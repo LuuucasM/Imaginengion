@@ -1,17 +1,49 @@
+const builtin = @import("builtin");
 const UnsupportedWindow = @This();
 
-pub fn init(self: *UnsupportedWindow) void {}
+pub fn Init(self: UnsupportedWindow) void {
+    _ = self;
+    Unsupported();
+}
 
-pub fn deinit(self: *UnsupportedWindow) void {}
+pub fn Deinit(self: UnsupportedWindow) void {
+    _ = self;
+    Unsupported();
+}
 
-pub fn GetWidth(self: *UnsupportedWindow) usize {}
+pub fn GetWidth(self: UnsupportedWindow) usize {
+    _ = self;
+    return Unsupported();
+}
 
-pub fn GetHeight(self: *UnsupportedWindow) usize {}
+pub fn GetHeight(self: UnsupportedWindow) usize {
+    _ = self;
+    return Unsupported();
+}
 
-pub fn SetVSync(self: *UnsupportedWindow) void {}
+pub fn SetVSync(self: UnsupportedWindow, useVSync: bool) void {
+    _ = self;
+    _ = useVSync;
+    Unsupported();
+}
 
-pub fn IsVSync(self: *UnsupportedWindow) bool {}
+pub fn IsVSync(self: UnsupportedWindow) bool {
+    _ = self;
+    return Unsupported();
+}
 
-pub fn GetNativeWindow(self: *UnsupportedWindow) *void {}
+pub fn GetNativeWindow(self: UnsupportedWindow) *void {
+    _ = self;
+    return Unsupported();
+}
 
-pub fn OnWindowResize(self: *UnsupportedWindow) void {}
+pub fn OnWindowResize(self: UnsupportedWindow, width: usize, height: usize) void {
+    _ = self;
+    _ = width;
+    _ = height;
+    Unsupported();
+}
+
+fn Unsupported() noreturn {
+    @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag));
+}
