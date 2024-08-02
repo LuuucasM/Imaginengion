@@ -26,7 +26,9 @@ pub fn Init(EngineAllocator: std.mem.Allocator, window: *void) void {
 //TODO: REMOVE ALL THE REFERENCES TO SELF. I FORGOT THAT
 //TODO: I NEEDED TO MAKE INPUT A 'STATIC CLASS' AND ACCIDENTLY MADE ALL THE FUNCTIONS
 //TODO: CALLED BY REFERENCE OOPS
+//TODO: ALSO I FORGOT TO WRITE DEINIT FOR WINDOWSINPUT !
 pub fn Deinit(self: *Input) void {
+    self._Impl.Deinit();
     self._EngineAllocator.destroy(self);
 }
 pub fn SetKeyPressed(self: Input, key: KeyCode, on: bool) void {

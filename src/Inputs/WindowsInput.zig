@@ -23,6 +23,10 @@ pub fn Init(self: *WindowsInput, window: *void) void {
     self._MousePressedSet.init(self._Allocator);
     self._MouseReleasedSet.init(self._Allocator);
 }
+pub fn Deinit(self: WindowsInput) void {
+    //TODO: CHECK IF REMOVE DEALLOCATES THE MEMORY OR NOT
+    self._KeyPressedSet.deinit();
+}
 pub fn SetKeyPressed(self: WindowsInput, key: KeyCodes, on: bool) void {
     const key_num = @intFromEnum(key);
     self._Mutex.lock();
