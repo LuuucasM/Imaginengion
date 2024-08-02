@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const InputEvents = @import("../Events/InputEvents.zig");
+const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
 
 const glfw = @import("../Core/CImports.zig").glfw;
@@ -28,16 +28,16 @@ pub fn Init(self: *WindowsWindow) void {
 
     self._Window = glfw.glfwCreateWindow(@intCast(self._Width), @intCast(self._Height), self._Title, null, null);
     if (self._Window == null) {
-        @panic("Could not create glfw window!");
+        @panic("Could not create glfw window in WindowsWindow::Init");
     }
     self._WindowCount += 1;
 
-    //_ = glfw.glfwSetWindowCloseCallback(self._Window, GLFWWindowCloseCallback);
-    //_ = glfw.glfwSetWindowSizeCallback(self._Window, GLFWWindowResizeCallback);
+    _ = glfw.glfwSetWindowCloseCallback(self._Window, GLFWWindowCloseCallback);
+    _ = glfw.glfwSetWindowSizeCallback(self._Window, GLFWWindowResizeCallback);
     _ = glfw.glfwSetKeyCallback(self._Window, GLFWKeyCallback);
-    //_ = glfw.glfwSetMouseButtonCallback(self._Window, GLFWMouseButtonCallback);
-    //_ = glfw.glfwSetCursorPosCallback(self._Window, GLFWMouseMovedCallback);
-    //_ = glfw.glfwSetScrollCallback(self._Window, GLFWMouseScrollCallback);
+    _ = glfw.glfwSetMouseButtonCallback(self._Window, GLFWMouseButtonCallback);
+    _ = glfw.glfwSetCursorPosCallback(self._Window, GLFWMouseMovedCallback);
+    _ = glfw.glfwSetScrollCallback(self._Window, GLFWMouseScrolledCallback);
 }
 
 pub fn Deinit(self: *WindowsWindow) void {
@@ -75,7 +75,7 @@ pub fn GetNativeWindow(self: WindowsWindow) *void {
     if (self._Window) |window| {
         return @ptrCast(window);
     }
-    @panic("Can not GetNativeWindow before Window is created!");
+    @panic("Can not GetNativeWindow before Window is created in WindowsWindow::GetNativeWindow\n");
 }
 
 pub fn OnWindowResize(self: *WindowsWindow, width: usize, height: usize) void {
@@ -84,53 +84,110 @@ pub fn OnWindowResize(self: *WindowsWindow, width: usize, height: usize) void {
 }
 
 export fn GLFWErrorCallback(err: c_int, msg: [*c]const u8) callconv(.C) void {
-    std.log.err("GLFW Error ({}): {s}", .{ err, msg });
+    std.log.err("GLFW Error ({}): {s} in WindowsWindow::GLFWErrorCallback\n", .{ err, msg });
 }
-
-//export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.C) void {}
-
-//export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.C) void {}
 
 export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
     _ = window;
     _ = scancode;
     _ = mods;
-    switch (action) {
-        glfw.GLFW_PRESS => {
-            const new_event = InputEvents.KeyPressedEvent{
+    const new_event = switch (action) {
+        glfw.GLFW_PRESS => Event{
+            .ET_KeyPressed = .{
                 ._KeyCode = @enumFromInt(key),
                 ._RepeatCount = 0,
-            };
-            EventManager.Insert(new_event) catch |err| {
-                std.debug.print("{}", .{err});
-                @panic("couldnt insert into event manager");
-            };
+            },
         },
-        glfw.GLFW_RELEASE => {
-            const new_event = InputEvents.KeyReleasedEvent{
+        glfw.GLFW_RELEASE => Event{
+            .ET_KeyReleased = .{
                 ._KeyCode = @enumFromInt(key),
-            };
-            EventManager.Insert(new_event) catch |err| {
-                std.debug.print("{}", .{err});
-                @panic("could not insert into event manager");
-            };
+            },
         },
-        glfw.GLFW_REPEAT => {
-            const new_event = InputEvents.KeyPressedEvent{
+        glfw.GLFW_REPEAT => Event{
+            .ET_KeyPressed = .{
                 ._KeyCode = @enumFromInt(key),
                 ._RepeatCount = 1,
-            };
-            EventManager.Insert(new_event) catch |err| {
-                std.debug.print("{}", .{err});
-                @panic("could not insert into event manager");
-            };
+            },
         },
-        else => @panic("not a valid glfw key press !"),
-    }
+        else => @panic("Unknown glfw action in Windowswindow::GLFWKeyCallback\n"),
+    };
+    EventManager.Insert(new_event) catch |err| {
+        std.debug.print("{}\n", .{err});
+        @panic("Could not insert event into queue in Windowswindow::GLFWKeyCallback\n");
+    };
 }
 
-//export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.C) void {}
+export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.C) void {
+    _ = window;
+    _ = mods;
+    const new_event = switch (action) {
+        glfw.GLFW_PRESS => Event{
+            .ET_MouseButtonPressed = .{
+                ._MouseCode = @enumFromInt(button),
+            },
+        },
+        glfw.GLFW_RELEASE => Event{
+            .ET_MouseButtonReleased = .{
+                ._MouseCode = @enumFromInt(button),
+            },
+        },
+        else => @panic("Unknown glfw action in Windowswindow::GLFWMouseButtonCallback\n"),
+    };
+    EventManager.Insert(new_event) catch |err| {
+        std.debug.print("{}\n", .{err});
+        @panic("Could not insert event into queue in Windowswindow::GLFWMouseButtonCallback\n");
+    };
+}
 
-//export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.C) void {}
+export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.C) void {
+    _ = window;
+    const new_event = Event{
+        .ET_MouseMoved = .{
+            ._MouseX = @floatCast(xPos),
+            ._MouseY = @floatCast(yPos),
+        },
+    };
+    EventManager.Insert(new_event) catch |err| {
+        std.debug.print("{}\n", .{err});
+        @panic("Could not insert event into queue in Windowswindow::GLFWMouseMovedCallback");
+    };
+}
 
-//export fn GLFWMouseScrollCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.C) void {}
+export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.C) void {
+    _ = window;
+    const new_event = Event{
+        .ET_MouseScrolled = .{
+            ._XOffset = @floatCast(xOffset),
+            ._YOffset = @floatCast(yOffset),
+        },
+    };
+    EventManager.Insert(new_event) catch |err| {
+        std.debug.print("{}\n", .{err});
+        @panic("Could not insert event into queue in Windowswindow::GLFWMouseScrolledCallback\n");
+    };
+}
+
+export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.C) void {
+    _ = window;
+    const new_event = Event{
+        .ET_WindowClose = .{},
+    };
+    EventManager.Insert(new_event) catch |err| {
+        std.debug.print("{}\n", .{err});
+        @panic("Could not insert event into queue in Windowswindow::GLFWWindowCloseCallback\n");
+    };
+}
+
+export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.C) void {
+    _ = window;
+    const new_event = Event{
+        .ET_WindowResize = .{
+            ._Width = @intCast(width),
+            ._Height = @intCast(height),
+        },
+    };
+    EventManager.Insert(new_event) catch |err| {
+        std.debug.print("{}\n", .{err});
+        @panic("Could not insert event into queue in Windowswindow::GLFWWindowResizeCallback\n");
+    };
+}

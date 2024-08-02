@@ -1,59 +1,60 @@
 const std = @import("std");
 const assert = std.debug.assert;
-const Event = @import("Event.zig");
-const EventManager = @This();
+const Event = @import("Event.zig").Event;
+const EventCategory = @import("EventEnums.zig").EventCategory;
+const EventType = @import("EventEnums.zig").EventType;
+const Self = @This();
 
-var EVENTMANAGER: *EventManager = undefined;
+var EventManager: *Self = undefined;
 
-_InputEventArena: std.heap.ArenaAllocator,
-_WindowEventArena: std.heap.ArenaAllocator,
+_InputEventPool: std.heap.MemoryPool(Event),
+_WindowEventPool: std.heap.MemoryPool(Event),
 _EngineAllocator: std.mem.Allocator,
+_Callbackfn: *const fn (*Event) void,
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !void {
-    EVENTMANAGER = try EngineAllocator.create(EventManager);
-    EVENTMANAGER.* = .{
-        ._InputEventArena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-        ._WindowEventArena = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+pub fn Init(EngineAllocator: std.mem.Allocator, callbackfn: fn (*Event) void) !void {
+    EventManager = try EngineAllocator.create(Self);
+    EventManager.* = .{
+        ._InputEventPool = std.heap.MemoryPool(Event).init(std.heap.page_allocator),
+        ._WindowEventPool = std.heap.MemoryPool(Event).init(std.heap.page_allocator),
         ._EngineAllocator = EngineAllocator,
+        ._Callbackfn = callbackfn,
     };
 }
 
 pub fn Deinit() void {
-    EVENTMANAGER._InputEventArena.deinit();
-    EVENTMANAGER._WindowEventArena.deinit();
-    EVENTMANAGER._EngineAllocator.destroy(EVENTMANAGER);
+    EventManager._InputEventPool.deinit();
+    EventManager._WindowEventPool.deinit();
+    EventManager._EngineAllocator.destroy(EventManager);
 }
 
-pub fn Insert(event: anytype) !void {
-    const T = @TypeOf(event);
-    assert(@hasDecl(T, "GetEventName"));
-    const ptr = switch (event.GetEventName()) {
-        .EN_KeyPressed, .EN_KeyReleased, .EN_MouseButtonPressed, .EN_MouseButtonReleased, .EN_MouseMoved, .EN_MouseScrolled => try EVENTMANAGER._InputEventArena.allocator().create(T),
-        .EN_WindowClose, .EN_WindowResize => try EVENTMANAGER._WindowEventArena.allocator().create(T),
+pub fn Insert(event: Event) !void {
+    const ptr = switch (event.GetEventCategory()) {
+        .EC_Input => try EventManager._InputEventPool.create(),
+        .EC_Window => try EventManager._WindowEventPool.create(),
     };
     ptr.* = event;
 }
 
-//pub fn ProcessWindowEvents(callbackfn: fn (Event) void) void {
-//    var it = EventManager._WindowEventArena.state.buffer_list.first;
-//    while (it) |node| {
-//        callbackfn(node.data);
-//        it = node.next;
-//    }
-//}
-
-pub fn ProcessInputEvents(callbackfn: fn (Event) void) void {
-    var it = EVENTMANAGER._InputEventArena.state.buffer_list.first;
+pub fn ProcessEvents(eventCategory: EventCategory) void {
+    var it = switch (eventCategory) {
+        .EC_Input => EventManager._InputEventPool.arena.state.buffer_list.first,
+        .EC_Window => EventManager._WindowEventPool.arena.state.buffer_list.first,
+    };
     while (it) |node| {
-        const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(@TypeOf(node));
+        //convert raw pointer into event pointer
+        //note std.SlinglyLinkedList(usize).Node is the type for BufNode which is the type of 'node' internally
+        const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
         const event: *Event = @ptrCast(@alignCast(object_bytes));
-        callbackfn(event.*);
+
+        EventManager._Callbackfn(event);
+
         it = node.next;
     }
 }
 
 pub fn EventsReset() void {
     //TODO: make it dynamic freeing
-    EVENTMANAGER._InputEventArena.reset(.free_all);
-    EVENTMANAGER._WindowEventArena.reset(.free_all);
+    _ = EventManager._InputEventPool.reset(.free_all);
+    _ = EventManager._WindowEventPool.reset(.free_all);
 }

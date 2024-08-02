@@ -45,6 +45,6 @@ pub fn GetNativeWindow(self: Window) *void {
     return self._Impl.GetNativeWindow();
 }
 
-pub fn OnWindowResize(self: Window, width: usize, height: usize) void {
+pub fn OnWindowResize(self: *Window, width: usize, height: usize) void {
     self._Impl.OnWindowResize(width, height);
 }

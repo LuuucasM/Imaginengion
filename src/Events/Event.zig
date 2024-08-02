@@ -1,13 +1,20 @@
-const EventNames = @import("EventEnums.zig").EventNames;
-const Event = @This();
+const InputEvents = @import("InputEvents.zig");
+const WindowEvents = @import("WindowEvents.zig");
+const EventType = @import("EventEnums.zig").EventType;
+const EventCategory = @import("EventEnums.zig").EventCategory;
 
-_VTable: *const VTable,
-_Event: *anyopaque,
-
-const VTable = struct {
-    GetEventName: *const fn (event: *anyopaque) EventNames,
+pub const Event = union(EventType) {
+    ET_WindowClose: WindowEvents.WindowCloseEvent,
+    ET_WindowResize: WindowEvents.WindowResizeEvent,
+    ET_KeyPressed: InputEvents.KeyPressedEvent,
+    ET_KeyReleased: InputEvents.KeyReleasedEvent,
+    ET_MouseButtonPressed: InputEvents.MouseButtonPressedEvent,
+    ET_MouseButtonReleased: InputEvents.MouseButtonReleasedEvent,
+    ET_MouseMoved: InputEvents.MouseMovedEvent,
+    ET_MouseScrolled: InputEvents.MouseScrolledEvent,
+    pub fn GetEventCategory(self: Event) EventCategory {
+        switch (self) {
+            inline else => |event| return event.GetEventCategory(),
+        }
+    }
 };
-
-pub fn GetEventName(self: Event) EventNames {
-    return self._VTable.GetEventName(self._Event);
-}

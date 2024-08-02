@@ -1,10 +1,14 @@
-pub const EventNames = enum {
-    EN_WindowClose,
-    EN_WindowResize,
-    EN_KeyPressed,
-    EN_KeyReleased,
-    EN_MouseButtonPressed,
-    EN_MouseButtonReleased,
-    EN_MouseMoved,
-    EN_MouseScrolled,
+pub const EventType = enum(u16) {
+    ET_WindowClose,
+    ET_WindowResize,
+    ET_KeyPressed,
+    ET_KeyReleased,
+    ET_MouseButtonPressed,
+    ET_MouseButtonReleased,
+    ET_MouseMoved,
+    ET_MouseScrolled,
+};
+pub const EventCategory = enum(u8) {
+    EC_Input,
+    EC_Window,
 };

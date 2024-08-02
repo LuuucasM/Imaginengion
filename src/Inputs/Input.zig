@@ -15,7 +15,7 @@ var INPUT: *Input = undefined;
 _Impl: Impl,
 _EngineAllocator: std.mem.Allocator,
 
-pub fn Init(EngineAllocator: std.mem.Allocator, window: *void) void {
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *void) !void {
     INPUT = try EngineAllocator.create(Input);
     INPUT.* = .{
         ._Impl = .{},
@@ -27,34 +27,34 @@ pub fn Init(EngineAllocator: std.mem.Allocator, window: *void) void {
 //TODO: I NEEDED TO MAKE INPUT A 'STATIC CLASS' AND ACCIDENTLY MADE ALL THE FUNCTIONS
 //TODO: CALLED BY REFERENCE OOPS
 //TODO: ALSO I FORGOT TO WRITE DEINIT FOR WINDOWSINPUT !
-pub fn Deinit(self: *Input) void {
-    self._Impl.Deinit();
-    self._EngineAllocator.destroy(self);
+pub fn Deinit() void {
+    INPUT._Impl.Deinit();
+    INPUT._EngineAllocator.destroy(INPUT);
 }
-pub fn SetKeyPressed(self: Input, key: KeyCode, on: bool) void {
-    self._Impl.SetKeyPressed(key, on);
+pub fn SetKeyPressed(key: KeyCode, on: bool) void {
+    INPUT._Impl.SetKeyPressed(key, on);
 }
-pub fn IsKeyPressed(self: Input, key: KeyCode) bool {
-    return self._Impl.IsKeyPressed(key);
+pub fn IsKeyPressed(key: KeyCode) bool {
+    return INPUT._Impl.IsKeyPressed(key);
 }
-pub fn SetMousePressed(self: Input, button: MouseCode, on: bool) void {
-    self._Impl.SetMousePressed(button, on);
+pub fn SetMousePressed(button: MouseCode, on: bool) void {
+    INPUT._Impl.SetMousePressed(button, on);
 }
-pub fn IsMouseButtonPressed(self: Input, button: MouseCode) bool {
-    return self._Impl.IsMouseButtonPressed(button);
+pub fn IsMouseButtonPressed(button: MouseCode) bool {
+    return INPUT._Impl.IsMouseButtonPressed(button);
 }
-pub fn SetMousePosition(self: Input, newPos: @Vector(2, f32)) void {
-    self._Impl.SetMousePosition(newPos);
+pub fn SetMousePosition(newPos: @Vector(2, f32)) void {
+    INPUT._Impl.SetMousePosition(newPos);
 }
-pub fn GetMousePosition(self: Input) @Vector(2, f32) {
-    return self._Impl.GetMousePosition();
+pub fn GetMousePosition() @Vector(2, f32) {
+    return INPUT._Impl.GetMousePosition();
 }
-pub fn SetMouseScrolled(self: Input, scrolled: @Vector(2, f32)) void {
-    self._Impl.SetMouseScrolled(scrolled);
+pub fn SetMouseScrolled(scrolled: @Vector(2, f32)) void {
+    INPUT._Impl.SetMouseScrolled(scrolled);
 }
-pub fn GetMouseScrolled(self: Input) @Vector(2, f32) {
-    return self._Impl.GetMouseScrolled();
+pub fn GetMouseScrolled() @Vector(2, f32) {
+    return INPUT._Impl.GetMouseScrolled();
 }
-pub fn PollInputEvents(self: Input) void {
-    self._Impl.PollInputEvents();
+pub fn PollInputEvents() void {
+    INPUT._Impl.PollInputEvents();
 }

@@ -3,10 +3,10 @@ const Application = @import("Core/Application.zig");
 
 pub fn main() !void {
     std.log.info("Initializing Application", .{});
-    const app = try Application.Init(std.heap.page_allocator);
+    try Application.Init(std.heap.page_allocator);
     std.log.info("Running Application", .{});
-    app.Run();
+    Application.Run();
     std.log.info("Deinitializing Application", .{});
-    app.Deinit();
+    Application.Deinit();
     std.log.info("Exiting main", .{});
 }

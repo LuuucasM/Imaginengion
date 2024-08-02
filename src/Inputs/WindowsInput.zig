@@ -18,10 +18,10 @@ _Window: *void = undefined,
 
 pub fn Init(self: *WindowsInput, window: *void) void {
     self._Window = window;
-    self._KeyPressedSet.init(self._Allocator);
-    self._KeyReleasedSet.init(self._Allocator);
-    self._MousePressedSet.init(self._Allocator);
-    self._MouseReleasedSet.init(self._Allocator);
+    self._KeyPressedSet = HashMap(u16, u32, std.hash_map.AutoContext(u16), std.hash_map.default_max_load_percentage).init(self._Allocator);
+    self._KeyReleasedSet = Set(u16).init(self._Allocator);
+    self._MousePressedSet = Set(u16).init(self._Allocator);
+    self._MouseReleasedSet = Set(u16).init(self._Allocator);
 }
 pub fn Deinit(self: WindowsInput) void {
     //TODO: CHECK IF REMOVE DEALLOCATES THE MEMORY OR NOT
@@ -35,7 +35,7 @@ pub fn SetKeyPressed(self: WindowsInput, key: KeyCodes, on: bool) void {
         if (self._KeyPressedSet.contains(key_num)) {
             const result = try self._KeyPressedSet.getOrPut(key_num);
             if (result.found_existing) {
-                result.value_ptr.* += 1;
+                result.value_ptr.* = 1;
             }
         } else if (self._KeyReleasedSet.contains(key_num)) {
             self._KeyReleasedSet.remove(key_num);
