@@ -6,96 +6,64 @@ const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const WindowsInput = @This();
 
 const glfw = @import("../Core/CImports.zig").glfw;
-_KeyPressedSet: HashMap(u16, u32, std.hash_map.AutoContext(u16), std.hash_map.default_max_load_percentage) = undefined,
-_KeyReleasedSet: Set(u16) = undefined,
-_MousePressedSet: Set(u16) = undefined,
-_MouseReleasedSet: Set(u16) = undefined,
-_MousePosition: @Vector(2, u32) = @splat(0),
-_MouseScrolled: @Vector(2, u32) = @splat(0),
-_Mutex: std.Thread.Mutex = .{},
+
+_KeyPressedSet: HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage) = undefined,
+_MousePressedSet: Set(MouseCodes) = undefined,
+_MousePosition: @Vector(2, f64) = @splat(0),
+_MouseScrolled: @Vector(2, f64) = @splat(0),
 _Allocator: std.mem.Allocator = std.heap.page_allocator,
 _Window: *void = undefined,
 
 pub fn Init(self: *WindowsInput, window: *void) void {
     self._Window = window;
-    self._KeyPressedSet = HashMap(u16, u32, std.hash_map.AutoContext(u16), std.hash_map.default_max_load_percentage).init(self._Allocator);
-    self._KeyReleasedSet = Set(u16).init(self._Allocator);
-    self._MousePressedSet = Set(u16).init(self._Allocator);
-    self._MouseReleasedSet = Set(u16).init(self._Allocator);
+    self._KeyPressedSet = HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage).init(self._Allocator);
+    self._MousePressedSet = Set(MouseCodes).init(self._Allocator);
 }
-pub fn Deinit(self: WindowsInput) void {
-    //TODO: CHECK IF REMOVE DEALLOCATES THE MEMORY OR NOT
+pub fn Deinit(self: *WindowsInput) void {
     self._KeyPressedSet.deinit();
+    self._MousePressedSet.deinit();
 }
-pub fn SetKeyPressed(self: WindowsInput, key: KeyCodes, on: bool) void {
-    const key_num = @intFromEnum(key);
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
+pub fn SetKeyPressed(self: *WindowsInput, key: KeyCodes, on: bool) !void {
     if (on == true) {
-        if (self._KeyPressedSet.contains(key_num)) {
-            const result = try self._KeyPressedSet.getOrPut(key_num);
+        if (self._KeyPressedSet.contains(key)) {
+            const result = try self._KeyPressedSet.getOrPut(key);
             if (result.found_existing) {
                 result.value_ptr.* = 1;
             }
-        } else if (self._KeyReleasedSet.contains(key_num)) {
-            self._KeyReleasedSet.remove(key_num);
         } else {
-            self._KeyPressedSet.put(key, 0);
+            try self._KeyPressedSet.put(key, 0);
         }
     } else {
-        if (self._KeyPressedSet.contains(key_num)) {
-            self._KeyPressedSet.remove(key_num);
-        } else {
-            self._KeyReleasedSet.add(key_num);
+        if (self._KeyPressedSet.contains(key)) {
+            _ = self._KeyPressedSet.remove(key);
         }
     }
 }
 pub fn IsKeyPressed(self: WindowsInput, key: KeyCodes) bool {
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
-    return if (self._KeyPressedSet.contains(@intFromEnum(key))) true else false;
+    return if (self._KeyPressedSet.contains(key)) true else false;
 }
-pub fn SetMousePressed(self: WindowsInput, button: MouseCodes, on: bool) void {
-    const button_num = @intFromEnum(button);
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
+pub fn SetMousePressed(self: *WindowsInput, button: MouseCodes, on: bool) !void {
     if (on == true) {
-        if (self._MouseReleasedSet.contains(button_num)) {
-            self._MouseReleasedSet.remove(button_num);
-        } else {
-            self._MousePressedSet.add(button_num);
-        }
+        _ = try self._MousePressedSet.add(button);
     } else {
-        if (self._MousePressedSet.contains(button_num)) {
-            self._MousePressedSet.remove(button_num);
-        } else {
-            self._MouseReleasedSet.add(button_num);
+        if (self._MousePressedSet.contains(button)) {
+            _ = self._MousePressedSet.remove(button);
         }
     }
 }
 pub fn IsMouseButtonPressed(self: WindowsInput, button: MouseCodes) bool {
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
-    return if (self._MousePressedSet.ocntains(@intFromEnum(button))) true else false;
+    return if (self._MousePressedSet.contains(button)) true else false;
 }
-pub fn SetMousePosition(self: WindowsInput, newPos: @Vector(2, f32)) void {
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
+pub fn SetMousePosition(self: *WindowsInput, newPos: @Vector(2, f64)) void {
     self._MousePosition = newPos;
 }
-pub fn GetMousePosition(self: WindowsInput) @Vector(2, f32) {
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
+pub fn GetMousePosition(self: WindowsInput) @Vector(2, f64) {
     return self._MousePosition;
 }
-pub fn SetMouseScrolled(self: WindowsInput, newScrolled: @Vector(2, f32)) void {
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
+pub fn SetMouseScrolled(self: *WindowsInput, newScrolled: @Vector(2, f64)) void {
     self._MouseScrolled = newScrolled;
 }
-pub fn GetMouseScrolled(self: WindowsInput) @Vector(2, f32) {
-    self._Mutex.lock();
-    defer self._Mutex.unlock();
+pub fn GetMouseScrolled(self: WindowsInput) @Vector(2, f64) {
     return self._MouseScrolled;
 }
 pub fn PollInputEvents(self: WindowsInput) void {

@@ -1,8 +1,12 @@
+const std = @import("std");
+const KeyCodes = @import("KeyCodes.zig").KeyCodes;
+const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const builtin = @import("builtin");
 const UnsupportedInput = @This();
 
-pub fn Init(window: *void) void {
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *void) void {
     _ = window;
+    _ = EngineAllocator;
     Unsupported();
 }
 
@@ -10,32 +14,40 @@ pub fn Deinit(self: UnsupportedInput) void {
     _ = self;
     Unsupported();
 }
-pub fn SetKeyPressed(self: UnsupportedInput) void {
+pub fn SetKeyPressed(self: UnsupportedInput, key: KeyCodes, on: bool) void {
     _ = self;
+    _ = key;
+    _ = on;
     Unsupported();
 }
-pub fn IsKeyPressed(self: UnsupportedInput) bool {
+pub fn IsKeyPressed(self: UnsupportedInput, key: KeyCodes) bool {
     _ = self;
+    _ = key;
     return Unsupported();
 }
-pub fn SetMousePressed(self: UnsupportedInput) void {
+pub fn SetMousePressed(self: UnsupportedInput, button: MouseCodes, on: bool) void {
     _ = self;
+    _ = button;
+    _ = on;
     Unsupported();
 }
-pub fn IsMouseButtonPressed(self: UnsupportedInput) bool {
+pub fn IsMouseButtonPressed(self: UnsupportedInput, button: MouseCodes) bool {
     _ = self;
+    _ = button;
     return Unsupported();
 }
-pub fn SetMousePosition(self: UnsupportedInput) void {
+pub fn SetMousePosition(self: UnsupportedInput, newPos: @Vector(2, f64)) void {
     _ = self;
+    _ = newPos;
     Unsupported();
 }
 pub fn GetMousePosition(self: UnsupportedInput) @Vector(2, f32) {
     _ = self;
     return Unsupported();
 }
-pub fn SetMouseScrolled(self: UnsupportedInput) void {
+pub fn SetMouseScrolled(self: UnsupportedInput, newScrolled: @Vector(2, f64)) void {
     _ = self;
+    _ = newScrolled;
     Unsupported();
 }
 pub fn GetMouseScrolled(self: UnsupportedInput) @Vector(2, f32) {
@@ -47,5 +59,5 @@ pub fn PollInputEvents(self: UnsupportedInput) void {
     Unsupported();
 }
 fn Unsupported() noreturn {
-    @compileError("Unsupported Operating system: " ++ @tagName(builtin.os.tag));
+    @compileError("Unsupported Operating system: " ++ @tagName(builtin.os.tag) ++ " in Input\n");
 }

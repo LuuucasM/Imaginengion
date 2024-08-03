@@ -45,5 +45,5 @@ pub fn OnWindowResize(self: UnsupportedWindow, width: usize, height: usize) void
 }
 
 fn Unsupported() noreturn {
-    @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag));
+    @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag) ++ " in Window\n");
 }
