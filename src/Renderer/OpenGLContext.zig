@@ -23,5 +23,5 @@ pub fn Init(self: *OpenGLContext) void {
 }
 
 pub fn SwapBuffers(self: OpenGLContext) void {
-    glad.glfwSwapBuffers(self._Window);
+    glfw.glfwSwapBuffers(self._Window);
 }

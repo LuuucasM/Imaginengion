@@ -21,3 +21,7 @@ pub fn Deinit() void {
     RenderManager._RenderContext.Deinit();
     RenderManager._EngineAllocator.destroy(RenderManager);
 }
+
+pub fn SwapBuffers() void {
+    RenderManager._RenderContext.SwapBuffers();
+}

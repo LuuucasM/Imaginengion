@@ -1,8 +1,8 @@
 const std = @import("std");
-const Application = @import("Application.zig");
+const Application = @import("../Core/Application.zig");
 const Window = @import("../Windows/Window.zig");
-const imgui = @import("CImports.zig").imgui;
-const glfw = @import("CImports.zig").glfw;
+const imgui = @import("../Core/CImports.zig").imgui;
+const glfw = @import("../Core/CImports.zig").glfw;
 
 pub fn Init() void {
     _ = imgui.igCreateContext(null);
@@ -34,6 +34,7 @@ pub fn Begin() void {
     imgui.igNewFrame();
 }
 pub fn End() void {
+    const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
     const window: *Window = @ptrCast(@alignCast(Application.GetNativeWindow()));
 
@@ -44,7 +45,7 @@ pub fn End() void {
     if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
         const backup_current_context: ?*glfw.struct_GLFWwindow = glfw.glfwGetCurrentContext();
         imgui.igUpdatePlatformWindows();
-        imgui.igRenderPlatformWindowsDefault(@ptrCast(@constCast(&0)), @ptrCast(@constCast(&0)));
+        imgui.igRenderPlatformWindowsDefault(@ptrCast(@alignCast(my_null_ptr)), @ptrCast(@alignCast(my_null_ptr)));
         glfw.glfwMakeContextCurrent(backup_current_context);
     }
 }
