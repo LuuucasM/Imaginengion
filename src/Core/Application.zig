@@ -43,6 +43,10 @@ pub fn Run() void {
     }
 }
 
+pub fn GetNativeWindow() *void {
+    return ApplicationManager._Window.GetNativeWindow();
+}
+
 fn OnEvent(event: *Event) void {
     const result = switch (event.*) {
         .ET_WindowClose => OnWindowClose(),

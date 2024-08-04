@@ -1,9 +1,10 @@
 const std = @import("std");
 const Event = @import("../Events/Event.zig").Event;
-const Impl = @import("EditorProgram.zig");
 const Program = @This();
 
+const Impl = @import("EditorProgram.zig");
 _Impl: Impl,
+
 _EngineAllocator: std.mem.Allocator,
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !*Program {
@@ -12,7 +13,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !*Program {
         ._Impl = .{},
         ._EngineAllocator = EngineAllocator,
     };
-    ptr._Impl.Init();
+    try ptr._Impl.Init(EngineAllocator);
     return ptr;
 }
 
