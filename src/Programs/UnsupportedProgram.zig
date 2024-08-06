@@ -10,8 +10,9 @@ pub fn Deinit(self: UnsupportedProgram) void {
     Unsupported();
 }
 
-pub fn OnUpdate(self: UnsupportedProgram) void {
+pub fn OnUpdate(self: UnsupportedProgram, dt: f64) void {
     _ = self;
+    _ = dt;
     Unsupported();
 }
 

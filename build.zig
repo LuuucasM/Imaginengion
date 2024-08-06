@@ -1,5 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const buildglfw = @import("src/Vendor/GLFW/buildglfw.zig");
+const buildglad = @import("src/Vendor/Glad/buildglad.zig");
+const buildimgui = @import("src/Vendor/imgui/buildimgui.zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -15,45 +18,15 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    //----------------GLFW------------------
-    exe.addLibraryPath(.{ .path = "src/Vendor/GLFW/zig-out/lib/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/GLFW/include/" });
-    exe.linkSystemLibrary("GLFW");
 
-    //----------------GLAD-----------------------
-    exe.addLibraryPath(.{ .path = "src/Vendor/Glad/zig-out/lib/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/Glad/include/" });
-    exe.linkSystemLibrary("Glad");
-
-    //--------------------IMGUI-------------------------
-    exe.addLibraryPath(.{ .path = "src/Vendor/imgui/zig-out/lib/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/imgui/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/imgui/imgui/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/imgui/generator/output/" });
-    const options = std.Build.Module.AddCSourceFilesOptions{
-        .files = &[_][]const u8{
-            "src/Vendor/imgui/imgui/backends/imgui_impl_glfw.cpp",
-            "src/Vendor/imgui/imgui/backends/imgui_impl_opengl3.cpp",
-        },
-        .flags = &[_][]const u8{
-            "-D_CRT_SECURE_NO_WARNINGS",
-            "-lstdc++",
-            "-D_IMGUI_IMPL_OPENGL_LOADER_GL3W",
-        },
-    };
-    exe.defineCMacro("IMGUI_IMPL_API", "extern \"C\"");
-    exe.addCSourceFiles(options);
-    exe.linkSystemLibrary("imgui");
+    //adding c/c++ dependecies
+    buildglfw.Add(exe);
+    buildglad.Add(exe);
+    buildimgui.Add(exe);
 
     //--------------SYSTEM LIBRARIES-----------
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("c++");
-    switch (builtin.os.tag) {
-        .windows => {
-            exe.linkSystemLibrary("gdi32");
-        },
-        else => @compileError("Unsupported os!"),
-    }
 
     b.installArtifact(exe);
 

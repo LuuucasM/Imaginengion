@@ -13,6 +13,7 @@ _PoolArena: std.heap.ArenaAllocator,
 allocator: std.mem.Allocator,
 threads: []std.Thread,
 _WorkingCount: u8 = 0,
+_EngineAllocator: std.mem.Allocator,
 
 const RunQueue = std.SinglyLinkedList(Runnable);
 const Runnable = struct {
@@ -34,6 +35,7 @@ pub fn init(EngineAllocator: std.mem.Allocator) !void {
         ._PoolArena = arena,
         .allocator = allocator,
         .threads = &[_]std.Thread{},
+        ._EngineAllocator = EngineAllocator,
     };
 
     if (builtin.single_threaded) {
@@ -43,7 +45,7 @@ pub fn init(EngineAllocator: std.mem.Allocator) !void {
     const thread_count = @max(1, std.Thread.getCpuCount() catch 1);
 
     // kill and join any threads we spawned and free memory on error.
-    ThreadPool.threads = try allocator.alloc(std.Thread, thread_count);
+    ThreadPool.threads = try EngineAllocator.alloc(std.Thread, thread_count);
     var spawned: usize = 0;
     errdefer ThreadPool.join(spawned);
 
@@ -55,7 +57,7 @@ pub fn init(EngineAllocator: std.mem.Allocator) !void {
 
 pub fn deinit() void {
     ThreadPool.join(ThreadPool.threads.len); // kill and join all threads.
-    ThreadPool.* = undefined;
+    ThreadPool._EngineAllocator.destroy(ThreadPool);
 }
 
 fn join(pool: *Pool, spawned: usize) void {
@@ -78,7 +80,7 @@ fn join(pool: *Pool, spawned: usize) void {
         thread.join();
     }
 
-    pool.allocator.free(pool.threads);
+    pool._EngineAllocator.free(pool.threads);
 }
 
 pub fn spawn(comptime func: anytype, args: anytype) !void {

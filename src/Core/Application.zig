@@ -5,6 +5,7 @@ const Window = @import("../Windows/Window.zig");
 const Input = @import("../Inputs/Input.zig");
 const ThreadPool = @import("../Core/ThreadPool.zig");
 const Program = @import("../Programs/Program.zig");
+const tracy = @import("CImports.zig").tracy;
 
 const Application: type = @This();
 
@@ -38,8 +39,14 @@ pub fn Deinit() void {
 }
 
 pub fn Run() void {
-    while (ApplicationManager._IsRunning) {
-        ApplicationManager._Program.OnUpdate();
+    var timer = std.time.Timer.start() catch |err| {
+        std.log.err("{}\n", .{err});
+        @panic("Could not start timer in Application::Run\n");
+    };
+    var delta_time: f64 = 0;
+
+    while (ApplicationManager._IsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
+        ApplicationManager._Program.OnUpdate(delta_time);
     }
 }
 
@@ -50,7 +57,7 @@ pub fn GetNativeWindow() *void {
 fn OnEvent(event: *Event) void {
     const result = switch (event.*) {
         .ET_WindowClose => OnWindowClose(),
-        .ET_WindowResize => |et| OnWindowResize(et._Width, et._Height),
+        .ET_WindowResize => |e| OnWindowResize(e._Width, e._Height),
         else => false,
     };
     if (result == false) {

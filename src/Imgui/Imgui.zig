@@ -11,14 +11,17 @@ pub fn Init() void {
     io.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable;
     io.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable;
 
-    imgui.igStyleColorsDark(imgui.igGetStyle());
-    SetDarkThemeColors();
-
     const style = imgui.igGetStyle();
+
+    imgui.igStyleColorsDark(style);
+
     if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
         style.*.WindowRounding = 0;
         style.*.Colors[2].w = 1;
     }
+
+    SetDarkThemeColors(style);
+
     const window = Application.GetNativeWindow();
     _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window), true);
     _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
@@ -50,11 +53,11 @@ pub fn End() void {
     }
 }
 
-fn SetDarkThemeColors() void {
-    var colors = imgui.igGetStyle().*.Colors;
+fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {
+    var colors = style.*.Colors;
 
     //background
-    colors[imgui.ImGuiCol_WindowBg] = .{ .x = 0.082, .y = 0.082, .z = 0.082, .w = 1.0 };
+    colors[imgui.ImGuiCol_WindowBg] = .{ .x = 1.0, .y = 0.082, .z = 0.082, .w = 1.0 };
 
     //Headers
     colors[imgui.ImGuiCol_Header] = .{ .x = 0.176, .y = 0.190, .z = 0.229, .w = 1.0 };

@@ -22,8 +22,8 @@ pub fn Deinit(self: *Program) void {
     self._EngineAllocator.destroy(self);
 }
 
-pub fn OnUpdate(self: Program) void {
-    self._Impl.OnUpdate();
+pub fn OnUpdate(self: Program, dt: f64) void {
+    self._Impl.OnUpdate(dt);
 }
 
 pub fn OnEvent(self: Program, event: *Event) void {

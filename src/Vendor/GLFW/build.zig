@@ -7,9 +7,10 @@ pub fn build(b: *std.Build) void {
 
     const lib = b.addStaticLibrary(.{ .name = "GLFW", .target = target, .optimize = optimize });
     lib.addIncludePath(.{ .path = "include/" });
-    switch (builtin.os.tag) {
-        .windows => {
-            const options = std.Build.Module.AddCSourceFilesOptions{
+    const options = switch (builtin.os.tag) {
+        .windows => blk: {
+            lib.linkSystemLibrary("gdi32");
+            break :blk std.Build.Module.AddCSourceFilesOptions{
                 .files = &[_][]const u8{
                     "src/context.c",
                     "src/init.c",
@@ -38,11 +39,9 @@ pub fn build(b: *std.Build) void {
                     "-D_CRT_SECURE_NO_WARNINGS",
                 },
             };
-            lib.addCSourceFiles(options);
-            lib.linkSystemLibrary("gdi32");
         },
-        .linux => {
-            const options = std.Build.Module.AddCSourceFilesOptions{
+        .linux => blk: {
+            break :blk std.Build.Module.AddCSourceFilesOptions{
                 .files = &[_][]const u8{
                     "src/context.c",
                     "src/init.c",
@@ -71,11 +70,10 @@ pub fn build(b: *std.Build) void {
                     "-D_CRT_SECURE_NO_WARNINGS",
                 },
             };
-            lib.addCSourceFiles(options);
         },
         else => @compileError("Do not support the OS given !"),
-    }
-
+    };
+    lib.addCSourceFiles(options);
     lib.linkSystemLibrary("c");
     b.installArtifact(lib);
 }
