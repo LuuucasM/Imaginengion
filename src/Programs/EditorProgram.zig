@@ -12,6 +12,7 @@ const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const PropertiesPanel = @import("../Imgui/PropertiesPanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
+const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
 
 const Renderer = @import("../Renderer/Renderer.zig");
 
@@ -24,6 +25,7 @@ _ContentBrowserPanel: *ContentBrowserPanel = undefined,
 _ScriptsPanel: *ScriptsPanel = undefined,
 _StatsPanel: *StatsPanel = undefined,
 _EngineAllocator: std.mem.Allocator = undefined,
+//_Dockspace: *Dockspace = undefined,
 
 const EditorProgram = @This();
 pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
@@ -34,8 +36,9 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ScriptsPanel = try EngineAllocator.create(ScriptsPanel);
     self._StatsPanel = try EngineAllocator.create(StatsPanel);
     self._ViewportPanel = try EngineAllocator.create(ViewportPanel);
+    self._ScenePanel.Init();
     try Renderer.Init(EngineAllocator);
-    ImGui.Init();
+    try ImGui.Init(EngineAllocator);
     //init editor camera
     //init each panel
     self._EngineAllocator = EngineAllocator;
@@ -43,11 +46,18 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
 
 pub fn Deinit(self: EditorProgram) void {
     self._EngineAllocator.destroy(self._ScenePanel);
-    Renderer.Deinit();
+    self._EngineAllocator.destroy(self._ComponentsPanel);
+    self._EngineAllocator.destroy(self._ContentBrowserPanel);
+    self._EngineAllocator.destroy(self._PropertiesPanel);
+    self._EngineAllocator.destroy(self._ScriptsPanel);
+    self._EngineAllocator.destroy(self._StatsPanel);
+    self._EngineAllocator.destroy(self._ViewportPanel);
     ImGui.Deinit();
+    Renderer.Deinit();
+    self._EngineAllocator.destroy(self._ScenePanel);
 }
 
-pub fn OnUpdate(self: EditorProgram, dt: f64) void {
+pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     _ = dt;
     //Process Inputs
     InputManager.PollInputEvents();
@@ -56,13 +66,16 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) void {
     //Render Imgui
     ImGui.Begin();
     Dockspace.Begin();
+    try Dockspace.OnImguiRender();
     self._ScenePanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
     self._ContentBrowserPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender();
     self._StatsPanel.OnImguiRender();
-    self._ViewportPanel.OnImguiRender();
+    self._ViewportPanel.OnImguiRender(); //note: for the editor, game rendering is done in here
+    self.ProcessImguiEvents();
+    ImGui.ClearEvents();
     Dockspace.End();
     ImGui.End();
 
@@ -73,7 +86,28 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) void {
     EventManager.EventsReset();
 }
 
-pub fn OnEvent(self: EditorProgram, event: *Event) void {
+pub fn OnInputEvent(self: EditorProgram, event: *Event) void {
     _ = self;
     _ = event;
+}
+
+pub fn OnWindowEvent(self: EditorProgram, event: *Event) void {
+    _ = self;
+    _ = event;
+}
+
+pub fn ProcessImguiEvents(self: EditorProgram) void {
+    var it = ImGui.GetFirstEvent();
+    while (it) |node| {
+        const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
+        const event: *ImguiEvent = @ptrCast(@alignCast(object_bytes));
+
+        if (event.GetPanelType() == .Scene) {
+            self._ScenePanel.OnImguiEvent(event);
+        } else {
+            @panic("This panel doesnt support events yet");
+        }
+
+        it = node.next;
+    }
 }

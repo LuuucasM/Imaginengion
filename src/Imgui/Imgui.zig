@@ -3,8 +3,20 @@ const Application = @import("../Core/Application.zig");
 const Window = @import("../Windows/Window.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const glfw = @import("../Core/CImports.zig").glfw;
+const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const Imgui = @This();
 
-pub fn Init() void {
+var ImguiManager: *Imgui = undefined;
+
+_EngineAllocator: std.mem.Allocator,
+_EventPool: std.heap.MemoryPool(ImguiEvent),
+
+pub fn Init(EngineAllocator: std.mem.Allocator) !void {
+    ImguiManager = try EngineAllocator.create(Imgui);
+    ImguiManager.* = .{
+        ._EngineAllocator = EngineAllocator,
+        ._EventPool = std.heap.MemoryPool(ImguiEvent).init(std.heap.page_allocator),
+    };
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
     io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard;
@@ -30,6 +42,8 @@ pub fn Deinit() void {
     imgui.ImGui_ImplOpenGL3_Shutdown();
     imgui.ImGui_ImplGlfw_Shutdown();
     imgui.igDestroyContext(null);
+    ImguiManager._EventPool.deinit();
+    ImguiManager._EngineAllocator.destroy(ImguiManager);
 }
 pub fn Begin() void {
     imgui.ImGui_ImplOpenGL3_NewFrame();
@@ -51,6 +65,19 @@ pub fn End() void {
         imgui.igRenderPlatformWindowsDefault(@ptrCast(@alignCast(my_null_ptr)), @ptrCast(@alignCast(my_null_ptr)));
         glfw.glfwMakeContextCurrent(backup_current_context);
     }
+}
+
+pub fn InsertEvent(event: ImguiEvent) !void {
+    const ptr = try ImguiManager._EventPool.create();
+    ptr.* = event;
+}
+
+pub fn GetFirstEvent() ?*std.SinglyLinkedList(usize).Node {
+    return ImguiManager._EventPool.arena.state.buffer_list.first;
+}
+
+pub fn ClearEvents() void {
+    _ = ImguiManager._EventPool.reset(.free_all);
 }
 
 fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {

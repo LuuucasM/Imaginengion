@@ -22,10 +22,14 @@ pub fn Deinit(self: *Program) void {
     self._EngineAllocator.destroy(self);
 }
 
-pub fn OnUpdate(self: Program, dt: f64) void {
-    self._Impl.OnUpdate(dt);
+pub fn OnUpdate(self: Program, dt: f64) !void {
+    try self._Impl.OnUpdate(dt);
 }
 
-pub fn OnEvent(self: Program, event: *Event) void {
-    self._Impl.OnEvent(event);
+pub fn OnInputEvent(self: Program, event: *Event) void {
+    self._Impl.OnInputEvent(event);
+}
+
+pub fn OnWindowEvent(self: Program, event: *Event) void {
+    self._Impl.OnWindowEvent(event);
 }

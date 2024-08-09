@@ -9,16 +9,19 @@ var EventManager: *Self = undefined;
 
 _InputEventPool: std.heap.MemoryPool(Event),
 _WindowEventPool: std.heap.MemoryPool(Event),
+//_ImguiEventPool: std.heap.MemoryPool(Event),
 _EngineAllocator: std.mem.Allocator,
-_Callbackfn: *const fn (*Event) void,
+_InputEventCallback: *const fn (*Event) void,
+_WindowEventCallback: *const fn (*Event) void,
 
-pub fn Init(EngineAllocator: std.mem.Allocator, callbackfn: fn (*Event) void) !void {
+pub fn Init(EngineAllocator: std.mem.Allocator, inputEventCallback: fn (*Event) void, windowEventCallback: fn (*Event) void) !void {
     EventManager = try EngineAllocator.create(Self);
     EventManager.* = .{
         ._InputEventPool = std.heap.MemoryPool(Event).init(std.heap.page_allocator),
         ._WindowEventPool = std.heap.MemoryPool(Event).init(std.heap.page_allocator),
         ._EngineAllocator = EngineAllocator,
-        ._Callbackfn = callbackfn,
+        ._InputEventCallback = inputEventCallback,
+        ._WindowEventCallback = windowEventCallback,
     };
 }
 
@@ -41,13 +44,17 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
         .EC_Input => EventManager._InputEventPool.arena.state.buffer_list.first,
         .EC_Window => EventManager._WindowEventPool.arena.state.buffer_list.first,
     };
+    const callback = switch (eventCategory) {
+        .EC_Input => EventManager._InputEventCallback,
+        .EC_Window => EventManager._WindowEventCallback,
+    };
     while (it) |node| {
         //convert raw pointer into event pointer
         //note std.SlinglyLinkedList(usize).Node is the type for BufNode which is the type of 'node' internally
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
         const event: *Event = @ptrCast(@alignCast(object_bytes));
 
-        EventManager._Callbackfn(event);
+        callback(event);
 
         it = node.next;
     }

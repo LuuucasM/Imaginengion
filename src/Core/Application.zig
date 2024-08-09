@@ -24,7 +24,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         ._Window = try Window.Init(EngineAllocator),
         ._Program = try Program.Init(EngineAllocator),
     };
-    try EventManager.Init(EngineAllocator, OnEvent);
+    try EventManager.Init(EngineAllocator, OnInputEvent, OnWindowEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
     try ThreadPool.init(EngineAllocator);
 }
@@ -38,7 +38,7 @@ pub fn Deinit() void {
     ApplicationManager._EngineAllocator.destroy(ApplicationManager);
 }
 
-pub fn Run() void {
+pub fn Run() !void {
     var timer = std.time.Timer.start() catch |err| {
         std.log.err("{}\n", .{err});
         @panic("Could not start timer in Application::Run\n");
@@ -46,7 +46,7 @@ pub fn Run() void {
     var delta_time: f64 = 0;
 
     while (ApplicationManager._IsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
-        ApplicationManager._Program.OnUpdate(delta_time);
+        try ApplicationManager._Program.OnUpdate(delta_time);
     }
 }
 
@@ -54,14 +54,18 @@ pub fn GetNativeWindow() *void {
     return ApplicationManager._Window.GetNativeWindow();
 }
 
-fn OnEvent(event: *Event) void {
+pub fn OnInputEvent(event: *Event) void {
+    ApplicationManager._Program.OnInputEvent(event);
+}
+
+pub fn OnWindowEvent(event: *Event) void {
     const result = switch (event.*) {
         .ET_WindowClose => OnWindowClose(),
         .ET_WindowResize => |e| OnWindowResize(e._Width, e._Height),
         else => false,
     };
     if (result == false) {
-        ApplicationManager._Program.OnEvent(event);
+        ApplicationManager._Program.OnWindowEvent(event);
     }
 }
 

@@ -5,7 +5,7 @@ pub fn main() !void {
     std.log.info("Initializing Application", .{});
     try Application.Init(std.heap.page_allocator);
     std.log.info("Running Application", .{});
-    Application.Run();
+    try Application.Run();
     std.log.info("Deinitializing Application", .{});
     Application.Deinit();
     std.log.info("Exiting main", .{});

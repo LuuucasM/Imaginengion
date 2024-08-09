@@ -1,4 +1,7 @@
 const imgui = @import("../Core/CImports.zig").imgui;
+const ImguiManager = @import("Imgui.zig");
+const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const Dockspace = @This();
 
 pub fn Begin() void {
     const opt_fullscreen = true;
@@ -38,7 +41,10 @@ pub fn Begin() void {
 
     const dockspace_id = imgui.igGetID_Str("MyDockSpace");
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
+}
 
+pub fn OnImguiRender() !void {
+    const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
         if (imgui.igBeginMenu("File", true) == true) {
             if (imgui.igMenuItem_Bool("New Project", "Ctrl+N", false, true) == true) {}
@@ -48,9 +54,21 @@ pub fn Begin() void {
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
             imgui.igEndMenu();
         }
+        if (imgui.igBeginMenu("Window", true) == true) {
+            if (imgui.igMenuItem_Bool("Scene", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_DockspaceWindowEvent = .{
+                        ._PanelType = .Scene,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            imgui.igEndMenu();
+        }
         imgui.igEndMenuBar();
     }
 }
+
 pub fn End() void {
     imgui.igEnd();
 }
