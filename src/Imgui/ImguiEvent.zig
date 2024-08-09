@@ -1,7 +1,11 @@
 pub const PanelType = enum(u16) {
-    Scene,
     Components,
     ContentBrowser,
+    Properties,
+    Scene,
+    Scripts,
+    Stats,
+    Viewport,
 };
 pub const ImguiEvent = union(enum) {
     ET_TogglePanelEvent: TogglePanelEvent,

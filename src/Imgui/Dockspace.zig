@@ -79,6 +79,30 @@ pub fn OnImguiRender() !void {
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
+            if (imgui.igMenuItem_Bool("Scripts", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .Scripts,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            if (imgui.igMenuItem_Bool("Stats", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .Stats,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .Viewport,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
             imgui.igEndMenu();
         }
         imgui.igEndMenuBar();

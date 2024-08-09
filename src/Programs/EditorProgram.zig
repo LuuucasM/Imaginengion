@@ -29,15 +29,20 @@ _EngineAllocator: std.mem.Allocator = undefined,
 
 const EditorProgram = @This();
 pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
-    self._ScenePanel = try EngineAllocator.create(ScenePanel);
-    self._ScenePanel.Init();
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
     self._ComponentsPanel.Init();
     self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
+    self._ContentBrowserPanel.Init();
     self._PropertiesPanel = try EngineAllocator.create(PropertiesPanel);
+    self._PropertiesPanel.Init();
+    self._ScenePanel = try EngineAllocator.create(ScenePanel);
+    self._ScenePanel.Init();
     self._ScriptsPanel = try EngineAllocator.create(ScriptsPanel);
+    self._ScriptsPanel.Init();
     self._StatsPanel = try EngineAllocator.create(StatsPanel);
+    self._StatsPanel.Init();
     self._ViewportPanel = try EngineAllocator.create(ViewportPanel);
+    self._ViewportPanel.Init();
     try Renderer.Init(EngineAllocator);
     try ImGui.Init(EngineAllocator);
     //init editor camera
@@ -46,16 +51,15 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
 }
 
 pub fn Deinit(self: EditorProgram) void {
-    self._EngineAllocator.destroy(self._ScenePanel);
     self._EngineAllocator.destroy(self._ComponentsPanel);
     self._EngineAllocator.destroy(self._ContentBrowserPanel);
     self._EngineAllocator.destroy(self._PropertiesPanel);
+    self._EngineAllocator.destroy(self._ScenePanel);
     self._EngineAllocator.destroy(self._ScriptsPanel);
     self._EngineAllocator.destroy(self._StatsPanel);
     self._EngineAllocator.destroy(self._ViewportPanel);
     ImGui.Deinit();
     Renderer.Deinit();
-    self._EngineAllocator.destroy(self._ScenePanel);
 }
 
 pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
@@ -103,10 +107,13 @@ pub fn ProcessImguiEvents(self: EditorProgram) void {
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
         const event: *ImguiEvent = @ptrCast(@alignCast(object_bytes));
         switch (event.GetPanelType()) {
-            .Scene => self._ScenePanel.OnImguiEvent(event),
             .Components => self._ComponentsPanel.OnImguiEvent(event),
             .ContentBrowser => self._ContentBrowserPanel.OnImguiEvent(event),
-            //else => @panic("This panel does not support events yet !"),
+            .Properties => self._PropertiesPanel.OnImguiEvent(event),
+            .Scene => self._ScenePanel.OnImguiEvent(event),
+            .Scripts => self._ScriptsPanel.OnImguiEvent(event),
+            .Stats => self._StatsPanel.OnImguiEvent(event),
+            .Viewport => self._ViewportPanel.OnImguiEvent(event),
         }
         it = node.next;
     }
