@@ -16,7 +16,7 @@ pub fn OnImguiRender(self: ScenePanel) void {
 }
 pub fn OnImguiEvent(self: *ScenePanel, event: *ImguiEvent) void {
     switch (event.*) {
-        .ET_DockspaceWindowEvent => {
+        .ET_TogglePanelEvent => {
             if (self._P_Open == true) {
                 self._P_Open = false;
             } else {

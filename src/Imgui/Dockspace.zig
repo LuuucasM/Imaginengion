@@ -55,9 +55,25 @@ pub fn OnImguiRender() !void {
             imgui.igEndMenu();
         }
         if (imgui.igBeginMenu("Window", true) == true) {
+            if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .Components,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            if (imgui.igMenuItem_Bool("ContentBrowser", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .ContentBrowser,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
             if (imgui.igMenuItem_Bool("Scene", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = ImguiEvent{
-                    .ET_DockspaceWindowEvent = .{
+                    .ET_TogglePanelEvent = .{
                         ._PanelType = .Scene,
                     },
                 };

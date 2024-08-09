@@ -24,6 +24,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         ._Window = try Window.Init(EngineAllocator),
         ._Program = try Program.Init(EngineAllocator),
     };
+    ApplicationManager._Window.SetVSync(false);
     try EventManager.Init(EngineAllocator, OnInputEvent, OnWindowEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
     try ThreadPool.init(EngineAllocator);
@@ -46,6 +47,8 @@ pub fn Run() !void {
     var delta_time: f64 = 0;
 
     while (ApplicationManager._IsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
+        //const fps = std.time.ms_per_s / delta_time;
+        //std.debug.print("fps: {d:.2}\n", .{fps});
         try ApplicationManager._Program.OnUpdate(delta_time);
     }
 }

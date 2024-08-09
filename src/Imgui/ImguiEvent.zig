@@ -1,8 +1,10 @@
 pub const PanelType = enum(u16) {
     Scene,
+    Components,
+    ContentBrowser,
 };
 pub const ImguiEvent = union(enum) {
-    ET_DockspaceWindowEvent: DockspaceWindowEvent,
+    ET_TogglePanelEvent: TogglePanelEvent,
     pub fn GetPanelType(self: ImguiEvent) PanelType {
         switch (self) {
             inline else => |event| return event.GetPanelType(),
@@ -10,9 +12,9 @@ pub const ImguiEvent = union(enum) {
     }
 };
 
-pub const DockspaceWindowEvent = struct {
+pub const TogglePanelEvent = struct {
     _PanelType: PanelType,
-    pub fn GetPanelType(self: DockspaceWindowEvent) PanelType {
+    pub fn GetPanelType(self: TogglePanelEvent) PanelType {
         return self._PanelType;
     }
 };

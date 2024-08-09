@@ -30,13 +30,14 @@ _EngineAllocator: std.mem.Allocator = undefined,
 const EditorProgram = @This();
 pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ScenePanel = try EngineAllocator.create(ScenePanel);
+    self._ScenePanel.Init();
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
+    self._ComponentsPanel.Init();
     self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
     self._PropertiesPanel = try EngineAllocator.create(PropertiesPanel);
     self._ScriptsPanel = try EngineAllocator.create(ScriptsPanel);
     self._StatsPanel = try EngineAllocator.create(StatsPanel);
     self._ViewportPanel = try EngineAllocator.create(ViewportPanel);
-    self._ScenePanel.Init();
     try Renderer.Init(EngineAllocator);
     try ImGui.Init(EngineAllocator);
     //init editor camera
@@ -101,13 +102,12 @@ pub fn ProcessImguiEvents(self: EditorProgram) void {
     while (it) |node| {
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
         const event: *ImguiEvent = @ptrCast(@alignCast(object_bytes));
-
-        if (event.GetPanelType() == .Scene) {
-            self._ScenePanel.OnImguiEvent(event);
-        } else {
-            @panic("This panel doesnt support events yet");
+        switch (event.GetPanelType()) {
+            .Scene => self._ScenePanel.OnImguiEvent(event),
+            .Components => self._ComponentsPanel.OnImguiEvent(event),
+            .ContentBrowser => self._ContentBrowserPanel.OnImguiEvent(event),
+            //else => @panic("This panel does not support events yet !"),
         }
-
         it = node.next;
     }
 }
