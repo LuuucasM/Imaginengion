@@ -3,6 +3,7 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const PropertiesPanel = @This();
 
 _P_Open: bool = true,
+//HoveredEntity
 
 pub fn Init(self: *PropertiesPanel) void {
     self._P_Open = true;

@@ -3,6 +3,14 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ViewportPanel = @This();
 
 _P_Open: bool = true,
+//EditorCamera: *EditorCamera
+//ViewportFocus: bool
+//ViewportHovered: bool
+//ViewportSize: vec2
+//ViewportBounds: [2]vec2
+//HoveredEntity: EntityID
+//SceneState: enum
+//_SceneManager: SceneManager
 
 pub fn Init(self: *ViewportPanel) void {
     self._P_Open = true;

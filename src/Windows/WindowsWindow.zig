@@ -10,8 +10,8 @@ const glfw = @import("../Core/CImports.zig").glfw;
 const WindowsWindow = @This();
 
 _Title: [*:0]const u8 = " ",
-_Width: usize = 1280,
-_Height: usize = 720,
+_Width: usize = 1600,
+_Height: usize = 900,
 _IsVSync: bool = true,
 _WindowCount: usize = 0,
 _Window: ?*glfw.struct_GLFWwindow = undefined,

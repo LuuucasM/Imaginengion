@@ -40,10 +40,7 @@ pub fn Deinit() void {
 }
 
 pub fn Run() !void {
-    var timer = std.time.Timer.start() catch |err| {
-        std.log.err("{}\n", .{err});
-        @panic("Could not start timer in Application::Run\n");
-    };
+    var timer = try std.time.Timer.start();
     var delta_time: f64 = 0;
 
     while (ApplicationManager._IsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {

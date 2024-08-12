@@ -3,6 +3,7 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ScenePanel = @This();
 
 _P_Open: bool = true,
+//HoveredEntity
 
 pub fn Init(self: *ScenePanel) void {
     self._P_Open = true;

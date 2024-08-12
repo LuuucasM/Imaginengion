@@ -47,10 +47,14 @@ pub fn OnImguiRender() !void {
     const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
         if (imgui.igBeginMenu("File", true) == true) {
-            if (imgui.igMenuItem_Bool("New Project", "Ctrl+N", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Open Project", "Ctrl+O", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save", "Ctrl+S", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save As...", "Ctrl+Shift+S", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("New Scene", "Ctrl+N", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Open Scene", "Ctrl+O", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene", "Ctrl+S", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene As...", "Ctrl+Shift+S", false, true) == true) {}
+            imgui.igSeparator();
+            if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {}
+            imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
             imgui.igEndMenu();
         }
@@ -67,6 +71,14 @@ pub fn OnImguiRender() !void {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .ContentBrowser,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            if (imgui.igMenuItem_Bool("Properties", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .Properties,
                     },
                 };
                 try ImguiManager.InsertEvent(new_event);

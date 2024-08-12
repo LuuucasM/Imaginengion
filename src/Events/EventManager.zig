@@ -9,7 +9,6 @@ var EventManager: *Self = undefined;
 
 _InputEventPool: std.heap.MemoryPool(Event),
 _WindowEventPool: std.heap.MemoryPool(Event),
-//_ImguiEventPool: std.heap.MemoryPool(Event),
 _EngineAllocator: std.mem.Allocator,
 _InputEventCallback: *const fn (*Event) void,
 _WindowEventCallback: *const fn (*Event) void,
