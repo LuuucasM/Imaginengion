@@ -58,21 +58,134 @@ pub fn PerspectiveRHGL(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
     };
 }
 
+fn QuatNormalize(q: Quatf32) Quatf32 {
+    const q_pow = @reduce(.Add, q * q);
+    const len = @sqrt(q_pow);
+    const normalized = q / len;
+    return normalized;
+}
+
 pub fn QuatToMat4(q: Quatf32) Mat4f32 {
-    const result: Mat4f32 = std.mem.zeroes(Mat4f32);
-    result[0][0] = 1 - (2 * ((q.y * q.y) + (q.z * q.z)));
-    result[0][1] = 2 * ((q.x * q.y) + (q.w * q.z));
-    result[0][2] = 2 * ((q.x * q.z) - (q.w * q.y));
+    const q_pow = q * q;
 
-    result[1][0] = 2 * ((q.x * q.y) - (q.w * q.z));
-    result[1][1] = 1 - (2 * ((q.x * q.x) + (q.z * q.z)));
-    result[1][2] = 2 * ((q.y * q.z) + (q.w * q.x));
+    const one: Vec4f32 = @splat(1.0);
+    const two: Vec4f32 = @splat(2.0);
+    const two2: Vec2f32 = @splat(2.0);
 
-    result[2][0] = 2 * ((q.x * q.z) + (q.w + q.y));
-    result[2][1] = 2 * ((q.y * q.z) + (q.w * q.x));
-    result[2][3] = 1 - (2 * ((q.x * q.x) + (q.y * q.y)));
+    const xy = q[0] * q[1];
+    const xz = q[0] * q[2];
+    const xw = q[0] * q[3];
+    const yz = q[1] * q[2];
+    const yw = q[1] * q[3];
+    const zw = q[2] * q[3];
 
-    result[3][3] = 1.0;
+    const diag = one - two * Vec4f32{ q_pow[1] + q_pow[2], q_pow[0] + q_pow[2], q_pow[0] + q_pow[1], 0.0 };
 
+    const r1 = two2 * Vec2f32{ xy + zw, xz - yw };
+    const r2 = two2 * Vec2f32{ xy - zw, yz + xw };
+    const r3 = two2 * Vec2f32{ xz + yw, yz - xw };
+
+    return Mat4f32{
+        Vec4f32{ diag[0], r1[0], r1[1] },
+        Vec4f32{ r2[0], diag[1], r2[1] },
+        Vec4f32{ r3[0], r3[1], diag[2] },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+}
+
+pub fn Translate(m: Mat4f32, v: Vec3f32) Mat4f32 {
+    var result = m;
+    result[3] = (m[0] * @as(Vec4f32, @splat(v[0]))) + (m[1] * @as(Vec4f32, @splat(v[1]))) + (m[2] * @as(Vec4f32, @splat(v[2]))) + m[3];
     return result;
+}
+
+pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
+    const Coef00 = m[2][2] * m[3][3] - m[3][2] * m[2][3];
+    const Coef02 = m[1][2] * m[3][3] - m[3][2] * m[1][3];
+    const Coef03 = m[1][2] * m[2][3] - m[2][2] * m[1][3];
+
+    const Coef04 = m[2][1] * m[3][3] - m[3][1] * m[2][3];
+    const Coef06 = m[1][1] * m[3][3] - m[3][1] * m[1][3];
+    const Coef07 = m[1][1] * m[2][3] - m[2][1] * m[1][3];
+
+    const Coef08 = m[2][1] * m[3][2] - m[3][1] * m[2][2];
+    const Coef10 = m[1][1] * m[3][2] - m[3][1] * m[1][2];
+    const Coef11 = m[1][1] * m[2][2] - m[2][1] * m[1][2];
+
+    const Coef12 = m[2][0] * m[3][3] - m[3][0] * m[2][3];
+    const Coef14 = m[1][0] * m[3][3] - m[3][0] * m[1][3];
+    const Coef15 = m[1][0] * m[2][3] - m[2][0] * m[1][3];
+
+    const Coef16 = m[2][0] * m[3][2] - m[3][0] * m[2][2];
+    const Coef18 = m[1][0] * m[3][2] - m[3][0] * m[1][2];
+    const Coef19 = m[1][0] * m[2][2] - m[2][0] * m[1][2];
+
+    const Coef20 = m[2][0] * m[3][1] - m[3][0] * m[2][1];
+    const Coef22 = m[1][0] * m[3][1] - m[3][0] * m[1][1];
+    const Coef23 = m[1][0] * m[2][1] - m[2][0] * m[1][1];
+
+    const Fac0 = Vec4f32{ Coef00, Coef00, Coef02, Coef03 };
+    const Fac1 = Vec4f32{ Coef04, Coef04, Coef06, Coef07 };
+    const Fac2 = Vec4f32{ Coef08, Coef08, Coef10, Coef11 };
+    const Fac3 = Vec4f32{ Coef12, Coef12, Coef14, Coef15 };
+    const Fac4 = Vec4f32{ Coef16, Coef16, Coef18, Coef19 };
+    const Fac5 = Vec4f32{ Coef20, Coef20, Coef22, Coef23 };
+
+    const Vec0 = Vec4f32{ m[1][0], m[0][0], m[0][0], m[0][0] };
+    const Vec1 = Vec4f32{ m[1][1], m[0][1], m[0][1], m[0][1] };
+    const Vec2 = Vec4f32{ m[1][2], m[0][2], m[0][2], m[0][2] };
+    const Vec3 = Vec4f32{ m[1][3], m[0][3], m[0][3], m[0][3] };
+
+    const Inv0 = Vec1 * Fac0 - Vec2 * Fac1 + Vec3 * Fac2;
+    const Inv1 = Vec0 * Fac0 - Vec2 * Fac3 + Vec3 * Fac4;
+    const Inv2 = Vec0 * Fac1 - Vec1 * Fac3 + Vec3 * Fac5;
+    const Inv3 = Vec0 * Fac2 - Vec1 * Fac4 + Vec2 * Fac5;
+
+    const SignA = Vec4f32{ 1, -1, 1, -1 };
+    const SignB = Vec4f32{ -1, 1, -1, 1 };
+    const Inverse: Mat4f32 = .{
+        Inv0 * SignA,
+        Inv1 * SignB,
+        Inv2 * SignA,
+        Inv3 * SignB,
+    };
+
+    const Col0 = Vec4f32{ Inverse[0][0], Inverse[1][0], Inverse[2][0], Inverse[3][0] };
+
+    const Dot1 = @reduce(.Add, m[0] * Col0);
+
+    return .{
+        Inverse[0] / Dot1,
+        Inverse[1] / Dot1,
+        Inverse[2] / Dot1,
+        Inverse[3] / Dot1,
+    };
+}
+
+pub fn Vec3ToQuat(v: Vec3f32) Quatf32 {
+    const c = @cos(v * @as(Vec3f32, @splat(0.5)));
+    const s = @sin(v * @as(Vec3f32, @splat(0.5)));
+
+    return Quatf32{
+        s[0] * c[1] * c[2] - c[0] * s[1] * s[2],
+        c[0] * s[1] * c[2] + s[0] * c[1] * s[2],
+        c[0] * c[1] * s[2] - s[0] * s[1] * c[2],
+        c[0] * c[1] * c[2] + s[0] * s[1] * s[2],
+    };
+}
+
+pub fn Vec3CrossVec3(x: Vec3f32, y: Vec3f32) Vec3f32 {
+    return .{
+        x[1] * y[2] - y[1] * x[2],
+        x[2] * y[0] - y[2] * x[0],
+        x[0] * y[1] - y[0] * x[1],
+    };
+}
+
+pub fn RotateQuatVec3(q: Quatf32, v: Vec3f32) Vec3f32 {
+    const QuatVect = Vec3f32{ q[0], q[1], q[2] };
+    const uv = Vec3CrossVec3(QuatVect, v);
+    const uuv = Vec3CrossVec3(QuatVect, uv);
+
+    return v + ((uv * @as(Vec3f32, @splat(q[3]))) + uuv) * @as(Vec3f32, @splat(2.0));
 }

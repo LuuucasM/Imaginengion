@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-
+const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const KeyCodes = @import("KeyCodes.zig").KeyCodes;
 const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const Input = @This();
@@ -39,16 +39,16 @@ pub fn SetMousePressed(button: MouseCodes, on: bool) !void {
 pub fn IsMouseButtonPressed(button: MouseCodes) bool {
     return InputManager._Impl.IsMouseButtonPressed(button);
 }
-pub fn SetMousePosition(newPos: @Vector(2, f64)) void {
+pub fn SetMousePosition(newPos: Vec2f32) void {
     InputManager._Impl.SetMousePosition(newPos);
 }
-pub fn GetMousePosition() @Vector(2, f64) {
+pub fn GetMousePosition() Vec2f32 {
     return InputManager._Impl.GetMousePosition();
 }
-pub fn SetMouseScrolled(scrolled: @Vector(2, f64)) void {
+pub fn SetMouseScrolled(scrolled: Vec2f32) void {
     InputManager._Impl.SetMouseScrolled(scrolled);
 }
-pub fn GetMouseScrolled() @Vector(2, f64) {
+pub fn GetMouseScrolled() Vec2f32 {
     return InputManager._Impl.GetMouseScrolled();
 }
 pub fn PollInputEvents() void {

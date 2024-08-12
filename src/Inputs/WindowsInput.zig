@@ -1,4 +1,5 @@
 const std = @import("std");
+const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const HashMap = @import("std").HashMap;
 const KeyCodes = @import("KeyCodes.zig").KeyCodes;
@@ -9,8 +10,8 @@ const glfw = @import("../Core/CImports.zig").glfw;
 
 _KeyPressedSet: HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage) = undefined,
 _MousePressedSet: Set(MouseCodes) = undefined,
-_MousePosition: @Vector(2, f64) = @splat(0),
-_MouseScrolled: @Vector(2, f64) = @splat(0),
+_MousePosition: Vec2f32 = std.mem.zeroes(Vec2f32),
+_MouseScrolled: Vec2f32 = std.mem.zeroes(Vec2f32),
 _Allocator: std.mem.Allocator = std.heap.page_allocator,
 _Window: *void = undefined,
 
@@ -54,16 +55,16 @@ pub fn SetMousePressed(self: *WindowsInput, button: MouseCodes, on: bool) !void 
 pub fn IsMouseButtonPressed(self: WindowsInput, button: MouseCodes) bool {
     return if (self._MousePressedSet.contains(button)) true else false;
 }
-pub fn SetMousePosition(self: *WindowsInput, newPos: @Vector(2, f64)) void {
+pub fn SetMousePosition(self: *WindowsInput, newPos: Vec2f32) void {
     self._MousePosition = newPos;
 }
-pub fn GetMousePosition(self: WindowsInput) @Vector(2, f64) {
+pub fn GetMousePosition(self: WindowsInput) Vec2f32 {
     return self._MousePosition;
 }
-pub fn SetMouseScrolled(self: *WindowsInput, newScrolled: @Vector(2, f64)) void {
+pub fn SetMouseScrolled(self: *WindowsInput, newScrolled: Vec2f32) void {
     self._MouseScrolled = newScrolled;
 }
-pub fn GetMouseScrolled(self: WindowsInput) @Vector(2, f64) {
+pub fn GetMouseScrolled(self: WindowsInput) Vec2f32 {
     return self._MouseScrolled;
 }
 pub fn PollInputEvents(self: WindowsInput) void {
