@@ -25,7 +25,6 @@ _ContentBrowserPanel: *ContentBrowserPanel = undefined,
 _ScriptsPanel: *ScriptsPanel = undefined,
 _StatsPanel: *StatsPanel = undefined,
 _EngineAllocator: std.mem.Allocator = undefined,
-//_Dockspace: *Dockspace = undefined,
 
 const EditorProgram = @This();
 pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
@@ -71,14 +70,14 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     //Render Imgui
     ImGui.Begin();
     Dockspace.Begin();
-    try Dockspace.OnImguiRender();
     self._ScenePanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
     self._ContentBrowserPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender();
     self._StatsPanel.OnImguiRender();
-    self._ViewportPanel.OnImguiRender(); //note: for the editor, game rendering is done in here
+    self._ViewportPanel.OnImguiRender();
+    try Dockspace.OnImguiRender();
     self.ProcessImguiEvents();
     ImGui.ClearEvents();
     Dockspace.End();

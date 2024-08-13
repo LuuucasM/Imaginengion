@@ -24,7 +24,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         ._Window = try Window.Init(EngineAllocator),
         ._Program = try Program.Init(EngineAllocator),
     };
-    ApplicationManager._Window.SetVSync(false);
+    ApplicationManager._Window.SetVSync(true);
     try EventManager.Init(EngineAllocator, OnInputEvent, OnWindowEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
     try ThreadPool.init(EngineAllocator);

@@ -78,7 +78,8 @@ pub fn GetFirstEvent() ?*std.SinglyLinkedList(usize).Node {
 }
 
 pub fn ClearEvents() void {
-    _ = ImguiManager._EventPool.reset(.free_all);
+    const limit = std.heap.ArenaAllocator.ResetMode{ .retain_with_limit = 2 };
+    _ = ImguiManager._EventPool.reset(limit);
 }
 
 fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {

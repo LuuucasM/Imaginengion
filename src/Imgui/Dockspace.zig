@@ -47,13 +47,28 @@ pub fn OnImguiRender() !void {
     const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
         if (imgui.igBeginMenu("File", true) == true) {
-            if (imgui.igMenuItem_Bool("New Scene", "Ctrl+N", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Open Scene", "Ctrl+O", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Scene", "Ctrl+S", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Scene As...", "Ctrl+Shift+S", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("New Level", "Ctrl+N", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Open Level", "Ctrl+O", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Leve", "Ctrl+S", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Level As...", "Ctrl+Shift+S", false, true) == true) {}
             imgui.igSeparator();
-            if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
+                //Stop the scene if it is currently playing
+                //Save current scene if there is one
+                //get rid of the scene
+                //change content browser CWD
+                //clear ImguiEventPool
+                //create a project file in the specified folder
+                //create sub folders like scenes, textures, etc (not sure how to lay it out for now)
+            }
+            if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
+                //stop the scene if there is one currently playing
+                //save the current scene if there is one
+                //get rid of the scene
+                //change content browser cwd
+                //clear imguieventpool
+                //
+            }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
             imgui.igEndMenu();

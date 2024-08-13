@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-
+const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
@@ -9,7 +9,7 @@ const glfw = @import("../Core/CImports.zig").glfw;
 
 const WindowsWindow = @This();
 
-_Title: [*:0]const u8 = " ",
+_Title: [*:0]const u8 = "ImaginEngion",
 _Width: usize = 1600,
 _Height: usize = 900,
 _IsVSync: bool = true,
@@ -173,7 +173,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
 
 export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.C) void {
     _ = window;
-    InputManager.SetMousePosition(@Vector(2, f64){ xPos, yPos });
+    InputManager.SetMousePosition(Vec2f32{ @floatCast(xPos), @floatCast(yPos) });
     const new_event = Event{
         .ET_MouseMoved = .{
             ._MouseX = @floatCast(xPos),
@@ -188,7 +188,7 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
 
 export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.C) void {
     _ = window;
-    InputManager.SetMouseScrolled(@Vector(2, f64){ xOffset, yOffset });
+    InputManager.SetMouseScrolled(Vec2f32{ @floatCast(xOffset), @floatCast(yOffset) });
     const new_event = Event{
         .ET_MouseScrolled = .{
             ._XOffset = @floatCast(xOffset),

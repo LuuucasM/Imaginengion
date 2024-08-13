@@ -1,3 +1,4 @@
+const builtin = @import("builtin");
 pub const glad = @cImport({
     @cInclude("glad/glad.h");
 });
@@ -13,3 +14,13 @@ pub const imgui = @cImport({
     @cInclude("cimgui.h");
     @cInclude("cimgui_impl.h");
 });
+
+pub const windows = switch (builtin.os.tag) {
+    .windows => {
+        @cImport({
+            @cDefine("GLFW_EXPOSE_NATIVE_WIN32", "");
+            @cInclude("GLFW/glfw3native.h");
+        });
+    },
+    else => undefined,
+};
