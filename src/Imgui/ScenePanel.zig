@@ -1,4 +1,5 @@
 const imgui = @import("../Core/CImports.zig").imgui;
+const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ScenePanel = @This();
 
@@ -24,8 +25,8 @@ pub fn OnImguiEvent(self: *ScenePanel, event: *ImguiEvent) void {
                 self._P_Open = true;
             }
         },
-        //else => {
-        //    @panic("This event is not supported in scene yet");
-        //},
+        .ET_NewProjectEvent => {
+            std.debug.print("not impelmeneted yet :)", .{});
+        },
     }
 }

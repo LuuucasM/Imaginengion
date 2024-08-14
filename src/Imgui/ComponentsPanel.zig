@@ -1,3 +1,4 @@
+const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ComponentsPanel = @This();
@@ -24,6 +25,9 @@ pub fn OnImguiEvent(self: *ComponentsPanel, event: *ImguiEvent) void {
             } else {
                 self._P_Open = true;
             }
+        },
+        .ET_NewProjectEvent => {
+            std.debug.print("not impelmeneted yet :)", .{});
         },
     }
 }

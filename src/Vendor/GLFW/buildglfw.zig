@@ -8,4 +8,5 @@ pub fn Add(exe: *Compile) void {
     exe.linkSystemLibrary("GLFW");
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("gdi32");
+    exe.linkSystemLibrary("ole32");
 }

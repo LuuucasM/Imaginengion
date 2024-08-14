@@ -5,25 +5,27 @@ const InputManager = @import("../Inputs/Input.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
-const ScenePanel = @import("../Imgui/ScenePanel.zig");
-const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const PropertiesPanel = @import("../Imgui/PropertiesPanel.zig");
+const ScenePanel = @import("../Imgui/ScenePanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
+const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
+const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
 
 const Renderer = @import("../Renderer/Renderer.zig");
 
-_ViewportPanel: *ViewportPanel = undefined,
 //_EditorCamera
-_ScenePanel: *ScenePanel = undefined,
 _ComponentsPanel: *ComponentsPanel = undefined,
-_PropertiesPanel: *PropertiesPanel = undefined,
 _ContentBrowserPanel: *ContentBrowserPanel = undefined,
+_PropertiesPanel: *PropertiesPanel = undefined,
+_ScenePanel: *ScenePanel = undefined,
 _ScriptsPanel: *ScriptsPanel = undefined,
 _StatsPanel: *StatsPanel = undefined,
+_ToolbarPanel: *ToolbarPanel = undefined,
+_ViewportPanel: *ViewportPanel = undefined,
 _EngineAllocator: std.mem.Allocator = undefined,
 
 const EditorProgram = @This();
@@ -40,6 +42,8 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ScriptsPanel.Init();
     self._StatsPanel = try EngineAllocator.create(StatsPanel);
     self._StatsPanel.Init();
+    self._ToolbarPanel = try EngineAllocator.create(ToolbarPanel);
+    self._ToolbarPanel.Init();
     self._ViewportPanel = try EngineAllocator.create(ViewportPanel);
     self._ViewportPanel.Init();
     try Renderer.Init(EngineAllocator);
@@ -56,6 +60,7 @@ pub fn Deinit(self: EditorProgram) void {
     self._EngineAllocator.destroy(self._ScenePanel);
     self._EngineAllocator.destroy(self._ScriptsPanel);
     self._EngineAllocator.destroy(self._StatsPanel);
+    self._EngineAllocator.destroy(self._ToolbarPanel);
     self._EngineAllocator.destroy(self._ViewportPanel);
     ImGui.Deinit();
     Renderer.Deinit();
@@ -75,6 +80,7 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     self._ContentBrowserPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender();
+    self._ToolbarPanel.OnImguiRender();
     self._StatsPanel.OnImguiRender();
     self._ViewportPanel.OnImguiRender();
     try Dockspace.OnImguiRender();
@@ -105,14 +111,25 @@ pub fn ProcessImguiEvents(self: EditorProgram) void {
     while (it) |node| {
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
         const event: *ImguiEvent = @ptrCast(@alignCast(object_bytes));
-        switch (event.GetPanelType()) {
-            .Components => self._ComponentsPanel.OnImguiEvent(event),
-            .ContentBrowser => self._ContentBrowserPanel.OnImguiEvent(event),
-            .Properties => self._PropertiesPanel.OnImguiEvent(event),
-            .Scene => self._ScenePanel.OnImguiEvent(event),
-            .Scripts => self._ScriptsPanel.OnImguiEvent(event),
-            .Stats => self._StatsPanel.OnImguiEvent(event),
-            .Viewport => self._ViewportPanel.OnImguiEvent(event),
+        switch (event.*) {
+            .ET_TogglePanelEvent => |e| {
+                switch (e._PanelType) {
+                    .Components => self._ComponentsPanel.OnImguiEvent(event),
+                    .ContentBrowser => self._ContentBrowserPanel.OnImguiEvent(event),
+                    .Properties => self._PropertiesPanel.OnImguiEvent(event),
+                    .Scene => self._ScenePanel.OnImguiEvent(event),
+                    .Scripts => self._ScriptsPanel.OnImguiEvent(event),
+                    .Stats => self._StatsPanel.OnImguiEvent(event),
+                    else => std.debug.print("Unexpected panel type!", .{}),
+                }
+            },
+            .ET_NewProjectEvent => {
+                self._ComponentsPanel.OnImguiEvent(event);
+                self._ContentBrowserPanel.OnImguiEvent(event);
+                self._PropertiesPanel.OnImguiEvent(event);
+                self._ScenePanel.OnImguiEvent(event);
+                self._ScriptsPanel.OnImguiEvent(event);
+            },
         }
         it = node.next;
     }

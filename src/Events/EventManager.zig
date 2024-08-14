@@ -47,11 +47,6 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
         .EC_Input => EventManager._InputEventCallback,
         .EC_Window => EventManager._WindowEventCallback,
     };
-    const num_events = switch (eventCategory) {
-        .EC_Input => EventManager._InputEventPool.arena.state.buffer_list.len(),
-        .EC_Window => EventManager._WindowEventPool.arena.state.buffer_list.len(),
-    };
-    std.debug.print("number of events: {}\n", .{num_events});
     while (it) |node| {
         //convert raw pointer into event pointer
         //note std.SlinglyLinkedList(usize).Node is the type for BufNode which is the type of 'node' internally
@@ -65,7 +60,7 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
 }
 
 pub fn EventsReset() void {
-    const limit = std.heap.ArenaAllocator.ResetMode{ .retain_with_limit = 2 };
+    const limit = std.heap.ArenaAllocator.ResetMode{ .retain_with_limit = 5 };
     _ = EventManager._InputEventPool.reset(limit);
     _ = EventManager._WindowEventPool.reset(limit);
 }

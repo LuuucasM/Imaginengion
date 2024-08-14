@@ -1,6 +1,10 @@
 const builtin = @import("builtin");
 const UnsupportedPlatformUtils = @This();
 
+pub fn OpenFolder() []const u16 {
+    Unsupported();
+}
+
 pub fn OpenFile(filter: []const u8) []const u8 {
     _ = filter;
     Unsupported();

@@ -9,16 +9,13 @@ pub const PanelType = enum(u16) {
 };
 pub const ImguiEvent = union(enum) {
     ET_TogglePanelEvent: TogglePanelEvent,
-    pub fn GetPanelType(self: ImguiEvent) PanelType {
-        switch (self) {
-            inline else => |event| return event.GetPanelType(),
-        }
-    }
+    ET_NewProjectEvent: NewProjectEvent,
 };
 
 pub const TogglePanelEvent = struct {
     _PanelType: PanelType,
-    pub fn GetPanelType(self: TogglePanelEvent) PanelType {
-        return self._PanelType;
-    }
+};
+
+pub const NewProjectEvent = struct {
+    _Path: []const u8,
 };

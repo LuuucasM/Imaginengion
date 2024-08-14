@@ -1,7 +1,9 @@
+const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiManager = @import("Imgui.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const Dockspace = @This();
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 pub fn Begin() void {
     const opt_fullscreen = true;
@@ -53,11 +55,18 @@ pub fn OnImguiRender() !void {
             if (imgui.igMenuItem_Bool("Save Level As...", "Ctrl+Shift+S", false, true) == true) {}
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
+                const path = try PlatformUtils.OpenFolder();
+                const new_event = ImguiEvent{
+                    .ET_NewProjectEvent = .{
+                        ._Path = path,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
                 //Stop the scene if it is currently playing
                 //Save current scene if there is one
-                //get rid of the scene
+                //destroy scene object
                 //change content browser CWD
-                //clear ImguiEventPool
+                //clear ImguiEventPool = EDITOR PROGRAM
                 //create a project file in the specified folder
                 //create sub folders like scenes, textures, etc (not sure how to lay it out for now)
             }

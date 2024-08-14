@@ -7,10 +7,14 @@ const Impl = switch (builtin.os.tag) {
     else => @import("UnsupportedPlatformUtils.zig"),
 };
 
+pub fn OpenFolder() ![]const u8 {
+    return Impl.OpenFolder();
+}
+
 pub fn OpenFile(filter: []const u8) []const u8 {
-    Impl.OpenFile(filter);
+    return Impl.OpenFile(filter);
 }
 
 pub fn SaveFile(filter: []const u8) []const u8 {
-    Impl.SaveFile(filter);
+    return Impl.SaveFile(filter);
 }
