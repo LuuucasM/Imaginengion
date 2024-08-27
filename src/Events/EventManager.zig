@@ -60,7 +60,6 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
 }
 
 pub fn EventsReset() void {
-    const limit = std.heap.ArenaAllocator.ResetMode{ .retain_with_limit = 5 };
-    _ = EventManager._InputEventPool.reset(limit);
-    _ = EventManager._WindowEventPool.reset(limit);
+    _ = EventManager._InputEventPool.reset(.free_all);
+    _ = EventManager._WindowEventPool.reset(.free_all);
 }

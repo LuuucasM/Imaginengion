@@ -1,5 +1,6 @@
 const std = @import("std");
 const math = std.math;
+
 pub const Vec1f32 = @Vector(1, f32);
 pub const Vec2f32 = @Vector(2, f32);
 pub const Vec3f32 = @Vector(3, f32);
@@ -18,7 +19,7 @@ pub fn InitMat4CompTime(x: comptime_float) Mat4f32 {
     };
 }
 
-fn Mat4MulVec(m: Vec4f32, v: Mat4f32) @TypeOf(m) {
+inline fn Mat4MulVec(m: Vec4f32, v: Mat4f32) @TypeOf(m) {
     const mov0: @TypeOf(m) = @splat(m[0]);
     const mov1: @TypeOf(m) = @splat(m[1]);
     const mul0 = v[0] * mov0;
@@ -188,4 +189,67 @@ pub fn RotateQuatVec3(q: Quatf32, v: Vec3f32) Vec3f32 {
     const uuv = Vec3CrossVec3(QuatVect, uv);
 
     return v + ((uv * @as(Vec3f32, @splat(q[3]))) + uuv) * @as(Vec3f32, @splat(2.0));
+}
+
+test Mat4Mul {
+    //------------TEST 1---------------
+    const mat1 = Mat4f32{
+        Vec4f32{ 1, 2, 3, 4 },
+        Vec4f32{ 5, 6, 7, 8 },
+        Vec4f32{ 9, 10, 11, 12 },
+        Vec4f32{ 13, 14, 15, 16 },
+    };
+    const mat2 = Mat4f32{
+        Vec4f32{ 4, 3, 2, 1 },
+        Vec4f32{ 8, 7, 6, 5 },
+        Vec4f32{ 12, 11, 10, 9 },
+        Vec4f32{ 16, 15, 14, 13 },
+    };
+    const ans1 = Mat4f32{
+        Vec4f32{ 120, 110, 100, 90 },
+        Vec4f32{ 280, 254, 228, 202 },
+        Vec4f32{ 440, 398, 356, 314 },
+        Vec4f32{ 600, 542, 484, 426 },
+    };
+
+    const calc1 = Mat4Mul(mat1, mat2);
+
+    var i = 0;
+    while (i < 4) : (i += 1) {
+        std.testing.expect(calc1[i][0] == ans1[i][0]);
+        std.testing.expect(calc1[i][1] == ans1[i][1]);
+        std.testing.expect(calc1[i][2] == ans1[i][2]);
+        std.testing.expect(calc1[i][3] == ans1[i][3]);
+    }
+
+    //-----------------TEST 2-----------------
+    const mat3 = Mat4f32{
+        Vec4f32{ 3.14, 2.71, 1.59, 4.23 },
+        Vec4f32{ 2.19, 3.85, 2.93, 1.17 },
+        Vec4f32{ 4.67, 1.23, 3.19, 2.54 },
+        Vec4f32{ 1.92, 4.15, 2.78, 3.42 },
+    };
+    const mat4 = Mat4f32{
+        Vec4f32{ 2.58, 3.92, 1.45, 2.19 },
+        Vec4f32{ 3.47, 1.98, 4.23, 3.15 },
+        Vec4f32{ 1.11, 2.67, 3.85, 1.92 },
+        Vec4f32{ 4.32, 2.51, 1.76, 3.28 },
+    };
+    const ans2 = Mat4f32{
+        Vec4f32{ 37.5434, 32.5372, 29.5826, 32.3403 },
+        Vec4f32{ 27.3164, 26.9676, 32.8007, 26.3868 },
+        Vec4f32{ 30.8304, 35.6345, 28.7263, 28.5578 },
+        Vec4f32{ 37.2143, 31.7502, 37.0607, 33.8325 },
+    };
+    const diff1 = 0.0001;
+
+    const calc2 = Mat4Mul(mat3, mat4);
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        std.testing.expect((calc2[i][0] - ans2[i][0]) < diff1);
+        std.testing.expect((calc2[i][1] - ans2[i][1]) < diff1);
+        std.testing.expect((calc2[i][2] - ans2[i][2]) < diff1);
+        std.testing.expect((calc2[i][3] - ans2[i][3]) < diff1);
+    }
 }

@@ -4,6 +4,8 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ContentBrowserPanel = @This();
 
 _P_Open: bool = true,
+_ProjectDirectory: []const u8 = "",
+_CurrentDirectory: []const u8 = "",
 
 pub fn Init(self: *ContentBrowserPanel) void {
     self._P_Open = true;
@@ -25,8 +27,9 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) void {
                 self._P_Open = true;
             }
         },
-        .ET_NewProjectEvent => {
-            std.debug.print("not impelmeneted yet :)", .{});
+        .ET_NewProjectEvent => |e| {
+            self._ProjectDirectory = e._Path;
+            self._CurrentDirectory = e._Path;
         },
     }
 }
