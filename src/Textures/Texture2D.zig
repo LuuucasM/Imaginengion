@@ -8,11 +8,11 @@ const Impl = switch (builtin.os.tag) {
 
 _Impl: Impl = .{},
 
-pub fn InitSize(self: Texture2D, width: u32, height: u32) void {
-    self._Impl.InitSize(width, height);
+pub fn InitData(self: *Texture2D, width: u32, height: u32, channels: u32, data: *anyopaque, size: usize) void {
+    self._Impl.InitData(width, height, channels, data, size);
 }
 
-pub fn InitPath(self: Texture2D, path: []const u8) void {
+pub fn InitPath(self: *Texture2D, path: []const u8) void {
     self._Impl.InitPath(path);
 }
 
@@ -29,8 +29,11 @@ pub fn GetHeight(self: Texture2D) u32 {
 pub fn GetID(self: Texture2D) u32 {
     return self._Impl.GetID();
 }
-pub fn SetData(self: Texture2D, data: *anyopaque, size: usize) void {
-    self._Impl.SetData(data, size);
+pub fn UpdateData(self: *Texture2D, data: *anyopaque, size: usize) void {
+    self._Impl.UpdateData(data, size);
+}
+pub fn UpdateDataPath(self: *Texture2D, path: []const u8) void {
+    self._Impl.UpdateDataPath(path);
 }
 pub fn Bind(self: Texture2D, slot: u32) void {
     self._Impl.Bind(slot);

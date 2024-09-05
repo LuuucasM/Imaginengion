@@ -34,7 +34,7 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
     self._ComponentsPanel.Init();
     self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
-    self._ContentBrowserPanel.Init();
+    try self._ContentBrowserPanel.Init();
     self._PropertiesPanel = try EngineAllocator.create(PropertiesPanel);
     self._PropertiesPanel.Init();
     self._ScenePanel = try EngineAllocator.create(ScenePanel);
@@ -69,6 +69,8 @@ pub fn Deinit(self: EditorProgram) void {
 
 pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     _ = dt;
+    //process asset manager
+    try AssetManager.OnUpdate();
     //Process Inputs
     InputManager.PollInputEvents();
     EventManager.ProcessEvents(.EC_Input);

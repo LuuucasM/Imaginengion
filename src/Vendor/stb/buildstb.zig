@@ -5,6 +5,9 @@ pub fn Add(exe: *Compile) void {
         .files = &[_][]const u8{
             "src/Vendor/stb/stb.c",
         },
+        .flags = &[_][]const u8{
+            "-std=c99",
+        },
     };
     exe.addCSourceFiles(options);
     exe.addIncludePath(.{ .path = "src/Vendor/stb/" });

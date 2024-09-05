@@ -4,7 +4,7 @@ const AssetHandle = @import("AssetHandle.zig");
 const AssetTypes = @import("AssetTypes.zig").AssetTypes;
 
 //const Scene = @import("");
-const Texture = @import("../Textures/Texture.zig");
+const Texture = @import("../Textures/Texture.zig").Texture;
 
 const AssetManager = @This();
 
@@ -22,7 +22,7 @@ _ProjectDirectory: []const u8 = "",
 _AssetIDToTextureMap: std.AutoHashMap(u128, Texture),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
-    const asset_gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var asset_gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const asset_allocator = asset_gpa.allocator();
     AssetM = try EngineAllocator.create(AssetManager);
     AssetM.* = .{
@@ -66,7 +66,7 @@ pub fn GetAsset(comptime T: type, id: u128) ?T {
     }
 }
 
-pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8) !T {
+pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8) !AssetHandle {
     //type
     const assetType = if (T == Texture) AssetTypes.Texture else @compileError("Type not supported yet");
 
@@ -82,7 +82,7 @@ pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8) !T {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
-    const content = try f.readToEndAlloc(arena.allocator(), fstat.size);
+    const content = try f.readToEndAlloc(arena.allocator(), @intCast(fstat.size));
     var hasher = std.hash.Wyhash.init(0);
     hasher.update(content);
     const hash = hasher.final();
@@ -159,7 +159,7 @@ fn HandleModifiedAssets(id: u128, handle: AssetHandle, abs_path: []const u8, new
 
     if (handle._AssetType == .Texture) {
         if (AssetM._AssetIDToTextureMap.get(id)) |texture| {
-            try texture.SetDataFromPath(abs_path);
+            texture.UpdateDataPath(abs_path);
         }
     }
 
@@ -190,7 +190,7 @@ fn HandleNewAsset(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
     defer file.close();
     const fstats = try file.stat();
 
-    const content = try file.readToEndAlloc(allocator, fstats.size);
+    const content = try file.readToEndAlloc(allocator, @intCast(fstats.size));
     defer allocator.free(content);
 
     var hasher = std.hash.Wyhash.init(0);

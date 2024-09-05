@@ -26,6 +26,5 @@ pub const nativeos = switch (builtin.os.tag) {
 };
 
 pub const stb = @cImport({
-    @cDefine("STB_IMAGE_IMPLEMENTATION", "");
     @cInclude("stb_image.h");
-})
+});
