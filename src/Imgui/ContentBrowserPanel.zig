@@ -47,45 +47,6 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
 
     RenderBackButton(self, thumbnail_size);
     try RenderDirectoryContents(self, thumbnail_size);
-    var icon_ptr: *Texture2D = &self._BackArrowTexture;
-            //add a back button if it is not the projects root directory
-            if (std.mem.eql(u8, self._CurrentDirectory, self._ProjectDirectory) != true) {
-                imgui.igPushStyleColor(imgui.ImGuiCol_Button, .{x = 0, y = 0, z = 0, w = 0});
-                imgui.igImageButton(icon_ptr.GetID(), .{x = thumbnailSize, y = thumbnailSize}, .{x = 0, y = 1}, .{x = 1, y = 0});
-                imgui.igPopStyleColor();
-
-                if (imgui.igIsItemHovered() == true and imgui.igIsMouseDoubleClicked(imgui.ImGuiMouseButton_Left) == true){
-                    self._CurrentDirectory = std.fs.path.dirname(self._CurrentDirectory).?;
-                }
-
-                imgui.igTextWrapped("Back");
-                imgui.igNextColumn();
-            }
-            //print all the contents of the current directory
-            const dir = try std.fs.openDirAbsolute(self._CurrentDirectory, .{.iterate = true});
-
-            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-            var iter = dir.iterate();
-            while (try iter.next()) |entry| {
-                imgui.igPushID(entry.name);
-                icon_ptr = if (entry.kind == .directory) &self._DirTexture else if (entry.kind == .file){
-                    if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true){
-                        &self._PngTexture
-                    }
-                }
-                imgui.igPushStyleColor(imgui.ImGuiCol_Button, .{x = 0, y = 0, z = 0, w = 0});
-                imgui.igImageButton(icon_ptr.GetID(), .{x = thumbnailSize, y = thumbnailSize}, .{x = 0, y = 1}, .{x = 1, y = 0});
-                imgui.igPopStyleColor();
-
-                if (entry.kind == .directory and imgui.igIsItemHovered() == true and imgui.igIsMouseDoubleClicked(imgui.ImGuiMouseButton_Left) == true){
-                    self._CurrentDirectory = try std.fs.path.join(arena.allocator(), [_][]const u8{self._CurrentDirectory, "/", entry.name, "/"});
-                }
-                imgui.igTextWrapped(entry.name);
-                imgui.igNextColumn();
-                imgui.igPopID();
-            }
-
-        imgui.igColumns(1);
 }
 
 pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) void {
