@@ -29,12 +29,12 @@ pub fn GetHeight(self: Texture2D) u32 {
 pub fn GetID(self: Texture2D) u32 {
     return self._Impl.GetID();
 }
-pub fn SetData(self: Texture2D, data: *anyopaque) void {
-    self._Impl.SetData(data);
+pub fn SetData(self: Texture2D, data: *anyopaque, size: usize) void {
+    self._Impl.SetData(data, size);
 }
-pub fn Bind(self: Texture2D) void {
-    self._Impl.Bind();
+pub fn Bind(self: Texture2D, slot: u32) void {
+    self._Impl.Bind(slot);
 }
-pub fn Unbind(self: Texture2D) void {
-    self._Impl.Unbind();
+pub fn Unbind(self: Texture2D, slot: u32) void {
+    self._Impl.Unbind(slot);
 }

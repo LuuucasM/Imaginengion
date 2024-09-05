@@ -12,19 +12,13 @@ pub fn Init(self: *StatsPanel) void {
 pub fn OnImguiRender(self: StatsPanel) void {
     if (self._P_Open == true) {
         _ = imgui.igBegin("Stats", null, 0);
-        imgui.igEnd();
+        defer imgui.igEnd();
     }
 }
 
 pub fn OnImguiEvent(self: *StatsPanel, event: *ImguiEvent) void {
     switch (event.*) {
-        .ET_TogglePanelEvent => {
-            if (self._P_Open == true) {
-                self._P_Open = false;
-            } else {
-                self._P_Open = true;
-            }
-        },
+        .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
         .ET_NewProjectEvent => {
             std.debug.print("not impelmeneted yet :)", .{});
         },

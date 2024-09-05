@@ -59,7 +59,7 @@ pub fn PerspectiveRHGL(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
     };
 }
 
-fn QuatNormalize(q: Quatf32) Quatf32 {
+pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const q_pow = @reduce(.Add, q * q);
     const len = @sqrt(q_pow);
     const normalized = q / len;
@@ -253,3 +253,13 @@ test Mat4Mul {
         std.testing.expect((calc2[i][3] - ans2[i][3]) < diff1);
     }
 }
+
+//test Radians
+//test PerspectiveRHGL
+//test QuatNormalize
+//test QuatToMat4
+//test Translate
+//test Mat4Inverse
+//test Vec3ToQuat
+//test Vec3CrossVec3
+//test RotateQuatVec3

@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const buildglfw = @import("src/Vendor/GLFW/buildglfw.zig");
 const buildglad = @import("src/Vendor/Glad/buildglad.zig");
 const buildimgui = @import("src/Vendor/imgui/buildimgui.zig");
+const buildstb = @import("src/Vendor/stb/buildstb.zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -23,6 +24,7 @@ pub fn build(b: *std.Build) void {
     buildglfw.Add(exe);
     buildglad.Add(exe);
     buildimgui.Add(exe);
+    buildstb.Add(exe);
 
     //--------------SYSTEM LIBRARIES-----------
     exe.linkSystemLibrary("c");

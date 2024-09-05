@@ -48,7 +48,9 @@ pub fn Begin() void {
 pub fn OnImguiRender() !void {
     const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
+        defer imgui.igEndMenuBar();
         if (imgui.igBeginMenu("File", true) == true) {
+            defer imgui.igEndMenu();
             if (imgui.igMenuItem_Bool("New Level", "Ctrl+N", false, true) == true) {}
             if (imgui.igMenuItem_Bool("Open Level", "Ctrl+O", false, true) == true) {}
             if (imgui.igMenuItem_Bool("Save Leve", "Ctrl+S", false, true) == true) {}
@@ -80,9 +82,9 @@ pub fn OnImguiRender() !void {
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
-            imgui.igEndMenu();
         }
         if (imgui.igBeginMenu("Window", true) == true) {
+            defer imgui.igEndMenu();
             if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
@@ -139,9 +141,7 @@ pub fn OnImguiRender() !void {
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
-            imgui.igEndMenu();
         }
-        imgui.igEndMenuBar();
     }
 }
 

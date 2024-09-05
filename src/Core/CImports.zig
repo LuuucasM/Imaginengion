@@ -15,7 +15,7 @@ pub const imgui = @cImport({
     @cInclude("cimgui_impl.h");
 });
 
-pub const windows = switch (builtin.os.tag) {
+pub const nativeos = switch (builtin.os.tag) {
     .windows => @cImport({
         @cDefine("GLFW_EXPOSE_NATIVE_WIN32", "");
         @cInclude("GLFW/glfw3.h");
@@ -24,3 +24,8 @@ pub const windows = switch (builtin.os.tag) {
     }),
     else => undefined,
 };
+
+pub const stb = @cImport({
+    @cDefine("STB_IMAGE_IMPLEMENTATION", "");
+    @cInclude("stb_image.h");
+})

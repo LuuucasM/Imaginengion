@@ -3,9 +3,9 @@ const EventManager = @import("../Events/EventManager.zig");
 const Event = @import("../Events/Event.zig").Event;
 const Window = @import("../Windows/Window.zig");
 const Input = @import("../Inputs/Input.zig");
-const ThreadPool = @import("../Core/ThreadPool.zig");
 const Program = @import("../Programs/Program.zig");
-const tracy = @import("CImports.zig").tracy;
+const ThreadPool = @import("ThreadPool.zig");
+const AssetManager = @import("../Assets/AssetManager.zig");
 
 const Application: type = @This();
 
@@ -28,6 +28,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     try EventManager.Init(EngineAllocator, OnInputEvent, OnWindowEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
     try ThreadPool.init(EngineAllocator);
+    try AssetManager.Init(EngineAllocator);
 }
 
 pub fn Deinit() void {

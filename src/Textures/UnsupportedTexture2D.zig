@@ -10,17 +10,20 @@ pub fn GetID(self: Texture) u32 {
     _ = self;
     Unsupported();
 }
-pub fn SetData(self: Texture, data: *anyopaque) void {
+pub fn SetData(self: Texture, data: *anyopaque, size: usize) void {
     _ = self;
     _ = data;
+    _ = size;
     Unsupported();
 }
-pub fn Bind(self: Texture) void {
+pub fn Bind(self: Texture, slot: u32) void {
     _ = self;
+    _ = slot;
     Unsupported();
 }
-pub fn Unbind(self: Texture) void {
+pub fn Unbind(self: Texture, slot: u32) void {
     _ = self;
+    _ = slot;
     Unsupported();
 }
 

@@ -14,6 +14,7 @@ const StatsPanel = @import("../Imgui/StatsPanel.zig");
 const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
+const AssetManager = @import("../Assets/AssetManager.zig");
 
 const Renderer = @import("../Renderer/Renderer.zig");
 
@@ -124,8 +125,9 @@ pub fn ProcessImguiEvents(self: EditorProgram) void {
                 }
             },
             .ET_NewProjectEvent => {
-                self._ComponentsPanel.OnImguiEvent(event);
+                AssetManager.UpdateProjectDirectory(event.ET_NewProjectEvent._Path);
                 self._ContentBrowserPanel.OnImguiEvent(event);
+                self._ComponentsPanel.OnImguiEvent(event);
                 self._PropertiesPanel.OnImguiEvent(event);
                 self._ScenePanel.OnImguiEvent(event);
                 self._ScriptsPanel.OnImguiEvent(event);
