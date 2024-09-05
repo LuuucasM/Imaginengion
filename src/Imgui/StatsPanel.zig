@@ -10,10 +10,9 @@ pub fn Init(self: *StatsPanel) void {
 }
 
 pub fn OnImguiRender(self: StatsPanel) void {
-    if (self._P_Open == true) {
-        _ = imgui.igBegin("Stats", null, 0);
-        defer imgui.igEnd();
-    }
+    if (self._P_Open == false) return;
+    _ = imgui.igBegin("Stats", null, 0);
+    defer imgui.igEnd();
 }
 
 pub fn OnImguiEvent(self: *StatsPanel, event: *ImguiEvent) void {

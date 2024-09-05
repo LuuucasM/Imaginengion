@@ -11,10 +11,9 @@ pub fn Init(self: *ScriptsPanel) void {
 }
 
 pub fn OnImguiRender(self: ScriptsPanel) void {
-    if (self._P_Open == true) {
-        _ = imgui.igBegin("Scripts", null, 0);
-        defer imgui.igEnd();
-    }
+    if (self._P_Open == false) return;
+    _ = imgui.igBegin("Scripts", null, 0);
+    defer imgui.igEnd();
 }
 
 pub fn OnImguiEvent(self: *ScriptsPanel, event: *ImguiEvent) void {

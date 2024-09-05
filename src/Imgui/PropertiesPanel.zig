@@ -11,10 +11,9 @@ pub fn Init(self: *PropertiesPanel) void {
 }
 
 pub fn OnImguiRender(self: PropertiesPanel) void {
-    if (self._P_Open == true) {
-        _ = imgui.igBegin("Properties", null, 0);
-        defer imgui.igEnd();
-    }
+    if (self._P_Open == false) return;
+    _ = imgui.igBegin("Properties", null, 0);
+    defer imgui.igEnd();
 }
 
 pub fn OnImguiEvent(self: *PropertiesPanel, event: *ImguiEvent) void {

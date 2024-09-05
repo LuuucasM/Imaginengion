@@ -11,10 +11,9 @@ pub fn Init(self: *ComponentsPanel) void {
 }
 
 pub fn OnImguiRender(self: ComponentsPanel) void {
-    if (self._P_Open == true) {
-        _ = imgui.igBegin("Components", null, 0);
-        defer imgui.igEnd();
-    }
+    if (self._P_Open == false) return;
+    _ = imgui.igBegin("Components", null, 0);
+    defer imgui.igEnd();
 }
 
 pub fn OnImguiEvent(self: *ComponentsPanel, event: *ImguiEvent) void {

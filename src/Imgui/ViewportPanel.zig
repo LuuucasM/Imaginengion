@@ -18,21 +18,14 @@ pub fn Init(self: *ViewportPanel) void {
 }
 
 pub fn OnImguiRender(self: ViewportPanel) void {
-    if (self._P_Open == true) {
-        _ = imgui.igBegin("Viewport", null, 0);
-        imgui.igEnd();
-    }
+    if (self._P_Open == false) return;
+    _ = imgui.igBegin("Viewport", null, 0);
+    defer imgui.igEnd();
 }
 
 pub fn OnImguiEvent(self: *ViewportPanel, event: *ImguiEvent) void {
     switch (event.*) {
-        .ET_TogglePanelEvent => {
-            if (self._P_Open == true) {
-                self._P_Open = false;
-            } else {
-                self._P_Open = true;
-            }
-        },
+        .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
         .ET_NewProjectEvent => {
             std.debug.print("not impelmeneted yet :)", .{});
         },
