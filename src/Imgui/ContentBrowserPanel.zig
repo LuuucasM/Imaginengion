@@ -5,15 +5,16 @@ const ContentBrowserPanel = @This();
 const Texture2D = @import("../Textures/Texture2D.zig");
 
 _P_Open: bool = true,
-_ProjectDirectory: []const u8 = "",
-_CurrentDirectory: []const u8 = "",
 _DirTexture: Texture2D = .{},
 _PngTexture: Texture2D = .{},
 _BackArrowTexture: Texture2D = .{},
+_ProjectDirectory: []const u8 = "",
+_CurrentDirectory: []const u8 = "",
 
 pub fn Init(self: *ContentBrowserPanel) !void {
     self._P_Open = true;
-
+    self._ProjectDirectory = "";
+    self._CurrentDirectory = "";
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
 
@@ -35,15 +36,16 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     const padding: f32 = 8.0;
     const thumbnail_size: f32 = 70.0;
     const cell_size: f32 = thumbnail_size + padding;
-
-    const panel_width = imgui.igGetContentRegionAvail().x;
+    var content_region: imgui.struct_ImVec2 = .{};
+    imgui.igGetContentRegionAvail(&content_region);
+    const panel_width = content_region.x;
     var column_count: i32 = @intFromFloat(panel_width / cell_size);
     if (column_count < 1) {
         column_count = 1;
     }
 
     imgui.igColumns(column_count, 0, false);
-    defer imgui.igColumns(1);
+    defer imgui.igColumns(1, 0, true);
 
     RenderBackButton(self, thumbnail_size);
 
@@ -63,11 +65,13 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) void {
 fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) void {
     if (std.mem.eql(u8, self._CurrentDirectory, self._ProjectDirectory) == true) return;
 
-    imgui.igPushStyleColor(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
-    imgui.igImageButton(self._BackArrowTexture, .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 });
-    imgui.igPopStyleColor();
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
+    _ = imgui.igImageButton("backarrow.png", @constCast(@ptrCast(&self._BackArrowTexture.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, 
+    .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 },
+    .{ .x = 0, .y = 0, .z = 0, .w = 0}, .{ .x = 1, .y = 1, .z = 1, .w = 1});
+    imgui.igPopStyleColor(1);
 
-    if (imgui.igIsItemHovered() == true and imgui.igIsMouseDoubleClicked(imgui.ImGuiMouseButton_Left) == true) {
+    if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
         self._CurrentDirectory = std.fs.path.dirname(self._CurrentDirectory).?;
     }
 
@@ -83,20 +87,22 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
-        imgui.igPushID(entry.name);
+        imgui.igPushID_Str(@ptrCast(entry.name));
         defer imgui.igPopID();
 
         const icon_ptr = if (entry.kind == .directory) &self._DirTexture else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) &self._PngTexture else continue;
 
-        imgui.igPushStyleColor(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
-        imgui.igImageButton(icon_ptr.GetID(), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 });
-        imgui.igPopStyleColor();
+        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
+        _ = imgui.igImageButton(@ptrCast(entry.name), @constCast(@ptrCast(&icon_ptr.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, 
+        .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, 
+        .{.x = 0, .y = 0, .z = 0, .w = 0}, .{.x = 1, .y = 1, .z = 1, .w = 1});
+        imgui.igPopStyleColor(1);
 
-        if (entry.kind == .directory and imgui.igIsItemHovered() == true and imgui.igIsMouseDoubleClicked(imgui.ImGuiMouseButton_Left) == true) {
+        if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
             self._CurrentDirectory = try std.fs.path.join(arena.allocator(), &[_][]const u8{ self._CurrentDirectory, entry.name });
         }
 
-        imgui.igTextWrapped(entry.name);
+        imgui.igTextWrapped(@ptrCast(entry.name));
         imgui.igNextColumn();
     }
 }

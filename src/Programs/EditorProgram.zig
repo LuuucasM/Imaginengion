@@ -31,6 +31,8 @@ _EngineAllocator: std.mem.Allocator = undefined,
 
 const EditorProgram = @This();
 pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
+    try Renderer.Init(EngineAllocator);
+    try ImGui.Init(EngineAllocator);
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
     self._ComponentsPanel.Init();
     self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
@@ -47,8 +49,6 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ToolbarPanel.Init();
     self._ViewportPanel = try EngineAllocator.create(ViewportPanel);
     self._ViewportPanel.Init();
-    try Renderer.Init(EngineAllocator);
-    try ImGui.Init(EngineAllocator);
     //init editor camera
     //init each panel
     self._EngineAllocator = EngineAllocator;
@@ -80,7 +80,7 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     Dockspace.Begin();
     self._ScenePanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
-    self._ContentBrowserPanel.OnImguiRender();
+    try self._ContentBrowserPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender();
     self._ToolbarPanel.OnImguiRender();

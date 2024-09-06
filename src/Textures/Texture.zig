@@ -38,8 +38,8 @@ pub const Texture = union(enum) {
         }
     }
     pub fn UpdateDataPath(self: *Texture, path: []const u8) void {
-        switch (self) {
-            inline else => |texture| texture.UpdateDataPath(path),
+        switch (self.*) {
+            inline else => |*texture| texture.UpdateDataPath(path),
         }
     }
     pub fn Bind(self: Texture, slot: u32) void {

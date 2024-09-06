@@ -19,7 +19,7 @@ pub fn OnImguiEvent(self: *StatsPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
         .ET_NewProjectEvent => {
-            std.debug.print("not impelmeneted yet :)", .{});
+            std.debug.print("not impelmeneted yet :)\n", .{});
         },
     }
 }

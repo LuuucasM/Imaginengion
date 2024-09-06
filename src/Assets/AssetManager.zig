@@ -23,17 +23,17 @@ _AssetIDToTextureMap: std.AutoHashMap(u128, Texture),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     var asset_gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const asset_allocator = asset_gpa.allocator();
     AssetM = try EngineAllocator.create(AssetManager);
     AssetM.* = .{
         ._EngineAllocator = EngineAllocator,
         ._AssetGPA = asset_gpa,
-        ._AssetPathToIDMap = std.StringHashMap(u128).init(asset_allocator),
-        ._AssetIDToHandleMap = std.AutoHashMap(u128, AssetHandle).init(asset_allocator),
-        ._AssetPathToIDDelete = std.StringHashMap(u128).init(asset_allocator),
-        ._AssetIDToHandleDelete = std.AutoHashMap(u128, AssetHandle).init(asset_allocator),
+        ._AssetPathToIDMap = std.StringHashMap(u128).init(asset_gpa.allocator()),
+        ._AssetIDToHandleMap = std.AutoHashMap(u128, AssetHandle).init(asset_gpa.allocator()),
+        ._AssetPathToIDDelete = std.StringHashMap(u128).init(asset_gpa.allocator()),
+        ._AssetIDToHandleDelete = std.AutoHashMap(u128, AssetHandle).init(asset_gpa.allocator()),
         //different asset types
-        ._AssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(asset_allocator),
+        ._AssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(asset_gpa.allocator()),
+        ._ProjectDirectory = "",
     };
 }
 
@@ -66,14 +66,42 @@ pub fn GetAsset(comptime T: type, id: u128) ?T {
     }
 }
 
-pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8) !AssetHandle {
+pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8, rel_path: []const u8) !void {
+    std.debug.print("Map pointer: {*}\n", .{&AssetM._AssetPathToIDMap});
+    std.debug.print("Map allocators: {}\n", .{AssetM._AssetPathToIDMap.allocator});
+    //std.debug.print("abs path: {s}\nrel path: {s}\nid: {d}\n", .{ abs_path, rel_path, id });
+    std.debug.print("Key legnth: {}, Value size: {} bytes\n", .{ rel_path.len, @sizeOf(u128) });
+    std.debug.print("Current map count: {}, capacity: {}\n", .{ AssetM._AssetPathToIDMap.count(), AssetM._AssetPathToIDMap.capacity() });
+
+    //const key = "test";
+    //const value: u128 = 0;
+
+    //const result = try AssetM._AssetPathToIDMap.getOrPut(key);
+
+    //if (result.found_existing == false) {
+    //    result.value_ptr.* = value;
+    //}
+
+    AssetM._AssetPathToIDMap.clearRetainingCapacity();
+
+    //var local_map = std.StringHashMap(u128).init(AssetM._AssetPathToIDMap.allocator);
+    //defer local_map.deinit();
+
+    //try local_map.put("test", 0);
+
+    const alloc = AssetM._AssetPathToIDMap.allocator;
+    const test_alloc = try alloc.alloc(u8, 100);
+    defer alloc.free(test_alloc);
+
+    try AssetM._AssetPathToIDMap.put("test", 0);
+    std.debug.print("Test insertion successful\n", .{});
+
+    //--------------ACTUAL FUNCTION---------------------------
     //type
     const assetType = if (T == Texture) AssetTypes.Texture else @compileError("Type not supported yet");
 
-    const rel_path = abs_path[AssetM._ProjectDirectory.len..];
-
     //id
-    const id = GenUUID();
+    const id = try GenUUID();
 
     const f = try std.fs.openFileAbsolute(abs_path, .{});
     defer f.close();
@@ -97,8 +125,6 @@ pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8) !AssetHandle {
 
     try AssetM._AssetPathToIDMap.put(rel_path, id);
     try AssetM._AssetIDToHandleMap.put(id, handle);
-
-    return handle;
 }
 
 pub fn UpdateProjectDirectory(path: []const u8) void {
@@ -158,8 +184,9 @@ fn HandleModifiedAssets(id: u128, handle: AssetHandle, abs_path: []const u8, new
     new_handle._AssetLastModified = new_mtime;
 
     if (handle._AssetType == .Texture) {
-        if (AssetM._AssetIDToTextureMap.get(id)) |texture| {
-            texture.UpdateDataPath(abs_path);
+        if (AssetM._AssetIDToTextureMap.getEntry(id)) |entry| {
+            entry.value_ptr.UpdateDataPath(abs_path);
+            // texture.UpdateDataPath(abs_path);
         }
     }
 
@@ -175,10 +202,8 @@ fn WalkDirectory(allocator: std.mem.Allocator) !void {
 
     while (try walker.next()) |entry| {
         if (entry.kind != .file) continue;
-
-        const abs_path = entry.path;
-        const rel_path = abs_path[AssetM._ProjectDirectory.len..];
-
+        const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ AssetM._ProjectDirectory, entry.path });
+        const rel_path = entry.path;
         if (AssetM._AssetPathToIDMap.contains(rel_path)) continue;
 
         try HandleNewAsset(allocator, abs_path, rel_path);
@@ -210,7 +235,7 @@ fn HandleNewAsset(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
         }
     }
     if (found_match == false) {
-        try CreateAssetHandle(Texture, rel_path);
+        try CreateAssetHandle(Texture, abs_path, rel_path);
     }
 }
 
