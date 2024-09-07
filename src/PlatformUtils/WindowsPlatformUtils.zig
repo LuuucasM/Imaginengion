@@ -1,4 +1,6 @@
 const std = @import("std");
+const Application = @import("../Core/Application.zig");
+const glfw = @import("../Core/CImports.zig").glfw;
 const nativeos = @import("../Core/CImports.zig").nativeos;
 const windows = std.os.windows;
 //const PCIDLIST_ABSOLUTE = w;
@@ -10,6 +12,7 @@ const DWORD = windows.DWORD;
 const LPARAM = windows.LPARAM;
 const LPCWSTR = windows.LPCWSTR;
 const LPVOID = windows.LPVOID;
+const CHAR = windows.CHAR;
 
 const MAX_PATH = 260;
 
@@ -45,4 +48,25 @@ pub fn OpenFolder() ![]const u8 {
     const allocator = std.heap.page_allocator;
 
     return try std.unicode.utf16leToUtf8Alloc(allocator, path[0..len]);
+}
+
+pub fn OpenFile(filter: []const u8) ![]const u8{
+    var ofn: nativeos.OPENFILENAMEA = std.mem.zeroes(nativeos.OPENFILENAMEA);
+    var szFile: [260]CHAR = std.mem.zeroes([260]CHAR);
+    var currentDir: [260]CHAR = std.mem.zeroes([260]CHAR);
+    ofn.lStructSize = @sizeOf(nativeos.OPENFILENAMEA);
+    ofn.hwndOwner = nativeos.glfwGetWin32Window(@ptrCast(Application.GetNativeWindow()));
+    ofn.lpstrFile = @ptrCast(&szFile);
+    ofn.nMaxFile = @sizeOf(CHAR)*260;
+    if (nativeos.GetCurrentDirectoryA(260, @ptrCast(&currentDir)) != 0){
+        ofn.lpstrInitialDir = @ptrCast(&currentDir);
+    }
+    ofn.lpstrFilter = @ptrCast(filter);
+    ofn.nFilterIndex = 1;
+    ofn.Flags = nativeos.OFN_PATHMUSTEXIST | nativeos.OFN_FILEMUSTEXIST | nativeos.OFN_NOCHANGEDIR;
+    if (nativeos.GetOpenFileNameA(&ofn) == nativeos.TRUE){
+        const len = std.mem.len(ofn.lpstrFile);
+        return ofn.lpstrFile[0..len];
+    }
+    return "";
 }

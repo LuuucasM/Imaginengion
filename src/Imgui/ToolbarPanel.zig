@@ -31,8 +31,6 @@ pub fn OnImguiRender(self: ToolbarPanel) void {
 pub fn OnImguiEvent(self: *ToolbarPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
-        .ET_NewProjectEvent => {
-            std.debug.print("not impelmeneted yet :)\n", .{});
-        },
+        else => @panic("This event has not been handled yet in ToolbarPanel!\n"),
     }
 }

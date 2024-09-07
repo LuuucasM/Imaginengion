@@ -30,6 +30,10 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("c++");
 
+    if (builtin.os.tag == .windows){
+        exe.linkSystemLibrary("comdlg32");
+    }
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);

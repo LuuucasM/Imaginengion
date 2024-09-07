@@ -92,7 +92,7 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     try Dockspace.OnImguiRender();
 
     //imgui events
-    self.ProcessImguiEvents();
+    try self.ProcessImguiEvents();
     ImGui.ClearEvents();
     
     //imgui end
@@ -119,7 +119,7 @@ pub fn OnWindowEvent(self: EditorProgram, event: *Event) void {
     _ = event;
 }
 
-pub fn ProcessImguiEvents(self: EditorProgram) void {
+pub fn ProcessImguiEvents(self: EditorProgram) !void {
     var it = ImGui.GetFirstEvent();
     while (it) |node| {
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
@@ -128,7 +128,7 @@ pub fn ProcessImguiEvents(self: EditorProgram) void {
             .ET_TogglePanelEvent => |e| {
                 switch (e._PanelType) {
                     .Components => self._ComponentsPanel.OnImguiEvent(event),
-                    .ContentBrowser => self._ContentBrowserPanel.OnImguiEvent(event),
+                    .ContentBrowser => try self._ContentBrowserPanel.OnImguiEvent(event),
                     .Properties => self._PropertiesPanel.OnImguiEvent(event),
                     .Scene => self._ScenePanel.OnImguiEvent(event),
                     .Scripts => self._ScriptsPanel.OnImguiEvent(event),
@@ -138,12 +138,13 @@ pub fn ProcessImguiEvents(self: EditorProgram) void {
             },
             .ET_NewProjectEvent => {
                 AssetManager.UpdateProjectDirectory(event.ET_NewProjectEvent._Path);
-                self._ContentBrowserPanel.OnImguiEvent(event);
-                self._ComponentsPanel.OnImguiEvent(event);
-                self._PropertiesPanel.OnImguiEvent(event);
-                self._ScenePanel.OnImguiEvent(event);
-                self._ScriptsPanel.OnImguiEvent(event);
+                try self._ContentBrowserPanel.OnImguiEvent(event);
             },
+            .ET_OpenProjectEvent => {
+                AssetManager.UpdateProjectDirectory(event.ET_OpenProjectEvent._Path);
+                try self._ContentBrowserPanel.OnImguiEvent(event);
+            },
+            else => @panic("This event has not been handled by editor program!\n"),
         }
         it = node.next;
     }

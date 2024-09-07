@@ -19,8 +19,6 @@ pub fn OnImguiRender(self: ComponentsPanel) void {
 pub fn OnImguiEvent(self: *ComponentsPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
-        .ET_NewProjectEvent => {
-            std.debug.print("not impelmeneted yet :)", .{});
-        },
+        else => @panic("Response to that event has not bee implemented yet in ComponentsPanel!\n"),
     }
 }

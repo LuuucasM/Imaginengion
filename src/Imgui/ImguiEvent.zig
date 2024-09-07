@@ -8,8 +8,14 @@ pub const PanelType = enum(u16) {
     Viewport,
 };
 pub const ImguiEvent = union(enum) {
+    ET_DefaultEvent: DefaultEvent,
     ET_TogglePanelEvent: TogglePanelEvent,
     ET_NewProjectEvent: NewProjectEvent,
+    ET_OpenProjectEvent: OpenProjectEvent,
+};
+
+pub const DefaultEvent = struct {
+
 };
 
 pub const TogglePanelEvent = struct {
@@ -17,5 +23,9 @@ pub const TogglePanelEvent = struct {
 };
 
 pub const NewProjectEvent = struct {
+    _Path: []const u8,
+};
+
+pub const OpenProjectEvent = struct {
     _Path: []const u8,
 };

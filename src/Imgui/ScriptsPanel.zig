@@ -19,8 +19,6 @@ pub fn OnImguiRender(self: ScriptsPanel) void {
 pub fn OnImguiEvent(self: *ScriptsPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
-        .ET_NewProjectEvent => {
-            std.debug.print("not impelmeneted yet :)\n", .{});
-        },
+        else => @panic("This event isnt haneled yet in ScriptsPanel\n"),
     }
 }

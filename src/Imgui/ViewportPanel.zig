@@ -26,8 +26,6 @@ pub fn OnImguiRender(self: ViewportPanel) void {
 pub fn OnImguiEvent(self: *ViewportPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
-        .ET_NewProjectEvent => {
-            std.debug.print("not impelmeneted yet :)\n", .{});
-        },
+        else => @panic("This event has not been handled yet in ViewportPanel!\n"),
     }
 }

@@ -11,7 +11,7 @@ pub fn OpenFolder() ![]const u8 {
     return Impl.OpenFolder();
 }
 
-pub fn OpenFile(filter: []const u8) []const u8 {
+pub fn OpenFile(filter: []const u8) ![]const u8 {
     return Impl.OpenFile(filter);
 }
 

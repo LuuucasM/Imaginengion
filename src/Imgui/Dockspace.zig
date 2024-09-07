@@ -66,21 +66,28 @@ pub fn OnImguiRender() !void {
                     };
                     try ImguiManager.InsertEvent(new_event);
                 }
-                //Stop the scene if it is currently playing
-                //Save current scene if there is one
-                //destroy scene object
-                //change content browser CWD
-                //clear ImguiEventPool = EDITOR PROGRAM
-                //create a project file in the specified folder
-                //create sub folders like scenes, textures, etc (not sure how to lay it out for now)
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                //stop the scene if there is one currently playing
-                //save the current scene if there is one
-                //get rid of the scene
-                //change content browser cwd
-                //clear imguieventpool
-                //
+                var buffer: [34]u8 = undefined;
+                const original = "Imagine Project (*.imprj)*.imprj";
+                const mid_insert_pos = 15;
+                var fba = std.heap.FixedBufferAllocator.init(&buffer);
+                const allocator = fba.allocator();
+                var filter = try allocator.alloc(u8, 34);
+                defer allocator.free(filter);
+                std.mem.copyForwards(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
+                filter[mid_insert_pos] = 0;
+                std.mem.copyForwards(u8, filter[mid_insert_pos+1..], original[mid_insert_pos+1..]);
+                filter[filter.len-1] = 0;
+                const path = try PlatformUtils.OpenFile(filter);
+                if (std.mem.eql(u8, path, "") == false){
+                    const new_event = ImguiEvent{
+                        .ET_OpenProjectEvent = .{
+                            ._Path = path,
+                        },
+                    };
+                    try ImguiManager.InsertEvent(new_event);
+                }
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
