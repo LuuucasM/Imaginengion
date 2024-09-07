@@ -22,18 +22,17 @@ _ProjectDirectory: []const u8 = "",
 _AssetIDToTextureMap: std.AutoHashMap(u128, Texture),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
-    var asset_gpa = std.heap.GeneralPurposeAllocator(.{}){};
     AssetM = try EngineAllocator.create(AssetManager);
     AssetM.* = .{
-        ._EngineAllocator = EngineAllocator,
-        ._AssetGPA = asset_gpa,
-        ._AssetPathToIDMap = std.StringHashMap(u128).init(asset_gpa.allocator()),
-        ._AssetIDToHandleMap = std.AutoHashMap(u128, AssetHandle).init(asset_gpa.allocator()),
-        ._AssetPathToIDDelete = std.StringHashMap(u128).init(asset_gpa.allocator()),
-        ._AssetIDToHandleDelete = std.AutoHashMap(u128, AssetHandle).init(asset_gpa.allocator()),
-        //different asset types
-        ._AssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(asset_gpa.allocator()),
         ._ProjectDirectory = "",
+        ._EngineAllocator = EngineAllocator,
+        ._AssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
+        ._AssetPathToIDMap = std.StringHashMap(u128).init(AssetM._AssetGPA.allocator()),
+        ._AssetIDToHandleMap = std.AutoHashMap(u128, AssetHandle).init(AssetM._AssetGPA.allocator()),
+        ._AssetPathToIDDelete = std.StringHashMap(u128).init(AssetM._AssetGPA.allocator()),
+        ._AssetIDToHandleDelete = std.AutoHashMap(u128, AssetHandle).init(AssetM._AssetGPA.allocator()),
+        //different asset types
+        ._AssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(AssetM._AssetGPA.allocator()),
     };
 }
 
@@ -67,36 +66,6 @@ pub fn GetAsset(comptime T: type, id: u128) ?T {
 }
 
 pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8, rel_path: []const u8) !void {
-    std.debug.print("Map pointer: {*}\n", .{&AssetM._AssetPathToIDMap});
-    std.debug.print("Map allocators: {}\n", .{AssetM._AssetPathToIDMap.allocator});
-    //std.debug.print("abs path: {s}\nrel path: {s}\nid: {d}\n", .{ abs_path, rel_path, id });
-    std.debug.print("Key legnth: {}, Value size: {} bytes\n", .{ rel_path.len, @sizeOf(u128) });
-    std.debug.print("Current map count: {}, capacity: {}\n", .{ AssetM._AssetPathToIDMap.count(), AssetM._AssetPathToIDMap.capacity() });
-
-    //const key = "test";
-    //const value: u128 = 0;
-
-    //const result = try AssetM._AssetPathToIDMap.getOrPut(key);
-
-    //if (result.found_existing == false) {
-    //    result.value_ptr.* = value;
-    //}
-
-    AssetM._AssetPathToIDMap.clearRetainingCapacity();
-
-    //var local_map = std.StringHashMap(u128).init(AssetM._AssetPathToIDMap.allocator);
-    //defer local_map.deinit();
-
-    //try local_map.put("test", 0);
-
-    const alloc = AssetM._AssetPathToIDMap.allocator;
-    const test_alloc = try alloc.alloc(u8, 100);
-    defer alloc.free(test_alloc);
-
-    try AssetM._AssetPathToIDMap.put("test", 0);
-    std.debug.print("Test insertion successful\n", .{});
-
-    //--------------ACTUAL FUNCTION---------------------------
     //type
     const assetType = if (T == Texture) AssetTypes.Texture else @compileError("Type not supported yet");
 
@@ -116,14 +85,13 @@ pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8, rel_path: []con
     const hash = hasher.final();
 
     const handle = AssetHandle{
-        ._AssetHash = hash,
         ._AssetLastModified = fstat.mtime,
-        ._AssetPath = rel_path,
         ._AssetSize = fstat.size,
+        ._AssetHash = hash,
         ._AssetType = assetType,
+        ._AssetPath = try AssetM._AssetGPA.allocator().dupeZ(u8, rel_path),
     };
-
-    try AssetM._AssetPathToIDMap.put(rel_path, id);
+    try AssetM._AssetPathToIDMap.put(handle._AssetPath, id);
     try AssetM._AssetIDToHandleMap.put(id, handle);
 }
 
@@ -258,6 +226,7 @@ fn CleanUpDeletedAssets() !void {
         const id = entry.value_ptr.*;
         if (AssetM._AssetIDToHandleDelete.get(id)) |handle| {
             if (current_time - handle._AssetLastModified > 1000000000) {
+                AssetM._AssetGPA.allocator().free(handle._AssetPath);
                 _ = AssetM._AssetPathToIDDelete.remove(rel_path);
                 _ = AssetM._AssetIDToHandleDelete.remove(id);
             }

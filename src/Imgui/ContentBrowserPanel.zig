@@ -87,15 +87,20 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
-        imgui.igPushID_Str(@ptrCast(entry.name));
-        defer imgui.igPopID();
 
         const icon_ptr = if (entry.kind == .directory) &self._DirTexture else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) &self._PngTexture else continue;
+        var texture_id = icon_ptr.*.GetID();
 
-        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
-        _ = imgui.igImageButton(@ptrCast(entry.name), @constCast(@ptrCast(&icon_ptr.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, 
-        .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, 
-        .{.x = 0, .y = 0, .z = 0, .w = 0}, .{.x = 1, .y = 1, .z = 1, .w = 1});
+        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1 });
+        _ = imgui.igImageButton(
+            @ptrCast(entry.name), 
+            @ptrCast(&texture_id), 
+            .{ .x = thumbnail_size, .y = thumbnail_size }, 
+            .{ .x = 0, .y = 1 }, 
+            .{ .x = 1, .y = 0 }, 
+            .{.x = 0, .y = 0, .z = 0, .w = 0}, 
+            .{.x = 1, .y = 1, .z = 1, .w = 1},
+        );
         imgui.igPopStyleColor(1);
 
         if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {

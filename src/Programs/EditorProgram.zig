@@ -71,13 +71,16 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     _ = dt;
     //process asset manager
     try AssetManager.OnUpdate();
+
     //Process Inputs
     InputManager.PollInputEvents();
     EventManager.ProcessEvents(.EC_Input);
 
-    //Render Imgui
+    //Imgui stuff
     ImGui.Begin();
     Dockspace.Begin();
+
+    //all the panels
     self._ScenePanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
     try self._ContentBrowserPanel.OnImguiRender();
@@ -87,15 +90,22 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     self._StatsPanel.OnImguiRender();
     self._ViewportPanel.OnImguiRender();
     try Dockspace.OnImguiRender();
+
+    //imgui events
     self.ProcessImguiEvents();
     ImGui.ClearEvents();
+    
+    //imgui end
     Dockspace.End();
     ImGui.End();
 
+    //swap buffers
     Renderer.SwapBuffers();
 
+    //Process window events
     EventManager.ProcessEvents(.EC_Window);
 
+    //end of frame resets
     EventManager.EventsReset();
 }
 

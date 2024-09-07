@@ -58,12 +58,14 @@ pub fn OnImguiRender() !void {
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const path = try PlatformUtils.OpenFolder();
-                const new_event = ImguiEvent{
-                    .ET_NewProjectEvent = .{
-                        ._Path = path,
-                    },
-                };
-                try ImguiManager.InsertEvent(new_event);
+                if (std.mem.eql(u8, path, "") == false){
+                    const new_event = ImguiEvent{
+                        .ET_NewProjectEvent = .{
+                            ._Path = path,
+                        },
+                    };
+                    try ImguiManager.InsertEvent(new_event);
+                }
                 //Stop the scene if it is currently playing
                 //Save current scene if there is one
                 //destroy scene object

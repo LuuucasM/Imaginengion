@@ -11,8 +11,8 @@ _DataFormat: c_uint = glad.GL_RGBA,
 
 pub fn InitData(self: *OpenGLTexture2D, width: u32, height: u32, channels: u32, data: *anyopaque, size: usize) void {
     _ = size;
-    self._Width = width;
-    self._Height = height;
+    self._Width = @intCast(width);
+    self._Height = @intCast(height);
     if (channels == 4) {
         self._InternalFormat = glad.GL_RGBA8;
         self._DataFormat = glad.GL_RGBA;
@@ -47,7 +47,7 @@ pub fn InitPath(self: *OpenGLTexture2D, path: []const u8) void {
 
     self._Width = width;
     self._Height = height;
-
+    std.debug.print("image for path: {s} width: {} height: {} channels: {}\n", .{path, width, height, channels});
     if (channels == 4) {
         self._InternalFormat = glad.GL_RGBA8;
         self._DataFormat = glad.GL_RGBA;
