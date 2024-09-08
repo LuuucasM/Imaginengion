@@ -1,4 +1,5 @@
 pub const PanelType = enum(u16) {
+    AssetHandles,
     Components,
     ContentBrowser,
     Properties,

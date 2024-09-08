@@ -10,6 +10,7 @@ _PngTexture: Texture2D = .{},
 _BackArrowTexture: Texture2D = .{},
 _ProjectDirectory: []const u8 = "",
 _CurrentDirectory: []const u8 = "",
+_ProjectFile: std.fs.File = undefined,
 
 pub fn Init(self: *ContentBrowserPanel) !void {
     self._P_Open = true;
@@ -21,6 +22,12 @@ pub fn Init(self: *ContentBrowserPanel) !void {
     self._DirTexture.InitPath(try std.fs.path.join(arena.allocator(), &[_][]const u8{ try std.fs.cwd().realpathAlloc(arena.allocator(), "."), "/assets/textures/foldericon.png" }));
     self._PngTexture.InitPath(try std.fs.path.join(arena.allocator(), &[_][]const u8{ try std.fs.cwd().realpathAlloc(arena.allocator(), "."), "/assets/textures/pngicon.png" }));
     self._BackArrowTexture.InitPath(try std.fs.path.join(arena.allocator(), &[_][]const u8{ try std.fs.cwd().realpathAlloc(arena.allocator(), "."), "/assets/textures/backarrowicon.png" }));
+}
+
+pub fn Deinit(self: *ContentBrowserPanel) void{
+    if (self._ProjectDirectory.len != 0){
+        self._ProjectFile.close();
+    }
 }
 
 pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
@@ -58,14 +65,14 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
         .ET_NewProjectEvent => |e| {
             self._ProjectDirectory = e._Path;
             self._CurrentDirectory = e._Path;
-            var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-            defer arena.deinit();
-            const file_path = try std.fs.path.join(arena.allocator(), &[_][]const u8{ self._ProjectDirectory, "NewGame.imprj" });
-            const file = try std.fs.createFileAbsolute(file_path, .{});
-            _ = file;
+            const file_path = try std.fs.path.join(std.heap.page_allocator, &[_][]const u8{ self._ProjectDirectory, "NewGame.imprj" });
+            defer std.heap.page_allocator.free(file_path);
+            self._ProjectFile = try std.fs.createFileAbsolute(file_path, .{});
         },
         .ET_OpenProjectEvent => |e| {
-            _ = e;
+            self._ProjectDirectory = std.fs.path.dirname(e._Path).?;
+            self._CurrentDirectory = std.fs.path.dirname(e._Path).?;
+            self._ProjectFile = try std.fs.openFileAbsolute(e._Path, .{});
             //in this case e._Path is the full path to the file
             //so first i need to separate the file.imprj file from the rest of the path
             //then i set projectdirectory and current directory to the directory path

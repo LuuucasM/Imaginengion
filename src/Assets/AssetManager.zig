@@ -96,6 +96,11 @@ pub fn CreateAssetHandle(comptime T: type, abs_path: []const u8, rel_path: []con
 }
 
 pub fn UpdateProjectDirectory(path: []const u8) void {
+    AssetM._AssetPathToIDMap.clearAndFree();
+    AssetM._AssetIDToHandleMap.clearAndFree();
+    AssetM._AssetIDToTextureMap.clearAndFree();
+    AssetM._AssetPathToIDDelete.clearAndFree();
+    AssetM._AssetIDToHandleDelete.clearAndFree();
     AssetM._ProjectDirectory = path;
 }
 

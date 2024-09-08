@@ -5,6 +5,7 @@ const InputManager = @import("../Inputs/Input.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
+const AssetHandlePanel = @import("../Imgui/AssethandlePanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const PropertiesPanel = @import("../Imgui/PropertiesPanel.zig");
@@ -19,6 +20,7 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 
 //_EditorCamera
+_AssetHandlePanel: *AssetHandlePanel = undefined,
 _ComponentsPanel: *ComponentsPanel = undefined,
 _ContentBrowserPanel: *ContentBrowserPanel = undefined,
 _PropertiesPanel: *PropertiesPanel = undefined,
@@ -28,11 +30,15 @@ _StatsPanel: *StatsPanel = undefined,
 _ToolbarPanel: *ToolbarPanel = undefined,
 _ViewportPanel: *ViewportPanel = undefined,
 _EngineAllocator: std.mem.Allocator = undefined,
+_ProjectDirectory: []const u8 = "",
 
 const EditorProgram = @This();
 pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
+    self._ProjectDirectory = "";
     try Renderer.Init(EngineAllocator);
     try ImGui.Init(EngineAllocator);
+    self._AssetHandlePanel = try EngineAllocator.create(AssetHandlePanel);
+    self._AssetHandlePanel.Init();
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
     self._ComponentsPanel.Init();
     self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
@@ -55,6 +61,8 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
 }
 
 pub fn Deinit(self: EditorProgram) void {
+    self._ContentBrowserPanel.Deinit();
+    self._EngineAllocator.destroy(self._AssetHandlePanel);
     self._EngineAllocator.destroy(self._ComponentsPanel);
     self._EngineAllocator.destroy(self._ContentBrowserPanel);
     self._EngineAllocator.destroy(self._PropertiesPanel);
@@ -67,7 +75,7 @@ pub fn Deinit(self: EditorProgram) void {
     Renderer.Deinit();
 }
 
-pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
+pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     _ = dt;
     //process asset manager
     try AssetManager.OnUpdate();
@@ -81,9 +89,10 @@ pub fn OnUpdate(self: EditorProgram, dt: f64) !void {
     Dockspace.Begin();
 
     //all the panels
+    self._AssetHandlePanel.OnImguiRender();
     self._ScenePanel.OnImguiRender();
-    self._ComponentsPanel.OnImguiRender();
     try self._ContentBrowserPanel.OnImguiRender();
+    self._ComponentsPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender();
     self._ToolbarPanel.OnImguiRender();
@@ -119,7 +128,7 @@ pub fn OnWindowEvent(self: EditorProgram, event: *Event) void {
     _ = event;
 }
 
-pub fn ProcessImguiEvents(self: EditorProgram) !void {
+pub fn ProcessImguiEvents(self: *EditorProgram) !void {
     var it = ImGui.GetFirstEvent();
     while (it) |node| {
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
@@ -127,21 +136,30 @@ pub fn ProcessImguiEvents(self: EditorProgram) !void {
         switch (event.*) {
             .ET_TogglePanelEvent => |e| {
                 switch (e._PanelType) {
+                    .AssetHandles => self._AssetHandlePanel.OnImguiEvent(event),
                     .Components => self._ComponentsPanel.OnImguiEvent(event),
                     .ContentBrowser => try self._ContentBrowserPanel.OnImguiEvent(event),
                     .Properties => self._PropertiesPanel.OnImguiEvent(event),
                     .Scene => self._ScenePanel.OnImguiEvent(event),
                     .Scripts => self._ScriptsPanel.OnImguiEvent(event),
                     .Stats => self._StatsPanel.OnImguiEvent(event),
-                    else => std.debug.print("Unexpected panel type!", .{}),
+                    else => @panic("This event has not been handled by this type of panel yet!\n"),
                 }
             },
             .ET_NewProjectEvent => {
+                if (self._ProjectDirectory.len != 0){
+                    std.heap.page_allocator.free(self._ProjectDirectory);
+                }
+                self._ProjectDirectory = event.ET_NewProjectEvent._Path;
                 AssetManager.UpdateProjectDirectory(event.ET_NewProjectEvent._Path);
                 try self._ContentBrowserPanel.OnImguiEvent(event);
             },
             .ET_OpenProjectEvent => {
-                AssetManager.UpdateProjectDirectory(event.ET_OpenProjectEvent._Path);
+                if (self._ProjectDirectory.len != 0){
+                    std.heap.page_allocator.free(self._ProjectDirectory);
+                }
+                self._ProjectDirectory = event.ET_OpenProjectEvent._Path;
+                AssetManager.UpdateProjectDirectory(std.fs.path.dirname(event.ET_OpenProjectEvent._Path).?);
                 try self._ContentBrowserPanel.OnImguiEvent(event);
             },
             else => @panic("This event has not been handled by editor program!\n"),

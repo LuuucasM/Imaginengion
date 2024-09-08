@@ -1,11 +1,14 @@
+const std = @import("std");
 const builtin = @import("builtin");
 const UnsupportedPlatformUtils = @This();
 
-pub fn OpenFolder() []const u16 {
+pub fn OpenFolder(allocator: std.mem.Allocator) []const u16 {
+    _ = allocator;
     Unsupported();
 }
 
-pub fn OpenFile(filter: []const u8) []const u8 {
+pub fn OpenFile(allocator: std.heap.page_allocator, filter: []const u8) []const u8 {
+    _ = allocator;
     _ = filter;
     Unsupported();
 }

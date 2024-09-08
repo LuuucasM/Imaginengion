@@ -57,7 +57,7 @@ pub fn OnImguiRender() !void {
             if (imgui.igMenuItem_Bool("Save Level As...", "Ctrl+Shift+S", false, true) == true) {}
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFolder();
+                const path = try PlatformUtils.OpenFolder(std.heap.page_allocator);
                 if (std.mem.eql(u8, path, "") == false){
                     const new_event = ImguiEvent{
                         .ET_NewProjectEvent = .{
@@ -68,18 +68,21 @@ pub fn OnImguiRender() !void {
                 }
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
+                //constructing the filter to be passed to opening the file
                 var buffer: [34]u8 = undefined;
                 const original = "Imagine Project (*.imprj)*.imprj";
-                const mid_insert_pos = 15;
+                const mid_insert_pos = 25;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const allocator = fba.allocator();
                 var filter = try allocator.alloc(u8, 34);
                 defer allocator.free(filter);
                 std.mem.copyForwards(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
                 filter[mid_insert_pos] = 0;
-                std.mem.copyForwards(u8, filter[mid_insert_pos+1..], original[mid_insert_pos+1..]);
+                std.mem.copyForwards(u8, filter[mid_insert_pos+1..], original[mid_insert_pos..]);
                 filter[filter.len-1] = 0;
-                const path = try PlatformUtils.OpenFile(filter);
+
+                const path = try PlatformUtils.OpenFile(std.heap.page_allocator, filter);
+                std.debug.print("path is: {s}\n", .{path});
                 if (std.mem.eql(u8, path, "") == false){
                     const new_event = ImguiEvent{
                         .ET_OpenProjectEvent = .{
@@ -94,6 +97,14 @@ pub fn OnImguiRender() !void {
         }
         if (imgui.igBeginMenu("Window", true) == true) {
             defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("AssetHandles", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .AssetHandles,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
             if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{

@@ -7,12 +7,12 @@ const Impl = switch (builtin.os.tag) {
     else => @import("UnsupportedPlatformUtils.zig"),
 };
 
-pub fn OpenFolder() ![]const u8 {
-    return Impl.OpenFolder();
+pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
+    return Impl.OpenFolder(allocator);
 }
 
-pub fn OpenFile(filter: []const u8) ![]const u8 {
-    return Impl.OpenFile(filter);
+pub fn OpenFile(allocator: std.mem.Allocator, filter: []const u8) ![]const u8 {
+    return Impl.OpenFile(allocator, filter);
 }
 
 pub fn SaveFile(filter: []const u8) []const u8 {
