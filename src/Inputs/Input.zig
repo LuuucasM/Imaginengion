@@ -15,7 +15,7 @@ var InputManager: *Input = undefined;
 _Impl: Impl,
 _EngineAllocator: std.mem.Allocator,
 
-pub fn Init(EngineAllocator: std.mem.Allocator, window: *void) !void {
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *anyopaque) !void {
     InputManager = try EngineAllocator.create(Input);
     InputManager.* = .{
         ._Impl = .{},

@@ -50,7 +50,7 @@ pub fn Run() !void {
     }
 }
 
-pub fn GetNativeWindow() *void {
+pub fn GetNativeWindow() *anyopaque {
     return ApplicationManager._Window.GetNativeWindow();
 }
 

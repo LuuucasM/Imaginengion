@@ -72,7 +72,7 @@ pub fn IsVSync(self: WindowsWindow) bool {
     return self._IsVSync;
 }
 
-pub fn GetNativeWindow(self: WindowsWindow) *void {
+pub fn GetNativeWindow(self: WindowsWindow) *anyopaque {
     if (self._Window) |window| {
         return @ptrCast(window);
     }

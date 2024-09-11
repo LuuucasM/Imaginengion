@@ -13,9 +13,9 @@ _MousePressedSet: Set(MouseCodes) = undefined,
 _MousePosition: Vec2f32 = std.mem.zeroes(Vec2f32),
 _MouseScrolled: Vec2f32 = std.mem.zeroes(Vec2f32),
 _Allocator: std.mem.Allocator = std.heap.page_allocator,
-_Window: *void = undefined,
+_Window: *anyopaque = undefined,
 
-pub fn Init(self: *WindowsInput, window: *void) void {
+pub fn Init(self: *WindowsInput, window: *anyopaque) void {
     self._Window = window;
     self._KeyPressedSet = HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage).init(self._Allocator);
     self._MousePressedSet = Set(MouseCodes).init(self._Allocator);

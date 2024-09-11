@@ -32,7 +32,7 @@ pub fn IsVSync(self: UnsupportedWindow) bool {
     return Unsupported();
 }
 
-pub fn GetNativeWindow(self: UnsupportedWindow) *void {
+pub fn GetNativeWindow(self: UnsupportedWindow) *anyopaque {
     _ = self;
     return Unsupported();
 }

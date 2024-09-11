@@ -41,7 +41,7 @@ pub fn IsVSync(self: Window) bool {
     return self._Impl.IsVSync();
 }
 
-pub fn GetNativeWindow(self: Window) *void {
+pub fn GetNativeWindow(self: Window) *anyopaque {
     return self._Impl.GetNativeWindow();
 }
 
