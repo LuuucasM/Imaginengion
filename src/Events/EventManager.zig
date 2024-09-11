@@ -10,17 +10,15 @@ var EventManager: *Self = undefined;
 _InputEventPool: std.heap.MemoryPool(Event),
 _WindowEventPool: std.heap.MemoryPool(Event),
 _EngineAllocator: std.mem.Allocator,
-_InputEventCallback: *const fn (*Event) void,
-_WindowEventCallback: *const fn (*Event) void,
+_EventCallback: *const fn (*Event) void,
 
-pub fn Init(EngineAllocator: std.mem.Allocator, inputEventCallback: fn (*Event) void, windowEventCallback: fn (*Event) void) !void {
+pub fn Init(EngineAllocator: std.mem.Allocator, eventCallback: fn (*Event) void) !void {
     EventManager = try EngineAllocator.create(Self);
     EventManager.* = .{
         ._InputEventPool = std.heap.MemoryPool(Event).init(std.heap.page_allocator),
         ._WindowEventPool = std.heap.MemoryPool(Event).init(std.heap.page_allocator),
         ._EngineAllocator = EngineAllocator,
-        ._InputEventCallback = inputEventCallback,
-        ._WindowEventCallback = windowEventCallback,
+        ._EventCallback = eventCallback,
     };
 }
 
@@ -43,23 +41,30 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
         .EC_Input => EventManager._InputEventPool.arena.state.buffer_list.first,
         .EC_Window => EventManager._WindowEventPool.arena.state.buffer_list.first,
     };
-    const callback = switch (eventCategory) {
-        .EC_Input => EventManager._InputEventCallback,
-        .EC_Window => EventManager._WindowEventCallback,
+    const end_index = switch (eventCategory) {
+        .EC_Input => EventManager._InputEventPool.arena.state.end_index,
+        .EC_Window => EventManager._WindowEventPool.arena.state.end_index,
     };
+
+    var current_index: usize = 0;
     while (it) |node| {
+        defer current_index += 1;
+        defer it = node.next;
+
+        //only want to itereate what we have allocated not the full capacity
+        if (current_index >= end_index) break;
+
         //convert raw pointer into event pointer
         //note std.SlinglyLinkedList(usize).Node is the type for BufNode which is the type of 'node' internally
         const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
         const event: *Event = @ptrCast(@alignCast(object_bytes));
 
-        callback(event);
-
-        it = node.next;
+        EventManager._EventCallback(event);
     }
 }
 
 pub fn EventsReset() void {
+    //const capacity = std.heap.ArenaAllocator.ResetMode{ .retain_with_limit = 20 };
     _ = EventManager._InputEventPool.reset(.free_all);
     _ = EventManager._WindowEventPool.reset(.free_all);
 }

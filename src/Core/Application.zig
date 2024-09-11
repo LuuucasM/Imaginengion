@@ -25,7 +25,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         ._Program = try Program.Init(EngineAllocator),
     };
     ApplicationManager._Window.SetVSync(true);
-    try EventManager.Init(EngineAllocator, OnInputEvent, OnWindowEvent);
+    try EventManager.Init(EngineAllocator, OnEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
     try ThreadPool.init(EngineAllocator);
     try AssetManager.Init(EngineAllocator);
@@ -37,6 +37,7 @@ pub fn Deinit() void {
     Input.Deinit();
     EventManager.Deinit();
     ThreadPool.deinit();
+    AssetManager.Deinit();
     ApplicationManager._EngineAllocator.destroy(ApplicationManager);
 }
 
@@ -45,8 +46,6 @@ pub fn Run() !void {
     var delta_time: f64 = 0;
 
     while (ApplicationManager._IsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
-        //const fps = std.time.ms_per_s / delta_time;
-        //std.debug.print("fps: {d:.2}\n", .{fps});
         try ApplicationManager._Program.OnUpdate(delta_time);
     }
 }
@@ -55,18 +54,14 @@ pub fn GetNativeWindow() *void {
     return ApplicationManager._Window.GetNativeWindow();
 }
 
-pub fn OnInputEvent(event: *Event) void {
-    ApplicationManager._Program.OnInputEvent(event);
-}
-
-pub fn OnWindowEvent(event: *Event) void {
+pub fn OnEvent(event: *Event) void {
     const result = switch (event.*) {
         .ET_WindowClose => OnWindowClose(),
         .ET_WindowResize => |e| OnWindowResize(e._Width, e._Height),
         else => false,
     };
     if (result == false) {
-        ApplicationManager._Program.OnWindowEvent(event);
+        ApplicationManager._Program.OnEvent(event);
     }
 }
 

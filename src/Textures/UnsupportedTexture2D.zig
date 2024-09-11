@@ -9,7 +9,7 @@ pub fn InitData(self: UnsupportedTexture2D, width: u32, height: u32, channels: u
     _ = size;
     Unsupported();
 }
-pub fn InitPath(self: UnsupportedTexture2D, path: []const u8) void {
+pub fn InitPath(self: UnsupportedTexture2D, path: []const u8) !void {
     _ = self;
     _ = path;
     Unsupported();

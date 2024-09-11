@@ -38,7 +38,7 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     try Renderer.Init(EngineAllocator);
     try ImGui.Init(EngineAllocator);
     self._AssetHandlePanel = try EngineAllocator.create(AssetHandlePanel);
-    self._AssetHandlePanel.Init();
+    try self._AssetHandlePanel.Init();
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
     self._ComponentsPanel.Init();
     self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
@@ -76,7 +76,6 @@ pub fn Deinit(self: EditorProgram) void {
 }
 
 pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
-    _ = dt;
     //process asset manager
     try AssetManager.OnUpdate();
 
@@ -89,21 +88,21 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     Dockspace.Begin();
 
     //all the panels
-    self._AssetHandlePanel.OnImguiRender();
+    try self._AssetHandlePanel.OnImguiRender();
     self._ScenePanel.OnImguiRender();
     try self._ContentBrowserPanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender();
     self._ToolbarPanel.OnImguiRender();
-    self._StatsPanel.OnImguiRender();
+    try self._StatsPanel.OnImguiRender(dt);
     self._ViewportPanel.OnImguiRender();
     try Dockspace.OnImguiRender();
 
     //imgui events
     try self.ProcessImguiEvents();
     ImGui.ClearEvents();
-    
+
     //imgui end
     Dockspace.End();
     ImGui.End();
@@ -118,12 +117,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     EventManager.EventsReset();
 }
 
-pub fn OnInputEvent(self: EditorProgram, event: *Event) void {
-    _ = self;
-    _ = event;
-}
-
-pub fn OnWindowEvent(self: EditorProgram, event: *Event) void {
+pub fn OnEvent(self: EditorProgram, event: *Event) void {
     _ = self;
     _ = event;
 }
@@ -147,7 +141,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 }
             },
             .ET_NewProjectEvent => {
-                if (self._ProjectDirectory.len != 0){
+                if (self._ProjectDirectory.len != 0) {
                     std.heap.page_allocator.free(self._ProjectDirectory);
                 }
                 self._ProjectDirectory = event.ET_NewProjectEvent._Path;
@@ -155,7 +149,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 try self._ContentBrowserPanel.OnImguiEvent(event);
             },
             .ET_OpenProjectEvent => {
-                if (self._ProjectDirectory.len != 0){
+                if (self._ProjectDirectory.len != 0) {
                     std.heap.page_allocator.free(self._ProjectDirectory);
                 }
                 self._ProjectDirectory = event.ET_OpenProjectEvent._Path;

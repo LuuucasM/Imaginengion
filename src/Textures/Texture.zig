@@ -7,9 +7,9 @@ pub const Texture = union(enum) {
             inline else => |texture| texture.InitData(width, height, channels, data, size),
         }
     }
-    pub fn InitPath(self: *Texture, path: []const u8) void {
+    pub fn InitPath(self: *Texture, path: []const u8) !void {
         switch (self) {
-            inline else => |texture| texture.InitPath(path),
+            inline else => |texture| try texture.InitPath(path),
         }
     }
     pub fn Deinit(self: Texture) void {

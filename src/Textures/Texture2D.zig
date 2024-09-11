@@ -12,8 +12,8 @@ pub fn InitData(self: *Texture2D, width: u32, height: u32, channels: u32, data: 
     self._Impl.InitData(width, height, channels, data, size);
 }
 
-pub fn InitPath(self: *Texture2D, path: []const u8) void {
-    self._Impl.InitPath(path);
+pub fn InitPath(self: *Texture2D, path: []const u8) !void {
+    try self._Impl.InitPath(path);
 }
 
 pub fn Deinit(self: Texture2D) void {

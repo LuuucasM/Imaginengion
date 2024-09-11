@@ -34,20 +34,26 @@ pub fn InitData(self: *OpenGLTexture2D, width: u32, height: u32, channels: u32, 
     glad.glTextureSubImage2D(self._TextureID, 0, 0, 0, self._Width, self._Height, self._DataFormat, glad.GL_UNSIGNED_BYTE, data);
 }
 
-pub fn InitPath(self: *OpenGLTexture2D, path: []const u8) void {
+pub fn InitPath(self: *OpenGLTexture2D, path: []const u8) !void {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
     var data: ?*stb.stbi_uc = null;
     stb.stbi_set_flip_vertically_on_load(1);
 
-    data = stb.stbi_load(@ptrCast(path), &width, &height, &channels, 0);
+    var file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+    const fstats = try file.stat();
+
+    const contents = try file.readToEndAlloc(std.heap.page_allocator, @intCast(fstats.size));
+    defer std.heap.page_allocator.free(contents);
+
+    data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
     defer stb.stbi_image_free(data);
     std.debug.assert(data != null);
 
     self._Width = width;
     self._Height = height;
-    std.debug.print("image for path: {s} width: {} height: {} channels: {}\n", .{path, width, height, channels});
     if (channels == 4) {
         self._InternalFormat = glad.GL_RGBA8;
         self._DataFormat = glad.GL_RGBA;

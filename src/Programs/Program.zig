@@ -26,10 +26,6 @@ pub fn OnUpdate(self: *Program, dt: f64) !void {
     try self._Impl.OnUpdate(dt);
 }
 
-pub fn OnInputEvent(self: Program, event: *Event) void {
-    self._Impl.OnInputEvent(event);
-}
-
-pub fn OnWindowEvent(self: Program, event: *Event) void {
-    self._Impl.OnWindowEvent(event);
+pub fn OnEvent(self: Program, event: *Event) void {
+    self._Impl.OnEvent(event);
 }
