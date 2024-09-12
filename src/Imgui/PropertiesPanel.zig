@@ -18,7 +18,11 @@ pub fn OnImguiRender(self: PropertiesPanel) void {
 
 pub fn OnImguiEvent(self: *PropertiesPanel, event: *ImguiEvent) void {
     switch (event.*) {
-        .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
+        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
         else => @panic("This event isnt handled yet in PropertiesPanel!\n"),
     }
+}
+
+fn OnTogglePanelEvent(self: *PropertiesPanel) void {
+    self._P_Open = !self._P_Open;
 }

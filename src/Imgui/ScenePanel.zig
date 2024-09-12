@@ -17,7 +17,11 @@ pub fn OnImguiRender(self: ScenePanel) void {
 }
 pub fn OnImguiEvent(self: *ScenePanel, event: *ImguiEvent) void {
     switch (event.*) {
-        .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
+        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
         else => @panic("This event is handled yet in ScenePanel!\n"),
     }
+}
+
+fn OnTogglePanelEvent(self: *ScenePanel) void {
+    self._P_Open = !self._P_Open;
 }

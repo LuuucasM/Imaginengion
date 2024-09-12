@@ -17,7 +17,11 @@ pub fn OnImguiRender(self: ViewportPanel) void {
 
 pub fn OnImguiEvent(self: *ViewportPanel, event: *ImguiEvent) void {
     switch (event.*) {
-        .ET_TogglePanelEvent => self._P_Open = !self._P_Open,
+        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
         else => @panic("This event has not been handled yet in ViewportPanel!\n"),
     }
+}
+
+fn OnTogglePanelEvent(self: *ViewportPanel) void {
+    self._P_Open = !self._P_Open;
 }

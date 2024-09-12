@@ -28,11 +28,6 @@ pub fn Init(self: *ContentBrowserPanel) !void {
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-    for (cwd_dir_path) |*c| {
-        if (c.* == '\\') {
-            c.* = '/';
-        }
-    }
 
     std.debug.print("cwd_dir_path: {s}\n", .{cwd_dir_path});
     const dir_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/foldericon.png" });
@@ -121,7 +116,6 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
         if (icon_ptr) |texture| {
             var texture_id = texture.GetID();
             imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1 });
-            std.debug.print("entry name in content browser: {s}\n", .{entry.name});
             _ = imgui.igImageButton(
                 @ptrCast(entry.name),
                 @ptrCast(&texture_id),

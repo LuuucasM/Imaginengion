@@ -51,10 +51,10 @@ pub fn OnImguiRender() !void {
         defer imgui.igEndMenuBar();
         if (imgui.igBeginMenu("File", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("New Level", "Ctrl+N", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Open Level", "Ctrl+O", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Leve", "Ctrl+S", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Level As...", "Ctrl+Shift+S", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("New Scene", "Ctrl+N", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Open Scene", "Ctrl+O", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene", "Ctrl+S", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene As...", "Ctrl+Shift+S", false, true) == true) {}
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const path = try PlatformUtils.OpenFolder(std.heap.page_allocator);
@@ -70,12 +70,13 @@ pub fn OnImguiRender() !void {
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
                 //constructing the filter to be passed to opening the file
                 var buffer: [34]u8 = undefined;
-                const original = "Imagine Project (*.imprj)*.imprj";
-                const mid_insert_pos = 25;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const allocator = fba.allocator();
+
+                const original = "Imagine Project (*.imprj)*.imprj";
+                const mid_insert_pos = 25;
+
                 var filter = try allocator.alloc(u8, 34);
-                defer allocator.free(filter);
                 std.mem.copyForwards(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
                 filter[mid_insert_pos] = 0;
                 std.mem.copyForwards(u8, filter[mid_insert_pos+1..], original[mid_insert_pos..]);
@@ -93,7 +94,9 @@ pub fn OnImguiRender() !void {
                 }
             }
             imgui.igSeparator();
-            if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+
+            }
         }
         if (imgui.igBeginMenu("Window", true) == true) {
             defer imgui.igEndMenu();
