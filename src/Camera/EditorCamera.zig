@@ -122,7 +122,7 @@ fn GetYaw(self: EditorCamera) f32 {
 
 fn UpdateProjection(self: *EditorCamera) void {
     self._AspectRatio = self._ViewportWidth / self._ViewportHeight;
-    self._ProjectionMatrix = LinAlg.PerspectiveRHGL(LinAlg.Radians(self._FOV), self._AspectRatio, self._NearClip, self._FarClip);
+    self._ProjectionMatrix = LinAlg.PerspectiveRHNO(LinAlg.Radians(self._FOV), self._AspectRatio, self._NearClip, self._FarClip);
 }
 
 fn UpdateView(self: *EditorCamera) void {

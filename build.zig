@@ -30,7 +30,7 @@ pub fn build(b: *std.Build) void {
     exe.linkSystemLibrary("c");
     exe.linkSystemLibrary("c++");
 
-    if (builtin.os.tag == .windows){
+    if (builtin.os.tag == .windows) {
         exe.linkSystemLibrary("comdlg32");
     }
 
@@ -53,7 +53,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
     const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
 
     const test_step = b.step("test", "Run unit tests");

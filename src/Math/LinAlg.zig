@@ -45,17 +45,17 @@ pub fn Mat4Mul(m: Mat4f32, v: Mat4f32) Mat4f32 {
 }
 
 pub fn Radians(degrees: anytype) @TypeOf(degrees) {
-    std.debug.assert(@typeInfo(degrees) == .Float);
+    std.debug.assert(@typeInfo(@TypeOf(degrees)) == .Float);
     return degrees * math.pi / 180.0;
 }
 
-pub fn PerspectiveRHGL(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
+pub fn PerspectiveRHNO(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
     const tanHalfFovy = math.tan(fovy / 2);
     return .{
         Vec4f32{ 1.0 / (aspect * tanHalfFovy), 0.0, 0.0, 0.0 },
         Vec4f32{ 0.0, 1 / tanHalfFovy, 0.0, 0.0 },
-        Vec4f32(0.0, 0.0, (zFar + zNear) / (zFar - zNear), 1.0),
-        Vec4f32(0.0, 0.0, 0.0, (2.0 * zFar * zNear) / (zFar - zNear)),
+        Vec4f32{ 0.0, 0.0, -((zFar + zNear) / (zFar - zNear)), -1.0 },
+        Vec4f32{ 0.0, 0.0, -((2.0 * zFar * zNear) / (zFar - zNear)), 0.0 },
     };
 }
 
@@ -214,12 +214,12 @@ test Mat4Mul {
 
     const calc1 = Mat4Mul(mat1, mat2);
 
-    var i = 0;
+    var i: u32 = 0;
     while (i < 4) : (i += 1) {
-        std.testing.expect(calc1[i][0] == ans1[i][0]);
-        std.testing.expect(calc1[i][1] == ans1[i][1]);
-        std.testing.expect(calc1[i][2] == ans1[i][2]);
-        std.testing.expect(calc1[i][3] == ans1[i][3]);
+        try std.testing.expect(calc1[i][0] == ans1[i][0]);
+        try std.testing.expect(calc1[i][1] == ans1[i][1]);
+        try std.testing.expect(calc1[i][2] == ans1[i][2]);
+        try std.testing.expect(calc1[i][3] == ans1[i][3]);
     }
 
     //-----------------TEST 2-----------------
@@ -247,16 +247,85 @@ test Mat4Mul {
 
     i = 0;
     while (i < 4) : (i += 1) {
-        std.testing.expect((calc2[i][0] - ans2[i][0]) < diff1);
-        std.testing.expect((calc2[i][1] - ans2[i][1]) < diff1);
-        std.testing.expect((calc2[i][2] - ans2[i][2]) < diff1);
-        std.testing.expect((calc2[i][3] - ans2[i][3]) < diff1);
+        try std.testing.expect((calc2[i][0] - ans2[i][0]) < diff1);
+        try std.testing.expect((calc2[i][1] - ans2[i][1]) < diff1);
+        try std.testing.expect((calc2[i][2] - ans2[i][2]) < diff1);
+        try std.testing.expect((calc2[i][3] - ans2[i][3]) < diff1);
     }
 }
 
 //test Radians
+test Radians {
+    const diff = 0.0001;
+    const degrees1: f32 = 45.0;
+    const degrees2: f32 = 180.0;
+    const degrees3: f32 = 220.0;
+    const degrees4: f32 = 350.0;
+    const degrees5: f32 = 380.0;
+    const degrees6: f32 = 800.0;
+
+    const ans1 = 0.7853;
+    const ans2 = 3.1415;
+    const ans3 = 3.8397;
+    const ans4 = 6.1086;
+    const ans5 = 6.6322;
+    const ans6 = 13.9626;
+
+    const radians1 = Radians(degrees1);
+    const radians2 = Radians(degrees2);
+    const radians3 = Radians(degrees3);
+    const radians4 = Radians(degrees4);
+    const radians5 = Radians(degrees5);
+    const radians6 = Radians(degrees6);
+
+    try std.testing.expect((radians1 - ans1) < diff);
+    try std.testing.expect((radians2 - ans2) < diff);
+    try std.testing.expect((radians3 - ans3) < diff);
+    try std.testing.expect((radians4 - ans4) < diff);
+    try std.testing.expect((radians5 - ans5) < diff);
+    try std.testing.expect((radians6 - ans6) < diff);
+}
+
 //test PerspectiveRHGL
+test PerspectiveRHNO {
+    const diff = 0.0001;
+
+    const perspective1 = PerspectiveRHNO(90.0, 1.0, 0.001, 1.0);
+    const perspective2 = PerspectiveRHNO(140.0, 0.69, 0.0001, 100.0);
+
+    const ans1 = Mat4f32{
+        Vec4f32{ 0.6173, 0, 0, 0.0 },
+        Vec4f32{ 0.0, 0.6173, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, -1.002, -1 },
+        Vec4f32{ 0.0, 0.0, -0.0020, 0.0 },
+    };
+
+    const ans2 = Mat4f32{
+        Vec4f32{ 1.1860, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.8183, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, -1, -1 },
+        Vec4f32{ 0.0, 0.0, 0.0002, 0.0 },
+    };
+
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect((perspective1[i][0] - ans1[i][0]) < diff);
+        try std.testing.expect((perspective1[i][1] - ans1[i][1]) < diff);
+        try std.testing.expect((perspective1[i][2] - ans1[i][2]) < diff);
+        try std.testing.expect((perspective1[i][3] - ans1[i][3]) < diff);
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect((perspective2[i][0] - ans2[i][0]) < diff);
+        try std.testing.expect((perspective2[i][1] - ans2[i][1]) < diff);
+        try std.testing.expect((perspective2[i][2] - ans2[i][2]) < diff);
+        try std.testing.expect((perspective2[i][3] - ans2[i][3]) < diff);
+    }
+}
+
 //test QuatNormalize
+
 //test QuatToMat4
 //test Translate
 //test Mat4Inverse
