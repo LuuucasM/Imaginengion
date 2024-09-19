@@ -30,6 +30,7 @@ _StatsPanel: *StatsPanel = undefined,
 _ToolbarPanel: *ToolbarPanel = undefined,
 _ViewportPanel: *ViewportPanel = undefined,
 _EngineAllocator: std.mem.Allocator = undefined,
+_PathGPA: std.heap.GeneralPurposeAllocator(.{}) = undefined,
 _ProjectDirectory: []const u8 = "",
 
 const EditorProgram = @This();
@@ -37,6 +38,7 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ProjectDirectory = "";
     try Renderer.Init(EngineAllocator);
     try ImGui.Init(EngineAllocator);
+    self._PathGPA = std.heap.GeneralPurposeAllocator(.{}){};
     self._AssetHandlePanel = try EngineAllocator.create(AssetHandlePanel);
     try self._AssetHandlePanel.Init();
     self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
@@ -60,7 +62,7 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._EngineAllocator = EngineAllocator;
 }
 
-pub fn Deinit(self: EditorProgram) void {
+pub fn Deinit(self: *EditorProgram) void {
     self._ContentBrowserPanel.Deinit();
     self._EngineAllocator.destroy(self._AssetHandlePanel);
     self._EngineAllocator.destroy(self._ComponentsPanel);
@@ -71,6 +73,8 @@ pub fn Deinit(self: EditorProgram) void {
     self._EngineAllocator.destroy(self._StatsPanel);
     self._EngineAllocator.destroy(self._ToolbarPanel);
     self._EngineAllocator.destroy(self._ViewportPanel);
+    self._PathGPA.allocator().free(self._ProjectDirectory);
+    _ = self._PathGPA.deinit();
     ImGui.Deinit();
     Renderer.Deinit();
 }
@@ -97,7 +101,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     self._ToolbarPanel.OnImguiRender();
     try self._StatsPanel.OnImguiRender(dt);
     self._ViewportPanel.OnImguiRender();
-    try Dockspace.OnImguiRender();
+    try Dockspace.OnImguiRender(self._PathGPA.allocator());
 
     //imgui events
     try self.ProcessImguiEvents();
@@ -142,7 +146,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_NewProjectEvent => {
                 if (self._ProjectDirectory.len != 0) {
-                    std.heap.page_allocator.free(self._ProjectDirectory);
+                    self._PathGPA.allocator().free(self._ProjectDirectory);
                 }
                 self._ProjectDirectory = event.ET_NewProjectEvent._Path;
                 AssetManager.UpdateProjectDirectory(event.ET_NewProjectEvent._Path);
@@ -150,7 +154,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_OpenProjectEvent => {
                 if (self._ProjectDirectory.len != 0) {
-                    std.heap.page_allocator.free(self._ProjectDirectory);
+                    self._PathGPA.allocator().free(self._ProjectDirectory);
                 }
                 self._ProjectDirectory = event.ET_OpenProjectEvent._Path;
                 AssetManager.UpdateProjectDirectory(std.fs.path.dirname(event.ET_OpenProjectEvent._Path).?);

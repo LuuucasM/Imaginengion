@@ -73,7 +73,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     imgui.igColumns(column_count, 0, false);
     defer imgui.igColumns(1, 0, true);
 
-    RenderBackButton(self, thumbnail_size);
+    try RenderBackButton(self, thumbnail_size);
 
     try RenderDirectoryContents(self, thumbnail_size);
 }
@@ -87,7 +87,7 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
     }
 }
 
-fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) void {
+fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     if (std.mem.eql(u8, self._CurrentDirectory, self._ProjectDirectory) == true) return;
 
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
@@ -95,7 +95,9 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) void {
     imgui.igPopStyleColor(1);
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-        self._CurrentDirectory = std.fs.path.dirname(self._CurrentDirectory).?;
+        const new_dir = try self._PathGPA.allocator().dupe(u8, std.fs.path.dirname(self._CurrentDirectory).?);
+        self._PathGPA.allocator().free(self._CurrentDirectory);
+        self._CurrentDirectory = new_dir;
     }
 
     imgui.igTextWrapped("Back");
@@ -156,6 +158,6 @@ fn OnNewProjectEvent(self: *ContentBrowserPanel, event: NewProjectEvent) !void {
 
 fn OnOpenProjectEvent(self: *ContentBrowserPanel, event: OpenProjectEvent) !void {
     self._ProjectDirectory = std.fs.path.dirname(event._Path).?;
-    self._CurrentDirectory = std.fs.path.dirname(event._Path).?;
+    self._CurrentDirectory = try self._PathGPA.allocator().dupe(u8, std.fs.path.dirname(event._Path).?);
     self._ProjectFile = try std.fs.openFileAbsolute(event._Path, .{});
 }

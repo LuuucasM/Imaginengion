@@ -119,8 +119,8 @@ pub fn OnUpdate() !void {
     var iter = AssetM._AssetPathToIDMap.iterator();
     while (iter.next()) |entry| {
         const rel_path = entry.key_ptr.*;
-        const abs_path = try std.fs.path.join(arena.allocator(), &[_][]const u8{ AssetM._ProjectDirectory, rel_path });
         const id = entry.value_ptr.*;
+        const abs_path = try std.fs.path.join(arena.allocator(), &[_][]const u8{ AssetM._ProjectDirectory, rel_path });
         const handle = AssetM._AssetIDToHandleMap.get(id).?;
         const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
             if (err == error.FileNotFound) {
@@ -172,7 +172,7 @@ fn HandleModifiedAssets(id: u128, handle: AssetHandle, abs_path: []const u8, new
 
     if (std.mem.eql(u8, std.fs.path.extension(new_handle._AssetPath), ".png") == true) {
         if (AssetM._AssetIDToTextureMap.getEntry(id)) |entry| {
-            entry.value_ptr.UpdateDataPath(abs_path);
+            try entry.value_ptr.UpdateDataPath(abs_path);
         }
     }
 
@@ -186,15 +186,25 @@ fn WalkDirectory(allocator: std.mem.Allocator) !void {
     var walker = try dir.walk(allocator);
     defer walker.deinit();
 
-    while (try walker.next()) |entry| {
+    while (true) {
+        const entry = walker.next() catch |err| {
+            switch(err){
+                error.Unexpected => {
+                    continue;
+                },
+                else => return err,
+            }
+        } orelse break;
+
         if (entry.kind != .file) continue;
+
         const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ AssetM._ProjectDirectory, entry.path });
         const rel_path = entry.path;
 
         if (AssetM._AssetPathToIDMap.contains(rel_path)) continue;
+
         const asset_type = if (std.mem.eql(u8, std.fs.path.extension(rel_path), ".png") == true) AssetTypes.Texture else AssetTypes.NotAsset;
         if (asset_type != .NotAsset) {
-            std.debug.print("Making new asset at path: {s}\n", .{rel_path});
             try HandleNewAsset(allocator, abs_path, rel_path, asset_type);
         }
     }
@@ -218,7 +228,7 @@ fn HandleNewAsset(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
         const delete_path = entry.key_ptr.*;
         const delete_id = entry.value_ptr.*;
         if (AssetM._AssetIDToHandleDelete.get(delete_id)) |delete_handle| {
-            if (delete_handle._AssetSize == fstats.size and delete_handle._AssetHash == hash and delete_handle._AssetType == .Texture) {
+            if (delete_handle._AssetSize == fstats.size and delete_handle._AssetHash == hash and delete_handle._AssetType == assetType) {
                 try RestoreDeletedAsset(delete_path, delete_id, delete_handle, rel_path, fstats.mtime);
                 found_match = true;
                 break;
@@ -235,12 +245,12 @@ fn RestoreDeletedAsset(old_rel_path: []const u8, id: u128, handle: AssetHandle, 
     new_handle._AssetPath = try AssetM._AssetGPA.allocator().dupe(u8, new_rel_path);
     new_handle._AssetLastModified = new_mtime;
 
+    try AssetM._AssetPathToIDMap.put(new_handle._AssetPath, id);
+    try AssetM._AssetIDToHandleMap.put(id, new_handle);
     _ = AssetM._AssetPathToIDDelete.remove(old_rel_path);
     _ = AssetM._AssetIDToHandleDelete.remove(id);
-    try AssetM._AssetPathToIDMap.put(new_rel_path, id);
-    try AssetM._AssetIDToHandleMap.put(id, new_handle);
 
-    AssetM._AssetGPA.allocator().free(old_rel_path);
+    AssetM._AssetGPA.allocator().free(handle._AssetPath);
 }
 
 fn CleanUpDeletedAssets() !void {

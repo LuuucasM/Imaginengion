@@ -95,14 +95,21 @@ pub fn UpdateData(self: *OpenGLTexture2D, width: u32, height: u32, data: *anyopa
     self._Height = height;
     glad.glTextureSubImage2D(self._TextureID, 0, 0, 0, self._Width, self._Height, self._DataFormat, glad.GL_UNSIGNED_BYTE, data);
 }
-pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) void {
+pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
     var data: ?*stb.stbi_uc = null;
     stb.stbi_set_flip_vertically_on_load(1);
 
-    data = stb.stbi_load(@ptrCast(path), &width, &height, &channels, 0);
+    var file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+    const fstats = try file.stat();
+
+    const contents = try file.readToEndAlloc(std.heap.page_allocator, @intCast(fstats.size));
+    defer std.heap.page_allocator.free(contents);
+
+    data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
     defer stb.stbi_image_free(data);
     std.debug.assert(data != null);
 
