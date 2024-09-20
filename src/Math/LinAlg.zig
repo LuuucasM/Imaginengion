@@ -8,6 +8,8 @@ pub const Vec4f32 = @Vector(4, f32);
 pub const Mat2f32 = [2]Vec2f32;
 pub const Mat3f32 = [3]Vec3f32;
 pub const Mat4f32 = [4]Vec4f32;
+
+//indecies 0-3: {w, x, y, z}
 pub const Quatf32 = @Vector(4, f32);
 
 pub fn InitMat4CompTime(x: comptime_float) Mat4f32 {
@@ -44,6 +46,18 @@ pub fn Mat4Mul(m: Mat4f32, v: Mat4f32) Mat4f32 {
     };
 }
 
+pub fn PrintMat4(m: Mat4f32) void {
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        std.debug.print("{d:.4} {d:.4} {d:.4} {d:.4}\n", .{ m[i][0], m[i][1], m[i][2], m[i][3] });
+    }
+    std.debug.print("\n", .{});
+}
+
+pub fn PrintQuat(q: Quatf32) void {
+    std.debug.print("{d:.4} {d:.4} {d:.4} {d:.4}\n\n", .{ q[0], q[1], q[2], q[3] });
+}
+
 pub fn Radians(degrees: anytype) @TypeOf(degrees) {
     std.debug.assert(@typeInfo(@TypeOf(degrees)) == .Float);
     return degrees * math.pi / 180.0;
@@ -62,34 +76,37 @@ pub fn PerspectiveRHNO(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const q_pow = @reduce(.Add, q * q);
     const len = @sqrt(q_pow);
-    const normalized = q / len;
-    return normalized;
+    if (len != 0) {
+        return q / @as(Quatf32, @splat(len));
+    }
+    return q;
 }
 
 pub fn QuatToMat4(q: Quatf32) Mat4f32 {
-    const q_pow = q * q;
-
-    const one: Vec4f32 = @splat(1.0);
-    const two: Vec4f32 = @splat(2.0);
+    const one: Vec3f32 = @splat(1.0);
+    const two: Vec3f32 = @splat(2.0);
     const two2: Vec2f32 = @splat(2.0);
 
-    const xy = q[0] * q[1];
-    const xz = q[0] * q[2];
-    const xw = q[0] * q[3];
-    const yz = q[1] * q[2];
-    const yw = q[1] * q[3];
-    const zw = q[2] * q[3];
+    const xx = q[1] * q[1];
+    const yy = q[2] * q[2];
+    const zz = q[3] * q[3];
+    const xy = q[1] * q[2];
+    const xz = q[1] * q[3];
+    const xw = q[1] * q[0];
+    const yz = q[2] * q[3];
+    const yw = q[2] * q[0];
+    const zw = q[3] * q[0];
 
-    const diag = one - two * Vec4f32{ q_pow[1] + q_pow[2], q_pow[0] + q_pow[2], q_pow[0] + q_pow[1], 0.0 };
+    const diag = one - (two * Vec3f32{ yy + zz, xx + zz, xx + yy });
 
     const r1 = two2 * Vec2f32{ xy + zw, xz - yw };
     const r2 = two2 * Vec2f32{ xy - zw, yz + xw };
     const r3 = two2 * Vec2f32{ xz + yw, yz - xw };
 
     return Mat4f32{
-        Vec4f32{ diag[0], r1[0], r1[1] },
-        Vec4f32{ r2[0], diag[1], r2[1] },
-        Vec4f32{ r3[0], r3[1], diag[2] },
+        Vec4f32{ diag[0], r1[0], r1[1], 0.0 },
+        Vec4f32{ r2[0], diag[1], r2[1], 0.0 },
+        Vec4f32{ r3[0], r3[1], diag[2], 0.0 },
         Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
     };
 }
@@ -247,10 +264,10 @@ test Mat4Mul {
 
     i = 0;
     while (i < 4) : (i += 1) {
-        try std.testing.expect((calc2[i][0] - ans2[i][0]) < diff1);
-        try std.testing.expect((calc2[i][1] - ans2[i][1]) < diff1);
-        try std.testing.expect((calc2[i][2] - ans2[i][2]) < diff1);
-        try std.testing.expect((calc2[i][3] - ans2[i][3]) < diff1);
+        try std.testing.expect(math.approxEqAbs(f32, calc2[i][0], ans2[i][0], diff1));
+        try std.testing.expect(math.approxEqAbs(f32, calc2[i][1], ans2[i][1], diff1));
+        try std.testing.expect(math.approxEqAbs(f32, calc2[i][2], ans2[i][2], diff1));
+        try std.testing.expect(math.approxEqAbs(f32, calc2[i][3], ans2[i][3], diff1));
     }
 }
 
@@ -278,12 +295,12 @@ test Radians {
     const radians5 = Radians(degrees5);
     const radians6 = Radians(degrees6);
 
-    try std.testing.expect((radians1 - ans1) < diff);
-    try std.testing.expect((radians2 - ans2) < diff);
-    try std.testing.expect((radians3 - ans3) < diff);
-    try std.testing.expect((radians4 - ans4) < diff);
-    try std.testing.expect((radians5 - ans5) < diff);
-    try std.testing.expect((radians6 - ans6) < diff);
+    try std.testing.expect(math.approxEqAbs(f32, radians1, ans1, diff));
+    try std.testing.expect(math.approxEqAbs(f32, radians2, ans2, diff));
+    try std.testing.expect(math.approxEqAbs(f32, radians3, ans3, diff));
+    try std.testing.expect(math.approxEqAbs(f32, radians4, ans4, diff));
+    try std.testing.expect(math.approxEqAbs(f32, radians5, ans5, diff));
+    try std.testing.expect(math.approxEqAbs(f32, radians6, ans6, diff));
 }
 
 //test PerspectiveRHGL
@@ -294,39 +311,116 @@ test PerspectiveRHNO {
     const perspective2 = PerspectiveRHNO(140.0, 0.69, 0.0001, 100.0);
 
     const ans1 = Mat4f32{
-        Vec4f32{ 0.6173, 0, 0, 0.0 },
+        Vec4f32{ 0.6173, 0.0, 0.0, 0.0 },
         Vec4f32{ 0.0, 0.6173, 0.0, 0.0 },
-        Vec4f32{ 0.0, 0.0, -1.002, -1 },
+        Vec4f32{ 0.0, 0.0, -1.0020, -1.0 },
         Vec4f32{ 0.0, 0.0, -0.0020, 0.0 },
     };
 
     const ans2 = Mat4f32{
         Vec4f32{ 1.1860, 0.0, 0.0, 0.0 },
         Vec4f32{ 0.0, 0.8183, 0.0, 0.0 },
-        Vec4f32{ 0.0, 0.0, -1, -1 },
-        Vec4f32{ 0.0, 0.0, 0.0002, 0.0 },
+        Vec4f32{ 0.0, 0.0, -1.0, -1.0 },
+        Vec4f32{ 0.0, 0.0, -0.0002, 0.0 },
     };
 
     var i: u32 = 0;
+
     while (i < 4) : (i += 1) {
-        try std.testing.expect((perspective1[i][0] - ans1[i][0]) < diff);
-        try std.testing.expect((perspective1[i][1] - ans1[i][1]) < diff);
-        try std.testing.expect((perspective1[i][2] - ans1[i][2]) < diff);
-        try std.testing.expect((perspective1[i][3] - ans1[i][3]) < diff);
+        try std.testing.expect(math.approxEqAbs(f32, perspective1[i][0], ans1[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, perspective1[i][1], ans1[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, perspective1[i][2], ans1[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, perspective1[i][3], ans1[i][3], diff));
     }
 
     i = 0;
     while (i < 4) : (i += 1) {
-        try std.testing.expect((perspective2[i][0] - ans2[i][0]) < diff);
-        try std.testing.expect((perspective2[i][1] - ans2[i][1]) < diff);
-        try std.testing.expect((perspective2[i][2] - ans2[i][2]) < diff);
-        try std.testing.expect((perspective2[i][3] - ans2[i][3]) < diff);
+        try std.testing.expect(math.approxEqAbs(f32, perspective2[i][0], ans2[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, perspective2[i][1], ans2[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, perspective2[i][2], ans2[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, perspective2[i][3], ans2[i][3], diff));
     }
 }
 
 //test QuatNormalize
+test QuatNormalize {
+    const diff = 0.0001;
+
+    const quat1 = Quatf32{ 0.9238, 0.0, 0.3826, 0.0 };
+    const quat2 = Quatf32{ 2.0, 2.0, 0.0, 0.0 };
+
+    const result1 = QuatNormalize(quat1);
+    const result2 = QuatNormalize(quat2);
+
+    const ans1 = Quatf32{ 0.9238, 0.0, 0.3826, 0.0 };
+    const ans2 = Quatf32{ 0.7071, 0.7071, 0.0, 0.0 };
+
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i], ans1[i], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i], ans2[i], diff));
+    }
+}
 
 //test QuatToMat4
+test QuatToMat4 {
+    const diff = 0.0001;
+
+    const quat1 = Quatf32{ 0.7071, 0.7071, 0.0, 0.0 };
+    const quat2 = Quatf32{ 0.5, 0.5, 0.5, 0.5 };
+    const quat3 = Quatf32{ 0.0, 0.0, 0.0, 1.0 };
+
+    const result1 = QuatToMat4(quat1);
+    const result2 = QuatToMat4(quat2);
+    const result3 = QuatToMat4(quat3);
+
+    const ans1 = Mat4f32{
+        Vec4f32{ 1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.9999, 0.0 },
+        Vec4f32{ 0.0, -0.9999, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+    const ans2 = Mat4f32{
+        Vec4f32{ 0.0, 1.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 0.0 },
+        Vec4f32{ 1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+    const ans3 = Mat4f32{
+        Vec4f32{ -1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, -1.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][0], ans1[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][1], ans1[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][2], ans1[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][3], ans1[i][3], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][0], ans2[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][1], ans2[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][2], ans2[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][3], ans2[i][3], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][0], ans3[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][1], ans3[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][2], ans3[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][3], ans3[i][3], diff));
+    }
+}
 //test Translate
 //test Mat4Inverse
 //test Vec3ToQuat
