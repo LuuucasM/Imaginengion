@@ -173,10 +173,10 @@ pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
     const Dot1 = @reduce(.Add, m[0] * Col0);
 
     return .{
-        Inverse[0] / Dot1,
-        Inverse[1] / Dot1,
-        Inverse[2] / Dot1,
-        Inverse[3] / Dot1,
+        Inverse[0] / @as(Vec4f32, @splat(Dot1)),
+        Inverse[1] / @as(Vec4f32, @splat(Dot1)),
+        Inverse[2] / @as(Vec4f32, @splat(Dot1)),
+        Inverse[3] / @as(Vec4f32, @splat(Dot1)),
     };
 }
 
@@ -185,10 +185,10 @@ pub fn Vec3ToQuat(v: Vec3f32) Quatf32 {
     const s = @sin(v * @as(Vec3f32, @splat(0.5)));
 
     return Quatf32{
+        c[0] * c[1] * c[2] + s[0] * s[1] * s[2],
         s[0] * c[1] * c[2] - c[0] * s[1] * s[2],
         c[0] * s[1] * c[2] + s[0] * c[1] * s[2],
         c[0] * c[1] * s[2] - s[0] * s[1] * c[2],
-        c[0] * c[1] * c[2] + s[0] * s[1] * s[2],
     };
 }
 
@@ -421,8 +421,178 @@ test QuatToMat4 {
         try std.testing.expect(math.approxEqAbs(f32, result3[i][3], ans3[i][3], diff));
     }
 }
+
 //test Translate
+test Translate {
+    const diff = 0.0001;
+    const base = InitMat4CompTime(1.0);
+    const vec31 = Vec3f32{ 1.0, 0.0, 0.0 };
+    const vec32 = Vec3f32{ 1.0, 2.0, 3.0 };
+    const vec33 = Vec3f32{ 10.0, 20.0, 0.0 };
+
+    const result1 = Translate(base, vec31);
+    const result2 = Translate(base, vec32);
+    const result3 = Translate(base, vec33);
+
+    const ans1 = Mat4f32{
+        Vec4f32{ 1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 1.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 0.0 },
+        Vec4f32{ 1.0, 0.0, 0.0, 1.0 },
+    };
+
+    const ans2 = Mat4f32{
+        Vec4f32{ 1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 1.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 0.0 },
+        Vec4f32{ 1.0, 2.0, 3.0, 1.0 },
+    };
+    const ans3 = Mat4f32{
+        Vec4f32{ 1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 1.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 0.0 },
+        Vec4f32{ 10.0, 20.0, 0.0, 1.0 },
+    };
+
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][0], ans1[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][1], ans1[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][2], ans1[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][3], ans1[i][3], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][0], ans2[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][1], ans2[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][2], ans2[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][3], ans2[i][3], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][0], ans3[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][1], ans3[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][2], ans3[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result3[i][3], ans3[i][3], diff));
+    }
+}
 //test Mat4Inverse
+test Mat4Inverse {
+    const diff = 0.0001;
+    const mat41 = Mat4f32{
+        Vec4f32{ 1.0, 0.0, 0.0, 1.0 },
+        Vec4f32{ 0.0, 1.0, 0.0, 2.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 3.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+    const mat42 = Mat4f32{
+        Vec4f32{ 2.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 3.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 4.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+
+    const result1 = Mat4Inverse(mat41);
+    const result2 = Mat4Inverse(mat42);
+
+    const ans1 = Mat4f32{
+        Vec4f32{ 1.0, 0.0, 0.0, -1.0 },
+        Vec4f32{ 0.0, 1.0, 0.0, -2.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, -3.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+    const ans2 = Mat4f32{
+        Vec4f32{ 0.5, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.3333, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.25, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
+    };
+
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][0], ans1[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][1], ans1[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][2], ans1[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result1[i][3], ans1[i][3], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][0], ans2[i][0], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][1], ans2[i][1], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][2], ans2[i][2], diff));
+        try std.testing.expect(math.approxEqAbs(f32, result2[i][3], ans2[i][3], diff));
+    }
+}
+
 //test Vec3ToQuat
+test Vec3ToQuat {
+    const diff = 0.0001;
+    const vec31 = Vec3f32{ 1.0, 0.0, 0.0 };
+    const vec32 = Vec3f32{ 0.0, 45.0, 0.0 };
+    const vec33 = Vec3f32{ 0.0, 0.0, 180.0 };
+
+    const result1 = Vec3ToQuat(vec31);
+    const result2 = Vec3ToQuat(vec32);
+    const result3 = Vec3ToQuat(vec33);
+
+    const ans1 = Quatf32{ 0.8775, 0.4794, 0.0, 0.0 };
+    const ans2 = Quatf32{ -0.8733, 0.0, -0.4871, 0.0 };
+    const ans3 = Quatf32{ -0.4480, 0.0, 0.0, 0.8939 };
+
+    var i: u32 = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i], ans1[i], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i], ans2[i], diff));
+    }
+
+    i = 0;
+    while (i < 4) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result3[i], ans3[i], diff));
+    }
+}
+
 //test Vec3CrossVec3
+test Vec3CrossVec3 {
+    const diff = 0.0001;
+    const vec311 = Vec3f32{ 0.0, 1.0, 1.0 };
+    const vec312 = Vec3f32{ 1.0, 0.0, -1.0 };
+
+    const vec321 = Vec3f32{ 0.0, 1.0, 1.0 };
+    const vec322 = Vec3f32{ 0.0, 2.0, 2.0 };
+
+    const vec331 = Vec3f32{ 3.4, 2.1, 1.9 };
+    const vec332 = Vec3f32{ -2.7, 4.5, 0.3 };
+
+    const result1 = Vec3CrossVec3(vec311, vec312);
+    const result2 = Vec3CrossVec3(vec321, vec322);
+    const result3 = Vec3CrossVec3(vec331, vec332);
+
+    const ans1 = Vec3f32{ -1.0, 1.0, -1.0 };
+    const ans2 = Vec3f32{ 0.0, 0.0, 0.0 };
+    const ans3 = Vec3f32{ -7.92, -6.15, 20.97 };
+
+    var i: u32 = 0;
+    while (i < 3) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i], ans1[i], diff));
+    }
+
+    i = 0;
+    while (i < 3) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i], ans2[i], diff));
+    }
+
+    i = 0;
+    while (i < 3) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result3[i], ans3[i], diff));
+    }
+}
+
 //test RotateQuatVec3
+test RotateQuatVec3 {}
