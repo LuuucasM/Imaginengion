@@ -19,7 +19,7 @@ _FarClip: f32 = 1000.0,
 _ViewMatrix: Mat4f32 = std.mem.zeroes(Mat4f32),
 _Position: Vec3f32 = std.mem.zeroes(Vec3f32),
 _FocalPoint: Vec3f32 = std.mem.zeroes(Vec3f32),
-_InitialMousePos: Vec2f32 = std.mem.zeroes(Vec2f32),
+_CurrentMousePos: Vec2f32 = std.mem.zeroes(Vec2f32),
 
 _Distance: f32 = 10.0,
 _Pitch: f32 = 0.0,
@@ -45,15 +45,15 @@ pub fn Deinit(self: *EditorCamera) void {
 pub fn OnUpdate(self: *EditorCamera) void {
     if (Input.IsKeyPressed(.LeftAlt)) {
         const pos = Input.GetMousePosition();
-        const delta = pos - self._InitialMousePos * @as(Vec2f32, @splat(0.003));
-        self._InitialMousePos = pos;
+        const delta = pos - self._CurrentMousePos * @as(Vec2f32, @splat(0.003));
+        self._CurrentMousePos = pos;
 
         if (Input.IsMouseButtonPressed(.ButtonMiddle)) {
-            MousePan(delta);
+            self.MousePan(delta);
         } else if (Input.IsMouseButtonPressed(.ButtonLeft)) {
-            MouseRotate(delta);
+            self.MouseRotate(delta);
         } else if (Input.IsMouseButtonPressed(.ButtonRight)) {
-            MouseZoom(delta[1]);
+            self.MouseZoom(delta[1]);
         }
     }
 
