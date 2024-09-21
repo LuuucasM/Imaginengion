@@ -93,15 +93,15 @@ pub fn SetViewportSize(self: *EditorCamera, width: f32, height: f32) void {
 }
 
 fn GetUpDirection(self: EditorCamera) Vec3f32 {
-    return LinAlg.RotateQuatVec3(self.GetOrientation(), Vec3f32{ 0.0, 1.0, 0.0 });
+    return LinAlg.RotateVec3Quat(self.GetOrientation(), Vec3f32{ 0.0, 1.0, 0.0 });
 }
 
 fn GetRightDirection(self: EditorCamera) Vec3f32 {
-    return LinAlg.RotateQuatVec3(self.GetOrientation(), Vec3f32{ 1.0, 0.0, 0.0 });
+    return LinAlg.RotateVec3Quat(self.GetOrientation(), Vec3f32{ 1.0, 0.0, 0.0 });
 }
 
 fn GetForwardDirection(self: EditorCamera) Vec3f32 {
-    return LinAlg.RotateQuatVec3(self.GetOrientation(), Vec3f32{ 0.0, 0.0, -1.0 });
+    return LinAlg.RotateVec3Quat(self.GetOrientation(), Vec3f32{ 0.0, 0.0, -1.0 });
 }
 
 fn GetPosition(self: EditorCamera) Vec3f32 {

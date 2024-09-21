@@ -46,10 +46,22 @@ pub fn Mat4Mul(m: Mat4f32, v: Mat4f32) Mat4f32 {
     };
 }
 
+pub fn PrintVec(v: anytype) void {
+    if (@typeInfo(@TypeOf(v)) != .Vector) return;
+
+    const vlen = @typeInfo(@TypeOf(v)).Vector.len;
+
+    var i: u32 = 0;
+    while (i < vlen) : (i += 1) {
+        std.debug.print("{d:.4} ", .{v[i]});
+    }
+    std.debug.print("\n", .{});
+}
+
 pub fn PrintMat4(m: Mat4f32) void {
     var i: u32 = 0;
     while (i < 4) : (i += 1) {
-        std.debug.print("{d:.4} {d:.4} {d:.4} {d:.4}\n", .{ m[i][0], m[i][1], m[i][2], m[i][3] });
+        PrintVec(m[i]);
     }
     std.debug.print("\n", .{});
 }
@@ -76,7 +88,7 @@ pub fn PerspectiveRHNO(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const q_pow = @reduce(.Add, q * q);
     const len = @sqrt(q_pow);
-    if (len != 0) {
+    if (len != 1 and len != 0) {
         return q / @as(Quatf32, @splat(len));
     }
     return q;
@@ -194,19 +206,27 @@ pub fn Vec3ToQuat(v: Vec3f32) Quatf32 {
 
 pub fn Vec3CrossVec3(x: Vec3f32, y: Vec3f32) Vec3f32 {
     return .{
-        x[1] * y[2] - y[1] * x[2],
-        x[2] * y[0] - y[2] * x[0],
-        x[0] * y[1] - y[0] * x[1],
+        x[1] * y[2] - x[2] * y[1],
+        x[2] * y[0] - x[0] * y[2],
+        x[0] * y[1] - x[1] * y[0],
     };
 }
 
-pub fn RotateQuatVec3(q: Quatf32, v: Vec3f32) Vec3f32 {
-    const QuatVect = Vec3f32{ q[0], q[1], q[2] };
+pub fn RotateVec3Quat(q: Quatf32, v: Vec3f32) Vec3f32 {
+    const QuatVect = Vec3f32{ q[1], q[2], q[3] };
+
     const uv = Vec3CrossVec3(QuatVect, v);
     const uuv = Vec3CrossVec3(QuatVect, uv);
 
-    return v + ((uv * @as(Vec3f32, @splat(q[3]))) + uuv) * @as(Vec3f32, @splat(2.0));
+    const expanded_uv = @as(Vec3f32, @splat(2.0 * q[0])) * uv;
+    const expanded_uuv = @as(Vec3f32, @splat(2.0)) * uuv;
+
+    return v + expanded_uv + expanded_uuv;
 }
+
+//----------------------------------UNIT TESTS----------------------------------------------------------------
+//###############################################################################################################
+//--------------------------------------------------------------------------------------------------------------
 
 test Mat4Mul {
     //------------TEST 1---------------
@@ -595,4 +615,36 @@ test Vec3CrossVec3 {
 }
 
 //test RotateQuatVec3
-test RotateQuatVec3 {}
+test RotateVec3Quat {
+    const diff = 0.0001;
+
+    const quat1 = Quatf32{ 1.0, 0.0, 0.0, 0.0 };
+    const vec1 = Vec3f32{ 1.0, 0.0, 0.0 };
+
+    const quat2 = Quatf32{ 0.7071, 0.7071, 0.0, 0.0 };
+    const vec2 = Vec3f32{ 0.0, 1.0, 0.0 };
+
+    const quat3 = Quatf32{ 0.26, 0.83, -0.49, 0.0 };
+    const vec3 = Vec3f32{ 0.1234, 0.5678, 0.9012 };
+
+    const result1 = RotateVec3Quat(quat1, vec1);
+    const result2 = RotateVec3Quat(quat2, vec2);
+    const result3 = RotateVec3Quat(quat3, vec3);
+
+    const ans1 = Vec3f32{ 1.0, 0.0, 0.0 };
+    const ans2 = Vec3f32{ 0.0, 0.0, 1.0 };
+    const ans3 = Vec3f32{ -0.6273, -0.7038, -0.4967 };
+
+    var i: u32 = 0;
+    while (i < 3) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result1[i], ans1[i], diff));
+    }
+    i = 0;
+    while (i < 3) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result2[i], ans2[i], diff));
+    }
+    i = 0;
+    while (i < 3) : (i += 1) {
+        try std.testing.expect(math.approxEqAbs(f32, result3[i], ans3[i], diff));
+    }
+}
