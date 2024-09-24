@@ -2,8 +2,11 @@ const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiManager = @import("Imgui.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const EventManager = @import("../Events/EventManager.zig");
+const Event = @import("../Events/Event.zig").Event;
 const Dockspace = @This();
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
+const Application = @import("../Core/Application.zig");
 
 pub fn Begin() void {
     const opt_fullscreen = true;
@@ -94,7 +97,10 @@ pub fn OnImguiRender(path_allocator: std.mem.Allocator) !void {
                 }
             }
             imgui.igSeparator();
-            if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = Event{ .ET_WindowClose = .{} };
+                try EventManager.Insert(new_event);
+            }
         }
         if (imgui.igBeginMenu("Window", true) == true) {
             defer imgui.igEndMenu();
