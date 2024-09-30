@@ -87,11 +87,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     InputManager.PollInputEvents();
     EventManager.ProcessEvents(.EC_Input);
 
-    //Imgui stuff
+    //--Imgui begin--
     ImGui.Begin();
     Dockspace.Begin();
 
-    //all the panels
     try self._AssetHandlePanel.OnImguiRender();
     self._ScenePanel.OnImguiRender();
     try self._ContentBrowserPanel.OnImguiRender();
@@ -103,13 +102,12 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     self._ViewportPanel.OnImguiRender();
     try Dockspace.OnImguiRender(self._PathGPA.allocator());
 
-    //imgui events
     try self.ProcessImguiEvents();
     ImGui.ClearEvents();
 
-    //imgui end
     Dockspace.End();
     ImGui.End();
+    //--Imgui end--
 
     //swap buffers
     Renderer.SwapBuffers();

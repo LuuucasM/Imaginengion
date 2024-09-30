@@ -28,10 +28,8 @@ pub fn Init(self: *ContentBrowserPanel) !void {
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-
-    std.debug.print("cwd_dir_path: {s}\n", .{cwd_dir_path});
     const dir_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/foldericon.png" });
-    std.debug.print("full dir path: {s}\n", .{dir_icon_path});
+
     try self._DirTexture.InitPath(dir_icon_path);
     fba.allocator().free(dir_icon_path);
 

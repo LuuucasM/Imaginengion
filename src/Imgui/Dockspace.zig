@@ -86,7 +86,6 @@ pub fn OnImguiRender(path_allocator: std.mem.Allocator) !void {
                 filter[filter.len - 1] = 0;
 
                 const path = try PlatformUtils.OpenFile(path_allocator, filter);
-                std.debug.print("path is: {s}\n", .{path});
                 if (std.mem.eql(u8, path, "") == false) {
                     const new_event = ImguiEvent{
                         .ET_OpenProjectEvent = .{

@@ -4,55 +4,64 @@ const ComponentManager = @import("ComponentManager.zig");
 const SystemManager = @import("SystemManager.zig");
 const ECS = @This();
 
-_EntityManager: EntityManager,
-_ComponentManager: ComponentManager,
-_SystemManager: SystemManager,
+_EntityManager: EntityManager = .{},
+_ComponentManager: ComponentManager = .{},
+_SystemManager: SystemManager = .{},
 _EngineAllocator: std.mem.Allocator,
 
-pub fn Init(EngineAllocator: std.mem.Allocator) ECS {
+pub fn Init(EngineAllocator: std.mem.Allocator) !*ECS {
     const ecs = try EngineAllocator.create(ECS);
     ecs.* = .{
         ._EngineAllocator = EngineAllocator,
     };
+    ecs._EntityManager.Init();
     return ecs;
 }
 
 pub fn Deinit(self: ECS) void {
+    self._EntityManager.Deinit();
+    self._ComponentManager.Deinit();
     self._EngineAllocator.destroy(self);
 }
 
 //---------------EntityManager--------------
-pub fn CreateEntity(self: ECS) u128 {
+pub fn CreateEntity(self: *ECS) !u64 {
     return self._EntityManager.CreateEntity();
 }
 
-pub fn DestroyEntity(self: ECS, entityID: u128) void {
-    self._EntityManager.DestroyEntity(entityID);
+pub fn DestroyEntity(self: *ECS, entityID: u64) !void {
+    try self._EntityManager.DestroyEntity(entityID);
 }
 
 //-------------ComponentManager------------
-pub fn RegisterComponent(self: ECS, comptime ComponentType: type) void {
-    self._ComponentManager.RegisterComponent(ComponentType);
+//so basically i am going to use sparce sets like EnTT does but
+//components must be registered
+//then i will save a 'skipfield' pattern for each registerd system so they can iterate over components
+//as an entities components get added i will check to see if that entitys bitmap is the same as the systems
+//if its in the system then just add 0 to the skipfield, else adjust the skipfield as needed
+//then every frame we will try to organize one of the component
+pub fn RegisterComponent(self: ECS, comptime ComponentType: type) !void {
+    try self._ComponentManager.RegisterComponent(ComponentType);
 }
 
-pub fn AddComponent(self: ECS, comptime ComponentType: type, entityID: u128, component: ComponentType) *ComponentType {
+pub fn AddComponent(self: ECS, comptime ComponentType: type, entityID: u64, component: ComponentType) *ComponentType {
     return self._ComponentManager.AddComponent(ComponentType, entityID, component);
 }
 
-pub fn AddComponents(self: ECS, comptime ComponentTypes: anytype, entityID: u128, components: anytype) std.meta.Tuple(ComponentTypes) {
-    return self._ComponentManager.AddComponents(ComponentTypes, entityID, components);
-}
-
-pub fn RemoveComponent(self: ECS, comptime ComponentType: type, entityID: u128) void {
+pub fn RemoveComponent(self: ECS, comptime ComponentType: type, entityID: u64) void {
     return self._ComponentManager.RemoveComponent(ComponentType, entityID);
 }
 
-pub fn RemoveComponents(self: ECS, comptime ComponentTypes: anytype, entityID: u128) void {
-    return self._ComponentManager.RemoveComponents(ComponentTypes, entityID);
+pub fn HasComponent(self: ECS, comptime ComponentType: type, entityID: u64) bool {
+    return self._ComponentManager.HasComponent(ComponentType, entityID);
 }
 
-pub fn HasComponent(self: ECS, comptime ComponentType: type, entityID: u128) bool {
-    return self._ComponentManager.HasComponent(ComponentType, entityID);
+pub fn GetComponent(self: ECS, comptime ComponentType: type, entityID: u64) *ComponentType {
+    return self._ComponentManager.GetComponent(ComponentType, entityID);
+}
+
+pub fn GetComponents(self: ECS, comptime ComponentTypes: anytype, entityID: u64) std.meta.Tuple(ComponentTypes) {
+    return self._ComponentManager.GetComponents(ComponentTypes, entityID);
 }
 
 //-----------System Manager------------
