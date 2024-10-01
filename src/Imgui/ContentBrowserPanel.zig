@@ -16,13 +16,12 @@ _BackArrowTexture: Texture2D = .{},
 _ProjectDirectory: []const u8 = "",
 _CurrentDirectory: []const u8 = "",
 _ProjectFile: std.fs.File = undefined,
-_PathGPA: std.heap.GeneralPurposeAllocator(.{}) = undefined,
+_PathGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
 pub fn Init(self: *ContentBrowserPanel) !void {
     self._P_Open = true;
     self._ProjectDirectory = "";
     self._CurrentDirectory = "";
-    self._PathGPA = std.heap.GeneralPurposeAllocator(.{}){};
 
     var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);

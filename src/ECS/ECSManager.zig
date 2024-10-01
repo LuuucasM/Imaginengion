@@ -2,26 +2,20 @@ const std = @import("std");
 const EntityManager = @import("EntityManager.zig");
 const ComponentManager = @import("ComponentManager.zig");
 const SystemManager = @import("SystemManager.zig");
-const ECS = @This();
+const ECSManager = @This();
 
 _EntityManager: EntityManager = .{},
 _ComponentManager: ComponentManager = .{},
 _SystemManager: SystemManager = .{},
-_EngineAllocator: std.mem.Allocator,
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !*ECS {
-    const ecs = try EngineAllocator.create(ECS);
-    ecs.* = .{
-        ._EngineAllocator = EngineAllocator,
-    };
-    ecs._EntityManager.Init();
-    return ecs;
+pub fn Init(self: ECSManager) void {
+    self._EntityManager.Init();
+    self._ComponentManager.Init();
 }
 
 pub fn Deinit(self: ECS) void {
     self._EntityManager.Deinit();
     self._ComponentManager.Deinit();
-    self._EngineAllocator.destroy(self);
 }
 
 //---------------EntityManager--------------

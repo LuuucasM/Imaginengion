@@ -7,22 +7,14 @@ const Impl = switch (builtin.os.tag) {
     else => @import("UnsupportedWindow.zig"),
 };
 
-_Impl: Impl,
-_EngineAllocator: std.mem.Allocator,
+_Impl: Impl = .{},
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !*Window {
-    const window = try EngineAllocator.create(Window);
-    window.* = .{
-        ._Impl = .{},
-        ._EngineAllocator = EngineAllocator,
-    };
-    window._Impl.Init();
-    return window;
+pub fn Init(self: *Window) void {
+    self._Impl.Init();
 }
 
 pub fn Deinit(self: *Window) void {
     self._Impl.Deinit();
-    self._EngineAllocator.destroy(self);
 }
 
 pub fn GetWidth(self: Window) usize {

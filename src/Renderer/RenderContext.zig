@@ -8,20 +8,10 @@ const Impl = switch (builtin.os.tag) {
 
 const RenderContext = @This();
 
-_Impl: Impl,
-_EngineAllocator: std.mem.Allocator,
+_Impl: Impl = .{},
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !*RenderContext {
-    const ptr = try EngineAllocator.create(RenderContext);
-    ptr.* = .{
-        ._Impl = .{},
-        ._EngineAllocator = EngineAllocator,
-    };
-    ptr._Impl.Init();
-    return ptr;
-}
-pub fn Deinit(self: *RenderContext) void {
-    self._EngineAllocator.destroy(self);
+pub fn Init(self: *RenderContext) void {
+    self._Impl.Init();
 }
 
 pub fn SwapBuffers(self: RenderContext) void {

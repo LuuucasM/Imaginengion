@@ -20,17 +20,16 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 
 //_EditorCamera
-_AssetHandlePanel: *AssetHandlePanel = undefined,
-_ComponentsPanel: *ComponentsPanel = undefined,
-_ContentBrowserPanel: *ContentBrowserPanel = undefined,
-_PropertiesPanel: *PropertiesPanel = undefined,
-_ScenePanel: *ScenePanel = undefined,
-_ScriptsPanel: *ScriptsPanel = undefined,
-_StatsPanel: *StatsPanel = undefined,
-_ToolbarPanel: *ToolbarPanel = undefined,
-_ViewportPanel: *ViewportPanel = undefined,
-_EngineAllocator: std.mem.Allocator = undefined,
-_PathGPA: std.heap.GeneralPurposeAllocator(.{}) = undefined,
+_AssetHandlePanel: AssetHandlePanel = .{},
+_ComponentsPanel: ComponentsPanel = .{},
+_ContentBrowserPanel: ContentBrowserPanel = .{},
+_PropertiesPanel: PropertiesPanel = .{},
+_ScenePanel: ScenePanel = .{},
+_ScriptsPanel: ScriptsPanel = .{},
+_StatsPanel: StatsPanel = .{},
+_ToolbarPanel: ToolbarPanel = .{},
+_ViewportPanel: ViewportPanel = .{},
+_PathGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 _ProjectDirectory: []const u8 = "",
 
 const EditorProgram = @This();
@@ -38,41 +37,21 @@ pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
     self._ProjectDirectory = "";
     try Renderer.Init(EngineAllocator);
     try ImGui.Init(EngineAllocator);
-    self._PathGPA = std.heap.GeneralPurposeAllocator(.{}){};
-    self._AssetHandlePanel = try EngineAllocator.create(AssetHandlePanel);
-    try self._AssetHandlePanel.Init();
-    self._ComponentsPanel = try EngineAllocator.create(ComponentsPanel);
+
+    self._AssetHandlePanel.Init();
     self._ComponentsPanel.Init();
-    self._ContentBrowserPanel = try EngineAllocator.create(ContentBrowserPanel);
     try self._ContentBrowserPanel.Init();
-    self._PropertiesPanel = try EngineAllocator.create(PropertiesPanel);
     self._PropertiesPanel.Init();
-    self._ScenePanel = try EngineAllocator.create(ScenePanel);
     self._ScenePanel.Init();
-    self._ScriptsPanel = try EngineAllocator.create(ScriptsPanel);
     self._ScriptsPanel.Init();
-    self._StatsPanel = try EngineAllocator.create(StatsPanel);
     self._StatsPanel.Init();
-    self._ToolbarPanel = try EngineAllocator.create(ToolbarPanel);
     self._ToolbarPanel.Init();
-    self._ViewportPanel = try EngineAllocator.create(ViewportPanel);
     self._ViewportPanel.Init();
     //init editor camera
-    //init each panel
-    self._EngineAllocator = EngineAllocator;
 }
 
 pub fn Deinit(self: *EditorProgram) void {
     self._ContentBrowserPanel.Deinit();
-    self._EngineAllocator.destroy(self._AssetHandlePanel);
-    self._EngineAllocator.destroy(self._ComponentsPanel);
-    self._EngineAllocator.destroy(self._ContentBrowserPanel);
-    self._EngineAllocator.destroy(self._PropertiesPanel);
-    self._EngineAllocator.destroy(self._ScenePanel);
-    self._EngineAllocator.destroy(self._ScriptsPanel);
-    self._EngineAllocator.destroy(self._StatsPanel);
-    self._EngineAllocator.destroy(self._ToolbarPanel);
-    self._EngineAllocator.destroy(self._ViewportPanel);
     self._PathGPA.allocator().free(self._ProjectDirectory);
     _ = self._PathGPA.deinit();
     ImGui.Deinit();

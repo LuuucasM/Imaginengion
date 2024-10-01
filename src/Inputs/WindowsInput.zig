@@ -12,13 +12,13 @@ _KeyPressedSet: HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.h
 _MousePressedSet: Set(MouseCodes) = undefined,
 _MousePosition: Vec2f32 = std.mem.zeroes(Vec2f32),
 _MouseScrolled: Vec2f32 = std.mem.zeroes(Vec2f32),
-_Allocator: std.mem.Allocator = std.heap.page_allocator,
+_InputGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 _Window: *anyopaque = undefined,
 
 pub fn Init(self: *WindowsInput, window: *anyopaque) void {
     self._Window = window;
-    self._KeyPressedSet = HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage).init(self._Allocator);
-    self._MousePressedSet = Set(MouseCodes).init(self._Allocator);
+    self._KeyPressedSet = HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage).init(self._InputGPA.allocator());
+    self._MousePressedSet = Set(MouseCodes).init(self._InputGPA.allocator());
 }
 pub fn Deinit(self: *WindowsInput) void {
     self._KeyPressedSet.deinit();

@@ -6,11 +6,12 @@ const AssetHandlePanel = @This();
 
 _P_Open: bool = false,
 
-pub fn Init(self: *AssetHandlePanel) !void {
+pub fn Init(self: *AssetHandlePanel) void {
     self._P_Open = false;
 }
 
 pub fn OnImguiRender(self: AssetHandlePanel) !void {
+
     if (self._P_Open == false) return;
     _ = imgui.igBegin("AssetHandles", null, 0);
     defer imgui.igEnd();

@@ -14,16 +14,16 @@ var ApplicationManager: *Application = undefined;
 _IsRunning: bool = true,
 _IsMinimized: bool = false,
 _EngineAllocator: std.mem.Allocator,
-_Window: *Window,
-_Program: *Program,
+_Window: Window = .{},
+_Program: Program = .{},
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     ApplicationManager = try EngineAllocator.create(Application);
     ApplicationManager.* = .{
         ._EngineAllocator = EngineAllocator,
-        ._Window = try Window.Init(EngineAllocator),
-        ._Program = try Program.Init(EngineAllocator),
     };
+    ApplicationManager._Window.Init();
+    try ApplicationManager._Program.Init(EngineAllocator);
     ApplicationManager._Window.SetVSync(true);
     try EventManager.Init(EngineAllocator, OnEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());

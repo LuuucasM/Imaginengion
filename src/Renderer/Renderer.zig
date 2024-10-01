@@ -7,18 +7,17 @@ const Renderer = @This();
 var RenderManager: *Renderer = undefined;
 
 _EngineAllocator: std.mem.Allocator,
-_RenderContext: *RenderContext,
+_RenderContext: RenderContext = .{},
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     RenderManager = try EngineAllocator.create(Renderer);
     RenderManager.* = .{
         ._EngineAllocator = EngineAllocator,
-        ._RenderContext = try RenderContext.Init(EngineAllocator),
     };
+    RenderManager._RenderContext.Init();
 }
 
 pub fn Deinit() void {
-    RenderManager._RenderContext.Deinit();
     RenderManager._EngineAllocator.destroy(RenderManager);
 }
 
