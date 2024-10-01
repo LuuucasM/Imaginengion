@@ -5,16 +5,17 @@ const EntityManager = @This();
 
 _IDsInUse: Set(u128) = undefined,
 _IDsRemoved: Set(u128) = undefined,
-_Allocator: std.mem.Allocator = std.heap.page_allocator,
+_EntityGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
 pub fn Init(self: *EntityManager) void {
-    self._IDsInUse = Set(u128).init(self._Allocator);
-    self._IDsRemoved = Set(u128).init(self._Allocator);
+    self._IDsInUse = Set(u128).init(self._EntityGPA.allocator());
+    self._IDsRemoved = Set(u128).init(self._EntityGPA.allocator());
 }
 
 pub fn Deinit(self: EntityManager) void {
     self._IDsInUse.deinit();
     self._IDsRemoved.deinit();
+    _ = self._EntityGPA.deinit();
 }
 
 pub fn CreateEntity(self: *EntityManager) !u64 {

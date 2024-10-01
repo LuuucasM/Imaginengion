@@ -23,6 +23,7 @@ pub fn Init(self: *WindowsInput, window: *anyopaque) void {
 pub fn Deinit(self: *WindowsInput) void {
     self._KeyPressedSet.deinit();
     self._MousePressedSet.deinit();
+    _ = self._InputGPA.deinit();
 }
 pub fn SetKeyPressed(self: *WindowsInput, key: KeyCodes, on: bool) !void {
     if (on == true) {
