@@ -8,60 +8,57 @@ _EntityManager: EntityManager = .{},
 _ComponentManager: ComponentManager = .{},
 _SystemManager: SystemManager = .{},
 
-pub fn Init(self: ECSManager) void {
+pub fn Init(self: *ECSManager) !void {
     self._EntityManager.Init();
-    self._ComponentManager.Init();
+    try self._ComponentManager.Init();
+    try self._SystemManager.Init();
 }
 
-pub fn Deinit(self: ECS) void {
+pub fn Deinit(self: *ECSManager) void {
     self._EntityManager.Deinit();
     self._ComponentManager.Deinit();
+    self._SystemManager.Deinit();
 }
 
 //---------------EntityManager--------------
-pub fn CreateEntity(self: *ECS) !u64 {
-    return self._EntityManager.CreateEntity();
+pub fn CreateEntity(self: *ECSManager) !u32 {
+    const entityID = try self._EntityManager.CreateEntity();
+    try self._ComponentManager.CreateEntity(entityID);
+    self._SystemManager.CreateEntity(entityID);
+    return entityID;
 }
 
-pub fn DestroyEntity(self: *ECS, entityID: u64) !void {
+pub fn DestroyEntity(self: *ECSManager, entityID: u32) !void {
+    try self._ComponentManager.DestroyEntity(entityID);
+    self._SystemManager.DestroyEntity(entityID);
     try self._EntityManager.DestroyEntity(entityID);
 }
 
-//-------------ComponentManager------------
-//so basically i am going to use sparce sets like EnTT does but
-//components must be registered
-//then i will save a 'skipfield' pattern for each registerd system so they can iterate over components
-//as an entities components get added i will check to see if that entitys bitmap is the same as the systems
-//if its in the system then just add 0 to the skipfield, else adjust the skipfield as needed
-//then every frame we will try to organize one of the component
-pub fn RegisterComponent(self: ECS, comptime ComponentType: type) !void {
-    try self._ComponentManager.RegisterComponent(ComponentType);
+pub fn GetAllEntities(self: ECSManager) std.AutoArrayHashMap(u32, EntityManager.ComponentMaskType) {
+    return self._EntityManager.GetAllEntities();
 }
 
-pub fn AddComponent(self: ECS, comptime ComponentType: type, entityID: u64, component: ComponentType) *ComponentType {
-    return self._ComponentManager.AddComponent(ComponentType, entityID, component);
+//components
+pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {
+    const new_component = try self._ComponentManager.AddComponent(ComponentType, entityID, component);
+    try self._SystemManager.AddComponent(ComponentType, entityID);
+    return new_component;
 }
 
-pub fn RemoveComponent(self: ECS, comptime ComponentType: type, entityID: u64) void {
-    return self._ComponentManager.RemoveComponent(ComponentType, entityID);
+pub fn RemoveComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32) !void {
+    try self._ComponentManager.RemoveComponent(ComponentType, entityID);
+    self._SystemManager.RemoveComponent(ComponentType, entityID);
 }
 
-pub fn HasComponent(self: ECS, comptime ComponentType: type, entityID: u64) bool {
+pub fn HasComponent(self: ECSManager, comptime ComponentType: type, entityID: u32) bool {
     return self._ComponentManager.HasComponent(ComponentType, entityID);
 }
 
-pub fn GetComponent(self: ECS, comptime ComponentType: type, entityID: u64) *ComponentType {
+pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u32) *ComponentType {
     return self._ComponentManager.GetComponent(ComponentType, entityID);
 }
 
-pub fn GetComponents(self: ECS, comptime ComponentTypes: anytype, entityID: u64) std.meta.Tuple(ComponentTypes) {
-    return self._ComponentManager.GetComponents(ComponentTypes, entityID);
-}
-
 //-----------System Manager------------
-pub fn RegisterSystem(self: ECS, comptime SystemType: type, comptime ComponentTypes: anytype) void {
-    return self._SystemManager.RegisterSystem(SystemType, ComponentTypes);
-}
-pub fn SystemOnUpdate(self: ECS, comptime SystemType: type) void {
-    return self._SystemManager.SystemOnUpdate(SystemType);
+pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) !void {
+    try self._SystemManager.SystemOnUpdate(SystemType);
 }
