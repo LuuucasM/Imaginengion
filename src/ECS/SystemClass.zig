@@ -1,5 +1,5 @@
 const std = @import("std");
-const Set = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const ComponentList = @import("Components.zig").ComponentsList;
 const BitFieldType = @import("ComponentManager.zig").BitFieldType;
 pub const ISystem = struct {
@@ -48,7 +48,7 @@ pub const ISystem = struct {
         self.mVTable.Deinit(self.mPtr, allocator);
         self.mEntities.deinit();
     }
-    pub fn OnUpdate(self: *ISystem) !void {
-        self.mVTable.OnUpdate(self.mPtr, &self.mEntities);
+    pub fn OnUpdate(self: *ISystem, entities: Set(u32)) void {
+        self.mVTable.OnUpdate(self.mPtr, entities);
     }
 };

@@ -103,7 +103,7 @@ pub fn OnImguiRender(path_allocator: std.mem.Allocator) !void {
         }
         if (imgui.igBeginMenu("Window", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("AssetHandles", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Asset Handles", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .AssetHandles,
@@ -119,7 +119,7 @@ pub fn OnImguiRender(path_allocator: std.mem.Allocator) !void {
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
-            if (imgui.igMenuItem_Bool("ContentBrowser", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Content Browser", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .ContentBrowser,

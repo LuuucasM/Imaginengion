@@ -38,6 +38,13 @@ pub fn GetAllEntities(self: ECSManager) std.AutoArrayHashMap(u32, EntityManager.
     return self._EntityManager.GetAllEntities();
 }
 
+pub fn DuplicateEntity(self: *ECSManager, original_entity_id: u32) !u32 {
+    const new_entity_id = try self.CreateEntity();
+    self._ComponentManager.DuplicateEntity(original_entity_id, new_entity_id);
+    self._SystemManager.DuplicateEntity(original_entity_id, new_entity_id);
+    return new_entity_id;
+}
+
 //components
 pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {
     const new_component = try self._ComponentManager.AddComponent(ComponentType, entityID, component);
@@ -59,6 +66,6 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
 }
 
 //-----------System Manager------------
-pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) !void {
+pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) void {
     try self._SystemManager.SystemOnUpdate(SystemType);
 }

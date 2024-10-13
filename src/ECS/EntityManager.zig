@@ -35,6 +35,11 @@ pub fn CreateEntity(self: *EntityManager) !u32 {
 }
 
 pub fn DestroyEntity(self: *EntityManager, entityID: u32) !void {
-    std.debug.assert(self._IDsInUse.contains(entityID));
-    try self._IDsRemoved.append(entityID);
+    if (self._IDsInUse.remove(entityID) == true) {
+        try self._IDsRemoved.append(entityID);
+    }
+}
+
+pub fn GetAllEntities(self: EntityManager) *Set(u32) {
+    return &self._IDsInUse;
 }

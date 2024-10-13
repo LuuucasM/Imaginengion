@@ -6,6 +6,8 @@ pub const IComponentArray = struct {
     vtable: *const VTab,
     const VTab = struct {
         Deinit: *const fn (*anyopaque, std.mem.Allocator) void,
+        DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
+        HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
     };
 
@@ -22,6 +24,14 @@ pub const IComponentArray = struct {
                 self.Deinit();
                 allocator.destroy(self);
             }
+            fn DuplicateEntity(ptr: *anyopaque, original_entity_id: u32, new_entity_id: u32) void {
+                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+                self.DuplicateEntity(original_entity_id, new_entity_id);
+            }
+            fn HasComponent(ptr: *anyopaque, entityID: u32) bool {
+                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+                return self.HasComponent(entityID);
+            }
             fn RemoveComponent(ptr: *anyopaque, entityID: u32) anyerror!void {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.RemoveComponent(entityID);
@@ -31,6 +41,8 @@ pub const IComponentArray = struct {
             .ptr = obj,
             .vtable = &.{
                 .Deinit = impl.Deinit,
+                .DuplicateEntity = impl.DuplicateEntity,
+                .HasComponent = impl.HasComponent,
                 .RemoveComponent = impl.RemoveComponent,
             },
         };
@@ -39,8 +51,14 @@ pub const IComponentArray = struct {
     pub fn Deinit(self: IComponentArray, allocator: std.mem.Allocator) void {
         self.vtable.Deinit(self.ptr, allocator);
     }
+    pub fn DuplicateEntity(self: IComponentArray, original_entity_id: u32, new_entity_id: u32) void {
+        self.vtable.DuplicateEntity(self.ptr, original_entity_id, new_entity_id);
+    }
     pub fn RemoveComponent(self: IComponentArray, entityID: u32) anyerror!void {
         try self.vtable.RemoveComponent(self.ptr, entityID);
+    }
+    pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
+        return self.vtable.HasComponent(self.ptr, entityID);
     }
 };
 
@@ -64,10 +82,16 @@ pub fn ComponentArray(comptime componentType: type) type {
         pub fn Deinit(self: *Self) void {
             self._Components.deinit();
         }
+        pub fn DuplicateEntity(self: *Self, original_entity_id: u32, new_entity_id: u32) void {
+            const new_dense_ind = self._Components.add(new_entity_id);
+            self._Components.getValueByDense(new_dense_ind).* = self._Components.getValueBySparse(original_entity_id).*;
+        }
         pub fn AddComponent(self: *Self, entityID: u32, component: componentType) !*componentType {
             const dense_ind = self._Components.add(entityID);
+
             const new_component = self._Components.getValueByDense(dense_ind);
             new_component.* = component;
+
             return new_component;
         }
         pub fn RemoveComponent(self: *Self, entityID: u32) !void {

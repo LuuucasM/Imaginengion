@@ -66,6 +66,10 @@ pub fn RemoveComponent(self: *SystemManager, comptime component_type: type, enti
     entity_bitfield.* &= ~(@as(BitFieldType, 1) << component_type.Ind);
 }
 
+pub fn DuplicateEntity(self: *SystemManager, original_entity_id: u32, new_entity_id: u32) void {
+    self.mEntityBitField.getValueBySparse(new_entity_id).* = self.mEntityBitField.getValueBySparse(original_entity_id).*;
+}
+
 pub fn CreateEntity(self: *SystemManager, entityID: u32) void {
     const dense_ind = self.mEntityBitField.add(entityID);
     self.mEntityBitField.getValueByDense(dense_ind).* = 0;
@@ -83,5 +87,5 @@ pub fn DestroyEntity(self: *SystemManager, entityID: u32) void {
 }
 
 pub fn SystemOnUpdate(self: *SystemManager, comptime system: type) !void {
-    try self.mSystemsArray.items[system.Ind].OnUpdate();
+    try self.mSystemsArray.items[system.Ind].OnUpdate(self.mSystemsArray.items[system.Ind].mEntities);
 }

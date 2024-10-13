@@ -3,10 +3,10 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const StatsPanel = @This();
 
-_P_Open: bool = true,
+_P_Open: bool = false,
 
 pub fn Init(self: *StatsPanel) void {
-    self._P_Open = true;
+    self._P_Open = false;
 }
 
 pub fn OnImguiRender(self: StatsPanel, dt: f64) !void {

@@ -10,8 +10,13 @@ const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, ComponentsList.len);
 
+const ComponentData = struct {
+    mBitField: BitFieldType,
+    mSkipField: StaticSkipField(ComponentsList.len),
+};
+
 _ComponentsArrays: std.ArrayList(IComponentArray) = undefined,
-_EntityComponentArrays: SparseSet(.{
+_EntitySkipField: SparseSet(.{
     .SparseT = u32,
     .DenseT = u32,
     .ValueT = StaticSkipField(ComponentsList.len),
@@ -22,7 +27,7 @@ _ComponentGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAl
 
 pub fn Init(self: *ComponentManager) !void {
     self._ComponentsArrays = std.ArrayList(IComponentArray).init(self._ComponentGPA.allocator());
-    self._EntityComponentArrays = try SparseSet(.{
+    self._EntitySkipField = try SparseSet(.{
         .SparseT = u32,
         .DenseT = u32,
         .ValueT = StaticSkipField(ComponentsList.len),
@@ -48,14 +53,14 @@ pub fn Deinit(self: *ComponentManager) void {
     }
 
     self._ComponentsArrays.deinit();
-    self._EntityComponentArrays.deinit();
+    self._EntitySkipField.deinit();
     _ = self._ComponentGPA.deinit();
 }
 
 pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {
-    std.debug.assert(!self.HasComponent(ComponentType, entityID));
+    std.debug.assert(!self.HasComponent(ComponentType, entityID)); //TODO: remove asserts and replace it with a better way to check input
 
-    self._EntityComponentArrays.getValueBySparse(entityID).ChangeToUnskipped(ComponentType.Ind);
+    self._EntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(ComponentType.Ind);
 
     return try @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).AddComponent(entityID, component);
 }
@@ -63,7 +68,7 @@ pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entit
 pub fn RemoveComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32) !void {
     std.debug.assert(self.HasComponent(ComponentType, entityID));
 
-    self._EntityComponentArrays.getValueBySparse(entityID).ChangeToSkipped(ComponentType.Ind);
+    self._EntitySkipField.getValueBySparse(entityID).ChangeToSkipped(ComponentType.Ind);
 
     return try self._ComponentsArrays.items[ComponentType.Ind].RemoveComponent(entityID);
 }
@@ -78,14 +83,14 @@ pub fn GetComponent(self: ComponentManager, comptime ComponentType: type, entity
 }
 
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
-    std.debug.assert(!self._EntityComponentArrays.hasSparse(entityID));
-    const dense_ind = self._EntityComponentArrays.add(entityID);
-    self._EntityComponentArrays.getValueByDense(dense_ind).* = StaticSkipField(ComponentsList.len).Init(.AllSkip);
+    std.debug.assert(!self._EntitySkipField.hasSparse(entityID));
+    const dense_ind = self._EntitySkipField.add(entityID);
+    self._EntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(ComponentsList.len).Init(.AllSkip);
 }
 pub fn DestroyEntity(self: *ComponentManager, entityID: u32) !void {
-    std.debug.assert(self._EntityComponentArrays.hasSparse(entityID));
+    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
 
-    const entity_skipfield = self._EntityComponentArrays.getValueBySparse(entityID);
+    const entity_skipfield = self._EntitySkipField.getValueBySparse(entityID);
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
@@ -93,5 +98,18 @@ pub fn DestroyEntity(self: *ComponentManager, entityID: u32) !void {
         i += 1;
         i += entity_skipfield.mSkipField[i];
     }
-    _ = self._EntityComponentArrays.remove(entityID);
+    _ = self._EntitySkipField.remove(entityID);
+}
+
+pub fn DuplicateEntity(self: *ComponentManager, original_entity_id: u32, new_entity_id: u32) void {
+    const original_skipfield = self._EntitySkipField.getValueBySparse(original_entity_id);
+    const new_skipfield = self._EntitySkipField.getValueBySparse(new_entity_id);
+    @memcpy(&new_skipfield.mSkipField, &original_skipfield.mSkipField);
+
+    var i: usize = original_skipfield.mSkipField[0];
+    while (i < original_skipfield.mSkipField.len) {
+        self._ComponentsArrays.items[i].DuplicateEntity(original_entity_id, new_entity_id);
+        i += 1;
+        i += original_skipfield.mSkipField[i];
+    }
 }
