@@ -9,20 +9,20 @@ const SceneIDComponent = Components.SceneIDComponent;
 const NameComponent = Components.NameComponent;
 const TransformComponent = Components.TransformComponent;
 
-const GameLayerEditor = @This();
+const LayerType = SceneIDComponent.ELayerType;
+
+const SceneLayerEditor = @This();
 
 mUUID: u64,
 mName: [24]u8,
 mECSManager: *ECSManager,
+mLayerType: LayerType,
 
-//pub fn Init
-//pub fn Deinit
-
-pub fn CreateEntity(self: GameLayerEditor, name: [24]u8) Entity {
-    return self.CreateEntityWithUUID(name, GenUUID());
+pub fn CreateEntity(self: SceneLayerEditor, name: [24]u8) !Entity {
+    return self.CreateEntityWithUUID(name, try GenUUID());
 }
-pub fn CreateEntityWithUUID(self: GameLayerEditor, name: [24]u8, uuid: u64) Entity {
-    const e = Entity{ .mEntityID = self.mECSManager.CreateEntity() };
+pub fn CreateEntityWithUUID(self: SceneLayerEditor, name: [24]u8, uuid: u64) !Entity {
+    const e = Entity{ .mEntityID = try self.mECSManager.CreateEntity(), .mLayerType = .GameLayer, .mLayer = self };
     _ = e.AddComponent(IDComponent, .{ .ID = uuid });
     _ = e.AddComponent(SceneIDComponent, .{ .ID = self.mUUID });
     _ = e.AddComponent(NameComponent, .{ .Name = name });
@@ -30,9 +30,9 @@ pub fn CreateEntityWithUUID(self: GameLayerEditor, name: [24]u8, uuid: u64) Enti
     return e;
 }
 
-pub fn DestroyEntity(self: GameLayerEditor, e: Entity) !void {
+pub fn DestroyEntity(self: SceneLayerEditor, e: Entity) !void {
     try self.mECSManager.DestroyEntity(e.mEntityID);
 }
-pub fn DuplicateEntity(self: GameLayerEditor, original_entity: Entity) Entity {
-    return Entity{ .mEntityID = self.mECSManager.DuplicateEntity(original_entity.mEntityID) };
+pub fn DuplicateEntity(self: SceneLayerEditor, original_entity: Entity) Entity {
+    return Entity{ .mEntityID = try self.mECSManager.DuplicateEntity(original_entity.mEntityID), .mLayerType = .GameLayer, .mLayer = self };
 }

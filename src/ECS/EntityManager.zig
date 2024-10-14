@@ -1,4 +1,5 @@
 const std = @import("std");
+const GetUUID = @import("../Core/UUID.zig").GenUUID;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const EntityManager = @This();
 
