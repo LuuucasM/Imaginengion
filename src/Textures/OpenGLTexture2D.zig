@@ -3,15 +3,13 @@ const glad = @import("../Core/CImports.zig").glad;
 const stb = @import("../Core/CImports.zig").stb;
 const OpenGLTexture2D = @This();
 
-_Width: c_int = 0,
-_Height: c_int = 0,
-_TextureID: c_uint = 0,
-_InternalFormat: c_uint = glad.GL_RGBA8,
-_DataFormat: c_uint = glad.GL_RGBA,
+_Width: c_int,
+_Height: c_int,
+_TextureID: c_uint
+_InternalFormat: c_uint,
+_DataFormat: c_uint,
 
-pub fn InitData(width: u32, height: u32, channels: u32, data: *anyopaque, size: usize) OpenGLTexture2D {
-    _ = size;
-
+pub fn InitData(width: u32, height: u32, channels: u32, data: *anyopaque) OpenGLTexture2D {
     var internal_format: c_uint = 0;
     var data_format: c_uint = 0;
     if (channels == 4) {

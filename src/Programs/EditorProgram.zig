@@ -1,7 +1,7 @@
 const std = @import("std");
+const ApplicationManager = @import("../Core/Application.zig");
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
-const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
@@ -60,10 +60,10 @@ pub fn Deinit(self: *EditorProgram) void {
 
 pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //process asset manager
+    ApplicationManager.GetWindow().PollInputEvents();
     try AssetManager.OnUpdate();
 
     //Process Inputs
-    InputManager.PollInputEvents();
     EventManager.ProcessEvents(.EC_Input);
 
     //--Imgui begin--

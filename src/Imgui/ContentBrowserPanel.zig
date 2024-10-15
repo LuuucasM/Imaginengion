@@ -114,7 +114,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             var texture_id = texture.GetID();
             imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1 });
             _ = imgui.igImageButton(
-                @ptrCast(entry.name),
+                entry.name.ptr,
                 @ptrCast(&texture_id),
                 .{ .x = thumbnail_size, .y = thumbnail_size },
                 .{ .x = 0, .y = 1 },

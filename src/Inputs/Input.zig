@@ -1,55 +1,81 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
+const LinAlg = @import("../Math/LinAlg.zig");
+const Vec2f32 = LinAlg.Vec2f32;
+const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
+const HashMap = std.AutoHashMap;
 const KeyCodes = @import("KeyCodes.zig").KeyCodes;
 const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const Input = @This();
 
-const Impl = switch (builtin.os.tag) {
-    .windows => @import("WindowsInput.zig"),
-    else => @import("UnsupportedInput.zig"),
-};
-
 var InputManager: *Input = undefined;
 
-_Impl: Impl,
 _EngineAllocator: std.mem.Allocator,
 
-pub fn Init(EngineAllocator: std.mem.Allocator, window: *anyopaque) !void {
+_KeyPressedSet: HashMap(KeyCodes, u32),
+_MousePressedSet: Set(MouseCodes),
+_MousePosition: Vec2f32,
+_MouseScrolled: Vec2f32,
+
+var InputGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
+
+pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     InputManager = try EngineAllocator.create(Input);
     InputManager.* = .{
-        ._Impl = Impl.Init(window),
         ._EngineAllocator = EngineAllocator,
+        ._KeyPressedSet = HashMap(KeyCodes, u32).init(InputGPA.allocator()),
+        ._MousePressedSet = Set(MouseCodes).init(InputGPA.allocator()),
+        ._MousePosition = std.mem.zeroes(Vec2f32),
+        ._MouseScrolled = std.mem.zeroes(Vec2f32),
     };
 }
 pub fn Deinit() void {
-    InputManager._Impl.Deinit();
+    InputManager._KeyPressedSet.deinit();
+    InputManager._MousePressedSet.deinit();
+    _ = InputGPA.deinit();
     InputManager._EngineAllocator.destroy(InputManager);
 }
+
 pub fn SetKeyPressed(key: KeyCodes, on: bool) !void {
-    try InputManager._Impl.SetKeyPressed(key, on);
+    if (on == true) {
+        if (InputManager._KeyPressedSet.contains(key)) {
+            const result = try InputManager._KeyPressedSet.getOrPut(key);
+            if (result.found_existing) {
+                result.value_ptr.* = 1;
+            }
+        } else {
+            try InputManager._KeyPressedSet.put(key, 0);
+        }
+    } else {
+        if (InputManager._KeyPressedSet.contains(key)) {
+            _ = InputManager._KeyPressedSet.remove(key);
+        }
+    }
 }
 pub fn IsKeyPressed(key: KeyCodes) bool {
-    return InputManager._Impl.IsKeyPressed(key);
+    return if (InputManager._KeyPressedSet.contains(key)) true else false;
 }
 pub fn SetMousePressed(button: MouseCodes, on: bool) !void {
-    try InputManager._Impl.SetMousePressed(button, on);
+    if (on == true) {
+        _ = try InputManager._MousePressedSet.add(button);
+    } else {
+        if (InputManager._MousePressedSet.contains(button)) {
+            _ = InputManager._MousePressedSet.remove(button);
+        }
+    }
 }
 pub fn IsMouseButtonPressed(button: MouseCodes) bool {
-    return InputManager._Impl.IsMouseButtonPressed(button);
+    return if (InputManager._MousePressedSet.contains(button)) true else false;
 }
 pub fn SetMousePosition(newPos: Vec2f32) void {
-    InputManager._Impl.SetMousePosition(newPos);
+    InputManager._MousePosition = newPos;
 }
 pub fn GetMousePosition() Vec2f32 {
-    return InputManager._Impl.GetMousePosition();
+    return InputManager._MousePosition;
 }
-pub fn SetMouseScrolled(scrolled: Vec2f32) void {
-    InputManager._Impl.SetMouseScrolled(scrolled);
+pub fn SetMouseScrolled(newScrolled: Vec2f32) void {
+    InputManager._MouseScrolled = newScrolled;
 }
 pub fn GetMouseScrolled() Vec2f32 {
-    return InputManager._Impl.GetMouseScrolled();
-}
-pub fn PollInputEvents() void {
-    InputManager._Impl.PollInputEvents();
+    return InputManager._MouseScrolled;
 }

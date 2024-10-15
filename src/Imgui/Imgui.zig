@@ -35,7 +35,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 
     SetDarkThemeColors(style);
 
-    const window = Application.GetNativeWindow();
+    const window = Application.GetWindow().GetNativeWindow();
     _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window), true);
     _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
 }
@@ -54,7 +54,7 @@ pub fn Begin() void {
 pub fn End() void {
     const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
-    const window: *Window = @ptrCast(@alignCast(Application.GetNativeWindow()));
+    const window: *Window = @ptrCast(@alignCast(Application.GetWindow().GetNativeWindow()));
 
     io.DisplaySize = .{ .x = @floatFromInt(window.GetWidth()), .y = @floatFromInt(window.GetHeight()) };
 

@@ -55,7 +55,7 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: []const u8) ![]const u8{
     var currentDir: [MAX_PATH_LENGTH]CHAR = std.mem.zeroes([MAX_PATH_LENGTH]CHAR);
 
     ofn.lStructSize = @sizeOf(nativeos.OPENFILENAMEA);
-    ofn.hwndOwner = nativeos.glfwGetWin32Window(@ptrCast(Application.GetNativeWindow()));
+    ofn.hwndOwner = nativeos.glfwGetWin32Window(@ptrCast(Application.GetWindow().GetNativeWindow()));
     ofn.lpstrFile = @ptrCast(&szFile);
     ofn.nMaxFile = @sizeOf(CHAR)*MAX_PATH_LENGTH;
 

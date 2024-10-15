@@ -44,6 +44,11 @@ pub fn OnWindowResize(self: UnsupportedWindow, width: usize, height: usize) void
     Unsupported();
 }
 
+pub fn PollInputEvents(self: UnsupportedWindow) void {
+    _ = self;
+    Unsupported();
+}
+
 fn Unsupported() noreturn {
     @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag) ++ " in Window\n");
 }

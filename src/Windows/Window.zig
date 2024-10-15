@@ -42,3 +42,7 @@ pub fn GetNativeWindow(self: Window) *anyopaque {
 pub fn OnWindowResize(self: *Window, width: usize, height: usize) void {
     self._Impl.OnWindowResize(width, height);
 }
+
+pub fn PollInputEvents(self: Window) void {
+    self._Impl.PollInputEvents();
+}

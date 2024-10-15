@@ -13,7 +13,6 @@ _Title: [*:0]const u8 = "Imaginengion",
 _Width: usize,
 _Height: usize,
 _IsVSync: bool,
-_WindowCount: usize,
 _Window: ?*glfw.struct_GLFWwindow,
 
 pub fn Init() WindowsWindow {
@@ -46,7 +45,6 @@ pub fn Init() WindowsWindow {
         ._Width = width,
         ._Height = height,
         ._IsVSync = is_v_sync,
-        ._WindowCount = 1,
         ._Window = new_glfw_window,
     };
 }
@@ -92,6 +90,11 @@ pub fn GetNativeWindow(self: WindowsWindow) *anyopaque {
 pub fn OnWindowResize(self: *WindowsWindow, width: usize, height: usize) void {
     self._Width = width;
     self._Height = height;
+}
+
+pub fn PollInputEvents(self: WindowsWindow) void {
+    _ = self;
+    glfw.glfwPollEvents();
 }
 
 export fn GLFWErrorCallback(err: c_int, msg: [*c]const u8) callconv(.C) void {

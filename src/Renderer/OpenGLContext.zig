@@ -9,9 +9,7 @@ const OpenGLContext = @This();
 _Window: ?*glfw.struct_GLFWwindow,
 
 pub fn Init() OpenGLContext {
-    const window: ?*glfw.struct_GLFWwindow = @ptrCast(Application.GetNativeWindow());
-
-    std.debug.print("Pointer value: {?}\n", .{window});
+    const window: ?*glfw.struct_GLFWwindow = @ptrCast(Application.GetWindow().GetNativeWindow());
 
     glfw.glfwMakeContextCurrent(window);
     const procaddr: glad.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);

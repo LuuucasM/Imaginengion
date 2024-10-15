@@ -27,7 +27,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     ApplicationManager._Window.SetVSync(true);
     try AssetManager.Init(EngineAllocator);
     try EventManager.Init(EngineAllocator, OnEvent);
-    try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
+    try Input.Init(EngineAllocator);
     try ThreadPool.init(EngineAllocator);
 }
 
@@ -50,8 +50,8 @@ pub fn Run() !void {
     }
 }
 
-pub fn GetNativeWindow() *anyopaque {
-    return ApplicationManager._Window.GetNativeWindow();
+pub fn GetWindow() *const Window {
+    return &ApplicationManager._Window;
 }
 
 pub fn OnEvent(event: *Event) void {
