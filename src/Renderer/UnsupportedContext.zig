@@ -1,7 +1,6 @@
 const UnsupportedContext = @This();
 
-pub fn Init(self: UnsupportedContext) void {
-    _ = self;
+pub fn Init() UnsupportedContext {
     Unsupported();
 }
 

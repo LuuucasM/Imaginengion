@@ -10,39 +10,37 @@ const Texture2D = @import("../Textures/Texture2D.zig");
 const MAX_PATH_LEN = 260;
 
 _P_Open: bool = true,
-_DirTexture: Texture2D = .{},
-_PngTexture: Texture2D = .{},
-_BackArrowTexture: Texture2D = .{},
-_ProjectDirectory: []const u8 = "",
-_CurrentDirectory: []const u8 = "",
-_ProjectFile: std.fs.File = undefined,
+_DirTexture: Texture2D,
+_PngTexture: Texture2D,
+_BackArrowTexture: Texture2D,
+_ProjectDirectory: []const u8,
+_CurrentDirectory: []const u8,
+_ProjectFile: ?std.fs.File = null,
 _PathGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
-pub fn Init(self: *ContentBrowserPanel) !void {
-    self._P_Open = true;
-    self._ProjectDirectory = "";
-    self._CurrentDirectory = "";
-
-    var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
+pub fn Init() !ContentBrowserPanel {
+    var buffer: [MAX_PATH_LEN * 4]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
     const dir_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/foldericon.png" });
-
-    try self._DirTexture.InitPath(dir_icon_path);
-    fba.allocator().free(dir_icon_path);
-
     const png_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/pngicon.png" });
-    try self._PngTexture.InitPath(png_icon_path);
-    fba.allocator().free(png_icon_path);
-
     const backarrow_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/backarrowicon.png" });
-    try self._BackArrowTexture.InitPath(backarrow_icon_path);
+
+    return ContentBrowserPanel{
+        ._P_Open = true,
+        ._DirTexture = try Texture2D.InitPath(dir_icon_path),
+        ._PngTexture = try Texture2D.InitPath(png_icon_path),
+        ._BackArrowTexture = try Texture2D.InitPath(backarrow_icon_path),
+        ._ProjectDirectory = "",
+        ._CurrentDirectory = "",
+        ._ProjectFile = null,
+    };
 }
 
 pub fn Deinit(self: *ContentBrowserPanel) void {
     if (self._ProjectDirectory.len != 0) {
-        self._ProjectFile.close();
+        self._ProjectFile.?.close();
     }
 }
 
@@ -143,18 +141,41 @@ fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
 }
 
 fn OnNewProjectEvent(self: *ContentBrowserPanel, event: NewProjectEvent) !void {
-    self._ProjectDirectory = event._Path;
+    if (self._ProjectDirectory.len != 0){
+        self._PathGPA.allocator().free(self._ProjectDirectory);
+        self._PathGPA.allocator().free(self._CurrentDirectory);
+    }
+    self._ProjectDirectory = try self._PathGPA.allocator().dupe(u8, event._Path);
     self._CurrentDirectory = try self._PathGPA.allocator().dupe(u8, event._Path);
+
+    var dir = try std.fs.openDirAbsolute(self._ProjectDirectory, .{});
+    defer dir.close();
+
+    const file_exists: bool = blk: {
+        dir.access("NewGame.imprj", .{}) catch |err| {
+            if (err == error.FileNotFound) break :blk false;
+            return err;
+        };
+        break :blk true;
+    };
 
     var buffer: [MAX_PATH_LEN]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
     const file_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self._ProjectDirectory, "NewGame.imprj" });
-    self._ProjectFile = try std.fs.createFileAbsolute(file_path, .{});
+
+    if (file_exists == false) {
+        self._ProjectFile = try std.fs.createFileAbsolute(file_path, .{});
+    } else {
+        self._ProjectFile = try std.fs.openFileAbsolute(file_path, .{});
+    }
 }
 
 fn OnOpenProjectEvent(self: *ContentBrowserPanel, event: OpenProjectEvent) !void {
-    self._ProjectDirectory = std.fs.path.dirname(event._Path).?;
+    if (self._ProjectDirectory.len != 0){
+        self._PathGPA.allocator().free(self._ProjectDirectory);
+        self._PathGPA.allocator().free(self._CurrentDirectory);
+    }
+    self._ProjectDirectory = try self._PathGPA.allocator().dupe(u8, std.fs.path.dirname(event._Path).?);
     self._CurrentDirectory = try self._PathGPA.allocator().dupe(u8, std.fs.path.dirname(event._Path).?);
     self._ProjectFile = try std.fs.openFileAbsolute(event._Path, .{});
 }

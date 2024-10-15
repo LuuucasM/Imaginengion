@@ -15,35 +15,39 @@ const ComponentData = struct {
     mSkipField: StaticSkipField(ComponentsList.len),
 };
 
-_ComponentsArrays: std.ArrayList(IComponentArray) = undefined,
+_ComponentsArrays: std.ArrayList(IComponentArray),
 _EntitySkipField: SparseSet(.{
     .SparseT = u32,
     .DenseT = u32,
     .ValueT = StaticSkipField(ComponentsList.len),
     .value_layout = .InternalArrayOfStructs,
     .allow_resize = .ResizeAllowed,
-}) = undefined,
-_ComponentGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
+}),
+var ComponentGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
-pub fn Init(self: *ComponentManager) !void {
-    self._ComponentsArrays = std.ArrayList(IComponentArray).init(self._ComponentGPA.allocator());
-    self._EntitySkipField = try SparseSet(.{
-        .SparseT = u32,
-        .DenseT = u32,
-        .ValueT = StaticSkipField(ComponentsList.len),
-        .value_layout = .InternalArrayOfStructs,
-        .allow_resize = .ResizeAllowed,
-    }).init(self._ComponentGPA.allocator(), 20, 10);
+pub fn Init() !ComponentManager {
+    const new_component_manager = ComponentManager{
+        ._ComponentsArrays = std.ArrayList(IComponentArray).init(ComponentGPA.allocator()),
+        ._EntitySkipField = try SparseSet(.{
+            .SparseT = u32,
+            .DenseT = u32,
+            .ValueT = StaticSkipField(ComponentsList.len),
+            .value_layout = .InternalArrayOfStructs,
+            .allow_resize = .ResizeAllowed,
+        }).init(ComponentGPA.allocator(), 20, 10),
+    };
 
     //init component arrays
     inline for (ComponentsList) |component_type| {
-        const component_array = try self._ComponentGPA.allocator().create(ComponentArray(component_type));
-        component_array.* = try ComponentArray(component_type).Init(self._ComponentGPA.allocator());
+        const component_array = ComponentGPA.allocator().create(ComponentArray(component_type));
+        component_array.* = try ComponentArray(component_type).Init(ComponentGPA.allocator());
 
         const i_component_array = IComponentArray.Init(component_array);
 
-        try self._ComponentsArrays.append(i_component_array);
+        try new_component_manager._ComponentsArrays.append(i_component_array);
     }
+
+    return new_component_manager;
 }
 
 pub fn Deinit(self: *ComponentManager) void {

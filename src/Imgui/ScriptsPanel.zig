@@ -3,11 +3,13 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ScriptsPanel = @This();
 
-_P_Open: bool = true,
+_P_Open: bool,
 //HoveredEntity
 
-pub fn Init(self: *ScriptsPanel) void {
-    self._P_Open = true;
+pub fn Init() ScriptsPanel {
+    return ScriptsPanel{
+        ._P_Open = true,
+    };
 }
 
 pub fn OnImguiRender(self: ScriptsPanel) void {

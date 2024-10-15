@@ -3,10 +3,12 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ViewportPanel = @This();
 
-_P_Open: bool = true,
+_P_Open: bool,
 
-pub fn Init(self: *ViewportPanel) void {
-    self._P_Open = true;
+pub fn Init() ViewportPanel {
+    return ViewportPanel{
+        ._P_Open = true,
+    };
 }
 
 pub fn OnImguiRender(self: ViewportPanel) void {

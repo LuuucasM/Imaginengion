@@ -1,7 +1,7 @@
 const builtin = @import("builtin");
 const UnsupportedWindow = @This();
 
-pub fn Init(self: UnsupportedWindow) void {
+pub fn Init(self: UnsupportedWindow) UnsupportedWindow {
     _ = self;
     Unsupported();
 }

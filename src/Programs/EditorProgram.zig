@@ -2,6 +2,7 @@ const std = @import("std");
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
+const Renderer = @import("../Renderer/Renderer.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -17,37 +18,37 @@ const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 
-const Renderer = @import("../Renderer/Renderer.zig");
 
-//_EditorCamera
-_AssetHandlePanel: AssetHandlePanel = .{},
-_ComponentsPanel: ComponentsPanel = .{},
-_ContentBrowserPanel: ContentBrowserPanel = .{},
-_PropertiesPanel: PropertiesPanel = .{},
-_ScenePanel: ScenePanel = .{},
-_ScriptsPanel: ScriptsPanel = .{},
-_StatsPanel: StatsPanel = .{},
-_ToolbarPanel: ToolbarPanel = .{},
-_ViewportPanel: ViewportPanel = .{},
+_AssetHandlePanel: AssetHandlePanel,
+_ComponentsPanel: ComponentsPanel,
+_ContentBrowserPanel: ContentBrowserPanel,
+_PropertiesPanel: PropertiesPanel,
+_ScenePanel: ScenePanel,
+_ScriptsPanel: ScriptsPanel,
+_StatsPanel: StatsPanel,
+_ToolbarPanel: ToolbarPanel,
+_ViewportPanel: ViewportPanel,
 _PathGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
-_ProjectDirectory: []const u8 = "",
+_ProjectDirectory: []const u8,
+//_EditorCamera
 
 const EditorProgram = @This();
-pub fn Init(self: *EditorProgram, EngineAllocator: std.mem.Allocator) !void {
-    self._ProjectDirectory = "";
-    try Renderer.Init(EngineAllocator);
+
+pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
     try ImGui.Init(EngineAllocator);
 
-    self._AssetHandlePanel.Init();
-    self._ComponentsPanel.Init();
-    try self._ContentBrowserPanel.Init();
-    self._PropertiesPanel.Init();
-    self._ScenePanel.Init();
-    self._ScriptsPanel.Init();
-    self._StatsPanel.Init();
-    self._ToolbarPanel.Init();
-    self._ViewportPanel.Init();
-    //init editor camera
+    return EditorProgram{
+        ._ProjectDirectory = "",
+        ._AssetHandlePanel = AssetHandlePanel.Init(),
+        ._ComponentsPanel = ComponentsPanel.Init(),
+        ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
+        ._PropertiesPanel = PropertiesPanel.Init(),
+        ._ScenePanel = ScenePanel.Init(),
+        ._ScriptsPanel = ScriptsPanel.Init(),
+        ._StatsPanel = StatsPanel.Init(),
+        ._ToolbarPanel = ToolbarPanel.Init(),
+        ._ViewportPanel = ViewportPanel.Init(),
+    };
 }
 
 pub fn Deinit(self: *EditorProgram) void {
@@ -55,7 +56,6 @@ pub fn Deinit(self: *EditorProgram) void {
     self._PathGPA.allocator().free(self._ProjectDirectory);
     _ = self._PathGPA.deinit();
     ImGui.Deinit();
-    Renderer.Deinit();
 }
 
 pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {

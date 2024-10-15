@@ -1,29 +1,34 @@
 const std = @import("std");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
-const HashMap = @import("std").HashMap;
+const HashMap = std.AutoHashMap;
 const KeyCodes = @import("KeyCodes.zig").KeyCodes;
 const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const WindowsInput = @This();
 
 const glfw = @import("../Core/CImports.zig").glfw;
 
-_KeyPressedSet: HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage) = undefined,
-_MousePressedSet: Set(MouseCodes) = undefined,
-_MousePosition: Vec2f32 = std.mem.zeroes(Vec2f32),
-_MouseScrolled: Vec2f32 = std.mem.zeroes(Vec2f32),
-_InputGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
-_Window: *anyopaque = undefined,
+var InputGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
 
-pub fn Init(self: *WindowsInput, window: *anyopaque) void {
-    self._Window = window;
-    self._KeyPressedSet = HashMap(KeyCodes, u32, std.hash_map.AutoContext(KeyCodes), std.hash_map.default_max_load_percentage).init(self._InputGPA.allocator());
-    self._MousePressedSet = Set(MouseCodes).init(self._InputGPA.allocator());
+_KeyPressedSet: HashMap(KeyCodes, u32),
+_MousePressedSet: Set(MouseCodes),
+_MousePosition: Vec2f32,
+_MouseScrolled: Vec2f32,
+_Window: *anyopaque,
+
+pub fn Init(window: *anyopaque) WindowsInput {
+    return WindowsInput{
+        ._KeyPressedSet = HashMap(KeyCodes, u32).init(InputGPA.allocator()),
+        ._MousePressedSet = Set(MouseCodes).init(InputGPA.allocator()),
+        ._MousePosition = std.mem.zeroes(Vec2f32),
+        ._MouseScrolled = std.mem.zeroes(Vec2f32),
+        ._Window = window,
+    };
 }
 pub fn Deinit(self: *WindowsInput) void {
     self._KeyPressedSet.deinit();
     self._MousePressedSet.deinit();
-    _ = self._InputGPA.deinit();
+    _ = InputGPA.deinit();
 }
 pub fn SetKeyPressed(self: *WindowsInput, key: KeyCodes, on: bool) !void {
     if (on == true) {

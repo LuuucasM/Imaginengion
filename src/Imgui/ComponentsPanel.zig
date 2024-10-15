@@ -3,11 +3,13 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ComponentsPanel = @This();
 
-_P_Open: bool = true,
+_P_Open: bool,
 //HoveredEntity
 
-pub fn Init(self: *ComponentsPanel) void {
-    self._P_Open = true;
+pub fn Init() ComponentsPanel {
+    return ComponentsPanel{
+        ._P_Open = true,
+    };
 }
 
 pub fn OnImguiRender(self: ComponentsPanel) void {

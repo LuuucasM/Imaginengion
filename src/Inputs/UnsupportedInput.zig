@@ -5,7 +5,7 @@ const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const builtin = @import("builtin");
 const UnsupportedInput = @This();
 
-pub fn Init(EngineAllocator: std.mem.Allocator, window: *anyopaque) void {
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *anyopaque) UnsupportedInput {
     _ = window;
     _ = EngineAllocator;
     Unsupported();

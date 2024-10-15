@@ -3,10 +3,12 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const StatsPanel = @This();
 
-_P_Open: bool = false,
+_P_Open: bool,
 
-pub fn Init(self: *StatsPanel) void {
-    self._P_Open = false;
+pub fn Init() StatsPanel {
+    return StatsPanel{
+        ._P_Open = false,
+    };
 }
 
 pub fn OnImguiRender(self: StatsPanel, dt: f64) !void {
@@ -17,9 +19,12 @@ pub fn OnImguiRender(self: StatsPanel, dt: f64) !void {
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
+    const ms_text = try std.fmt.allocPrint(fba.allocator(), "Delta time: {d:.2}\n", .{dt});
+    imgui.igTextUnformatted(ms_text.ptr, ms_text.ptr + ms_text.len);
+
     const fps = std.time.ms_per_s / dt;
-    const text = try std.fmt.allocPrint(fba.allocator(), "FPS: {d:.2}\n", .{fps});
-    imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
+    const fps_text = try std.fmt.allocPrint(fba.allocator(), "FPS: {d:.2}\n", .{fps});
+    imgui.igTextUnformatted(fps_text.ptr, fps_text.ptr + fps_text.len);
 }
 
 pub fn OnImguiEvent(self: *StatsPanel, event: *ImguiEvent) void {

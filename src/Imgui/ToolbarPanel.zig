@@ -3,10 +3,12 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const ToolbarPanel = @This();
 
-_P_Open: bool = true,
+_P_Open: bool,
 
-pub fn Init(self: *ToolbarPanel) void {
-    self._P_Open = true;
+pub fn Init() ToolbarPanel {
+    return ToolbarPanel{
+        ._P_Open = true,
+    };
 }
 
 pub fn OnImguiRender(self: ToolbarPanel) void {

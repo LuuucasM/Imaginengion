@@ -4,14 +4,16 @@ const ComponentManager = @import("ComponentManager.zig");
 const SystemManager = @import("SystemManager.zig");
 const ECSManager = @This();
 
-_EntityManager: EntityManager = .{},
-_ComponentManager: ComponentManager = .{},
-_SystemManager: SystemManager = .{},
+_EntityManager: EntityManager,
+_ComponentManager: ComponentManager,
+_SystemManager: SystemManager,
 
-pub fn Init(self: *ECSManager) !void {
-    self._EntityManager.Init();
-    try self._ComponentManager.Init();
-    try self._SystemManager.Init();
+pub fn Init() !ECSManager {
+    return ECSManager{
+        ._EntityManager = EntityManager.Init();
+        ._ComponentManager = try ComponentManager.Init();
+        ._SystemManager = try SystemManager.Init();
+    };
 }
 
 pub fn Deinit(self: *ECSManager) void {

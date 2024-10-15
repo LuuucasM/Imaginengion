@@ -9,36 +9,46 @@ const glfw = @import("../Core/CImports.zig").glfw;
 
 const WindowsWindow = @This();
 
-_Title: [*:0]const u8 = "ImaginEngion",
-_Width: usize = 1600,
-_Height: usize = 900,
-_IsVSync: bool = true,
-_WindowCount: usize = 0,
-_Window: ?*glfw.struct_GLFWwindow = undefined,
+_Title: [*:0]const u8 = "Imaginengion",
+_Width: usize,
+_Height: usize,
+_IsVSync: bool,
+_WindowCount: usize,
+_Window: ?*glfw.struct_GLFWwindow,
 
-pub fn Init(self: *WindowsWindow) void {
-    if (self._WindowCount == 0) {
-        _ = glfw.glfwSetErrorCallback(GLFWErrorCallback);
-        const success: c_int = glfw.glfwInit();
-        std.debug.assert(success != glfw.GLFW_FALSE);
-    }
+pub fn Init() WindowsWindow {
+    const title: [*:0]const u8 = "Imaginengion";
+    const width: usize = 1600;
+    const height: usize = 900;
+    const is_v_sync: bool = true;
+
+    _ = glfw.glfwSetErrorCallback(GLFWErrorCallback);
+    const success: c_int = glfw.glfwInit();
+    std.debug.assert(success != glfw.GLFW_FALSE);
 
     if ((builtin.mode == .Debug) or (builtin.mode == .ReleaseSafe)) {
         glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, glfw.GLFW_TRUE);
     }
 
-    self._Window = glfw.glfwCreateWindow(@intCast(self._Width), @intCast(self._Height), self._Title, null, null);
-    if (self._Window == null) {
+    const new_glfw_window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
+    if (new_glfw_window == null) {
         @panic("Could not create glfw window in WindowsWindow::Init");
     }
-    self._WindowCount += 1;
 
-    _ = glfw.glfwSetWindowCloseCallback(self._Window, GLFWWindowCloseCallback);
-    _ = glfw.glfwSetWindowSizeCallback(self._Window, GLFWWindowResizeCallback);
-    _ = glfw.glfwSetKeyCallback(self._Window, GLFWKeyCallback);
-    _ = glfw.glfwSetMouseButtonCallback(self._Window, GLFWMouseButtonCallback);
-    _ = glfw.glfwSetCursorPosCallback(self._Window, GLFWMouseMovedCallback);
-    _ = glfw.glfwSetScrollCallback(self._Window, GLFWMouseScrolledCallback);
+    _ = glfw.glfwSetWindowCloseCallback(new_glfw_window, GLFWWindowCloseCallback);
+    _ = glfw.glfwSetWindowSizeCallback(new_glfw_window, GLFWWindowResizeCallback);
+    _ = glfw.glfwSetKeyCallback(new_glfw_window, GLFWKeyCallback);
+    _ = glfw.glfwSetMouseButtonCallback(new_glfw_window, GLFWMouseButtonCallback);
+    _ = glfw.glfwSetCursorPosCallback(new_glfw_window, GLFWMouseMovedCallback);
+    _ = glfw.glfwSetScrollCallback(new_glfw_window, GLFWMouseScrolledCallback);
+
+    return WindowsWindow{
+        ._Width = width,
+        ._Height = height,
+        ._IsVSync = is_v_sync,
+        ._WindowCount = 1,
+        ._Window = new_glfw_window,
+    };
 }
 
 pub fn Deinit(self: *WindowsWindow) void {

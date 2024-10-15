@@ -14,30 +14,30 @@ var ApplicationManager: *Application = undefined;
 _IsRunning: bool = true,
 _IsMinimized: bool = false,
 _EngineAllocator: std.mem.Allocator,
-_Window: Window = .{},
-_Program: Program = .{},
+_Window: Window,
+_Program: Program,
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     ApplicationManager = try EngineAllocator.create(Application);
     ApplicationManager.* = .{
         ._EngineAllocator = EngineAllocator,
+        ._Window = Window.Init(),
+        ._Program = try Program.Init(EngineAllocator),
     };
-    ApplicationManager._Window.Init();
-    try ApplicationManager._Program.Init(EngineAllocator);
     ApplicationManager._Window.SetVSync(true);
+    try AssetManager.Init(EngineAllocator);
     try EventManager.Init(EngineAllocator, OnEvent);
     try Input.Init(EngineAllocator, ApplicationManager._Window.GetNativeWindow());
     try ThreadPool.init(EngineAllocator);
-    try AssetManager.Init(EngineAllocator);
 }
 
 pub fn Deinit() void {
     ApplicationManager._Program.Deinit();
     ApplicationManager._Window.Deinit();
-    Input.Deinit();
-    EventManager.Deinit();
-    ThreadPool.deinit();
     AssetManager.Deinit();
+    EventManager.Deinit();
+    Input.Deinit();
+    ThreadPool.deinit();
     ApplicationManager._EngineAllocator.destroy(ApplicationManager);
 }
 

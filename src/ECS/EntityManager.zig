@@ -7,13 +7,15 @@ pub const NullEntity: u32 = ~0;
 
 var NextID: u32 = 0;
 
-_IDsInUse: Set(u32) = undefined,
-_IDsRemoved: std.ArrayList(u32) = undefined,
-_EntityGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
+_IDsInUse: Set(u32),
+_IDsRemoved: std.ArrayList(u32),
+var EntityGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
-pub fn Init(self: *EntityManager) void {
-    self._IDsInUse = Set(u32).init(self._EntityGPA.allocator());
-    self._IDsRemoved = std.ArrayList(u32).init(self._EntityGPA.allocator());
+pub fn Init() EntityManager {
+    return EntityManager{
+        ._IDsInUse = Set(u32).init(EntityGPA.allocator()),
+        ._IDsRemoved = std.ArrayList(u32).init(EntityGPA.allocator()),
+    };
 }
 
 pub fn Deinit(self: *EntityManager) void {

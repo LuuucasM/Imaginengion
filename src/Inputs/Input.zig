@@ -12,15 +12,15 @@ const Impl = switch (builtin.os.tag) {
 
 var InputManager: *Input = undefined;
 
-_Impl: Impl = .{},
+_Impl: Impl,
 _EngineAllocator: std.mem.Allocator,
 
 pub fn Init(EngineAllocator: std.mem.Allocator, window: *anyopaque) !void {
     InputManager = try EngineAllocator.create(Input);
     InputManager.* = .{
+        ._Impl = Impl.Init(window),
         ._EngineAllocator = EngineAllocator,
     };
-    InputManager._Impl.Init(window);
 }
 pub fn Deinit() void {
     InputManager._Impl.Deinit();

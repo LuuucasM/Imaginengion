@@ -4,10 +4,12 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandlePanel = @This();
 
-_P_Open: bool = false,
+_P_Open: bool,
 
-pub fn Init(self: *AssetHandlePanel) void {
-    self._P_Open = false;
+pub fn Init() AssetHandlePanel {
+    return AssetHandlePanel{
+        ._P_Open = false,
+    };
 }
 
 pub fn OnImguiRender(self: AssetHandlePanel) !void {

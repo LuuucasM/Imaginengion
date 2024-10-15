@@ -13,6 +13,9 @@ const LayerType = SceneIDComponent.ELayerType;
 
 const SceneLayerEditor = @This();
 
+//.gscl
+//.oscl
+
 mUUID: u64,
 mName: [24]u8,
 mECSManager: *ECSManager,

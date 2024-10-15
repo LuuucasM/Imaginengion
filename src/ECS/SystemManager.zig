@@ -13,27 +13,30 @@ mEntityBitField: SparseSet(.{
     .value_layout = .InternalArrayOfStructs,
     .allow_resize = .ResizeAllowed,
 }) = undefined,
-mSystemsGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
+const SystemsGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
 
-pub fn Init(self: *SystemManager) !void {
-    self.mSystemsArray = std.ArrayList(ISystem).init(self.mSystemsGPA.allocator());
-    self.mEntityBitField = try SparseSet(.{
-        .SparseT = u32,
-        .DenseT = u32,
-        .ValueT = BitFieldType,
-        .value_layout = .InternalArrayOfStructs,
-        .allow_resize = .ResizeAllowed,
-    }).init(self.mSystemsGPA.allocator(), 20, 10);
+pub fn Init() !SystemManager {
+    const new_system_manager = SystemManager{
+        .mSystemsArray = std.ArrayList(ISystem).init(self.SystemsGPA.allocator()),
+        .mEntityBitField = try SparseSet(.{
+            .SparseT = u32,
+            .DenseT = u32,
+            .ValueT = BitFieldType,
+            .value_layout = .InternalArrayOfStructs,
+            .allow_resize = .ResizeAllowed,
+        }).init(self.mSystemsGPA.allocator(), 20, 10),
+    };
 
     inline for (SystemsList) |system_type| {
-        const new_system = try self.mSystemsGPA.allocator().create(system_type);
+        const new_system = try SystemsGPA.allocator().create(system_type);
 
         new_system.* = system_type.Init();
 
-        const i_system = ISystem.Init(new_system, self.mSystemsGPA.allocator(), &system_type.Types);
+        const i_system = ISystem.Init(new_system, SystemsGPA.allocator(), &system_type.Types);
 
-        try self.mSystemsArray.append(i_system);
+        try new_system_manager.mSystemsArray.append(i_system);
     }
+    return new_system_manager;
 }
 
 pub fn Deinit(self: *SystemManager) void {

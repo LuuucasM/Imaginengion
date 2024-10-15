@@ -3,11 +3,13 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const PropertiesPanel = @This();
 
-_P_Open: bool = true,
+_P_Open: bool,
 //HoveredEntity
 
-pub fn Init(self: *PropertiesPanel) void {
-    self._P_Open = true;
+pub fn Init() PropertiesPanel {
+    return PropertiesPanel{
+        ._P_Open = true,
+    };
 }
 
 pub fn OnImguiRender(self: PropertiesPanel) void {

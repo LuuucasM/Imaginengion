@@ -8,10 +8,12 @@ const Impl = switch (builtin.os.tag) {
 
 const RenderContext = @This();
 
-_Impl: Impl = .{},
+_Impl: Impl,
 
-pub fn Init(self: *RenderContext) void {
-    self._Impl.Init();
+pub fn Init() RenderContext {
+    return RenderContext{
+        ._Impl = Impl.Init(),
+    };
 }
 
 pub fn SwapBuffers(self: RenderContext) void {
