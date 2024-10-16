@@ -50,13 +50,8 @@ pub fn Init() WindowsWindow {
 }
 
 pub fn Deinit(self: *WindowsWindow) void {
-    if (self._Window) |window| {
-        glfw.glfwDestroyWindow(window);
-        self._WindowCount -= 1;
-        if (self._WindowCount == 0) {
-            glfw.glfwTerminate();
-        }
-    }
+    glfw.glfwDestroyWindow(self._Window);
+    glfw.glfwTerminate();
 }
 
 pub fn GetWidth(self: WindowsWindow) usize {

@@ -59,14 +59,22 @@ pub fn Deinit(self: *EditorProgram) void {
 }
 
 pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
-    //process asset manager
-    ApplicationManager.GetWindow().PollInputEvents();
+    //update asset manager
     try AssetManager.OnUpdate();
 
-    //Process Inputs
+    //---------Inputs Begin--------------
+    ApplicationManager.GetWindow().PollInputEvents();
     EventManager.ProcessEvents(.EC_Input);
+    //---------Inputs End----------------
 
-    //--Imgui begin--
+    //---------Physics Begin-------------
+    //---------Physics End---------------
+
+    //---------Game Logic Begin----------
+    //---------GameLogic End-------------
+
+    //---------Render Begin-------------
+    //Imgui begin
     ImGui.Begin();
     Dockspace.Begin();
 
@@ -86,12 +94,18 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     Dockspace.End();
     ImGui.End();
-    //--Imgui end--
+    //Imgui end
 
-    //swap buffers
     Renderer.SwapBuffers();
+    //----------Render End-----------------
 
-    //Process window events
+    //----------Audio Begin----------------
+    //----------Audio End------------------
+
+    //----------Networking Begin-----------
+    //----------Networking End-------------
+
+    //Finally Process window events
     EventManager.ProcessEvents(.EC_Window);
 
     //end of frame resets

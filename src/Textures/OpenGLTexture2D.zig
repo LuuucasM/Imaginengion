@@ -5,7 +5,7 @@ const OpenGLTexture2D = @This();
 
 _Width: c_int,
 _Height: c_int,
-_TextureID: c_uint
+_TextureID: c_uint,
 _InternalFormat: c_uint,
 _DataFormat: c_uint,
 

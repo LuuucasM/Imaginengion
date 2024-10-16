@@ -1,29 +1,32 @@
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const LayerType = @import("Components/SceneIDComponent.zig").ELayerType;
-const Entity = @This();
 
+const ECSManager = @import("ECSManager.zig");
 const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
+const Entity = @This();
+
 
 mEntityID: u32,
-mLayer: *SceneLayer,
+mECSManager: *ECSManager,
 
 pub fn AddComponent(self: Entity, comptime component_type: type, component: component_type) !*component_type {
-    return try self.mLayer.mECSManager.AddComponent(component_type, self.mEntityID, component);
+    return try self.mECSManager.AddComponent(component_type, self.mEntityID, component);
 }
 pub fn RemoveComponent(self: Entity, comptime component_type: type) !void {
-    try self.mLayer.mECSManager.RemoveComponent(component_type, self.mEntityID);
+    try self.mECSManager.RemoveComponent(component_type, self.mEntityID);
 }
 pub fn GetComponent(self: Entity, comptime component_type: type) *component_type {
-    return self.mLayer.mECSManager.GetComponent(component_type, self.mEntityID);
+    return self.mECSManager.GetComponent(component_type, self.mEntityID);
 }
 pub fn HasComponent(self: Entity, comptime component_type: type) bool {
-    return self.mLayer.mECSManager.HasComponent(component_type, self.mEntityID);
+    return self.mECSManager.HasComponent(component_type, self.mEntityID);
 }
 pub fn GetUUID(self: Entity) IDComponent {
-    return self.mLayer.mECSManager.GetComponent(IDComponent, self.mEntityID);
+    return self.mECSManager.GetComponent(IDComponent, self.mEntityID);
 }
 pub fn GetName(self: Entity) NameComponent {
-    return self.mLayer.mECSManager.GetComponent(NameComponent, self.mEntityID);
+    return self.mECSManager.GetComponent(NameComponent, self.mEntityID);
+}
+pub fn Duplicate(self: Entity) !Entity {
+    return try self.mECSManager.DuplicateEntity(self.mEntityID);
 }
