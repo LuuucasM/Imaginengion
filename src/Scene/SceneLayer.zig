@@ -1,6 +1,6 @@
-const LayerType = SceneIDComponent.ELayerType;
+const LayerType = @import("../ECS/Components/SceneIDComponent.zig").ELayerType;
 const SceneLayerEditor = @This();
-const Set = @import("../Vendor/ziglang-set/src/array_has_set/")
+const Set = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 
 //.gscl
 //.oscl

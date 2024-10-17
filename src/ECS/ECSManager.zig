@@ -7,18 +7,20 @@ const ECSManager = @This();
 _EntityManager: EntityManager,
 _ComponentManager: ComponentManager,
 _SystemManager: SystemManager,
+mECSAllocator: std.mem.Allocator,
 
-pub fn Init() !ECSManager {
+pub fn Init(ECSAllocator: std.mem.Allocator) !ECSManager {
     return ECSManager{
-        ._EntityManager = EntityManager.Init();
-        ._ComponentManager = try ComponentManager.Init();
-        ._SystemManager = try SystemManager.Init();
+        ._EntityManager = EntityManager.Init(ECSAllocator),
+        ._ComponentManager = try ComponentManager.Init(ECSAllocator),
+        ._SystemManager = try SystemManager.Init(ECSAllocator),
+        .mECSAllocator = ECSAllocator,
     };
 }
 
 pub fn Deinit(self: *ECSManager) void {
     self._EntityManager.Deinit();
-    self._ComponentManager.Deinit();
+    self._ComponentManager.Deinit(self.mECSAllocator);
     self._SystemManager.Deinit();
 }
 

@@ -9,19 +9,17 @@ var NextID: u32 = 0;
 
 _IDsInUse: Set(u32),
 _IDsRemoved: std.ArrayList(u32),
-var EntityGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
-pub fn Init() EntityManager {
+pub fn Init(ECSAllocator: std.mem.Allocator) EntityManager {
     return EntityManager{
-        ._IDsInUse = Set(u32).init(EntityGPA.allocator()),
-        ._IDsRemoved = std.ArrayList(u32).init(EntityGPA.allocator()),
+        ._IDsInUse = Set(u32).init(ECSAllocator),
+        ._IDsRemoved = std.ArrayList(u32).init(ECSAllocator),
     };
 }
 
 pub fn Deinit(self: *EntityManager) void {
     self._IDsInUse.deinit();
     self._IDsRemoved.deinit();
-    _ = self._EntityGPA.deinit();
 }
 
 pub fn CreateEntity(self: *EntityManager) !u32 {

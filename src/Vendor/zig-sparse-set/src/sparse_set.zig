@@ -106,14 +106,14 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             // indices than dense...
             assert(capacity_dense < capacity_sparse);
 
-            const dense_to_sparse = try allocator.alloc(SparseT, capacity_dense);
+            const dense_to_sparse = try allocator.alloc(SparseT, @intCast(capacity_dense));
             errdefer allocator.free(dense_to_sparse);
-            const sparse_to_dense = try allocator.alloc(DenseT, capacity_sparse);
+            const sparse_to_dense = try allocator.alloc(DenseT, @intCast(capacity_sparse));
             errdefer allocator.free(sparse_to_dense);
 
             var self: Self = undefined;
             if (value_layout == .InternalArrayOfStructs) {
-                const values = try allocator.alloc(ValueT, capacity_dense);
+                const values = try allocator.alloc(ValueT, @intCast(capacity_dense));
                 errdefer allocator.free(values);
 
                 self = Self{
@@ -193,9 +193,9 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             if (allow_resize == .ResizeAllowed) {
                 if (self.dense_count == self.capacity_dense) {
                     self.capacity_dense = self.capacity_dense * 2;
-                    self.dense_to_sparse = self.allocator.realloc(self.dense_to_sparse, self.capacity_dense) catch unreachable;
+                    self.dense_to_sparse = self.allocator.realloc(self.dense_to_sparse, @intCast(self.capacity_dense)) catch unreachable;
                     if (value_layout == .InternalArrayOfStructs) {
-                        self.values = self.allocator.realloc(self.values, self.capacity_dense) catch unreachable;
+                        self.values = self.allocator.realloc(self.values, @intCast(self.capacity_dense)) catch unreachable;
                     }
                 }
             }
@@ -203,7 +203,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             assert(sparse < self.capacity_sparse);
             assert(self.dense_count < self.capacity_dense);
             assert(!self.hasSparse(sparse));
-            self.dense_to_sparse[self.dense_count] = sparse;
+            self.dense_to_sparse[@intCast(self.dense_count)] = sparse;
             self.sparse_to_dense[sparse] = @intCast(self.dense_count);
             if (value_layout == .InternalArrayOfStructs and value_init == .ZeroInitialized) {
                 self.values[self.dense_count] = std.mem.zeroes(ValueT);
@@ -334,12 +334,12 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             assert(self.dense_count > 0);
             assert(self.hasSparse(sparse));
             const last_dense = self.dense_count - 1;
-            const last_sparse = self.dense_to_sparse[last_dense];
+            const last_sparse = self.dense_to_sparse[@intCast(last_dense)];
             const dense = self.sparse_to_dense[sparse];
             self.dense_to_sparse[dense] = last_sparse;
             self.sparse_to_dense[last_sparse] = dense;
             if (value_layout == .InternalArrayOfStructs) {
-                self.values[dense] = self.values[last_dense];
+                self.values[dense] = self.values[@intCast(last_dense)];
             }
 
             self.dense_count -= 1;

@@ -17,7 +17,7 @@ const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
-
+const EditorSceneManager = @import("../Scene/EditorSceneManager.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -30,6 +30,7 @@ _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 _PathGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 _ProjectDirectory: []const u8,
+mEditorSceneManager: EditorSceneManager,
 //_EditorCamera
 
 const EditorProgram = @This();
@@ -48,6 +49,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
+        .mEditorSceneManager = try EditorSceneManager.Init(1600, 900),
     };
 }
 

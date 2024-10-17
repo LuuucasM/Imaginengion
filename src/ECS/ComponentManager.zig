@@ -23,24 +23,23 @@ _EntitySkipField: SparseSet(.{
     .value_layout = .InternalArrayOfStructs,
     .allow_resize = .ResizeAllowed,
 }),
-var ComponentGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
 
-pub fn Init() !ComponentManager {
-    const new_component_manager = ComponentManager{
-        ._ComponentsArrays = std.ArrayList(IComponentArray).init(ComponentGPA.allocator()),
+pub fn Init(ECSAllocator: std.mem.Allocator) !ComponentManager {
+    var new_component_manager = ComponentManager{
+        ._ComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
         ._EntitySkipField = try SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
             .ValueT = StaticSkipField(ComponentsList.len),
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
-        }).init(ComponentGPA.allocator(), 20, 10),
+        }).init(ECSAllocator, 20, 10),
     };
 
     //init component arrays
     inline for (ComponentsList) |component_type| {
-        const component_array = ComponentGPA.allocator().create(ComponentArray(component_type));
-        component_array.* = try ComponentArray(component_type).Init(ComponentGPA.allocator());
+        const component_array = try ECSAllocator.create(ComponentArray(component_type));
+        component_array.* = try ComponentArray(component_type).Init(ECSAllocator);
 
         const i_component_array = IComponentArray.Init(component_array);
 
@@ -50,10 +49,10 @@ pub fn Init() !ComponentManager {
     return new_component_manager;
 }
 
-pub fn Deinit(self: *ComponentManager) void {
+pub fn Deinit(self: *ComponentManager, ECSAllocator: std.mem.Allocator) void {
     //delete component arrays
     for (self._ComponentsArrays.items) |component_array| {
-        component_array.Deinit(self._ComponentGPA.allocator());
+        component_array.Deinit(ECSAllocator);
     }
 
     self._ComponentsArrays.deinit();
