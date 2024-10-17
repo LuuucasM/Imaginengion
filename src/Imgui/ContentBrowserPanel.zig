@@ -114,14 +114,15 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             var texture_id = texture.GetID();
             texture.Bind(0);
             imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1 });
-            _ = imgui.igImageButton(
-                entry.name.ptr,
+            _ = imgui.igImageButtonEx(
+                texture_id,
                 @ptrCast(&texture_id),
                 .{ .x = thumbnail_size, .y = thumbnail_size },
                 .{ .x = 0, .y = 1 },
                 .{ .x = 1, .y = 0 },
                 .{ .x = 0, .y = 0, .z = 0, .w = 0 },
                 .{ .x = 1, .y = 1, .z = 1, .w = 1 },
+                0,
             );
             imgui.igPopStyleColor(1);
 
