@@ -5,7 +5,6 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const EventManager = @import("../Events/EventManager.zig");
 const Event = @import("../Events/Event.zig").Event;
 const Dockspace = @This();
-const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const Application = @import("../Core/Application.zig");
 
 pub fn Begin() void {
@@ -48,7 +47,7 @@ pub fn Begin() void {
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 }
 
-pub fn OnImguiRender(path_allocator: std.mem.Allocator) !void {
+pub fn OnImguiRender() !void {
     const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
         defer imgui.igEndMenuBar();
@@ -60,44 +59,26 @@ pub fn OnImguiRender(path_allocator: std.mem.Allocator) !void {
             if (imgui.igMenuItem_Bool("Save Scene As...", "Ctrl+Shift+S", false, true) == true) {}
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFolder(path_allocator);
-                if (std.mem.eql(u8, path, "") == false) {
-                    const new_event = ImguiEvent{
-                        .ET_NewProjectEvent = .{
-                            ._Path = path,
-                        },
-                    };
-                    try ImguiManager.InsertEvent(new_event);
-                }
+                const new_event = ImguiEvent{
+                    .ET_NewProjectEvent = .{ 
+                        ._Path = "",
+                    }, 
+                };
+                try ImguiManager.InsertEvent(new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                //constructing the filter to be passed to opening the file
-                var buffer: [34]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const allocator = fba.allocator();
-
-                const original = "Imagine Project (*.imprj)*.imprj";
-                const mid_insert_pos = 25;
-
-                var filter = try allocator.alloc(u8, 34);
-                std.mem.copyForwards(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
-                filter[mid_insert_pos] = 0;
-                std.mem.copyForwards(u8, filter[mid_insert_pos + 1 ..], original[mid_insert_pos..]);
-                filter[filter.len - 1] = 0;
-
-                const path = try PlatformUtils.OpenFile(path_allocator, filter);
-                if (std.mem.eql(u8, path, "") == false) {
-                    const new_event = ImguiEvent{
-                        .ET_OpenProjectEvent = .{
-                            ._Path = path,
-                        },
-                    };
-                    try ImguiManager.InsertEvent(new_event);
-                }
+                const new_event = ImguiEvent{
+                    .ET_OpenProjectEvent = .{ 
+                        ._Path = "",
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
-                const new_event = Event{ .ET_WindowClose = .{} };
+                const new_event = Event{ 
+                    .ET_WindowClose = .{},
+                };
                 try EventManager.Insert(new_event);
             }
         }

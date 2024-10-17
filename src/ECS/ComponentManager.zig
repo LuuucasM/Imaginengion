@@ -57,7 +57,6 @@ pub fn Deinit(self: *ComponentManager, ECSAllocator: std.mem.Allocator) void {
 
     self._ComponentsArrays.deinit();
     self._EntitySkipField.deinit();
-    _ = self._ComponentGPA.deinit();
 }
 
 pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {

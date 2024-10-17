@@ -68,10 +68,41 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: []const u8) ![]const u8{
     ofn.Flags = nativeos.OFN_PATHMUSTEXIST | nativeos.OFN_FILEMUSTEXIST | nativeos.OFN_NOCHANGEDIR;
 
     if (nativeos.GetOpenFileNameA(&ofn) == nativeos.TRUE){
-        const len = std.mem.len(@as([*:0]u8, @ptrCast(ofn.lpstrFile)));
+        const lpstrfile = std.mem.span(ofn.lpstrFile);
 
-        const result = try allocator.alloc(u8, len);
-        @memcpy(result, ofn.lpstrFile[0..len]);
+        const result = try allocator.alloc(u8, lpstrfile.len);
+        @memcpy(result, lpstrfile[0..lpstrfile.len]);
+        return result;
+    }
+    return "";
+}
+
+pub fn SaveFile(allocator: std.mem.Allocator, filter: []const u8) ![]const u8{
+    var ofn: nativeos.OPENFILENAMEA = std.mem.zeroes(nativeos.OPENFILENAMEA);
+    var szFile: [MAX_PATH_LENGTH]CHAR = std.mem.zeroes([MAX_PATH_LENGTH]CHAR);
+    var currentDir: [MAX_PATH_LENGTH]CHAR = std.mem.zeroes([MAX_PATH_LENGTH]CHAR);
+
+    ofn.lStructSize = @sizeOf(nativeos.OPENFILENAMEA);
+    ofn.hwndOwner = nativeos.glfwGetWin32Window(@ptrCast(Application.GetWindow().GetNativeWindow()));
+    ofn.lpstrFile = @ptrCast(&szFile);
+    ofn.nMaxFile = @sizeOf(CHAR)*MAX_PATH_LENGTH;
+
+    if (nativeos.GetCurrentDirectoryA(MAX_PATH_LENGTH, @ptrCast(&currentDir)) != 0){
+        ofn.lpstrInitialDir = @ptrCast(&currentDir);
+    }
+
+    ofn.lpstrFilter = @ptrCast(filter);
+    ofn.nFilterIndex = 1;
+
+    ofn.lpstrDefExt = filter;
+
+    ofn.Flags = nativeos.OFN_PATHMUSTEXIST | nativeos.OFN_OVERWRITEPROMPT | nativeos.OFN_NOCHANGEDIR;
+
+    if (nativeos.GetSaveFileNameA(&ofn) == nativeos.TRUE){
+        const lpstrfile = std.mem.span(ofn.lpstrFile);
+
+        const result = try allocator.alloc(u8, lpstrfile.len);
+        @memcpy(result, lpstrfile[0..lpstrfile.len]);
         return result;
     }
     return "";

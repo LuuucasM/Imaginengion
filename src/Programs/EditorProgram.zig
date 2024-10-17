@@ -3,6 +3,7 @@ const ApplicationManager = @import("../Core/Application.zig");
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -28,8 +29,6 @@ _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
-_PathGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){},
-_ProjectDirectory: []const u8,
 mEditorSceneManager: EditorSceneManager,
 //_EditorCamera
 
@@ -39,7 +38,6 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
     try ImGui.Init(EngineAllocator);
 
     return EditorProgram{
-        ._ProjectDirectory = "",
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
@@ -55,8 +53,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
 
 pub fn Deinit(self: *EditorProgram) void {
     self._ContentBrowserPanel.Deinit();
-    self._PathGPA.allocator().free(self._ProjectDirectory);
-    _ = self._PathGPA.deinit();
+    self.mEditorSceneManager.Deinit();
     ImGui.Deinit();
 }
 
@@ -89,7 +86,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     self._ToolbarPanel.OnImguiRender();
     try self._StatsPanel.OnImguiRender(dt);
     self._ViewportPanel.OnImguiRender();
-    try Dockspace.OnImguiRender(self._PathGPA.allocator());
+    try Dockspace.OnImguiRender();
 
     try self.ProcessImguiEvents();
     ImGui.ClearEvents();
@@ -137,20 +134,33 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                     else => @panic("This event has not been handled by this type of panel yet!\n"),
                 }
             },
-            .ET_NewProjectEvent => {
-                if (self._ProjectDirectory.len != 0) {
-                    self._PathGPA.allocator().free(self._ProjectDirectory);
-                }
-                self._ProjectDirectory = event.ET_NewProjectEvent._Path;
-                AssetManager.UpdateProjectDirectory(event.ET_NewProjectEvent._Path);
+            .ET_NewProjectEvent => |*e| {
+                var buffer: [260]u8 = undefined;
+                var fba = std.heap.FixedBufferAllocator.init(&buffer);
+                const path = try PlatformUtils.OpenFolder(fba.allocator());
+                e._Path = path;
+
+                try AssetManager.UpdateProjectDirectory(e._Path);
                 try self._ContentBrowserPanel.OnImguiEvent(event);
             },
-            .ET_OpenProjectEvent => {
-                if (self._ProjectDirectory.len != 0) {
-                    self._PathGPA.allocator().free(self._ProjectDirectory);
-                }
-                self._ProjectDirectory = event.ET_OpenProjectEvent._Path;
-                AssetManager.UpdateProjectDirectory(std.fs.path.dirname(event.ET_OpenProjectEvent._Path).?);
+            .ET_OpenProjectEvent => |*e| {
+                //34 for the filter, and 260 for max path size
+                var buffer: [260+34]u8 = undefined;
+                var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+                const original = "Imagine Project (*.imprj)*.imprj";
+                const mid_insert_pos = 25;
+
+                var filter = try fba.allocator().alloc(u8, 34);
+                std.mem.copyForwards(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
+                filter[mid_insert_pos] = 0;
+                std.mem.copyForwards(u8, filter[mid_insert_pos + 1 ..], original[mid_insert_pos..]);
+                filter[filter.len - 1] = 0;
+
+                const path = try PlatformUtils.OpenFile(fba.allocator(), filter);
+                e._Path = path;
+
+                try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e._Path).?);
                 try self._ContentBrowserPanel.OnImguiEvent(event);
             },
             else => @panic("This event has not been handled by editor program!\n"),

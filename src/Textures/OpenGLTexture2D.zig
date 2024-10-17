@@ -104,7 +104,7 @@ pub fn GetWidth(self: OpenGLTexture2D) u32 {
 pub fn GetHeight(self: OpenGLTexture2D) u32 {
     return self._Height;
 }
-pub fn GetID(self: OpenGLTexture2D) u32 {
+pub fn GetID(self: OpenGLTexture2D) c_uint {
     return self._TextureID;
 }
 pub fn UpdateData(self: *OpenGLTexture2D, width: u32, height: u32, data: *anyopaque, size: usize) void {

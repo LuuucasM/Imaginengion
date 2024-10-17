@@ -44,8 +44,8 @@ fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uin
     _ = id;
 
     switch(severity){
-        glad.GL_DEBUG_SEVERITY_NOTIFICATION => std.log.debug("GL Debug: type = {s}, source = {s}, message = {s}\n", 
-        .{glDebugTypeToStr(debug_type), glSourceToStr(source), message}),
+        //glad.GL_DEBUG_SEVERITY_NOTIFICATION => std.log.debug("GL Debug: type = {s}, source = {s}, message = {s}\n", 
+        //.{glDebugTypeToStr(debug_type), glSourceToStr(source), message}),
 
         glad.GL_DEBUG_SEVERITY_LOW => std.log.info("GL Debug: type = {s}, source = {s}, message = {s}\n", 
         .{glDebugTypeToStr(debug_type), glSourceToStr(source), message}),
@@ -56,7 +56,7 @@ fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uin
         glad.GL_DEBUG_SEVERITY_HIGH => std.log.err("GL Debug: type = {s}, source = {s}, message = {s}\n", 
         .{glDebugTypeToStr(debug_type), glSourceToStr(source), message}),
 
-        else => std.log.err("unknown gl severity level!\n", .{}),
+        else => {},
     }
 }
 

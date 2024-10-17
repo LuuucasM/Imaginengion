@@ -45,7 +45,6 @@ pub fn Deinit(self: *SystemManager, ECSAllocator: std.mem.Allocator) void {
 
     self.mSystemsArray.deinit();
     self.mEntityBitField.deinit();
-    _ = self.mSystemsGPA.deinit();
 }
 
 pub fn AddComponent(self: *SystemManager, comptime component_type: type, entityID: u32) !void {

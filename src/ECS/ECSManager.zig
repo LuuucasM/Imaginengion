@@ -21,7 +21,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator) !ECSManager {
 pub fn Deinit(self: *ECSManager) void {
     self._EntityManager.Deinit();
     self._ComponentManager.Deinit(self.mECSAllocator);
-    self._SystemManager.Deinit();
+    self._SystemManager.Deinit(self.mECSAllocator);
 }
 
 //---------------EntityManager--------------

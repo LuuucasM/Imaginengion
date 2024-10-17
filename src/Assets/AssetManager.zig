@@ -52,11 +52,13 @@ pub fn Deinit() void {
     }
     AssetM._AssetPathToIDDelete.deinit();
     AssetM._AssetIDToHandleDelete.deinit();
-    _ = AssetM._AssetGPA.deinit();
 
     //different asset types
     AssetM._AssetIDToTextureMap.deinit();
-
+    if (AssetM._ProjectDirectory.len > 0){
+        AssetM._AssetGPA.allocator().free(AssetM._ProjectDirectory);
+    }
+    _ = AssetM._AssetGPA.deinit();
     AssetM._EngineAllocator.destroy(AssetM);
 }
 
@@ -91,23 +93,27 @@ pub fn CreateAssetHandle(rel_path: []const u8, assetType: AssetTypes, size: u64,
     try AssetM._AssetIDToHandleMap.put(id, handle);
 }
 
-pub fn UpdateProjectDirectory(path: []const u8) void {
-    var iter = AssetM._AssetPathToIDMap.iterator();
+pub fn UpdateProjectDirectory(path: []const u8) !void {
+    if (AssetM._ProjectDirectory.len > 0){
+        var iter = AssetM._AssetPathToIDMap.iterator();
+        while (iter.next()) |entry| {
+            AssetM._AssetGPA.allocator().free(entry.key_ptr.*);
+        }
+        AssetM._AssetPathToIDMap.clearAndFree();
+        AssetM._AssetIDToHandleMap.clearAndFree();
+        AssetM._AssetIDToTextureMap.clearAndFree();
 
-    while (iter.next()) |entry| {
-        AssetM._AssetGPA.allocator().free(entry.key_ptr.*);
-    }
-    AssetM._AssetPathToIDMap.clearAndFree();
-    AssetM._AssetIDToHandleMap.clearAndFree();
-    AssetM._AssetIDToTextureMap.clearAndFree();
+        iter = AssetM._AssetPathToIDDelete.iterator();
+        while (iter.next()) |entry| {
+            AssetM._AssetGPA.allocator().free(entry.key_ptr.*);
+        }
+        AssetM._AssetPathToIDDelete.clearAndFree();
+        AssetM._AssetIDToHandleDelete.clearAndFree();
 
-    iter = AssetM._AssetPathToIDDelete.iterator();
-    while (iter.next()) |entry| {
-        AssetM._AssetGPA.allocator().free(entry.key_ptr.*);
+        AssetM._AssetGPA.allocator().free(AssetM._ProjectDirectory);
     }
-    AssetM._AssetPathToIDDelete.clearAndFree();
-    AssetM._AssetIDToHandleDelete.clearAndFree();
-    AssetM._ProjectDirectory = path;
+
+    AssetM._ProjectDirectory = try AssetM._AssetGPA.allocator().dupe(u8, path);
 }
 
 pub fn OnUpdate() !void {

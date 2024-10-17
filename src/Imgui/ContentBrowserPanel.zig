@@ -112,6 +112,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
         }
         if (icon_ptr) |texture| {
             var texture_id = texture.GetID();
+            texture.Bind(0);
             imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1 });
             _ = imgui.igImageButton(
                 entry.name.ptr,
