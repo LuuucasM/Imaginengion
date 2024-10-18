@@ -71,7 +71,7 @@ pub fn build(b: *std.Build) void {
                 },
             };
         },
-        else => @compileError("Do not support the OS given !"),
+        else => @compileError("Do not support the OS given !\n"),
     };
     lib.addCSourceFiles(options);
     lib.linkSystemLibrary("c");

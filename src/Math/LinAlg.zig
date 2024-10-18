@@ -86,8 +86,7 @@ pub fn PerspectiveRHNO(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
 }
 
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
-    const q_pow = @reduce(.Add, q * q);
-    const len = @sqrt(q_pow);
+    const len = @sqrt(@reduce(.Add, q * q));
     if (len != 1 and len != 0) {
         return q / @as(Quatf32, @splat(len));
     }
@@ -379,6 +378,8 @@ test QuatNormalize {
     while (i < 4) : (i += 1) {
         try std.testing.expect(math.approxEqAbs(f32, result1[i], ans1[i], diff));
     }
+
+    try std.testing.expect(quat1[0] == 0.9238);
 
     i = 0;
     while (i < 4) : (i += 1) {

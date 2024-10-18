@@ -145,19 +145,19 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_OpenProjectEvent => |*e| {
                 //34 for the filter, and 260 for max path size
-                var buffer: [260+34]u8 = undefined;
+                var buffer: [260]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-                const original = "Imagine Project (*.imprj)*.imprj";
-                const mid_insert_pos = 25;
+                //const original = "Imagine Project (*.imprj)*.imprj";
+                //const mid_insert_pos = 25;
 
-                var filter = try fba.allocator().alloc(u8, 34);
-                std.mem.copyForwards(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
-                filter[mid_insert_pos] = 0;
-                std.mem.copyForwards(u8, filter[mid_insert_pos + 1 ..], original[mid_insert_pos..]);
-                filter[filter.len - 1] = 0;
+                //var filter = try fba.allocator().alloc(u8, 34);
+                //@memCopy(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
+                //filter[mid_insert_pos] = 0;
+                //std.mem.copyForwards(u8, filter[mid_insert_pos + 1 ..], original[mid_insert_pos..]);
+                //filter[filter.len - 1] = 0;
 
-                const path = try PlatformUtils.OpenFile(fba.allocator(), filter);
+                const path = try PlatformUtils.OpenFile(fba.allocator(), "imprj");
                 e._Path = path;
 
                 try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e._Path).?);

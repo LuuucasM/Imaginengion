@@ -20,6 +20,4 @@ pub fn Add(exe: *Compile) void {
     exe.addIncludePath(.{ .path = "src/Vendor/imgui/imgui/" });
     exe.addLibraryPath(.{ .path = "src/Vendor/imgui/zig-out/lib/" });
     exe.linkSystemLibrary("imgui");
-    exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("c++");
 }

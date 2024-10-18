@@ -101,6 +101,6 @@ pub fn NewScene(self: EditorSceneManager, layer_type: LayerType) void {
     }
     self.mActiveScene = SceneLayer.Init(ECSGPA.allocator(), layer_type);
 }
-pub fn SaveAsScene() void {}
+pub fn LoadScene() void{}
 pub fn SaveScene() void {}
-//pub fn LoadScene() void{}
+pub fn SaveAsScene() void {}

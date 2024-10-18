@@ -4,6 +4,7 @@ const buildglfw = @import("src/Vendor/GLFW/buildglfw.zig");
 const buildglad = @import("src/Vendor/Glad/buildglad.zig");
 const buildimgui = @import("src/Vendor/imgui/buildimgui.zig");
 const buildstb = @import("src/Vendor/stb/buildstb.zig");
+const buildnativefiledialog = @import("src/Vendor/nativefiledialog/buildnativefiledialog.zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -25,6 +26,7 @@ pub fn build(b: *std.Build) void {
     buildglad.Add(exe);
     buildimgui.Add(exe);
     buildstb.Add(exe);
+    buildnativefiledialog.Add(exe);
 
     //--------------SYSTEM LIBRARIES-----------
     exe.linkSystemLibrary("c");
@@ -32,6 +34,8 @@ pub fn build(b: *std.Build) void {
 
     if (builtin.os.tag == .windows) {
         exe.linkSystemLibrary("comdlg32");
+        exe.linkSystemLibrary("gdi32");
+        exe.linkSystemLibrary("ole32");
     }
 
     b.installArtifact(exe);

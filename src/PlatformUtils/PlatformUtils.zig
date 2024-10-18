@@ -1,20 +1,66 @@
 const std = @import("std");
-const builtin = @import("builtin");
+const nfd = @import("../Core/CImports.zig").nfd;
 const PlatformUtils = @This();
 
-const Impl = switch (builtin.os.tag) {
-    .windows => @import("WindowsPlatformUtils.zig"),
-    else => @import("UnsupportedPlatformUtils.zig"),
-};
-
 pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
-    return Impl.OpenFolder(allocator);
+    var outPath: [*c]nfd.nfdchar_t = undefined;
+
+    const folder_result = nfd.NDF_PickFolder(null, &outPath);
+
+    if (folder_result != nfd.NFD_OKAY){
+        if (folder_result == nfd.NFD_ERROR){
+            std.log.err("NFD Error: {s}\n", .{nfd.NFD_GetError()});
+        }
+        return "";
+    }
+
+    defer nfd.free(outPath);
+
+    const len = std.mem.len(outPath);
+    const path_result = try allocator.alloc(u8, len);
+
+    @memcpy(path_result, outPath[0..len]);
+    return path_result;
 }
 
-pub fn OpenFile(allocator: std.mem.Allocator, filter: []const u8) ![]const u8 {
-    return Impl.OpenFile(allocator, filter);
+pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
+    var outPath: [*c]nfd.nfdchar_t = undefined;
+
+    const folder_result = nfd.NFD_OpenDialog(filter, null, &outPath);
+
+    if (folder_result != nfd.NFD_OKAY){
+        if (folder_result == nfd.NFD_ERROR){
+            std.log.err("NFD Error: {s}\n", .{nfd.NFD_GetError()});
+        }
+        return "";
+    }
+
+    defer nfd.free(outPath);
+
+    const len = std.mem.len(outPath);
+    const path_result = try allocator.alloc(u8, len);
+
+    @memcpy(path_result, outPath[0..len]);
+    return path_result;
 }
 
-pub fn SaveFile(filter: []const u8) []const u8 {
-    return Impl.SaveFile(filter);
+pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
+    var outPath: [*c]nfd.nfdchar_t = undefined;
+
+    const folder_result = nfd.NFD_OpenDialog(filter, null, &outPath);
+
+    if (folder_result != nfd.NFD_OKAY){
+        if (folder_result == nfd.NFD_ERROR){
+            std.log.err("NFD Error: {s}\n", .{nfd.NFD_GetError()});
+        }
+        return "";
+    }
+
+    defer nfd.free(outPath);
+
+    const len = std.mem.len(outPath);
+    const path_result = try allocator.alloc(u8, len);
+
+    @memcpy(path_result, outPath[0..len]);
+    return path_result;
 }

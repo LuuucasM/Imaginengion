@@ -28,3 +28,8 @@ pub const nativeos = switch (builtin.os.tag) {
 pub const stb = @cImport({
     @cInclude("stb_image.h");
 });
+
+pub const nfd = @cImport({
+    @cInclude("stdlib.h");
+    @cInclude("nfd.h");
+});

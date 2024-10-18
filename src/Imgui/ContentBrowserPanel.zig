@@ -85,7 +85,7 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
 fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     if (std.mem.eql(u8, self._CurrentDirectory, self._ProjectDirectory) == true) return;
 
-    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton("back", @constCast(@ptrCast(&self._BackArrowTexture.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
     imgui.igPopStyleColor(1);
 
@@ -113,15 +113,15 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
         if (icon_ptr) |texture| {
             var texture_id = texture.GetID();
             texture.Bind(0);
-            imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1 });
+            imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1.0 });
             _ = imgui.igImageButtonEx(
                 texture_id,
                 @ptrCast(&texture_id),
                 .{ .x = thumbnail_size, .y = thumbnail_size },
-                .{ .x = 0, .y = 1 },
-                .{ .x = 1, .y = 0 },
-                .{ .x = 0, .y = 0, .z = 0, .w = 0 },
-                .{ .x = 1, .y = 1, .z = 1, .w = 1 },
+                .{ .x = 0.0, .y = 0.0 },
+                .{ .x = 1.0, .y = 1.0 },
+                .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0},
+                .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
                 0,
             );
             imgui.igPopStyleColor(1);
