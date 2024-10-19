@@ -75,7 +75,13 @@ pub fn ComponentArray(comptime componentType: type) type {
     return struct {
         const Self = @This();
 
-        _Components: SparseSet(.{ .SparseT = u32, .DenseT = u32, .ValueT = componentType, .value_layout = .InternalArrayOfStructs, .allow_resize = .ResizeAllowed }),
+        _Components: SparseSet(.{
+            .SparseT = u32,
+            .DenseT = u32,
+            .ValueT = componentType,
+            .value_layout = .InternalArrayOfStructs,
+            .allow_resize = .ResizeAllowed,
+        }),
 
         pub fn Init(allocator: std.mem.Allocator) !Self {
             return .{

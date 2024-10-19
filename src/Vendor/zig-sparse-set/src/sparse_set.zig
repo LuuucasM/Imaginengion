@@ -104,7 +104,8 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
         ) !Self {
             // Could be <= but I'm not sure why'd you use a sparse_set if you don't have more sparse
             // indices than dense...
-            assert(capacity_dense < capacity_sparse);
+            // I know why
+            assert(capacity_dense <= capacity_sparse);
 
             const dense_to_sparse = try allocator.alloc(SparseT, @intCast(capacity_dense));
             errdefer allocator.free(dense_to_sparse);
@@ -198,6 +199,10 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
                         self.values = self.allocator.realloc(self.values, @intCast(self.capacity_dense)) catch unreachable;
                     }
                 }
+                while (sparse >= self.sparse_to_dense.len) {
+                    self.capacity_sparse = self.capacity_sparse * 2;
+                    self.sparse_to_dense = self.allocator.realloc(self.sparse_to_dense, @intCast(self.capacity_sparse)) catch unreachable;
+                }
             }
 
             assert(sparse < self.capacity_sparse);
@@ -231,6 +236,10 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
                     if (value_layout == .InternalArrayOfStructs) {
                         self.values = try self.allocator.realloc(self.values, self.capacity_dense);
                     }
+                    while (sparse >= self.sparse_to_dense.len) {
+                        const new_cap = self.sparse_to_dense.len * 2;
+                        self.sparse_to_dense = self.allocator.realloc(self.sparse_to_dense, @intCast(new_cap)) catch unreachable;
+                    }
                 } else {
                     return error.OutOfBounds;
                 }
@@ -255,6 +264,10 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
                             if (value_layout == .InternalArrayOfStructs) {
                                 self.values = self.allocator.realloc(self.values, self.capacity_dense) catch unreachable;
                             }
+                        }
+                        while (sparse >= self.sparse_to_dense.len) {
+                            self.capacity_sparse = self.capacity_sparse * 2;
+                            self.sparse_to_dense = self.allocator.realloc(self.sparse_to_dense, @intCast(self.capacity_sparse)) catch unreachable;
                         }
                     }
 
@@ -356,6 +369,20 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             }
 
             self.remove(sparse);
+        }
+
+        pub fn orderedRemove(self: *Self, sparse: SparseT) void {
+            const start = self.getBySparse(sparse);
+            const after_range = start + 1;
+            //remove value
+            std.mem.copyForwards(ValueT, self.values[after_range - 1 ..], self.values[after_range..]);
+            //remove dense
+            std.mem.copyForwards(SparseT, self.dense_to_sparse[after_range - 1 ..], self.dense_to_sparse[after_range..]);
+            //starting from dense at i (sparselist[sprase])
+            for (self.dense_to_sparse[start .. self.dense_count - 1]) |sparse_id| {
+                self.sparse_to_dense[sparse_id] -= 1;
+            }
+            self.dense_count -= 1;
         }
 
         /// Returns true if the sparse is registered to a dense index.
@@ -478,4 +505,49 @@ test "docs" {
     try std.testing.expectEqual(@as(DocValueT, 10), (try ss.getValueBySparseOrError(ent1)).*);
     try std.testing.expectEqual(@as(Entity, ent1), try ss.getByDenseOrError(0));
     try std.testing.expectEqual(@as(DocValueT, 10), (try ss.getValueByDenseOrError(0)).*);
+}
+
+test "orderedRemove" {
+    const Entity = u32;
+    const DenseT = u8;
+    const DocValueT = i32;
+    const DocsSparseSet = SparseSet(.{
+        .SparseT = Entity,
+        .DenseT = DenseT,
+        .ValueT = DocValueT,
+        .allow_resize = .ResizeAllowed,
+        .value_layout = .InternalArrayOfStructs,
+    });
+
+    var ss = DocsSparseSet.init(std.testing.allocator, 4, 4) catch unreachable;
+    defer ss.deinit();
+    std.debug.print("dense to sparse len: {}\n", .{ss.dense_to_sparse.len});
+    std.debug.print("sparse to dense len: {}\n", .{ss.sparse_to_dense.len});
+    std.debug.print("values len: {}\n", .{ss.values.len});
+    const ent1: Entity = 1;
+    const ent2: Entity = 2;
+    const ent3: Entity = 3;
+    const ent4: Entity = 4;
+    const ent5: Entity = 5;
+
+    _ = ss.addValue(ent1, 10);
+    _ = ss.addValue(ent2, 20);
+    _ = ss.addValue(ent3, 30);
+    _ = ss.addValue(ent4, 40);
+    _ = ss.addValue(ent5, 50);
+
+    ss.orderedRemove(ent3);
+    try std.testing.expect(ss.dense_count == 4);
+    try std.testing.expect(ss.dense_to_sparse[2] == 4);
+    try std.testing.expect(ss.values[2] == 40);
+
+    ss.orderedRemove(ent5);
+    try std.testing.expect(ss.dense_count == 3);
+    try std.testing.expect(ss.dense_to_sparse[2] == 4);
+    try std.testing.expect(ss.values[2] == 40);
+
+    ss.orderedRemove(ent1);
+    try std.testing.expect(ss.dense_count == 2);
+    try std.testing.expect(ss.dense_to_sparse[1] == 4);
+    try std.testing.expect(ss.values[1] == 40);
 }

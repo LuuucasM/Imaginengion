@@ -8,8 +8,8 @@ const Set = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").Arra
 //.oscl
 
 mUUID: u128,
-mName: ?[]const u8,
-mPath: ?[]const u8,
+mName: ?std.ArrayList(u8),
+mPath: ?std.ArrayList(u8),
 mLayerType: LayerType,
 mEntities: Set(u32),
 

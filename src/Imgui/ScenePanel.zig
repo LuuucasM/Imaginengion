@@ -1,10 +1,14 @@
-const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
+const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const SceneLayer = @import("../Scene/SceneLayer.zig");
+const Entity = @import("../ECS/Entity.zig");
 const ScenePanel = @This();
 
 _P_Open: bool,
-//HoveredEntity
+mSelectedScene: SceneLayer,
+mSelectedEntity: Entity,
+mSceneStackRef: *const std.ArrayList(SceneLayer),
 
 pub fn Init() ScenePanel {
     return ScenePanel{

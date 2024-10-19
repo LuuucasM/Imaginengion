@@ -112,15 +112,15 @@ pub fn RemoveScene(self: *SceneManager, scene_id: u128) !void {
     var i: usize = self.mSceneStack.items.len - 1;
     while (iter.nextPtr()) |scene_layer| {
         if (scene_layer.mUUID == scene_id) {
-            if (scene_layer.mName != null) {
+            if (scene_layer.mPath != null) {
                 try self.SaveScene(scene_id);
             } else {
                 try self.SaveAsScene(scene_id);
             }
-            if (scene_layer.mName != null) {
-                SceneManagerGPA.allocator().free(scene_layer.mName.?);
+            if (scene_layer.mPath != null) {
                 SceneManagerGPA.allocator().free(scene_layer.mPath.?);
             }
+            SceneManagerGPA.allocator().free(scene_layer.mName.?);
             scene_layer.Deinit();
             _ = self.mSceneStack.orderedRemove(i);
             return;
@@ -140,7 +140,11 @@ pub fn LoadScene(self: SceneManager) void {
 pub fn SaveScene(self: *SceneManager, scene_id: u128) !void {
     for (self.mSceneStack.items) |scene_layer| {
         if (scene_layer.mUUID == scene_id) {
-            try SceneSerializer.SerializeText(scene_layer, self);
+            if (scene_layer.mPath == null) {
+                self.SaveAsScene(scene_id);
+            } else {
+                try SceneSerializer.SerializeText(scene_layer, self);
+            }
             return;
         }
     }
