@@ -84,6 +84,19 @@ pub fn GetComponent(self: ComponentManager, comptime ComponentType: type, entity
     return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).GetComponent(entityID);
 }
 
+pub fn Stringify(self: ComponentManager, out: *std.ArrayList(u8), entityID: u32) !void {
+    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
+    const entity_skipfield = self._EntitySkipField.getValueBySparse(entityID);
+
+    var i: usize = entity_skipfield.mSkipField[0];
+    while (i < entity_skipfield.mSkipField.len) {
+        try self._ComponentsArrays.items[i].Stringify(out, entityID);
+
+        i += 1;
+        i += entity_skipfield.mSkipField[i];
+    }
+}
+
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
     std.debug.assert(!self._EntitySkipField.hasSparse(entityID));
     const dense_ind = self._EntitySkipField.add(entityID);

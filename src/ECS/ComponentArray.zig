@@ -9,6 +9,7 @@ pub const IComponentArray = struct {
         DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
         HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
+        Stringify: *const fn (*anyopaque, *std.ArrayList(u8), u32) anyerror!void,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
@@ -36,6 +37,10 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.RemoveComponent(entityID);
             }
+            fn Stringify(ptr: *anyopaque, out: *std.ArrayList(u8), entityID: u32) anyerror!void {
+                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+                try self.Stringify(out, entityID);
+            }
         };
         return IComponentArray{
             .ptr = obj,
@@ -44,6 +49,7 @@ pub const IComponentArray = struct {
                 .DuplicateEntity = impl.DuplicateEntity,
                 .HasComponent = impl.HasComponent,
                 .RemoveComponent = impl.RemoveComponent,
+                .Stringify = impl.Stringify,
             },
         };
     }
@@ -59,6 +65,9 @@ pub const IComponentArray = struct {
     }
     pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
         return self.vtable.HasComponent(self.ptr, entityID);
+    }
+    pub fn Stringify(self: IComponentArray, out: *std.ArrayList(u8), entityID: u32) anyerror!void {
+        try self.vtable.Stringify(self.ptr, out, entityID);
     }
 };
 
@@ -102,6 +111,19 @@ pub fn ComponentArray(comptime componentType: type) type {
         }
         pub fn GetComponent(self: Self, entityID: u32) *componentType {
             return self._Components.getValueBySparse(entityID);
+        }
+        pub fn Stringify(self: Self, out: *std.ArrayList(u8), entityID: u32) !void {
+            var write_stream = std.json.writeStream(out.writer(), .{ .whitespace = .indent_2 });
+            const component = self.GetComponent(entityID).*;
+
+            var buffer: [260]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+            var component_string = std.ArrayList(u8).init(fba.allocator());
+
+            try std.json.stringify(component, .{}, component_string.writer());
+            try write_stream.objectField(@typeName(componentType));
+            try write_stream.write(component_string.items);
         }
     };
 }

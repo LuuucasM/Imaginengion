@@ -5,8 +5,8 @@ pub const SceneIDComponent = @import("Components/SceneIDComponent.zig");
 pub const TransformComponent = @import("Components/TransformComponent.zig");
 
 pub const ComponentsList = [_]type{
-    IDComponent,
     NameComponent,
+    IDComponent,
     Render2DComponent,
     SceneIDComponent,
     TransformComponent,

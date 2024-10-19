@@ -53,10 +53,28 @@ pub fn OnImguiRender() !void {
         defer imgui.igEndMenuBar();
         if (imgui.igBeginMenu("File", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("New Scene", "Ctrl+N", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Open Scene", "Ctrl+O", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Scene", "Ctrl+S", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Scene As...", "Ctrl+Shift+S", false, true) == true) {}
+            if (imgui.igBeginMenu("New Scene", true) == true){
+                defer imgui.igEndMenu();
+                if (imgui.igMenuItem_Bool("New Game Scene", "", false, true) == true) {
+                    const new_event = ImguiEvent{
+                        .ET_NewSceneEvent = .{
+                            .mLayerType = .GameLayer,
+                        },
+                    };
+                    try ImguiManager.InsertEvent(new_event);
+                }
+                if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true){
+                    const new_event = ImguiEvent{
+                        .ET_NewSceneEvent = .{
+                            .mLayerType = .OverlayLayer,
+                        },
+                    };
+                    try ImguiManager.InsertEvent(new_event);
+                }
+            }
+            if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene", "", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {}
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const new_event = ImguiEvent{

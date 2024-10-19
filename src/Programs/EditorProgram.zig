@@ -18,7 +18,7 @@ const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
-const EditorSceneManager = @import("../Scene/EditorSceneManager.zig");
+const EditorSceneManager = @import("../Scene/SceneManager.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -29,7 +29,7 @@ _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
-mEditorSceneManager: EditorSceneManager,
+mSceneManager: EditorSceneManager,
 //_EditorCamera
 
 const EditorProgram = @This();
@@ -47,13 +47,13 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
-        .mEditorSceneManager = try EditorSceneManager.Init(1600, 900),
+        .mSceneManager = try EditorSceneManager.Init(1600, 900),
     };
 }
 
-pub fn Deinit(self: *EditorProgram) void {
+pub fn Deinit(self: *EditorProgram) !void {
     self._ContentBrowserPanel.Deinit();
-    self.mEditorSceneManager.Deinit();
+    try self.mSceneManager.Deinit();
     ImGui.Deinit();
 }
 
@@ -148,20 +148,15 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 var buffer: [260]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-                //const original = "Imagine Project (*.imprj)*.imprj";
-                //const mid_insert_pos = 25;
-
-                //var filter = try fba.allocator().alloc(u8, 34);
-                //@memCopy(u8, filter[0..mid_insert_pos], original[0..mid_insert_pos]);
-                //filter[mid_insert_pos] = 0;
-                //std.mem.copyForwards(u8, filter[mid_insert_pos + 1 ..], original[mid_insert_pos..]);
-                //filter[filter.len - 1] = 0;
-
                 const path = try PlatformUtils.OpenFile(fba.allocator(), "imprj");
                 e._Path = path;
 
                 try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e._Path).?);
                 try self._ContentBrowserPanel.OnImguiEvent(event);
+            },
+            .ET_NewSceneEvent => |e| {
+                try self.mSceneManager.NewScene(e.mLayerType);
+                //
             },
             else => @panic("This event has not been handled by editor program!\n"),
         }

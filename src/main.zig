@@ -9,6 +9,6 @@ pub fn main() !void {
     std.log.info("Running Application", .{});
     try Application.Run();
     std.log.info("Deinitializing Application", .{});
-    Application.Deinit();
+    try Application.Deinit();
     std.log.info("Exiting main", .{});
 }

@@ -69,6 +69,10 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
     return self._ComponentManager.GetComponent(ComponentType, entityID);
 }
 
+pub fn Stringify(self: ECSManager, out: *std.ArrayList(u8), entityID: u32) !void {
+    try self._ComponentManager.Stringify(out, entityID);
+}
+
 //-----------System Manager------------
 pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) void {
     try self._SystemManager.SystemOnUpdate(SystemType);

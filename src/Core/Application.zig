@@ -31,8 +31,8 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     try ThreadPool.init(EngineAllocator);
 }
 
-pub fn Deinit() void {
-    ApplicationManager._Program.Deinit();
+pub fn Deinit() !void {
+    try ApplicationManager._Program.Deinit();
     ApplicationManager._Window.Deinit();
     AssetManager.Deinit();
     EventManager.Deinit();

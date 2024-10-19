@@ -13,8 +13,8 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !Program {
     };
 }
 
-pub fn Deinit(self: *Program) void {
-    self._Impl.Deinit();
+pub fn Deinit(self: *Program) !void {
+    try self._Impl.Deinit();
     Renderer.Deinit();
 }
 

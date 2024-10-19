@@ -1,16 +1,16 @@
 const UnsupportedProgram = @This();
 
-pub fn Init(self: UnsupportedProgram) void {
+pub fn Init(self: UnsupportedProgram) !void {
     _ = self;
     Unsupported();
 }
 
-pub fn Deinit(self: UnsupportedProgram) void {
+pub fn Deinit(self: UnsupportedProgram) !void {
     _ = self;
     Unsupported();
 }
 
-pub fn OnUpdate(self: UnsupportedProgram, dt: f64) void {
+pub fn OnUpdate(self: UnsupportedProgram, dt: f64) !void {
     _ = self;
     _ = dt;
     Unsupported();

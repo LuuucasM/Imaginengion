@@ -7,15 +7,17 @@ const Set = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").Arra
 //.gscl
 //.oscl
 
-mUUID: u64,
-mName: [24]u8,
+mUUID: u128,
+mName: ?[]const u8,
+mPath: ?[]const u8,
 mLayerType: LayerType,
 mEntities: Set(u32),
 
-pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType) SceneLayer {
+pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType) !SceneLayer {
     return SceneLayer{
-        .mUUID = GenUUID(),
-        .mName = std.mem.zeroes([24]u8),
+        .mUUID = try GenUUID(),
+        .mName = null,
+        .mPath = null,
         .mLayerType = layer_type,
         .mEntities = Set(u32).init(ECSAllocator),
     };
