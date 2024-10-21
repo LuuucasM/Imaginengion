@@ -273,9 +273,9 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
 
                     assert(sparse < self.capacity_sparse);
                     assert(self.dense_count < self.capacity_dense);
-                    assert(!self.hasSparse(sparse));
+                    assert(!self.hasSparse(@intCast(sparse)));
                     self.dense_to_sparse[self.dense_count] = sparse;
-                    self.sparse_to_dense[sparse] = @intCast(self.dense_count);
+                    self.sparse_to_dense[@intCast(sparse)] = @intCast(self.dense_count);
                     self.values[self.dense_count] = value;
                     self.dense_count += 1;
                     return @intCast(self.dense_count - 1);
@@ -380,7 +380,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             std.mem.copyForwards(SparseT, self.dense_to_sparse[after_range - 1 ..], self.dense_to_sparse[after_range..]);
             //starting from dense at i (sparselist[sprase])
             for (self.dense_to_sparse[start .. self.dense_count - 1]) |sparse_id| {
-                self.sparse_to_dense[sparse_id] -= 1;
+                self.sparse_to_dense[@intCast(sparse_id)] -= 1;
             }
             self.dense_count -= 1;
         }
@@ -391,7 +391,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             // Related: https://github.com/ziglang/zig/issues/978
             // @setRuntimeSafety(false);
             assert(sparse < self.capacity_sparse);
-            const dense = self.sparse_to_dense[sparse];
+            const dense = self.sparse_to_dense[@intCast(sparse)];
             return dense < self.dense_count and self.dense_to_sparse[dense] == sparse;
         }
 
@@ -406,8 +406,8 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
 
         /// Returns corresponding dense index.
         pub fn getBySparse(self: Self, sparse: SparseT) DenseT {
-            assert(self.hasSparse(sparse));
-            return self.sparse_to_dense[sparse];
+            assert(self.hasSparse(@intCast(sparse)));
+            return self.sparse_to_dense[@intCast(sparse)];
         }
 
         /// Tries hasSparseOrError, then returns getBySparse.
@@ -439,7 +439,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
                 /// Returns a pointer to the SOA value corresponding to the sparse parameter.
                 pub fn getValueBySparse(self: Self, sparse: SparseT) *ValueT {
                     assert(self.hasSparse(sparse));
-                    const dense = self.sparse_to_dense[sparse];
+                    const dense = self.sparse_to_dense[@intCast(sparse)];
                     return &self.values[dense];
                 }
 

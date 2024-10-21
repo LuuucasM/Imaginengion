@@ -5,20 +5,22 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../ECS/Entity.zig");
 const ScenePanel = @This();
 
-_P_Open: bool,
-mSelectedScene: SceneLayer,
-mSelectedEntity: Entity,
-mSceneStackRef: *const std.ArrayList(SceneLayer),
+mIsVisible: bool,
+mSelectedScene: ?SceneLayer,
+mSelectedEntity: ?Entity,
+//mSceneStackRef: *const std.ArrayList(SceneLayer),
 
 pub fn Init() ScenePanel {
     return ScenePanel{
-        ._P_Open = true,
+        .mIsVisible = true,
+        .mSelectedScene = null,
+        .mSelectedEntity = null,
     };
 }
 
 pub fn OnImguiRender(self: ScenePanel) void {
-    if (self._P_Open == false) return;
-    _ = imgui.igBegin("Scene", null, 0);
+    if (self.mIsVisible == false) return;
+    _ = imgui.igBegin("Scenes", null, 0);
     defer imgui.igEnd();
 }
 pub fn OnImguiEvent(self: *ScenePanel, event: *ImguiEvent) void {
@@ -29,5 +31,5 @@ pub fn OnImguiEvent(self: *ScenePanel, event: *ImguiEvent) void {
 }
 
 fn OnTogglePanelEvent(self: *ScenePanel) void {
-    self._P_Open = !self._P_Open;
+    self.mIsVisible = !self.mIsVisible;
 }

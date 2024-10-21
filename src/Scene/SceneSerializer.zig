@@ -17,7 +17,7 @@ pub fn SerializeText(scene_layer: SceneLayer, scene_manager: *SceneManager) !voi
 
     try write_stream.beginObject();
     try write_stream.objectField("Name");
-    try write_stream.write(scene_layer.mName);
+    try write_stream.write(scene_layer.mName.items);
 
     try write_stream.objectField("UUID");
     try write_stream.write(scene_layer.mUUID);
@@ -37,7 +37,7 @@ pub fn SerializeText(scene_layer: SceneLayer, scene_manager: *SceneManager) !voi
     }
     try write_stream.endObject();
     const file = try std.fs.createFileAbsolute(
-        scene_layer.mPath.?,
+        scene_layer.mPath.items,
         .{ .read = false, .truncate = true },
     );
     defer file.close();
