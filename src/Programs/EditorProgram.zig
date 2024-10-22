@@ -37,18 +37,21 @@ const EditorProgram = @This();
 pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
     try ImGui.Init(EngineAllocator);
 
-    return EditorProgram{
+    var new_editor_program = EditorProgram{
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
         ._PropertiesPanel = PropertiesPanel.Init(),
-        ._ScenePanel = ScenePanel.Init(),
+        ._ScenePanel = undefined,
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
         .mSceneManager = try EditorSceneManager.Init(1600, 900),
     };
+    new_editor_program._ScenePanel = ScenePanel.Init(&new_editor_program.mSceneManager.mSceneStack);
+
+    return new_editor_program;
 }
 
 pub fn Deinit(self: *EditorProgram) !void {

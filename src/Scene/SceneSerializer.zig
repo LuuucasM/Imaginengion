@@ -4,7 +4,7 @@ const Entity = @import("../ECS/Entity.zig");
 const Components = @import("../ECS/Components.zig");
 const SceneManager = @import("SceneManager.zig");
 
-pub fn SerializeText(scene_layer: SceneLayer, scene_manager: *SceneManager) !void {
+pub fn SerializeText(scene_layer: *SceneLayer) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
@@ -25,10 +25,10 @@ pub fn SerializeText(scene_layer: SceneLayer, scene_manager: *SceneManager) !voi
     try write_stream.objectField("LayerType");
     try write_stream.write(scene_layer.mLayerType);
 
-    var iter = scene_layer.mEntities.iterator();
+    var iter = scene_layer.mEntityIDs.iterator();
     while (iter.next()) |entry| {
         const entity_id = entry.key_ptr.*;
-        const entity = Entity{ .mEntityID = entity_id, .mECSManager = &scene_manager.mECSManager };
+        const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer};
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();

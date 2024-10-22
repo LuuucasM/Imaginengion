@@ -13,12 +13,6 @@ const SceneSerializer = @import("SceneSerializer.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const SceneManager = @This();
 
-const Components = @import("../ECS/Components.zig");
-const IDComponent = Components.IDComponent;
-const SceneIDComponent = Components.SceneIDComponent;
-const NameComponent = Components.NameComponent;
-const TransformComponent = Components.TransformComponent;
-
 pub const ESceneState = enum {
     Stop,
     Play,
@@ -70,34 +64,24 @@ pub fn Deinit(self: *SceneManager) !void {
 
 pub fn CreateEntity(self: SceneManager, name: [24]u8, scene_id: u8) !Entity {
     std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    return self.CreateEntityWithUUID(name, GenUUID(), scene_id);
+    const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
+    return scene_layer.CreateEntity(name);
 }
 pub fn CreateEntityWithUUID(self: SceneManager, name: [24]u8, uuid: u128, scene_id: u8) !Entity {
     std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
     const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    const e = Entity{ .mEntityID = try self.mECSManager.CreateEntity(), .mLayerType = scene_layer.mLayerType, .mECSManager = &self.mECSManager };
-    _ = e.AddComponent(IDComponent, .{ .ID = uuid });
-    _ = e.AddComponent(SceneIDComponent, .{ .ID = scene_layer.mUUID, .LayerType = scene_layer.mLayerType });
-    _ = e.AddComponent(NameComponent, .{ .Name = name });
-    _ = e.AddComponent(TransformComponent, .{ .Transform = LinAlg.InitMat4CompTime(1.0) });
-
-    scene_layer.mEntities.add(e.mEntityID);
-
-    return e;
+    return scene_layer.CreateEntityWithUUID(name, uuid);
 }
 
 pub fn DestroyEntity(self: SceneManager, e: Entity, scene_id: u8) !void {
     std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
     const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    try self.mECSManager.DestroyEntity(e.mEntityID);
-    scene_layer.mEntities.remove(e.mEntityID);
+    scene_layer.DestroyEntity(e);
 }
 pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: u8) !Entity {
     std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
     const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    const new_entity = Entity{ .mEntityID = try self.mECSManager.DuplicateEntity(original_entity.mEntityID), .mECSManager = &self.mECSManager };
-    scene_layer.mEntities.add(new_entity.mEntityID);
-    return new_entity;
+    return scene_layer.DuplicateEntity(original_entity);
 }
 
 //pub fn OnRuntimeStart() void {}
@@ -117,7 +101,7 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !void {
         NextID += 1;
     }
 
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, new_id);
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, new_id, &self.mECSManager);
     _ = self.mSceneStack.addValue(new_id, new_scene);
 
     _ = try new_scene.mName.writer().write("Unsaved Scene");
@@ -145,9 +129,9 @@ pub fn LoadScene(self: SceneManager) void {
 }
 pub fn SaveScene(self: *SceneManager, scene_id: u8) !void {
     std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
+    const scene_layer = self.mSceneStack.getValueBySparse(scene_id);
     if (scene_layer.mPath.items.len != 0) {
-        try SceneSerializer.SerializeText(scene_layer, self);
+        try SceneSerializer.SerializeText(scene_layer);
     } else {
         try self.SaveSceneAs(scene_id);
     }
@@ -168,6 +152,6 @@ pub fn SaveSceneAs(self: *SceneManager, scene_id: u8) !void {
         _ = try scene_layer.mName.writer().write(scene_name);
         scene_layer.mPath.clearAndFree();
         _ = try scene_layer.mPath.writer().write(path);
-        try SceneSerializer.SerializeText(scene_layer.*, self);
+        try SceneSerializer.SerializeText(scene_layer);
     }
 }
