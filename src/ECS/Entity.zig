@@ -6,7 +6,7 @@ const NameComponent = Components.NameComponent;
 const Entity = @This();
 
 mEntityID: u32,
-mSceneLayerRef: *SceneLayer,
+mSceneLayerRef: *const SceneLayer,
 
 pub fn AddComponent(self: Entity, comptime component_type: type, component: component_type) !*component_type {
     return try self.mSceneLayerRef.mECSManagerRef.AddComponent(component_type, self.mEntityID, component);

@@ -20,11 +20,11 @@ mName: std.ArrayList(u8),
 mUUID: u128,
 mPath: std.ArrayList(u8),
 mLayerType: LayerType,
-mInternalID: u8,
+mInternalID: usize,
 mECSManagerRef: *ECSManager,
 mEntityIDs: Set(u32),
 
-pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id: u8, ecs_manager: *ECSManager) !SceneLayer {
+pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id: usize, ecs_manager: *ECSManager) !SceneLayer {
     return SceneLayer{
         .mUUID = try GenUUID(),
         .mName = std.ArrayList(u8).init(ECSAllocator),

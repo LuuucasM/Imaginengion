@@ -37,21 +37,18 @@ const EditorProgram = @This();
 pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
     try ImGui.Init(EngineAllocator);
 
-    var new_editor_program = EditorProgram{
+    return EditorProgram{
+        .mSceneManager = try EditorSceneManager.Init(1600, 900),
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
         ._PropertiesPanel = PropertiesPanel.Init(),
-        ._ScenePanel = undefined,
+        ._ScenePanel = ScenePanel.Init(),
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
-        .mSceneManager = try EditorSceneManager.Init(1600, 900),
     };
-    new_editor_program._ScenePanel = ScenePanel.Init(&new_editor_program.mSceneManager.mSceneStack);
-
-    return new_editor_program;
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -81,7 +78,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     Dockspace.Begin();
 
     try self._AssetHandlePanel.OnImguiRender();
-    self._ScenePanel.OnImguiRender();
+    try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
     try self._ContentBrowserPanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
     self._PropertiesPanel.OnImguiRender();

@@ -102,9 +102,6 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             capacity_sparse: SparseCapacityT,
             capacity_dense: DenseCapacityT,
         ) !Self {
-            // Could be <= but I'm not sure why'd you use a sparse_set if you don't have more sparse
-            // indices than dense...
-            // I know why
             assert(capacity_dense <= capacity_sparse);
 
             const dense_to_sparse = try allocator.alloc(SparseT, @intCast(capacity_dense));
@@ -378,11 +375,38 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             std.mem.copyForwards(ValueT, self.values[after_range - 1 ..], self.values[after_range..]);
             //remove dense
             std.mem.copyForwards(SparseT, self.dense_to_sparse[after_range - 1 ..], self.dense_to_sparse[after_range..]);
-            //starting from dense at i (sparselist[sprase])
+            //starting from dense at i (sparselist[sprase]) decrease sprase value by 1
             for (self.dense_to_sparse[start .. self.dense_count - 1]) |sparse_id| {
                 self.sparse_to_dense[@intCast(sparse_id)] -= 1;
             }
             self.dense_count -= 1;
+        }
+
+        pub fn move(self: *Self, sparse: SparseT, new_pos: usize) void {
+            const current_pos = self.getBySparse(sparse);
+            if (new_pos == current_pos) return;
+
+            const value = self.getValueBySparse(sparse).*;
+
+            if (new_pos < current_pos) {
+                std.mem.copyBackwards(ValueT, self.values[new_pos + 1 .. current_pos+1], self.values[new_pos .. current_pos]);
+                std.mem.copyBackwards(SparseT, self.dense_to_sparse[new_pos + 1 .. current_pos+1], self.dense_to_sparse[new_pos .. current_pos]);
+
+                for (self.dense_to_sparse[new_pos + 1 .. current_pos+1]) |sparse_id| {
+                    self.sparse_to_dense[@intCast(sparse_id)] += 1;
+                }
+
+            } else {
+                std.mem.copyForwards(ValueT, self.values[current_pos .. new_pos], self.values[current_pos + 1 .. new_pos+1]);
+                std.mem.copyForwards(SparseT, self.dense_to_sparse[current_pos .. new_pos], self.dense_to_sparse[current_pos + 1 .. new_pos+1]);
+
+                for (self.dense_to_sparse[current_pos .. new_pos]) |sparse_id| {
+                    self.sparse_to_dense[@intCast(sparse_id)] -= 1;
+                }
+            }
+            self.values[new_pos] = value;
+            self.dense_to_sparse[new_pos] = sparse;
+            self.sparse_to_dense[sparse] = @intCast(new_pos);
         }
 
         /// Returns true if the sparse is registered to a dense index.
@@ -521,9 +545,6 @@ test "orderedRemove" {
 
     var ss = DocsSparseSet.init(std.testing.allocator, 4, 4) catch unreachable;
     defer ss.deinit();
-    std.debug.print("dense to sparse len: {}\n", .{ss.dense_to_sparse.len});
-    std.debug.print("sparse to dense len: {}\n", .{ss.sparse_to_dense.len});
-    std.debug.print("values len: {}\n", .{ss.values.len});
     const ent1: Entity = 1;
     const ent2: Entity = 2;
     const ent3: Entity = 3;
@@ -550,4 +571,42 @@ test "orderedRemove" {
     try std.testing.expect(ss.dense_count == 2);
     try std.testing.expect(ss.dense_to_sparse[1] == 4);
     try std.testing.expect(ss.values[1] == 40);
+}
+
+test "move" {
+    const Entity = u32;
+    const DenseT = u8;
+    const DocValueT = i32;
+    const DocsSparseSet = SparseSet(.{
+        .SparseT = Entity,
+        .DenseT = DenseT,
+        .ValueT = DocValueT,
+        .allow_resize = .ResizeAllowed,
+        .value_layout = .InternalArrayOfStructs,
+    });
+
+    var ss = DocsSparseSet.init(std.testing.allocator, 4, 4) catch unreachable;
+    defer ss.deinit();
+    const ent1: Entity = 1;
+    const ent2: Entity = 2;
+    const ent3: Entity = 3;
+    const ent4: Entity = 4;
+    const ent5: Entity = 5;
+
+    _ = ss.addValue(ent1, 10);
+    _ = ss.addValue(ent2, 20);
+    _ = ss.addValue(ent3, 30);
+    _ = ss.addValue(ent4, 40);
+    _ = ss.addValue(ent5, 50);
+
+    ss.move(ent1, 4);
+    try std.testing.expect(ss.sparse_to_dense[ent5] == 3);
+    try std.testing.expect(ss.sparse_to_dense[ent1] == 4);
+    
+    ss.move(ent3, 1);
+    try std.testing.expect(ss.sparse_to_dense[ent3] == 1);
+
+    ss.move(ent4, 0);
+    try std.testing.expect(ss.sparse_to_dense[ent4] == 0);
+    try std.testing.expect(ss.sparse_to_dense[ent2] == 1);
 }

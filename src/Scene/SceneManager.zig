@@ -18,70 +18,49 @@ pub const ESceneState = enum {
     Play,
 };
 
-var NextID: u8 = 0;
-
 var SceneManagerGPA: std.heap.GeneralPurposeAllocator(.{}) = .{};
 
 mFrameBuffer: FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STENCIL8, 1, false),
-mSceneStack: SparseSet(.{
-    .SparseT = u128,
-    .DenseT = u8,
-    .ValueT = SceneLayer,
-    .allow_resize = .ResizeAllowed,
-    .value_layout = .InternalArrayOfStructs,
-}),
+mSceneStack: std.ArrayList(SceneLayer),
 mECSManager: ECSManager,
 mSceneState: ESceneState,
-mDeletedSceneIDs: std.ArrayList(u8),
 
 pub fn Init(width: usize, height: usize) !SceneManager {
     return SceneManager{
         .mFrameBuffer = FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STENCIL8, 1, false).Init(width, height),
-        .mSceneStack = try SparseSet(.{
-            .SparseT = u128,
-            .DenseT = u8,
-            .ValueT = SceneLayer,
-            .allow_resize = .ResizeAllowed,
-            .value_layout = .InternalArrayOfStructs,
-        }).init(SceneManagerGPA.allocator(), 16, 16),
+        .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
         .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator()),
         .mSceneState = .Stop,
-        .mDeletedSceneIDs = std.ArrayList(u8).init(SceneManagerGPA.allocator()),
     };
 }
 
 pub fn Deinit(self: *SceneManager) !void {
-    var iter = std.mem.reverseIterator(self.mSceneStack.values[0..self.mSceneStack.dense_count]);
+    var iter = std.mem.reverseIterator(self.mSceneStack.items);
     while (iter.next()) |scene_layer| {
         try self.RemoveScene(scene_layer.mInternalID);
     }
     self.mSceneStack.deinit();
     self.mFrameBuffer.Deinit();
     self.mECSManager.Deinit();
-    self.mDeletedSceneIDs.deinit();
     _ = SceneManagerGPA.deinit();
 }
 
-pub fn CreateEntity(self: SceneManager, name: [24]u8, scene_id: u8) !Entity {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    return scene_layer.CreateEntity(name);
+pub fn CreateEntity(self: SceneManager, name: [24]u8, scene_id: usize) !Entity {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    return self.mSceneStack.items[scene_id].CreateEntity(name);
 }
-pub fn CreateEntityWithUUID(self: SceneManager, name: [24]u8, uuid: u128, scene_id: u8) !Entity {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    return scene_layer.CreateEntityWithUUID(name, uuid);
+pub fn CreateEntityWithUUID(self: SceneManager, name: [24]u8, uuid: u128, scene_id: usize) !Entity {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    return self.mSceneStack.items[scene_id].CreateEntityWithUUID(name, uuid);
 }
 
-pub fn DestroyEntity(self: SceneManager, e: Entity, scene_id: u8) !void {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    scene_layer.DestroyEntity(e);
+pub fn DestroyEntity(self: SceneManager, e: Entity, scene_id: usize) !void {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    self.mSceneStack.items[scene_id].DestroyEntity(e.EntityID);
 }
-pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: u8) !Entity {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id).*;
-    return scene_layer.DuplicateEntity(original_entity);
+pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: usize) !Entity {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    return self.mSceneStack.items[scene_id].DuplicateEntity(original_entity.EntityID);
 }
 
 //pub fn OnRuntimeStart() void {}
@@ -93,30 +72,22 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: u8
 //fn OnViewportResize void {}
 
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !void {
-    var new_id: u8 = 0;
-    if (self.mDeletedSceneIDs.items.len > 0) {
-        new_id = self.mDeletedSceneIDs.pop();
-    } else {
-        new_id = NextID;
-        NextID += 1;
-    }
 
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, new_id, &self.mECSManager);
-    _ = self.mSceneStack.addValue(new_id, new_scene);
-
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, self.mSceneStack.items.len, &self.mECSManager);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
+    
+    try self.mSceneStack.append(new_scene);
 }
-pub fn RemoveScene(self: *SceneManager, scene_id: u8) !void {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id);
+pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    const scene_layer = &self.mSceneStack.items[scene_id];
     if (scene_layer.mPath.items.len == 0) {
         try self.SaveScene(scene_id);
     } else {
         try self.SaveSceneAs(scene_id);
     }
     scene_layer.Deinit();
-    self.mSceneStack.orderedRemove(scene_id);
-    try self.mDeletedSceneIDs.append(scene_id);
+    _ = self.mSceneStack.orderedRemove(scene_id);
 }
 pub fn LoadScene(self: SceneManager) void {
     _ = self;
@@ -127,18 +98,18 @@ pub fn LoadScene(self: SceneManager) void {
     //const new_scene = scene deserialize(path)
     //self.mSceneStack.append(new_scene)
 }
-pub fn SaveScene(self: *SceneManager, scene_id: u8) !void {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id);
+pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    const scene_layer = &self.mSceneStack.items[scene_id];
     if (scene_layer.mPath.items.len != 0) {
         try SceneSerializer.SerializeText(scene_layer);
     } else {
         try self.SaveSceneAs(scene_id);
     }
 }
-pub fn SaveSceneAs(self: *SceneManager, scene_id: u8) !void {
-    std.debug.assert(self.mSceneStack.hasSparse(scene_id) == true);
-    const scene_layer = self.mSceneStack.getValueBySparse(scene_id);
+pub fn SaveSceneAs(self: *SceneManager, scene_id: usize) !void {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    const scene_layer = &self.mSceneStack.items[scene_id];
 
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
