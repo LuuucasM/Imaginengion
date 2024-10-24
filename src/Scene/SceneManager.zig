@@ -71,12 +71,13 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //pub fn SetSceneName() void {}
 //fn OnViewportResize void {}
 
-pub fn NewScene(self: *SceneManager, layer_type: LayerType) !void {
-
+pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
     var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, self.mSceneStack.items.len, &self.mECSManager);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
     
     try self.mSceneStack.append(new_scene);
+
+    return new_scene.mInternalID;
 }
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
@@ -89,14 +90,22 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     scene_layer.Deinit();
     _ = self.mSceneStack.orderedRemove(scene_id);
 }
-pub fn LoadScene(self: SceneManager) void {
-    _ = self;
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const path = try PlatformUtils.OpenFile(fba.allocator(), "imsc");
-    std.debug.print("LOADING SCENE NEEDS TO BE IMPLEMENTED: {s}", .{path});
-    //const new_scene = scene deserialize(path)
-    //self.mSceneStack.append(new_scene)
+pub fn LoadScene(self: SceneManager, path: []const u8) !usize {
+    const new_scene_id = self.NewScene(.GameLayer);
+    const scene_layer = &self.mSceneStack.items[new_scene_id];
+
+    const scene_basename = std.fs.path.basename(path);
+    const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
+    const scene_name = scene_basename[0..dot_location];
+
+    scene_layer.mName.clearAndFree();
+    _ = try scene_layer.mName.writer().write(scene_name);
+    scene_layer.mPath.clearAndFree();
+    _ = try scene_layer.mPath.writer().write(path);
+
+    try SceneSerializer.DeSerializeText(scene_layer);
+
+    return new_scene_id;
 }
 pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
@@ -119,10 +128,12 @@ pub fn SaveSceneAs(self: *SceneManager, scene_id: usize) !void {
         const scene_basename = std.fs.path.basename(path);
         const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
         const scene_name = scene_basename[0..dot_location];
+
         scene_layer.mName.clearAndFree();
         _ = try scene_layer.mName.writer().write(scene_name);
         scene_layer.mPath.clearAndFree();
         _ = try scene_layer.mPath.writer().write(path);
+
         try SceneSerializer.SerializeText(scene_layer);
     }
 }

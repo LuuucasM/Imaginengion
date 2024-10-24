@@ -25,6 +25,6 @@ pub fn OnImguiEvent(self: *PropertiesPanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelEvent(self: *PropertiesPanel) void {
+pub fn OnTogglePanelEvent(self: *PropertiesPanel) void {
     self._P_Open = !self._P_Open;
 }

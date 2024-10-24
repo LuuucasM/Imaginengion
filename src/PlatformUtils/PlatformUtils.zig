@@ -26,7 +26,7 @@ pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
 pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
     var outPath: [*c]nfd.nfdchar_t = undefined;
 
-    const folder_result = nfd.NFD_OpenDialog(filter, null, &outPath);
+    const folder_result = nfd.NFD_OpenDialog(&filter[1], null, &outPath);
 
     if (folder_result != nfd.NFD_OKAY){
         if (folder_result == nfd.NFD_ERROR){
@@ -38,13 +38,10 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
     defer nfd.free(outPath);
 
     const path_len = std.mem.len(outPath);
-    const filter_len = std.mem.len(filter);
 
-    const path_result = try allocator.alloc(u8, path_len+1+filter_len);
+    const path_result = try allocator.alloc(u8, path_len);
 
     std.mem.copyForwards(u8, path_result[0..path_len], outPath[0..path_len]);
-    path_result[path_len] = '.';
-    std.mem.copyForwards(u8, path_result[path_len+1..], filter[0..filter_len]);
 
     return path_result;
 }
@@ -52,7 +49,7 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
 pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
     var outPath: [*c]nfd.nfdchar_t = undefined;
 
-    const folder_result = nfd.NFD_SaveDialog(filter, null, &outPath);
+    const folder_result = nfd.NFD_SaveDialog(&filter[1], null, &outPath);
 
     if (folder_result != nfd.NFD_OKAY){
         if (folder_result == nfd.NFD_ERROR){
@@ -66,11 +63,19 @@ pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
     const path_len = std.mem.len(outPath);
     const filter_len = std.mem.len(filter);
 
-    const path_result = try allocator.alloc(u8, path_len+1+filter_len);
+    if (std.mem.eql(u8, std.mem.span(outPath)[path_len-filter_len..], filter[0..filter_len]) == true){
+        const path_result = try allocator.alloc(u8, path_len);
 
-    std.mem.copyForwards(u8, path_result[0..path_len], outPath[0..path_len]);
-    path_result[path_len] = '.';
-    std.mem.copyForwards(u8, path_result[path_len+1..], filter[0..filter_len]);
+        std.mem.copyForwards(u8, path_result[0..path_len], outPath[0..path_len]);
 
-    return path_result;
+        return path_result;
+    }
+    else{
+        const path_result = try allocator.alloc(u8, path_len+filter_len);
+
+        std.mem.copyForwards(u8, path_result[0..path_len], outPath[0..path_len]);
+        std.mem.copyForwards(u8, path_result[path_len..], filter[0..filter_len]);
+
+        return path_result;
+    }
 }

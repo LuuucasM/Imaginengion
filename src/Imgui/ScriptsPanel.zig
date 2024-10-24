@@ -25,6 +25,6 @@ pub fn OnImguiEvent(self: *ScriptsPanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelEvent(self: *ScriptsPanel) void {
+pub fn OnTogglePanelEvent(self: *ScriptsPanel) void {
     self._P_Open = !self._P_Open;
 }

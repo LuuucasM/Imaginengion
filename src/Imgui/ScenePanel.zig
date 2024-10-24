@@ -63,6 +63,6 @@ pub fn OnImguiEvent(self: *ScenePanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelEvent(self: *ScenePanel) void {
+pub fn OnTogglePanelEvent(self: *ScenePanel) void {
     self.mIsVisible = !self.mIsVisible;
 }

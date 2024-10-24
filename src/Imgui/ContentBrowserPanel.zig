@@ -141,17 +141,17 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
     }
 }
 
-fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
+pub fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
     self.mIsVisible = !self.mIsVisible;
 }
 
-fn OnNewProjectEvent(self: *ContentBrowserPanel, event: NewProjectEvent) !void {
+pub fn OnNewProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
     if (self.mProjectDirectory.items.len != 0) {
         self.mProjectDirectory.clearAndFree();
         self.mCurrentDirectory.clearAndFree();
     }
-    _ = try self.mProjectDirectory.writer().write(event._Path);
-    _ = try self.mCurrentDirectory.writer().write(event._Path);
+    _ = try self.mProjectDirectory.writer().write(path);
+    _ = try self.mCurrentDirectory.writer().write(path);
 
     var dir = try std.fs.openDirAbsolute(self.mProjectDirectory.items, .{});
     defer dir.close();
@@ -175,12 +175,12 @@ fn OnNewProjectEvent(self: *ContentBrowserPanel, event: NewProjectEvent) !void {
     }
 }
 
-fn OnOpenProjectEvent(self: *ContentBrowserPanel, event: OpenProjectEvent) !void {
+pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
     if (self.mProjectDirectory.items.len != 0) {
         self.mProjectDirectory.clearAndFree();
         self.mCurrentDirectory.clearAndFree();
     }
-    _ = try self.mProjectDirectory.writer().write(event._Path);
-    _ = try self.mCurrentDirectory.writer().write(event._Path);
-    self.mProjectFile = try std.fs.openFileAbsolute(event._Path, .{});
+    _ = try self.mProjectDirectory.writer().write(path);
+    _ = try self.mCurrentDirectory.writer().write(path);
+    self.mProjectFile = try std.fs.openFileAbsolute(path, .{});
 }

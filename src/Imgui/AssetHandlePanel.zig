@@ -35,6 +35,6 @@ pub fn OnImguiEvent(self: *AssetHandlePanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelOpen(self: *AssetHandlePanel) void {
+pub fn OnTogglePanelEvent(self: *AssetHandlePanel) void {
     self._P_Open = !self._P_Open;
 }

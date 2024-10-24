@@ -124,41 +124,56 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
         switch (event.*) {
             .ET_TogglePanelEvent => |e| {
                 switch (e._PanelType) {
-                    .AssetHandles => self._AssetHandlePanel.OnImguiEvent(event),
-                    .Components => self._ComponentsPanel.OnImguiEvent(event),
-                    .ContentBrowser => try self._ContentBrowserPanel.OnImguiEvent(event),
-                    .Properties => self._PropertiesPanel.OnImguiEvent(event),
-                    .Scene => self._ScenePanel.OnImguiEvent(event),
-                    .Scripts => self._ScriptsPanel.OnImguiEvent(event),
-                    .Stats => self._StatsPanel.OnImguiEvent(event),
+                    .AssetHandles => self._AssetHandlePanel.OnTogglePanelEvent(),
+                    .Components => self._ComponentsPanel.OnTogglePanelEvent(),
+                    .ContentBrowser => self._ContentBrowserPanel.OnTogglePanelEvent(),
+                    .Properties => self._PropertiesPanel.OnTogglePanelEvent(),
+                    .Scene => self._ScenePanel.OnTogglePanelEvent(),
+                    .Scripts => self._ScriptsPanel.OnTogglePanelEvent(),
+                    .Stats => self._StatsPanel.OnTogglePanelEvent(),
                     else => @panic("This event has not been handled by this type of panel yet!\n"),
                 }
             },
-            .ET_NewProjectEvent => |*e| {
+            .ET_NewProjectEvent => {
                 var buffer: [260]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const path = try PlatformUtils.OpenFolder(fba.allocator());
-                e._Path = path;
-
-                try AssetManager.UpdateProjectDirectory(e._Path);
-                try self._ContentBrowserPanel.OnImguiEvent(event);
+                if (path.len > 0){
+                    try AssetManager.UpdateProjectDirectory(path);
+                    try self._ContentBrowserPanel.OnNewProjectEvent(path);
+                }
             },
-            .ET_OpenProjectEvent => |*e| {
-                //34 for the filter, and 260 for max path size
+            .ET_OpenProjectEvent => {
                 var buffer: [260]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-                const path = try PlatformUtils.OpenFile(fba.allocator(), "imprj");
-                e._Path = path;
-
-                try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e._Path).?);
-                try self._ContentBrowserPanel.OnImguiEvent(event);
+                const path = try PlatformUtils.OpenFile(fba.allocator(), ".imprj");
+                if (path.len > 0){
+                    try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(path).?);
+                    try self._ContentBrowserPanel.OnOpenProjectEvent(path);
+                }
             },
             .ET_NewSceneEvent => |e| {
-                try self.mSceneManager.NewScene(e.mLayerType);
-                //
+                _ = try self.mSceneManager.NewScene(e.mLayerType);
             },
-            else => @panic("This event has not been handled by editor program!\n"),
+            .ET_SaveSceneEvent => {
+                //get the save path
+                //get the currently selected scene from the scene manager.
+                //if that scene has a path, call scenemanager.savescene(path)
+                //if it does not have a path call scenemanager.savesceneas(path) instead
+            },
+            .ET_SaveSceneAsEvent => {
+                //get the save path
+                //call scenemanager.savesceneas(path)
+            },
+            .ET_OpenSceneEvent => {
+                var buffer: [260]u8 = undefined;
+                var fba = std.heap.FixedBufferAllocator.init(&buffer);
+                const path = try PlatformUtils.OpenFile(fba.allocator(), ".imsc");
+                if (path.len > 0){
+                    _ = try self.mSceneManager.LoadScene(path);    
+                }
+            },
+            else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }
         it = node.next;
     }

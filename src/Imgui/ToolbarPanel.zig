@@ -37,6 +37,6 @@ pub fn OnImguiEvent(self: *ToolbarPanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelEvent(self: *ToolbarPanel) void {
+pub fn OnTogglePanelEvent(self: *ToolbarPanel) void {
     self._P_Open = !self._P_Open;
 }

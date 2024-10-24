@@ -4,6 +4,7 @@ const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const Entity = @This();
+pub const NullEntity: u32 = ~0;
 
 mEntityID: u32,
 mSceneLayerRef: *const SceneLayer,

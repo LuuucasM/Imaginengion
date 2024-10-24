@@ -24,6 +24,6 @@ pub fn OnImguiEvent(self: *ViewportPanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelEvent(self: *ViewportPanel) void {
+pub fn OnTogglePanelEvent(self: *ViewportPanel) void {
     self._P_Open = !self._P_Open;
 }

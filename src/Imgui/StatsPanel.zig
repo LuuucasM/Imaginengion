@@ -34,6 +34,6 @@ pub fn OnImguiEvent(self: *StatsPanel, event: *ImguiEvent) void {
     }
 }
 
-fn OnTogglePanelEvent(self: *StatsPanel) void {
+pub fn OnTogglePanelEvent(self: *StatsPanel) void {
     self._P_Open = !self._P_Open;
 }
