@@ -3,6 +3,7 @@ const IComponentArray = @import("ComponentArray.zig").IComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const Components = @import("Components.zig");
 const ComponentsList = Components.ComponentsList;
+const EComponents = Components.EComponents;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 
@@ -95,6 +96,13 @@ pub fn Stringify(self: ComponentManager, out: *std.ArrayList(u8), entityID: u32)
         i += 1;
         i += entity_skipfield.mSkipField[i];
     }
+}
+
+pub fn DeStringify(self: *ComponentManager, components_index: EComponents, component_string: []const u8, entityID: u32) !void {
+    std.debug.assert(@intFromEnum(components_index) < self._ComponentsArrays.items.len);
+    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
+
+    try self._ComponentsArrays.items[@intFromEnum(components_index)].DeStringify(component_string, entityID);
 }
 
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {

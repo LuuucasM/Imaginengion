@@ -74,7 +74,7 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
     var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, self.mSceneStack.items.len, &self.mECSManager);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
-    
+
     try self.mSceneStack.append(new_scene);
 
     return new_scene.mInternalID;
@@ -82,7 +82,7 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
     const scene_layer = &self.mSceneStack.items[scene_id];
-    if (scene_layer.mPath.items.len == 0) {
+    if (scene_layer.mPath.items.len != 0) {
         try self.SaveScene(scene_id);
     } else {
         try self.SaveSceneAs(scene_id);
@@ -90,8 +90,8 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     scene_layer.Deinit();
     _ = self.mSceneStack.orderedRemove(scene_id);
 }
-pub fn LoadScene(self: SceneManager, path: []const u8) !usize {
-    const new_scene_id = self.NewScene(.GameLayer);
+pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
+    const new_scene_id = try self.NewScene(.GameLayer);
     const scene_layer = &self.mSceneStack.items[new_scene_id];
 
     const scene_basename = std.fs.path.basename(path);
@@ -123,7 +123,7 @@ pub fn SaveSceneAs(self: *SceneManager, scene_id: usize) !void {
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-    const path = try PlatformUtils.SaveFile(fba.allocator(), "imsc");
+    const path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
     if (path.len > 0) {
         const scene_basename = std.fs.path.basename(path);
         const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;

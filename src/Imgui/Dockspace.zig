@@ -1,6 +1,7 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiManager = @import("Imgui.zig");
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const EventManager = @import("../Events/EventManager.zig");
 const Event = @import("../Events/Event.zig").Event;
@@ -73,8 +74,11 @@ pub fn OnImguiRender() !void {
                 }
             }
             if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {
+                const path = try PlatformUtils.OpenFile(ImguiManager.EventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
-                    .ET_OpenSceneEvent = .{},
+                    .ET_OpenSceneEvent = .{
+                        .Path = path,  
+                    },
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
@@ -82,14 +86,20 @@ pub fn OnImguiRender() !void {
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {}
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
+                const path = try PlatformUtils.OpenFolder(ImguiManager.EventAllocator());
                 const new_event = ImguiEvent{
-                    .ET_NewProjectEvent = .{}, 
+                    .ET_NewProjectEvent = .{
+                        .Path = path,
+                    }, 
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
+                const path = try PlatformUtils.OpenFile(ImguiManager.EventAllocator(), ".imprj");
                 const new_event = ImguiEvent{
-                    .ET_OpenProjectEvent = .{},
+                    .ET_OpenProjectEvent = .{
+                        .Path = path
+                    },
                 };
                 try ImguiManager.InsertEvent(new_event);
             }

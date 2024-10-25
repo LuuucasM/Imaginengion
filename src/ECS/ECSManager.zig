@@ -2,6 +2,7 @@ const std = @import("std");
 const EntityManager = @import("EntityManager.zig");
 const ComponentManager = @import("ComponentManager.zig");
 const SystemManager = @import("SystemManager.zig");
+const EComponents = @import("Components.zig").EComponents;
 const ECSManager = @This();
 
 _EntityManager: EntityManager,
@@ -71,6 +72,10 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
 
 pub fn Stringify(self: ECSManager, out: *std.ArrayList(u8), entityID: u32) !void {
     try self._ComponentManager.Stringify(out, entityID);
+}
+
+pub fn DeStringify(self: *ECSManager, component_index: EComponents, component_string: []const u8, entityID: u32) !void {
+    try self._ComponentManager.DeStringify(component_index, component_string, entityID);
 }
 
 //-----------System Manager------------

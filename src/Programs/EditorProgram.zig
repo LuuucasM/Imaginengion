@@ -3,7 +3,6 @@ const ApplicationManager = @import("../Core/Application.zig");
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
-const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -117,11 +116,8 @@ pub fn OnEvent(self: EditorProgram, event: *Event) void {
 }
 
 pub fn ProcessImguiEvents(self: *EditorProgram) !void {
-    var it = ImGui.GetFirstEvent();
-    while (it) |node| {
-        const object_bytes = @as([*]u8, @ptrCast(node)) + @sizeOf(std.SinglyLinkedList(usize).Node);
-        const event: *ImguiEvent = @ptrCast(@alignCast(object_bytes));
-        switch (event.*) {
+    for (ImGui.GetEventArray().items) |event| {
+        switch (event) {
             .ET_TogglePanelEvent => |e| {
                 switch (e._PanelType) {
                     .AssetHandles => self._AssetHandlePanel.OnTogglePanelEvent(),
@@ -134,22 +130,16 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                     else => @panic("This event has not been handled by this type of panel yet!\n"),
                 }
             },
-            .ET_NewProjectEvent => {
-                var buffer: [260]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const path = try PlatformUtils.OpenFolder(fba.allocator());
-                if (path.len > 0){
-                    try AssetManager.UpdateProjectDirectory(path);
-                    try self._ContentBrowserPanel.OnNewProjectEvent(path);
+            .ET_NewProjectEvent => |e| {
+                if (e.Path.len > 0){
+                    try AssetManager.UpdateProjectDirectory(e.Path);
+                    try self._ContentBrowserPanel.OnNewProjectEvent(e.Path);
                 }
             },
-            .ET_OpenProjectEvent => {
-                var buffer: [260]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const path = try PlatformUtils.OpenFile(fba.allocator(), ".imprj");
-                if (path.len > 0){
-                    try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(path).?);
-                    try self._ContentBrowserPanel.OnOpenProjectEvent(path);
+            .ET_OpenProjectEvent => |e| {
+                if (e.Path.len > 0){
+                    try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e.Path).?);
+                    try self._ContentBrowserPanel.OnOpenProjectEvent(e.Path);
                 }
             },
             .ET_NewSceneEvent => |e| {
@@ -165,16 +155,12 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 //get the save path
                 //call scenemanager.savesceneas(path)
             },
-            .ET_OpenSceneEvent => {
-                var buffer: [260]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const path = try PlatformUtils.OpenFile(fba.allocator(), ".imsc");
-                if (path.len > 0){
-                    _ = try self.mSceneManager.LoadScene(path);    
+            .ET_OpenSceneEvent => |e| {
+                if (e.Path.len > 0){
+                    _ = try self.mSceneManager.LoadScene(e.Path);    
                 }
             },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }
-        it = node.next;
     }
 }

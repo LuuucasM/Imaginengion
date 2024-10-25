@@ -1,5 +1,7 @@
 const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
+const LayerType = @import("../ECS/Components/SceneIDComponent.zig").ELayerType;
+const EComponents = @import("../ECS/Components.zig").EComponents;
 const Entity = @import("../ECS/Entity.zig");
 const Components = @import("../ECS/Components.zig");
 const SceneManager = @import("SceneManager.zig");
@@ -41,12 +43,12 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     defer file.close();
     try file.writeAll(out.items);
 }
-pub fn DeserializeText(scene_layer: *SceneLayer) SceneLayer {
+pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const file = try std.fs.openFileAbsolute(scene_layer.mPath);
+    const file = try std.fs.openFileAbsolute(scene_layer.mPath.items, .{});
     defer file.close();
 
     const file_size = try file.getEndPos();
@@ -58,18 +60,38 @@ pub fn DeserializeText(scene_layer: *SceneLayer) SceneLayer {
     var scanner = std.json.Scanner.initCompleteInput(allocator, buffer);
     defer scanner.deinit();
 
-    //var entity: Entity = Entity{ .mEntityID = Entity.NullEntity, .mSceneLayerRef = scene_layer };
-
     while (true) {
         const token = try scanner.next();
         switch (token) {
             .string => {
-                //check if token.string == UUID, if so scanner.next and set token.number to the uuid if scene_panel
-                //check if token.string == LayerType, if so scanner.next and set scene_panel.mPanelType according to what token.string is
-                //check if token.string == Entity, create a new entity id from the ECS manager, then set entity variable using entityid and scene_layer
-                //while true, scanner.next and manually write out a check for each component type and if it is that type then add it to the entity
-                //on object_end add the entity to the scene_panel.entityIDs and set entity variable back to the null entity then break
-                //else ignore
+                const str = token.string;
+
+                if (std.mem.eql(u8, str, "UUID") == true) {
+                    const uuid_token = try scanner.next();
+                    const uuid = try std.fmt.parseUnsigned(u128, uuid_token.number, 10);
+                    scene_layer.mUUID = uuid;
+                } else if (std.mem.eql(u8, str, "LayerType") == true) {
+                    const layer_type_token = try scanner.next();
+                    const layer_type = std.meta.stringToEnum(LayerType, layer_type_token.string).?;
+                    scene_layer.mLayerType = layer_type;
+                } else if (std.mem.eql(u8, str, "Entity") == true) {
+                    const new_entity = try scene_layer.CreateNewEntity();
+                    _ = try scanner.next(); //this is because the next scanner object will be beginObject token, and then after that we will get the object fields + data
+                    while (true) {
+                        const component_token = try scanner.next();
+                        switch (component_token) {
+                            .string => {
+                                const ecomponent_type = std.meta.stringToEnum(EComponents, component_token.string).?;
+                                const component_data_token = try scanner.next();
+                                const component_string = component_data_token.string;
+                                try new_entity.DeStringify(ecomponent_type, component_string);
+                            },
+                            .object_end => break,
+                            else => continue,
+                        }
+                    }
+                    _ = try scene_layer.mEntityIDs.add(new_entity.mEntityID);
+                }
             },
             .end_of_document => break,
             else => continue,

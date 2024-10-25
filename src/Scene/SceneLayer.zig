@@ -42,11 +42,15 @@ pub fn Deinit(self: *SceneLayer) void {
     self.mEntityIDs.deinit();
 }
 
+pub fn CreateNewEntity(self: SceneLayer) !Entity {
+    return Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = &self };
+}
+
 pub fn CreateEntity(self: SceneLayer, name: [24]u8) !Entity {
     return self.CreateEntityWithUUID(name, GenUUID());
 }
 pub fn CreateEntityWithUUID(self: SceneLayer, name: [24]u8, uuid: u128) !Entity {
-    const e = Entity{ .mEntityID = try self.mECSManager.CreateEntity(), .mSceneLayerRef = &self};
+    const e = Entity{ .mEntityID = try self.mECSManager.CreateEntity(), .mSceneLayerRef = &self };
     _ = e.AddComponent(IDComponent, .{ .ID = uuid });
     _ = e.AddComponent(SceneIDComponent, .{ .ID = self.mUUID, .LayerType = self.mLayerType });
     _ = e.AddComponent(NameComponent, .{ .Name = name });
@@ -62,7 +66,7 @@ pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
     self.mEntityIDs.remove(e.mEntityID);
 }
 pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
-    const new_entity = Entity{ .mEntityID = try self.mECSManager.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = &self};
+    const new_entity = Entity{ .mEntityID = try self.mECSManager.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = &self };
     self.mEntityIDs.add(new_entity.mEntityID);
     return new_entity;
 }

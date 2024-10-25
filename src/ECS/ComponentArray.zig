@@ -10,6 +10,7 @@ pub const IComponentArray = struct {
         HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
         Stringify: *const fn (*anyopaque, *std.ArrayList(u8), u32) anyerror!void,
+        DeStringify: *const fn (*anyopaque, []const u8, u32) anyerror!void,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
@@ -41,6 +42,10 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.Stringify(out, entityID);
             }
+            fn DeStringify(ptr: *anyopaque, component_string: []const u8, entityID: u32) anyerror!void {
+                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+                try self.DeStringify(component_string, entityID);
+            }
         };
         return IComponentArray{
             .ptr = obj,
@@ -50,6 +55,7 @@ pub const IComponentArray = struct {
                 .HasComponent = impl.HasComponent,
                 .RemoveComponent = impl.RemoveComponent,
                 .Stringify = impl.Stringify,
+                .DeStringify = impl.DeStringify,
             },
         };
     }
@@ -68,6 +74,9 @@ pub const IComponentArray = struct {
     }
     pub fn Stringify(self: IComponentArray, out: *std.ArrayList(u8), entityID: u32) anyerror!void {
         try self.vtable.Stringify(self.ptr, out, entityID);
+    }
+    pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!void {
+        try self.vtable.DeStringify(self.ptr, component_string, entityID);
     }
 };
 
@@ -130,6 +139,14 @@ pub fn ComponentArray(comptime componentType: type) type {
             try std.json.stringify(component, .{}, component_string.writer());
             try write_stream.objectField(@typeName(componentType));
             try write_stream.write(component_string.items);
+        }
+        pub fn DeStringify(self: *Self, component_string: []const u8, entityID: u32) !void {
+            var buffer: [260]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+            const new_component_parsed = try std.json.parseFromSlice(componentType, fba.allocator(), component_string, .{});
+            defer new_component_parsed.deinit();
+            _ = try self.AddComponent(entityID, new_component_parsed.value);
         }
     };
 }

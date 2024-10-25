@@ -1,6 +1,7 @@
 const std = @import("std");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Components = @import("Components.zig");
+const EComponents = Components.EComponents;
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const Entity = @This();
@@ -33,4 +34,8 @@ pub fn Duplicate(self: Entity) !Entity {
 
 pub fn Stringify(self: Entity, out: *std.ArrayList(u8)) !void {
     try self.mSceneLayerRef.mECSManagerRef.Stringify(out, self.mEntityID);
+}
+
+pub fn DeStringify(self: Entity, component_index: EComponents, component_string: []const u8) !void {
+    try self.mSceneLayerRef.mECSManagerRef.DeStringify(component_index, component_string, self.mEntityID);
 }

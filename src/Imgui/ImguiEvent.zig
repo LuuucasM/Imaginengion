@@ -27,9 +27,13 @@ pub const TogglePanelEvent = struct {
     _PanelType: PanelType,
 };
 
-pub const NewProjectEvent = struct {};
+pub const NewProjectEvent = struct {
+    Path: []const u8,
+};
 
-pub const OpenProjectEvent = struct {};
+pub const OpenProjectEvent = struct {
+    Path: []const u8,
+};
 
 pub const NewSceneEvent = struct {
     mLayerType: LayerType,
@@ -39,4 +43,6 @@ pub const SaveSceneEvent = struct{};
 
 pub const SaveSceneAsEvent = struct{};
 
-pub const OpenSceneEvent = struct{};
+pub const OpenSceneEvent = struct{
+    Path: []const u8,
+};

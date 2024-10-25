@@ -13,25 +13,28 @@ mIsVisible: bool = true,
 mDirTexture: Texture2D,
 mPngTexture: Texture2D,
 mBackArrowTexture: Texture2D,
+mSceneTexture: Texture2D,
 mProjectDirectory: std.ArrayList(u8),
 mCurrentDirectory: std.ArrayList(u8),
 mProjectFile: ?std.fs.File = null,
 var PathGPA: std.heap.GeneralPurposeAllocator(.{}) = .{};
 
 pub fn Init() !ContentBrowserPanel {
-    var buffer: [MAX_PATH_LEN * 4]u8 = undefined;
+    var buffer: [MAX_PATH_LEN * 5]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
     const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
     const dir_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/foldericon.png" });
     const png_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/pngicon.png" });
     const backarrow_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/backarrowicon.png" });
+    const scene_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8 {cwd_dir_path, "/assets/textures/sceneicon.png" });
 
     return ContentBrowserPanel{
         .mIsVisible = true,
         .mDirTexture = try Texture2D.InitPath(dir_icon_path),
         .mPngTexture = try Texture2D.InitPath(png_icon_path),
         .mBackArrowTexture = try Texture2D.InitPath(backarrow_icon_path),
+        .mSceneTexture = try Texture2D.InitPath(scene_icon_path),
         .mProjectDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mCurrentDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mProjectFile = null,
@@ -42,8 +45,9 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
     self.mDirTexture.Deinit();
     self.mPngTexture.Deinit();
     self.mBackArrowTexture.Deinit();
+    self.mSceneTexture.Deinit();
     self.mProjectDirectory.deinit();
-    self.mProjectDirectory.deinit();
+    self.mCurrentDirectory.deinit();
     if (self.mProjectFile != null) {
         self.mProjectFile.?.close();
     }
@@ -113,29 +117,48 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             icon_ptr = &self.mDirTexture;
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
             icon_ptr = &self.mPngTexture;
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true){
+            icon_ptr = &self.mSceneTexture;
         }
         if (icon_ptr) |texture| {
+
+            var name_buf: [260]u8 = undefined;
+            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+
+            _ = imgui.igPushID_Str(entry_name);
+            defer imgui.igPopID();
+
             var texture_id = texture.GetID();
             texture.Bind(0);
             imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1.0 });
-            _ = imgui.igImageButtonEx(
-                texture_id,
+            _ = imgui.igImageButton(
+                entry_name,
                 @ptrCast(&texture_id),
                 .{ .x = thumbnail_size, .y = thumbnail_size },
                 .{ .x = 0.0, .y = 0.0 },
                 .{ .x = 1.0, .y = 1.0 },
                 .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
                 .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-                0,
             );
-            imgui.igPopStyleColor(1);
+            if (entry.kind == .file and std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
+                if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
+                    defer imgui.igEndDragDropSource();
+                    var buffer: [MAX_PATH_LEN]u8 = undefined;
+                    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+                    const full_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
+                    _ = imgui.igSetDragDropPayload("SceneLayerLoad", full_path.ptr, full_path.len, 0);
 
+                    std.debug.print("Dragging file: {s}\n", .{full_path});
+                }
+            }
             if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
                 _ = try self.mCurrentDirectory.writer().write("/");
                 _ = try self.mCurrentDirectory.writer().write(entry.name);
             }
 
-            imgui.igTextWrapped(@ptrCast(entry.name));
+            imgui.igPopStyleColor(1);
+
+            imgui.igTextWrapped(@ptrCast(entry_name));
             imgui.igNextColumn();
         }
     }
@@ -180,7 +203,10 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
         self.mProjectDirectory.clearAndFree();
         self.mCurrentDirectory.clearAndFree();
     }
-    _ = try self.mProjectDirectory.writer().write(path);
-    _ = try self.mCurrentDirectory.writer().write(path);
+
+    const dir = std.fs.path.dirname(path).?;
+    _ = try self.mProjectDirectory.writer().write(dir);
+    _ = try self.mCurrentDirectory.writer().write(dir);
+
     self.mProjectFile = try std.fs.openFileAbsolute(path, .{});
 }

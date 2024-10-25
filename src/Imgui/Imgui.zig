@@ -8,14 +8,14 @@ const Imgui = @This();
 
 var ImguiManager: *Imgui = undefined;
 
-_EngineAllocator: std.mem.Allocator,
-_EventPool: std.heap.MemoryPool(ImguiEvent),
+mEngineAllocator: std.mem.Allocator,
+mEventArray: std.ArrayList(ImguiEvent) = std.ArrayList(ImguiEvent).init(std.heap.page_allocator),
+mEventAllocator: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     ImguiManager = try EngineAllocator.create(Imgui);
     ImguiManager.* = .{
-        ._EngineAllocator = EngineAllocator,
-        ._EventPool = std.heap.MemoryPool(ImguiEvent).init(std.heap.page_allocator),
+        .mEngineAllocator = EngineAllocator,
     };
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
@@ -43,8 +43,9 @@ pub fn Deinit() void {
     imgui.ImGui_ImplOpenGL3_Shutdown();
     imgui.ImGui_ImplGlfw_Shutdown();
     imgui.igDestroyContext(null);
-    ImguiManager._EventPool.deinit();
-    ImguiManager._EngineAllocator.destroy(ImguiManager);
+    ImguiManager.mEventArray.deinit();
+    ImguiManager.mEventAllocator.deinit();
+    ImguiManager.mEngineAllocator.destroy(ImguiManager);
 }
 pub fn Begin() void {
     imgui.ImGui_ImplOpenGL3_NewFrame();
@@ -69,16 +70,21 @@ pub fn End() void {
 }
 
 pub fn InsertEvent(event: ImguiEvent) !void {
-    const ptr = try ImguiManager._EventPool.create();
-    ptr.* = event;
+    try ImguiManager.mEventArray.append(event);
+    
 }
 
-pub fn GetFirstEvent() ?*std.SinglyLinkedList(usize).Node {
-    return ImguiManager._EventPool.arena.state.buffer_list.first;
+pub fn GetEventArray() *std.ArrayList(ImguiEvent) {
+    return &ImguiManager.mEventArray;
+}
+
+pub fn EventAllocator() std.mem.Allocator {
+    return ImguiManager.mEventAllocator.allocator();
 }
 
 pub fn ClearEvents() void {
-    _ = ImguiManager._EventPool.reset(.free_all);
+    ImguiManager.mEventArray.clearAndFree();
+    _ = ImguiManager.mEventAllocator.reset(.free_all);
 }
 
 fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {
