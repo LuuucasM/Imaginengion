@@ -52,15 +52,15 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             imgui.igGetItemRectMax(&max_pos);
             imgui.igGetItemRectSize(&size);
 
+            if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true){
+                self.mSelectedScene = scene_layer.mInternalID;
+            }
+
             if (scene_layer.mLayerType == .OverlayLayer){
                 imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFFEBCE87, 0.0, imgui.ImDrawFlags_None, 1.0);
             }
             else{
                 imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFF84A4C4, 0.0, imgui.ImDrawFlags_None, 1.0);
-            }
-
-            if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true){
-                self.mSelectedScene = scene_layer.mInternalID;
             }
 
             if (self.mSelectedScene == scene_layer.mInternalID) {
@@ -105,6 +105,9 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     }
                     scene_stack_ref.items[i] = payload_scene;
                     scene_stack_ref.items[i].mInternalID = i;
+                    if (payload_scene.mInternalID == self.mSelectedScene) {
+                        self.mSelectedScene = i;
+                    }
                 }
             }
 
