@@ -24,6 +24,7 @@ mFrameBuffer: FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STE
 mSceneStack: std.ArrayList(SceneLayer),
 mECSManager: ECSManager,
 mSceneState: ESceneState,
+mLayerInsertIndex: usize,
 
 pub fn Init(width: usize, height: usize) !SceneManager {
     return SceneManager{
@@ -31,6 +32,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
         .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator()),
         .mSceneState = .Stop,
+        .mLayerInsertIndex = 0,
     };
 }
 
@@ -72,10 +74,10 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //fn OnViewportResize void {}
 
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, self.mSceneStack.items.len, &self.mECSManager);
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, 9999, &self.mECSManager);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
 
-    try self.InsertScene(new_scene);
+    try self.InsertScene(&new_scene);
 
     return new_scene.mInternalID;
 }
@@ -100,7 +102,7 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
 
     try SceneSerializer.DeSerializeText(&new_scene);
 
-    try self.InsertScene(new_scene);
+    try self.InsertScene(&new_scene);
 
     return new_scene.mInternalID;
 }
@@ -133,6 +135,46 @@ pub fn SaveSceneAs(self: *SceneManager, scene_id: usize, path: []const u8) !void
     try SceneSerializer.SerializeText(scene_layer);
 }
 
-fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
-    try self.mSceneStack.append(scene_layer);
+pub fn MoveScene(self: *SceneManager, scene_id: usize, move_to_pos: usize) void {
+    const current_scene = self.mSceneStack.items[scene_id];
+    const current_pos = scene_id;
+
+    var new_pos: usize = 0;
+    if (current_scene.mLayerType == .OverlayLayer and move_to_pos < self.mLayerInsertIndex) {
+        new_pos = self.mLayerInsertIndex;
+    } else if (current_scene.mLayerType == .GameLayer and move_to_pos >= self.mLayerInsertIndex) {
+        new_pos = self.mLayerInsertIndex - 1;
+    } else {
+        new_pos = move_to_pos;
+    }
+
+    if (new_pos < current_pos) {
+        std.mem.copyBackwards(SceneLayer, self.mSceneStack.items[new_pos + 1 .. current_pos + 1], self.mSceneStack.items[new_pos..current_pos]);
+
+        for (self.mSceneStack.items[new_pos + 1 .. current_pos + 1]) |*scene_layer| {
+            scene_layer.mInternalID += 1;
+        }
+    } else {
+        std.mem.copyForwards(SceneLayer, self.mSceneStack.items[current_pos..new_pos], self.mSceneStack.items[current_pos + 1 .. new_pos + 1]);
+
+        for (self.mSceneStack.items[current_pos..new_pos]) |*scene_layer| {
+            scene_layer.mInternalID -= 1;
+        }
+    }
+    self.mSceneStack.items[new_pos] = current_scene;
+    self.mSceneStack.items[new_pos].mInternalID = new_pos;
+}
+
+fn InsertScene(self: *SceneManager, scene_layer: *SceneLayer) !void {
+    if (scene_layer.mLayerType == .OverlayLayer) {
+        scene_layer.mInternalID = self.mSceneStack.items.len;
+        try self.mSceneStack.append(scene_layer.*);
+    } else {
+        scene_layer.mInternalID = self.mLayerInsertIndex;
+        try self.mSceneStack.insert(self.mLayerInsertIndex, scene_layer.*);
+        self.mLayerInsertIndex += 1;
+        for (self.mSceneStack.items[self.mLayerInsertIndex..]) |*changed_scene_layer| {
+            changed_scene_layer.mInternalID += 1;
+        }
+    }
 }

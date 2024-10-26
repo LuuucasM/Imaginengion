@@ -162,6 +162,9 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                     _ = try self.mSceneManager.LoadScene(e.Path);    
                 }
             },
+            .ET_MoveSceneEvent => |e| {
+                self.mSceneManager.MoveScene(e.SceneID, e.NewPos);
+            },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }
     }

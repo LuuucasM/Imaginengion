@@ -19,6 +19,7 @@ pub const ImguiEvent = union(enum) {
     ET_SaveSceneEvent: SaveSceneEvent,
     ET_SaveSceneAsEvent: SaveSceneAsEvent,
     ET_OpenSceneEvent: OpenSceneEvent,
+    ET_MoveSceneEvent: MoveSceneEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -47,4 +48,9 @@ pub const SaveSceneAsEvent = struct{
 
 pub const OpenSceneEvent = struct{
     Path: []const u8,
+};
+
+pub const MoveSceneEvent = struct{
+    SceneID: usize,
+    NewPos: usize,
 };

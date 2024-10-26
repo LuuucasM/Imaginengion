@@ -79,35 +79,31 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     const payload_scene = scene_stack_ref.items[payload_internal_id];
                     const current_pos = payload_scene.mInternalID;
                     const new_pos = i;
-                    if (new_pos < current_pos) {
-                        std.mem.copyBackwards(SceneLayer, scene_stack_ref.items[new_pos + 1 .. current_pos+1], scene_stack_ref.items[new_pos .. current_pos]);
-
-                        for (scene_stack_ref.items[new_pos + 1 .. current_pos+1]) |*drag_scene_layer| {
-                            drag_scene_layer.mInternalID += 1;
-                        }
-
-                        if (self.mSelectedScene) |scene_id| {
-                            if ( new_pos <= scene_id and scene_id < current_pos){
-                                self.mSelectedScene.? += 1;
+                    if (current_pos != new_pos){
+                        const new_event = ImguiEvent{
+                            .ET_MoveSceneEvent = .{
+                                .SceneID = current_pos,
+                                .NewPos = new_pos,
+                            },
+                        };
+                        try ImguiManager.InsertEvent(new_event);
+                        if (new_pos < current_pos){
+                            if (self.mSelectedScene) |scene_id| {
+                                if ( new_pos <= scene_id and scene_id < current_pos){
+                                    self.mSelectedScene.? += 1;
+                                }
+                            }
+                        } else{
+                            if (self.mSelectedScene) |scene_id| {
+                                if ( current_pos < scene_id and scene_id <= new_pos){
+                                    self.mSelectedScene.? -= 1;
+                                }
                             }
                         }
-                    } else {
-                        std.mem.copyForwards(SceneLayer, scene_stack_ref.items[current_pos .. new_pos], scene_stack_ref.items[current_pos + 1 .. new_pos+1]);
-
-                        for (scene_stack_ref.items[current_pos .. new_pos]) |*drag_scene_layer| {
-                            drag_scene_layer.mInternalID -= 1;
+                        if (payload_internal_id == self.mSelectedScene) {
+                            self.mSelectedScene = i;
                         }
-                        if (self.mSelectedScene) |scene_id| {
-                            if ( current_pos < scene_id and scene_id <= new_pos){
-                                self.mSelectedScene.? -= 1;
-                            }
-                        }
-                    }
-                    scene_stack_ref.items[i] = payload_scene;
-                    scene_stack_ref.items[i].mInternalID = i;
-                    if (payload_scene.mInternalID == self.mSelectedScene) {
-                        self.mSelectedScene = i;
-                    }
+                    } 
                 }
             }
 
