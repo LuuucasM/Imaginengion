@@ -146,14 +146,16 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 _ = try self.mSceneManager.NewScene(e.mLayerType);
             },
             .ET_SaveSceneEvent => {
-                //get the save path
-                //get the currently selected scene from the scene manager.
-                //if that scene has a path, call scenemanager.savescene(path)
-                //if it does not have a path call scenemanager.savesceneas(path) instead
+                if (self._ScenePanel.mSelectedScene) |scene_id|{
+                    try self.mSceneManager.SaveScene(scene_id);
+                }
             },
-            .ET_SaveSceneAsEvent => {
-                //get the save path
-                //call scenemanager.savesceneas(path)
+            .ET_SaveSceneAsEvent => |e| {
+                if (self._ScenePanel.mSelectedScene) |scene_id| {
+                    if (e.Path.len > 0){
+                        try self.mSceneManager.SaveSceneAs(scene_id, e.Path);
+                    }
+                }
             },
             .ET_OpenSceneEvent => |e| {
                 if (e.Path.len > 0){

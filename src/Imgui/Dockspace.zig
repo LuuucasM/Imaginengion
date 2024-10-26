@@ -82,8 +82,21 @@ pub fn OnImguiRender() !void {
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
-            if (imgui.igMenuItem_Bool("Save Scene", "", false, true) == true) {}
-            if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {}
+            if (imgui.igMenuItem_Bool("Save Scene", "", false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_SaveSceneEvent = .{},
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
+                const path = try PlatformUtils.OpenFolder(ImguiManager.EventAllocator());
+                const new_event = ImguiEvent{
+                    .ET_SaveSceneAsEvent = .{
+                        .Path = path,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const path = try PlatformUtils.OpenFolder(ImguiManager.EventAllocator());

@@ -147,8 +147,6 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
                     var fba = std.heap.FixedBufferAllocator.init(&buffer);
                     const full_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
                     _ = imgui.igSetDragDropPayload("SceneLayerLoad", full_path.ptr, full_path.len, 0);
-
-                    std.debug.print("Dragging file: {s}\n", .{full_path});
                 }
             }
             if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {

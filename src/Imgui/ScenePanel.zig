@@ -24,100 +24,114 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
     _ = imgui.igBegin("Scenes", null, 0);
     defer imgui.igEnd();
+    
+    var available_region: imgui.ImVec2 = undefined;
+    imgui.igGetContentRegionAvail(&available_region);
 
-    if (imgui.igBeginDragDropTarget() == true){
-        defer imgui.igEndDragDropTarget();
-        if (imgui.igAcceptDragDropPayload("SceneLayerLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-            const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            const new_event = ImguiEvent{
-                .ET_OpenSceneEvent = .{
-                    .Path = try ImguiManager.EventAllocator().dupe(u8, path),
-                },
-            };
-            try ImguiManager.InsertEvent(new_event);
+    if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
+        defer imgui.igEndChild();
+        if (imgui.igBeginDragDropTarget() == true){
+            defer imgui.igEndDragDropTarget();
+            if (imgui.igAcceptDragDropPayload("SceneLayerLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+                const path_len = payload.*.DataSize;
+                const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+                const new_event = ImguiEvent{
+                    .ET_OpenSceneEvent = .{
+                        .Path = try ImguiManager.EventAllocator().dupe(u8, path),
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
         }
-    }
+        var i: usize = scene_stack_ref.items.len;
+        while (i > 0) {
+            i -= 1;
+            const scene_layer = &scene_stack_ref.items[i];
 
-    var i: usize = scene_stack_ref.items.len;
-    while (i > 0) {
-        i -= 1;
-        const scene_layer = &scene_stack_ref.items[i];
+            var name_buf: [260]u8 = undefined;
+            const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{scene_layer.mName.items});
 
-        var name_buf: [260]u8 = undefined;
-        const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{scene_layer.mName.items});
+            _ = imgui.igPushID_Str(scene_name.ptr);
+            defer imgui.igPopID();
 
-        _ = imgui.igPushID_Str(scene_name.ptr);
-        defer imgui.igPopID();
+            const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
+            const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
 
-        const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
-        const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
-
-        if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true){
-            self.mSelectedScene = scene_layer.mInternalID;
-        }
-
-        if (self.mSelectedScene == scene_layer.mInternalID) {
             const draw_list = imgui.igGetWindowDrawList();
-            var pos: imgui.ImVec2 = undefined;
+            var min_pos: imgui.ImVec2 = undefined;
+            var max_pos: imgui.ImVec2 = undefined;
             var size: imgui.ImVec2 = undefined;
-            imgui.igGetItemRectMin(&pos);
+            imgui.igGetItemRectMin(&min_pos);
+            imgui.igGetItemRectMax(&max_pos);
             imgui.igGetItemRectSize(&size);
 
-            imgui.ImDrawList_AddLine(draw_list, .{.x = pos.x, .y = pos.y+size.y}, .{.x = pos.x + size.x, .y = pos.y+size.y}, 0xFFFFFFFF, 1.0);
-        }
+            if (scene_layer.mLayerType == .GameLayer){
+                imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFFC4A484, 0.0, imgui.ImDrawFlags_None, 1.0);
+            }
+            else{
+                imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFF87ceeb, 0.0, imgui.ImDrawFlags_None, 1.0);
+            }
 
-        if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
-            defer imgui.igEndDragDropSource();
-            _ = imgui.igSetDragDropPayload("SceneLayerMove", @ptrCast(&scene_layer.mInternalID), @sizeOf(usize), imgui.ImGuiCond_Once);
-        }
+            if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true){
+                self.mSelectedScene = scene_layer.mInternalID;
+            }
 
-        if (imgui.igBeginDragDropTarget() == true) {
-            defer imgui.igEndDragDropTarget();
-            if (imgui.igAcceptDragDropPayload("SceneLayerMove", imgui.ImGuiDragDropFlags_None)) |payload| {
-                const payload_internal_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
-                const payload_scene = scene_stack_ref.items[payload_internal_id];
-                const current_pos = payload_scene.mInternalID;
-                const new_pos = i;
-                if (new_pos < current_pos) {
-                    std.mem.copyBackwards(SceneLayer, scene_stack_ref.items[new_pos + 1 .. current_pos+1], scene_stack_ref.items[new_pos .. current_pos]);
+            if (self.mSelectedScene == scene_layer.mInternalID) {
+                imgui.ImDrawList_AddLine(draw_list, .{.x = min_pos.x, .y = min_pos.y+size.y}, .{.x = min_pos.x + size.x, .y = min_pos.y+size.y}, 0xFFFFFFFF, 1.0);
+            }
 
-                    for (scene_stack_ref.items[new_pos + 1 .. current_pos+1]) |*drag_scene_layer| {
-                        drag_scene_layer.mInternalID += 1;
-                    }
+            if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
+                defer imgui.igEndDragDropSource();
+                _ = imgui.igSetDragDropPayload("SceneLayerMove", @ptrCast(&scene_layer.mInternalID), @sizeOf(usize), imgui.ImGuiCond_Once);
+            }
 
-                    if (self.mSelectedScene) |scene_id| {
-                        if ( new_pos <= scene_id and scene_id < current_pos){
-                            self.mSelectedScene.? += 1;
+            if (imgui.igBeginDragDropTarget() == true) {
+                defer imgui.igEndDragDropTarget();
+                if (imgui.igAcceptDragDropPayload("SceneLayerMove", imgui.ImGuiDragDropFlags_None)) |payload| {
+                    const payload_internal_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
+                    const payload_scene = scene_stack_ref.items[payload_internal_id];
+                    const current_pos = payload_scene.mInternalID;
+                    const new_pos = i;
+                    if (new_pos < current_pos) {
+                        std.mem.copyBackwards(SceneLayer, scene_stack_ref.items[new_pos + 1 .. current_pos+1], scene_stack_ref.items[new_pos .. current_pos]);
+
+                        for (scene_stack_ref.items[new_pos + 1 .. current_pos+1]) |*drag_scene_layer| {
+                            drag_scene_layer.mInternalID += 1;
+                        }
+
+                        if (self.mSelectedScene) |scene_id| {
+                            if ( new_pos <= scene_id and scene_id < current_pos){
+                                self.mSelectedScene.? += 1;
+                            }
+                        }
+                    } else {
+                        std.mem.copyForwards(SceneLayer, scene_stack_ref.items[current_pos .. new_pos], scene_stack_ref.items[current_pos + 1 .. new_pos+1]);
+
+                        for (scene_stack_ref.items[current_pos .. new_pos]) |*drag_scene_layer| {
+                            drag_scene_layer.mInternalID -= 1;
+                        }
+                        if (self.mSelectedScene) |scene_id| {
+                            if ( current_pos < scene_id and scene_id <= new_pos){
+                                self.mSelectedScene.? -= 1;
+                            }
                         }
                     }
-                } else {
-                    std.mem.copyForwards(SceneLayer, scene_stack_ref.items[current_pos .. new_pos], scene_stack_ref.items[current_pos + 1 .. new_pos+1]);
-
-                    for (scene_stack_ref.items[current_pos .. new_pos]) |*drag_scene_layer| {
-                        drag_scene_layer.mInternalID -= 1;
-                    }
-                    if (self.mSelectedScene) |scene_id| {
-                        if ( current_pos < scene_id and scene_id <= new_pos){
-                            self.mSelectedScene.? -= 1;
-                        }
-                    }
-                }
-                scene_stack_ref.items[i] = payload_scene;
-                scene_stack_ref.items[i].mInternalID = i;
-    }
-        }
-
-        if (is_tree_open){
-            var entity_iter = scene_layer.mEntityIDs.iterator();
-            while (entity_iter.next()) |entity_id| {
-                const entity = Entity{ .mEntityID = entity_id.key_ptr.*, .mSceneLayerRef = scene_layer };
-                const entity_name = entity.GetName();
-                if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-                    std.debug.print("clicked on entity name: {s}", .{entity_name});
+                    scene_stack_ref.items[i] = payload_scene;
+                    scene_stack_ref.items[i].mInternalID = i;
                 }
             }
-            imgui.igTreePop();
+
+            if (is_tree_open){
+                var entity_iter = scene_layer.mEntityIDs.iterator();
+                while (entity_iter.next()) |entity_id| {
+                    const entity = Entity{ .mEntityID = entity_id.key_ptr.*, .mSceneLayerRef = scene_layer };
+                    const entity_name = entity.GetName();
+                    if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+                        std.debug.print("clicked on entity name: {s}", .{entity_name});
+                    }
+                }
+                imgui.igTreePop();
+            }
         }
     }
 }

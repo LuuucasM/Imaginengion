@@ -75,24 +75,51 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
     var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, self.mSceneStack.items.len, &self.mECSManager);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
 
-    try self.mSceneStack.append(new_scene);
+    try self.InsertScene(new_scene);
 
     return new_scene.mInternalID;
 }
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
     const scene_layer = &self.mSceneStack.items[scene_id];
-    if (scene_layer.mPath.items.len != 0) {
-        try self.SaveScene(scene_id);
-    } else {
-        try self.SaveSceneAs(scene_id);
-    }
+    try self.SaveScene(scene_id);
     scene_layer.Deinit();
     _ = self.mSceneStack.orderedRemove(scene_id);
 }
 pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
-    const new_scene_id = try self.NewScene(.GameLayer);
-    const scene_layer = &self.mSceneStack.items[new_scene_id];
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), .GameLayer, self.mSceneStack.items.len, &self.mECSManager);
+
+    const scene_basename = std.fs.path.basename(path);
+    const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
+    const scene_name = scene_basename[0..dot_location];
+
+    new_scene.mName.clearAndFree();
+    _ = try new_scene.mName.writer().write(scene_name);
+    new_scene.mPath.clearAndFree();
+    _ = try new_scene.mPath.writer().write(path);
+
+    try SceneSerializer.DeSerializeText(&new_scene);
+
+    try self.InsertScene(new_scene);
+
+    return new_scene.mInternalID;
+}
+pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    const scene_layer = &self.mSceneStack.items[scene_id];
+    if (scene_layer.mPath.items.len != 0) {
+        try SceneSerializer.SerializeText(scene_layer);
+    } else {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const path = try PlatformUtils.OpenFolder(fba.allocator());
+
+        try self.SaveSceneAs(scene_id, path);
+    }
+}
+pub fn SaveSceneAs(self: *SceneManager, scene_id: usize, path: []const u8) !void {
+    std.debug.assert(scene_id < self.mSceneStack.items.len);
+    const scene_layer = &self.mSceneStack.items[scene_id];
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
@@ -103,37 +130,9 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
     scene_layer.mPath.clearAndFree();
     _ = try scene_layer.mPath.writer().write(path);
 
-    try SceneSerializer.DeSerializeText(scene_layer);
-
-    return new_scene_id;
+    try SceneSerializer.SerializeText(scene_layer);
 }
-pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
-    std.debug.assert(scene_id < self.mSceneStack.items.len);
-    const scene_layer = &self.mSceneStack.items[scene_id];
-    if (scene_layer.mPath.items.len != 0) {
-        try SceneSerializer.SerializeText(scene_layer);
-    } else {
-        try self.SaveSceneAs(scene_id);
-    }
-}
-pub fn SaveSceneAs(self: *SceneManager, scene_id: usize) !void {
-    std.debug.assert(scene_id < self.mSceneStack.items.len);
-    const scene_layer = &self.mSceneStack.items[scene_id];
 
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
-    if (path.len > 0) {
-        const scene_basename = std.fs.path.basename(path);
-        const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
-        const scene_name = scene_basename[0..dot_location];
-
-        scene_layer.mName.clearAndFree();
-        _ = try scene_layer.mName.writer().write(scene_name);
-        scene_layer.mPath.clearAndFree();
-        _ = try scene_layer.mPath.writer().write(path);
-
-        try SceneSerializer.SerializeText(scene_layer);
-    }
+fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
+    try self.mSceneStack.append(scene_layer);
 }
