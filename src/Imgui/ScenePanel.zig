@@ -30,19 +30,6 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
-        if (imgui.igBeginDragDropTarget() == true){
-            defer imgui.igEndDragDropTarget();
-            if (imgui.igAcceptDragDropPayload("SceneLayerLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-                const path_len = payload.*.DataSize;
-                const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-                const new_event = ImguiEvent{
-                    .ET_OpenSceneEvent = .{
-                        .Path = try ImguiManager.EventAllocator().dupe(u8, path),
-                    },
-                };
-                try ImguiManager.InsertEvent(new_event);
-            }
-        }
         var i: usize = scene_stack_ref.items.len;
         while (i > 0) {
             i -= 1;
@@ -65,11 +52,11 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             imgui.igGetItemRectMax(&max_pos);
             imgui.igGetItemRectSize(&size);
 
-            if (scene_layer.mLayerType == .GameLayer){
-                imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFFC4A484, 0.0, imgui.ImDrawFlags_None, 1.0);
+            if (scene_layer.mLayerType == .OverlayLayer){
+                imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFFEBCE87, 0.0, imgui.ImDrawFlags_None, 1.0);
             }
             else{
-                imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFF87ceeb, 0.0, imgui.ImDrawFlags_None, 1.0);
+                imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFF84A4C4, 0.0, imgui.ImDrawFlags_None, 1.0);
             }
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true){
@@ -132,6 +119,19 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                 }
                 imgui.igTreePop();
             }
+        }
+    }
+    if (imgui.igBeginDragDropTarget() == true){
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload("SceneLayerLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+            const path_len = payload.*.DataSize;
+            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            const new_event = ImguiEvent{
+                .ET_OpenSceneEvent = .{
+                    .Path = try ImguiManager.EventAllocator().dupe(u8, path),
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
         }
     }
 }
