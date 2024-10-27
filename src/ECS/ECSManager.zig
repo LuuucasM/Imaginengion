@@ -70,12 +70,16 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
     return self._ComponentManager.GetComponent(ComponentType, entityID);
 }
 
-pub fn Stringify(self: ECSManager, out: *std.ArrayList(u8), entityID: u32) !void {
-    try self._ComponentManager.Stringify(out, entityID);
+pub fn Stringify(self: ECSManager, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
+    try self._ComponentManager.Stringify(write_stream, entityID);
 }
 
-pub fn DeStringify(self: *ECSManager, component_index: EComponents, component_string: []const u8, entityID: u32) !void {
+pub fn DeStringify(self: *ECSManager, component_index: usize, component_string: []const u8, entityID: u32) !void {
     try self._ComponentManager.DeStringify(component_index, component_string, entityID);
+}
+
+pub fn EntityImguiRender(self: ECSManager, entityID: u32) void{
+    try self._ComponentManager.EntityImguiRender(entityID);
 }
 
 //-----------System Manager------------

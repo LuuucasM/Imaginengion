@@ -1,6 +1,5 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const LayerType = @import("../ECS/Components/SceneIDComponent.zig").ELayerType;
 const Entity = @import("../ECS/Entity.zig");
 const Set = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig");
@@ -9,12 +8,15 @@ const SceneLayer = @This();
 
 const Components = @import("../ECS/Components.zig");
 const IDComponent = Components.IDComponent;
-const SceneIDComponent = Components.SceneIDComponent;
 const NameComponent = Components.NameComponent;
 const TransformComponent = Components.TransformComponent;
 
 //.gscl
 //.oscl
+pub const LayerType = enum {
+    GameLayer,
+    OverlayLayer,
+};
 
 mName: std.ArrayList(u8),
 mUUID: u128,
@@ -42,21 +44,24 @@ pub fn Deinit(self: *SceneLayer) void {
     self.mEntityIDs.deinit();
 }
 
-pub fn CreateNewEntity(self: SceneLayer) !Entity {
-    return Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = &self };
+pub fn CreateBlankEntity(self: *SceneLayer) !Entity {
+    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
+    _ = try self.mEntityIDs.add(new_entity.mEntityID);
+    return new_entity;
 }
 
-pub fn CreateEntity(self: SceneLayer, name: [24]u8) !Entity {
-    return self.CreateEntityWithUUID(name, GenUUID());
+pub fn CreateEntity(self: *SceneLayer) !Entity {
+    return self.CreateEntityWithUUID(try GenUUID());
 }
-pub fn CreateEntityWithUUID(self: SceneLayer, name: [24]u8, uuid: u128) !Entity {
-    const e = Entity{ .mEntityID = try self.mECSManager.CreateEntity(), .mSceneLayerRef = &self };
-    _ = e.AddComponent(IDComponent, .{ .ID = uuid });
-    _ = e.AddComponent(SceneIDComponent, .{ .ID = self.mUUID, .LayerType = self.mLayerType });
-    _ = e.AddComponent(NameComponent, .{ .Name = name });
-    _ = e.AddComponent(TransformComponent, .{ .Transform = LinAlg.InitMat4CompTime(1.0) });
+pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
+    const e = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
+    _ = try e.AddComponent(IDComponent, .{ .ID = uuid });
+    var name = [_]u8{0} ** 24;
+    @memcpy(name[0..14], "Unnamed Entity");
+    _ = try e.AddComponent(NameComponent, .{ .Name = name });
+    _ = try e.AddComponent(TransformComponent, .{ .Transform = LinAlg.InitMat4CompTime(1.0) });
 
-    self.mEntityIDs.add(e.mEntityID);
+    _ = try self.mEntityIDs.add(e.mEntityID);
 
     return e;
 }

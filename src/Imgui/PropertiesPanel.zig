@@ -3,19 +3,22 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const PropertiesPanel = @This();
 
-_P_Open: bool,
-//HoveredEntity
+mP_Open: bool,
 
 pub fn Init() PropertiesPanel {
     return PropertiesPanel{
-        ._P_Open = true,
+        .mP_Open = true,
     };
 }
 
-pub fn OnImguiRender(self: PropertiesPanel) void {
-    if (self._P_Open == false) return;
+pub fn OnImguiRender(self: PropertiesPanel, selected_entity_ref: ?*Entity) void {
+    if (self.mP_Open == false) return;
     _ = imgui.igBegin("Properties", null, 0);
     defer imgui.igEnd();
+
+    if (selected_entity_ref) |entity|{
+        selected_entity_ref.OnImguiRender();
+    }
 }
 
 pub fn OnImguiEvent(self: *PropertiesPanel, event: *ImguiEvent) void {
@@ -26,5 +29,5 @@ pub fn OnImguiEvent(self: *PropertiesPanel, event: *ImguiEvent) void {
 }
 
 pub fn OnTogglePanelEvent(self: *PropertiesPanel) void {
-    self._P_Open = !self._P_Open;
+    self.mP_Open = !self.mP_Open;
 }

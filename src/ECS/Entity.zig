@@ -32,10 +32,14 @@ pub fn Duplicate(self: Entity) !Entity {
     return try self.mSceneLayerRef.mECSManagerRef.DuplicateEntity(self.mEntityID);
 }
 
-pub fn Stringify(self: Entity, out: *std.ArrayList(u8)) !void {
-    try self.mSceneLayerRef.mECSManagerRef.Stringify(out, self.mEntityID);
+pub fn Stringify(self: Entity, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 })) !void {
+    try self.mSceneLayerRef.mECSManagerRef.Stringify(write_stream, self.mEntityID);
 }
 
-pub fn DeStringify(self: Entity, component_index: EComponents, component_string: []const u8) !void {
+pub fn DeStringify(self: Entity, component_index: usize, component_string: []const u8) !void {
     try self.mSceneLayerRef.mECSManagerRef.DeStringify(component_index, component_string, self.mEntityID);
+}
+
+pub fn EntityImguiRender(self: Entity){
+    self.mSceneLayerRef.mECSManagerRef.EntityImguiRender(self.mEntityID);
 }

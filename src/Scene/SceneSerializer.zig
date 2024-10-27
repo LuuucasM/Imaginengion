@@ -1,6 +1,6 @@
 const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
-const LayerType = @import("../ECS/Components/SceneIDComponent.zig").ELayerType;
+const LayerType = SceneLayer.LayerType;
 const EComponents = @import("../ECS/Components.zig").EComponents;
 const Entity = @import("../ECS/Entity.zig");
 const Components = @import("../ECS/Components.zig");
@@ -14,7 +14,7 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     var out = std.ArrayList(u8).init(allocator);
     defer out.deinit();
 
-    var write_stream = std.json.writeStream(out.writer(), .{ .whitespace = .indent_2 });
+    var write_stream = std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }).init(undefined, out.writer(), .{ .whitespace = .indent_2 });
     defer write_stream.deinit();
 
     try write_stream.beginObject();
@@ -32,7 +32,7 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
-        try entity.Stringify(&out);
+        try entity.Stringify(&write_stream);
         try write_stream.endObject();
     }
     try write_stream.endObject();
@@ -60,42 +60,62 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
     var scanner = std.json.Scanner.initCompleteInput(allocator, buffer);
     defer scanner.deinit();
 
-    while (true) {
-        const token = try scanner.next();
-        switch (token) {
-            .string => {
-                const str = token.string;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const token_allocator = arena.allocator();
+    defer arena.deinit();
 
-                if (std.mem.eql(u8, str, "UUID") == true) {
-                    const uuid_token = try scanner.next();
-                    const uuid = try std.fmt.parseUnsigned(u128, uuid_token.number, 10);
-                    scene_layer.mUUID = uuid;
-                } else if (std.mem.eql(u8, str, "LayerType") == true) {
-                    const layer_type_token = try scanner.next();
-                    const layer_type = std.meta.stringToEnum(LayerType, layer_type_token.string).?;
-                    scene_layer.mLayerType = layer_type;
-                } else if (std.mem.eql(u8, str, "Entity") == true) {
-                    const new_entity = try scene_layer.CreateNewEntity();
-                    _ = try scanner.next(); //this is because the next scanner object will be beginObject token, and then after that we will get the object fields + data
-                    while (true) {
-                        const component_token = try scanner.next();
-                        switch (component_token) {
-                            .string => {
-                                const ecomponent_type = std.meta.stringToEnum(EComponents, component_token.string).?;
-                                const component_data_token = try scanner.next();
-                                const component_string = component_data_token.string;
-                                try new_entity.DeStringify(ecomponent_type, component_string);
-                            },
-                            .object_end => break,
-                            else => continue,
-                        }
-                    }
-                    _ = try scene_layer.mEntityIDs.add(new_entity.mEntityID);
-                }
-            },
+    while (true) {
+        const token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+        const value = switch (token) {
+            .string => |value| value,
+            .number => |value| value,
+            //.allocated_string => |value| value,
+            //.allocated_number => |value| value,
             .end_of_document => break,
-            else => continue,
+            else => "",
+        };
+        if (value.len > 0) {
+            if (std.mem.eql(u8, value, "UUID") == true) {
+                const uuid_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                const uuid_value = switch (uuid_token) {
+                    .number => |uuid_value| uuid_value,
+                    .allocated_number => |uuid_value| uuid_value,
+                    else => @panic("should be a number!\n"),
+                };
+                scene_layer.mUUID = try std.fmt.parseUnsigned(u128, uuid_value, 10);
+            } else if (std.mem.eql(u8, value, "LayerType") == true) {
+                const layer_type_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                const layer_type_value = switch (layer_type_token) {
+                    .string => |layer_type_value| layer_type_value,
+                    .allocated_string => |layer_type_value| layer_type_value,
+                    else => @panic("Should be a string!\n"),
+                };
+                scene_layer.mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
+            } else if (std.mem.eql(u8, value, "Entity") == true) {
+                const new_entity = try scene_layer.CreateBlankEntity();
+                _ = try scanner.next(); //for the start of the new object
+                while (true) {
+                    const component_type_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                    const component_type_string = switch (component_type_token) {
+                        .string => |component_type| component_type,
+                        .allocated_string => |component_type| component_type,
+                        .object_end => break,
+                        else => @panic("should be a string!\n"),
+                    };
+                    const component_type = std.meta.stringToEnum(EComponents, component_type_string).?;
+
+                    const component_data_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                    const component_data_string = switch (component_data_token) {
+                        .string => |component_data| component_data,
+                        .allocated_string => |component_data| component_data,
+                        else => @panic("should be a string!!\n"),
+                    };
+
+                    try new_entity.DeStringify(@intFromEnum(component_type), component_data_string);
+                }
+            }
         }
+        _ = arena.reset(.retain_capacity);
     }
 }
 

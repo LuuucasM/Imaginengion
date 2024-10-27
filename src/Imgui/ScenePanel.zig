@@ -9,7 +9,7 @@ const ScenePanel = @This();
 
 mIsVisible: bool,
 mSelectedScene: ?usize,
-mSelectedEntity: ?u32,
+mSelectedEntity: ?Entity,
 
 pub fn Init() ScenePanel {
     return ScenePanel{
@@ -41,30 +41,36 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             _ = imgui.igPushID_Str(scene_name.ptr);
             defer imgui.igPopID();
 
+            const original_color = imgui.igGetStyleColorVec4(imgui.ImGuiCol_Text);
+            const selected_text_col = imgui.ImVec4{.x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0};
+            const other_text_col = imgui.ImVec4{.x = 0.7, .y = 0.7, .z = 0.7, .w = 1.0};
+
+            if (self.mSelectedScene == scene_layer.mInternalID){
+                imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
+            }
+            else{
+                imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
+            }
+
             const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
             const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
 
-            const draw_list = imgui.igGetWindowDrawList();
-            var min_pos: imgui.ImVec2 = undefined;
-            var max_pos: imgui.ImVec2 = undefined;
-            var size: imgui.ImVec2 = undefined;
-            imgui.igGetItemRectMin(&min_pos);
-            imgui.igGetItemRectMax(&max_pos);
-            imgui.igGetItemRectSize(&size);
+            imgui.igPopStyleColor(1);
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true){
                 self.mSelectedScene = scene_layer.mInternalID;
             }
 
+            const draw_list = imgui.igGetWindowDrawList();
+            var min_pos: imgui.ImVec2 = undefined;
+            var max_pos: imgui.ImVec2 = undefined;
+            imgui.igGetItemRectMin(&min_pos);
+            imgui.igGetItemRectMax(&max_pos);
             if (scene_layer.mLayerType == .OverlayLayer){
                 imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFFEBCE87, 0.0, imgui.ImDrawFlags_None, 1.0);
             }
             else{
                 imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFF84A4C4, 0.0, imgui.ImDrawFlags_None, 1.0);
-            }
-
-            if (self.mSelectedScene == scene_layer.mInternalID) {
-                imgui.ImDrawList_AddLine(draw_list, .{.x = min_pos.x, .y = min_pos.y+size.y}, .{.x = min_pos.x + size.x, .y = min_pos.y+size.y}, 0xFFFFFFFF, 1.0);
             }
 
             if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -112,9 +118,19 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                 while (entity_iter.next()) |entity_id| {
                     const entity = Entity{ .mEntityID = entity_id.key_ptr.*, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
-                    if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-                        std.debug.print("clicked on entity name: {s}", .{entity_name});
+
+                    if(self.mSelectedEntity.mEntityID == entity.mEntityID){
+                        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
                     }
+                    else {
+                        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
+                    }
+
+                    if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+                        self.mSelectedEntity = entity;
+                    }
+
+                    imgui.igPopStyleColor(1);
                 }
                 imgui.igTreePop();
             }
@@ -131,6 +147,43 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                 },
             };
             try ImguiManager.InsertEvent(new_event);
+        }
+    }
+    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsItemClicked(imgui.ImGuiMouseButton_Right) == true){
+        imgui.igOpenPopup_Str("scene_context", imgui.ImGuiPopupFlags_None);
+    }
+    if (imgui.igBeginPopup("scene_context", imgui.ImGuiWindowFlags_None) == true){
+        defer imgui.igEndPopup();
+
+        if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true){
+            if (self.mSelectedScene) |selected_scene_id|{
+                const new_event = ImguiEvent{
+                    .ET_NewEntityEvent = .{
+                        .SceneID = selected_scene_id,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+        }
+
+        if (imgui.igBeginMenu("New Scene", true) == true){
+            defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("New Game Scene", "", false, true) == true){
+                const new_event = ImguiEvent{
+                    .ET_NewSceneEvent = .{
+                        .mLayerType = .GameLayer,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
+            if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true){
+                const new_event = ImguiEvent{
+                    .ET_NewSceneEvent = .{
+                        .mLayerType = .OverlayLayer,
+                    },
+                };
+                try ImguiManager.InsertEvent(new_event);
+            }
         }
     }
 }

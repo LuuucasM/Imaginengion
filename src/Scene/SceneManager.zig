@@ -1,13 +1,13 @@
 const std = @import("std");
 const LinAlg = @import("../Math/LinAlg.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const LayerType = @import("../ECS/Components/SceneIDComponent.zig").ELayerType;
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Entity = @import("../ECS/Entity.zig");
 const FrameBufferFile = @import("../FrameBuffers/FrameBuffer.zig");
 const FrameBuffer = FrameBufferFile.FrameBuffer;
 const TextureFormat = FrameBufferFile.TextureFormat;
 const SceneLayer = @import("SceneLayer.zig");
+const LayerType = SceneLayer.LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const SceneSerializer = @import("SceneSerializer.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
@@ -47,13 +47,13 @@ pub fn Deinit(self: *SceneManager) !void {
     _ = SceneManagerGPA.deinit();
 }
 
-pub fn CreateEntity(self: SceneManager, name: [24]u8, scene_id: usize) !Entity {
+pub fn CreateEntity(self: SceneManager, scene_id: usize) !Entity {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
-    return self.mSceneStack.items[scene_id].CreateEntity(name);
+    return self.mSceneStack.items[scene_id].CreateEntity();
 }
-pub fn CreateEntityWithUUID(self: SceneManager, name: [24]u8, uuid: u128, scene_id: usize) !Entity {
+pub fn CreateEntityWithUUID(self: SceneManager, uuid: u128, scene_id: usize) !Entity {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
-    return self.mSceneStack.items[scene_id].CreateEntityWithUUID(name, uuid);
+    return self.mSceneStack.items[scene_id].CreateEntityWithUUID(uuid);
 }
 
 pub fn DestroyEntity(self: SceneManager, e: Entity, scene_id: usize) !void {

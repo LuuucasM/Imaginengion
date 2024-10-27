@@ -165,6 +165,9 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             .ET_MoveSceneEvent => |e| {
                 self.mSceneManager.MoveScene(e.SceneID, e.NewPos);
             },
+            .ET_NewEntityEvent => |e| {
+                _ = try self.mSceneManager.CreateEntity(e.SceneID);
+            },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }
     }

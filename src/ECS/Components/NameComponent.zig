@@ -1,3 +1,4 @@
+const imgui = @import("../../Core/CImports.zig").imgui;
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const NameComponent = @This();
 
@@ -10,3 +11,13 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn ImguiRender(self: *NameComponent) void {
+    var buffer: [24]u8 = undefined;
+    @memset(buffer, 0);
+    @memcpy(buffer, self.Name);
+
+    if (imgui.igInputText("##Name", buffer, buffer.len) == true){
+        self.Name = buffer;
+    }
+}

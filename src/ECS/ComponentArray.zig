@@ -9,8 +9,9 @@ pub const IComponentArray = struct {
         DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
         HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
-        Stringify: *const fn (*anyopaque, *std.ArrayList(u8), u32) anyerror!void,
+        Stringify: *const fn (*anyopaque, *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), u32) anyerror!void,
         DeStringify: *const fn (*anyopaque, []const u8, u32) anyerror!void,
+        ImguiRender: *const fn (*anyopaque, u32) void,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
@@ -38,13 +39,17 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.RemoveComponent(entityID);
             }
-            fn Stringify(ptr: *anyopaque, out: *std.ArrayList(u8), entityID: u32) anyerror!void {
+            fn Stringify(ptr: *anyopaque, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-                try self.Stringify(out, entityID);
+                try self.Stringify(write_stream, entityID);
             }
             fn DeStringify(ptr: *anyopaque, component_string: []const u8, entityID: u32) anyerror!void {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.DeStringify(component_string, entityID);
+            }
+            fn ImguiRender(ptr: *anyopaque, entityID: u32) void{
+                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+                self.ImguiRender(entityID);
             }
         };
         return IComponentArray{
@@ -56,6 +61,7 @@ pub const IComponentArray = struct {
                 .RemoveComponent = impl.RemoveComponent,
                 .Stringify = impl.Stringify,
                 .DeStringify = impl.DeStringify,
+                .ImguiRender = impl.ImguiRender,
             },
         };
     }
@@ -72,11 +78,14 @@ pub const IComponentArray = struct {
     pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
         return self.vtable.HasComponent(self.ptr, entityID);
     }
-    pub fn Stringify(self: IComponentArray, out: *std.ArrayList(u8), entityID: u32) anyerror!void {
-        try self.vtable.Stringify(self.ptr, out, entityID);
+    pub fn Stringify(self: IComponentArray, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
+        try self.vtable.Stringify(self.ptr, write_stream, entityID);
     }
     pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!void {
         try self.vtable.DeStringify(self.ptr, component_string, entityID);
+    }
+    pub fn ImguiRender(self: IComponentArray, entityID: u32) void{
+        self.vtable.ImguiRender(self.ptr, entityID);
     }
 };
 
@@ -127,17 +136,20 @@ pub fn ComponentArray(comptime componentType: type) type {
         pub fn GetComponent(self: Self, entityID: u32) *componentType {
             return self._Components.getValueBySparse(entityID);
         }
-        pub fn Stringify(self: Self, out: *std.ArrayList(u8), entityID: u32) !void {
-            var write_stream = std.json.writeStream(out.writer(), .{ .whitespace = .indent_2 });
+        pub fn Stringify(self: Self, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
             const component = self.GetComponent(entityID).*;
 
             var buffer: [260]u8 = undefined;
             var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-            var component_string = std.ArrayList(u8).init(fba.allocator());
+            const full_component_name = @typeName(componentType);
+            const last_dot = std.mem.lastIndexOf(u8, full_component_name, ".") orelse full_component_name.len;
+            const component_name = full_component_name[last_dot + 1 ..];
 
+            var component_string = std.ArrayList(u8).init(fba.allocator());
             try std.json.stringify(component, .{}, component_string.writer());
-            try write_stream.objectField(@typeName(componentType));
+
+            try write_stream.objectField(component_name);
             try write_stream.write(component_string.items);
         }
         pub fn DeStringify(self: *Self, component_string: []const u8, entityID: u32) !void {
@@ -147,6 +159,11 @@ pub fn ComponentArray(comptime componentType: type) type {
             const new_component_parsed = try std.json.parseFromSlice(componentType, fba.allocator(), component_string, .{});
             defer new_component_parsed.deinit();
             _ = try self.AddComponent(entityID, new_component_parsed.value);
+        }
+        pub fn ImguiRender(self *Self, entityID: u32) void {
+            if (@hasDecl(componentType, "ImguiRender")){
+                self.GetComponent(entityID).ImguiRender()
+            }
         }
     };
 }
