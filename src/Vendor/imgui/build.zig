@@ -6,8 +6,8 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const lib = b.addStaticLibrary(.{ .name = "imgui", .target = target, .optimize = optimize });
-    lib.addIncludePath(.{ .path = "./" });
-    lib.addIncludePath(.{ .path = "imgui/" });
+    lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "./" } });
+    lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "imgui/" } });
     const options = std.Build.Module.AddCSourceFilesOptions{
         .files = &[_][]const u8{
             "imgui/imgui.cpp",
@@ -29,8 +29,8 @@ pub fn build(b: *std.Build) void {
     lib.linkSystemLibrary("c++");
 
     //---------------GLFW-----------
-    lib.addLibraryPath(.{ .path = "../GLFW/zig-out/lib/" });
-    lib.addIncludePath(.{ .path = "../GLFW/include/" });
+    lib.addLibraryPath(.{ .src_path = .{ .owner = b, .sub_path = "../GLFW/zig-out/lib/" } });
+    lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "../GLFW/include/" } });
     lib.linkSystemLibrary("GLFW");
 
     b.installArtifact(lib);

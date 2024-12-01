@@ -6,7 +6,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const lib = b.addStaticLibrary(.{ .name = "GLFW", .target = target, .optimize = optimize });
-    lib.addIncludePath(.{ .path = "include/" });
+    lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "include/" } });
     const options = switch (builtin.os.tag) {
         .windows => blk: {
             lib.linkSystemLibrary("gdi32");

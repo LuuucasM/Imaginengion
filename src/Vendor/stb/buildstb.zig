@@ -1,6 +1,6 @@
 const std = @import("std");
 const Compile = std.Build.Step.Compile;
-pub fn Add(exe: *Compile) void {
+pub fn Add(exe: *Compile, b: *std.Build) void {
     const options = std.Build.Module.AddCSourceFilesOptions{
         .files = &[_][]const u8{
             "src/Vendor/stb/stb.c",
@@ -10,5 +10,5 @@ pub fn Add(exe: *Compile) void {
         },
     };
     exe.addCSourceFiles(options);
-    exe.addIncludePath(.{ .path = "src/Vendor/stb/" });
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/stb/" } });
 }

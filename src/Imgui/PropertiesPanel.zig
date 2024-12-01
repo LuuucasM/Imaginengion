@@ -1,6 +1,7 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const Entity = @import("../ECS/Entity.zig");
 const PropertiesPanel = @This();
 
 mP_Open: bool,
@@ -16,8 +17,8 @@ pub fn OnImguiRender(self: PropertiesPanel, selected_entity_ref: ?*Entity) void 
     _ = imgui.igBegin("Properties", null, 0);
     defer imgui.igEnd();
 
-    if (selected_entity_ref) |entity|{
-        selected_entity_ref.OnImguiRender();
+    if (selected_entity_ref) |entity| {
+        entity.OnImguiRender();
     }
 }
 

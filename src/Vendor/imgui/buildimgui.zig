@@ -1,7 +1,7 @@
 const std = @import("std");
 const Compile = std.Build.Step.Compile;
 
-pub fn Add(exe: *Compile) void {
+pub fn Add(exe: *Compile, b: *std.Build) void {
     const options = std.Build.Module.AddCSourceFilesOptions{
         .files = &[_][]const u8{
             "src/Vendor/imgui/imgui/backends/imgui_impl_glfw.cpp",
@@ -15,9 +15,9 @@ pub fn Add(exe: *Compile) void {
     };
     exe.addCSourceFiles(options);
     exe.defineCMacro("IMGUI_IMPL_API", "extern \"C\"");
-    exe.addIncludePath(.{ .path = "src/Vendor/imgui/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/imgui/generator/output/" });
-    exe.addIncludePath(.{ .path = "src/Vendor/imgui/imgui/" });
-    exe.addLibraryPath(.{ .path = "src/Vendor/imgui/zig-out/lib/" });
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/" } });
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/generator/output/" } });
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/imgui/" } });
+    exe.addLibraryPath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/zig-out/lib/" } });
     exe.linkSystemLibrary("imgui");
 }

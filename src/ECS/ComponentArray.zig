@@ -17,9 +17,9 @@ pub const IComponentArray = struct {
     pub fn Init(obj: anytype) IComponentArray {
         const Ptr = @TypeOf(obj);
         const PtrInfo = @typeInfo(Ptr);
-        std.debug.assert(PtrInfo == .Pointer);
-        std.debug.assert(PtrInfo.Pointer.size == .One);
-        std.debug.assert(@typeInfo(PtrInfo.Pointer.child) == .Struct);
+        std.debug.assert(PtrInfo == .pointer);
+        std.debug.assert(PtrInfo.pointer.size == .One);
+        std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
 
         const impl = struct {
             fn Deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
@@ -47,7 +47,7 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.DeStringify(component_string, entityID);
             }
-            fn ImguiRender(ptr: *anyopaque, entityID: u32) void{
+            fn ImguiRender(ptr: *anyopaque, entityID: u32) void {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 self.ImguiRender(entityID);
             }
@@ -84,7 +84,7 @@ pub const IComponentArray = struct {
     pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!void {
         try self.vtable.DeStringify(self.ptr, component_string, entityID);
     }
-    pub fn ImguiRender(self: IComponentArray, entityID: u32) void{
+    pub fn ImguiRender(self: IComponentArray, entityID: u32) void {
         self.vtable.ImguiRender(self.ptr, entityID);
     }
 };
@@ -160,9 +160,9 @@ pub fn ComponentArray(comptime componentType: type) type {
             defer new_component_parsed.deinit();
             _ = try self.AddComponent(entityID, new_component_parsed.value);
         }
-        pub fn ImguiRender(self *Self, entityID: u32) void {
-            if (@hasDecl(componentType, "ImguiRender")){
-                self.GetComponent(entityID).ImguiRender()
+        pub fn ImguiRender(self: *Self, entityID: u32) void {
+            if (@hasDecl(componentType, "ImguiRender")) {
+                self.GetComponent(entityID).ImguiRender();
             }
         }
     };

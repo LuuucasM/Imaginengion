@@ -26,7 +26,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             new_framebuffer.Create();
             return new_framebuffer;
         }
-        pub fn Deinit(self: Self) void{
+        pub fn Deinit(self: Self) void {
             glad.glDeleteFramebuffers(1, &self.mBufferID);
             glad.glDeleteTextures(self.mColorAttachments.len, &self.mColorAttachments[0]);
             glad.glDeleteTextures(1, &self.mDepthAttachment);
@@ -47,7 +47,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, 0);
         }
         pub fn Resize(self: Self, width: usize, height: usize) void {
-            if (width < 1 or height < 1 or width > 8192 or height > 8192){
+            if (width < 1 or height < 1 or width > 8192 or height > 8192) {
                 std.log.warn("attachment index must be within bounds!\n", .{});
                 return;
             }
@@ -70,33 +70,32 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             return pixel_data;
         }
 
-        fn Create(self: *Self) void{
+        fn Create(self: *Self) void {
             glad.glCreateFramebuffers(1, &self.mBufferID);
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, self.mBufferID);
 
             const multisampled: bool = samples > 1;
 
             //color attachments
-            if (self.mColorAttachments.len > 0){
+            if (self.mColorAttachments.len > 0) {
                 glad.glCreateTextures(TextureTarget(multisampled), self.mColorAttachments.len, &self.mColorAttachments[0]);
-                for (color_texture_formats, 0..) |texture_format, i|{
+                for (color_texture_formats, 0..) |texture_format, i| {
                     glad.glBindTexture(TextureTarget(multisampled), self.mColorAttachments[i]);
-                    AttachColorTexture(self.mColorAttachments[i], TextureFormatToInternalFormat(texture_format), TextureFormatToFormat(texture_format), @intCast(self.mWidth), @intCast(self.mHeight), i, multisampled);
+                    AttachColorTexture(self.mColorAttachments[i], TextureFormatToInternalFormat(texture_format), TextureFormatToFormat(texture_format), @intCast(self.mWidth), @intCast(self.mHeight), @intCast(i), multisampled);
                 }
             }
 
             //depths attachments
-            if (depth_texture_format != TextureFormat.None){
+            if (depth_texture_format != TextureFormat.None) {
                 glad.glCreateTextures(TextureTarget(multisampled), 1, &self.mDepthAttachment);
                 glad.glBindTexture(TextureTarget(multisampled), self.mDepthAttachment);
                 AttachDepthTexture(self.mDepthAttachment, TextureFormatToInternalFormat(depth_texture_format), @intCast(self.mWidth), @intCast(self.mHeight), multisampled);
             }
 
-            if (self.mColorAttachments.len > 1){
-                const buffers: [5]glad.GLenum = .{glad.GL_COLOR_ATTACHMENT0, glad.GL_COLOR_ATTACHMENT1, glad.GL_COLOR_ATTACHMENT2, glad.GL_COLOR_ATTACHMENT3, glad.GL_COLOR_ATTACHMENT4};
+            if (self.mColorAttachments.len > 1) {
+                const buffers: [5]glad.GLenum = .{ glad.GL_COLOR_ATTACHMENT0, glad.GL_COLOR_ATTACHMENT1, glad.GL_COLOR_ATTACHMENT2, glad.GL_COLOR_ATTACHMENT3, glad.GL_COLOR_ATTACHMENT4 };
                 glad.glDrawBuffers(@intCast(buffers.len), &buffers[0]);
-            }
-            else if (self.mColorAttachments.len == 0){
+            } else if (self.mColorAttachments.len == 0) {
                 glad.glDrawBuffer(glad.GL_NONE);
             }
 
@@ -105,15 +104,14 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, 0);
         }
 
-        fn TextureTarget(multisample: bool) glad.GLenum{
+        fn TextureTarget(multisample: bool) glad.GLenum {
             return if (multisample == true) glad.GL_TEXTURE_2D_MULTISAMPLE else glad.GL_TEXTURE_2D;
         }
 
         fn AttachColorTexture(attachment_id: u32, internal_format: glad.GLenum, format: glad.GLenum, width: usize, height: usize, index: c_uint, multisampled: bool) void {
-            if (multisampled == true){
+            if (multisampled == true) {
                 glad.glTexImage2DMultisample(glad.GL_TEXTURE_2D_MULTISAMPLE, samples, internal_format, @intCast(width), @intCast(height), glad.GL_FALSE);
-            }
-            else{
+            } else {
                 glad.glTexImage2D(glad.GL_TEXTURE_2D, 0, @intCast(internal_format), @intCast(width), @intCast(height), 0, format, glad.GL_UNSIGNED_BYTE, null);
 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_MIN_FILTER, glad.GL_LINEAR);
@@ -127,10 +125,9 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
         }
 
         fn AttachDepthTexture(attachment_id: u32, internal_format: glad.GLenum, width: usize, height: usize, multisampled: bool) void {
-            if (multisampled == true){
+            if (multisampled == true) {
                 glad.glTexImage2DMultisample(glad.GL_TEXTURE_2D_MULTISAMPLE, samples, internal_format, @intCast(width), @intCast(height), glad.GL_FALSE);
-            }
-            else{
+            } else {
                 glad.glTexStorage2D(glad.GL_TEXTURE_2D, 1, internal_format, @intCast(width), @intCast(height));
 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_MIN_FILTER, glad.GL_LINEAR);
@@ -140,19 +137,19 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_T, glad.GL_CLAMP_TO_EDGE);
             }
 
-            glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, glad.GL_DEPTH_STENCIL_ATTACHMENT , TextureTarget(multisampled), attachment_id, 0);
+            glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, glad.GL_DEPTH_STENCIL_ATTACHMENT, TextureTarget(multisampled), attachment_id, 0);
         }
 
         fn TextureFormatToInternalFormat(format: TextureFormat) glad.GLenum {
-            return switch(format){
+            return switch (format) {
                 .RGBA8 => glad.GL_RGBA8,
                 .RED_INTEGER => glad.GL_R32UI,
                 .DEPTH24STENCIL8 => glad.GL_DEPTH24_STENCIL8,
                 else => @panic("This texture format isnt implemented yet!"),
             };
         }
-        fn TextureFormatToFormat(format: TextureFormat) glad.GLenum{
-            return switch(format){
+        fn TextureFormatToFormat(format: TextureFormat) glad.GLenum {
+            return switch (format) {
                 .RGBA8 => glad.GL_RGBA,
                 .RED_INTEGER => glad.GL_RED_INTEGER,
                 .DEPTH24STENCIL8 => glad.GL_DEPTH_STENCIL,

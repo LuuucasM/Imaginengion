@@ -16,17 +16,17 @@ pub fn build(b: *std.Build) void {
     //-----------IMAGINENGION---------------
     const exe = b.addExecutable(.{
         .name = "GameEngine",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/main.zig" } },
         .target = target,
         .optimize = optimize,
     });
 
     //adding c/c++ dependecies
-    buildglfw.Add(exe);
-    buildglad.Add(exe);
-    buildimgui.Add(exe);
-    buildstb.Add(exe);
-    buildnativefiledialog.Add(exe);
+    buildglfw.Add(exe, b);
+    buildglad.Add(exe, b);
+    buildimgui.Add(exe, b);
+    buildstb.Add(exe, b);
+    buildnativefiledialog.Add(exe, b);
 
     //--------------SYSTEM LIBRARIES-----------
     exe.linkSystemLibrary("c");

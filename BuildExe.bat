@@ -8,6 +8,9 @@ zig build
 cd ../imgui
 zig build
 
+cd ../nativefiledialog
+zig build
+
 cd ../../..
 zig build
 
