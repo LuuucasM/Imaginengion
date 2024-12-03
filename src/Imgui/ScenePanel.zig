@@ -42,7 +42,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             const other_text_col = imgui.ImVec4{ .x = 0.7, .y = 0.7, .z = 0.7, .w = 1.0 };
 
             const io = imgui.igGetIO();
-            const bold_font = io.Fonts.Fronts[0];
+            const bold_font = io.*.Fonts.*.Fonts.Data[0];
 
             _ = imgui.igPushID_Str(scene_name.ptr);
             defer imgui.igPopID();
@@ -123,7 +123,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     const entity = Entity{ .mEntityID = entity_id.key_ptr.*, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
 
-                    if (self.mSelectedEntity.mEntityID == entity.mEntityID) {
+                    if (self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID) {
                         imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
                     } else {
                         imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);

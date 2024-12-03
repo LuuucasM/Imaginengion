@@ -12,13 +12,13 @@ pub fn Init() PropertiesPanel {
     };
 }
 
-pub fn OnImguiRender(self: PropertiesPanel, selected_entity_ref: ?*Entity) void {
+pub fn OnImguiRender(self: PropertiesPanel, selected_entity_ref: ?Entity) void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Properties", null, 0);
     defer imgui.igEnd();
 
     if (selected_entity_ref) |entity| {
-        entity.OnImguiRender();
+        entity.EntityImguiRender();
     }
 }
 

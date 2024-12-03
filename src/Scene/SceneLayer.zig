@@ -60,7 +60,7 @@ pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
     @memcpy(name[0..14], "Unnamed Entity");
     _ = try e.AddComponent(NameComponent, .{ .Name = name });
     _ = try e.AddComponent(TransformComponent, .{
-        .Position = .{ 0.0, 0.0, 0.0 },
+        .Translation = .{ 0.0, 0.0, 0.0 },
         .Rotation = .{ 1.0, 0.0, 0.0, 0.0 },
         .Scale = .{ 1.0, 1.0, 1.0 },
         .Transform = LinAlg.InitMat4CompTime(1.0),

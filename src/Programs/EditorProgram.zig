@@ -80,7 +80,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
     try self._ContentBrowserPanel.OnImguiRender();
     self._ComponentsPanel.OnImguiRender();
-    self._PropertiesPanel.OnImguiRender();
+    self._PropertiesPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
     self._ScriptsPanel.OnImguiRender();
     self._ToolbarPanel.OnImguiRender();
     try self._StatsPanel.OnImguiRender(dt);
@@ -131,13 +131,13 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 }
             },
             .ET_NewProjectEvent => |e| {
-                if (e.Path.len > 0){
+                if (e.Path.len > 0) {
                     try AssetManager.UpdateProjectDirectory(e.Path);
                     try self._ContentBrowserPanel.OnNewProjectEvent(e.Path);
                 }
             },
             .ET_OpenProjectEvent => |e| {
-                if (e.Path.len > 0){
+                if (e.Path.len > 0) {
                     try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e.Path).?);
                     try self._ContentBrowserPanel.OnOpenProjectEvent(e.Path);
                 }
@@ -146,20 +146,20 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 _ = try self.mSceneManager.NewScene(e.mLayerType);
             },
             .ET_SaveSceneEvent => {
-                if (self._ScenePanel.mSelectedScene) |scene_id|{
+                if (self._ScenePanel.mSelectedScene) |scene_id| {
                     try self.mSceneManager.SaveScene(scene_id);
                 }
             },
             .ET_SaveSceneAsEvent => |e| {
                 if (self._ScenePanel.mSelectedScene) |scene_id| {
-                    if (e.Path.len > 0){
+                    if (e.Path.len > 0) {
                         try self.mSceneManager.SaveSceneAs(scene_id, e.Path);
                     }
                 }
             },
             .ET_OpenSceneEvent => |e| {
-                if (e.Path.len > 0){
-                    _ = try self.mSceneManager.LoadScene(e.Path);    
+                if (e.Path.len > 0) {
+                    _ = try self.mSceneManager.LoadScene(e.Path);
                 }
             },
             .ET_MoveSceneEvent => |e| {
