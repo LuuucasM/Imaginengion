@@ -78,8 +78,8 @@ pub fn DeStringify(self: *ECSManager, component_index: usize, component_string: 
     try self._ComponentManager.DeStringify(component_index, component_string, entityID);
 }
 
-pub fn EntityImguiRender(self: ECSManager, entityID: u32) void{
-    try self._ComponentManager.EntityImguiRender(entityID);
+pub fn EntityImguiRender(self: ECSManager, entityID: u32) void {
+    self._ComponentManager.EntityImguiRender(entityID);
 }
 
 //-----------System Manager------------

@@ -15,3 +15,5 @@ cd ../../..
 zig build
 
 copy "zig-out\bin\GameEngine.exe" .
+
+pause

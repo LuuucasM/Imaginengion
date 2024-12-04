@@ -17,7 +17,7 @@ pub fn ImguiRender(self: *NameComponent) void {
     @memset(&buffer, 0);
     @memcpy(&buffer, &self.Name);
 
-    if (imgui.igInputText("##Name", &buffer, buffer.len) == true) {
+    if (imgui.igInputText("##Name", &buffer, buffer.len, imgui.ImGuiInputTextFlags_None, null, null) == true) {
         self.Name = buffer;
     }
 }

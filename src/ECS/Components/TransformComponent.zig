@@ -19,14 +19,14 @@ pub const Ind: usize = blk: {
 };
 
 pub fn ImguiRender(self: *TransformComponent) void {
-    const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowItemOverlap | imgui.ImGuiTreeNodeFlags_Framed |
+    const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowOverlap | imgui.ImGuiTreeNodeFlags_Framed |
         imgui.ImGuiTreeNodeFlags_SpanAvailWidth | imgui.ImGuiTreeNodeFlags_FramePadding;
     const is_tree_open = imgui.igTreeNodeEx_Str(@typeName(TransformComponent), tree_node_flags);
 
     if (is_tree_open) {
         defer imgui.igTreePop();
         _ = DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
-        const rotation = LinAlg.QuatToDegrees(self.Rotation); //TODO: IMPLEMENT LIN ALG FUNCTION
+        var rotation = LinAlg.QuatToDegrees(self.Rotation); //TODO: IMPLEMENT LIN ALG FUNCTION
         if (DrawVec3Control("Rotation", &rotation, 0.0, 0.25, 100.0) == true) {
             self.Rotation = LinAlg.DegreesToQuat(rotation); //TODO: IMPLEMENT LIN ALG FUNCTION
         }
@@ -36,7 +36,7 @@ pub fn ImguiRender(self: *TransformComponent) void {
 
 fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32, speed: f32, column_width: f32) bool {
     const io = imgui.igGetIO();
-    const bold_font = io.Fonts.Font[0];
+    const bold_font = io.*.Fonts.*.Fonts.Data[0];
     var changed: bool = false;
 
     imgui.igPushID_Str(label.ptr);

@@ -223,6 +223,30 @@ pub fn RotateVec3Quat(q: Quatf32, v: Vec3f32) Vec3f32 {
     return v + expanded_uv + expanded_uuv;
 }
 
+//TODO: glm functions for quat to degrees can be found here:
+//https://github.com/g-truc/glm/blob/6543cc9ad1476dd62fbfbe3194fcf19412f0cbc0/glm/gtc/quaternion.inl#L10
+pub fn QuatToDegrees(q: Quatf32) Vec3f32 {
+    return Vec3f32{ QuatToPitch(q), QuatToYaw(q), QuatToRoll(q) };
+}
+
+//TODO: for degrees to quat look into the following website:
+//https://gamedev.stackexchange.com/questions/13436/glm-euler-angles-to-quaternion
+pub fn DegreesToQuat(degrees: Vec3f32) Quatf32 {
+    _ = degrees;
+}
+
+pub fn QuatToPitch(q: Quatf32) f32 {
+    _ = q;
+}
+
+pub fn QuatToYaw(q: Quatf32) f32 {
+    _ = q;
+}
+
+pub fn QuatToRoll(q: Quatf32) f32 {
+    _ = q;
+}
+
 //----------------------------------UNIT TESTS----------------------------------------------------------------
 //###############################################################################################################
 //--------------------------------------------------------------------------------------------------------------
@@ -649,3 +673,13 @@ test RotateVec3Quat {
         try std.testing.expect(math.approxEqAbs(f32, result3[i], ans3[i], diff));
     }
 }
+
+//TODO: test for QuatToDegrees
+
+//TODO: test for DegreesToQuat
+
+//TODO: test for QuatToPitch
+
+//TODO: test for QuatToYaw
+
+//TODO: test for QuatToRoll
