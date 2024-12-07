@@ -231,20 +231,42 @@ pub fn QuatToDegrees(q: Quatf32) Vec3f32 {
 
 //TODO: for degrees to quat look into the following website:
 //https://gamedev.stackexchange.com/questions/13436/glm-euler-angles-to-quaternion
-pub fn DegreesToQuat(degrees: Vec3f32) Quatf32 {
-    _ = degrees;
+pub fn DegreesToQuat(euler_vector: Vec3f32) Quatf32 {
+    return RadiansToQuat(Vec3f32{ DegreeToRadian(euler_vector[0]), DegreeToRadian(euler_vector[1]), DegreeToRadian(euler_vector[2]) });
+}
+
+pub fn DegreeToRadian(degree: f32) f32 {
+    return degree * (math.pi / 180.0);
+}
+
+pub fn RadiansToQuat(radians_vector: Vec3f32) Quatf32 {
+    const cos_vec = @cos(radians_vector) / @as(Vec3f32, @splat(2.0));
+    const sin_vec = @sin(radians_vector) / @as(Vec3f32, @splat(2.0));
+
+    return Quatf32{
+        cos_vec[0] * cos_vec[1] * cos_vec[2] + sin_vec[0] * sin_vec[1] * sin_vec[2],
+        sin_vec[0] * cos_vec[1] * cos_vec[2] - cos_vec[0] * sin_vec[1] * sin_vec[2],
+        cos_vec[0] * sin_vec[1] * cos_vec[2] + sin_vec[0] * cos_vec[1] * sin_vec[2],
+        cos_vec[0] * cos_vec[1] * sin_vec[2] - sin_vec[0] * sin_vec[1] * cos_vec[2],
+    };
 }
 
 pub fn QuatToPitch(q: Quatf32) f32 {
-    _ = q;
+    const epsilon = 1e-7;
+
+    const y: f32 = 2 * (q[2] * q[3] + q[0] * q[1]);
+    const x: f32 = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
+
+    const singularityCheck: f32 = @floatFromInt(@intFromBool(math.approxEqAbs(f32, x, 0, epsilon) or math.approxEqAbs(f32, y, 0, epsilon)));
+    return (1.0 - singularityCheck) * math.atan2(y, x) + singularityCheck * (1.0 * math.atan2(q[1], q[0]));
 }
 
 pub fn QuatToYaw(q: Quatf32) f32 {
-    _ = q;
+    return math.asin(math.clamp(-2.0 * (q[1] * q[3] * q[0]), -1.0, 1.0));
 }
 
 pub fn QuatToRoll(q: Quatf32) f32 {
-    _ = q;
+    return math.atan2(2.0 * (q[1] * q[2] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
 }
 
 //----------------------------------UNIT TESTS----------------------------------------------------------------
