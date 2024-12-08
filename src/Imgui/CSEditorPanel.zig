@@ -12,20 +12,16 @@ pub fn Init() PropertiesPanel {
     };
 }
 
-pub fn OnImguiRender(self: PropertiesPanel, selected_entity_ref: ?Entity) void {
+pub fn OnImguiRender(self: PropertiesPanel) void {
     if (self.mP_Open == false) return;
-    _ = imgui.igBegin("Properties", null, 0);
+    _ = imgui.igBegin("Component/Scripts Editor", null, 0);
     defer imgui.igEnd();
-
-    if (selected_entity_ref) |entity| {
-        entity.EntityImguiRender();
-    }
 }
 
 pub fn OnImguiEvent(self: *PropertiesPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
-        else => @panic("This event isnt handled yet in PropertiesPanel!\n"),
+        else => @panic("This event isnt handled yet in Component/Scripts Editor Panel!\n"),
     }
 }
 

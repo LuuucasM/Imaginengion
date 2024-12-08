@@ -3,12 +3,25 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const TransformComponent = @This();
 const LinAlg = @import("../../Math/LinAlg.zig");
 
-Translation: LinAlg.Vec3f32,
-Rotation: LinAlg.Quatf32,
-Scale: LinAlg.Vec3f32,
+const Vec3f32 = LinAlg.Vec3f32;
+const Quatf32 = LinAlg.Quatf32;
+const Mat4f32 = LinAlg.Mat4f32;
 
-Transform: LinAlg.Mat4f32,
+Translation: Vec3f32,
+Rotation: Quatf32,
+Scale: Vec3f32,
+
+Transform: Mat4f32,
 Dirty: bool,
+
+pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {
+    if (self.Dirty == true) {
+        defer self.Dirty = false;
+
+        self.Transform = LinAlg.Translate(self.Translation) * LinAlg.QuatToMat4(self.Rotation) * LinAlg.Scale(self.Scale);
+    }
+    return self.Transform;
+}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
@@ -60,7 +73,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font);
     if (imgui.igButton("X", button_size)) {
-        values.* = @as(LinAlg.Vec3f32, @splat(reset_value));
+        values.* = @as(Vec3f32, @splat(reset_value));
         changed = true;
     }
     imgui.igPopFont();
@@ -80,7 +93,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Y", button_size)) {
-        values.* = @as(LinAlg.Vec3f32, @splat(reset_value));
+        values.* = @as(Vec3f32, @splat(reset_value));
         changed = true;
     }
     imgui.igPopFont();
@@ -100,7 +113,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Z", button_size)) {
-        values.* = @as(LinAlg.Vec3f32, @splat(reset_value));
+        values.* = @as(Vec3f32, @splat(reset_value));
         changed = true;
     }
     imgui.igPopFont();

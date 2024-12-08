@@ -11,7 +11,7 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
+//pub fn ImguiRenderComponentName(self: *NameComponent) void {}
 pub fn ImguiRender(self: *NameComponent) void {
     var buffer: [24]u8 = undefined;
     @memset(&buffer, 0);

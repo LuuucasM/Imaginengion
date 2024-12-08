@@ -1,6 +1,7 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const Entity = @import("../ECS/Entity.zig");
 const ScriptsPanel = @This();
 
 _P_Open: bool,
@@ -12,10 +13,15 @@ pub fn Init() ScriptsPanel {
     };
 }
 
-pub fn OnImguiRender(self: ScriptsPanel) void {
+pub fn OnImguiRender(self: ScriptsPanel, selected_entity_ref: ?Entity) void {
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Scripts", null, 0);
     defer imgui.igEnd();
+
+    if (selected_entity_ref) |entity| {
+        _ = entity;
+        //entity.ScriptsImguiRender();
+    }
 }
 
 pub fn OnImguiEvent(self: *ScriptsPanel, event: *ImguiEvent) void {

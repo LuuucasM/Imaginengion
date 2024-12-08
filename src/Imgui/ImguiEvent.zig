@@ -4,7 +4,7 @@ pub const PanelType = enum {
     AssetHandles,
     Components,
     ContentBrowser,
-    Properties,
+    CSEditor,
     Scene,
     Scripts,
     Stats,

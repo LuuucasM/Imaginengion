@@ -122,9 +122,21 @@ pub fn QuatToMat4(q: Quatf32) Mat4f32 {
     };
 }
 
-pub fn Translate(m: Mat4f32, v: Vec3f32) Mat4f32 {
+pub fn Translate(v: Vec3f32) Mat4f32 {
+    const m = InitMat4CompTime(1.0);
     var result = m;
     result[3] = (m[0] * @as(Vec4f32, @splat(v[0]))) + (m[1] * @as(Vec4f32, @splat(v[1]))) + (m[2] * @as(Vec4f32, @splat(v[2]))) + m[3];
+    return result;
+}
+
+//TODO: code scale
+pub fn Scale(v: Vec3f32) Mat4f32 {
+    const m = InitMat4CompTime(1.0);
+    var result = m;
+    result[0] = m[0] * v[0];
+    result[1] = m[1] * v[1];
+    result[2] = m[2] * v[2];
+    result[3] = m[3];
     return result;
 }
 
@@ -492,14 +504,13 @@ test QuatToMat4 {
 //test Translate
 test Translate {
     const diff = 0.0001;
-    const base = InitMat4CompTime(1.0);
     const vec31 = Vec3f32{ 1.0, 0.0, 0.0 };
     const vec32 = Vec3f32{ 1.0, 2.0, 3.0 };
     const vec33 = Vec3f32{ 10.0, 20.0, 0.0 };
 
-    const result1 = Translate(base, vec31);
-    const result2 = Translate(base, vec32);
-    const result3 = Translate(base, vec33);
+    const result1 = Translate(vec31);
+    const result2 = Translate(vec32);
+    const result3 = Translate(vec33);
 
     const ans1 = Mat4f32{
         Vec4f32{ 1.0, 0.0, 0.0, 0.0 },

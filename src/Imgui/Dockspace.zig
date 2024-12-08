@@ -54,7 +54,7 @@ pub fn OnImguiRender() !void {
         defer imgui.igEndMenuBar();
         if (imgui.igBeginMenu("File", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igBeginMenu("New Scene", true) == true){
+            if (imgui.igBeginMenu("New Scene", true) == true) {
                 defer imgui.igEndMenu();
                 if (imgui.igMenuItem_Bool("New Game Scene", "", false, true) == true) {
                     const new_event = ImguiEvent{
@@ -64,7 +64,7 @@ pub fn OnImguiRender() !void {
                     };
                     try ImguiManager.InsertEvent(new_event);
                 }
-                if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true){
+                if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true) {
                     const new_event = ImguiEvent{
                         .ET_NewSceneEvent = .{
                             .mLayerType = .OverlayLayer,
@@ -77,7 +77,7 @@ pub fn OnImguiRender() !void {
                 const path = try PlatformUtils.OpenFile(ImguiManager.EventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
                     .ET_OpenSceneEvent = .{
-                        .Path = path,  
+                        .Path = path,
                     },
                 };
                 try ImguiManager.InsertEvent(new_event);
@@ -103,22 +103,20 @@ pub fn OnImguiRender() !void {
                 const new_event = ImguiEvent{
                     .ET_NewProjectEvent = .{
                         .Path = path,
-                    }, 
+                    },
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
                 const path = try PlatformUtils.OpenFile(ImguiManager.EventAllocator(), ".imprj");
                 const new_event = ImguiEvent{
-                    .ET_OpenProjectEvent = .{
-                        .Path = path
-                    },
+                    .ET_OpenProjectEvent = .{ .Path = path },
                 };
                 try ImguiManager.InsertEvent(new_event);
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
-                const new_event = Event{ 
+                const new_event = Event{
                     .ET_WindowClose = .{},
                 };
                 try EventManager.Insert(new_event);
@@ -153,7 +151,7 @@ pub fn OnImguiRender() !void {
             if (imgui.igMenuItem_Bool("Properties", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
-                        ._PanelType = .Properties,
+                        ._PanelType = .CSEditor,
                     },
                 };
                 try ImguiManager.InsertEvent(new_event);

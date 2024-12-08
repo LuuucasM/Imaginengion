@@ -9,7 +9,7 @@ const Dockspace = @import("../Imgui/Dockspace.zig");
 const AssetHandlePanel = @import("../Imgui/AssethandlePanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
-const PropertiesPanel = @import("../Imgui/PropertiesPanel.zig");
+const CSEditorPanel = @import("../Imgui/CSEditorPanel.zig");
 const ScenePanel = @import("../Imgui/ScenePanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
@@ -22,7 +22,7 @@ const EditorSceneManager = @import("../Scene/SceneManager.zig");
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
 _ContentBrowserPanel: ContentBrowserPanel,
-_PropertiesPanel: PropertiesPanel,
+_CSEditorPanel: CSEditorPanel,
 _ScenePanel: ScenePanel,
 _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
@@ -41,7 +41,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
-        ._PropertiesPanel = PropertiesPanel.Init(),
+        ._CSEditorPanel = CSEditorPanel.Init(),
         ._ScenePanel = ScenePanel.Init(),
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
@@ -75,16 +75,20 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //Imgui begin
     ImGui.Begin();
     Dockspace.Begin();
-
-    try self._AssetHandlePanel.OnImguiRender();
-    try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
     try self._ContentBrowserPanel.OnImguiRender();
-    self._ComponentsPanel.OnImguiRender();
-    self._PropertiesPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
-    self._ScriptsPanel.OnImguiRender();
+    try self._AssetHandlePanel.OnImguiRender();
+
+    try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
+
+    self._ComponentsPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
+    self._ScriptsPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
+    self._CSEditorPanel.OnImguiRender();
+
     self._ToolbarPanel.OnImguiRender();
-    try self._StatsPanel.OnImguiRender(dt);
     self._ViewportPanel.OnImguiRender();
+
+    try self._StatsPanel.OnImguiRender(dt);
+
     try Dockspace.OnImguiRender();
 
     try self.ProcessImguiEvents();
@@ -123,7 +127,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                     .AssetHandles => self._AssetHandlePanel.OnTogglePanelEvent(),
                     .Components => self._ComponentsPanel.OnTogglePanelEvent(),
                     .ContentBrowser => self._ContentBrowserPanel.OnTogglePanelEvent(),
-                    .Properties => self._PropertiesPanel.OnTogglePanelEvent(),
+                    .CSEditor => self._CSEditorPanel.OnTogglePanelEvent(),
                     .Scene => self._ScenePanel.OnTogglePanelEvent(),
                     .Scripts => self._ScriptsPanel.OnTogglePanelEvent(),
                     .Stats => self._StatsPanel.OnTogglePanelEvent(),
