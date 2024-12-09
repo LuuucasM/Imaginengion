@@ -10,3 +10,6 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+//afaik this component doesnt need to be
+//imgui rendered ever

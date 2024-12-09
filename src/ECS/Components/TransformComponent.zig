@@ -1,7 +1,10 @@
-const imgui = @import("../../Core/CImports.zig").imgui;
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const TransformComponent = @This();
 const LinAlg = @import("../../Math/LinAlg.zig");
+
+//imgui stuff
+const imgui = @import("../../Core/CImports.zig").imgui;
+const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
@@ -30,6 +33,10 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn GetEditorWindow(self: *TransformComponent) EditorWindow {
+    return EditorWindow.Init(self);
+}
 
 pub fn ImguiRender(self: *TransformComponent) void {
     const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowOverlap | imgui.ImGuiTreeNodeFlags_Framed |
