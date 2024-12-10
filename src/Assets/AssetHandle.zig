@@ -1,6 +1,8 @@
 const AssetTypes = @import("AssetTypes.zig").AssetTypes;
-_AssetLastModified: i128,
-_AssetSize: u64,
-_AssetHash: u64,
-_AssetType: AssetTypes,
-_AssetPath: []const u8,
+
+mID: u128,
+mLastModified: i128,
+mSize: u64,
+mHash: u64,
+mType: AssetTypes,
+mAbsPath: []const u8,

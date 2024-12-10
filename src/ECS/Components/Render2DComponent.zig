@@ -29,4 +29,12 @@ pub fn ImguiRender(self: *Render2DComponent) void {
     _ = thumbnail_size;
     imgui.igColorEdit4("Color", &self.Color, imgui.ImGuiColorEditFlags_None);
     imgui.igText("TEMPORARY TEXTURE TARGET");
+    if (imgui.igBeginDragDropTarget() == true) {
+        if (imgui.igAcceptDragDropPayload("TextureLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+            const path_len = payload.*.DataSize;
+            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            _ = path;
+            //TODO:
+        }
+    }
 }
