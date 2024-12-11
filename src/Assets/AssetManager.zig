@@ -12,12 +12,13 @@ var AssetM: *AssetManager = undefined;
 
 mEngineAllocator: std.mem.Allocator,
 mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
-mAssetPathToHandle: std.StringHashMap(AssetHandle),
-mAssetPathToHandleDelete: std.StringHashMap(AssetHandle),
+mAssetIDToHandle: std.AutoHashMap(u128, AssetHandle),
+mAssetIDToPath: std.AutoHashMap(u128, []const u8),
+//mAssetPathToHandleDelete: std.StringHashMap(AssetHandle),
 mProjectDirectory: []const u8 = "",
 
 //different asset types
-mAssetIDToTextureMap: std.AutoHashMap(u128, Texture),
+//mAssetIDToTextureMap: std.AutoHashMap(u128, Texture),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     AssetM = try EngineAllocator.create(AssetManager);
@@ -25,53 +26,34 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mProjectDirectory = "",
         .mEngineAllocator = EngineAllocator,
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
-        .mAssetPathToHandle = std.StringHashMap(AssetHandle).init(AssetM._AssetGPA.allocator()),
-        .mAssetPathToHandleDelete = std.StringHashMap(AssetHandle).init(AssetM._AssetGPA.allocator()),
+        .mAssetIDToHandle = std.AutoHashMap(u128, AssetHandle).init(AssetM._AssetGPA.allocator()),
+        .mAssetIDToPath = std.StringHashMap(u128, []const u8).init(AssetM._AssetGPA.allocator()),
 
         //different asset types
-        .mAssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(AssetM._AssetGPA.allocator()),
+        //.mAssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(AssetM._AssetGPA.allocator()),
     };
 }
 
 pub fn Deinit() void {
-    AssetM.mAssetPathToHandle.deinit();
-    AssetM.mAssetPathToHandleDelete.deinit();
-
-    //different asset types
-    AssetM.mAssetIDToTextureMap.deinit();
-    if (AssetM.mProjectDirectory.len > 0) {
-        AssetM.mAssetGPA.allocator().free(AssetM.mProjectDirectory);
-    }
+    AssetM.mAssetIDToHandle.deinit();
+    AssetM.mAssetIDToPath.deinit();
     _ = AssetM.mAssetGPA.deinit();
     AssetM.mEngineAllocator.destroy(AssetM);
 }
 
-pub fn GetAsset(abs_path: []const u8) AssetHandle {
-    return CreateOrGetAssetHandle(abs_path);
+pub fn GetAssetHandle(id: u128) AssetHandle {
+    return AssetM.mAssetIDToHandle.get(id).?;
 }
 
-fn CreateOrGetAssetHandle(abs_path: []const u8) AssetHandle {
-    if (AssetM.mAssetPathToHandle.get(abs_path)) |asset_handle| {
+pub fn CreateAssetHandle(abs_path: []const u8) AssetHandle {
+    var hasher = std.hash.Fnv1a_128.init();
+    hasher.update(abs_path);
+    const id = hasher.final();
+    if (AssetM.mAssetIDToHandle.get(id)) |asset_handle| {
         return asset_handle;
     } else {
-        CreateAssetHandle(abs_path);
+        //TODO: create the new asset handle
     }
-}
-
-fn CreateAssetHandle(abs_path: []const u8) !void {
-    const handle = AssetHandle{
-        .mID = try GenUUID(),
-        .mLastModified = modifyTime,
-        .mSize = size,
-        .mHash = hash,
-        .mType = assetType,
-        .mAbsPath = try AssetM._AssetGPA.allocator().dupe(u8, abs_path),
-    };
-    try AssetM._AssetPathToHandle.put(abs_path, handle);
-}
-
-pub fn GetAssetHandle(id: u128) AssetHandle {
-    return AssetM._AssetIDToHandleMap.get(id).?;
 }
 
 pub fn UpdateProjectDirectory(path: []const u8) !void {
