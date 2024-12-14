@@ -13,6 +13,7 @@ var AssetM: *AssetManager = undefined;
 mEngineAllocator: std.mem.Allocator,
 mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
 mAssetPathToHandle: std.StringHashMap(AssetHandle),
+mAssetHandleCache: std.DoublyLinkedList(AssetHandle),
 
 mProjectDirectory: []const u8 = "",
 
@@ -26,7 +27,6 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mEngineAllocator = EngineAllocator,
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
         .mAssetPathToHandle = std.StringHashMap(AssetHandle).init(AssetM._AssetGPA.allocator()),
-
         //different asset types
         //.mAssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(AssetM._AssetGPA.allocator()),
     };
@@ -86,7 +86,7 @@ fn CreateAssetHandle(abs_path: []const u8) !*AssetHandle {
     return AssetM.mAssetPathToHandle.getPtr(abs_path).?;
 }
 
-pub fn OnUpdate() void {
+pub fn OnUpdate() !void {
     var iter = AssetM.mAssetPathToHandle.iterator();
 
     while (iter.next()) |entry| {
@@ -94,15 +94,21 @@ pub fn OnUpdate() void {
         const asset_handle = entry.value_ptr;
 
         //first check to see if this asset will just get deleted
-        if (asset_handle.mSize == 0 and std.time.nanoTimestamp() - asset_handle.mLastModified > 1000000000) {
-            DeleteAssetHandle(abs_path, asset_handle);
+        if (asset_handle.mSize == 0) {
+            if (std.time.nanoTimestamp() - asset_handle.mLastModified > 1000000000) {
+                DeleteAssetHandle(abs_path, asset_handle);
+            }
             continue;
         }
 
         //then check if the asset path is still valid
-        const file = std.fs.openFileAbsolute(abs_path, .{}) catch {
-            SetAssetHandleToDelete(asset_handle);
-            continue;
+        const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
+            if (err == error.FileNotFound) {
+                SetAssetHandleToDelete(asset_handle);
+                continue;
+            } else {
+                return err;
+            }
         };
         defer file.close();
 
