@@ -1,4 +1,6 @@
+mRefs: u32,
 mID: u128,
+mPath: []const u8,
 mLastModified: i128,
 mSize: u64,
 mHash: u64,

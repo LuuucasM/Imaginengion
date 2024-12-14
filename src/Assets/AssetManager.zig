@@ -12,9 +12,8 @@ var AssetM: *AssetManager = undefined;
 
 mEngineAllocator: std.mem.Allocator,
 mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
-mAssetIDToHandle: std.AutoHashMap(u128, AssetHandle),
-mAssetIDToPath: std.AutoHashMap(u128, []const u8),
-//mAssetPathToHandleDelete: std.StringHashMap(AssetHandle),
+mAssetPathToHandle: std.StringHashMap(AssetHandle),
+
 mProjectDirectory: []const u8 = "",
 
 //different asset types
@@ -26,8 +25,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mProjectDirectory = "",
         .mEngineAllocator = EngineAllocator,
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
-        .mAssetIDToHandle = std.AutoHashMap(u128, AssetHandle).init(AssetM._AssetGPA.allocator()),
-        .mAssetIDToPath = std.StringHashMap(u128, []const u8).init(AssetM._AssetGPA.allocator()),
+        .mAssetPathToHandle = std.StringHashMap(AssetHandle).init(AssetM._AssetGPA.allocator()),
 
         //different asset types
         //.mAssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(AssetM._AssetGPA.allocator()),
@@ -35,206 +33,104 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 }
 
 pub fn Deinit() void {
-    AssetM.mAssetIDToHandle.deinit();
-    AssetM.mAssetIDToPath.deinit();
+    AssetM.mAssetPathToHandle.deinit();
     _ = AssetM.mAssetGPA.deinit();
     AssetM.mEngineAllocator.destroy(AssetM);
 }
 
-pub fn GetAssetHandle(id: u128) AssetHandle {
-    return AssetM.mAssetIDToHandle.get(id).?;
-}
-
-pub fn CreateAssetHandle(abs_path: []const u8) AssetHandle {
-    var hasher = std.hash.Fnv1a_128.init();
-    hasher.update(abs_path);
-    const id = hasher.final();
-    if (AssetM.mAssetIDToHandle.get(id)) |asset_handle| {
+pub fn GetAssetHandle(abs_path: []const u8) AssetHandle {
+    if (AssetM.mAssetPathToHandle.getPtr(abs_path)) |asset_handle| {
+        asset_handle.mRefs += 1;
         return asset_handle;
     } else {
-        //TODO: create the new asset handle
+        const asset_handle = try CreateAssetHandle(abs_path);
+        asset_handle.mRefs += 1;
+        return asset_handle;
     }
 }
 
-pub fn UpdateProjectDirectory(path: []const u8) !void {
-    if (AssetM._ProjectDirectory.len > 0) {
-        var iter = AssetM._AssetPathToIDMap.iterator();
-        while (iter.next()) |entry| {
-            AssetM._AssetGPA.allocator().free(entry.key_ptr.*);
-        }
-        AssetM._AssetPathToIDMap.clearAndFree();
-        AssetM._AssetIDToHandleMap.clearAndFree();
-        AssetM._AssetIDToTextureMap.clearAndFree();
-
-        iter = AssetM._AssetPathToIDDelete.iterator();
-        while (iter.next()) |entry| {
-            AssetM._AssetGPA.allocator().free(entry.key_ptr.*);
-        }
-        AssetM._AssetPathToIDDelete.clearAndFree();
-        AssetM._AssetIDToHandleDelete.clearAndFree();
-
-        AssetM._AssetGPA.allocator().free(AssetM._ProjectDirectory);
+pub fn ReleaseAssetHandle(asset_handle: *AssetHandle) void {
+    asset_handle -= 1;
+    if (asset_handle.mRefs == 0) {
+        SetAssetHandleToDelete(asset_handle);
     }
-
-    AssetM._ProjectDirectory = try AssetM._AssetGPA.allocator().dupe(u8, path);
 }
 
-pub fn OnUpdate() !void {
-    //no project == no assets
-    if (AssetM._ProjectDirectory.len == 0) return;
+fn CreateAssetHandle(abs_path: []const u8) !*AssetHandle {
+    var path_hasher = std.hash.Fnv1a_128.init();
+    path_hasher.update(abs_path);
 
-    //for reading files later
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const allocator = arena.allocator();
-    defer arena.deinit();
+    const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
+        return err;
+    };
+    defer file.close();
+    const fstats = try file.stat();
 
-    //check current handles to see if they are still up to date
-    //and that they still exist
-    CheckHandles(allocator);
+    var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const allocator = file_arena.allocator();
+    var file_hasher = std.hash.Fnv1a_64.init();
+    file_hasher.update(file.readToEndAlloc(allocator, 4000000000));
 
-    //walk from the project directory to find any new assets or
-    //possibly recover modified assets
-    WalkDir(allocator);
+    AssetM.mAssetPathToHandle.put(
+        abs_path,
+        .{
+            .mRefs = 0,
+            .mHash = file_hasher.final(),
+            .mLastModified = fstats.mtime,
+            .mID = path_hasher.final(),
+            .mPath = AssetM.mAssetGPA.allocator().dupe([]const u8, abs_path),
+            .mSize = fstats.size,
+        },
+    );
 
-    //for handles that are for sure deleted now
-    CleanUpHandles();
+    return AssetM.mAssetPathToHandle.getPtr(abs_path).?;
 }
 
-fn CheckHandles(allocator: std.mem.Allocator) void {
+pub fn OnUpdate() void {
     var iter = AssetM.mAssetPathToHandle.iterator();
 
     while (iter.next()) |entry| {
         const abs_path = entry.key_ptr.*;
-        const handle = entry.value_ptr.*;
+        const asset_handle = entry.value_ptr;
 
-        const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
-            if (err == error.FileNotFound) {
-                try HandleDeletedAssets(handle);
-                continue;
-            } else {
-                return err;
-            }
+        //first check to see if this asset will just get deleted
+        if (asset_handle.mSize == 0 and std.time.nanoTimestamp() - asset_handle.mLastModified > 1000000000) {
+            DeleteAssetHandle(abs_path, asset_handle);
+            continue;
+        }
+
+        //then check if the asset path is still valid
+        const file = std.fs.openFileAbsolute(abs_path, .{}) catch {
+            SetAssetHandleToDelete(asset_handle);
+            continue;
         };
         defer file.close();
 
-        //check if the file has been modified
+        //then check if the asset needs to be updated
         const fstats = try file.stat();
-        if (fstats.mtime != handle.mLastModified) {
-            try HandleModifiedAsset(handle, file, fstats, allocator);
+        if (asset_handle.mLastModified != fstats.mtime) {
+            UpdateAssetHandle(asset_handle, file, fstats);
         }
     }
 }
 
-fn WalkDir(allocator: std.mem.Allocator) void {
-    //Walk dir
-    var dir = try std.fs.openDirAbsolute(AssetM._ProjectDirectory, .{ .iterate = true });
-    defer dir.close();
-
-    var walker = try dir.walk(allocator);
-    defer walker.deinit();
-
-    while (true) {
-        const entry = walker.next() catch |err| {
-            switch (err) {
-                error.Unexpected => {
-                    continue;
-                },
-                else => return err,
-            }
-        } orelse break;
-
-        if (entry.kind != .file) continue;
-
-        const rel_path = entry.path;
-        const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ AssetM._ProjectDirectory, rel_path });
-
-        const file_extension = std.fs.path.extension(rel_path);
-        const asset_type = .NotAsset;
-        if (std.mem.eql(u8, file_extension, ".png") == true) {
-            asset_type = .PNG;
-        }
-        if (asset_type != .NotAsset) {
-            //check if the file still exists
-            const asset_handle = CreateOrGetAssetHandle(abs_path);
-            const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
-                if (err == error.FileNotFound) {
-                    try HandleDeletedAssets(asset_handle);
-                    continue;
-                } else {
-                    return err;
-                }
-            };
-            defer file.close();
-
-            //check if the file has been modified
-            const fstats = try file.stat();
-
-            if (fstats.mtime != asset_handle._AssetLastModified) {
-                try HandleModifiedAsset(asset_handle, file, fstats.mtime, allocator);
-            }
-        }
-    }
+fn DeleteAssetHandle(abs_path: []const u8, asset_handle: AssetHandle) void {
+    AssetM.mAssetGPA.allocator().free(asset_handle.mPath);
+    AssetM.mAssetPathToHandle.remove(abs_path);
 }
 
-fn CleanUpHandles() void {}
-
-fn HandleDeletedAssets(asset_handle: AssetHandle) !void {
-    var new_handle = asset_handle;
-    //set asset last modified to the current time
-    //so we can keep the handle around for 1-2 seconds before deleting
-    new_handle._AssetLastModified = std.time.nanoTimestamp();
-
-    _ = AssetM._AssetPathToIDMap.remove(asset_handle._AssetAbsPath);
-    _ = AssetM._AssetIDToHandleMap.remove(asset_handle._AssetID);
-    if (asset_handle._AssetType == .Texture) {
-        _ = AssetM._AssetIDToTextureMap.remove(asset_handle);
-    }
-
-    try AssetM._AssetPathToIDDelete.put(asset_handle.mAbsPath, asset_handle.mID);
-    try AssetM._AssetIDToHandleDelete.put(new_handle.mID, new_handle);
+fn SetAssetHandleToDelete(asset_handle: *AssetHandle) void {
+    asset_handle.mSize = 0;
+    asset_handle.mLastModified = std.time.nanoTimestamp();
 }
 
-fn HandleModifiedAsset(asset_handle: AssetHandle, file: std.fs.File, stats: std.fs.File.Stat, allocator: std.mem.Allocator) void {
-    asset_handle.mSize = stats.size;
+fn UpdateAssetHandle(asset_handle: *AssetHandle, file: std.fs.File, fstats: std.fs.File.Stat) void {
+    var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    const allocator = file_arena.allocator();
+    var file_hasher = std.hash.Fnv1a_64.init();
+    file_hasher.update(file.readToEndAlloc(allocator, 4000000000));
 
-    asset_handle.mLastModified = stats.mtime;
-
-    //update hash
-    const content = try file.readToEndAlloc(allocator, @intCast(fstats.size));
-    defer allocator.free(content);
-
-    var hasher = std.hash.Wyhash.init(0);
-    hasher.update(content);
-    const hash = hasher.final();
-
-    asset_handle.mHash = hash;
-}
-
-fn RestoreDeletedAsset(old_rel_path: []const u8, id: u128, handle: AssetHandle, new_rel_path: []const u8, new_mtime: i128) !void {
-    var new_handle = handle;
-    new_handle._AssetPath = try AssetM._AssetGPA.allocator().dupe(u8, new_rel_path);
-    new_handle._AssetLastModified = new_mtime;
-
-    try AssetM._AssetPathToIDMap.put(new_handle._AssetPath, id);
-    try AssetM._AssetIDToHandleMap.put(id, new_handle);
-    _ = AssetM._AssetPathToIDDelete.remove(old_rel_path);
-    _ = AssetM._AssetIDToHandleDelete.remove(id);
-
-    AssetM._AssetGPA.allocator().free(handle._AssetPath);
-}
-
-fn CleanUpDeletedAssets() !void {
-    const current_time = std.time.nanoTimestamp();
-    var iter = AssetM._AssetPathToIDDelete.iterator();
-    while (iter.next()) |entry| {
-        const rel_path = entry.key_ptr.*;
-        const id = entry.value_ptr.*;
-        if (AssetM._AssetIDToHandleDelete.get(id)) |handle| {
-            if (current_time - handle._AssetLastModified > 1000000000) {
-                _ = AssetM._AssetPathToIDDelete.remove(rel_path);
-                _ = AssetM._AssetIDToHandleDelete.remove(id);
-                AssetM._AssetGPA.allocator().free(rel_path);
-            }
-        }
-    }
+    asset_handle.mHash = file_hasher.final();
+    asset_handle.mLastModified = fstats.mtime;
+    asset_handle.mSize = fstats.size;
 }
