@@ -2,38 +2,37 @@ const std = @import("std");
 const IComponentArray = @import("ComponentArray.zig").IComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const Components = @import("Components.zig");
-const ComponentsList = Components.ComponentsList;
 const EComponents = Components.EComponents;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 
 const ComponentManager = @This();
 
-pub const BitFieldType: type = std.meta.Int(.unsigned, ComponentsList.len);
+pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
 
 _ComponentsArrays: std.ArrayList(IComponentArray),
 _EntitySkipField: SparseSet(.{
     .SparseT = u32,
     .DenseT = u32,
-    .ValueT = StaticSkipField(ComponentsList.len + 1),
+    .ValueT = StaticSkipField(32 + 1), //32 is abritrary number
     .value_layout = .InternalArrayOfStructs,
     .allow_resize = .ResizeAllowed,
 }),
 
-pub fn Init(ECSAllocator: std.mem.Allocator) !ComponentManager {
+pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !ComponentManager {
     var new_component_manager = ComponentManager{
         ._ComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
         ._EntitySkipField = try SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
-            .ValueT = StaticSkipField(ComponentsList.len + 1),
+            .ValueT = StaticSkipField(32 + 1), //32 is abitrary number
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
         }).init(ECSAllocator, 20, 10),
     };
 
     //init component arrays
-    inline for (ComponentsList) |component_type| {
+    inline for (components_list) |component_type| {
         const component_array = try ECSAllocator.create(ComponentArray(component_type));
         component_array.* = try ComponentArray(component_type).Init(ECSAllocator);
 
@@ -103,7 +102,7 @@ pub fn DeStringify(self: *ComponentManager, components_index: usize, component_s
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
     std.debug.assert(!self._EntitySkipField.hasSparse(entityID));
     const dense_ind = self._EntitySkipField.add(entityID);
-    self._EntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(ComponentsList.len + 1).Init(.AllSkip);
+    self._EntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(32 + 1).Init(.AllSkip); //32 is arbitrary
 }
 pub fn DestroyEntity(self: *ComponentManager, entityID: u32) !void {
     std.debug.assert(self._EntitySkipField.hasSparse(entityID));

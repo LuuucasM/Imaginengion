@@ -1,6 +1,6 @@
 const std = @import("std");
-const glad = @import("../Core/CImports.zig").glad;
-const stb = @import("../Core/CImports.zig").stb;
+const glad = @import("../../../Core/CImports.zig").glad;
+const stb = @import("../../../Core/CImports.zig").stb;
 const OpenGLTexture2D = @This();
 
 _Width: c_int,

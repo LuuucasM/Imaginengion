@@ -2,9 +2,8 @@ const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const Asset = @import("Asset.zig");
 const AssetHandle = Asset.AssetHandle;
-
-//const Scene = @import("");
-const Texture = @import("../Textures/Texture.zig").Texture;
+const AssetsList = @import("Assets.zig").AssetsList;
+const ECSManager = @import("../ECS/ECSManager.zig");
 
 const AssetManager = @This();
 
@@ -16,11 +15,8 @@ var AssetM: *AssetManager = undefined;
 mEngineAllocator: std.mem.Allocator,
 mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
 mAssetIDToAsset: std.AutoHashMap(u32, Asset),
-
+mAssetMemoryManager: ECSManager,
 mProjectDirectory: []const u8 = "",
-
-//different asset types
-//mAssetIDToTextureMap: std.AutoHashMap(u128, Texture),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     AssetM = try EngineAllocator.create(AssetManager);
@@ -28,14 +24,14 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mProjectDirectory = "",
         .mEngineAllocator = EngineAllocator,
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
-        .mAssetIDToAsset = std.AutoHashMap(u32, Asset).init(AssetM._AssetGPA.allocator()),
-        //different asset types
-        //.mAssetIDToTextureMap = std.AutoHashMap(u128, Texture).init(AssetM._AssetGPA.allocator()),
+        .mAssetIDToAsset = std.AutoHashMap(u32, Asset).init(AssetM.mAssetGPA.allocator()),
+        .mAssetMemoryManager = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList),
     };
 }
 
 pub fn Deinit() void {
     AssetM.mAssetIDToAsset.deinit();
+    AssetM.mAssetMemoryManager.Deinit();
     _ = AssetM.mAssetGPA.deinit();
     AssetM.mEngineAllocator.destroy(AssetM);
 }
@@ -63,11 +59,8 @@ pub fn ReleaseAssetHandleRef(asset_id: u32) void {
     }
 }
 
-pub fn GetAsset(asset_id: u32) ?*anyopaque {
-    if (AssetM.mAssetIDToAsset.get(asset_id)) |asset| {
-        return asset.mMemoryLoc;
-    }
-    return null;
+pub fn GetAsset(comptime asset_type: type, asset_id: u32) *asset_type {
+    return AssetM.mAssetMemoryManager.GetComponent(asset_type, AssetM.mAssetIDToAsset.get(asset_id).?.mInternalID);
 }
 
 pub fn OnUpdate() !void {
@@ -96,9 +89,28 @@ pub fn OnUpdate() !void {
         //then check if the asset needs to be updated
         const fstats = try file.stat();
         if (asset.mLastModified != fstats.mtime) {
-            UpdateAssetHandle(asset, file, fstats);
+            try UpdateAssetHandle(asset, file, fstats);
         }
     }
+}
+
+pub fn GetHandleMap() std.AutoHashMap(u32, Asset) {
+    return AssetM.mAssetIDToAsset;
+}
+
+pub fn UpdateProjectDirectory(path: []const u8) !void {
+    if (AssetM.mProjectDirectory.len > 0) {
+        var iter = AssetM.mAssetIDToAsset.iterator();
+        while (iter.next()) |entry| {
+            AssetM.mAssetGPA.allocator().free(entry.value_ptr.mPath);
+        }
+
+        AssetM.mAssetIDToAsset.clearAndFree();
+
+        AssetM.mAssetGPA.allocator().free(AssetM.mProjectDirectory);
+    }
+
+    AssetM.mProjectDirectory = try AssetM.mAssetGPA.allocator().dupe(u8, path);
 }
 
 fn CreateAsset(abs_path: []const u8, path_hash: u32) !*Asset {
@@ -134,7 +146,7 @@ fn CreateAsset(abs_path: []const u8, path_hash: u32) !*Asset {
 
 fn DeleteAsset(asset: *Asset) void {
     AssetM.mAssetGPA.allocator().free(asset.mPath);
-    AssetM.mAssetIDToAsset.remove(asset.mAssetHandle.mID);
+    _ = AssetM.mAssetIDToAsset.remove(asset.mAssetHandle.mID);
 }
 
 fn SetAssetToDelete(asset: *Asset) void {
@@ -142,12 +154,12 @@ fn SetAssetToDelete(asset: *Asset) void {
     asset.mLastModified = std.time.nanoTimestamp();
 }
 
-fn UpdateAssetHandle(asset: *Asset, file: std.fs.File, fstats: std.fs.File.Stat) void {
+fn UpdateAssetHandle(asset: *Asset, file: std.fs.File, fstats: std.fs.File.Stat) !void {
     var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer file_arena.deinit();
     const allocator = file_arena.allocator();
     var file_hasher = std.hash.Fnv1a_64.init();
-    file_hasher.update(file.readToEndAlloc(allocator, MAX_FILE_SIZE));
+    file_hasher.update(try file.readToEndAlloc(allocator, MAX_FILE_SIZE));
 
     asset.mHash = file_hasher.final();
     asset.mLastModified = fstats.mtime;
@@ -178,7 +190,7 @@ fn RetryAssetExists(asset: *Asset) !bool {
 
     const fstats = try file.stat();
 
-    UpdateAssetHandle(asset, file, fstats);
+    try UpdateAssetHandle(asset, file, fstats);
 
     return true;
 }

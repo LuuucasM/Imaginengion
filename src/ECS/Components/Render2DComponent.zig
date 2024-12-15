@@ -27,7 +27,7 @@ pub fn ImguiRender(self: *Render2DComponent) void {
     const thumbnail_size: f32 = 70.0;
     _ = padding;
     _ = thumbnail_size;
-    imgui.igColorEdit4("Color", &self.Color, imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.Color), imgui.ImGuiColorEditFlags_None);
     imgui.igText("TEMPORARY TEXTURE TARGET");
     if (imgui.igBeginDragDropTarget() == true) {
         if (imgui.igAcceptDragDropPayload("TextureLoad", imgui.ImGuiDragDropFlags_None)) |payload| {

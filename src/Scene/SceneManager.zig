@@ -11,6 +11,7 @@ const LayerType = SceneLayer.LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const SceneSerializer = @import("SceneSerializer.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
+const ComponentsArray = @import("../ECS/Components.zig").ComponentsList;
 const SceneManager = @This();
 
 pub const ESceneState = enum {
@@ -30,7 +31,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     return SceneManager{
         .mFrameBuffer = FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STENCIL8, 1, false).Init(width, height),
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
-        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator()),
+        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray),
         .mSceneState = .Stop,
         .mLayerInsertIndex = 0,
     };

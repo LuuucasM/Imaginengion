@@ -10,10 +10,10 @@ _ComponentManager: ComponentManager,
 _SystemManager: SystemManager,
 mECSAllocator: std.mem.Allocator,
 
-pub fn Init(ECSAllocator: std.mem.Allocator) !ECSManager {
+pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_array: []const type) !ECSManager {
     return ECSManager{
         ._EntityManager = EntityManager.Init(ECSAllocator),
-        ._ComponentManager = try ComponentManager.Init(ECSAllocator),
+        ._ComponentManager = try ComponentManager.Init(ECSAllocator, components_array),
         ._SystemManager = try SystemManager.Init(ECSAllocator),
         .mECSAllocator = ECSAllocator,
     };

@@ -13,7 +13,6 @@ pub fn Init() AssetHandlePanel {
 }
 
 pub fn OnImguiRender(self: AssetHandlePanel) !void {
-
     if (self._P_Open == false) return;
     _ = imgui.igBegin("AssetHandles", null, 0);
     defer imgui.igEnd();
@@ -22,7 +21,7 @@ pub fn OnImguiRender(self: AssetHandlePanel) !void {
     const HandleMap = AssetManager.GetHandleMap();
     var iter = HandleMap.iterator();
     while (iter.next()) |entry| {
-        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ entry.key_ptr.*, entry.value_ptr._AssetPath });
+        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ entry.key_ptr.*, entry.value_ptr.mPath });
         defer fba.allocator().free(text);
         imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
     }

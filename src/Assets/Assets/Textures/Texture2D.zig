@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const AssetsList = @import("../../Assets.zig").AssetsList;
 const Texture2D = @This();
 
 const Impl = switch (builtin.os.tag) {
@@ -45,3 +46,11 @@ pub fn Bind(self: Texture2D, slot: u32) void {
 pub fn Unbind(self: Texture2D, slot: u32) void {
     self._Impl.Unbind(slot);
 }
+
+pub const Ind: usize = blk: {
+    for (AssetsList, 0..) |asset_type, i| {
+        if (asset_type == Texture2D) {
+            break :blk i;
+        }
+    }
+};

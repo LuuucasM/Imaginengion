@@ -5,7 +5,7 @@ const ImguiEvent = ImguiEvents.ImguiEvent;
 const NewProjectEvent = ImguiEvents.NewProjectEvent;
 const OpenProjectEvent = ImguiEvents.OpenProjectEvent;
 const ContentBrowserPanel = @This();
-const Texture2D = @import("../Textures/Texture2D.zig");
+const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 
 const MAX_PATH_LEN = 260;
 
@@ -27,7 +27,7 @@ pub fn Init() !ContentBrowserPanel {
     const dir_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/foldericon.png" });
     const png_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/pngicon.png" });
     const backarrow_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/backarrowicon.png" });
-    const scene_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8 {cwd_dir_path, "/assets/textures/sceneicon.png" });
+    const scene_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/sceneicon.png" });
 
     return ContentBrowserPanel{
         .mIsVisible = true,
@@ -117,11 +117,10 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             icon_ptr = &self.mDirTexture;
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
             icon_ptr = &self.mPngTexture;
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true){
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             icon_ptr = &self.mSceneTexture;
         }
         if (icon_ptr) |texture| {
-
             var name_buf: [260]u8 = undefined;
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
