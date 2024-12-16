@@ -21,7 +21,7 @@ pub fn OnImguiRender(self: AssetHandlePanel) !void {
     const HandleMap = AssetManager.GetHandleMap();
     var iter = HandleMap.iterator();
     while (iter.next()) |entry| {
-        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ entry.key_ptr.*, entry.value_ptr.mPath });
+        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ entry.key_ptr.*, entry.value_ptr.mAbsPath });
         defer fba.allocator().free(text);
         imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
     }

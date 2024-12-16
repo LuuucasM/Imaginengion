@@ -136,13 +136,11 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_NewProjectEvent => |e| {
                 if (e.Path.len > 0) {
-                    try AssetManager.UpdateProjectDirectory(e.Path);
                     try self._ContentBrowserPanel.OnNewProjectEvent(e.Path);
                 }
             },
             .ET_OpenProjectEvent => |e| {
                 if (e.Path.len > 0) {
-                    try AssetManager.UpdateProjectDirectory(std.fs.path.dirname(e.Path).?);
                     try self._ContentBrowserPanel.OnOpenProjectEvent(e.Path);
                 }
             },

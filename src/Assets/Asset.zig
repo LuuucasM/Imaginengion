@@ -14,7 +14,7 @@ pub const AssetHandle = struct {
 const Asset = @This();
 mAssetHandle: AssetHandle,
 mRefs: u32,
-mPath: []const u8,
+mAbsPath: []const u8,
 mLastModified: i128,
 mSize: u64,
 mHash: u64,
