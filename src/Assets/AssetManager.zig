@@ -34,6 +34,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 
 pub fn Deinit() void {
     AssetM.mAssetIDToAsset.deinit();
+    AssetM.mAssetECS.Deinit();
     AssetM.mAssetMemoryPool.deinit();
     _ = AssetM.mAssetGPA.deinit();
     AssetM.mEngineAllocator.destroy(AssetM);

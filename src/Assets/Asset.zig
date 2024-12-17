@@ -1,17 +1,7 @@
 const std = @import("std");
-
-pub const AssetState = enum(u2) {
-    NotLoaded,
-    InCPU,
-    InGPU,
-};
-
-pub const AssetHandle = struct {
-    mID: u32,
-    mLoadState: AssetState,
-};
-
+const AssetHandle = @import("AssetHandle.zig");
 const Asset = @This();
+
 mAssetHandle: AssetHandle,
 mRefs: u32,
 mAbsPath: []const u8,
