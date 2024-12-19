@@ -79,6 +79,11 @@ pub fn GetComponent(self: ComponentManager, comptime ComponentType: type, entity
     return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).GetComponent(entityID);
 }
 
+pub fn GetOrAddComponent(self: ComponentManager, comptime ComponentType: type, entityID: u32) *ComponentType {
+    if (self.HasComponent(ComponentType, entityID) == true) {} else {}
+    return self.GetComponent(ComponentType, entityID);
+}
+
 pub fn Stringify(self: ComponentManager, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
     std.debug.assert(self._EntitySkipField.hasSparse(entityID));
     const entity_skipfield = self._EntitySkipField.getValueBySparse(entityID);

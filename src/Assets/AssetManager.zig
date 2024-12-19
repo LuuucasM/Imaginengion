@@ -2,6 +2,10 @@ const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const Asset = @import("Asset.zig");
 const AssetHandle = Asset.AssetHandle;
+const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
+const AssetMetaData = @import("./Assets/AssetMetaData.zig");
+const FileMetaData = @import("./Assets/FileMetaData.zig");
+const IDComponent = @import("./Assets/IDComponent.zig");
 const AssetsList = @import("Assets.zig").AssetsList;
 const ECSManager = @import("../ECS/ECSManager.zig");
 
@@ -17,6 +21,7 @@ mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
 mAssetIDToAsset: std.AutoHashMap(u32, Asset),
 mAssetECS: ECSManager,
 mAssetMemoryPool: std.heap.ArenaAllocator,
+mAssetPathToID: std.StringHashMap(u32),
 //note the head of the list is most recently used and tail is lease
 mAssetGPUCache: std.DoublyLinkedList(Asset),
 mAssetCPUCache: std.DoublyLinkedList(Asset),
@@ -29,6 +34,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mAssetIDToAsset = std.AutoHashMap(u32, Asset).init(AssetM.mAssetGPA.allocator()),
         .mAssetECS = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList),
         .mAssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+        .mAssetPathToID = std.StringHashMap(u32).init(AssetM.mAssetGPA.allocator()),
     };
 }
 
@@ -36,36 +42,35 @@ pub fn Deinit() void {
     AssetM.mAssetIDToAsset.deinit();
     AssetM.mAssetECS.Deinit();
     AssetM.mAssetMemoryPool.deinit();
+    AssetM.mAssetPathToID.deinit();
     _ = AssetM.mAssetGPA.deinit();
     AssetM.mEngineAllocator.destroy(AssetM);
 }
 
-pub fn GetAssetHandleRef(abs_path: []const u8) *AssetHandle {
-    var path_hasher = std.hash.Fnv1a_32.init();
-    path_hasher.update(abs_path);
-    const path_hash = path_hasher.final();
-
-    if (AssetM.mAssetIDToAsset.getPtr(path_hash)) |asset| {
-        asset.mRefs += 1;
-        return &asset.mAssetHandle;
+pub fn GetAssetHandleRef(abs_path: []const u8) AssetHandle {
+    if (AssetM.mAssetPathToID.get(abs_path)) |entity_id| {
+        AssetM.mAssetECS.GetComponent(AssetMetaData, entity_id).mRefs += 1;
+        return AssetHandle{
+            .mID = entity_id,
+            .mECSRef = &AssetM.mAssetECS,
+        };
     } else {
-        const asset = try CreateAsset(abs_path, path_hash);
-        asset.mRefs += 1;
-        return &asset.mAssetHandle;
+        const asset_handle = CreateAsset(abs_path);
+        AssetM.mAssetPathToID.put(abs_path, asset_handle.mID);
+        return asset_handle;
     }
 }
 
 pub fn ReleaseAssetHandleRef(asset_id: u32) void {
-    const asset = AssetM.mAssetIDToAsset.getPtr(asset_id).?;
-    asset.mRefs -= 1;
-    if (asset.mRefs == 0) {
-        SetAssetToDelete(asset);
+    const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_id).mRefs;
+    asset_meta_data.mRefs -= 1;
+    if (asset_meta_data.mRefs == 0) {
+        SetAssetToDelete(asset_id);
     }
 }
 
-pub fn GetAsset(comptime asset_type: type, asset_id: u32) *asset_type {
-    const asset = AssetM.mAssetIDToAsset.get(asset_id).?;
-    return AssetM.mAssetECS.GetComponent(asset_type, asset.mInternalID);
+pub fn GetAsset(comptime asset_type: type, asset_id: u32) asset_type {
+    return AssetM.mAssetECS.GetOrAddComponent(asset_type, asset_id);
 }
 
 pub fn OnUpdate() !void {
@@ -103,7 +108,16 @@ pub fn GetHandleMap() std.AutoHashMap(u32, Asset) {
     return AssetM.mAssetIDToAsset;
 }
 
-fn CreateAsset(abs_path: []const u8, path_hash: u32) !*Asset {
+fn CreateAsset(abs_path: []const u8) AssetHandle {
+    const new_handle = AssetHandle{
+        .mID = AssetM.mAssetECS.CreateEntity(),
+        .ECSRef = &AssetM.mAssetECS,
+    };
+    AssetM.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
+        .mAssetType = .None,
+        .mRefs = 1,
+    });
+
     const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
         return err;
     };
@@ -116,22 +130,18 @@ fn CreateAsset(abs_path: []const u8, path_hash: u32) !*Asset {
     var file_hasher = std.hash.Fnv1a_64.init();
     file_hasher.update(try file.readToEndAlloc(allocator, MAX_FILE_SIZE));
 
-    AssetM.mAssetIDToAsset.put(
-        path_hash,
-        .{
-            .mAssetHandle = .{
-                .mID = path_hash,
-                .mLoadState = .NotLoaded,
-            },
-            .mRefs = 0,
-            .mHash = file_hasher.final(),
-            .mLastModified = fstats.mtime,
-            .mAbsPath = AssetM.mAssetGPA.allocator().dupe([]const u8, abs_path),
-            .mSize = fstats.size,
-        },
-    );
+    AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
+        .mAbsPath = AssetM.mAssetGPA.allocator().dupe([]const u8, abs_path),
+        .mLastModified = fstats.mtime,
+        .mSize = fstats.size,
+        .mHash = file_hasher.final(),
+    });
 
-    return AssetM.mAssetIDToAsset.getPtr(path_hash).?;
+    AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
+        .ID = GenUUID(),
+    });
+
+    return new_handle;
 }
 
 fn DeleteAsset(asset: *Asset) void {
@@ -139,9 +149,10 @@ fn DeleteAsset(asset: *Asset) void {
     _ = AssetM.mAssetIDToAsset.remove(asset.mAssetHandle.mID);
 }
 
-fn SetAssetToDelete(asset: *Asset) void {
-    asset.mSize = 0;
-    asset.mLastModified = std.time.nanoTimestamp();
+fn SetAssetToDelete(asset_id: u32) void {
+    const file_meta_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    file_meta_data.mLastModified = std.time.nanoTimestamp();
+    file_meta_data.mSize = 0;
 }
 
 fn UpdateAsset(asset: *Asset, file: std.fs.File, fstats: std.fs.File.Stat) !void {

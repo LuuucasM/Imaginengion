@@ -70,6 +70,10 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
     return self._ComponentManager.GetComponent(ComponentType, entityID);
 }
 
+pub fn GetOrAddComponent(self: ECSManager, comptime ComponentType: type, entityID: u32) *ComponentType {
+    return self._ComponentManager.GetOrAddComponent(ComponentType, entityID);
+}
+
 pub fn Stringify(self: ECSManager, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
     try self._ComponentManager.Stringify(write_stream, entityID);
 }
