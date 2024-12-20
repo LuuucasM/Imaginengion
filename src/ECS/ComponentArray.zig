@@ -93,7 +93,7 @@ pub fn ComponentArray(comptime componentType: type) type {
     return struct {
         const Self = @This();
 
-        _Components: SparseSet(.{
+        mComponents: SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
             .ValueT = componentType,
@@ -103,7 +103,7 @@ pub fn ComponentArray(comptime componentType: type) type {
 
         pub fn Init(allocator: std.mem.Allocator) !Self {
             return .{
-                ._Components = try SparseSet(.{
+                .mComponents = try SparseSet(.{
                     .SparseT = u32,
                     .DenseT = u32,
                     .ValueT = componentType,
@@ -113,28 +113,31 @@ pub fn ComponentArray(comptime componentType: type) type {
             };
         }
         pub fn Deinit(self: *Self) void {
-            self._Components.deinit();
+            self.mComponents.deinit();
         }
         pub fn DuplicateEntity(self: *Self, original_entity_id: u32, new_entity_id: u32) void {
-            const new_dense_ind = self._Components.add(new_entity_id);
-            self._Components.getValueByDense(new_dense_ind).* = self._Components.getValueBySparse(original_entity_id).*;
+            const new_dense_ind = self.mComponents.add(new_entity_id);
+            self.mComponents.getValueByDense(new_dense_ind).* = self.mComponents.getValueBySparse(original_entity_id).*;
         }
         pub fn AddComponent(self: *Self, entityID: u32, component: componentType) !*componentType {
-            const dense_ind = self._Components.add(entityID);
+            const dense_ind = self.mComponents.add(entityID);
 
-            const new_component = self._Components.getValueByDense(dense_ind);
+            const new_component = self.mComponents.getValueByDense(dense_ind);
             new_component.* = component;
 
             return new_component;
         }
         pub fn RemoveComponent(self: *Self, entityID: u32) !void {
-            self._Components.remove(entityID);
+            self.mComponents.remove(entityID);
         }
         pub fn HasComponent(self: Self, entityID: u32) bool {
-            return self._Components.hasSparse(entityID);
+            return self.mComponents.hasSparse(entityID);
         }
         pub fn GetComponent(self: Self, entityID: u32) *componentType {
-            return self._Components.getValueBySparse(entityID);
+            return self.mComponents.getValueBySparse(entityID);
+        }
+        pub fn NumOfComponents(self: *Self) usize {
+            return self.mComponents.dense_count;
         }
         pub fn Stringify(self: Self, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
             const component = self.GetComponent(entityID).*;

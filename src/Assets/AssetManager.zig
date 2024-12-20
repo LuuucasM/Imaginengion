@@ -18,7 +18,6 @@ var AssetM: *AssetManager = undefined;
 
 mEngineAllocator: std.mem.Allocator,
 mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
-mAssetIDToAsset: std.AutoHashMap(u32, Asset),
 mAssetECS: ECSManager,
 mAssetMemoryPool: std.heap.ArenaAllocator,
 mAssetPathToID: std.StringHashMap(u32),
@@ -40,6 +39,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 
 pub fn Deinit() void {
     AssetM.mAssetIDToAsset.deinit();
+    //TODO: get all of the file_data components and free the mAbsPath
     AssetM.mAssetECS.Deinit();
     AssetM.mAssetMemoryPool.deinit();
     AssetM.mAssetPathToID.deinit();
@@ -70,11 +70,20 @@ pub fn ReleaseAssetHandleRef(asset_id: u32) void {
 }
 
 pub fn GetAsset(comptime asset_type: type, asset_id: u32) asset_type {
-    return AssetM.mAssetECS.GetOrAddComponent(asset_type, asset_id);
+    if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
+        return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
+    } else {
+        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+        const new_asset: asset_type = asset_type.Init(file_data.mAbsPath);
+        return new_asset;
+    }
 }
 
 pub fn OnUpdate() !void {
-    var iter = AssetM.mAssetIDToAsset.iterator();
+    //TODO: get all of the file_data components
+    //iterate through and check what im doing here
+
+    var iter = AssetM.m.iterator();
 
     while (iter.next()) |entry| {
         const asset = entry.value_ptr;
@@ -105,6 +114,7 @@ pub fn OnUpdate() !void {
 }
 
 pub fn GetHandleMap() std.AutoHashMap(u32, Asset) {
+    //TODO: return list of file_data
     return AssetM.mAssetIDToAsset;
 }
 
@@ -118,35 +128,32 @@ fn CreateAsset(abs_path: []const u8) AssetHandle {
         .mRefs = 1,
     });
 
-    const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
-        return err;
-    };
-    defer file.close();
-    const fstats = try file.stat();
-
-    var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer file_arena.deinit();
-    const allocator = file_arena.allocator();
-    var file_hasher = std.hash.Fnv1a_64.init();
-    file_hasher.update(try file.readToEndAlloc(allocator, MAX_FILE_SIZE));
-
     AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
         .mAbsPath = AssetM.mAssetGPA.allocator().dupe([]const u8, abs_path),
-        .mLastModified = fstats.mtime,
-        .mSize = fstats.size,
-        .mHash = file_hasher.final(),
+        .mLastModified = 0,
+        .mSize = 0,
+        .mHash = 0,
     });
 
     AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
         .ID = GenUUID(),
     });
 
+    const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
+        return err;
+    };
+    defer file.close();
+    const fstats = try file.stat();
+
+    UpdateAsset(new_handle.mID, file, fstats);
+
     return new_handle;
 }
 
-fn DeleteAsset(asset: *Asset) void {
-    AssetM.mAssetGPA.allocator().free(asset.mAbsPath);
-    _ = AssetM.mAssetIDToAsset.remove(asset.mAssetHandle.mID);
+fn DeleteAsset(asset_id: u32) void {
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
+    AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 
 fn SetAssetToDelete(asset_id: u32) void {
@@ -155,31 +162,34 @@ fn SetAssetToDelete(asset_id: u32) void {
     file_meta_data.mSize = 0;
 }
 
-fn UpdateAsset(asset: *Asset, file: std.fs.File, fstats: std.fs.File.Stat) !void {
+fn UpdateAsset(asset_id: u32, file: std.fs.File, fstats: std.fs.File.Stat) !void {
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+
     var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer file_arena.deinit();
     const allocator = file_arena.allocator();
     var file_hasher = std.hash.Fnv1a_64.init();
     file_hasher.update(try file.readToEndAlloc(allocator, MAX_FILE_SIZE));
 
-    asset.mHash = file_hasher.final();
-    asset.mLastModified = fstats.mtime;
-    asset.mSize = fstats.size;
+    file_data.mHash = file_hasher.final();
+    file_data.mLastModified = fstats.mtime;
+    file_data.mSize = fstats.size;
 }
 
-fn CheckAssetToDelete(asset: *Asset) !void {
+fn CheckAssetToDelete(asset_id: u32) !void {
     //check to see if we can recover the asset
-    if (try RetryAssetExists(asset)) return;
+    if (try RetryAssetExists(asset_id)) return;
 
     //if its run out of time then just delete
-    if (std.time.nanoTimestamp() - asset.mLastModified > ASSET_DELETE_TIMEOUT_NS) {
-        DeleteAsset(asset);
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    if (std.time.nanoTimestamp() - file_data.mLastModified > ASSET_DELETE_TIMEOUT_NS) {
+        DeleteAsset(asset_id);
     }
 }
 
 //This function checks again to see if we can open the file maybe there was
 //some weird issue last frame but this frame the file is ok so we can recover it
-fn RetryAssetExists(asset: *Asset) !bool {
+fn RetryAssetExists(asset_id: u32) !bool {
     const file = std.fs.openFileAbsolute(asset.mAbsPath, .{}) catch |err| {
         if (err == error.FileNotFound) {
             return false;
@@ -191,7 +201,7 @@ fn RetryAssetExists(asset: *Asset) !bool {
 
     const fstats = try file.stat();
 
-    try UpdateAsset(asset, file, fstats);
+    try UpdateAsset(asset_id, file, fstats);
 
     return true;
 }

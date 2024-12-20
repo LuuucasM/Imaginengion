@@ -5,13 +5,14 @@ const Components = @import("Components.zig");
 const EComponents = Components.EComponents;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
+const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 
 const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
 
-_ComponentsArrays: std.ArrayList(IComponentArray),
-_EntitySkipField: SparseSet(.{
+mComponentsArrays: std.ArrayList(IComponentArray),
+mEntitySkipField: SparseSet(.{
     .SparseT = u32,
     .DenseT = u32,
     .ValueT = StaticSkipField(32 + 1), //32 is abritrary number
@@ -21,8 +22,8 @@ _EntitySkipField: SparseSet(.{
 
 pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !ComponentManager {
     var new_component_manager = ComponentManager{
-        ._ComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
-        ._EntitySkipField = try SparseSet(.{
+        .mComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
+        .mEntitySkipField = try SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
             .ValueT = StaticSkipField(32 + 1), //32 is abitrary number
@@ -38,7 +39,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
 
         const i_component_array = IComponentArray.Init(component_array);
 
-        try new_component_manager._ComponentsArrays.append(i_component_array);
+        try new_component_manager.mComponentsArrays.append(i_component_array);
     }
 
     return new_component_manager;
@@ -46,18 +47,18 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
 
 pub fn Deinit(self: *ComponentManager, ECSAllocator: std.mem.Allocator) void {
     //delete component arrays
-    for (self._ComponentsArrays.items) |component_array| {
+    for (self.ComponentsArrays.items) |component_array| {
         component_array.Deinit(ECSAllocator);
     }
 
-    self._ComponentsArrays.deinit();
-    self._EntitySkipField.deinit();
+    self.mComponentsArrays.deinit();
+    self.mEntitySkipField.deinit();
 }
 
 pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {
     std.debug.assert(!self.HasComponent(ComponentType, entityID)); //TODO: remove asserts and replace it with a better way to check input
 
-    self._EntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(ComponentType.Ind);
+    self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(ComponentType.Ind);
 
     return try @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).AddComponent(entityID, component);
 }
@@ -65,23 +66,59 @@ pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entit
 pub fn RemoveComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32) !void {
     std.debug.assert(self.HasComponent(ComponentType, entityID));
 
-    self._EntitySkipField.getValueBySparse(entityID).ChangeToSkipped(ComponentType.Ind);
+    self.mEntitySkipField.getValueBySparse(entityID).ChangeToSkipped(ComponentType.Ind);
 
-    return try self._ComponentsArrays.items[ComponentType.Ind].RemoveComponent(entityID);
+    return try self.mComponentsArrays.items[ComponentType.Ind].RemoveComponent(entityID);
 }
 
 pub fn HasComponent(self: ComponentManager, comptime ComponentType: type, entityID: u32) bool {
-    return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).HasComponent(entityID);
+    return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentType.Ind].ptr))).HasComponent(entityID);
 }
 
 pub fn GetComponent(self: ComponentManager, comptime ComponentType: type, entityID: u32) *ComponentType {
     std.debug.assert(self.HasComponent(ComponentType, entityID));
-    return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).GetComponent(entityID);
+    return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentType.Ind].ptr))).GetComponent(entityID);
 }
 
-pub fn GetOrAddComponent(self: ComponentManager, comptime ComponentType: type, entityID: u32) *ComponentType {
-    if (self.HasComponent(ComponentType, entityID) == true) {} else {}
-    return self.GetComponent(ComponentType, entityID);
+pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) ArraySet(u32) {
+    std.debug.assert(ComponentTypes.len > 0);
+    if (ComponentTypes.len == 1) {
+        const component_array = @as(*ComponentArray(ComponentTypes[0]), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentTypes[0].Ind].ptr)));
+        const group = try ArraySet(u32).initCapacity(allocator, component_array.NumOfComponents());
+        const num_dense = component_array.NumOfComponents();
+        for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
+            group.append(value);
+        }
+        return group;
+    }
+
+    var smallest_ind: usize = 0;
+    var smallest_len: usize = std.math.maxInt(usize);
+    inline for (ComponentTypes, 0..) |component_type, i| {
+        const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
+        const num_dense = component_array.NumOfComponents();
+        if (num_dense < smallest_len) {
+            smallest_ind = i;
+            smallest_len = num_dense;
+        }
+    }
+
+    const group = try ArraySet(u32).initCapacity(allocator, smallest_len);
+
+    const smallest_component_array = @as(*ComponentArray(ComponentTypes[smallest_ind]), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentTypes[smallest_ind].Ind].ptr)));
+    for (smallest_component_array.mComponents.dense_to_sparse[0..smallest_len]) |value| {
+        group.append(value);
+    }
+
+    inline for (ComponentTypes, 0..) |component_type, i| {
+        const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
+        const num_dense = component_array.NumOfComponents();
+        for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
+            if (!group.contains(value)) {
+                //TODO: FINISH THIS
+            }
+        }
+    }
 }
 
 pub fn Stringify(self: ComponentManager, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
