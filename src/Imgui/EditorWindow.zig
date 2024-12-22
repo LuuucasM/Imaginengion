@@ -1,8 +1,9 @@
 const std = @import("std");
+const Entity = @import("../ECS/Entity.zig");
 const EditorWindow = @This();
 
-Ptr: *anyopaque,
-VTable: VTab,
+mPtr: *anyopaque,
+mVTable: VTab,
 
 const VTab = struct {
     ImguiRender: *const fn (*anyopaque) void,
