@@ -34,7 +34,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 pub fn Deinit() !void {
     try ApplicationManager._Program.Deinit();
     ApplicationManager._Window.Deinit();
-    AssetManager.Deinit();
+    try AssetManager.Deinit();
     EventManager.Deinit();
     Input.Deinit();
     ThreadPool.deinit();

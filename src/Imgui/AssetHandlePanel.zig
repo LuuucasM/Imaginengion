@@ -2,6 +2,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
+const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
 const AssetHandlePanel = @This();
 
 _P_Open: bool,
@@ -18,10 +19,15 @@ pub fn OnImguiRender(self: AssetHandlePanel) !void {
     defer imgui.igEnd();
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const HandleMap = AssetManager.GetHandleMap();
-    var iter = HandleMap.iterator();
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+
+    const file_data_set = try AssetManager.GetHandleMap(arena.allocator());
+    var iter = file_data_set.iterator();
     while (iter.next()) |entry| {
-        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ entry.key_ptr.*, entry.value_ptr.mAbsPath });
+        const asset_id = entry.key_ptr.*;
+        const file_data = AssetManager.GetComponent(FileMetaData, asset_id);
+        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ asset_id, file_data.mAbsPath });
         defer fba.allocator().free(text);
         imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
     }

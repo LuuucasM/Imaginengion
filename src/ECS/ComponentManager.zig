@@ -47,7 +47,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
 
 pub fn Deinit(self: *ComponentManager, ECSAllocator: std.mem.Allocator) void {
     //delete component arrays
-    for (self.ComponentsArrays.items) |component_array| {
+    for (self.mComponentsArrays.items) |component_array| {
         component_array.Deinit(ECSAllocator);
     }
 
@@ -60,7 +60,7 @@ pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entit
 
     self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(ComponentType.Ind);
 
-    return try @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentType.Ind].ptr))).AddComponent(entityID, component);
+    return try @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentType.Ind].ptr))).AddComponent(entityID, component);
 }
 
 pub fn RemoveComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32) !void {
@@ -80,14 +80,14 @@ pub fn GetComponent(self: ComponentManager, comptime ComponentType: type, entity
     return @as(*ComponentArray(ComponentType), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentType.Ind].ptr))).GetComponent(entityID);
 }
 
-pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) ArraySet(u32) {
+pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !ArraySet(u32) {
     std.debug.assert(ComponentTypes.len > 0);
     if (ComponentTypes.len == 1) {
         const component_array = @as(*ComponentArray(ComponentTypes[0]), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentTypes[0].Ind].ptr)));
-        const group = try ArraySet(u32).initCapacity(allocator, component_array.NumOfComponents());
+        var group = try ArraySet(u32).initCapacity(allocator, component_array.NumOfComponents());
         const num_dense = component_array.NumOfComponents();
         for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
-            group.append(value);
+            _ = try group.add(value);
         }
         return group;
     }
@@ -103,31 +103,28 @@ pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, a
         }
     }
 
-    const group = try ArraySet(u32).initCapacity(allocator, smallest_len);
+    var group = try ArraySet(u32).initCapacity(allocator, smallest_len);
 
     const smallest_component_array = @as(*ComponentArray(ComponentTypes[smallest_ind]), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentTypes[smallest_ind].Ind].ptr)));
-    for (smallest_component_array.mComponents.dense_to_sparse[0..smallest_len]) |value| {
-        group.append(value);
+    outer: for (smallest_component_array.mComponents.dense_to_sparse[0..smallest_len]) |value| {
+        inline for (ComponentTypes, 0..) |component_type, i| {
+            if (i == smallest_ind) continue;
+            const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
+            if (!component_array.mComponents.hasSparse(value)) continue :outer;
+        }
+        _ = try group.add(value);
     }
 
-    inline for (ComponentTypes, 0..) |component_type, i| {
-        const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
-        const num_dense = component_array.NumOfComponents();
-        for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
-            if (!group.contains(value)) {
-                //TODO: FINISH THIS
-            }
-        }
-    }
+    return group;
 }
 
 pub fn Stringify(self: ComponentManager, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
-    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
-    const entity_skipfield = self._EntitySkipField.getValueBySparse(entityID);
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
-        try self._ComponentsArrays.items[i].Stringify(write_stream, entityID);
+        try self.mComponentsArrays.items[i].Stringify(write_stream, entityID);
 
         i += 1;
         i += entity_skipfield.mSkipField[i];
@@ -135,51 +132,51 @@ pub fn Stringify(self: ComponentManager, write_stream: *std.json.WriteStream(std
 }
 
 pub fn DeStringify(self: *ComponentManager, components_index: usize, component_string: []const u8, entityID: u32) !void {
-    std.debug.assert(components_index < self._ComponentsArrays.items.len);
-    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
+    std.debug.assert(components_index < self.mComponentsArrays.items.len);
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
 
-    try self._ComponentsArrays.items[components_index].DeStringify(component_string, entityID);
+    try self.mComponentsArrays.items[components_index].DeStringify(component_string, entityID);
 }
 
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
-    std.debug.assert(!self._EntitySkipField.hasSparse(entityID));
-    const dense_ind = self._EntitySkipField.add(entityID);
-    self._EntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(32 + 1).Init(.AllSkip); //32 is arbitrary
+    std.debug.assert(!self.mEntitySkipField.hasSparse(entityID));
+    const dense_ind = self.mEntitySkipField.add(entityID);
+    self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(32 + 1).Init(.AllSkip); //32 is arbitrary
 }
 pub fn DestroyEntity(self: *ComponentManager, entityID: u32) !void {
-    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
 
-    const entity_skipfield = self._EntitySkipField.getValueBySparse(entityID);
+    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
-        try self._ComponentsArrays.items[i].RemoveComponent(entityID);
+        try self.mComponentsArrays.items[i].RemoveComponent(entityID);
         i += 1;
         i += entity_skipfield.mSkipField[i];
     }
-    _ = self._EntitySkipField.remove(entityID);
+    _ = self.mEntitySkipField.remove(entityID);
 }
 
 pub fn DuplicateEntity(self: *ComponentManager, original_entity_id: u32, new_entity_id: u32) void {
-    const original_skipfield = self._EntitySkipField.getValueBySparse(original_entity_id);
-    const new_skipfield = self._EntitySkipField.getValueBySparse(new_entity_id);
+    const original_skipfield = self.mEntitySkipField.getValueBySparse(original_entity_id);
+    const new_skipfield = self.mEntitySkipField.getValueBySparse(new_entity_id);
     @memcpy(&new_skipfield.mSkipField, &original_skipfield.mSkipField);
 
     var i: usize = original_skipfield.mSkipField[0];
     while (i < original_skipfield.mSkipField.len) {
-        self._ComponentsArrays.items[i].DuplicateEntity(original_entity_id, new_entity_id);
+        self.mComponentsArrays.items[i].DuplicateEntity(original_entity_id, new_entity_id);
         i += 1;
         i += original_skipfield.mSkipField[i];
     }
 }
 
 pub fn EntityImguiRender(self: ComponentManager, entityID: u32) void {
-    std.debug.assert(self._EntitySkipField.hasSparse(entityID));
-    const entity_skipfield = self._EntitySkipField.getValueBySparse(entityID);
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
-        self._ComponentsArrays.items[i].ImguiRender(entityID);
+        self.mComponentsArrays.items[i].ImguiRender(entityID);
 
         i += 1;
         i += entity_skipfield.mSkipField[i];

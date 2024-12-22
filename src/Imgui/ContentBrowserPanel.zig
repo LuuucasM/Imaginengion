@@ -4,16 +4,18 @@ const ImguiEvents = @import("ImguiEvent.zig");
 const ImguiEvent = ImguiEvents.ImguiEvent;
 const NewProjectEvent = ImguiEvents.NewProjectEvent;
 const OpenProjectEvent = ImguiEvents.OpenProjectEvent;
+const AssetManager = @import("../Assets/AssetManager.zig");
+const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 
 const MAX_PATH_LEN = 260;
 
 mIsVisible: bool = true,
-mDirTexture: Texture2D,
-mPngTexture: Texture2D,
-mBackArrowTexture: Texture2D,
-mSceneTexture: Texture2D,
+mDirTextureHandle: AssetHandle,
+mPngTextureHandle: AssetHandle,
+mBackArrowTextureHandle: AssetHandle,
+mSceneTextureHandle: AssetHandle,
 mProjectDirectory: std.ArrayList(u8),
 mCurrentDirectory: std.ArrayList(u8),
 mProjectFile: ?std.fs.File = null,
@@ -31,10 +33,10 @@ pub fn Init() !ContentBrowserPanel {
 
     return ContentBrowserPanel{
         .mIsVisible = true,
-        .mDirTexture = try Texture2D.InitPath(dir_icon_path),
-        .mPngTexture = try Texture2D.InitPath(png_icon_path),
-        .mBackArrowTexture = try Texture2D.InitPath(backarrow_icon_path),
-        .mSceneTexture = try Texture2D.InitPath(scene_icon_path),
+        .mDirTextureHandle = try AssetManager.GetAssetHandleRef(dir_icon_path),
+        .mPngTextureHandle = try AssetManager.GetAssetHandleRef(png_icon_path),
+        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef(backarrow_icon_path),
+        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef(scene_icon_path),
         .mProjectDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mCurrentDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mProjectFile = null,
@@ -42,10 +44,10 @@ pub fn Init() !ContentBrowserPanel {
 }
 
 pub fn Deinit(self: *ContentBrowserPanel) void {
-    self.mDirTexture.Deinit();
-    self.mPngTexture.Deinit();
-    self.mBackArrowTexture.Deinit();
-    self.mSceneTexture.Deinit();
+    AssetManager.ReleaseAssetHandleRef(self.mDirTextureHandle.mID);
+    AssetManager.ReleaseAssetHandleRef(self.mPngTextureHandle.mID);
+    AssetManager.ReleaseAssetHandleRef(self.mBackArrowTextureHandle.mID);
+    AssetManager.ReleaseAssetHandleRef(self.mSceneTextureHandle.mID);
     self.mProjectDirectory.deinit();
     self.mCurrentDirectory.deinit();
     if (self.mProjectFile != null) {
@@ -94,8 +96,9 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
 fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     if (std.mem.eql(u8, self.mCurrentDirectory.items, self.mProjectDirectory.items) == true) return;
 
+    const back_texture = self.mBackArrowTextureHandle.GetAsset(Texture2D);
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
-    _ = imgui.igImageButton("back", @constCast(@ptrCast(&self.mBackArrowTexture.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
+    _ = imgui.igImageButton("back", @constCast(@ptrCast(&back_texture.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
     imgui.igPopStyleColor(1);
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
@@ -114,11 +117,11 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
     while (try iter.next()) |entry| {
         var icon_ptr: ?*Texture2D = null;
         if (entry.kind == .directory) {
-            icon_ptr = &self.mDirTexture;
+            icon_ptr = self.mDirTextureHandle.GetAsset(Texture2D);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-            icon_ptr = &self.mPngTexture;
+            icon_ptr = self.mPngTextureHandle.GetAsset(Texture2D);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-            icon_ptr = &self.mSceneTexture;
+            icon_ptr = self.mSceneTextureHandle.GetAsset(Texture2D);
         }
         if (icon_ptr) |texture| {
             var name_buf: [260]u8 = undefined;

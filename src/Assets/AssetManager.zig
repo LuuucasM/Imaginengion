@@ -1,12 +1,12 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const Asset = @import("Asset.zig");
-const AssetHandle = Asset.AssetHandle;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const AssetMetaData = @import("./Assets/AssetMetaData.zig");
 const FileMetaData = @import("./Assets/FileMetaData.zig");
 const IDComponent = @import("./Assets/IDComponent.zig");
 const AssetsList = @import("Assets.zig").AssetsList;
+const AssetHandle = @import("AssetHandle.zig");
+const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig");
 
 const AssetManager = @This();
@@ -22,24 +22,31 @@ mAssetECS: ECSManager,
 mAssetMemoryPool: std.heap.ArenaAllocator,
 mAssetPathToID: std.StringHashMap(u32),
 //note the head of the list is most recently used and tail is lease
-mAssetGPUCache: std.DoublyLinkedList(Asset),
-mAssetCPUCache: std.DoublyLinkedList(Asset),
+mAssetGPUCache: std.DoublyLinkedList(u32),
+mAssetCPUCache: std.DoublyLinkedList(u32),
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     AssetM = try EngineAllocator.create(AssetManager);
     AssetM.* = .{
         .mEngineAllocator = EngineAllocator,
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
-        .mAssetIDToAsset = std.AutoHashMap(u32, Asset).init(AssetM.mAssetGPA.allocator()),
         .mAssetECS = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList),
         .mAssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator),
         .mAssetPathToID = std.StringHashMap(u32).init(AssetM.mAssetGPA.allocator()),
+        .mAssetCPUCache = std.DoublyLinkedList(u32){},
+        .mAssetGPUCache = std.DoublyLinkedList(u32){},
     };
 }
 
-pub fn Deinit() void {
-    AssetM.mAssetIDToAsset.deinit();
-    //TODO: get all of the file_data components and free the mAbsPath
+pub fn Deinit() !void {
+    var group = try GetGroup(&[_]type{FileMetaData}, AssetM.mAssetGPA.allocator());
+    var iter = group.iterator();
+    while (iter.next()) |entry| {
+        const id = entry.key_ptr.*;
+        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, id);
+        AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
+    }
+    group.deinit();
     AssetM.mAssetECS.Deinit();
     AssetM.mAssetMemoryPool.deinit();
     AssetM.mAssetPathToID.deinit();
@@ -47,22 +54,21 @@ pub fn Deinit() void {
     AssetM.mEngineAllocator.destroy(AssetM);
 }
 
-pub fn GetAssetHandleRef(abs_path: []const u8) AssetHandle {
+pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
     if (AssetM.mAssetPathToID.get(abs_path)) |entity_id| {
         AssetM.mAssetECS.GetComponent(AssetMetaData, entity_id).mRefs += 1;
         return AssetHandle{
             .mID = entity_id,
-            .mECSRef = &AssetM.mAssetECS,
         };
     } else {
-        const asset_handle = CreateAsset(abs_path);
-        AssetM.mAssetPathToID.put(abs_path, asset_handle.mID);
+        const asset_handle = try CreateAsset(abs_path);
+        try AssetM.mAssetPathToID.put(abs_path, asset_handle.mID);
         return asset_handle;
     }
 }
 
 pub fn ReleaseAssetHandleRef(asset_id: u32) void {
-    const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_id).mRefs;
+    const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_id);
     asset_meta_data.mRefs -= 1;
     if (asset_meta_data.mRefs == 0) {
         SetAssetToDelete(asset_id);
@@ -83,21 +89,19 @@ pub fn OnUpdate() !void {
     //TODO: get all of the file_data components
     //iterate through and check what im doing here
 
-    var iter = AssetM.m.iterator();
-
+    const group = try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, AssetM.mAssetGPA.allocator());
+    var iter = group.iterator();
     while (iter.next()) |entry| {
-        const asset = entry.value_ptr;
-
-        //first check to see if this asset will just get deleted
-        if (asset.mSize == 0) {
-            try CheckAssetToDelete(asset);
+        const id = entry.key_ptr.*;
+        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, id);
+        if (file_data.mSize == 0) {
+            try CheckAssetToDelete(id);
             continue;
         }
-
         //then check if the asset path is still valid
-        const file = std.fs.openFileAbsolute(asset.mAbsPath, .{}) catch |err| {
+        const file = std.fs.openFileAbsolute(file_data.mAbsPath, .{}) catch |err| {
             if (err == error.FileNotFound) {
-                SetAssetToDelete(asset);
+                SetAssetToDelete(id);
                 continue;
             } else {
                 return err;
@@ -107,36 +111,42 @@ pub fn OnUpdate() !void {
 
         //then check if the asset needs to be updated
         const fstats = try file.stat();
-        if (asset.mLastModified != fstats.mtime) {
-            try UpdateAsset(asset, file, fstats);
+        if (file_data.mLastModified != fstats.mtime) {
+            try UpdateAsset(id, file, fstats);
         }
     }
 }
 
-pub fn GetHandleMap() std.AutoHashMap(u32, Asset) {
-    //TODO: return list of file_data
-    return AssetM.mAssetIDToAsset;
+pub fn GetHandleMap(allocator: std.mem.Allocator) !ArraySet(u32) {
+    return try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, allocator);
 }
 
-fn CreateAsset(abs_path: []const u8) AssetHandle {
+pub fn GetGroup(comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !ArraySet(u32) {
+    return try AssetM.mAssetECS.GetGroup(ComponentTypes, allocator);
+}
+
+pub fn GetComponent(comptime ComponentType: type, asset_id: u32) *ComponentType {
+    return AssetM.mAssetECS.GetComponent(ComponentType, asset_id);
+}
+
+fn CreateAsset(abs_path: []const u8) !AssetHandle {
     const new_handle = AssetHandle{
-        .mID = AssetM.mAssetECS.CreateEntity(),
-        .ECSRef = &AssetM.mAssetECS,
+        .mID = try AssetM.mAssetECS.CreateEntity(),
     };
-    AssetM.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
+    _ = try AssetM.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
         .mAssetType = .None,
         .mRefs = 1,
     });
 
-    AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
-        .mAbsPath = AssetM.mAssetGPA.allocator().dupe([]const u8, abs_path),
+    _ = try AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
+        .mAbsPath = try AssetM.mAssetGPA.allocator().dupe(u8, abs_path),
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,
     });
 
-    AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
-        .ID = GenUUID(),
+    _ = try AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
+        .ID = try GenUUID(),
     });
 
     const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
@@ -145,15 +155,16 @@ fn CreateAsset(abs_path: []const u8) AssetHandle {
     defer file.close();
     const fstats = try file.stat();
 
-    UpdateAsset(new_handle.mID, file, fstats);
+    try UpdateAsset(new_handle.mID, file, fstats);
 
     return new_handle;
 }
 
-fn DeleteAsset(asset_id: u32) void {
+fn DeleteAsset(asset_id: u32) !void {
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    _ = AssetM.mAssetPathToID.remove(file_data.mAbsPath);
     AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
-    AssetM.mAssetECS.DestroyEntity(asset_id);
+    try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 
 fn SetAssetToDelete(asset_id: u32) void {
@@ -183,14 +194,15 @@ fn CheckAssetToDelete(asset_id: u32) !void {
     //if its run out of time then just delete
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
     if (std.time.nanoTimestamp() - file_data.mLastModified > ASSET_DELETE_TIMEOUT_NS) {
-        DeleteAsset(asset_id);
+        try DeleteAsset(asset_id);
     }
 }
 
 //This function checks again to see if we can open the file maybe there was
 //some weird issue last frame but this frame the file is ok so we can recover it
 fn RetryAssetExists(asset_id: u32) !bool {
-    const file = std.fs.openFileAbsolute(asset.mAbsPath, .{}) catch |err| {
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    const file = std.fs.openFileAbsolute(file_data.mAbsPath, .{}) catch |err| {
         if (err == error.FileNotFound) {
             return false;
         } else {
