@@ -86,9 +86,6 @@ pub fn GetAsset(comptime asset_type: type, asset_id: u32) asset_type {
 }
 
 pub fn OnUpdate() !void {
-    //TODO: get all of the file_data components
-    //iterate through and check what im doing here
-
     const group = try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, AssetM.mAssetGPA.allocator());
     var iter = group.iterator();
     while (iter.next()) |entry| {

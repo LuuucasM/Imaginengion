@@ -78,12 +78,12 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
             if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                 defer imgui.igEndDragDropSource();
-                _ = imgui.igSetDragDropPayload("SceneLayerMove", @ptrCast(&scene_layer.mInternalID), @sizeOf(usize), imgui.ImGuiCond_Once);
+                _ = imgui.igSetDragDropPayload("SceneMove", @ptrCast(&scene_layer.mInternalID), @sizeOf(usize), imgui.ImGuiCond_Once);
             }
 
             if (imgui.igBeginDragDropTarget() == true) {
                 defer imgui.igEndDragDropTarget();
-                if (imgui.igAcceptDragDropPayload("SceneLayerMove", imgui.ImGuiDragDropFlags_None)) |payload| {
+                if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
                     const payload_internal_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
                     const payload_scene = scene_stack_ref.items[payload_internal_id];
                     const current_pos = payload_scene.mInternalID;
@@ -140,7 +140,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
     }
     if (imgui.igBeginDragDropTarget() == true) {
         defer imgui.igEndDragDropTarget();
-        if (imgui.igAcceptDragDropPayload("SceneLayerLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+        if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             const new_event = ImguiEvent{

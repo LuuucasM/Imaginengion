@@ -1,12 +1,14 @@
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Render2DComponent = @This();
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
+const AssetM = @import("../../Assets/AssetManager.zig");
+const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-Texture: u64 = 0,
+Texture: AssetHandle = .{ .mID = AssetHandle.EmptyHandle },
 Color: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
 TilingFactor: f32 = 1.0,
 
@@ -30,11 +32,10 @@ pub fn ImguiRender(self: *Render2DComponent) void {
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.Color), imgui.ImGuiColorEditFlags_None);
     imgui.igText("TEMPORARY TEXTURE TARGET");
     if (imgui.igBeginDragDropTarget() == true) {
-        if (imgui.igAcceptDragDropPayload("TextureLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+        if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            _ = path;
-            //TODO:
+            self.Texture = AssetM.GetAssetHandleRef(path);
         }
     }
 }
