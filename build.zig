@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-
+    //exe.verbose_cc = true;
     //adding c/c++ dependecies
     buildglfw.Add(exe, b);
     buildglad.Add(exe, b);
@@ -29,8 +29,8 @@ pub fn build(b: *std.Build) void {
     buildnativefiledialog.Add(exe, b);
 
     //--------------SYSTEM LIBRARIES-----------
-    exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("c++");
+    exe.linkLibC();
+    exe.linkLibCpp();
 
     if (builtin.os.tag == .windows) {
         exe.linkSystemLibrary("comdlg32");
