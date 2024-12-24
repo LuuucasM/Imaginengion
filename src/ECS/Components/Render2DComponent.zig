@@ -24,7 +24,19 @@ pub fn GetEditorWindow(self: *Render2DComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *Render2DComponent) void {
+pub fn ImguiRender(self: *Render2DComponent, entityID: u32) !void {
+    if (imgui.igSelectable_Bool(@typeName(Render2DComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+        const new_editor_window = EditorWindow.Init(self, entityID);
+        const new_event = ImguiEvent{
+            .ET_SelectComponentEvent = .{
+                .mEditorWIndow = new_editor_window,
+            },
+        };
+        try ImguiManager.InsertEvent(new_event);
+    }
+}
+
+pub fn EditorRender(self: *Render2DComponent) void {
     const padding: f32 = 16.0;
     const thumbnail_size: f32 = 70.0;
     _ = padding;

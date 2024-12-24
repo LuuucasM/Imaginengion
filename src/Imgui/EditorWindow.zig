@@ -2,14 +2,15 @@ const std = @import("std");
 const Entity = @import("../ECS/Entity.zig");
 const EditorWindow = @This();
 
+mAssetID: u32,
 mPtr: *anyopaque,
 mVTable: VTab,
 
 const VTab = struct {
-    ImguiRender: *const fn (*anyopaque) void,
+    EditorRender: *const fn (*anyopaque) void,
 };
 
-pub fn Init(obj: anytype) EditorWindow {
+pub fn Init(obj: anytype, asset_id: u32) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
     std.debug.assert(PtrInfo == .pointer);
@@ -17,20 +18,21 @@ pub fn Init(obj: anytype) EditorWindow {
     std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
 
     const impl = struct {
-        fn ImguiRender(ptr: *anyopaque) void {
+        fn EditorRender(ptr: *anyopaque) void {
             const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-            self.ImguiRender();
+            self.EditorRender();
         }
     };
 
     return EditorWindow{
-        .Ptr = obj,
-        .VTable = &.{
-            .ImguiRender = impl.ImguiRender,
+        .mAssetID = asset_id,
+        .mPtr = obj,
+        .mVTable = &.{
+            .EditorRender = impl.EditorRender,
         },
     };
 }
 
-pub fn ImguiRender(self: EditorWindow) void {
-    self.VTable.ImguiRender(self.Ptr);
+pub fn EditorRender(self: EditorWindow) void {
+    self.VTable.EditorRender(self.Ptr);
 }

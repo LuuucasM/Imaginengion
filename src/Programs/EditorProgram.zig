@@ -80,7 +80,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
 
-    self._ComponentsPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
+    self._ComponentsPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
     self._CSEditorPanel.OnImguiRender();
 
@@ -169,6 +169,20 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_NewEntityEvent => |e| {
                 _ = try self.mSceneManager.CreateEntity(e.SceneID);
+            },
+            .ET_SelectSceneEvent => |e| {
+                self._ScenePanel.OnSelectSceneEvent(e.SelectedScene);
+            },
+            .ET_SelectEntityEvent => |e| {
+                self._ScenePanel.OnSelectEntityEvent(e.SelectedEntity);
+                self._ComponentsPanel.OnSelectEntityEvent(e.SelectedEntity);
+                self._ScriptsPanel.OnSelectEntityEvent(e.SelectedEntity);
+            },
+            .ET_SelectComponentEvent => |e| {
+                self._CSEditorPanel.OnSelectComponentEvent(e.mEditorWindow);
+            },
+            .ET_SelectScriptEvent => |e| {
+                self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
             },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }

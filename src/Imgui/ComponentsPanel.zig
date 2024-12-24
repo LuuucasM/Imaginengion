@@ -5,15 +5,16 @@ const Entity = @import("../ECS/Entity.zig");
 const ComponentsPanel = @This();
 
 _P_Open: bool,
-//HoveredEntity
+mSelectedEntity: ?Entity,
 
 pub fn Init() ComponentsPanel {
     return ComponentsPanel{
         ._P_Open = true,
+        .mSelectedEntity = null,
     };
 }
 
-pub fn OnImguiRender(self: ComponentsPanel, selected_entity_ref: ?Entity) void {
+pub fn OnImguiRender(self: ComponentsPanel) void {
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Components", null, 0);
     defer imgui.igEnd();
@@ -32,4 +33,8 @@ pub fn OnImguiEvent(self: *ComponentsPanel, event: *ImguiEvent) void {
 
 pub fn OnTogglePanelEvent(self: *ComponentsPanel) void {
     self._P_Open = !self._P_Open;
+}
+
+pub fn OnSelectEntityEvent(self: *ComponentsPanel, new_selected_entity: ?Entity) void {
+    self.mSelectedEntity = new_selected_entity;
 }

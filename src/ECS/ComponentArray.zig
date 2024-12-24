@@ -163,10 +163,8 @@ pub fn ComponentArray(comptime componentType: type) type {
             defer new_component_parsed.deinit();
             _ = try self.AddComponent(entityID, new_component_parsed.value);
         }
-        pub fn ImguiRender(self: *Self, entityID: u32) void {
-            if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-                self.mSelectedEntity = entity;
-            }
+        pub fn ImguiRender(self: *Self, entityID: u32) !void {
+            try self.mComponents.getBySparse(entityID).ImguiRender(entityID);
         }
     };
 }

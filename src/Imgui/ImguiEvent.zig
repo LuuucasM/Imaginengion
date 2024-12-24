@@ -1,4 +1,6 @@
 const LayerType = @import("../Scene/SceneLayer.zig").LayerType;
+const Entity = @import("../ECS/Entity.zig");
+const EditorWindow = @import("EditorWindow.zig");
 
 pub const PanelType = enum {
     AssetHandles,
@@ -21,6 +23,10 @@ pub const ImguiEvent = union(enum) {
     ET_OpenSceneEvent: OpenSceneEvent,
     ET_MoveSceneEvent: MoveSceneEvent,
     ET_NewEntityEvent: NewEntityEvent,
+    ET_SelectSceneEvent: SelectSceneEvent,
+    ET_SelectEntityEvent: SelectEntityEvent,
+    ET_SelectComponentEvent: SelectComponentEvent,
+    ET_SelectScriptEvent: SelectScriptEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -58,4 +64,20 @@ pub const MoveSceneEvent = struct {
 
 pub const NewEntityEvent = struct {
     SceneID: usize,
+};
+
+pub const SelectSceneEvent = struct {
+    SelectedScene: ?usize,
+};
+
+pub const SelectEntityEvent = struct {
+    SelectedEntity: ?Entity,
+};
+
+pub const SelectComponentEvent = struct {
+    mEditorWindow: EditorWindow,
+};
+
+pub const SelectScriptEvent = struct {
+    mEditorWindow: EditorWindow,
 };

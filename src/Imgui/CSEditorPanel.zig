@@ -18,12 +18,15 @@ pub fn Init() CSEditorPanel {
 
 pub fn OnImguiRender(self: CSEditorPanel) void {
     if (self.mP_Open == false) return;
+
     _ = imgui.igBegin("Component/Scripts Editor", null, 0);
+    defer imgui.igEnd();
+
     for (self.mEditorWIndows.list) |window| {
         _ = imgui.igBegin("", null, 0);
-        window.ImguiRender();
+        defer imgui.igEnd();
+        window.EditorRender();
     }
-    defer imgui.igEnd();
 }
 
 pub fn OnImguiEvent(self: *CSEditorPanel, event: *ImguiEvent) void {
@@ -35,4 +38,12 @@ pub fn OnImguiEvent(self: *CSEditorPanel, event: *ImguiEvent) void {
 
 pub fn OnTogglePanelEvent(self: *CSEditorPanel) void {
     self.mP_Open = !self.mP_Open;
+}
+
+pub fn OnSelectComponentEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) void {
+    self.mEditorWindows.append(new_editor_window);
+}
+
+pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) void {
+    self.mEditorWindows.append(new_editor_window);
 }

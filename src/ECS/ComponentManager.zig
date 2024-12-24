@@ -170,14 +170,13 @@ pub fn DuplicateEntity(self: *ComponentManager, original_entity_id: u32, new_ent
     }
 }
 
-pub fn EntityImguiRender(self: ComponentManager, entityID: u32) void {
+pub fn EntityImguiRender(self: ComponentManager, entityID: u32) !void {
     std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
     const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
-        self.mComponentsArrays.items[i].ImguiRender(entityID);
-
+        try self.mComponentsArrays.items[i].ImguiRender(entityID);
         i += 1;
         i += entity_skipfield.mSkipField[i];
     }

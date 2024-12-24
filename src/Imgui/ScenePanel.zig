@@ -63,6 +63,11 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true) {
                 self.mSelectedScene = scene_layer.mInternalID;
+                ImguiManager.InsertEvent(.{
+                    .ET_SelectSceneEvent = .{
+                        .SelectedScene = scene_layer.mInternalID,
+                    },
+                });
             }
 
             const draw_list = imgui.igGetWindowDrawList();
@@ -131,7 +136,11 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     }
 
                     if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-                        self.mSelectedEntity = entity;
+                        ImguiManager.InsertEvent(.{
+                            .ET_SelectEntityEvent = .{
+                                .SelectedEntity = entity,
+                            },
+                        });
                     }
 
                     imgui.igPopStyleColor(1);
@@ -193,4 +202,12 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
 pub fn OnTogglePanelEvent(self: *ScenePanel) void {
     self.mIsVisible = !self.mIsVisible;
+}
+
+pub fn OnSelectSceneEvent(self: *ScenePanel, new_scene_id: ?usize) void {
+    self.mSelectedScene = event.ET_SelectSceneEvent.SelectedScene;
+}
+
+pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
+    self.mSelectedEntity = new_entity;
 }

@@ -5,7 +5,7 @@ const Entity = @import("../ECS/Entity.zig");
 const ScriptsPanel = @This();
 
 _P_Open: bool,
-//HoveredEntity
+mSelectedEntity: ?Entity,
 
 pub fn Init() ScriptsPanel {
     return ScriptsPanel{
@@ -33,4 +33,8 @@ pub fn OnImguiEvent(self: *ScriptsPanel, event: *ImguiEvent) void {
 
 pub fn OnTogglePanelEvent(self: *ScriptsPanel) void {
     self._P_Open = !self._P_Open;
+}
+
+pub fn OnSelectEntityEvent(self: *ScriptsPanel, new_selected_entity: ?Entity) void {
+    self.mSelectedEntity = new_selected_entity;
 }

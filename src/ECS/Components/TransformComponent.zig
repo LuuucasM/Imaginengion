@@ -4,6 +4,8 @@ const LinAlg = @import("../../Math/LinAlg.zig");
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+const ImguiEvent = @import("../../Imgui/ImguiEvent.zig");
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Vec3f32 = LinAlg.Vec3f32;
@@ -38,7 +40,19 @@ pub fn GetEditorWindow(self: *TransformComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *TransformComponent) void {
+pub fn ImguiRender(self: *TransformComponent, entityID: u32) !void {
+    if (imgui.igSelectable_Bool(@typeName(TransformComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+        const new_editor_window = EditorWindow.Init(self, entityID);
+        const new_event = ImguiEvent{
+            .ET_SelectComponentEvent = .{
+                .mEditorWIndow = new_editor_window,
+            },
+        };
+        try ImguiManager.InsertEvent(new_event);
+    }
+}
+
+pub fn EditorRender(self: *TransformComponent) void {
     const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowOverlap | imgui.ImGuiTreeNodeFlags_Framed |
         imgui.ImGuiTreeNodeFlags_SpanAvailWidth | imgui.ImGuiTreeNodeFlags_FramePadding;
     const is_tree_open = imgui.igTreeNodeEx_Str(@typeName(TransformComponent), tree_node_flags);
