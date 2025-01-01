@@ -2,7 +2,7 @@ const std = @import("std");
 const Entity = @import("../ECS/Entity.zig");
 const EditorWindow = @This();
 
-mAssetID: u32,
+mEntityID: u32,
 mPtr: *anyopaque,
 mVTable: *const VTab,
 

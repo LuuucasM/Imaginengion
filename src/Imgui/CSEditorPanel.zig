@@ -3,6 +3,7 @@ const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../ECS/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
+const AssetManager = @import("../Assets/AssetManager.zig");
 const CSEditorPanel = @This();
 
 mP_Open: bool,
