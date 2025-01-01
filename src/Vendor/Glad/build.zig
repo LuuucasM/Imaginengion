@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
         },
     };
     lib.addCSourceFiles(options);
-    lib.linkSystemLibrary("c");
+
+    lib.linkLibC();
     b.installArtifact(lib);
 }

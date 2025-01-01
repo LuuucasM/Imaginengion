@@ -25,8 +25,8 @@ pub fn build(b: *std.Build) void {
     };
     lib.addCSourceFiles(options);
 
-    lib.linkSystemLibrary("c");
-    lib.linkSystemLibrary("c++");
+    lib.linkLibC();
+    lib.linkLibCpp();
 
     //---------------GLFW-----------
     lib.addLibraryPath(.{ .src_path = .{ .owner = b, .sub_path = "../GLFW/zig-out/lib/" } });

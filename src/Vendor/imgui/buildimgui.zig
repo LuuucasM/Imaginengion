@@ -8,14 +8,15 @@ pub fn Add(exe: *Compile, b: *std.Build) void {
             "src/Vendor/imgui/imgui/backends/imgui_impl_opengl3.cpp",
         },
         .flags = &[_][]const u8{
-            "-fno-exceptions",
-            "-fno-rtti",
             "-D_CRT_SECURE_NO_WARNINGS",
             "-DIMGUI_IMPL_API=extern\"C\"",
-            "-DIMGUI_IMPL_OPENGL_LOADER_CUSTOM",
+            "-DIMGUI_IMPL_OPENGL_LOADER_GLAD",
+            "-includeglad/glad.h",
         },
     };
     exe.addCSourceFiles(options);
+
+    exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/Glad/include/" } });
 
     exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/" } });
     exe.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/generator/output/" } });

@@ -20,13 +20,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    //exe.verbose_cc = true;
-    //adding c/c++ dependecies
-    buildglfw.Add(exe, b);
-    buildglad.Add(exe, b);
-    buildimgui.Add(exe, b);
-    buildstb.Add(exe, b);
-    buildnativefiledialog.Add(exe, b);
 
     //--------------SYSTEM LIBRARIES-----------
     exe.linkLibC();
@@ -37,6 +30,12 @@ pub fn build(b: *std.Build) void {
         exe.linkSystemLibrary("gdi32");
         exe.linkSystemLibrary("ole32");
     }
+
+    buildglfw.Add(exe, b);
+    buildglad.Add(exe, b);
+    buildimgui.Add(exe, b);
+    buildstb.Add(exe, b);
+    buildnativefiledialog.Add(exe, b);
 
     b.installArtifact(exe);
 
