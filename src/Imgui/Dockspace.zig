@@ -36,7 +36,7 @@ pub fn Begin() void {
     if (opt_padding == false) {
         imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowPadding, .{ .x = 0, .y = 0 });
     }
-    _ = imgui.igBegin("Dockspace Demo", @ptrCast(@constCast(&p_open)), window_flags);
+    _ = imgui.igBegin("EngineDockspace", @ptrCast(@constCast(&p_open)), window_flags);
     if (opt_padding == false) {
         imgui.igPopStyleVar(1);
     }
@@ -44,7 +44,7 @@ pub fn Begin() void {
         imgui.igPopStyleVar(2);
     }
 
-    const dockspace_id = imgui.igGetID_Str("MyDockSpace");
+    const dockspace_id = imgui.igGetID_Str("EngineDockspace");
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 }
 
