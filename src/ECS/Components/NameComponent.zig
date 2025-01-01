@@ -3,6 +3,8 @@ const NameComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 Name: [24]u8,

@@ -19,7 +19,7 @@ pub fn OnImguiRender(self: ComponentsPanel) void {
     _ = imgui.igBegin("Components", null, 0);
     defer imgui.igEnd();
 
-    if (selected_entity_ref) |entity| {
+    if (self.mSelectedEntity) |entity| {
         entity.EntityImguiRender();
     }
 }

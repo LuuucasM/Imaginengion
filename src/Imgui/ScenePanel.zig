@@ -205,7 +205,7 @@ pub fn OnTogglePanelEvent(self: *ScenePanel) void {
 }
 
 pub fn OnSelectSceneEvent(self: *ScenePanel, new_scene_id: ?usize) void {
-    self.mSelectedScene = event.ET_SelectSceneEvent.SelectedScene;
+    self.mSelectedScene = new_scene_id;
 }
 
 pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {

@@ -2,6 +2,8 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const Render2DComponent = @This();
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const AssetM = @import("../../Assets/AssetManager.zig");
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 //IMGUI
