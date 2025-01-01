@@ -18,6 +18,11 @@ _Window: Window,
 _Program: Program,
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
+    try AssetManager.Init(EngineAllocator);
+    try EventManager.Init(EngineAllocator, OnEvent);
+    try Input.Init(EngineAllocator);
+    try ThreadPool.init(EngineAllocator);
+
     ApplicationManager = try EngineAllocator.create(Application);
     ApplicationManager.* = .{
         ._EngineAllocator = EngineAllocator,
@@ -25,10 +30,6 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         ._Program = try Program.Init(EngineAllocator),
     };
     ApplicationManager._Window.SetVSync(false);
-    try AssetManager.Init(EngineAllocator);
-    try EventManager.Init(EngineAllocator, OnEvent);
-    try Input.Init(EngineAllocator);
-    try ThreadPool.init(EngineAllocator);
 }
 
 pub fn Deinit() !void {

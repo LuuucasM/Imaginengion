@@ -21,6 +21,7 @@ mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
 mAssetECS: ECSManager,
 mAssetMemoryPool: std.heap.ArenaAllocator,
 mAssetPathToID: std.StringHashMap(u32),
+
 //note the head of the list is most recently used and tail is lease
 mAssetGPUCache: std.DoublyLinkedList(u32),
 mAssetCPUCache: std.DoublyLinkedList(u32),
@@ -39,14 +40,15 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 }
 
 pub fn Deinit() !void {
-    var group = try GetGroup(&[_]type{FileMetaData}, AssetM.mAssetGPA.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    var group = try GetGroup(&[_]type{FileMetaData}, arena.allocator());
     var iter = group.iterator();
     while (iter.next()) |entry| {
         const id = entry.key_ptr.*;
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, id);
         AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
     }
-    group.deinit();
     AssetM.mAssetECS.Deinit();
     AssetM.mAssetMemoryPool.deinit();
     AssetM.mAssetPathToID.deinit();
@@ -62,6 +64,7 @@ pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
         };
     } else {
         const asset_handle = try CreateAsset(abs_path);
+        AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).mRefs += 1;
         try AssetM.mAssetPathToID.put(abs_path, asset_handle.mID);
         return asset_handle;
     }
@@ -75,18 +78,25 @@ pub fn ReleaseAssetHandleRef(asset_id: u32) void {
     }
 }
 
-pub fn GetAsset(comptime asset_type: type, asset_id: u32) asset_type {
+pub fn GetAsset(comptime asset_type: type, asset_id: u32) !*asset_type {
+    if (asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent) {
+        return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
+    }
+
     if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
         return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
     } else {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
-        const new_asset: asset_type = asset_type.Init(file_data.mAbsPath);
-        return new_asset;
+        const new_asset: asset_type = try asset_type.Init(file_data.mAbsPath);
+        const new_component = try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
+        return new_component;
     }
 }
 
 pub fn OnUpdate() !void {
-    const group = try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, AssetM.mAssetGPA.allocator());
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const group = try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, arena.allocator());
     var iter = group.iterator();
     while (iter.next()) |entry| {
         const id = entry.key_ptr.*;
@@ -114,16 +124,8 @@ pub fn OnUpdate() !void {
     }
 }
 
-pub fn GetHandleMap(allocator: std.mem.Allocator) !ArraySet(u32) {
-    return try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, allocator);
-}
-
 pub fn GetGroup(comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !ArraySet(u32) {
     return try AssetM.mAssetECS.GetGroup(ComponentTypes, allocator);
-}
-
-pub fn GetComponent(comptime ComponentType: type, asset_id: u32) *ComponentType {
-    return AssetM.mAssetECS.GetComponent(ComponentType, asset_id);
 }
 
 fn CreateAsset(abs_path: []const u8) !AssetHandle {
@@ -131,8 +133,7 @@ fn CreateAsset(abs_path: []const u8) !AssetHandle {
         .mID = try AssetM.mAssetECS.CreateEntity(),
     };
     _ = try AssetM.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
-        .mAssetType = .None,
-        .mRefs = 1,
+        .mRefs = 0,
     });
 
     _ = try AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{

@@ -1,7 +1,7 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const Entity = @import("../ECS/Entity.zig");
-const Set = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const SceneLayer = @This();
@@ -24,7 +24,7 @@ mPath: std.ArrayList(u8),
 mLayerType: LayerType,
 mInternalID: usize,
 mECSManagerRef: *ECSManager,
-mEntityIDs: Set(u32),
+mEntityIDs: ArraySet(u32),
 
 pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id: usize, ecs_manager: *ECSManager) !SceneLayer {
     return SceneLayer{
@@ -34,7 +34,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id:
         .mLayerType = layer_type,
         .mInternalID = internal_id,
         .mECSManagerRef = ecs_manager,
-        .mEntityIDs = Set(u32).init(ECSAllocator),
+        .mEntityIDs = ArraySet(u32).init(ECSAllocator),
     };
 }
 

@@ -9,41 +9,7 @@ _TextureID: c_uint,
 _InternalFormat: c_uint,
 _DataFormat: c_uint,
 
-pub fn InitData(width: u32, height: u32, channels: u32, data: *anyopaque) OpenGLTexture2D {
-    var internal_format: c_uint = 0;
-    var data_format: c_uint = 0;
-    if (channels == 4) {
-        internal_format = glad.GL_RGBA8;
-        data_format = glad.GL_RGBA;
-    } else if (channels == 3) {
-        internal_format = glad.GL_RGB8;
-        data_format = glad.GL_RGB;
-    } else {
-        std.log.err("Textureformat not supported in OpenGLTexture2D when loading loading data", .{});
-        @panic("");
-    }
-
-    var new_texture_id: c_uint = 0;
-    glad.glCreateTextures(glad.GL_TEXTURE_2D, 1, &new_texture_id);
-    glad.glTextureStorage2D(new_texture_id, 1, internal_format, @intCast(width), @intCast(height));
-
-    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_MIN_FILTER, glad.GL_LINEAR);
-    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_MAG_FILTER, glad.GL_NEAREST);
-
-    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_WRAP_S, glad.GL_REPEAT);
-    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_WRAP_T, glad.GL_REPEAT);
-    glad.glTextureSubImage2D(new_texture_id, 0, 0, 0, @intCast(width), @intCast(height), data_format, glad.GL_UNSIGNED_BYTE, data);
-
-    return OpenGLTexture2D{
-        ._Width = @intCast(width),
-        ._Height = @intCast(height),
-        ._TextureID = new_texture_id,
-        ._InternalFormat = internal_format,
-        ._DataFormat = data_format,
-    };
-}
-
-pub fn InitPath(path: []const u8) !OpenGLTexture2D {
+pub fn Init(path: []const u8) !OpenGLTexture2D {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;

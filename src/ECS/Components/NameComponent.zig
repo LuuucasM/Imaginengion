@@ -32,6 +32,11 @@ pub fn ImguiRender(self: *NameComponent, entityID: u32) !void {
     }
 }
 
+pub fn GetName(self: NameComponent) []const u8 {
+    _ = self;
+    return "NameComponent";
+}
+
 pub fn EditorRender(self: *NameComponent) !void {
     var buffer: [24]u8 = undefined;
     @memset(&buffer, 0);

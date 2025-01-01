@@ -96,9 +96,10 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
 fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     if (std.mem.eql(u8, self.mCurrentDirectory.items, self.mProjectDirectory.items) == true) return;
 
-    const back_texture = self.mBackArrowTextureHandle.GetAsset(Texture2D);
+    const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
+    const texture_id = back_texture.GetID();
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
-    _ = imgui.igImageButton("back", @constCast(@ptrCast(&back_texture.GetID())), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
+    _ = imgui.igImageButton("back", @constCast(@ptrCast(&texture_id)), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
     imgui.igPopStyleColor(1);
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
@@ -117,11 +118,11 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
     while (try iter.next()) |entry| {
         var icon_ptr: ?*Texture2D = null;
         if (entry.kind == .directory) {
-            icon_ptr = self.mDirTextureHandle.GetAsset(Texture2D);
+            icon_ptr = try self.mDirTextureHandle.GetAsset(Texture2D);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-            icon_ptr = self.mPngTextureHandle.GetAsset(Texture2D);
+            icon_ptr = try self.mPngTextureHandle.GetAsset(Texture2D);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-            icon_ptr = self.mSceneTextureHandle.GetAsset(Texture2D);
+            icon_ptr = try self.mSceneTextureHandle.GetAsset(Texture2D);
         }
         if (icon_ptr) |texture| {
             var name_buf: [260]u8 = undefined;

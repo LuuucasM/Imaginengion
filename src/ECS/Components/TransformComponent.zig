@@ -52,6 +52,11 @@ pub fn ImguiRender(self: *TransformComponent, entityID: u32) !void {
     }
 }
 
+pub fn GetName(self: TransformComponent) []const u8 {
+    _ = self;
+    return "TransformComponent";
+}
+
 pub fn EditorRender(self: *TransformComponent) !void {
     const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowOverlap | imgui.ImGuiTreeNodeFlags_Framed |
         imgui.ImGuiTreeNodeFlags_SpanAvailWidth | imgui.ImGuiTreeNodeFlags_FramePadding;

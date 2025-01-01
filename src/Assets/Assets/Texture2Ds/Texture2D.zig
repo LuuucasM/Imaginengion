@@ -9,15 +9,9 @@ const Impl = switch (builtin.os.tag) {
 
 _Impl: Impl,
 
-pub fn InitData(width: u32, height: u32, channels: u32, data: *anyopaque, size: usize) Texture2D {
+pub fn Init(path: []const u8) !Texture2D {
     return Texture2D{
-        ._Impl = Impl.InitData(width, height, channels, data, size),
-    };
-}
-
-pub fn InitPath(path: []const u8) !Texture2D {
-    return Texture2D{
-        ._Impl = try Impl.InitPath(path),
+        ._Impl = try Impl.Init(path),
     };
 }
 

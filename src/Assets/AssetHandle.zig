@@ -4,7 +4,7 @@ const AssetHandle = @This();
 pub const EmptyHandle = std.math.maxInt(u32);
 mID: u32,
 
-pub fn GetAsset(self: AssetHandle, comptime ComponentType: type) *ComponentType {
+pub fn GetAsset(self: *AssetHandle, comptime ComponentType: type) !*ComponentType {
     comptime {
         const AssetMetaData = @import("./Assets/AssetMetaData.zig");
         const FileMetaData = @import("./Assets/FileMetaData.zig");
@@ -12,5 +12,5 @@ pub fn GetAsset(self: AssetHandle, comptime ComponentType: type) *ComponentType 
             @compileError("Cannot call AssetHandle.GetAsset with AssetMetaData or FileMetaData");
         }
     }
-    return AssetManager.GetComponent(ComponentType, self.mID);
+    return try AssetManager.GetAsset(ComponentType, self.mID);
 }

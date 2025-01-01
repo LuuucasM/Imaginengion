@@ -1,4 +1,5 @@
 const AssetsList = @import("../Assets.zig").AssetsList;
+const GenUUID = @import("../../Core/UUID.zig").GenUUID;
 const IDComponent = @This();
 
 ID: u128,

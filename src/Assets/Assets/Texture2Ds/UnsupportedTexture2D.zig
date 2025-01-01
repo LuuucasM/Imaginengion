@@ -1,14 +1,7 @@
 const builtin = @import("builtin");
 const UnsupportedTexture2D = @This();
-pub fn InitData(width: u32, height: u32, channels: u32, data: *anyopaque, size: usize) UnsupportedTexture2D {
-    _ = width;
-    _ = height;
-    _ = channels;
-    _ = data;
-    _ = size;
-    Unsupported();
-}
-pub fn InitPath(path: []const u8) !UnsupportedTexture2D {
+
+pub fn Init(path: []const u8) !UnsupportedTexture2D {
     _ = path;
     Unsupported();
 }

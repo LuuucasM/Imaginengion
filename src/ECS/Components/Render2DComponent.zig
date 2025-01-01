@@ -37,6 +37,11 @@ pub fn ImguiRender(self: *Render2DComponent, entityID: u32) !void {
     }
 }
 
+pub fn GetName(self: Render2DComponent) []const u8 {
+    _ = self;
+    return "Render2DComponent";
+}
+
 pub fn EditorRender(self: *Render2DComponent) !void {
     const padding: f32 = 16.0;
     const thumbnail_size: f32 = 70.0;
