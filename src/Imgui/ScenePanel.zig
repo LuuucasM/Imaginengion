@@ -63,7 +63,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true) {
                 self.mSelectedScene = scene_layer.mInternalID;
-                ImguiManager.InsertEvent(.{
+                try ImguiManager.InsertEvent(.{
                     .ET_SelectSceneEvent = .{
                         .SelectedScene = scene_layer.mInternalID,
                     },
@@ -136,7 +136,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     }
 
                     if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-                        ImguiManager.InsertEvent(.{
+                        try ImguiManager.InsertEvent(.{
                             .ET_SelectEntityEvent = .{
                                 .SelectedEntity = entity,
                             },

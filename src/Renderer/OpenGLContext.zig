@@ -38,7 +38,7 @@ pub fn SwapBuffers(self: OpenGLContext) void {
     glfw.glfwSwapBuffers(self._Window);
 }
 
-fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uint, length: c_int, message: [*c]const u8, userParam: ?*const anyopaque) callconv(.c) void {
+fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uint, length: c_int, message: [*c]const u8, userParam: ?*const anyopaque) callconv(.C) void {
     _ = length;
     _ = userParam;
     _ = id;

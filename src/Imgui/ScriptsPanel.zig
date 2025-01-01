@@ -10,6 +10,7 @@ mSelectedEntity: ?Entity,
 pub fn Init() ScriptsPanel {
     return ScriptsPanel{
         ._P_Open = true,
+        .mSelectedEntity = null,
     };
 }
 

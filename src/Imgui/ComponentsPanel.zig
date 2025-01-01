@@ -14,13 +14,13 @@ pub fn Init() ComponentsPanel {
     };
 }
 
-pub fn OnImguiRender(self: ComponentsPanel) void {
+pub fn OnImguiRender(self: ComponentsPanel) !void {
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Components", null, 0);
     defer imgui.igEnd();
 
     if (self.mSelectedEntity) |entity| {
-        entity.EntityImguiRender();
+        try entity.EntityImguiRender();
     }
 }
 

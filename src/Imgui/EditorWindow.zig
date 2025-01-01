@@ -4,23 +4,23 @@ const EditorWindow = @This();
 
 mAssetID: u32,
 mPtr: *anyopaque,
-mVTable: VTab,
+mVTable: *const VTab,
 
 const VTab = struct {
-    EditorRender: *const fn (*anyopaque) void,
+    EditorRender: *const fn (*anyopaque) anyerror!void,
 };
 
 pub fn Init(obj: anytype, asset_id: u32) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
-    std.debug.assert(PtrInfo == .pointer);
-    std.debug.assert(PtrInfo.pointer.size == .One);
-    std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
+    std.debug.assert(PtrInfo == .Pointer);
+    std.debug.assert(PtrInfo.Pointer.size == .One);
+    std.debug.assert(@typeInfo(PtrInfo.Pointer.child) == .Struct);
 
     const impl = struct {
-        fn EditorRender(ptr: *anyopaque) void {
+        fn EditorRender(ptr: *anyopaque) !void {
             const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-            self.EditorRender();
+            try self.EditorRender();
         }
     };
 
@@ -33,6 +33,6 @@ pub fn Init(obj: anytype, asset_id: u32) EditorWindow {
     };
 }
 
-pub fn EditorRender(self: EditorWindow) void {
-    self.VTable.EditorRender(self.Ptr);
+pub fn EditorRender(self: EditorWindow) !void {
+    try self.VTable.EditorRender(self.Ptr);
 }

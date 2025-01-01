@@ -11,15 +11,15 @@ pub const IComponentArray = struct {
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
         Stringify: *const fn (*anyopaque, *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), u32) anyerror!void,
         DeStringify: *const fn (*anyopaque, []const u8, u32) anyerror!void,
-        ImguiRender: *const fn (*anyopaque, u32) void,
+        ImguiRender: *const fn (*anyopaque, u32) anyerror!void,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
         const Ptr = @TypeOf(obj);
         const PtrInfo = @typeInfo(Ptr);
-        std.debug.assert(PtrInfo == .pointer);
-        std.debug.assert(PtrInfo.pointer.size == .One);
-        std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
+        std.debug.assert(PtrInfo == .Pointer);
+        std.debug.assert(PtrInfo.Pointer.size == .One);
+        std.debug.assert(@typeInfo(PtrInfo.Pointer.child) == .Struct);
 
         const impl = struct {
             fn Deinit(ptr: *anyopaque, allocator: std.mem.Allocator) void {
@@ -47,9 +47,9 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.DeStringify(component_string, entityID);
             }
-            fn ImguiRender(ptr: *anyopaque, entityID: u32) void {
+            fn ImguiRender(ptr: *anyopaque, entityID: u32) !void {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-                self.ImguiRender(entityID);
+                try self.ImguiRender(entityID);
             }
         };
         return IComponentArray{
@@ -84,8 +84,8 @@ pub const IComponentArray = struct {
     pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!void {
         try self.vtable.DeStringify(self.ptr, component_string, entityID);
     }
-    pub fn ImguiRender(self: IComponentArray, entityID: u32) void {
-        self.vtable.ImguiRender(self.ptr, entityID);
+    pub fn ImguiRender(self: IComponentArray, entityID: u32) !void {
+        try self.vtable.ImguiRender(self.ptr, entityID);
     }
 };
 
@@ -164,7 +164,10 @@ pub fn ComponentArray(comptime componentType: type) type {
             _ = try self.AddComponent(entityID, new_component_parsed.value);
         }
         pub fn ImguiRender(self: *Self, entityID: u32) !void {
-            try self.mComponents.getBySparse(entityID).ImguiRender(entityID);
+            const component = self.mComponents.getValueBySparse(entityID);
+            if (@hasDecl(componentType, "ImguiRender")) {
+                try component.ImguiRender(entityID);
+            }
         }
     };
 }

@@ -23,17 +23,16 @@ pub fn GetEditorWindow(self: *NameComponent) EditorWindow {
 
 pub fn ImguiRender(self: *NameComponent, entityID: u32) !void {
     if (imgui.igSelectable_Bool(@typeName(NameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-        const new_editor_window = EditorWindow.Init(self, entityID);
         const new_event = ImguiEvent{
             .ET_SelectComponentEvent = .{
-                .mEditorWIndow = new_editor_window,
+                .mEditorWindow = EditorWindow.Init(self, entityID),
             },
         };
         try ImguiManager.InsertEvent(new_event);
     }
 }
 
-pub fn EditorRender(self: *NameComponent) void {
+pub fn EditorRender(self: *NameComponent) !void {
     var buffer: [24]u8 = undefined;
     @memset(&buffer, 0);
     @memcpy(&buffer, &self.Name);

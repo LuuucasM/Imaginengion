@@ -5,7 +5,7 @@ const LinAlg = @import("../../Math/LinAlg.zig");
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
 const ImguiManager = @import("../../Imgui/Imgui.zig");
-const ImguiEvent = @import("../../Imgui/ImguiEvent.zig");
+const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Vec3f32 = LinAlg.Vec3f32;
@@ -45,14 +45,14 @@ pub fn ImguiRender(self: *TransformComponent, entityID: u32) !void {
         const new_editor_window = EditorWindow.Init(self, entityID);
         const new_event = ImguiEvent{
             .ET_SelectComponentEvent = .{
-                .mEditorWIndow = new_editor_window,
+                .mEditorWindow = new_editor_window,
             },
         };
         try ImguiManager.InsertEvent(new_event);
     }
 }
 
-pub fn EditorRender(self: *TransformComponent) void {
+pub fn EditorRender(self: *TransformComponent) !void {
     const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowOverlap | imgui.ImGuiTreeNodeFlags_Framed |
         imgui.ImGuiTreeNodeFlags_SpanAvailWidth | imgui.ImGuiTreeNodeFlags_FramePadding;
     const is_tree_open = imgui.igTreeNodeEx_Str(@typeName(TransformComponent), tree_node_flags);

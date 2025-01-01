@@ -7,7 +7,7 @@ const CSEditorPanel = @This();
 
 mP_Open: bool,
 mEditorWindows: std.ArrayList(EditorWindow),
-const EditorWindowsGPA = std.heap.GeneralPurposeAllocator(.{}){};
+var EditorWindowsGPA = std.heap.GeneralPurposeAllocator(.{}){};
 
 pub fn Init() CSEditorPanel {
     return CSEditorPanel{
@@ -22,10 +22,11 @@ pub fn OnImguiRender(self: CSEditorPanel) void {
     _ = imgui.igBegin("Component/Scripts Editor", null, 0);
     defer imgui.igEnd();
 
-    for (self.mEditorWIndows.list) |window| {
-        _ = imgui.igBegin("", null, 0);
-        defer imgui.igEnd();
-        window.EditorRender();
+    for (self.mEditorWindows.items) |window| {
+        _ = window;
+        //_ = imgui.igBegin("", null, 0);
+        //defer imgui.igEnd();
+        //window.EditorRender();
     }
 }
 
@@ -40,10 +41,10 @@ pub fn OnTogglePanelEvent(self: *CSEditorPanel) void {
     self.mP_Open = !self.mP_Open;
 }
 
-pub fn OnSelectComponentEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) void {
-    self.mEditorWindows.append(new_editor_window);
+pub fn OnSelectComponentEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) !void {
+    try self.mEditorWindows.append(new_editor_window);
 }
 
-pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) void {
-    self.mEditorWindows.append(new_editor_window);
+pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) !void {
+    try self.mEditorWindows.append(new_editor_window);
 }
