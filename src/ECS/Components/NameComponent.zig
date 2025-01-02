@@ -1,4 +1,5 @@
 const ComponentsList = @import("../Components.zig").ComponentsList;
+const Entity = @import("../Entity.zig");
 const NameComponent = @This();
 
 //IMGUI
@@ -21,11 +22,11 @@ pub fn GetEditorWindow(self: *NameComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *NameComponent, entityID: u32) !void {
+pub fn ImguiRender(self: *NameComponent, entity: Entity) !void {
     if (imgui.igSelectable_Bool(@typeName(NameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
         const new_event = ImguiEvent{
             .ET_SelectComponentEvent = .{
-                .mEditorWindow = EditorWindow.Init(self, entityID),
+                .mEditorWindow = EditorWindow.Init(self, entity),
             },
         };
         try ImguiManager.InsertEvent(new_event);

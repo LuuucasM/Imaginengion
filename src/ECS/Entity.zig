@@ -41,5 +41,5 @@ pub fn DeStringify(self: Entity, component_index: usize, component_string: []con
 }
 
 pub fn EntityImguiRender(self: Entity) !void {
-    try self.mSceneLayerRef.mECSManagerRef.EntityImguiRender(self.mEntityID);
+    try self.mSceneLayerRef.mECSManagerRef.EntityImguiRender(self);
 }

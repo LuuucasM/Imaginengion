@@ -2,7 +2,7 @@ const std = @import("std");
 const Entity = @import("../ECS/Entity.zig");
 const EditorWindow = @This();
 
-mEntityID: u32,
+mEntity: Entity,
 mPtr: *anyopaque,
 mVTable: *const VTab,
 
@@ -11,7 +11,7 @@ const VTab = struct {
     GetComponentName: *const fn (*anyopaque) []const u8,
 };
 
-pub fn Init(obj: anytype, asset_id: u32) EditorWindow {
+pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
     std.debug.assert(PtrInfo == .Pointer);
@@ -30,7 +30,7 @@ pub fn Init(obj: anytype, asset_id: u32) EditorWindow {
     };
 
     return EditorWindow{
-        .mAssetID = asset_id,
+        .mEntity = entity,
         .mPtr = obj,
         .mVTable = &.{
             .EditorRender = impl.EditorRender,

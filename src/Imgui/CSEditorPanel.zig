@@ -17,55 +17,33 @@ pub fn Init() CSEditorPanel {
     };
 }
 
-pub fn OnImguiRender(self: CSEditorPanel) void {
+pub fn OnImguiRender(self: CSEditorPanel) !void {
     if (self.mP_Open == false) return;
 
-    _ = imgui.igBegin("Component/Scripts Editor", null, 0);
-    defer imgui.igEnd();
-
-    const opt_fullscreen = true;
-    const opt_padding = false;
     const p_open = true;
     const my_null_ptr: ?*anyopaque = null;
-    var dockspace_flags = imgui.ImGuiDockNodeFlags_None;
 
-    var window_flags = imgui.ImGuiWindowFlags_MenuBar | imgui.ImGuiWindowFlags_NoDocking;
-    if (opt_fullscreen == true) {
-        const viewport = imgui.igGetMainViewport();
-        imgui.igSetNextWindowPos(viewport.*.WorkPos, 0, .{ .x = 0, .y = 0 });
-        imgui.igSetNextWindowSize(viewport.*.WorkSize, 0);
-        imgui.igSetNextWindowViewport(viewport.*.ID);
-        imgui.igPushStyleVar_Float(imgui.ImGuiStyleVar_WindowRounding, 0);
-        imgui.igPushStyleVar_Float(imgui.ImGuiStyleVar_WindowBorderSize, 0);
-        window_flags |= imgui.ImGuiWindowFlags_NoTitleBar | imgui.ImGuiWindowFlags_NoCollapse | imgui.ImGuiWindowFlags_NoResize | imgui.ImGuiWindowFlags_NoMove;
-        window_flags |= imgui.ImGuiWindowFlags_NoBringToFrontOnFocus | imgui.ImGuiWindowFlags_NoNavFocus;
-    } else {
-        dockspace_flags &= ~imgui.ImGuiDockNodeFlags_PassthruCentralNode;
-    }
+    const dockspace_flags = imgui.ImGuiDockNodeFlags_None;
+    const window_flags = imgui.ImGuiWindowFlags_None;
 
-    if (dockspace_flags & imgui.ImGuiDockNodeFlags_PassthruCentralNode != 0) {
-        window_flags |= imgui.ImGuiWindowFlags_NoBackground;
-    }
+    imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowPadding, .{ .x = 0, .y = 0 });
 
-    if (opt_padding == false) {
-        imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowPadding, .{ .x = 0, .y = 0 });
-    }
-    _ = imgui.igBegin("EditDockspace", @ptrCast(@constCast(&p_open)), window_flags);
-    if (opt_padding == false) {
-        imgui.igPopStyleVar(1);
-    }
-    if (opt_fullscreen == true) {
-        imgui.igPopStyleVar(2);
-    }
-
-    const dockspace_id = imgui.igGetID_Str("EditDockspace");
-    _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
+    _ = imgui.igBegin("Component/Script Editor", @ptrCast(@constCast(&p_open)), window_flags);
     defer imgui.igEnd();
+    imgui.igPopStyleVar(1);
+
+    const dockspace_id = imgui.igGetID_Str("EditorDockspace");
+    _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
+
+    var buffer: [256]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
     for (self.mEditorWindows.items) |window| {
-        _ = window;
-        //_ = imgui.igBegin("", null, 0);
-        //defer imgui.igEnd();
-        //window.EditorRender();
+        const name = try std.fmt.allocPrint(fba.allocator(), "{s}{s}", .{ window.mEntity.GetName(), window.GetComponentName() });
+        defer fba.allocator().free(name);
+
+        _ = imgui.igBegin(name.ptr, null, 0);
+        defer imgui.igEnd();
+        try window.EditorRender();
     }
 }
 

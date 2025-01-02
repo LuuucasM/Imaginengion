@@ -1,14 +1,15 @@
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const Render2DComponent = @This();
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const AssetM = @import("../../Assets/AssetManager.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
-const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
+const Entity = @import("../Entity.zig");
+const Render2DComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 
 Texture: AssetHandle = .{ .mID = AssetHandle.EmptyHandle },
 Color: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
@@ -26,11 +27,11 @@ pub fn GetEditorWindow(self: *Render2DComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *Render2DComponent, entityID: u32) !void {
+pub fn ImguiRender(self: *Render2DComponent, entity: Entity) !void {
     if (imgui.igSelectable_Bool(@typeName(Render2DComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
         const new_event = ImguiEvent{
             .ET_SelectComponentEvent = .{
-                .mEditorWindow = EditorWindow.Init(self, entityID),
+                .mEditorWindow = EditorWindow.Init(self, entity),
             },
         };
         try ImguiManager.InsertEvent(new_event);

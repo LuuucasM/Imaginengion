@@ -1,6 +1,7 @@
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const TransformComponent = @This();
 const LinAlg = @import("../../Math/LinAlg.zig");
+const Entity = @import("../Entity.zig");
+const TransformComponent = @This();
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -40,9 +41,9 @@ pub fn GetEditorWindow(self: *TransformComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *TransformComponent, entityID: u32) !void {
+pub fn ImguiRender(self: *TransformComponent, entity: Entity) !void {
     if (imgui.igSelectable_Bool(@typeName(TransformComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-        const new_editor_window = EditorWindow.Init(self, entityID);
+        const new_editor_window = EditorWindow.Init(self, entity);
         const new_event = ImguiEvent{
             .ET_SelectComponentEvent = .{
                 .mEditorWindow = new_editor_window,

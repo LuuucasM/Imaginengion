@@ -6,7 +6,7 @@ const EComponents = Components.EComponents;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
-
+const Entity = @import("Entity.zig");
 const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
@@ -134,8 +134,8 @@ pub fn Stringify(self: ComponentManager, write_stream: *std.json.WriteStream(std
 pub fn DeStringify(self: *ComponentManager, components_index: usize, component_string: []const u8, entityID: u32) !void {
     std.debug.assert(components_index < self.mComponentsArrays.items.len);
     std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
-
-    try self.mComponentsArrays.items[components_index].DeStringify(component_string, entityID);
+    const component_ind = try self.mComponentsArrays.items[components_index].DeStringify(component_string, entityID);
+    self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(@intCast(component_ind));
 }
 
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
@@ -170,13 +170,13 @@ pub fn DuplicateEntity(self: *ComponentManager, original_entity_id: u32, new_ent
     }
 }
 
-pub fn EntityImguiRender(self: ComponentManager, entityID: u32) !void {
-    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
-    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
+pub fn EntityImguiRender(self: ComponentManager, entity: Entity) !void {
+    std.debug.assert(self.mEntitySkipField.hasSparse(entity.mEntityID));
+    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entity.mEntityID);
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
-        try self.mComponentsArrays.items[i].ImguiRender(entityID);
+        try self.mComponentsArrays.items[i].ImguiRender(entity);
         i += 1;
         i += entity_skipfield.mSkipField[i];
     }

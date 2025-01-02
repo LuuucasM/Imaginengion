@@ -4,6 +4,7 @@ const ComponentManager = @import("ComponentManager.zig");
 const SystemManager = @import("SystemManager.zig");
 const EComponents = @import("Components.zig").EComponents;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const Entity = @import("Entity.zig");
 const ECSManager = @This();
 
 mEntityManager: EntityManager,
@@ -83,8 +84,8 @@ pub fn DeStringify(self: *ECSManager, component_index: usize, component_string: 
     try self.mComponentManager.DeStringify(component_index, component_string, entityID);
 }
 
-pub fn EntityImguiRender(self: ECSManager, entityID: u32) !void {
-    try self.mComponentManager.EntityImguiRender(entityID);
+pub fn EntityImguiRender(self: ECSManager, entity: Entity) !void {
+    try self.mComponentManager.EntityImguiRender(entity);
 }
 
 //-----------System Manager------------

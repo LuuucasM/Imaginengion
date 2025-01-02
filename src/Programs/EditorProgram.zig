@@ -82,7 +82,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     try self._ComponentsPanel.OnImguiRender();
     self._ScriptsPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
-    self._CSEditorPanel.OnImguiRender();
+    try self._CSEditorPanel.OnImguiRender();
 
     self._ToolbarPanel.OnImguiRender();
     self._ViewportPanel.OnImguiRender();
