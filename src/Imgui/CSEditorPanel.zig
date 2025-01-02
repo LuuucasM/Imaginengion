@@ -35,11 +35,15 @@ pub fn OnImguiRender(self: CSEditorPanel) !void {
     const dockspace_id = imgui.igGetID_Str("EditorDockspace");
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 
-    var buffer: [256]u8 = undefined;
+    var buffer: [400]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     for (self.mEditorWindows.items) |window| {
-        const name = try std.fmt.allocPrint(fba.allocator(), "{s}{s}", .{ window.mEntity.GetName(), window.GetComponentName() });
+        const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}", .{ window.mEntity.GetName(), window.GetComponentName() });
         defer fba.allocator().free(name);
+        defer fba.reset();
+
+        std.debug.print("testing name: {s}\n", .{name});
+        imgui.igSetNextWindowDockID(dockspace_id, imgui.ImGuiCond_Once);
 
         _ = imgui.igBegin(name.ptr, null, 0);
         defer imgui.igEnd();

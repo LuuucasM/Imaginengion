@@ -59,26 +59,18 @@ pub fn GetName(self: TransformComponent) []const u8 {
 }
 
 pub fn EditorRender(self: *TransformComponent) !void {
-    const tree_node_flags: u32 = imgui.ImGuiTreeNodeFlags_DefaultOpen | imgui.ImGuiTreeNodeFlags_AllowOverlap | imgui.ImGuiTreeNodeFlags_Framed |
-        imgui.ImGuiTreeNodeFlags_SpanAvailWidth | imgui.ImGuiTreeNodeFlags_FramePadding;
-    const is_tree_open = imgui.igTreeNodeEx_Str(@typeName(TransformComponent), tree_node_flags);
-
-    if (is_tree_open) {
-        defer imgui.igTreePop();
-        _ = DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
-        var rotation = LinAlg.QuatToDegrees(self.Rotation); //TODO: IMPLEMENT LIN ALG FUNCTION
-        if (DrawVec3Control("Rotation", &rotation, 0.0, 0.25, 100.0) == true) {
-            self.Rotation = LinAlg.DegreesToQuat(rotation); //TODO: IMPLEMENT LIN ALG FUNCTION
-        }
-        _ = DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);
+    _ = DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
+    var rotation = LinAlg.QuatToDegrees(self.Rotation);
+    if (DrawVec3Control("Rotation", &rotation, 0.0, 0.25, 100.0) == true) {
+        self.Rotation = LinAlg.DegreesToQuat(rotation);
     }
+    _ = DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);
 }
 
 fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32, speed: f32, column_width: f32) bool {
     const io = imgui.igGetIO();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     var changed: bool = false;
-
     imgui.igPushID_Str(label.ptr);
     defer imgui.igPopID();
 
@@ -91,7 +83,8 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushMultiItemsWidths(3, imgui.igCalcItemWidth());
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemSpacing, .{ .x = 0.0, .y = 0.0 });
     defer imgui.igPopStyleVar(1);
-    const line_height = imgui.igGetIO().*.FontDefault.*.FontSize + imgui.igGetStyle().*.FramePadding.y * 2.0;
+
+    const line_height = bold_font.*.FontSize + imgui.igGetStyle().*.FramePadding.y * 2.0;
     const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
 
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
