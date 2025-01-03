@@ -274,11 +274,11 @@ pub fn QuatToPitch(q: Quatf32) f32 {
 }
 
 pub fn QuatToYaw(q: Quatf32) f32 {
-    return math.asin(math.clamp(-2.0 * (q[1] * q[3] * q[0]), -1.0, 1.0));
+    return math.asin(math.clamp(-2.0 * (q[1] * q[3] - q[0] * q[2]), -1.0, 1.0));
 }
 
 pub fn QuatToRoll(q: Quatf32) f32 {
-    return math.atan2(2.0 * (q[1] * q[2] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
+    return math.atan2(2.0 * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
 }
 
 //----------------------------------UNIT TESTS----------------------------------------------------------------

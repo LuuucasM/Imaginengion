@@ -4,17 +4,23 @@ const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../ECS/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
+const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const CSEditorPanel = @This();
 
 mP_Open: bool,
-mEditorWindows: std.ArrayList(EditorWindow),
+mEditorWindows: std.StringArrayHashMap(EditorWindow),
 var EditorWindowsGPA = std.heap.GeneralPurposeAllocator(.{}){};
 
 pub fn Init() CSEditorPanel {
     return CSEditorPanel{
         .mP_Open = true,
-        .mEditorWindows = std.ArrayList(EditorWindow).init(EditorWindowsGPA.allocator()),
+        .mEditorWindows = std.StringArrayHashMap(EditorWindow).init(EditorWindowsGPA.allocator()),
     };
+}
+
+pub fn Deinit(self: *CSEditorPanel) void {
+    self.mEditorWindows.deinit();
+    EditorWindowsGPA.deinit();
 }
 
 pub fn OnImguiRender(self: CSEditorPanel) !void {
@@ -35,18 +41,28 @@ pub fn OnImguiRender(self: CSEditorPanel) !void {
     const dockspace_id = imgui.igGetID_Str("EditorDockspace");
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 
-    var buffer: [400]u8 = undefined;
+    var buffer: [300]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    for (self.mEditorWindows.items) |window| {
-        const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}", .{ window.mEntity.GetName(), window.GetComponentName() });
+    var iter = self.mEditorWindows.iterator();
+    while (iter.next()) |entry| {
+        const window = entry.value_ptr;
+
+        const entity_name = window.mEntity.GetName();
+        const component_name = window.GetComponentName();
+
+        const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len; // Find first null byte or use full length
+        const trimmed_name = entity_name[0..name_len];
+
+        const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}###{s}0", .{ trimmed_name, component_name, entry.key_ptr.* });
+        name[name.len - 1] = 0;
         defer fba.allocator().free(name);
         defer fba.reset();
 
-        std.debug.print("testing name: {s}\n", .{name});
         imgui.igSetNextWindowDockID(dockspace_id, imgui.ImGuiCond_Once);
 
         _ = imgui.igBegin(name.ptr, null, 0);
         defer imgui.igEnd();
+
         try window.EditorRender();
     }
 }
@@ -63,9 +79,23 @@ pub fn OnTogglePanelEvent(self: *CSEditorPanel) void {
 }
 
 pub fn OnSelectComponentEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) !void {
-    try self.mEditorWindows.append(new_editor_window);
+    var buffer: [300]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+    const id_name = try std.fmt.allocPrint(fba.allocator(), "{d}{s}", .{ new_editor_window.mEntity.mEntityID, new_editor_window.GetComponentName() });
+
+    if (self.mEditorWindows.contains(id_name) == false) {
+        try self.mEditorWindows.put(id_name, new_editor_window);
+    }
 }
 
 pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow) !void {
-    try self.mEditorWindows.append(new_editor_window);
+    var buffer: [300]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+    const id_name = try std.fmt.allocPrint(fba.allocator(), "{d}{s}", .{ new_editor_window.mEntity.mEntityID, new_editor_window.GetComponentName() });
+
+    if (self.mEditorWindows.contains(id_name) == false) {
+        try self.mEditorWindows.put(id_name, new_editor_window);
+    }
 }

@@ -60,10 +60,12 @@ pub fn GetName(self: TransformComponent) []const u8 {
 
 pub fn EditorRender(self: *TransformComponent) !void {
     _ = DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
+
     var rotation = LinAlg.QuatToDegrees(self.Rotation);
     if (DrawVec3Control("Rotation", &rotation, 0.0, 0.25, 100.0) == true) {
         self.Rotation = LinAlg.DegreesToQuat(rotation);
     }
+
     _ = DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);
 }
 
