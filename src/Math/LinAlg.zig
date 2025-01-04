@@ -238,47 +238,58 @@ pub fn RotateVec3Quat(q: Quatf32, v: Vec3f32) Vec3f32 {
 //TODO: glm functions for quat to degrees can be found here:
 //https://github.com/g-truc/glm/blob/6543cc9ad1476dd62fbfbe3194fcf19412f0cbc0/glm/gtc/quaternion.inl#L10
 pub fn QuatToDegrees(q: Quatf32) Vec3f32 {
-    return Vec3f32{ QuatToPitch(q), QuatToYaw(q), QuatToRoll(q) };
+    const rad = Vec3f32{ QuatToPitch(q), QuatToYaw(q), QuatToRoll(q) };
+    const to_deg = @as(Vec3f32, @splat(180.0 / math.pi));
+    return rad * to_deg;
 }
 
 //TODO: for degrees to quat look into the following website:
 //https://gamedev.stackexchange.com/questions/13436/glm-euler-angles-to-quaternion
 pub fn DegreesToQuat(euler_vector: Vec3f32) Quatf32 {
-    return RadiansToQuat(Vec3f32{ DegreeToRadian(euler_vector[0]), DegreeToRadian(euler_vector[1]), DegreeToRadian(euler_vector[2]) });
-}
+    const to_rad = @as(Vec3f32, @splat(math.pi / 180.0));
+    const rad = euler_vector * to_rad;
 
-pub fn DegreeToRadian(degree: f32) f32 {
-    return degree * (math.pi / 180.0);
-}
+    const half = @as(Vec3f32, @splat(0.5));
+    const half_angles = rad * half;
 
-pub fn RadiansToQuat(radians_vector: Vec3f32) Quatf32 {
-    const cos_vec = @cos(radians_vector) / @as(Vec3f32, @splat(2.0));
-    const sin_vec = @sin(radians_vector) / @as(Vec3f32, @splat(2.0));
+    const c = @cos(half_angles);
+    const s = @sin(half_angles);
+
+    const cr = c[0];
+    const cp = c[1];
+    const cy = c[2];
+    const sr = s[0];
+    const sp = s[1];
+    const sy = s[2];
 
     return Quatf32{
-        cos_vec[0] * cos_vec[1] * cos_vec[2] + sin_vec[0] * sin_vec[1] * sin_vec[2],
-        sin_vec[0] * cos_vec[1] * cos_vec[2] - cos_vec[0] * sin_vec[1] * sin_vec[2],
-        cos_vec[0] * sin_vec[1] * cos_vec[2] + sin_vec[0] * cos_vec[1] * sin_vec[2],
-        cos_vec[0] * cos_vec[1] * sin_vec[2] - sin_vec[0] * sin_vec[1] * cos_vec[2],
+        cr * cp * cy + sr * sp * sy,
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
     };
 }
 
 pub fn QuatToPitch(q: Quatf32) f32 {
-    const epsilon = 1e-7;
-
-    const y: f32 = 2 * (q[2] * q[3] + q[0] * q[1]);
-    const x: f32 = q[0] * q[0] - q[1] * q[1] - q[2] * q[2] + q[3] * q[3];
-
-    const singularityCheck: f32 = @floatFromInt(@intFromBool(math.approxEqAbs(f32, x, 0, epsilon) or math.approxEqAbs(f32, y, 0, epsilon)));
-    return (1.0 - singularityCheck) * math.atan2(y, x) + singularityCheck * (1.0 * math.atan2(q[1], q[0]));
+    const sinr_cosp = 2.0 * (q[0] * q[1] + q[2] * q[3]);
+    const cosr_cosp = 1.0 - 2.0 * (q[1] * q[1] + q[2] * q[2]);
+    return math.atan2(sinr_cosp, cosr_cosp);
 }
 
 pub fn QuatToYaw(q: Quatf32) f32 {
-    return math.asin(math.clamp(-2.0 * (q[1] * q[3] - q[0] * q[2]), -1.0, 1.0));
+    const sinp = 2.0 * (q[0] * q[2] - q[3] * q[1]);
+    const sign = if (sinp >= 0.0) @as(f32, 1.0) else @as(f32, -1.0);
+
+    if (@abs(sinp) >= 1.0) {
+        return sign * (math.pi / 2.0);
+    }
+    return math.asin(sinp);
 }
 
 pub fn QuatToRoll(q: Quatf32) f32 {
-    return math.atan2(2.0 * (q[1] * q[2] + q[0] * q[3]), q[0] * q[0] + q[1] * q[1] - q[2] * q[2] - q[3] * q[3]);
+    const siny_cosp = 2.0 * (q[0] * q[3] + q[1] * q[2]);
+    const cosy_cosp = 1.0 - 2.0 * (q[2] * q[2] + q[3] * q[3]);
+    return math.atan2(siny_cosp, cosy_cosp);
 }
 
 //----------------------------------UNIT TESTS----------------------------------------------------------------
