@@ -65,21 +65,18 @@ pub fn GetInd(self: TransformComponent) u32 {
 }
 
 pub fn EditorRender(self: *TransformComponent) !void {
-    _ = DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
+    DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
 
     var rotation = LinAlg.QuatToDegrees(self.Rotation);
-    std.debug.print("rotation before: {}\t", .{rotation});
-    _ = DrawVec3Control("Rotation", &rotation, 0.0, 0.25, 100.0);
-    std.debug.print("rotation after: {}\n", .{rotation});
+    DrawVec3Control("Rotation", &rotation, 0.0, 0.25, 100.0);
     self.Rotation = LinAlg.DegreesToQuat(rotation);
 
-    _ = DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);
+    DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);
 }
 
-fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32, speed: f32, column_width: f32) bool {
+fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32, speed: f32, column_width: f32) void {
     const io = imgui.igGetIO();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
-    var changed: bool = false;
     imgui.igPushID_Str(label.ptr);
     defer imgui.igPopID();
 
@@ -102,17 +99,14 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font);
     if (imgui.igButton("X", button_size)) {
-        values.* = @as(Vec3f32, @splat(reset_value));
-        changed = true;
+        values.*[0] = reset_value;
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    if (imgui.igDragFloat("##X", &values[0], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        changed = true;
-    }
+    if (imgui.igDragFloat("##X", &values[0], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {}
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
 
@@ -122,17 +116,14 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Y", button_size)) {
-        values.* = @as(Vec3f32, @splat(reset_value));
-        changed = true;
+        values.*[1] = reset_value;
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    if (imgui.igDragFloat("##Y", &values[1], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        changed = true;
-    }
+    if (imgui.igDragFloat("##Y", &values[1], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {}
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
 
@@ -142,18 +133,13 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Z", button_size)) {
-        values.* = @as(Vec3f32, @splat(reset_value));
-        changed = true;
+        values.*[2] = reset_value;
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    if (imgui.igDragFloat("##Z", &values[2], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        changed = true;
-    }
+    if (imgui.igDragFloat("##Z", &values[2], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {}
     imgui.igPopItemWidth();
-
-    return changed;
 }

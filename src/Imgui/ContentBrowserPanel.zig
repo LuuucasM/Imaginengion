@@ -97,9 +97,9 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     if (std.mem.eql(u8, self.mCurrentDirectory.items, self.mProjectDirectory.items) == true) return;
 
     const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
-    const texture_id = back_texture.GetID();
+    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
-    _ = imgui.igImageButton("back", @constCast(@ptrCast(&texture_id)), .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 1 }, .{ .x = 1, .y = 0 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
+    _ = imgui.igImageButton("back", texture_id, .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 0 }, .{ .x = 1, .y = 1 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
     imgui.igPopStyleColor(1);
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
@@ -131,12 +131,12 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             _ = imgui.igPushID_Str(entry_name);
             defer imgui.igPopID();
 
-            var texture_id = texture.GetID();
-            texture.Bind(0);
+            const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, texture.GetID())));
+
             imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1.0 });
             _ = imgui.igImageButton(
                 entry_name,
-                @ptrCast(&texture_id),
+                @ptrCast(texture_id),
                 .{ .x = thumbnail_size, .y = thumbnail_size },
                 .{ .x = 0.0, .y = 0.0 },
                 .{ .x = 1.0, .y = 1.0 },

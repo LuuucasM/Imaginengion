@@ -8,6 +8,7 @@ _Height: c_int,
 _TextureID: c_uint,
 _InternalFormat: c_uint,
 _DataFormat: c_uint,
+mSlot: i32,
 
 pub fn Init(path: []const u8) !OpenGLTexture2D {
     var width: c_int = 0;
@@ -42,13 +43,14 @@ pub fn Init(path: []const u8) !OpenGLTexture2D {
 
     var new_texture_id: c_uint = 0;
     glad.glCreateTextures(glad.GL_TEXTURE_2D, 1, &new_texture_id);
-    glad.glTextureStorage2D(new_texture_id, 1, internal_format, width, height);
 
+    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_BASE_LEVEL, 0);
+    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_MAX_LEVEL, 0);
     glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_MIN_FILTER, glad.GL_LINEAR);
-    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_MAG_FILTER, glad.GL_NEAREST);
-
+    glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_MAG_FILTER, glad.GL_LINEAR);
     glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_WRAP_S, glad.GL_REPEAT);
     glad.glTextureParameteri(new_texture_id, glad.GL_TEXTURE_WRAP_T, glad.GL_REPEAT);
+    glad.glTextureStorage2D(new_texture_id, 1, internal_format, width, height);
 
     glad.glTextureSubImage2D(new_texture_id, 0, 0, 0, width, height, data_format, glad.GL_UNSIGNED_BYTE, data);
 
@@ -58,6 +60,7 @@ pub fn Init(path: []const u8) !OpenGLTexture2D {
         ._TextureID = new_texture_id,
         ._InternalFormat = internal_format,
         ._DataFormat = data_format,
+        .mSlot = -1,
     };
 }
 
@@ -73,12 +76,7 @@ pub fn GetHeight(self: OpenGLTexture2D) u32 {
 pub fn GetID(self: OpenGLTexture2D) c_uint {
     return self._TextureID;
 }
-pub fn UpdateData(self: *OpenGLTexture2D, width: u32, height: u32, data: *anyopaque, size: usize) void {
-    _ = size;
-    self._Width = width;
-    self._Height = height;
-    glad.glTextureSubImage2D(self._TextureID, 0, 0, 0, self._Width, self._Height, self._DataFormat, glad.GL_UNSIGNED_BYTE, data);
-}
+
 pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {
     var width: c_int = 0;
     var height: c_int = 0;
@@ -101,11 +99,11 @@ pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {
     self._Height = height;
     glad.glTextureSubImage2D(self._TextureID, 0, 0, 0, self._Width, self._Height, self._DataFormat, glad.GL_UNSIGNED_BYTE, data);
 }
-pub fn Bind(self: OpenGLTexture2D, slot: u32) void {
+pub fn Bind(self: *OpenGLTexture2D, slot: u32) void {
     glad.glBindTextureUnit(slot, self._TextureID);
+    self.mSlot = @intCast(slot);
 }
-pub fn Unbind(self: OpenGLTexture2D, slot: u32) void {
-    _ = self;
-    _ = slot;
-    glad.glBindTexture(glad.GL_TEXTURE_2D, 0);
+pub fn Unbind(self: OpenGLTexture2D) void {
+    glad.glBindTextureUnit(self.mSlot, 0);
+    self.mSlot = -1;
 }
