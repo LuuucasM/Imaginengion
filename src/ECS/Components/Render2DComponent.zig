@@ -43,6 +43,11 @@ pub fn GetName(self: Render2DComponent) []const u8 {
     return "Render2DComponent";
 }
 
+pub fn GetInd(self: Render2DComponent) u32 {
+    _ = self;
+    return @intCast(Ind);
+}
+
 pub fn EditorRender(self: *Render2DComponent) !void {
     const padding: f32 = 16.0;
     const thumbnail_size: f32 = 70.0;

@@ -9,6 +9,7 @@ mVTable: *const VTab,
 const VTab = struct {
     EditorRender: *const fn (*anyopaque) anyerror!void,
     GetComponentName: *const fn (*anyopaque) []const u8,
+    GetComponentID: *const fn (*anyopaque) u32,
 };
 
 pub fn Init(obj: anytype, entity: Entity) EditorWindow {
@@ -27,6 +28,11 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
             const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
             return self.GetName();
         }
+
+        fn GetComponentID(ptr: *anyopaque) u32 {
+            const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+            return @intCast(self.GetInd());
+        }
     };
 
     return EditorWindow{
@@ -35,6 +41,7 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
         .mVTable = &.{
             .EditorRender = impl.EditorRender,
             .GetComponentName = impl.GetComponentName,
+            .GetComponentID = impl.GetComponentID,
         },
     };
 }
@@ -45,4 +52,8 @@ pub fn EditorRender(self: EditorWindow) !void {
 
 pub fn GetComponentName(self: EditorWindow) []const u8 {
     return self.mVTable.GetComponentName(self.mPtr);
+}
+
+pub fn GetComponentID(self: EditorWindow) u32 {
+    return self.mVTable.GetComponentID(self.mPtr);
 }

@@ -38,6 +38,11 @@ pub fn GetName(self: NameComponent) []const u8 {
     return "NameComponent";
 }
 
+pub fn GetInd(self: NameComponent) u32 {
+    _ = self;
+    return @intCast(Ind);
+}
+
 pub fn EditorRender(self: *NameComponent) !void {
     var buffer: [24]u8 = undefined;
     @memset(&buffer, 0);

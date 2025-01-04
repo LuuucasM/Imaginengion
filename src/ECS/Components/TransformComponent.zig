@@ -58,6 +58,11 @@ pub fn GetName(self: TransformComponent) []const u8 {
     return "TransformComponent";
 }
 
+pub fn GetInd(self: TransformComponent) u32 {
+    _ = self;
+    return @intCast(Ind);
+}
+
 pub fn EditorRender(self: *TransformComponent) !void {
     _ = DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
 

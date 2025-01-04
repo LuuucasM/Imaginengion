@@ -20,7 +20,7 @@ mEngineAllocator: std.mem.Allocator,
 mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
 mAssetECS: ECSManager,
 mAssetMemoryPool: std.heap.ArenaAllocator,
-mAssetPathToID: std.StringHashMap(u32),
+mAssetPathToID: std.AutoHashMap(u64, u32),
 
 //note the head of the list is most recently used and tail is lease
 mAssetGPUCache: std.DoublyLinkedList(u32),
@@ -33,7 +33,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
         .mAssetECS = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList),
         .mAssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-        .mAssetPathToID = std.StringHashMap(u32).init(AssetM.mAssetGPA.allocator()),
+        .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetM.mAssetGPA.allocator()),
         .mAssetCPUCache = std.DoublyLinkedList(u32){},
         .mAssetGPUCache = std.DoublyLinkedList(u32){},
     };
@@ -57,7 +57,10 @@ pub fn Deinit() !void {
 }
 
 pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
-    if (AssetM.mAssetPathToID.get(abs_path)) |entity_id| {
+    var hasher = std.hash.Fnv1a_64.init();
+    hasher.update(abs_path);
+    const abs_path_hash = hasher.final();
+    if (AssetM.mAssetPathToID.get(abs_path_hash)) |entity_id| {
         AssetM.mAssetECS.GetComponent(AssetMetaData, entity_id).mRefs += 1;
         return AssetHandle{
             .mID = entity_id,
@@ -65,7 +68,7 @@ pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
     } else {
         const asset_handle = try CreateAsset(abs_path);
         AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).mRefs += 1;
-        try AssetM.mAssetPathToID.put(abs_path, asset_handle.mID);
+        try AssetM.mAssetPathToID.put(abs_path_hash, asset_handle.mID);
         return asset_handle;
     }
 }
@@ -160,7 +163,10 @@ fn CreateAsset(abs_path: []const u8) !AssetHandle {
 
 fn DeleteAsset(asset_id: u32) !void {
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
-    _ = AssetM.mAssetPathToID.remove(file_data.mAbsPath);
+    var hasher = std.hash.Fnv1a_64.init();
+    hasher.update(file_data.mAbsPath);
+    const abs_path_hash = hasher.final();
+    _ = AssetM.mAssetPathToID.remove(abs_path_hash);
     AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
     try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
