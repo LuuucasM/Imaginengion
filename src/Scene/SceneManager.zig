@@ -2,7 +2,7 @@ const std = @import("std");
 const LinAlg = @import("../Math/LinAlg.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const ECSManager = @import("../ECS/ECSManager.zig");
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("..//GameObjects/Entity.zig");
 const FrameBufferFile = @import("../FrameBuffers/FrameBuffer.zig");
 const FrameBuffer = FrameBufferFile.FrameBuffer;
 const TextureFormat = FrameBufferFile.TextureFormat;
@@ -11,7 +11,7 @@ const LayerType = SceneLayer.LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const SceneSerializer = @import("SceneSerializer.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
-const ComponentsArray = @import("../ECS/Components.zig").ComponentsList;
+const ComponentsArray = @import("../GameObjects/Components.zig").ComponentsList;
 const SceneManager = @This();
 
 pub const ESceneState = enum {

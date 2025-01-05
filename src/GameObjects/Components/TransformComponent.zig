@@ -42,18 +42,6 @@ pub fn GetEditorWindow(self: *TransformComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *TransformComponent, entity: Entity) !void {
-    if (imgui.igSelectable_Bool(@typeName(TransformComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-        const new_editor_window = EditorWindow.Init(self, entity);
-        const new_event = ImguiEvent{
-            .ET_SelectComponentEvent = .{
-                .mEditorWindow = new_editor_window,
-            },
-        };
-        try ImguiManager.InsertEvent(new_event);
-    }
-}
-
 pub fn GetName(self: TransformComponent) []const u8 {
     _ = self;
     return "TransformComponent";

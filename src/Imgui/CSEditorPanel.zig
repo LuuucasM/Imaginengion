@@ -1,7 +1,7 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
@@ -54,8 +54,7 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
         const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len; // Find first null byte or use full length
         const trimmed_name = entity_name[0..name_len];
 
-        const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}###{d}0", .{ trimmed_name, component_name, id_name });
-        name[name.len - 1] = 0;
+        const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}###{d}\x00", .{ trimmed_name, component_name, id_name });
         defer fba.allocator().free(name);
 
         imgui.igSetNextWindowDockID(dockspace_id, imgui.ImGuiCond_Once);

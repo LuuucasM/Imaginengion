@@ -1,8 +1,18 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
+const ImguiManager = @import("../Imgui/Imgui.zig");
+const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 const ComponentsPanel = @This();
+
+const Components = @import("../GameObjects/Components.zig");
+const IDComponent = Components.IDComponent;
+const NameComponent = Components.NameComponent;
+const TransformComponent = Components.TransformComponent;
+const Render2DComponent = Components.Render2DComponent;
+
+const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 _P_Open: bool,
 mSelectedEntity: ?Entity,
@@ -20,20 +30,26 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
     if (self.mSelectedEntity) |entity| {
         var buffer: [300]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const name = try std.fmt.allocPrint(fba.allocator(), "Components - {s}0###Components", .{entity.GetName()});
-        name[name.len - 1] = 0;
+
+        const name = try std.fmt.allocPrint(fba.allocator(), "Components - {s}###Components\x00", .{entity.GetName()});
+
         _ = imgui.igBegin(name.ptr, null, 0);
     } else {
-        _ = imgui.igBegin("Components - No Entity###Components", null, 0);
+        _ = imgui.igBegin("Components - No Entity###Components\x00", null, 0);
     }
     defer imgui.igEnd();
 
     if (self.mSelectedEntity) |entity| {
-        //if (imgui.igButton("Add Component", .{ .x = 10, .y = 10 }) == true) {
-        //    imgui.igOpenPopup_Str("AddComponent", imgui.ImGuiPopupFlags_None);
-        //}
-        //if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {}
-        try entity.EntityImguiRender();
+        var region_size: imgui.ImVec2 = .{ .x = 0, .y = 0 };
+        imgui.igGetContentRegionAvail(&region_size);
+        if (imgui.igButton("Add Component", .{ .x = region_size.x, .y = 20 }) == true) {
+            imgui.igOpenPopup_Str("AddComponent", imgui.ImGuiPopupFlags_None);
+        }
+        if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
+            defer imgui.igEndPopup();
+            AddComponentPopupMenu(entity);
+        }
+        try EntityImguiRender(entity);
     }
 }
 
@@ -50,4 +66,47 @@ pub fn OnTogglePanelEvent(self: *ComponentsPanel) void {
 
 pub fn OnSelectEntityEvent(self: *ComponentsPanel, new_selected_entity: ?Entity) void {
     self.mSelectedEntity = new_selected_entity;
+}
+
+fn EntityImguiRender(entity: Entity) !void {
+    if (entity.HasComponent(NameComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(NameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(NameComponent), entity),
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
+        }
+    }
+    if (entity.HasComponent(TransformComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(TransformComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_editor_window = EditorWindow.Init(entity.GetComponent(TransformComponent), entity);
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = new_editor_window,
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
+        }
+    }
+    if (entity.HasComponent(Render2DComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(Render2DComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(Render2DComponent), entity),
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
+        }
+    }
+}
+
+fn AddComponentPopupMenu(entity: Entity) void {
+    if (entity.HasComponent(Render2DComponent) == false) {
+        if (imgui.igMenuItem_Bool("Render2DComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(Render2DComponent, .{ .Texture = .{ .mID = AssetHandle.EmptyHandle }, .Color = .{ 1.0, 1.0, 1.0, 1.0 }, .TilingFactor = 1 });
+            imgui.igCloseCurrentPopup();
+        }
+    }
 }

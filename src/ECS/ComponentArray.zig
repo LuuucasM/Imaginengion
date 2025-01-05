@@ -1,6 +1,5 @@
 const std = @import("std");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
-const Entity = @import("Entity.zig");
 
 pub const IComponentArray = struct {
     ptr: *anyopaque,
@@ -10,9 +9,9 @@ pub const IComponentArray = struct {
         DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
         HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
-        Stringify: *const fn (*anyopaque, *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), u32) anyerror!void,
-        DeStringify: *const fn (*anyopaque, []const u8, u32) anyerror!usize,
-        ImguiRender: *const fn (*anyopaque, Entity) anyerror!void,
+        // Stringify: *const fn (*anyopaque, *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), u32) anyerror!void,
+        // DeStringify: *const fn (*anyopaque, []const u8, u32) anyerror!usize,
+        // ImguiRender: *const fn (*anyopaque, Entity) anyerror!void,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
@@ -40,18 +39,18 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.RemoveComponent(entityID);
             }
-            fn Stringify(ptr: *anyopaque, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
-                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-                try self.Stringify(write_stream, entityID);
-            }
-            fn DeStringify(ptr: *anyopaque, component_string: []const u8, entityID: u32) anyerror!usize {
-                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-                return try self.DeStringify(component_string, entityID);
-            }
-            fn ImguiRender(ptr: *anyopaque, entity: Entity) !void {
-                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-                try self.ImguiRender(entity);
-            }
+            // fn Stringify(ptr: *anyopaque, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
+            //     const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+            //     try self.Stringify(write_stream, entityID);
+            // }
+            // fn DeStringify(ptr: *anyopaque, component_string: []const u8, entityID: u32) anyerror!usize {
+            //     const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+            //     return try self.DeStringify(component_string, entityID);
+            // }
+            // fn ImguiRender(ptr: *anyopaque, entity: Entity) !void {
+            //     const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+            //     try self.ImguiRender(entity);
+            // }
         };
         return IComponentArray{
             .ptr = obj,
@@ -60,9 +59,9 @@ pub const IComponentArray = struct {
                 .DuplicateEntity = impl.DuplicateEntity,
                 .HasComponent = impl.HasComponent,
                 .RemoveComponent = impl.RemoveComponent,
-                .Stringify = impl.Stringify,
-                .DeStringify = impl.DeStringify,
-                .ImguiRender = impl.ImguiRender,
+                // .Stringify = impl.Stringify,
+                // .DeStringify = impl.DeStringify,
+                // .ImguiRender = impl.ImguiRender,
             },
         };
     }
@@ -79,15 +78,15 @@ pub const IComponentArray = struct {
     pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
         return self.vtable.HasComponent(self.ptr, entityID);
     }
-    pub fn Stringify(self: IComponentArray, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
-        try self.vtable.Stringify(self.ptr, write_stream, entityID);
-    }
-    pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!usize {
-        return try self.vtable.DeStringify(self.ptr, component_string, entityID);
-    }
-    pub fn ImguiRender(self: IComponentArray, entity: Entity) !void {
-        try self.vtable.ImguiRender(self.ptr, entity);
-    }
+    // pub fn Stringify(self: IComponentArray, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
+    //     try self.vtable.Stringify(self.ptr, write_stream, entityID);
+    // }
+    // pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!usize {
+    //     return try self.vtable.DeStringify(self.ptr, component_string, entityID);
+    // }
+    // pub fn ImguiRender(self: IComponentArray, entity: Entity) !void {
+    //     try self.vtable.ImguiRender(self.ptr, entity);
+    // }
 };
 
 pub fn ComponentArray(comptime componentType: type) type {
@@ -140,36 +139,36 @@ pub fn ComponentArray(comptime componentType: type) type {
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
         }
-        pub fn Stringify(self: Self, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
-            const component = self.GetComponent(entityID).*;
+        // pub fn Stringify(self: Self, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
+        //     const component = self.GetComponent(entityID).*;
 
-            var buffer: [260]u8 = undefined;
-            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        //     var buffer: [260]u8 = undefined;
+        //     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-            const full_component_name = @typeName(componentType);
-            const last_dot = std.mem.lastIndexOf(u8, full_component_name, ".") orelse full_component_name.len;
-            const component_name = full_component_name[last_dot + 1 ..];
+        //     const full_component_name = @typeName(componentType);
+        //     const last_dot = std.mem.lastIndexOf(u8, full_component_name, ".") orelse full_component_name.len;
+        //     const component_name = full_component_name[last_dot + 1 ..];
 
-            var component_string = std.ArrayList(u8).init(fba.allocator());
-            try std.json.stringify(component, .{}, component_string.writer());
+        //     var component_string = std.ArrayList(u8).init(fba.allocator());
+        //     try std.json.stringify(component, .{}, component_string.writer());
 
-            try write_stream.objectField(component_name);
-            try write_stream.write(component_string.items);
-        }
-        pub fn DeStringify(self: *Self, component_string: []const u8, entityID: u32) !usize {
-            var buffer: [260]u8 = undefined;
-            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        //     try write_stream.objectField(component_name);
+        //     try write_stream.write(component_string.items);
+        // }
+        // pub fn DeStringify(self: *Self, component_string: []const u8, entityID: u32) !usize {
+        //     var buffer: [260]u8 = undefined;
+        //     var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-            const new_component_parsed = try std.json.parseFromSlice(componentType, fba.allocator(), component_string, .{});
-            defer new_component_parsed.deinit();
-            _ = try self.AddComponent(entityID, new_component_parsed.value);
-            return componentType.Ind;
-        }
-        pub fn ImguiRender(self: *Self, entity: Entity) !void {
-            const component = self.mComponents.getValueBySparse(entity.mEntityID);
-            if (@hasDecl(componentType, "ImguiRender")) {
-                try component.ImguiRender(entity);
-            }
-        }
+        //     const new_component_parsed = try std.json.parseFromSlice(componentType, fba.allocator(), component_string, .{});
+        //     defer new_component_parsed.deinit();
+        //     _ = try self.AddComponent(entityID, new_component_parsed.value);
+        //     return componentType.Ind;
+        // }
+        // pub fn ImguiRender(self: *Self, entity: Entity) !void {
+        //     const component = self.mComponents.getValueBySparse(entity.mEntityID);
+        //     if (@hasDecl(componentType, "ImguiRender")) {
+        //         try component.ImguiRender(entity);
+        //     }
+        // }
     };
 }

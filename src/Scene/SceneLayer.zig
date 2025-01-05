@@ -1,12 +1,12 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const SceneLayer = @This();
 
-const Components = @import("../ECS/Components.zig");
+const Components = @import("../GameObjects/Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const TransformComponent = Components.TransformComponent;

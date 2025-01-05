@@ -1,5 +1,5 @@
 const std = @import("std");
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @This();
 
 mEntity: Entity,

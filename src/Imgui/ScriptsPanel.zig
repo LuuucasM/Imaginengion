@@ -1,7 +1,7 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 const ScriptsPanel = @This();
 
 _P_Open: bool,

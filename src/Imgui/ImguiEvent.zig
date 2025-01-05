@@ -1,5 +1,5 @@
 const LayerType = @import("../Scene/SceneLayer.zig").LayerType;
-const Entity = @import("../ECS/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
 
 pub const PanelType = enum {

@@ -1,6 +1,6 @@
 const std = @import("std");
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
-const ComponentList = @import("Components.zig").ComponentsList;
+//const ComponentList = @import("Components.zig").ComponentsList;
 const BitFieldType = @import("ComponentManager.zig").BitFieldType;
 pub const ISystem = struct {
     mPtr: *anyopaque,

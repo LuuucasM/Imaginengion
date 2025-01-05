@@ -28,25 +28,6 @@ pub fn GetEditorWindow(self: *Render2DComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn ImguiRender(self: *Render2DComponent, entity: Entity) !void {
-    if (imgui.igSelectable_Bool(@typeName(Render2DComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-        const new_event = ImguiEvent{
-            .ET_SelectComponentEvent = .{
-                .mEditorWindow = EditorWindow.Init(self, entity),
-            },
-        };
-        try ImguiManager.InsertEvent(new_event);
-    }
-}
-
-pub fn NotComponentRender() bool {
-    if (imgui.igMenuItem_Bool("Render2DComponent", "", false, true) == true) {
-        imgui.igCloseCurrentPopup();
-        return true;
-    }
-    return false;
-}
-
 pub fn GetName(self: Render2DComponent) []const u8 {
     _ = self;
     return "Render2DComponent";

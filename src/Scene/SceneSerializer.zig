@@ -1,9 +1,14 @@
 const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
-const EComponents = @import("../ECS/Components.zig").EComponents;
-const Entity = @import("../ECS/Entity.zig");
-const Components = @import("../ECS/Components.zig");
+const Entity = @import("../GameObjects/Entity.zig");
+
+const Components = @import("../GameObjects/Components.zig");
+const IDComponent = Components.IDComponent;
+const NameComponent = Components.NameComponent;
+const TransformComponent = Components.TransformComponent;
+const Render2DComponent = Components.Render2DComponent;
+
 const SceneManager = @import("SceneManager.zig");
 
 pub fn SerializeText(scene_layer: *SceneLayer) !void {
@@ -32,7 +37,7 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
-        try entity.Stringify(&write_stream);
+        try Stringify(&write_stream, entity);
         try write_stream.endObject();
     }
     try write_stream.endObject();
@@ -102,7 +107,6 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                         .object_end => break,
                         else => @panic("should be a string!\n"),
                     };
-                    const component_type = std.meta.stringToEnum(EComponents, component_type_string).?;
 
                     const component_data_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
                     const component_data_string = switch (component_data_token) {
@@ -111,7 +115,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                         else => @panic("should be a string!!\n"),
                     };
 
-                    try new_entity.DeStringify(@intFromEnum(component_type), component_data_string);
+                    try DeStringify(new_entity, component_type_string, component_data_string);
                 }
             }
         }
@@ -128,4 +132,86 @@ pub fn DeserializeBinary(path: []const u8, scene_manager: SceneManager, allocato
     _ = path;
     _ = scene_manager;
     _ = allocator;
+}
+
+fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entity: Entity) !void {
+    if (entity.HasComponent(IDComponent) == true) {
+        const component = entity.GetComponent(IDComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("IDComponent");
+        try write_stream.write(component_string.items);
+    }
+    if (entity.HasComponent(NameComponent) == true) {
+        const component = entity.GetComponent(NameComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("NameComponent");
+        try write_stream.write(component_string.items);
+    }
+    if (entity.HasComponent(TransformComponent) == true) {
+        const component = entity.GetComponent(TransformComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("TransformComponent");
+        try write_stream.write(component_string.items);
+    }
+    if (entity.HasComponent(Render2DComponent) == true) {
+        const component = entity.GetComponent(Render2DComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("Render2DComponent");
+        try write_stream.write(component_string.items);
+    }
+}
+fn DeStringify(entity: Entity, component_type_string: []const u8, component_string: []const u8) !void {
+    if (std.mem.eql(u8, component_type_string, "IDComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(IDComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(IDComponent, new_component_parsed.value);
+    } else if (std.mem.eql(u8, component_type_string, "NameComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(NameComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(NameComponent, new_component_parsed.value);
+    } else if (std.mem.eql(u8, component_type_string, "TransformComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(TransformComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
+    } else if (std.mem.eql(u8, component_type_string, "Render2DComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(Render2DComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(Render2DComponent, new_component_parsed.value);
+    }
 }
