@@ -76,7 +76,7 @@ pub fn OnImguiRender() !void {
                 try ImguiManager.InsertEvent(new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFolder(ImguiManager.EventAllocator());
+                const path = try PlatformUtils.SaveFile(ImguiManager.EventAllocator());
                 const new_event = ImguiEvent{
                     .ET_SaveSceneAsEvent = .{
                         .Path = path,

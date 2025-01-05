@@ -115,9 +115,8 @@ pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
     } else {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const path = try PlatformUtils.OpenFolder(fba.allocator());
-
-        try self.SaveSceneAs(scene_id, path);
+        const path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
+        if (path.len > 0) try self.SaveSceneAs(scene_id, path);
     }
 }
 pub fn SaveSceneAs(self: *SceneManager, scene_id: usize, path: []const u8) !void {
