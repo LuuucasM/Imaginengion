@@ -2,7 +2,6 @@ const std = @import("std");
 const EntityManager = @import("EntityManager.zig");
 const ComponentManager = @import("ComponentManager.zig");
 const SystemManager = @import("SystemManager.zig");
-const EComponents = @import("Components.zig").EComponents;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Entity = @import("Entity.zig");
 const ECSManager = @This();

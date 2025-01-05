@@ -1,3 +1,4 @@
+const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const AssetMetaData = @This();
 

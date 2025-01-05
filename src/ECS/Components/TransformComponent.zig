@@ -21,6 +21,14 @@ Scale: Vec3f32,
 Transform: Mat4f32,
 Dirty: bool,
 
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == TransformComponent) {
+            break :blk i;
+        }
+    }
+};
+
 pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {
     if (self.Dirty == true) {
         defer self.Dirty = false;
@@ -29,14 +37,6 @@ pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {
     }
     return self.Transform;
 }
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == TransformComponent) {
-            break :blk i;
-        }
-    }
-};
 
 pub fn GetEditorWindow(self: *TransformComponent) EditorWindow {
     return EditorWindow.Init(self);

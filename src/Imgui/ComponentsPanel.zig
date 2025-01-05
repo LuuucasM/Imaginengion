@@ -16,10 +16,23 @@ pub fn Init() ComponentsPanel {
 
 pub fn OnImguiRender(self: ComponentsPanel) !void {
     if (self._P_Open == false) return;
-    _ = imgui.igBegin("Components", null, 0);
+
+    if (self.mSelectedEntity) |entity| {
+        var buffer: [300]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const name = try std.fmt.allocPrint(fba.allocator(), "Components - {s}0###Components", .{entity.GetName()});
+        name[name.len - 1] = 0;
+        _ = imgui.igBegin(name.ptr, null, 0);
+    } else {
+        _ = imgui.igBegin("Components - No Entity###Components", null, 0);
+    }
     defer imgui.igEnd();
 
     if (self.mSelectedEntity) |entity| {
+        //if (imgui.igButton("Add Component", .{ .x = 10, .y = 10 }) == true) {
+        //    imgui.igOpenPopup_Str("AddComponent", imgui.ImGuiPopupFlags_None);
+        //}
+        //if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {}
         try entity.EntityImguiRender();
     }
 }

@@ -1,7 +1,6 @@
 const std = @import("std");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Components = @import("Components.zig");
-const EComponents = Components.EComponents;
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const Entity = @This();

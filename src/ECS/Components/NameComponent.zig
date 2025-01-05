@@ -1,3 +1,4 @@
+const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../Entity.zig");
 const NameComponent = @This();

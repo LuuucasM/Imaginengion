@@ -1,3 +1,4 @@
+const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const GenUUID = @import("../../Core/UUID.zig").GenUUID;
 const IDComponent = @This();
@@ -11,6 +12,3 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-//afaik this component doesnt need to be
-//imgui rendered ever

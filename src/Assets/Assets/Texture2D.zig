@@ -1,10 +1,11 @@
+const std = @import("std");
 const builtin = @import("builtin");
-const AssetsList = @import("../../Assets.zig").AssetsList;
+const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("OpenGLTexture2D.zig"),
-    else => @import("UnsupportedTexture2D.zig"),
+    .windows => @import("Texture2Ds/OpenGLTexture2D.zig"),
+    else => @import("Texture2Ds/UnsupportedTexture2D.zig"),
 };
 
 _Impl: Impl,

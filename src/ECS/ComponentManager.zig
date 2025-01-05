@@ -2,7 +2,6 @@ const std = @import("std");
 const IComponentArray = @import("ComponentArray.zig").IComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const Components = @import("Components.zig");
-const EComponents = Components.EComponents;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;

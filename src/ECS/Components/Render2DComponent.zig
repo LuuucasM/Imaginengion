@@ -1,3 +1,4 @@
+const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const AssetM = @import("../../Assets/AssetManager.zig");
@@ -11,9 +12,9 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 
-Texture: AssetHandle = .{ .mID = AssetHandle.EmptyHandle },
-Color: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
-TilingFactor: f32 = 1.0,
+Texture: AssetHandle,
+Color: Vec4f32,
+TilingFactor: f32,
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
@@ -36,6 +37,14 @@ pub fn ImguiRender(self: *Render2DComponent, entity: Entity) !void {
         };
         try ImguiManager.InsertEvent(new_event);
     }
+}
+
+pub fn NotComponentRender() bool {
+    if (imgui.igMenuItem_Bool("Render2DComponent", "", false, true) == true) {
+        imgui.igCloseCurrentPopup();
+        return true;
+    }
+    return false;
 }
 
 pub fn GetName(self: Render2DComponent) []const u8 {
