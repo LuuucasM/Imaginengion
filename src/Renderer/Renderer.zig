@@ -11,9 +11,6 @@ const Renderer = @This();
 
 var RenderManager: *Renderer = undefined;
 
-_EngineAllocator: std.mem.Allocator,
-_RenderContext: RenderContext,
-
 pub const RectVertex = struct {
     Position: Vec3f32,
     Color: Vec4f32,
@@ -29,6 +26,14 @@ pub const CircleVertex = struct {
     Thickness: f32,
     Fade: f32,
 };
+
+pub const EditorLineVertex = struct {
+    Position: Vec3f32,
+    Color: Vec4f32,
+};
+
+_EngineAllocator: std.mem.Allocator,
+_RenderContext: RenderContext,
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     RenderManager = try EngineAllocator.create(Renderer);
