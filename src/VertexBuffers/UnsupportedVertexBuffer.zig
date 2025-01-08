@@ -2,25 +2,33 @@ const std = @import("std");
 
 const UnsupportedVertexBuffer = @This();
 
-pub fn Init(size: usize) UnsupportedVertexBuffer {
+pub fn Init(size: usize, buffer_id_out: *c_uint) void {
     _ = size;
-    return UnsupportedVertexBuffer{};
+    _ = buffer_id_out;
+    Unsupported();
 }
 
-pub fn Deinit(self: UnsupportedVertexBuffer) void {
-    _ = self;
+pub fn Deinit(buffer_id_out: c_uint) void {
+    _ = buffer_id_out;
+    Unsupported();
 }
 
-pub fn Bind(self: UnsupportedVertexBuffer) void {
-    _ = self;
+pub fn Bind(buffer_id_out: c_uint) void {
+    _ = buffer_id_out;
+    Unsupported();
 }
 
-pub fn Unbind(self: UnsupportedVertexBuffer) void {
-    _ = self;
+pub fn Unbind() void {
+    Unsupported();
 }
 
-pub fn SetData(self: UnsupportedVertexBuffer, data: *anyopaque, size: usize) void {
-    _ = self;
+pub fn SetData(buffer_id_out: c_uint, data: *anyopaque, size: usize) void {
+    _ = buffer_id_out;
     _ = data;
     _ = size;
+    Unsupported();
+}
+
+fn Unsupported() noreturn {
+    @compileError("Unsupported OS for RenderContext");
 }

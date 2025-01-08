@@ -11,38 +11,41 @@ const Impl = switch (builtin.os.tag) {
 
 const VertexArray = @This();
 
-mImpl: Impl,
 mArrayID: c_uint,
 mVertexBuffers: std.ArrayList(VertexBuffer),
 mIndexBuffer: IndexBuffer,
 
 pub fn Init() VertexArray {
-    return VertexArray{
-        .mImpl = Impl.Init(),
+    const new_va = VertexArray{
         .mArrayID = 0,
         .mVertexBuffers = std.ArrayList(VertexBuffer).init(),
         .mIndexBuffer = 0,
     };
+    Impl.Init(&new_va.mArrayID);
+    return new_va;
 }
 
 pub fn Deinit(self: VertexArray) void {
-    self.mImpl.Deinit();
+    Impl.Deinit(&self.mArrayID);
 }
 
 pub fn Bind(self: VertexArray) void {
-    self.mImpl.Bind();
+    Impl.Bind(self.mArrayID);
 }
 
 pub fn Unbind(self: VertexArray) void {
-    self.mImpl.Unbind();
+    _ = self;
+    Impl.Unbind();
 }
 
 pub fn AddVertexBuffer(self: VertexArray, new_vertex_buffer: VertexBuffer) void {
+    self.Bind();
     self.mImpl.AddVertexBuffer(new_vertex_buffer);
     self.mVertexBuffers.append(new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: VertexArray, new_index_buffer: IndexBuffer) void {
+    self.Bind();
     self.mImpl.SetIndexBuffer(new_index_buffer);
     self.mIndexBuffer = new_index_buffer;
 }

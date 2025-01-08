@@ -16,3 +16,19 @@ pub fn Init(data_type: ShaderDataType, normalized: bool) VertexBufferElement {
         .mIsNormalized = normalized,
     };
 }
+
+pub fn GetComponentCount(self: VertexBufferElement) u32 {
+    return switch (self.mType) {
+        .Float => 1,
+        .Float2 => 2,
+        .Float3 => 3,
+        .Float4 => 4,
+        .Mat3 => 3 * 3,
+        .Mat4 => 4 * 4,
+        .Int => 1,
+        .Int2 => 2,
+        .Int3 => 3,
+        .Int4 => 4,
+        .Bool => 1,
+    };
+}

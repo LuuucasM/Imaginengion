@@ -10,31 +10,36 @@ const Impl = switch (builtin.os.tag) {
 
 const VertexBuffer = @This();
 
-mImpl: Impl,
 mBufferID: c_uint,
 mLayout: std.ArrayList(VertexBufferElement),
 mStride: c_uint,
 
 pub fn Init(size: usize) VertexBuffer {
-    return VertexBuffer{
-        ._Impl = Impl.Init(size),
+    const new_vb = VertexBuffer{
+        .mBufferID = 0,
+        .mLayout = std.ArrayList(VertexBufferElement).init(0),
+        .mStride = 0,
+        ._Impl = undefined,
     };
+    Impl.Init(size, &new_vb.mBufferID);
+    return new_vb;
 }
 
 pub fn Deinit(self: VertexBuffer) void {
-    self.mImpl.Deinit();
+    Impl.Deinit(&self.mBufferID);
 }
 
 pub fn Bind(self: VertexBuffer) void {
-    self.mImpl.Bind();
+    Impl.Bind(&self.mBufferID);
 }
 
 pub fn Unbind(self: VertexBuffer) void {
-    self.mImpl.Unbind();
+    _ = self;
+    Impl.Unbind();
 }
 
 pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize) void {
-    self.mImpl.SetData(data, size);
+    Impl.SetData(&self.mBufferID, data, size);
 }
 
 pub fn SetLayout(self: VertexBuffer, layout: std.ArrayList(VertexBufferElement)) void {
