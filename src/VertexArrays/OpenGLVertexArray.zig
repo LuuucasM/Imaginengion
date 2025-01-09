@@ -7,23 +7,36 @@ const ShaderDataType = @import("../Shaders/Shaders.zig").ShaderDataType;
 
 const OpenGLVertexArray = @This();
 
-pub fn Init(array_id: *c_uint) void {
-    glad.glCreateVertexArrays(1, array_id);
+mArrayID: c_uint,
+mVertexBuffers: std.ArrayList(VertexBuffer),
+mIndexBuffer: IndexBuffer,
+
+pub fn Init(allocator: std.mem.Allocator) OpenGLVertexArray {
+    const new_va = OpenGLVertexArray{
+        .mArrayID = undefined,
+        .mVertexBuffers = std.ArrayList(VertexBuffer).init(allocator),
+        .mIndexBuffer = IndexBuffer{ .mBufferID = 0, .mCount = 0 },
+    };
+
+    glad.glCreateVertexArrays(1, &new_va.mArrayID);
+
+    return new_va;
 }
 
-pub fn Deinit(array_id: *c_uint) void {
-    glad.glDeleteVertexArrays(1, array_id);
+pub fn Deinit(self: OpenGLVertexArray) void {
+    glad.glDeleteVertexArrays(1, &self.mArrayID);
 }
 
-pub fn Bind(array_id: c_uint) void {
-    glad.glBindVertexArray(array_id);
+pub fn Bind(self: OpenGLVertexArray) void {
+    glad.glBindVertexArray(self.mArrayID);
 }
 
 pub fn Unbind() void {
     glad.glBindVertexArray(0);
 }
 
-pub fn AddVertexBuffer(new_vertex_buffer: VertexBuffer) void {
+pub fn AddVertexBuffer(self: OpenGLVertexArray, new_vertex_buffer: VertexBuffer) void {
+    self.Bind();
     new_vertex_buffer.Bind();
 
     for (new_vertex_buffer.mLayout.items, 0..) |element, i| {
@@ -51,10 +64,13 @@ pub fn AddVertexBuffer(new_vertex_buffer: VertexBuffer) void {
             );
         }
     }
+    self.mVertexBuffers.append(new_vertex_buffer);
 }
 
-pub fn SetIndexBuffer(index_buffer: IndexBuffer) void {
-    index_buffer.Bind();
+pub fn SetIndexBuffer(self: OpenGLVertexArray, new_index_buffer: IndexBuffer) void {
+    self.Bind();
+    new_index_buffer.Bind();
+    self.mIndexBuffer = new_index_buffer;
 }
 
 fn ShaderDataTypeToOpenGLBaseType(data_type: ShaderDataType) glad.GLenum {

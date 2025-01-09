@@ -7,30 +7,26 @@ const Impl = switch (builtin.os.tag) {
 
 const IndexBuffer = @This();
 
-mCount: u32,
-mBufferID: c_uint,
+mImpl: Impl,
 
 pub fn Init(indices: []u32, count: u32) IndexBuffer {
-    const new_ib = IndexBuffer{
-        .mCount = count,
-        .mBufferID = 0,
+    return IndexBuffer{
+        .mImpl = Impl.Init(indices, count),
     };
-    Impl.Init(&new_ib.mBufferID, indices, count);
 }
 
 pub fn Deinit(self: IndexBuffer) void {
-    Impl.Deinit(&self.mBufferID);
+    self.mImpl.Deinit();
 }
 
 pub fn Bind(self: IndexBuffer) void {
-    Impl.Bind(self.mBufferID);
+    self.mImpl.Bind();
 }
 
 pub fn Unbind(self: IndexBuffer) void {
-    _ = self;
-    Impl.Unbind();
+    self.mImpl.Unbind();
 }
 
 pub fn GetCount(self: IndexBuffer) u32 {
-    return self.mCount;
+    return self.GetCount();
 }

@@ -1,23 +1,29 @@
 const UnsupportedVertexBuffer = @This();
 
-pub fn Init(buffer_id_out: *c_uint, indices: []u32, count: u32) void {
-    _ = buffer_id_out;
+pub fn Init(indices: []u32, count: u32) UnsupportedVertexBuffer {
     _ = indices;
     _ = count;
     Unsupported();
+    return UnsupportedVertexBuffer{};
 }
 
-pub fn Bind(buffer_id: c_uint) void {
-    _ = buffer_id;
+pub fn Deinit(self: UnsupportedVertexBuffer) void {
+    _ = self;
     Unsupported();
 }
 
-pub fn Unbind() void {
+pub fn Bind(self: UnsupportedVertexBuffer) void {
+    _ = self;
     Unsupported();
 }
 
-pub fn Deinit(buffer_id_out: *c_uint) void {
-    _ = buffer_id_out;
+pub fn Unbind(self: UnsupportedVertexBuffer) void {
+    _ = self;
+    Unsupported();
+}
+
+pub fn GetCount(self: UnsupportedVertexBuffer) u32 {
+    _ = self;
     Unsupported();
 }
 

@@ -10,50 +10,42 @@ const Impl = switch (builtin.os.tag) {
 
 const VertexBuffer = @This();
 
-mBufferID: c_uint,
-mLayout: std.ArrayList(VertexBufferElement),
-mStride: c_uint,
+mImpl: Impl,
 
-pub fn Init(size: usize) VertexBuffer {
-    const new_vb = VertexBuffer{
-        .mBufferID = 0,
-        .mLayout = std.ArrayList(VertexBufferElement).init(0),
-        .mStride = 0,
-        ._Impl = undefined,
+pub fn Init(allocator: std.mem.Allocator, size: usize) VertexBuffer {
+    return VertexBuffer{
+        .mImpl = Impl.Init(allocator, size),
     };
-    Impl.Init(size, &new_vb.mBufferID);
-    return new_vb;
 }
 
 pub fn Deinit(self: VertexBuffer) void {
-    Impl.Deinit(&self.mBufferID);
+    self.mImpl.Deinit();
 }
 
 pub fn Bind(self: VertexBuffer) void {
-    Impl.Bind(&self.mBufferID);
+    self.mImpl.Bind();
 }
 
 pub fn Unbind(self: VertexBuffer) void {
-    _ = self;
-    Impl.Unbind();
+    self.mImpl.Unbind();
 }
 
 pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize) void {
-    Impl.SetData(&self.mBufferID, data, size);
+    self.mImpl.SetData(&self.mBufferID, data, size);
 }
 
 pub fn SetLayout(self: VertexBuffer, layout: std.ArrayList(VertexBufferElement)) void {
-    self.mLayout = layout.clone();
+    self.mImpl.SetLayout(layout);
 }
 
 pub fn SetStride(self: VertexBuffer, stride: u32) void {
-    self.mStride = stride;
+    self.mImpl.SetStride(stride);
 }
 
-pub fn GetLayout(self: VertexBuffer) std.ArrayList(VertexBuffer) {
-    return self.mLayout;
+pub fn GetLayout(self: VertexBuffer) std.ArrayList(VertexBufferElement) {
+    return self.mImpl.GetLayout();
 }
 
 pub fn GetStride(self: VertexBuffer) u32 {
-    return self.mStride;
+    return self.mImpl.GetStride();
 }

@@ -1,20 +1,22 @@
 const std = @import("std");
+const VertexBufferElement = @import("VertexBufferElement.zig");
 
 const UnsupportedVertexBuffer = @This();
 
-pub fn Init(size: usize, buffer_id_out: *c_uint) void {
+pub fn Init(allocator: std.mem.Allocator, size: usize) UnsupportedVertexBuffer {
+    _ = allocator;
     _ = size;
-    _ = buffer_id_out;
+    Unsupported();
+    return UnsupportedVertexBuffer{};
+}
+
+pub fn Deinit(self: UnsupportedVertexBuffer) void {
+    _ = self;
     Unsupported();
 }
 
-pub fn Deinit(buffer_id_out: c_uint) void {
-    _ = buffer_id_out;
-    Unsupported();
-}
-
-pub fn Bind(buffer_id_out: c_uint) void {
-    _ = buffer_id_out;
+pub fn Bind(self: UnsupportedVertexBuffer) void {
+    _ = self;
     Unsupported();
 }
 
@@ -22,10 +24,32 @@ pub fn Unbind() void {
     Unsupported();
 }
 
-pub fn SetData(buffer_id_out: c_uint, data: *anyopaque, size: usize) void {
-    _ = buffer_id_out;
+pub fn SetData(self: UnsupportedVertexBuffer, data: *anyopaque, size: usize) void {
+    _ = self;
     _ = data;
     _ = size;
+    Unsupported();
+}
+
+pub fn SetLayout(self: UnsupportedVertexBuffer, layout: std.ArrayList(VertexBufferElement)) void {
+    _ = self;
+    _ = layout;
+    Unsupported();
+}
+
+pub fn SetStride(self: UnsupportedVertexBuffer, stride: u32) void {
+    _ = self;
+    _ = stride;
+    Unsupported();
+}
+
+pub fn GetLayout(self: UnsupportedVertexBuffer) std.ArrayList(VertexBufferElement) {
+    _ = self;
+    Unsupported();
+}
+
+pub fn GetStride(self: UnsupportedVertexBuffer) u32 {
+    _ = self;
     Unsupported();
 }
 

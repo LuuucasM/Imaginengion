@@ -5,8 +5,10 @@ const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 
 const UnsupportedVertexArray = @This();
 
-pub fn Init() UnsupportedVertexArray {
+pub fn Init(allocator: std.mem.Allocator) UnsupportedVertexArray {
+    _ = allocator;
     Unsupported();
+
     return UnsupportedVertexArray{};
 }
 
@@ -25,15 +27,15 @@ pub fn Unbind(self: UnsupportedVertexArray) void {
     Unsupported();
 }
 
-pub fn AddVertexBuffer(self: UnsupportedVertexArray, vertex_buffer: VertexBuffer) void {
+pub fn AddVertexBuffer(self: UnsupportedVertexArray, new_vertex_buffer: VertexBuffer) void {
     _ = self;
-    _ = vertex_buffer;
+    _ = new_vertex_buffer;
     Unsupported();
 }
 
-pub fn SetIndexBuffer(self: UnsupportedVertexArray, index_buffer: IndexBuffer) void {
+pub fn SetIndexBuffer(self: UnsupportedVertexArray, new_index_buffer: IndexBuffer) void {
     _ = self;
-    _ = index_buffer;
+    _ = new_index_buffer;
     Unsupported();
 }
 

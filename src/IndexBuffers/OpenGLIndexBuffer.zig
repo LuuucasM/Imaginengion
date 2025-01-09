@@ -2,20 +2,35 @@ const glad = @import("../Core/CImports.zig").glad;
 
 const OpenGLIndexBuffer = @This();
 
-pub fn Init(buffer_id_out: *c_uint, indices: []u32, count: u32) void {
-    glad.glCreateBuffers(1, buffer_id_out);
-    glad.glBindBuffer(glad.GL_ARRAY_BUFFER, buffer_id_out.*);
+mCount: u32,
+mBufferID: c_uint,
+
+pub fn Init(indices: []u32, count: u32) OpenGLIndexBuffer {
+    const new_ib = OpenGLIndexBuffer{
+        .mCount = 0,
+        .mBufferID = undefined,
+    };
+
+    glad.glCreateBuffers(1, &new_ib.mBufferID);
+    glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_ib.mBufferID);
     glad.glBufferData(glad.GL_ARRAY_BUFFER, count * @sizeOf(u32), indices, glad.GL_STATIC_DRAW);
+
+    return new_ib;
 }
 
-pub fn Bind(buffer_id: c_uint) void {
-    glad.glBindBuffer(glad.GL_ELEMENT_ARRAY_BUFFER, buffer_id);
+pub fn Deinit(self: OpenGLIndexBuffer) void {
+    glad.glDeleteBuffers(1, self.mBufferID);
 }
 
-pub fn Unbind() void {
+pub fn Bind(self: OpenGLIndexBuffer) void {
+    glad.glBindBuffer(glad.GL_ELEMENT_ARRAY_BUFFER, self.mBufferID);
+}
+
+pub fn Unbind(self: OpenGLIndexBuffer) void {
+    _ = self;
     glad.glBindBuffer(glad.GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
-pub fn Deinit(buffer_id_out: *c_uint) void {
-    glad.glDeleteBuffers(1, buffer_id_out);
+pub fn GetCount(self: OpenGLIndexBuffer) u32 {
+    return self.mCount;
 }
