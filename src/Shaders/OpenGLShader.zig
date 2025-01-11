@@ -2,6 +2,7 @@ const std = @import("std");
 const glad = @import("../Core/CImports.zig").glad;
 const VertexBufferElement = @import("../VertexBuffers/VertexBufferElement.zig");
 const ShaderDataType = @import("Shaders.zig").ShaderDataType;
+const ShaderDataTypeSize = @import("Shaders.zig").ShaderDataTypeSize;
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
@@ -59,31 +60,148 @@ pub fn Unbind(self: OpenGLShader) void {
 }
 
 pub fn SetUniform_Bool(self: OpenGLShader, name: []const u8, value: bool) void {
-    self.mImpl.SetUniform_Bool(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1i(self.mUniforms.get(hash_val).?, @intFromBool(value));
 }
 pub fn SetUniform_Int(self: OpenGLShader, name: []const u8, value: i32) void {
-    self.mImpl.SetUniform_Int(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1i(self.mUniforms.get(hash_val).?, value);
 }
 pub fn SetUniform_IntArray(self: OpenGLShader, name: []const u8, value: *i32) void {
-    self.mImpl.SetUniform_IntArray(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1iv(self.mUniforms.get(hash_val).?, value);
 }
 pub fn SetUniform_Float(self: OpenGLShader, name: []const u8, value: f32) void {
-    self.mImpl.SetUniform_Float(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1f(self.mUniforms.get(hash_val).?, value);
 }
 pub fn SetUniform_Vec2(self: OpenGLShader, name: []const u8, value: Vec2f32) void {
-    self.mImpl.SetUniform_Vec2(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform2f(self.mUniforms.get(hash_val).?, value[0], value[1]);
 }
 pub fn SetUniform_Vec3(self: OpenGLShader, name: []const u8, value: Vec3f32) void {
-    self.mImpl.SetUniform_Vec3(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform3f(self.mUniforms.get(hash_val).?, value[0], value[1], value[2]);
 }
 pub fn SetUniform_Vec4(self: OpenGLShader, name: []const u8, value: Vec4f32) void {
-    self.mImpl.SetUniform_Vec4(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform4f(self.mUniforms.get(hash_val).?, value[0], value[1], value[2], value[3]);
 }
 pub fn SetUniform_Mat3(self: OpenGLShader, name: []const u8, value: Mat3f32) void {
-    self.mImpl.SetUniform_Mat3(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniformMatrix3fv(self.mUniforms.get(hash_val).?, 1, glad.GL_FALSE, &value);
 }
 pub fn SetUniform_Mat4(self: OpenGLShader, name: []const u8, value: Mat4f32) void {
-    self.mImpl.SetUniform_Mat4(name, value);
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniformMatrix4fv(self.mUniforms.get(hash_val).?, 1, glad.GL_FALSE, &value);
+}
+
+fn CreateLayout(self: OpenGLShader, shader_source: []const u8) void {
+    // Split shader into lines
+    var lines = std.mem.split(u8, shader_source, "\n");
+
+    while (lines.next()) |line| {
+        // Trim whitespace
+        const trimmed = std.mem.trim(u8, line, " \t");
+
+        // Check if line starts with layout
+        if (std.mem.startsWith(u8, trimmed, "layout")) {
+            // Find the "in" keyword after layout declaration
+            if (std.mem.indexOf(u8, trimmed, ") in ")) |in_pos| {
+                // Extract everything after "in" keyword
+                const after_in = trimmed[in_pos + 5 ..];
+
+                // Split by spaces to get type and variable name
+                var tokens = std.mem.split(u8, after_in, " ");
+                if (tokens.next()) |type_str| {
+                    // Convert type string to ShaderDataType
+                    const data_type = TypeStrToDataType(type_str);
+                    self.mBufferElements.append(.{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
+                }
+            }
+        }
+    }
+    self.CalculateOffsets();
+    self.CalculateStride();
+}
+fn DiscoverUniforms(self: OpenGLShader) void {
+    var i: glad.GLint = undefined;
+    var count: glad.GLint = undefined;
+    var size: glad.GLint = undefined;
+    var data_type: glad.GLenum = undefined;
+    var length: glad.glsizei = undefined;
+    const uniname: [32]u8 = undefined;
+
+    glad.glGetProgramiv(self.mShaderID, glad.GL_ACTIVE_UNIFORMS, &count);
+
+    while (i < count) : (i += 1) {
+        glad.glGetActiveUniform(self.mShaderID, i, 32, &length, &size, &data_type, uniname);
+
+        const name_slice = uniname[0..length];
+
+        var final_name: []const u8 = undefined;
+        if (std.mem.indexOf(u8, name_slice, "[")) |found| {
+            final_name = name_slice[0..found];
+        } else {
+            final_name = name_slice;
+        }
+
+        const location = glad.glGetUniformLocation(self.mShaderID, final_name.ptr);
+
+        var hasher = std.hash.Fnv1a_32.init();
+        hasher.update(final_name);
+
+        self.mUniforms.put(hasher.final(), location);
+    }
+}
+fn CalculateOffsets(self: OpenGLShader) void {
+    var offset: u32 = 0;
+    for (self.mBufferElements) |element| {
+        element.mOffset = offset;
+        offset += element.mSize;
+    }
+}
+fn CalculateStride(self: OpenGLShader) void {
+    self.mBufferStride = 0;
+    for (self.mBufferElements) |element| {
+        self.mBufferStride += element.mSize;
+    }
 }
 
 fn ReadFile(allocator: std.mem.Allocator, source: []const u8) !std.AutoArrayHashMap(u32, []const u8) {
@@ -202,8 +320,6 @@ fn Compile(shader_id_out: *u32, shader_sources: std.AutoArrayHashMap(u32, []cons
     }
     return true;
 }
-fn CreateLayout() void {}
-fn DiscoverUniforms() void {}
 
 fn ShaderTypeFromStr(str: []const u8) glad.GLenum {
     if (std.mem.eql(u8, str, "vertex") == true) {

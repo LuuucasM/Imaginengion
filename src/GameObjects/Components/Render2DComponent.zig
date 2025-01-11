@@ -12,9 +12,17 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 
-Texture: AssetHandle,
-Color: Vec4f32,
-TilingFactor: f32,
+const Shape2D = enum {
+    Rect,
+    Sprite,
+    Circle,
+    Line,
+};
+
+mTexture: AssetHandle,
+mColor: Vec4f32,
+mTilingFactor: f32,
+mShape2D: Shape2D,
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
