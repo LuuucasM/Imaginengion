@@ -13,38 +13,25 @@ const Renderer = @This();
 
 var RenderManager: *Renderer = undefined;
 
-pub const RectVertex = struct {
-    Position: Vec3f32,
-    Color: Vec4f32,
-    TexCoord: Vec2f32,
-    TexIndex: f32,
-    TilingFactor: f32,
-};
-
-pub const CircleVertex = struct {
-    Position: Vec3f32,
-    LocalPosition: Vec3f32,
-    Color: Vec4f32,
-    Thickness: f32,
-    Fade: f32,
-};
-
-pub const EditorLineVertex = struct {
-    Position: Vec3f32,
-    Color: Vec4f32,
-};
+const MaxTri: u32 = 20_000;
+const MaxVerticies: u32 = MaxTri * 3;
+const MaxIndices: u32 = MaxTri * 3;
 
 mEngineAllocator: std.mem.Allocator,
 mRenderContext: RenderContext,
-mRenderer2D: Renderer2D,
-mRenderer3D: Renderer3D,
 
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
+    const new_render_context = RenderContext.Init();
     RenderManager = try EngineAllocator.create(Renderer);
     RenderManager.* = .{
         .mEngineAllocator = EngineAllocator,
-        .mRenderContext = RenderContext.Init(),
-        .mRenderer2D = Renderer2D.Init(),
+        .mRenderContext = new_render_context,
+        .mRenderer2D = Renderer2D.Init(
+            MaxTri,
+            MaxVerticies,
+            MaxIndices,
+            new_render_context.GetMaxTextureImageSlots(),
+        ),
         .mRenderer3D = Renderer3D.Init(),
     };
 }

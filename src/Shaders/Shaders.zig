@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const VertexBufferElement = @import("../VertexBuffers/VertexBufferElement.zig");
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("OpenGLShader.zig"),
@@ -69,6 +70,14 @@ pub fn Bind(self: Shader) void {
 
 pub fn Unbind(self: Shader) void {
     self.mImpl.Unbind();
+}
+
+pub fn GetLayout(self: Shader) std.ArrayList(VertexBufferElement) {
+    return self.mImpl.GetLayout();
+}
+
+pub fn GetStride(self: Shader) u32 {
+    return self.mImpl.GetStride();
 }
 
 pub fn SetUniform_Bool(self: Shader, name: []const u8, value: bool) void {

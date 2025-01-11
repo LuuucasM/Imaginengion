@@ -2,7 +2,7 @@ const std = @import("std");
 const ApplicationManager = @import("../Core/Application.zig");
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
-const Renderer = @import("../Renderer/Renderer.zig");
+const Renderer = @import("../Renderer/RendererManager.zig");
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");

@@ -7,6 +7,8 @@ const glfw = @import("../Core/CImports.zig").glfw;
 
 const OpenGLContext = @This();
 
+var MaxTextureImageSlots: u32 = undefined;
+
 _Window: ?*glfw.struct_GLFWwindow,
 
 pub fn Init() OpenGLContext {
@@ -93,4 +95,8 @@ fn glSourceToStr(source: c_uint) []const u8 {
         glad.GL_DEBUG_SOURCE_OTHER => "OTHER",
         else => "UNKNOWN",
     };
+}
+
+pub fn GetMaxTextureImageSlots() u32 {
+    return MaxTextureImageSlots;
 }

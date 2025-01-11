@@ -18,3 +18,7 @@ pub fn Init() RenderContext {
 pub fn SwapBuffers(self: RenderContext) void {
     self._Impl.SwapBuffers();
 }
+
+pub fn GetMaxTextureImageSlots() u32 {
+    Impl.GetMaxTextureImageSlots();
+}
