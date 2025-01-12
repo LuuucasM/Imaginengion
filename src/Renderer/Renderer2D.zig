@@ -14,11 +14,6 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
-const Stats = struct {
-    mDrawCalls: u32,
-    mTriCount: u32,
-};
-
 pub const SpriteVertex = struct {
     Position: Vec3f32,
     Color: Vec4f32,
@@ -40,6 +35,20 @@ pub const ELineVertex = struct {
     Color: Vec4f32,
 };
 
+const RectVertexPositions = Mat4f32{
+    Vec4f32{ -0.5, -0.5, 0.0, 1.0 },
+    Vec4f32{ 0.5, -0.5, 0.0, 1.0 },
+    Vec4f32{ 0.5, 0.5, 0.0, 1.0 },
+    Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
+};
+
+const RectTexCoordPositions = [4]Vec2f32{
+    Vec2f32{ 0.0, 0.0 },
+    Vec2f32{ 1.0, 0.0 },
+    Vec2f32{ 1.0, 1.0 },
+    Vec2f32{ 0.0, 1.0 },
+};
+
 mSpriteVertexArray: VertexArray,
 mSpriteVertexBuffer: VertexBuffer,
 mSpriteShader: Shader,
@@ -54,24 +63,19 @@ mELineShader: Shader,
 
 mWhiteTexutre: AssetHandle,
 
-mSpriteIndexCount: u32,
+mSpriteIndexCount: usize,
 mSpriteVertexBufferBase: []SpriteVertex,
-mSpriteVertexBufferPtr: []SpriteVertex,
+mSpriteVertexBufferPtr: *SpriteVertex,
 
-mCircleIndexCount: u32,
+mCircleIndexCount: usize,
 mCircleVertexBufferBase: []CircleVertex,
-mCircleVertexBufferPtr: []CircleVertex,
+mCircleVertexBufferPtr: *CircleVertex,
 
-mELineIndexCount: u32,
+mELineIndexCount: usize,
 mELineVertexBufferBase: []ELineVertex,
-mELineVertexBufferPtr: []ELineVertex,
+mELineVertexBufferPtr: *ELineVertex,
 
 mELineThickness: f32,
-
-mTextureSlots: std.ArrayList(AssetHandle),
-mTextureSlotIndex: u32,
-
-mRectVertexPositions: Mat4f32,
 
 mCameraBuffer: Mat4f32,
 mCameraUniformBuffer: UniformBuffer,
@@ -79,7 +83,6 @@ mCameraUniformBuffer: UniformBuffer,
 pub fn Init(
     max_vertices: u32,
     max_indices: u32,
-    max_texture_image_slots: u32,
     allocator: std.mem.Allocator,
 ) !Renderer2D {
     const new_renderer2d = Renderer2D{
@@ -110,16 +113,6 @@ pub fn Init(
         .mELineVertexBufferPtr = undefined,
 
         .mELineThickness = 2.0,
-
-        .mTextureSlots = std.ArrayList(AssetHandle).initCapacity(allocator, max_texture_image_slots),
-        .mTextureSlotIndex = 1,
-
-        .mRectVertexPositions = Mat4f32{
-            Vec4f32{ -0.5, -0.5, 0.0, 1.0 },
-            Vec4f32{ 0.5, -0.5, 0.0, 1.0 },
-            Vec4f32{ 0.5, 0.5, 0.0, 1.0 },
-            Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
-        },
 
         .mCameraBuffer = LinAlg.InitMat4CompTime(1.0),
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(Mat4f32), 0),
@@ -152,7 +145,7 @@ pub fn Init(
 
     new_renderer2d.mSpriteVertexArray.SetIndexBuffer(rect_index_buffer);
 
-    new_renderer2d.mSpriteVertexBufferPtr = new_renderer2d.mSpriteVertexBufferBase;
+    new_renderer2d.mSpriteVertexBufferPtr = new_renderer2d.mSpriteVertexBufferBase.ptr;
 
     //circle
     new_renderer2d.mCircleVertexBuffer.SetLayout(new_renderer2d.mCircleShader.GetLayout());
@@ -162,7 +155,7 @@ pub fn Init(
 
     new_renderer2d.mCircleVertexArray.SetIndexBuffer(rect_index_buffer);
 
-    new_renderer2d.mCircleVertexBufferPtr = new_renderer2d.mCircleVertexBufferBase;
+    new_renderer2d.mCircleVertexBufferPtr = new_renderer2d.mCircleVertexBufferBase.ptr;
 
     //editor line
     new_renderer2d.mELineVertexBuffer.SetLayout(new_renderer2d.mELineShader.GetLayout());
@@ -172,7 +165,36 @@ pub fn Init(
 
     new_renderer2d.mELineVertexArray.SetIndexBuffer(rect_index_buffer);
 
-    new_renderer2d.mELineVertexBufferPtr = new_renderer2d.mELineVertexBufferBase;
+    new_renderer2d.mELineVertexBufferPtr = new_renderer2d.mELineVertexBufferBase.ptr;
 
     return new_renderer2d;
 }
+
+pub fn DrawSprite(self: Renderer2D, transform: Mat4f32, texture_index: f32, tiling_factor: f32, color: Vec4f32) void {
+    var i: usize = 0;
+    while (i < 4) : (i += 1) {
+        self.mSpriteVertexBufferPtr.Position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
+        self.mSpriteVertexBufferPtr.Color = color;
+        self.mSpriteVertexBufferPtr.TexCoord = RectVertexPositions[i];
+        self.mSpriteVertexBufferPtr.TexIndex = texture_index;
+        self.mSpriteVertexBufferPtr.TilingFactor = tiling_factor;
+        self.mSpriteVertexBufferPtr += 1;
+    }
+    self.mSpriteIndexCount += 6;
+}
+pub fn DrawCircle(self: Renderer2D, transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
+    var i: usize = 0;
+
+    while (i < 4) : (i += 1) {
+        self.mCircleVertexBufferPtr.Position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
+        const local_pos = RectVertexPositions[i] * @as(Vec4f32, @splat(2.0));
+        self.mCircleVertexBufferPtr.LocalPosition = Vec3f32{ local_pos[0], local_pos[1], local_pos[2] };
+        self.mCircleVertexBufferPtr.Color = color;
+        self.mCircleVertexBufferPtr.Thickness = thickness;
+        self.mCircleVertexBufferPtr.Fade = fade;
+        self.mCircleVertexBufferPtr += 1;
+    }
+    self.mCircleIndexCount += 6;
+}
+
+pub fn DrawELine() void {}

@@ -3,50 +3,39 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const AssetM = @import("../../Assets/AssetManager.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
-const Entity = @import("../Entity.zig");
-const Render2DComponent = @This();
+const SpriteRenderComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
-const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 
-const Shape2D = enum {
-    Rect,
-    Sprite,
-    Circle,
-    Line,
-};
-
-mTexture: AssetHandle,
 mColor: Vec4f32,
+mTexture: AssetHandle,
 mTilingFactor: f32,
-mShape2D: Shape2D,
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == Render2DComponent) {
+        if (component_type == SpriteRenderComponent) {
             break :blk i;
         }
     }
 };
 
-pub fn GetEditorWindow(self: *Render2DComponent) EditorWindow {
+pub fn GetEditorWindow(self: *SpriteRenderComponent) EditorWindow {
     return EditorWindow.Init(self);
 }
 
-pub fn GetName(self: Render2DComponent) []const u8 {
+pub fn GetName(self: SpriteRenderComponent) []const u8 {
     _ = self;
-    return "Render2DComponent";
+    return "SpriteRenderComponent";
 }
 
-pub fn GetInd(self: Render2DComponent) u32 {
+pub fn GetInd(self: SpriteRenderComponent) u32 {
     _ = self;
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *Render2DComponent) !void {
+pub fn EditorRender(self: *SpriteRenderComponent) !void {
     const padding: f32 = 16.0;
     const thumbnail_size: f32 = 70.0;
     _ = padding;

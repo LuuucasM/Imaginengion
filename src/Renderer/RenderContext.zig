@@ -19,6 +19,8 @@ pub fn SwapBuffers(self: RenderContext) void {
     self._Impl.SwapBuffers();
 }
 
-pub fn GetMaxTextureImageSlots() u32 {
-    Impl.GetMaxTextureImageSlots();
+pub fn GetMaxTextureImageSlots(self: RenderContext) usize {
+    return self._Impl.GetMaxTextureImageSlots();
 }
+
+pub fn DrawIndexed(vertex_array: VertexArray, index_count: usize) void {}

@@ -46,6 +46,14 @@ pub fn Mat4Mul(m: Mat4f32, v: Mat4f32) Mat4f32 {
     };
 }
 
+pub fn Mat4MulVec4(m: Mat4f32, v: Vec4f32) Vec4f32 {
+    return Vec4f32{
+        Vec4DotVec4(m[0], v),
+        Vec4DotVec4(m[1], v),
+        Vec4DotVec4(m[2], v),
+        Vec4DotVec4(m[3], v),
+    };
+}
 pub fn PrintVec(v: anytype) void {
     if (@typeInfo(@TypeOf(v)) != .Vector) return;
 
@@ -193,7 +201,7 @@ pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
 
     const Col0 = Vec4f32{ Inverse[0][0], Inverse[1][0], Inverse[2][0], Inverse[3][0] };
 
-    const Dot1 = @reduce(.Add, m[0] * Col0);
+    const Dot1 = Vec4DotVec4(m[0], Col0);
 
     return .{
         Inverse[0] / @as(Vec4f32, @splat(Dot1)),
@@ -201,6 +209,10 @@ pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
         Inverse[2] / @as(Vec4f32, @splat(Dot1)),
         Inverse[3] / @as(Vec4f32, @splat(Dot1)),
     };
+}
+
+pub fn Vec4DotVec4(v1: Vec4f32, v2: Vec4f32) f32 {
+    return @reduce(.Add, v1 * v2);
 }
 
 pub fn Vec3ToQuat(v: Vec3f32) Quatf32 {

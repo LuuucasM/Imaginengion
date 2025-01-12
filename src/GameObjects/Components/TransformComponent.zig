@@ -1,13 +1,10 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
-const Entity = @import("../Entity.zig");
 const TransformComponent = @This();
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
-const ImguiManager = @import("../../Imgui/Imgui.zig");
-const ImguiEvent = @import("../../Imgui/ImguiEvent.zig").ImguiEvent;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Vec3f32 = LinAlg.Vec3f32;

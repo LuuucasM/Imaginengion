@@ -9,15 +9,11 @@ pub fn SwapBuffers(self: UnsupportedContext) void {
     Unsupported();
 }
 
-pub fn GetMaxTextureImageSlots() u32 {
-    FreeUnsupported();
-}
-
-fn Unsupported(self: UnsupportedContext) noreturn {
+pub fn GetMaxTextureImageSlots(self: UnsupportedContext) u32 {
     _ = self;
-    @compileError("Unsupported OS for RenderContext");
+    Unsupported();
 }
 
-fn FreeUnsupported() noreturn {
+fn Unsupported() noreturn {
     @compileError("Unsupported OS for RenderContext");
 }

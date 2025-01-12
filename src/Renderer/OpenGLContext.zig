@@ -7,9 +7,8 @@ const glfw = @import("../Core/CImports.zig").glfw;
 
 const OpenGLContext = @This();
 
-var MaxTextureImageSlots: u32 = undefined;
-
-_Window: ?*glfw.struct_GLFWwindow,
+mWindow: ?*glfw.struct_GLFWwindow,
+mMaxTextureImageSlots: usize,
 
 pub fn Init() OpenGLContext {
     const window: ?*glfw.struct_GLFWwindow = @ptrCast(Application.GetWindow().GetNativeWindow());
@@ -31,13 +30,17 @@ pub fn Init() OpenGLContext {
     std.log.info("\tRenderer: {s}\n", .{glad.glGetString(glad.GL_RENDERER)});
     std.log.info("\tVersion: {s}\n", .{glad.glGetString(glad.GL_VERSION)});
 
-    return OpenGLContext{
-        ._Window = window,
+    var new_opengl_context = OpenGLContext{
+        .mWindow = window,
+        .mMaxTextureImageSlots = undefined,
     };
+    glad.glGetIntegerv(glad.GL_MAX_IMAGE_UNITS, &new_opengl_context.mMaxTextureImageSlots);
+
+    return new_opengl_context;
 }
 
 pub fn SwapBuffers(self: OpenGLContext) void {
-    glfw.glfwSwapBuffers(self._Window);
+    glfw.glfwSwapBuffers(self.mWindow);
 }
 
 fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uint, length: c_int, message: [*c]const u8, userParam: ?*const anyopaque) callconv(.C) void {
@@ -97,6 +100,6 @@ fn glSourceToStr(source: c_uint) []const u8 {
     };
 }
 
-pub fn GetMaxTextureImageSlots() u32 {
-    return MaxTextureImageSlots;
+pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
+    return self.mMaxTextureImageSlots;
 }

@@ -4,10 +4,12 @@ const LayerType = SceneLayer.LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 
 const Components = @import("../GameObjects/Components.zig");
+const CameraComponent = Components.CameraComponent;
+const CircleRenderComponent = Components.CircleRenderComponent;
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
+const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
-const Render2DComponent = Components.Render2DComponent;
 
 const SceneManager = @import("SceneManager.zig");
 
@@ -171,8 +173,8 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         try write_stream.objectField("TransformComponent");
         try write_stream.write(component_string.items);
     }
-    if (entity.HasComponent(Render2DComponent) == true) {
-        const component = entity.GetComponent(Render2DComponent);
+    if (entity.HasComponent(CameraComponent) == true) {
+        const component = entity.GetComponent(CameraComponent);
 
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -180,7 +182,31 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         var component_string = std.ArrayList(u8).init(fba.allocator());
         try std.json.stringify(component, .{}, component_string.writer());
 
-        try write_stream.objectField("Render2DComponent");
+        try write_stream.objectField("CameraComponent");
+        try write_stream.write(component_string.items);
+    }
+    if (entity.HasComponent(CircleRenderComponent) == true) {
+        const component = entity.GetComponent(CircleRenderComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("CircleRenderComponent");
+        try write_stream.write(component_string.items);
+    }
+    if (entity.HasComponent(SpriteRenderComponent) == true) {
+        const component = entity.GetComponent(SpriteRenderComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("SpriteRenderComponent");
         try write_stream.write(component_string.items);
     }
 }
@@ -206,12 +232,26 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
         const new_component_parsed = try std.json.parseFromSlice(TransformComponent, fba.allocator(), component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
-    } else if (std.mem.eql(u8, component_type_string, "Render2DComponent")) {
+    } else if (std.mem.eql(u8, component_type_string, "CameraComponent")) {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-        const new_component_parsed = try std.json.parseFromSlice(Render2DComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(CameraComponent, fba.allocator(), component_string, .{});
         defer new_component_parsed.deinit();
-        _ = try entity.AddComponent(Render2DComponent, new_component_parsed.value);
+        _ = try entity.AddComponent(CameraComponent, new_component_parsed.value);
+    } else if (std.mem.eql(u8, component_type_string, "CircleRenderComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(CircleRenderComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(CircleRenderComponent, new_component_parsed.value);
+    } else if (std.mem.eql(u8, component_type_string, "SpriteRenderComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
     }
 }

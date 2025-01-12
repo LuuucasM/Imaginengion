@@ -7,10 +7,12 @@ const Entity = @import("../GameObjects/Entity.zig");
 const ComponentsPanel = @This();
 
 const Components = @import("../GameObjects/Components.zig");
+const CameraComponent = Components.CameraComponent;
+const CircleRenderComponent = Components.CircleRenderComponent;
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
+const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
-const Render2DComponent = Components.Render2DComponent;
 
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 
@@ -90,11 +92,31 @@ fn EntityImguiRender(entity: Entity) !void {
             try ImguiManager.InsertEvent(new_event);
         }
     }
-    if (entity.HasComponent(Render2DComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(Render2DComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+    if (entity.HasComponent(CameraComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(CameraComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(Render2DComponent), entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(CameraComponent), entity),
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
+        }
+    }
+    if (entity.HasComponent(CircleRenderComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(CircleRenderComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(CircleRenderComponent), entity),
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
+        }
+    }
+    if (entity.HasComponent(SpriteRenderComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(SpriteRenderComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(SpriteRenderComponent), entity),
                 },
             };
             try ImguiManager.InsertEvent(new_event);
@@ -103,9 +125,21 @@ fn EntityImguiRender(entity: Entity) !void {
 }
 
 fn AddComponentPopupMenu(entity: Entity) void {
-    if (entity.HasComponent(Render2DComponent) == false) {
-        if (imgui.igMenuItem_Bool("Render2DComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(Render2DComponent, .{ .Texture = .{ .mID = AssetHandle.EmptyHandle }, .Color = .{ 1.0, 1.0, 1.0, 1.0 }, .TilingFactor = 1 });
+    if (entity.HasComponent(CameraComponent) == false) {
+        if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(CameraComponent, .{ .Color = .{ 1.0, 1.0, 1.0, 1.0 } });
+            imgui.igCloseCurrentPopup();
+        }
+    }
+    if (entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {
+        if (imgui.igMenuItem_Bool("CircleRenderComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(CircleRenderComponent, .{ .Color = .{ 1.0, 1.0, 1.0, 1.0 }, .mThickness = 1.0, .mFade = 0.005 });
+            imgui.igCloseCurrentPopup();
+        }
+    }
+    if (entity.HasComponent(SpriteRenderComponent) == false and entity.HasComponent(CircleRenderComponent) == false) {
+        if (imgui.igMenuItem_Bool("SpriteRenderComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(SpriteRenderComponent, .{ .Texture = .{ .mID = AssetHandle.EmptyHandle }, .Color = .{ 1.0, 1.0, 1.0, 1.0 }, .TilingFactor = 1 });
             imgui.igCloseCurrentPopup();
         }
     }
