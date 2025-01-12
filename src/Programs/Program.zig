@@ -1,6 +1,6 @@
 const std = @import("std");
 const Event = @import("../Events/Event.zig").Event;
-const Renderer = @import("../Renderer/RendererManager.zig");
+const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @This();
 
 const Impl = @import("EditorProgram.zig");

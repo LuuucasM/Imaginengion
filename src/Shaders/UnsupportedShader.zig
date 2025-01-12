@@ -1,5 +1,5 @@
 const std = @import("std");
-
+const VertexBufferElement = @import("../VertexBuffers/VertexBufferElement.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
@@ -26,6 +26,16 @@ pub fn Bind(self: UnsupportedShader) void {
 }
 
 pub fn Unbind(self: UnsupportedShader) void {
+    _ = self;
+    Unsupported();
+}
+
+pub fn GetLayout(self: UnsupportedShader) std.ArrayList(VertexBufferElement) {
+    _ = self;
+    Unsupported();
+}
+
+pub fn GetStride(self: UnsupportedShader) u32 {
     _ = self;
     Unsupported();
 }

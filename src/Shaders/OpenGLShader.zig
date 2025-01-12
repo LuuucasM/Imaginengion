@@ -59,6 +59,14 @@ pub fn Unbind(self: OpenGLShader) void {
     glad.glUseProgram(0);
 }
 
+pub fn GetLayout(self: OpenGLShader) std.ArrayList(VertexBufferElement) {
+    return self.mBufferElements;
+}
+
+pub fn GetStride(self: OpenGLShader) u32 {
+    return self.mBufferStride;
+}
+
 pub fn SetUniform_Bool(self: OpenGLShader, name: []const u8, value: bool) void {
     var hasher = std.hash.Fnv1a_32.init();
     hasher.update(name);

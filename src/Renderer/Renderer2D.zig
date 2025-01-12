@@ -73,6 +73,7 @@ mTextureSlotIndex: u32,
 
 mRectVertexPositions: Mat4f32,
 
+mCameraBuffer: Mat4f32,
 mCameraUniformBuffer: UniformBuffer,
 
 pub fn Init(
@@ -120,6 +121,7 @@ pub fn Init(
             Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
         },
 
+        .mCameraBuffer = LinAlg.InitMat4CompTime(1.0),
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(Mat4f32), 0),
     };
 
