@@ -198,3 +198,30 @@ pub fn DrawCircle(self: Renderer2D, transform: Mat4f32, color: Vec4f32, thicknes
 }
 
 pub fn DrawELine() void {}
+
+pub fn StartBatchSprite(self: Renderer2D) void {
+    self.mSpriteIndexCount = 0;
+    self.mSpriteVertexBufferPtr = self.mSpriteVertexBufferBase;
+}
+
+pub fn StartBatchCircle(self: Renderer2D) void {
+    self.mCircleIndexCount = 0;
+    self.mCircleVertexBufferPtr = self.mCircleVertexBufferBase;
+}
+
+pub fn StartBatchELine(self: Renderer2D) void {
+    self.mELineIndexCount = 0;
+    self.mELineVertexBufferPtr = self.mELineVertexBufferBase;
+}
+
+pub fn FlushSprite(self: Renderer2D) void {
+    _ = self;
+}
+
+pub fn FlushCircle(self: Renderer2D) void {
+    _ = self;
+}
+
+pub fn FlushELine(self: Renderer2D) void {
+    _ = self;
+}

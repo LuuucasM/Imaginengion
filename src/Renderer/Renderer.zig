@@ -32,10 +32,8 @@ mR2D: Renderer2D,
 mR3D: Renderer3D,
 mTextureSlots: std.ArrayList(AssetHandle),
 mTextureSlotIndex: u32,
+mSpriteTextureToIndex: std.AutoHashMap(u32, usize),
 mStats: Stats,
-mTriCount: u32,
-mVertexCount: u32,
-mIndicesCount: u32,
 
 var RenderAllocator = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -53,10 +51,8 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mR3D = Renderer3D.Init(),
         .mTextureSlots = std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), new_render_context.GetMaxTextureImageSlots()),
         .mTextureSlotIndex = 1,
+        .mSpriteTextureIndexs = std.AutoHashMap(u32, usize).init(RenderAllocator.allocator()),
         .mStats = .{ .mDrawCalls = 0, .mTriCount = 0 },
-        .mTriCount = 0,
-        .mVertexCount = 0,
-        .mIndicesCount = 0,
     };
 }
 
@@ -81,20 +77,28 @@ pub fn EndScene() void {
 }
 
 pub fn DrawSprite(transform: Mat4f32, texture: AssetHandle, tiling_factor: f32, color: Vec4f32) void {
-    ShouldResetBatch(2, 4, 6);
+    if (RenderM.mR2D.mSpriteIndexCount + 6 > MaxIndices or RenderM.mTextureSlotIndex + 1 > RenderM.mTextureSlots.capacity) {
+        RenderM.mR2D.FlushSprite();
+        RenderM.mR2D.StartBatchSprite();
+    }
 
     var texture_index: f32 = 0.0;
-    for (RenderM.mTextureSlots.items, 0..) |slots_handle, i| {
-        if (slots_handle.mID == texture.mID) {
-            texture_index = @floatFromInt(i);
-        }
+    if (RenderM.mSpriteTextureToIndex.get(texture.mID)) |index| {
+        texture_index = @floatFromInt(index);
+    } else {
+        //TODO: texture_index =
+    }
+
+    if (texture_index == 0.0) {
+        texture_index = @floatFromInt(RenderM.mTextureSlotIndex);
+        RenderM.mTextureSlots.append(texture);
+        RenderM.mTextureSlotIndex += 1;
+
+        //TODO: texture_index =
     }
 
     RenderM.mR2D.DrawSprite(transform, texture_index, tiling_factor, color);
 
-    RenderM.mTriCount += 2;
-    RenderM.mVertexCount += 4;
-    RenderM.mIndicesCount += 6;
     RenderM.mStats.mTriCount += 2;
     RenderM.mStats.mVertexCount += 4;
     RenderM.mStats.mIndicesCount += 6;
@@ -104,9 +108,6 @@ pub fn DrawCircle(transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32)
 
     RenderM.mR2D.DrawCircle(transform, color, thickness, fade);
 
-    RenderM.mTriCount += 2;
-    RenderM.mVertexCount += 4;
-    RenderM.mIndicesCount += 6;
     RenderM.mStats.mTriCount += 2;
     RenderM.mStats.mVertexCount += 4;
     RenderM.mStats.mIndicesCount += 6;
@@ -115,20 +116,13 @@ pub fn DrawCircle(transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32)
 pub fn Draw3D() void {}
 
 fn StartBatch() void {
-    RenderM.mR2D.mHasSprites = false;
-    RenderM.mR2D.mSpriteVertexBufferPtr = RenderM.mR2D.mSpriteVertexBufferBase;
+    RenderM.mR2D.StartBatch();
 
-    RenderM.mR2D.mHasCircles = false;
-    RenderM.mR2D.mCircleVertexBufferPtr = RenderM.mR2D.mCircleVertexBufferBase;
-
-    RenderM.mR2D.mHasELine = false;
-    RenderM.mR2D.mELineVertexBufferPtr = RenderM.mR2D.mELineVertexBufferBase;
-
-    RenderM.mR2D.mTextureSlotIndex = 1;
+    RenderM.mTextureSlotIndex = 1;
 }
 
 fn FlushScene() void {
-    if (RenderM.mR2D.mHasSprites == true) {
+    if (RenderM.mR2D.mSpriteIndexCount > 0) {
         const data_size: u32 = @intFromPtr(RenderM.mR2D.mSpriteVertexBufferPtr) - @intFromPtr(RenderM.mR2D.mSpriteVertexBufferBase);
         RenderM.mR2D.mSpriteVertexBuffer.SetData(RenderM.mR2D.mSpriteVertexBufferBase, data_size);
 
@@ -141,7 +135,7 @@ fn FlushScene() void {
         RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mSpriteVertexArray, RenderM.mR2D.mSpriteIndexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
-    if (RenderM.mR2D.mHasCircles == true) {
+    if (RenderM.mR2D.mCircleIndexCount > 0) {
         const data_size: u32 = @intFromPtr(RenderM.mR2D.mCircleVertexBufferPtr) - @intFromPtr(RenderM.mR2D.mCircleVertexBufferBase);
         RenderM.mR2D.mCircleVertexBuffer.SetData(RenderM.mR2D.mCircleVertexBufferBase, data_size);
 
@@ -149,7 +143,7 @@ fn FlushScene() void {
         RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mCircleVertexArray, RenderM.mR2D.mCircleIndexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
-    if (RenderM.mR2D.mHasELine == true) {
+    if (RenderM.mR2D.mELineIndexCount > 0) {
         const data_size: u32 = @intFromPtr(RenderM.mR2D.mELineVertexBufferPtr) - @intFromPtr(RenderM.mR2D.ELineVertexBufferBase);
         RenderM.mR2D.mELineVertexBuffer.SetData(RenderM.mR2D.mELineVertexBufferBase, data_size);
 
@@ -159,8 +153,8 @@ fn FlushScene() void {
     }
 }
 
-fn ShouldResetBatch(new_tri_count: u32, new_vertex_count: u32, new_indices_count: u32) void {
-    if (RenderM.mTriCount + new_tri_count > MaxTri or RenderM.mVertexCount + new_vertex_count > MaxVerticies or RenderM.mIndicesCount + new_indices_count > MaxIndices) {
+fn ShouldResetBatch(new_tri_count: u32, new_vertex_count: u32, new_indices_count: u32, new_textures_count: u32) void {
+    if (RenderM.mTriCount + new_tri_count > MaxTri or RenderM.mVertexCount + new_vertex_count > MaxVerticies or RenderM.mIndicesCount + new_indices_count > MaxIndices or RenderM.mTextureSlotIndex + new_textures_count > RenderM.mTextureSlots.capacity) {
         FlushScene();
         StartBatch();
     }
