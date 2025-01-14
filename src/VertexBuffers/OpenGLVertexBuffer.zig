@@ -5,12 +5,14 @@ const VertexBufferElement = @import("VertexBufferElement.zig");
 const OpenGLVertexBuffer = @This();
 
 mBufferID: c_uint,
+mCapacity: usize,
 mLayout: std.ArrayList(VertexBufferElement),
 mStride: c_uint,
 
 pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
     const new_vb = OpenGLVertexBuffer{
         .mBufferID = undefined,
+        .mCapacity = size,
         .mLayout = std.ArrayList(VertexBufferElement).init(allocator),
         .mStride = 0,
     };
@@ -33,8 +35,13 @@ pub fn Unbind() void {
 }
 
 pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize) void {
-    glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.mBufferID);
-    glad.BufferSubData(glad.GL_ARRAY_BUFFER, 0, size, data);
+    if (size <= self.Capacity) {
+        glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.mBufferID);
+        glad.glBufferSubData(glad.GL_ARRAY_BUFFER, 0, size, data);
+    } else {
+        glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.mBufferID);
+        glad.glNamedBufferData(self.mBufferID, size, data, glad.GL_DYNAMIC_DRAW);
+    }
 }
 
 pub fn SetLayout(self: OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement)) void {

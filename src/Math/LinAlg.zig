@@ -37,7 +37,7 @@ inline fn Mat4MulVec(m: Vec4f32, v: Mat4f32) Vec4f32 {
     return add0 + add1;
 }
 
-pub fn Mat4Mul(m: Mat4f32, v: Mat4f32) Mat4f32 {
+pub fn Mat4MulMat4(m: Mat4f32, v: Mat4f32) Mat4f32 {
     return .{
         Mat4MulVec(m[0], v),
         Mat4MulVec(m[1], v),
@@ -308,7 +308,7 @@ pub fn QuatToRoll(q: Quatf32) f32 {
 //###############################################################################################################
 //--------------------------------------------------------------------------------------------------------------
 
-test Mat4Mul {
+test Mat4MulMat4 {
     //------------TEST 1---------------
     const mat1 = Mat4f32{
         Vec4f32{ 1, 2, 3, 4 },
@@ -329,7 +329,7 @@ test Mat4Mul {
         Vec4f32{ 600, 542, 484, 426 },
     };
 
-    const calc1 = Mat4Mul(mat1, mat2);
+    const calc1 = Mat4MulMat4(mat1, mat2);
 
     var i: u32 = 0;
     while (i < 4) : (i += 1) {
@@ -360,7 +360,7 @@ test Mat4Mul {
     };
     const diff1 = 0.0001;
 
-    const calc2 = Mat4Mul(mat3, mat4);
+    const calc2 = Mat4MulMat4(mat3, mat4);
 
     i = 0;
     while (i < 4) : (i += 1) {

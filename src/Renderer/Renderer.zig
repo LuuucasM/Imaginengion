@@ -31,6 +31,7 @@ mRenderContext: RenderContext,
 mR2D: Renderer2D,
 mR3D: Renderer3D,
 mTextureSlots: std.ArrayList(AssetHandle),
+
 mTextureSlotIndex: u32,
 mSpriteTextureToIndex: std.AutoHashMap(u32, usize),
 mStats: Stats,
@@ -77,31 +78,7 @@ pub fn EndScene() void {
 }
 
 pub fn DrawSprite(transform: Mat4f32, texture: AssetHandle, tiling_factor: f32, color: Vec4f32) void {
-    if (RenderM.mR2D.mSpriteIndexCount + 6 > MaxIndices or RenderM.mTextureSlotIndex + 1 > RenderM.mTextureSlots.capacity) {
-        RenderM.mR2D.FlushSprite();
-        RenderM.mR2D.StartBatchSprite();
-    }
-
-    var texture_index: f32 = 0.0;
-    if (RenderM.mSpriteTextureToIndex.get(texture.mID)) |index| {
-        texture_index = @floatFromInt(index);
-    } else {
-        //TODO: texture_index =
-    }
-
-    if (texture_index == 0.0) {
-        texture_index = @floatFromInt(RenderM.mTextureSlotIndex);
-        RenderM.mTextureSlots.append(texture);
-        RenderM.mTextureSlotIndex += 1;
-
-        //TODO: texture_index =
-    }
-
-    RenderM.mR2D.DrawSprite(transform, texture_index, tiling_factor, color);
-
-    RenderM.mStats.mTriCount += 2;
-    RenderM.mStats.mVertexCount += 4;
-    RenderM.mStats.mIndicesCount += 6;
+    RenderM.mR2d.DrawSprite(transform, color, texture, tiling_factor);
 }
 pub fn DrawCircle(transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
     ShouldResetBatch(2, 4, 6);
