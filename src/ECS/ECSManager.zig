@@ -74,14 +74,6 @@ pub fn GetGroup(self: ECSManager, comptime ComponentTypes: []const type, allocat
     return try self.mComponentManager.GetGroup(ComponentTypes, allocator);
 }
 
-// pub fn Stringify(self: ECSManager, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) !void {
-//     try self.mComponentManager.Stringify(write_stream, entityID);
-// }
-
-// pub fn DeStringify(self: *ECSManager, component_index: usize, component_string: []const u8, entityID: u32) !void {
-//     try self.mComponentManager.DeStringify(component_index, component_string, entityID);
-// }
-
 //-----------System Manager------------
 pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) void {
     _ = self;
