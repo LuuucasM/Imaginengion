@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Application = @import("../Core/Application.zig");
+const VertexArray = @import("../VertexArrays/VertexArray.zig");
 
 const glad = @import("../Core/CImports.zig").glad;
 const glfw = @import("../Core/CImports.zig").glfw;
@@ -73,6 +74,22 @@ fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uin
     }
 }
 
+pub fn SetELineThickness(self: OpenGLContext, thickness: f32) void {
+    _ = self;
+    glad.glLineWidth(thickness);
+}
+
+pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
+    return self.mMaxTextureImageSlots;
+}
+
+pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: usize) void {
+    _ = self;
+    vertex_array.Bind();
+    const count = if (index_count > 0) index_count else vertex_array.GetIndexBuffer().GetCount();
+    glad.glDrawElements(glad.GL_TRIANGLES, count, glad.GL_UNSIGNED_INT, null);
+}
+
 fn glDebugTypeToStr(debug_type: c_uint) []const u8 {
     return switch (debug_type) {
         glad.GL_DEBUG_TYPE_ERROR => "ERROR",
@@ -98,8 +115,4 @@ fn glSourceToStr(source: c_uint) []const u8 {
         glad.GL_DEBUG_SOURCE_OTHER => "OTHER",
         else => "UNKNOWN",
     };
-}
-
-pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
-    return self.mMaxTextureImageSlots;
 }

@@ -16,9 +16,10 @@ mEntitySkipField: SparseSet(.{
     .value_layout = .InternalArrayOfStructs,
     .allow_resize = .ResizeAllowed,
 }),
+mECSAllocator: std.mem.Allocator,
 
-pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !ComponentManager {
-    var new_component_manager = ComponentManager{
+pub fn Init(ECSAllocator: std.mem.Allocator) !ComponentManager {
+    return ComponentManager{
         .mComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
         .mEntitySkipField = try SparseSet(.{
             .SparseT = u32,
@@ -27,19 +28,8 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
         }).init(ECSAllocator, 20, 10),
+        .mECSAllocator = ECSAllocator,
     };
-
-    //init component arrays
-    inline for (components_list) |component_type| {
-        const component_array = try ECSAllocator.create(ComponentArray(component_type));
-        component_array.* = try ComponentArray(component_type).Init(ECSAllocator);
-
-        const i_component_array = IComponentArray.Init(component_array);
-
-        try new_component_manager.mComponentsArrays.append(i_component_array);
-    }
-
-    return new_component_manager;
 }
 
 pub fn Deinit(self: *ComponentManager, ECSAllocator: std.mem.Allocator) void {
@@ -50,6 +40,13 @@ pub fn Deinit(self: *ComponentManager, ECSAllocator: std.mem.Allocator) void {
 
     self.mComponentsArrays.deinit();
     self.mEntitySkipField.deinit();
+}
+
+pub fn RegisterComponentType(self: *ComponentManager, comptime component_type: type) void {
+    const component_array = try self.mECSAllocator.create(ComponentArray(component_type));
+    component_array.* = try ComponentArray(component_type).Init(self.mECSAllocator);
+    const i_component_array = IComponentArray.Init(component_array);
+    try self.mComponentsArrays.append(i_component_array);
 }
 
 pub fn AddComponent(self: *ComponentManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {
