@@ -34,11 +34,11 @@ pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize) void {
     self.mImpl.SetData(&self.mBufferID, data, size);
 }
 
-pub fn SetLayout(self: VertexBuffer, layout: std.ArrayList(VertexBufferElement)) void {
-    self.mImpl.SetLayout(layout);
+pub fn SetLayout(self: *VertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {
+    try self.mImpl.SetLayout(layout);
 }
 
-pub fn SetStride(self: VertexBuffer, stride: u32) void {
+pub fn SetStride(self: *VertexBuffer, stride: u32) void {
     self.mImpl.SetStride(stride);
 }
 

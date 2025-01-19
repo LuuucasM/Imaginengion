@@ -78,7 +78,7 @@ pub fn PrintQuat(q: Quatf32) void {
     std.debug.print("{d:.4} {d:.4} {d:.4} {d:.4}\n\n", .{ q[0], q[1], q[2], q[3] });
 }
 
-pub fn Radians(degrees: anytype) @TypeOf(degrees) {
+pub fn DegreesToRadians(degrees: anytype) @TypeOf(degrees) {
     std.debug.assert(@typeInfo(@TypeOf(degrees)) == .Float);
     return degrees * math.pi / 180.0;
 }
@@ -90,6 +90,19 @@ pub fn PerspectiveRHNO(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
         Vec4f32{ 0.0, 1 / tanHalfFovy, 0.0, 0.0 },
         Vec4f32{ 0.0, 0.0, -((zFar + zNear) / (zFar - zNear)), -1.0 },
         Vec4f32{ 0.0, 0.0, -((2.0 * zFar * zNear) / (zFar - zNear)), 0.0 },
+    };
+}
+
+pub fn OrthographicRHNO(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) Mat4f32 {
+    const width = right - left;
+    const height = top - bottom;
+    const depth = far - near;
+
+    return Mat4f32{
+        Vec4f32{ 2.0 / width, 0.0, 0.0, -(right + left) / width },
+        Vec4f32{ 0.0, 2.0 / height, 0.0, -(top + bottom) / height },
+        Vec4f32{ 0.0, 0.0, -2.0 / depth, -(far + near) / depth },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
     };
 }
 
@@ -372,7 +385,7 @@ test Mat4MulMat4 {
 }
 
 //test Radians
-test Radians {
+test DegreesToRadians {
     const diff = 0.0001;
     const degrees1: f32 = 45.0;
     const degrees2: f32 = 180.0;
@@ -388,12 +401,12 @@ test Radians {
     const ans5 = 6.6322;
     const ans6 = 13.9626;
 
-    const radians1 = Radians(degrees1);
-    const radians2 = Radians(degrees2);
-    const radians3 = Radians(degrees3);
-    const radians4 = Radians(degrees4);
-    const radians5 = Radians(degrees5);
-    const radians6 = Radians(degrees6);
+    const radians1 = DegreesToRadians(degrees1);
+    const radians2 = DegreesToRadians(degrees2);
+    const radians3 = DegreesToRadians(degrees3);
+    const radians4 = DegreesToRadians(degrees4);
+    const radians5 = DegreesToRadians(degrees5);
+    const radians6 = DegreesToRadians(degrees6);
 
     try std.testing.expect(math.approxEqAbs(f32, radians1, ans1, diff));
     try std.testing.expect(math.approxEqAbs(f32, radians2, ans2, diff));
@@ -739,3 +752,5 @@ test RotateVec3Quat {
 //TODO: test for QuatToYaw
 
 //TODO: test for QuatToRoll
+
+//TODO: test for OrthographicRHNO

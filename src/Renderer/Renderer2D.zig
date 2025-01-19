@@ -83,26 +83,26 @@ pub fn Init(
     max_indices: u32,
     allocator: std.mem.Allocator,
 ) !Renderer2D {
-    const new_renderer2d = Renderer2D{
+    var new_renderer2d = Renderer2D{
         .mSpriteVertexArray = VertexArray.Init(allocator),
         .mSpriteVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(SpriteVertex)),
-        .mSpriteShader = Shader.Init(allocator, "/assets/shaders/2d/Sprite.glsl"),
+        .mSpriteShader = try Shader.Init(allocator, "/assets/shaders/2d/Sprite.glsl"),
 
         .mCircleVertexArray = VertexArray.Init(allocator),
         .mCircleVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(CircleVertex)),
-        .mCircleShader = Shader.Init(allocator, "/assets/shaders/2d/Circle.glsl"),
+        .mCircleShader = try Shader.Init(allocator, "/assets/shaders/2d/Circle.glsl"),
 
         .mELineVertexArray = VertexArray.Init(allocator),
         .mELineVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(ELineVertex)),
-        .mELineShader = Shader.Init(allocator, "/assets/shaders/2d/ELine.glsl"),
+        .mELineShader = try Shader.Init(allocator, "/assets/shaders/2d/ELine.glsl"),
 
-        .mWhiteTexutre = AssetManager.GetAssetHandleRef("/assets/textures/whitetexture.png"),
+        .mWhiteTexutre = try AssetManager.GetAssetHandleRef("/assets/textures/whitetexture.png"),
 
         .mSpriteVertexCount = 0,
         .mSpriteVertexBufferBase = try allocator.alloc(SpriteVertex, max_vertices),
         .mSpriteVertexBufferPtr = undefined,
 
-        .mCricleVertexCount = 0,
+        .mCircleVertexCount = 0,
         .mCircleVertexBufferBase = try allocator.alloc(CircleVertex, max_vertices),
         .mCircleVertexBufferPtr = undefined,
 
@@ -118,7 +118,7 @@ pub fn Init(
     defer allocator.free(rect_indices);
 
     var i: usize = 0;
-    var offset: usize = 0;
+    var offset: u32 = 0;
     while (i < max_indices) : (i += 6) {
         rect_indices[i + 0] = offset + 0;
         rect_indices[i + 1] = offset + 1;
@@ -134,34 +134,34 @@ pub fn Init(
     const rect_index_buffer = IndexBuffer.Init(rect_indices, max_indices);
 
     //sprite
-    new_renderer2d.mSpriteVertexBuffer.SetLayout(new_renderer2d.mSpriteShader.GetLayout());
+    try new_renderer2d.mSpriteVertexBuffer.SetLayout(new_renderer2d.mSpriteShader.GetLayout());
     new_renderer2d.mSpriteVertexBuffer.SetStride(new_renderer2d.mSpriteShader.GetStride());
 
     new_renderer2d.mSpriteVertexArray.AddVertexBuffer(new_renderer2d.mSpriteVertexBuffer);
 
     new_renderer2d.mSpriteVertexArray.SetIndexBuffer(rect_index_buffer);
 
-    new_renderer2d.mSpriteVertexBufferPtr = new_renderer2d.mSpriteVertexBufferBase.ptr;
+    new_renderer2d.mSpriteVertexBufferPtr = &new_renderer2d.mSpriteVertexBufferBase[0];
 
     //circle
-    new_renderer2d.mCircleVertexBuffer.SetLayout(new_renderer2d.mCircleShader.GetLayout());
+    try new_renderer2d.mCircleVertexBuffer.SetLayout(new_renderer2d.mCircleShader.GetLayout());
     new_renderer2d.mCircleVertexBuffer.SetStride(new_renderer2d.mCircleShader.GetStride());
 
     new_renderer2d.mCircleVertexArray.AddVertexBuffer(new_renderer2d.mCircleVertexBuffer);
 
     new_renderer2d.mCircleVertexArray.SetIndexBuffer(rect_index_buffer);
 
-    new_renderer2d.mCircleVertexBufferPtr = new_renderer2d.mCircleVertexBufferBase.ptr;
+    new_renderer2d.mCircleVertexBufferPtr = &new_renderer2d.mCircleVertexBufferBase[0];
 
     //editor line
-    new_renderer2d.mELineVertexBuffer.SetLayout(new_renderer2d.mELineShader.GetLayout());
+    try new_renderer2d.mELineVertexBuffer.SetLayout(new_renderer2d.mELineShader.GetLayout());
     new_renderer2d.mELineVertexBuffer.SetStride(new_renderer2d.mELineShader.GetStride());
 
     new_renderer2d.mELineVertexArray.AddVertexBuffer(new_renderer2d.mELineVertexBuffer);
 
     new_renderer2d.mELineVertexArray.SetIndexBuffer(rect_index_buffer);
 
-    new_renderer2d.mELineVertexBufferPtr = new_renderer2d.mELineVertexBufferBase.ptr;
+    new_renderer2d.mELineVertexBufferPtr = &new_renderer2d.mELineVertexBufferBase[0];
 
     return new_renderer2d;
 }

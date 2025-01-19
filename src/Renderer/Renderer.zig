@@ -45,16 +45,13 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     RenderM.* = .{
         .mEngineAllocator = EngineAllocator,
         .mRenderContext = new_render_context,
-        .mR2D = Renderer2D.Init(
+        .mR2D = try Renderer2D.Init(
             MaxVerticies,
             MaxIndices,
             RenderAllocator.allocator(),
         ),
         .mR3D = Renderer3D.Init(),
-        .mTextureSlots = std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), new_render_context.GetMaxTextureImageSlots()),
-        .mTextureSlotIndex = 1,
-        .mSpriteTextureIndexs = std.AutoHashMap(u32, usize).init(RenderAllocator.allocator()),
-        .mStats = .{ .mDrawCalls = 0, .mTriCount = 0 },
+        .mStats = std.mem.zeroes(Stats),
     };
 }
 

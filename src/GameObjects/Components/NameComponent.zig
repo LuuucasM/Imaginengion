@@ -6,7 +6,7 @@ const NameComponent = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-Name: [24]u8,
+Name: [24]u8 = std.mem.zeroes([24]u8),
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

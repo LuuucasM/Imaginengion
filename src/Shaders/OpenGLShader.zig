@@ -19,8 +19,8 @@ mShaderID: u32,
 mName: []const u8,
 mAllocator: std.mem.Allocator,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) OpenGLShader {
-    const new_shader = OpenGLShader{
+pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
+    var new_shader = OpenGLShader{
         .mBufferElements = std.ArrayList(VertexBufferElement).init(allocator),
         .mUniforms = std.AutoHashMap(u32, i32).init(allocator),
         .mBufferStride = 0,
@@ -32,12 +32,12 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) OpenGLShader {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const shader_sources = try ReadFile(abs_path, arena.allocator());
-    if (Compile(&new_shader.mShaderID, shader_sources) == true) {
-        CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
-        DiscoverUniforms();
+    if (new_shader.Compile(shader_sources) == true) {
+        try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
+        try new_shader.DiscoverUniforms();
     }
 
-    new_shader.mName = new_shader.mAllocator.dupe(u8, std.fs.path.basename(abs_path));
+    new_shader.mName = try new_shader.mAllocator.dupe(u8, std.fs.path.basename(abs_path));
 
     return new_shader;
 }
@@ -140,7 +140,7 @@ pub fn SetUniform_Mat4(self: OpenGLShader, name: []const u8, value: Mat4f32) voi
     glad.glUniformMatrix4fv(self.mUniforms.get(hash_val).?, 1, glad.GL_FALSE, &value);
 }
 
-fn CreateLayout(self: OpenGLShader, shader_source: []const u8) void {
+fn CreateLayout(self: *OpenGLShader, shader_source: []const u8) !void {
     // Split shader into lines
     var lines = std.mem.split(u8, shader_source, "\n");
 
@@ -160,7 +160,7 @@ fn CreateLayout(self: OpenGLShader, shader_source: []const u8) void {
                 if (tokens.next()) |type_str| {
                     // Convert type string to ShaderDataType
                     const data_type = TypeStrToDataType(type_str);
-                    self.mBufferElements.append(.{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
+                    try self.mBufferElements.append(.{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
                 }
             }
         }
@@ -168,20 +168,20 @@ fn CreateLayout(self: OpenGLShader, shader_source: []const u8) void {
     self.CalculateOffsets();
     self.CalculateStride();
 }
-fn DiscoverUniforms(self: OpenGLShader) void {
-    var i: glad.GLint = undefined;
+fn DiscoverUniforms(self: *OpenGLShader) !void {
+    var i: glad.GLuint = undefined;
     var count: glad.GLint = undefined;
     var size: glad.GLint = undefined;
     var data_type: glad.GLenum = undefined;
-    var length: glad.glsizei = undefined;
-    const uniname: [32]u8 = undefined;
+    var length: glad.GLsizei = undefined;
+    var uniname: [32]u8 = undefined;
 
     glad.glGetProgramiv(self.mShaderID, glad.GL_ACTIVE_UNIFORMS, &count);
 
     while (i < count) : (i += 1) {
-        glad.glGetActiveUniform(self.mShaderID, i, 32, &length, &size, &data_type, uniname);
+        glad.glGetActiveUniform(self.mShaderID, i, 32, &length, &size, &data_type, &uniname[0]);
 
-        const name_slice = uniname[0..length];
+        const name_slice = uniname[0..@intCast(length)];
 
         var final_name: []const u8 = undefined;
         if (std.mem.indexOf(u8, name_slice, "[")) |found| {
@@ -195,24 +195,24 @@ fn DiscoverUniforms(self: OpenGLShader) void {
         var hasher = std.hash.Fnv1a_32.init();
         hasher.update(final_name);
 
-        self.mUniforms.put(hasher.final(), location);
+        try self.mUniforms.put(hasher.final(), location);
     }
 }
 fn CalculateOffsets(self: OpenGLShader) void {
     var offset: u32 = 0;
-    for (self.mBufferElements) |element| {
+    for (self.mBufferElements.items) |*element| {
         element.mOffset = offset;
         offset += element.mSize;
     }
 }
-fn CalculateStride(self: OpenGLShader) void {
+fn CalculateStride(self: *OpenGLShader) void {
     self.mBufferStride = 0;
-    for (self.mBufferElements) |element| {
+    for (self.mBufferElements.items) |*element| {
         self.mBufferStride += element.mSize;
     }
 }
 
-fn ReadFile(allocator: std.mem.Allocator, source: []const u8) !std.AutoArrayHashMap(u32, []const u8) {
+fn ReadFile(source: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHashMap(u32, []const u8) {
     var shaders = std.AutoArrayHashMap(u32, []const u8).init(allocator);
     errdefer {
         var iter = shaders.iterator();
@@ -262,12 +262,12 @@ fn ReadFile(allocator: std.mem.Allocator, source: []const u8) !std.AutoArrayHash
     return shaders;
 }
 
-fn Compile(shader_id_out: *u32, shader_sources: std.AutoArrayHashMap(u32, []const u8)) void {
+fn Compile(self: OpenGLShader, shader_sources: std.AutoArrayHashMap(u32, []const u8)) bool {
     const shader_id: glad.GLuint = glad.glCreateProgram();
 
     var buffer: [40 + 256]u8 = undefined;
-    const fba = std.heap.FixedBufferAllocator(&buffer);
-    const gl_shader_ids = std.ArrayList(glad.GLenum).init(fba.allocator);
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const gl_shader_ids = std.ArrayList(glad.GLenum).init(fba.allocator());
 
     var iter = shader_sources.iterator();
     while (iter.next()) |entry| {
@@ -276,7 +276,7 @@ fn Compile(shader_id_out: *u32, shader_sources: std.AutoArrayHashMap(u32, []cons
 
         const shader = glad.glCreateShader(shader_type);
 
-        glad.glShaderSource(shader, 1, shader_source.ptr, 0);
+        glad.glShaderSource(shader, 1, &shader_source.ptr, 0);
 
         glad.glCompileShader(shader);
 
@@ -299,7 +299,7 @@ fn Compile(shader_id_out: *u32, shader_sources: std.AutoArrayHashMap(u32, []cons
         gl_shader_ids.append(shader);
     }
 
-    shader_id_out.* = shader_id;
+    self.mShaderID = shader_id;
 
     glad.glLinkProgram(shader_id);
 
@@ -340,5 +340,5 @@ fn ShaderTypeFromStr(str: []const u8) glad.GLenum {
 }
 
 fn TypeStrToDataType(str: []const u8) ShaderDataType {
-    if (std.mem.eql(u8, str, "float")) return ShaderDataType.Float else if (std.mem.eql(u8, str, "vec2")) return ShaderDataType.Float2 else if (std.mem.eql(u8, str, "vec3")) return ShaderDataType.Float3 else if (std.mem.eql(u8, str, "vec4")) return ShaderDataType.Float4 else if (std.mem.eql(u8, str, "mat3")) return ShaderDataType.Mat3 else if (std.mem.eql(u8, str, "mat4")) return ShaderDataType.Mat4 else if (std.mem.eql(u8, str, "uint")) return ShaderDataType.UInt else if (std.mem.eql(u8, str, "int")) return ShaderDataType.Int else if (std.mem.eql(u8, str, "int2")) return ShaderDataType.Int2 else if (std.mem.eql(u8, str, "int3")) return ShaderDataType.Int3 else if (std.mem.eql(u8, str, "int4")) return ShaderDataType.Int4 else if (std.mem.eql(u8, str, "bool")) return ShaderDataType.Bool;
+    if (std.mem.eql(u8, str, "float")) return ShaderDataType.Float else if (std.mem.eql(u8, str, "vec2")) return ShaderDataType.Float2 else if (std.mem.eql(u8, str, "vec3")) return ShaderDataType.Float3 else if (std.mem.eql(u8, str, "vec4")) return ShaderDataType.Float4 else if (std.mem.eql(u8, str, "mat3")) return ShaderDataType.Mat3 else if (std.mem.eql(u8, str, "mat4")) return ShaderDataType.Mat4 else if (std.mem.eql(u8, str, "uint")) return ShaderDataType.UInt else if (std.mem.eql(u8, str, "int")) return ShaderDataType.Int else if (std.mem.eql(u8, str, "int2")) return ShaderDataType.Int2 else if (std.mem.eql(u8, str, "int3")) return ShaderDataType.Int3 else if (std.mem.eql(u8, str, "int4")) return ShaderDataType.Int4 else if (std.mem.eql(u8, str, "bool")) return ShaderDataType.Bool else @panic("unrecognized type str!\n");
 }

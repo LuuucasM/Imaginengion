@@ -9,9 +9,9 @@ const SpriteRenderComponent = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-mColor: Vec4f32,
-mTexture: AssetHandle,
-mTilingFactor: f32,
+mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
+mTexture: AssetHandle = .{ .mID = std.math.maxInt(u32) },
+mTilingFactor: f32 = 1.0,
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

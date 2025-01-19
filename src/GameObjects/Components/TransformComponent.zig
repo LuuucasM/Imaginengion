@@ -11,12 +11,12 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
 const Mat4f32 = LinAlg.Mat4f32;
 
-Translation: Vec3f32,
-Rotation: Quatf32,
-Scale: Vec3f32,
+Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
+Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
+Scale: Vec3f32 = .{ 1.0, 1.0, 1.0 },
 
-Transform: Mat4f32,
-Dirty: bool,
+Transform: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
+Dirty: bool = true,
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

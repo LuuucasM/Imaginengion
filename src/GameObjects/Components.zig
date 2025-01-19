@@ -4,7 +4,7 @@ pub const IDComponent = @import("Components/IDComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
 pub const SpriteRenderComponent = @import("Components/SpriteRenderComponent.zig");
 pub const TransformComponent = @import("Components/TransformComponent.zig");
-pub const TriangleRenderComponent = @import("Components/TriangleRenderComponent.zig");
+//pub const TriangleRenderComponent = @import("Components/TriangleRenderComponent.zig");
 
 pub const ComponentsList = [_]type{
     CameraComponent,
@@ -13,7 +13,7 @@ pub const ComponentsList = [_]type{
     NameComponent,
     SpriteRenderComponent,
     TransformComponent,
-    TriangleRenderComponent,
+    //TriangleRenderComponent,
 };
 
 pub const EComponents = enum(usize) {
@@ -23,5 +23,5 @@ pub const EComponents = enum(usize) {
     NameComponent = NameComponent.Ind,
     SpriteRenderComponent = SpriteRenderComponent.Ind,
     TransformComponent = TransformComponent.Ind,
-    TriangleRenderComponent = TriangleRenderComponent.Ind,
+    //TriangleRenderComponent = TriangleRenderComponent.Ind,
 };

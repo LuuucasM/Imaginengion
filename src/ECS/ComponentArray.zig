@@ -78,15 +78,6 @@ pub const IComponentArray = struct {
     pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
         return self.vtable.HasComponent(self.ptr, entityID);
     }
-    // pub fn Stringify(self: IComponentArray, write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entityID: u32) anyerror!void {
-    //     try self.vtable.Stringify(self.ptr, write_stream, entityID);
-    // }
-    // pub fn DeStringify(self: IComponentArray, component_string: []const u8, entityID: u32) anyerror!usize {
-    //     return try self.vtable.DeStringify(self.ptr, component_string, entityID);
-    // }
-    // pub fn ImguiRender(self: IComponentArray, entity: Entity) !void {
-    //     try self.vtable.ImguiRender(self.ptr, entity);
-    // }
 };
 
 pub fn ComponentArray(comptime componentType: type) type {
@@ -119,11 +110,14 @@ pub fn ComponentArray(comptime componentType: type) type {
             const new_dense_ind = self.mComponents.add(new_entity_id);
             self.mComponents.getValueByDense(new_dense_ind).* = self.mComponents.getValueBySparse(original_entity_id).*;
         }
-        pub fn AddComponent(self: *Self, entityID: u32, component: componentType) !*componentType {
+        pub fn AddComponent(self: *Self, entityID: u32, component: ?componentType) !*componentType {
             const dense_ind = self.mComponents.add(entityID);
 
             const new_component = self.mComponents.getValueByDense(dense_ind);
-            new_component.* = component;
+
+            if (component) |comp| {
+                new_component.* = comp;
+            }
 
             return new_component;
         }

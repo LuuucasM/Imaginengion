@@ -51,7 +51,7 @@ pub fn DuplicateEntity(self: *ECSManager, original_entity_id: u32) !u32 {
 }
 
 //components
-pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32, component: ComponentType) !*ComponentType {
+pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32, component: ?ComponentType) !*ComponentType {
     const new_component = try self.mComponentManager.AddComponent(ComponentType, entityID, component);
     //try self.mSystemManager.AddComponent(ComponentType, entityID);
     return new_component;

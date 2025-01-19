@@ -6,14 +6,14 @@ mCount: u32,
 mBufferID: c_uint,
 
 pub fn Init(indices: []u32, count: u32) OpenGLIndexBuffer {
-    const new_ib = OpenGLIndexBuffer{
+    var new_ib = OpenGLIndexBuffer{
         .mCount = 0,
         .mBufferID = undefined,
     };
 
     glad.glCreateBuffers(1, &new_ib.mBufferID);
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_ib.mBufferID);
-    glad.glBufferData(glad.GL_ARRAY_BUFFER, count * @sizeOf(u32), indices, glad.GL_STATIC_DRAW);
+    glad.glBufferData(glad.GL_ARRAY_BUFFER, count * @sizeOf(u32), indices.ptr, glad.GL_STATIC_DRAW);
 
     return new_ib;
 }

@@ -10,7 +10,7 @@ mLayout: std.ArrayList(VertexBufferElement),
 mStride: c_uint,
 
 pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
-    const new_vb = OpenGLVertexBuffer{
+    var new_vb = OpenGLVertexBuffer{
         .mBufferID = undefined,
         .mCapacity = size,
         .mLayout = std.ArrayList(VertexBufferElement).init(allocator),
@@ -18,7 +18,7 @@ pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
     };
     glad.glCreateBuffers(1, &new_vb.mBufferID);
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_vb.mBufferID);
-    glad.glBufferData(glad.GL_ARRAY_BUFFER, size, null, glad.GL_DYNAMIC_DRAW);
+    glad.glBufferData(glad.GL_ARRAY_BUFFER, @intCast(size), null, glad.GL_DYNAMIC_DRAW);
     return new_vb;
 }
 
@@ -44,11 +44,12 @@ pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize) void {
     }
 }
 
-pub fn SetLayout(self: OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement)) void {
-    self.mLayout = layout.clone();
+pub fn SetLayout(self: *OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {
+    self.mLayout.deinit();
+    self.mLayout = try layout.clone();
 }
 
-pub fn SetStride(self: OpenGLVertexBuffer, stride: u32) void {
+pub fn SetStride(self: *OpenGLVertexBuffer, stride: u32) void {
     self.mStride = stride;
 }
 

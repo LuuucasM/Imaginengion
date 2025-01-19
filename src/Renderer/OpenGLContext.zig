@@ -9,7 +9,6 @@ const glfw = @import("../Core/CImports.zig").glfw;
 const OpenGLContext = @This();
 
 mWindow: ?*glfw.struct_GLFWwindow,
-mMaxTextureImageSlots: usize,
 
 pub fn Init() OpenGLContext {
     const window: ?*glfw.struct_GLFWwindow = @ptrCast(Application.GetWindow().GetNativeWindow());
@@ -31,13 +30,9 @@ pub fn Init() OpenGLContext {
     std.log.info("\tRenderer: {s}\n", .{glad.glGetString(glad.GL_RENDERER)});
     std.log.info("\tVersion: {s}\n", .{glad.glGetString(glad.GL_VERSION)});
 
-    var new_opengl_context = OpenGLContext{
+    return OpenGLContext{
         .mWindow = window,
-        .mMaxTextureImageSlots = undefined,
     };
-    glad.glGetIntegerv(glad.GL_MAX_IMAGE_UNITS, &new_opengl_context.mMaxTextureImageSlots);
-
-    return new_opengl_context;
 }
 
 pub fn SwapBuffers(self: OpenGLContext) void {
@@ -80,7 +75,10 @@ pub fn SetELineThickness(self: OpenGLContext, thickness: f32) void {
 }
 
 pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
-    return self.mMaxTextureImageSlots;
+    _ = self;
+    var num: c_int = 0;
+    glad.glGetIntegerv(glad.GL_MAX_IMAGE_UNITS, &num);
+    return @intCast(num);
 }
 
 pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: usize) void {

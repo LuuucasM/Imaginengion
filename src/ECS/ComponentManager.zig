@@ -19,12 +19,12 @@ mEntitySkipField: SparseSet(.{
 mECSAllocator: std.mem.Allocator,
 
 pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !ComponentManager {
-    const new_component_manager = ComponentManager{
+    var new_component_manager = ComponentManager{
         .mComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
         .mEntitySkipField = try SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
-            .ValueT = StaticSkipField(components_list.len + 1),
+            .ValueT = StaticSkipField(32 + 1),
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
         }).init(ECSAllocator, 20, 10),
@@ -53,7 +53,7 @@ pub fn Deinit(self: *ComponentManager) void {
     self.mEntitySkipField.deinit();
 }
 
-pub fn AddComponent(self: *ComponentManager, comptime component_type: type, entityID: u32, component: component_type) !*component_type {
+pub fn AddComponent(self: *ComponentManager, comptime component_type: type, entityID: u32, component: ?component_type) !*component_type {
     std.debug.assert(@hasDecl(component_type, "Ind"));
     std.debug.assert(!self.HasComponent(component_type, entityID));
     std.debug.assert(self.mEntitySkipField.hasSparse(entityID));

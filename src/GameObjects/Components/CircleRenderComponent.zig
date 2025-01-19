@@ -7,9 +7,9 @@ const CircleRenderComponent = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-mColor: Vec4f32,
-mThickness: f32,
-mFade: f32,
+mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
+mThickness: f32 = 1.0,
+mFade: f32 = 0.005,
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

@@ -12,10 +12,10 @@ mVertexBuffers: std.ArrayList(VertexBuffer),
 mIndexBuffer: IndexBuffer,
 
 pub fn Init(allocator: std.mem.Allocator) OpenGLVertexArray {
-    const new_va = OpenGLVertexArray{
+    var new_va = OpenGLVertexArray{
         .mArrayID = undefined,
         .mVertexBuffers = std.ArrayList(VertexBuffer).init(allocator),
-        .mIndexBuffer = IndexBuffer{ .mBufferID = 0, .mCount = 0 },
+        .mIndexBuffer = undefined,
     };
 
     glad.glCreateVertexArrays(1, &new_va.mArrayID);
@@ -35,31 +35,31 @@ pub fn Unbind() void {
     glad.glBindVertexArray(0);
 }
 
-pub fn AddVertexBuffer(self: OpenGLVertexArray, new_vertex_buffer: VertexBuffer) void {
+pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer) void {
     self.Bind();
     new_vertex_buffer.Bind();
 
-    for (new_vertex_buffer.mLayout.items, 0..) |element, i| {
-        glad.glEnableVertexAttribArray(i);
+    for (new_vertex_buffer.GetLayout().items, 0..) |element, i| {
+        glad.glEnableVertexAttribArray(@intCast(i));
 
         if (element.mType == .Bool or element.mType == .UInt or
             element.mType == .Int or element.mType == .Int2 or
             element.mType == .Int3 or element.mType == .Int4)
         {
             glad.glVertexAttribIPointer(
-                i,
+                @intCast(i),
                 element.GetComponentCount(),
                 ShaderDataTypeToOpenGLBaseType(element.mType),
-                new_vertex_buffer.GetStride(),
+                @intCast(new_vertex_buffer.GetStride()),
                 @as(*anyopaque, @ptrFromInt(@as(usize, element.mOffset))),
             );
         } else {
             glad.glVertexAttribPointer(
-                i,
+                @intCast(i),
                 element.GetComponentCount(),
                 ShaderDataTypeToOpenGLBaseType(element.mType),
                 if (element.mIsNormalized) glad.GL_TRUE else glad.GL_FALSE,
-                VertexBuffer.GetStride(),
+                @intCast(new_vertex_buffer.GetStride()),
                 @as(*anyopaque, @ptrFromInt(@as(usize, element.mOffset))),
             );
         }
@@ -67,7 +67,7 @@ pub fn AddVertexBuffer(self: OpenGLVertexArray, new_vertex_buffer: VertexBuffer)
     self.mVertexBuffers.append(new_vertex_buffer);
 }
 
-pub fn SetIndexBuffer(self: OpenGLVertexArray, new_index_buffer: IndexBuffer) void {
+pub fn SetIndexBuffer(self: *OpenGLVertexArray, new_index_buffer: IndexBuffer) void {
     self.Bind();
     new_index_buffer.Bind();
     self.mIndexBuffer = new_index_buffer;
