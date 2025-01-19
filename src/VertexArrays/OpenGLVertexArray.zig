@@ -35,7 +35,7 @@ pub fn Unbind() void {
     glad.glBindVertexArray(0);
 }
 
-pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer) void {
+pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer) !void {
     self.Bind();
     new_vertex_buffer.Bind();
 
@@ -64,7 +64,7 @@ pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer
             );
         }
     }
-    self.mVertexBuffers.append(new_vertex_buffer);
+    try self.mVertexBuffers.append(new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: *OpenGLVertexArray, new_index_buffer: IndexBuffer) void {

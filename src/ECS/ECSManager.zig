@@ -21,7 +21,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_types: []const 
 
 pub fn Deinit(self: *ECSManager) void {
     self.mEntityManager.Deinit();
-    self.mComponentManager.Deinit(self.mECSAllocator);
+    self.mComponentManager.Deinit();
     //self.mSystemManager.Deinit(self.mECSAllocator);
 }
 

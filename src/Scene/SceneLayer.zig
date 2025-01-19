@@ -59,13 +59,7 @@ pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
     var name = [_]u8{0} ** 24;
     @memcpy(name[0..14], "Unnamed Entity");
     _ = try e.AddComponent(NameComponent, .{ .Name = name });
-    _ = try e.AddComponent(TransformComponent, .{
-        .Translation = .{ 0.0, 0.0, 0.0 },
-        .Rotation = .{ 1.0, 0.0, 0.0, 0.0 },
-        .Scale = .{ 1.0, 1.0, 1.0 },
-        .Transform = LinAlg.InitMat4CompTime(1.0),
-        .Dirty = true,
-    });
+    _ = try e.AddComponent(TransformComponent, null);
 
     _ = try self.mEntityIDs.add(e.mEntityID);
 

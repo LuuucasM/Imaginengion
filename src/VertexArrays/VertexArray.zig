@@ -31,8 +31,8 @@ pub fn Unbind(self: VertexArray) void {
     self.mImpl.Unbind();
 }
 
-pub fn AddVertexBuffer(self: *VertexArray, new_vertex_buffer: VertexBuffer) void {
-    self.mImpl.AddVertexBuffer(new_vertex_buffer);
+pub fn AddVertexBuffer(self: *VertexArray, new_vertex_buffer: VertexBuffer) !void {
+    try self.mImpl.AddVertexBuffer(new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: *VertexArray, new_index_buffer: IndexBuffer) void {

@@ -40,13 +40,13 @@ pub fn EditorRender(self: *SpriteRenderComponent) !void {
     const thumbnail_size: f32 = 70.0;
     _ = padding;
     _ = thumbnail_size;
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.Color), imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
     imgui.igText("TEMPORARY TEXTURE TARGET");
     if (imgui.igBeginDragDropTarget() == true) {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            self.Texture = try AssetM.GetAssetHandleRef(path);
+            self.mTexture = try AssetM.GetAssetHandleRef(path);
         }
     }
 }

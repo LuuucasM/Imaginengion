@@ -34,5 +34,5 @@ pub fn GetInd(self: CircleRenderComponent) u32 {
 }
 
 pub fn EditorRender(self: *CircleRenderComponent) !void {
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.Color), imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
 }

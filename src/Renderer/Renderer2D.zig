@@ -61,8 +61,6 @@ mELineVertexArray: VertexArray,
 mELineVertexBuffer: VertexBuffer,
 mELineShader: Shader,
 
-mWhiteTexutre: AssetHandle,
-
 mSpriteVertexCount: u32,
 mSpriteVertexBufferBase: []SpriteVertex,
 mSpriteVertexBufferPtr: *SpriteVertex,
@@ -95,8 +93,6 @@ pub fn Init(
         .mELineVertexArray = VertexArray.Init(allocator),
         .mELineVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(ELineVertex)),
         .mELineShader = try Shader.Init(allocator, "/assets/shaders/2d/ELine.glsl"),
-
-        .mWhiteTexutre = try AssetManager.GetAssetHandleRef("/assets/textures/whitetexture.png"),
 
         .mSpriteVertexCount = 0,
         .mSpriteVertexBufferBase = try allocator.alloc(SpriteVertex, max_vertices),
@@ -137,7 +133,7 @@ pub fn Init(
     try new_renderer2d.mSpriteVertexBuffer.SetLayout(new_renderer2d.mSpriteShader.GetLayout());
     new_renderer2d.mSpriteVertexBuffer.SetStride(new_renderer2d.mSpriteShader.GetStride());
 
-    new_renderer2d.mSpriteVertexArray.AddVertexBuffer(new_renderer2d.mSpriteVertexBuffer);
+    try new_renderer2d.mSpriteVertexArray.AddVertexBuffer(new_renderer2d.mSpriteVertexBuffer);
 
     new_renderer2d.mSpriteVertexArray.SetIndexBuffer(rect_index_buffer);
 
@@ -147,7 +143,7 @@ pub fn Init(
     try new_renderer2d.mCircleVertexBuffer.SetLayout(new_renderer2d.mCircleShader.GetLayout());
     new_renderer2d.mCircleVertexBuffer.SetStride(new_renderer2d.mCircleShader.GetStride());
 
-    new_renderer2d.mCircleVertexArray.AddVertexBuffer(new_renderer2d.mCircleVertexBuffer);
+    try new_renderer2d.mCircleVertexArray.AddVertexBuffer(new_renderer2d.mCircleVertexBuffer);
 
     new_renderer2d.mCircleVertexArray.SetIndexBuffer(rect_index_buffer);
 
@@ -157,7 +153,7 @@ pub fn Init(
     try new_renderer2d.mELineVertexBuffer.SetLayout(new_renderer2d.mELineShader.GetLayout());
     new_renderer2d.mELineVertexBuffer.SetStride(new_renderer2d.mELineShader.GetStride());
 
-    new_renderer2d.mELineVertexArray.AddVertexBuffer(new_renderer2d.mELineVertexBuffer);
+    try new_renderer2d.mELineVertexArray.AddVertexBuffer(new_renderer2d.mELineVertexBuffer);
 
     new_renderer2d.mELineVertexArray.SetIndexBuffer(rect_index_buffer);
 

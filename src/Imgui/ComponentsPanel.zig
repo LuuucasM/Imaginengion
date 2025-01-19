@@ -127,19 +127,19 @@ fn EntityImguiRender(entity: Entity) !void {
 fn AddComponentPopupMenu(entity: Entity) void {
     if (entity.HasComponent(CameraComponent) == false) {
         if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(CameraComponent, .{ .Color = .{ 1.0, 1.0, 1.0, 1.0 } });
+            _ = try entity.AddComponent(CameraComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }
     if (entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {
         if (imgui.igMenuItem_Bool("CircleRenderComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(CircleRenderComponent, .{ .Color = .{ 1.0, 1.0, 1.0, 1.0 }, .mThickness = 1.0, .mFade = 0.005 });
+            _ = try entity.AddComponent(CircleRenderComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }
     if (entity.HasComponent(SpriteRenderComponent) == false and entity.HasComponent(CircleRenderComponent) == false) {
         if (imgui.igMenuItem_Bool("SpriteRenderComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(SpriteRenderComponent, .{ .Texture = .{ .mID = AssetHandle.EmptyHandle }, .Color = .{ 1.0, 1.0, 1.0, 1.0 }, .TilingFactor = 1 });
+            _ = try entity.AddComponent(SpriteRenderComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }

@@ -32,7 +32,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const shader_sources = try ReadFile(abs_path, arena.allocator());
-    if (new_shader.Compile(shader_sources) == true) {
+    if (try new_shader.Compile(shader_sources) == true) {
         try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
         try new_shader.DiscoverUniforms();
     }
@@ -212,15 +212,8 @@ fn CalculateStride(self: *OpenGLShader) void {
     }
 }
 
-fn ReadFile(source: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHashMap(u32, []const u8) {
-    var shaders = std.AutoArrayHashMap(u32, []const u8).init(allocator);
-    errdefer {
-        var iter = shaders.iterator();
-        while (iter.next()) |entry| {
-            allocator.free(entry.value_ptr.*);
-        }
-        shaders.deinit();
-    }
+fn ReadFile(source: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
+    var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(allocator);
 
     var lines = std.mem.split(u8, source, "\n");
     var current_type: c_uint = undefined;
@@ -262,13 +255,13 @@ fn ReadFile(source: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHash
     return shaders;
 }
 
-fn Compile(self: OpenGLShader, shader_sources: std.AutoArrayHashMap(u32, []const u8)) bool {
+fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8)) !bool {
     const shader_id: glad.GLuint = glad.glCreateProgram();
 
-    var buffer: [40 + 256]u8 = undefined;
+    var buffer: [40 + 1024]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const gl_shader_ids = std.ArrayList(glad.GLenum).init(fba.allocator());
-
+    var gl_shader_ids = std.ArrayList(glad.GLenum).init(fba.allocator());
+    defer gl_shader_ids.deinit();
     var iter = shader_sources.iterator();
     while (iter.next()) |entry| {
         const shader_type = entry.key_ptr.*;
@@ -283,10 +276,11 @@ fn Compile(self: OpenGLShader, shader_sources: std.AutoArrayHashMap(u32, []const
         var is_compiled: glad.GLint = 0;
         glad.glGetShaderiv(shader, glad.GL_COMPILE_STATUS, &is_compiled);
         if (is_compiled == glad.GL_FALSE) {
-            const max_length: glad.GLint = 0;
+            var max_length: glad.GLint = 0;
             glad.glGetShaderiv(shader, glad.GL_INFO_LOG_LENGTH, &max_length);
 
-            const info_log = try std.ArrayList(u8).initCapacity(fba.allocator, max_length);
+            const info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
+            defer info_log.deinit();
             glad.glGetShaderInfoLog(shader, max_length, &max_length, info_log.items.ptr);
 
             glad.glDeleteShader(shader);
@@ -295,26 +289,28 @@ fn Compile(self: OpenGLShader, shader_sources: std.AutoArrayHashMap(u32, []const
 
             return false;
         }
+        std.log.debug("Attaching shader with ID: {d} and type: {d}\n", .{ shader, shader_type });
         glad.glAttachShader(shader_id, shader);
-        gl_shader_ids.append(shader);
+        try gl_shader_ids.append(shader);
     }
 
     self.mShaderID = shader_id;
 
     glad.glLinkProgram(shader_id);
 
-    const is_linked: glad.GLint = 0;
+    var is_linked: glad.GLint = 0;
     glad.glGetProgramiv(shader_id, glad.GL_LINK_STATUS, &is_linked);
     if (is_linked == glad.GL_FALSE) {
-        const max_length: glad.GLint = 0;
+        var max_length: glad.GLint = 0;
         glad.glGetProgramiv(shader_id, glad.GL_INFO_LOG_LENGTH, &max_length);
 
-        const info_log = try std.ArrayList(u8).initCapacity(fba.allocator, max_length);
+        const info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
+        defer info_log.deinit();
         glad.glGetProgramInfoLog(shader_id, max_length, &max_length, info_log.items.ptr);
 
         glad.glDeleteProgram(shader_id);
 
-        for (gl_shader_ids) |id| {
+        for (gl_shader_ids.items) |id| {
             glad.glDeleteShader(id);
         }
 
@@ -322,7 +318,7 @@ fn Compile(self: OpenGLShader, shader_sources: std.AutoArrayHashMap(u32, []const
 
         return false;
     }
-    for (gl_shader_ids) |id| {
+    for (gl_shader_ids.items) |id| {
         glad.glDetachShader(shader_id, id);
         glad.glDeleteShader(id);
     }

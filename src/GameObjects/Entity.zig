@@ -9,7 +9,7 @@ pub const NullEntity: u32 = ~0;
 mEntityID: u32,
 mSceneLayerRef: *const SceneLayer,
 
-pub fn AddComponent(self: Entity, comptime component_type: type, component: component_type) !*component_type {
+pub fn AddComponent(self: Entity, comptime component_type: type, component: ?component_type) !*component_type {
     return try self.mSceneLayerRef.mECSManagerRef.AddComponent(component_type, self.mEntityID, component);
 }
 pub fn RemoveComponent(self: Entity, comptime component_type: type) !void {
