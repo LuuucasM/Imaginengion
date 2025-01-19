@@ -36,6 +36,18 @@ pub fn SetOrthographic(self: CameraComponent, size: f32, near_clip: f32, far_cli
     self.RecalculateProjection();
 }
 
+pub fn SetPerspective(self: CameraComponent, fov: f32, near_clip: f32, far_clip: f32) void {
+    self.mPerspectiveFOV = fov;
+    self.mPerspectiveNear = near_clip;
+    self.mPerspectiveFar = far_clip;
+    self.RecalculateProjection();
+}
+
+pub fn SetProjectionType(self: CameraComponent, new_projection_type: ProjectionType) void {
+    self.mProjectionType = new_projection_type;
+    self.RecalculateProjection();
+}
+
 pub fn SetViewportSize(self: CameraComponent, width: usize, height: usize) void {
     if (height > 0) {
         self.mAspectRatio = @as(f32, @floatCast(width)) / @as(f32, @floatCast(height));
