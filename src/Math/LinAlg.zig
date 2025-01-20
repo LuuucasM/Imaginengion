@@ -322,6 +322,7 @@ pub fn QuatToRoll(q: Quatf32) f32 {
 //###############################################################################################################
 //--------------------------------------------------------------------------------------------------------------
 
+//Test Mat4MulMat4
 test Mat4MulMat4 {
     //------------TEST 1---------------
     const mat1 = Mat4f32{
@@ -417,7 +418,7 @@ test DegreesToRadians {
     try std.testing.expect(math.approxEqAbs(f32, radians6, ans6, diff));
 }
 
-//test PerspectiveRHGL
+//test PerspectiveRHNO
 test PerspectiveRHNO {
     const diff = 0.0001;
 
