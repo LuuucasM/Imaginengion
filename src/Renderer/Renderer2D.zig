@@ -13,6 +13,7 @@ const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
+const MAX_PATH_LEN = 256;
 
 pub const SpriteVertex = struct {
     Position: Vec3f32,
@@ -81,18 +82,26 @@ pub fn Init(
     max_indices: u32,
     allocator: std.mem.Allocator,
 ) !Renderer2D {
+    var buffer: [MAX_PATH_LEN * 5]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+    const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
+    const sprite_shader_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/shaders/2d/Sprite.glsl" });
+    const circle_shader_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/shaders/2d/Circle.glsl" });
+    const eline_shader_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/shaders/2d/ELine.glsl" });
+
     var new_renderer2d = Renderer2D{
         .mSpriteVertexArray = VertexArray.Init(allocator),
         .mSpriteVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(SpriteVertex)),
-        .mSpriteShader = try Shader.Init(allocator, "/assets/shaders/2d/Sprite.glsl"),
+        .mSpriteShader = try Shader.Init(allocator, sprite_shader_path),
 
         .mCircleVertexArray = VertexArray.Init(allocator),
         .mCircleVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(CircleVertex)),
-        .mCircleShader = try Shader.Init(allocator, "/assets/shaders/2d/Circle.glsl"),
+        .mCircleShader = try Shader.Init(allocator, circle_shader_path),
 
         .mELineVertexArray = VertexArray.Init(allocator),
         .mELineVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(ELineVertex)),
-        .mELineShader = try Shader.Init(allocator, "/assets/shaders/2d/ELine.glsl"),
+        .mELineShader = try Shader.Init(allocator, eline_shader_path),
 
         .mSpriteVertexCount = 0,
         .mSpriteVertexBufferBase = try allocator.alloc(SpriteVertex, max_vertices),

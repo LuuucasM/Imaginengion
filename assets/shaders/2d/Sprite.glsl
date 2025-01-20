@@ -26,13 +26,13 @@ void main()
     vs_out.TexCoord = a_TexCoord;
     vs_out.TilingFactor = a_TilingFactor;
     vs_out.TexIndex = a_TexIndex;
-	gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0)
+	gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0);
 }
 
 #type fragment
 #version 460 core
 
-layout(location = 0) out vec4 o_color;
+layout(location = 0) out vec4 o_Color;
 
 in VS_OUT {
     vec4 Color;

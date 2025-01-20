@@ -212,10 +212,22 @@ fn CalculateStride(self: *OpenGLShader) void {
     }
 }
 
-fn ReadFile(source: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
+fn ReadFile(abs_path: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
+    var source = std.ArrayList(u8).init(allocator);
+    defer source.deinit();
+
+    const file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
+    defer file.close();
+
+    const file_size = try file.getEndPos();
+    try source.ensureTotalCapacity(@intCast(file_size));
+    try source.resize(@intCast(file_size));
+
+    _ = try file.readAll(source.items);
+
     var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(allocator);
 
-    var lines = std.mem.split(u8, source, "\n");
+    var lines = std.mem.split(u8, source.items, "\n");
     var current_type: c_uint = undefined;
     var has_type = false;
     var current_source = std.ArrayList(u8).init(allocator);
@@ -289,7 +301,6 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
             return false;
         }
-        std.log.debug("Attaching shader with ID: {d} and type: {d}\n", .{ shader, shader_type });
         glad.glAttachShader(shader_id, shader);
         try gl_shader_ids.append(shader);
     }

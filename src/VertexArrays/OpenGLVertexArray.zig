@@ -38,9 +38,10 @@ pub fn Unbind() void {
 pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer) !void {
     self.Bind();
     new_vertex_buffer.Bind();
-
     for (new_vertex_buffer.GetLayout().items, 0..) |element, i| {
         glad.glEnableVertexAttribArray(@intCast(i));
+
+        const offset_ptr: ?*anyopaque = if (element.mOffset == 0) null else @as(*anyopaque, @ptrFromInt(@as(usize, element.mOffset)));
 
         if (element.mType == .Bool or element.mType == .UInt or
             element.mType == .Int or element.mType == .Int2 or
@@ -51,7 +52,7 @@ pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer
                 element.GetComponentCount(),
                 ShaderDataTypeToOpenGLBaseType(element.mType),
                 @intCast(new_vertex_buffer.GetStride()),
-                @as(*anyopaque, @ptrFromInt(@as(usize, element.mOffset))),
+                offset_ptr,
             );
         } else {
             glad.glVertexAttribPointer(
@@ -60,7 +61,7 @@ pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer
                 ShaderDataTypeToOpenGLBaseType(element.mType),
                 if (element.mIsNormalized) glad.GL_TRUE else glad.GL_FALSE,
                 @intCast(new_vertex_buffer.GetStride()),
-                @as(*anyopaque, @ptrFromInt(@as(usize, element.mOffset))),
+                offset_ptr,
             );
         }
     }

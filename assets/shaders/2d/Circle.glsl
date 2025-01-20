@@ -26,7 +26,6 @@ void main()
     vs_out.Color = a_Color;
     vs_out.Thickness = a_Thickness;
     vs_out.Fade = a_Fade;
-    vs_out.EntityID = a_EntityID;
 
     gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0);
 }
@@ -34,7 +33,7 @@ void main()
 #type fragment
 #version 460 core
 
-layout(location = 0) out vec4 o_color;
+layout(location = 0) out vec4 o_Color;
 
 in VS_OUT {
     vec3 LocalPosition;
