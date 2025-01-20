@@ -84,8 +84,8 @@ pub fn DegreesToRadians(degrees: anytype) @TypeOf(degrees) {
     return degrees * math.pi / 180.0;
 }
 
-pub fn PerspectiveRHNO(fovy: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
-    const tanHalfFovy = math.tan(fovy / 2);
+pub fn PerspectiveRHNO(fovy_radians: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
+    const tanHalfFovy = math.tan(fovy_radians / 2);
     return .{
         Vec4f32{ 1.0 / (aspect * tanHalfFovy), 0.0, 0.0, 0.0 },
         Vec4f32{ 0.0, 1 / tanHalfFovy, 0.0, 0.0 },

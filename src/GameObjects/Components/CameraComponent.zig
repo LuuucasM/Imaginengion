@@ -25,7 +25,7 @@ mOrthographicSize: f32 = 10.0,
 mOrthographicNear: f32 = -1.0,
 mOrthographicFar: f32 = 1.0,
 
-mPerspectiveFOV: f32 = LinAlg.DegreesToRadians(45.0),
+mPerspectiveFOVDegrees: f32 = 45.0,
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 
@@ -36,8 +36,8 @@ pub fn SetOrthographic(self: CameraComponent, size: f32, near_clip: f32, far_cli
     self.RecalculateProjection();
 }
 
-pub fn SetPerspective(self: CameraComponent, fov: f32, near_clip: f32, far_clip: f32) void {
-    self.mPerspectiveFOV = fov;
+pub fn SetPerspective(self: CameraComponent, fov_degrees: f32, near_clip: f32, far_clip: f32) void {
+    self.mPerspectiveFOVDegrees = fov_degrees;
     self.mPerspectiveNear = near_clip;
     self.mPerspectiveFar = far_clip;
     self.RecalculateProjection();
@@ -59,7 +59,7 @@ pub fn SetViewportSize(self: CameraComponent, width: usize, height: usize) void 
 
 fn RecalculateProjection(self: CameraComponent) void {
     if (self.mProjectionType == .Perspective) {
-        self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOV, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
+        self.mProjection = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mPerspectiveFOVDegrees), self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
     } else {
         const ortho_left = -1.0 * self.mOrthographicSize * self.mAspectRatio * 0.5;
         const ortho_right = self.mOrthographicSize * self.mAspectRatio * 0.5;
