@@ -25,7 +25,10 @@ pub fn Update(self: RenderSystem, component_manager: ComponentManager) void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
 
+    //culling
     const cull_should_render = CullShouldRender(component_manager, self.mEntityList, allocator);
+
+    //other optimization passes?
 
     //final resulting list to draw
     for (cull_should_render.items) |entity_id| {
