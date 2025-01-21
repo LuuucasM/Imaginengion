@@ -15,9 +15,9 @@ const VTab = struct {
 pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
-    std.debug.assert(PtrInfo == .Pointer);
-    std.debug.assert(PtrInfo.Pointer.size == .One);
-    std.debug.assert(@typeInfo(PtrInfo.Pointer.child) == .Struct);
+    std.debug.assert(PtrInfo == .pointer);
+    std.debug.assert(PtrInfo.pointer.size == .one);
+    std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
 
     const impl = struct {
         fn EditorRender(ptr: *anyopaque) !void {

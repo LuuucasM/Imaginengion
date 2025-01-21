@@ -142,7 +142,7 @@ pub fn SetUniform_Mat4(self: OpenGLShader, name: []const u8, value: Mat4f32) voi
 
 fn CreateLayout(self: *OpenGLShader, shader_source: []const u8) !void {
     // Split shader into lines
-    var lines = std.mem.split(u8, shader_source, "\n");
+    var lines = std.mem.splitSequence(u8, shader_source, "\n");
 
     while (lines.next()) |line| {
         // Trim whitespace
@@ -156,7 +156,7 @@ fn CreateLayout(self: *OpenGLShader, shader_source: []const u8) !void {
                 const after_in = trimmed[in_pos + 5 ..];
 
                 // Split by spaces to get type and variable name
-                var tokens = std.mem.split(u8, after_in, " ");
+                var tokens = std.mem.splitSequence(u8, after_in, " ");
                 if (tokens.next()) |type_str| {
                     // Convert type string to ShaderDataType
                     const data_type = TypeStrToDataType(type_str);
@@ -227,7 +227,7 @@ fn ReadFile(abs_path: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHa
 
     var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(allocator);
 
-    var lines = std.mem.split(u8, source.items, "\n");
+    var lines = std.mem.splitSequence(u8, source.items, "\n");
     var current_type: c_uint = undefined;
     var has_type = false;
     var current_source = std.ArrayList(u8).init(allocator);
