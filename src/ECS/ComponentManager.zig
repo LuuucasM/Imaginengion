@@ -33,6 +33,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
 
     inline for (components_list) |component_type| {
         const component_array = try ECSAllocator.create(ComponentArray(component_type));
+
         component_array.* = try ComponentArray(component_type).Init(ECSAllocator);
 
         const i_component_array = IComponentArray.Init(component_array);
