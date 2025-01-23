@@ -24,18 +24,17 @@ pub fn Deinit(self: RenderSystem) void {
     self.mCircleEntities.deinit();
 }
 
-pub fn Update(self: RenderSystem, component_manager: ComponentManager) void {
+pub fn OnUpdate(self: RenderSystem, component_manager: ComponentManager) void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const allocator = arena.allocator();
     defer arena.deinit();
 
     //culling
-    const end_index_sprites = self.CullShouldRender(component_manager, SpriteRenderComponent, allocator);
-    const end_index_circles = self.CullShouldRender(component_manager, CircleRenderComponent, allocator);
+    const end_index_sprites = self.Culling(component_manager, SpriteRenderComponent, allocator);
+    const end_index_circles = self.Culling(component_manager, CircleRenderComponent, allocator);
 
     //other optimization passes
 
-    //final resulting list to draw
     for (0..end_index_sprites) |i| {
         const entity_id = self.mSpriteEntities.items[i];
         const transform_component = component_manager.GetComponent(TransformComponent, entity_id);
@@ -72,7 +71,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-fn CullShouldRender(self: RenderSystem, component_manager: ComponentManager, component_type: type) usize {
+fn Culling(self: RenderSystem, component_manager: ComponentManager, component_type: type) usize {
     const entity_list = if (component_type == SpriteRenderComponent) self.mSpriteEntities else self.mCircleEntities;
     var write_index: usize = 0;
     var read_index: usize = 0;

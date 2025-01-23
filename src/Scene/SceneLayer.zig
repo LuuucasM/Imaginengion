@@ -10,6 +10,7 @@ const Components = @import("../GameObjects/Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const TransformComponent = Components.TransformComponent;
+const CameraComponent = Components.CameraComponent;
 
 //.gscl
 //.oscl
@@ -74,4 +75,19 @@ pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManager.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = &self };
     self.mEntityIDs.add(new_entity.mEntityID);
     return new_entity;
+}
+
+pub fn OnViewportResize(self: SceneLayer, width: u32, height: u32) !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const entity_ids = try self.mECSManagerRef.GetGroup(&[_]type{CameraComponent}, allocator);
+    var iter = entity_ids.iterator();
+    while (iter.next()) |entry| {
+        const entity_id = entry.key_ptr.*;
+        const camera_component = self.mECSManagerRef.GetComponent(CameraComponent, entity_id);
+        if (camera_component.mIsFixedAspectRatio == false) {
+            camera_component.SetViewportSize(width, height);
+        }
+    }
 }

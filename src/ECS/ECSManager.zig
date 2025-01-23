@@ -29,13 +29,13 @@ pub fn Deinit(self: *ECSManager) void {
 pub fn CreateEntity(self: *ECSManager) !u32 {
     const entityID = try self.mEntityManager.CreateEntity();
     try self.mComponentManager.CreateEntity(entityID);
-    //self.mSystemManager.CreateEntity(entityID);
+    self.mSystemManager.CreateEntity(entityID);
     return entityID;
 }
 
 pub fn DestroyEntity(self: *ECSManager, entityID: u32) !void {
     try self.mComponentManager.DestroyEntity(entityID);
-    //self.mSystemManager.DestroyEntity(entityID);
+    self.mSystemManager.DestroyEntity(entityID);
     try self.mEntityManager.DestroyEntity(entityID);
 }
 
@@ -46,20 +46,20 @@ pub fn GetAllEntities(self: ECSManager) std.AutoArrayHashMap(u32, EntityManager.
 pub fn DuplicateEntity(self: *ECSManager, original_entity_id: u32) !u32 {
     const new_entity_id = try self.CreateEntity();
     self.mComponentManager.DuplicateEntity(original_entity_id, new_entity_id);
-    //self.mSystemManager.DuplicateEntity(original_entity_id, new_entity_id);
+    self.mSystemManager.DuplicateEntity(original_entity_id, new_entity_id);
     return new_entity_id;
 }
 
 //components
 pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32, component: ?ComponentType) !*ComponentType {
     const new_component = try self.mComponentManager.AddComponent(ComponentType, entityID, component);
-    //try self.mSystemManager.AddComponent(ComponentType, entityID);
+    try self.mSystemManager.AddComponent(self.mComponentManager.mEntitySkipField.getValueBySparse(entityID).*, entityID);
     return new_component;
 }
 
 pub fn RemoveComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32) !void {
     try self.mComponentManager.RemoveComponent(ComponentType, entityID);
-    //self.mSystemManager.RemoveComponent(ComponentType, entityID);
+    self.mSystemManager.RemoveComponent(self.mComponentManager.mEntitySkipField.getValueBySparse(entityID).*, entityID);
 }
 
 pub fn HasComponent(self: ECSManager, comptime ComponentType: type, entityID: u32) bool {
@@ -76,7 +76,5 @@ pub fn GetGroup(self: ECSManager, comptime ComponentTypes: []const type, allocat
 
 //-----------System Manager------------
 pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) void {
-    _ = self;
-    _ = SystemType;
-    //try self.mSystemManager.SystemOnUpdate(SystemType);
+    try self.mSystemManager.SystemOnUpdate(SystemType, self.mComponentManager);
 }

@@ -24,7 +24,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
         .mEntitySkipField = try SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
-            .ValueT = StaticSkipField(32 + 1),
+            .ValueT = StaticSkipField(32 + 1), //TODO: 32 is arbitrary
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
         }).init(ECSAllocator, 20, 10),
@@ -52,6 +52,42 @@ pub fn Deinit(self: *ComponentManager) void {
 
     self.mComponentsArrays.deinit();
     self.mEntitySkipField.deinit();
+}
+
+pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
+    std.debug.assert(!self.mEntitySkipField.hasSparse(entityID));
+    const dense_ind = self.mEntitySkipField.add(entityID);
+    self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(32 + 1).Init(.AllSkip); //TODO: 32 is arbitrary
+}
+
+pub fn DestroyEntity(self: *ComponentManager, entityID: u32) !void {
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+
+    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
+
+    var i: usize = entity_skipfield.mSkipField[0];
+    while (i < entity_skipfield.mSkipField.len) {
+        try self.mComponentsArrays.items[i].RemoveComponent(entityID);
+        i += 1;
+        i += entity_skipfield.mSkipField[i];
+    }
+    _ = self.mEntitySkipField.remove(entityID);
+}
+
+pub fn DuplicateEntity(self: *ComponentManager, original_entity_id: u32, new_entity_id: u32) void {
+    std.debug.assert(self.mEntitySkipField.hasSparse(original_entity_id));
+    std.debug.assert(self.mEntitySkipField.hasSparse(new_entity_id));
+
+    const original_skipfield = self.mEntitySkipField.getValueBySparse(original_entity_id);
+    const new_skipfield = self.mEntitySkipField.getValueBySparse(new_entity_id);
+    @memcpy(&new_skipfield.mSkipField, &original_skipfield.mSkipField);
+
+    var i: usize = original_skipfield.mSkipField[0];
+    while (i < original_skipfield.mSkipField.len) {
+        self.mComponentsArrays.items[i].DuplicateEntity(original_entity_id, new_entity_id);
+        i += 1;
+        i += original_skipfield.mSkipField[i];
+    }
 }
 
 pub fn AddComponent(self: *ComponentManager, comptime component_type: type, entityID: u32, component: ?component_type) !*component_type {
@@ -132,39 +168,4 @@ pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, a
     }
 
     return group;
-}
-
-pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
-    std.debug.assert(!self.mEntitySkipField.hasSparse(entityID));
-    const dense_ind = self.mEntitySkipField.add(entityID);
-    self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(32 + 1).Init(.AllSkip); //32 is arbitrary
-}
-pub fn DestroyEntity(self: *ComponentManager, entityID: u32) !void {
-    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
-
-    const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
-
-    var i: usize = entity_skipfield.mSkipField[0];
-    while (i < entity_skipfield.mSkipField.len) {
-        try self.mComponentsArrays.items[i].RemoveComponent(entityID);
-        i += 1;
-        i += entity_skipfield.mSkipField[i];
-    }
-    _ = self.mEntitySkipField.remove(entityID);
-}
-
-pub fn DuplicateEntity(self: *ComponentManager, original_entity_id: u32, new_entity_id: u32) void {
-    std.debug.assert(self.mEntitySkipField.hasSparse(original_entity_id));
-    std.debug.assert(self.mEntitySkipField.hasSparse(new_entity_id));
-
-    const original_skipfield = self.mEntitySkipField.getValueBySparse(original_entity_id);
-    const new_skipfield = self.mEntitySkipField.getValueBySparse(new_entity_id);
-    @memcpy(&new_skipfield.mSkipField, &original_skipfield.mSkipField);
-
-    var i: usize = original_skipfield.mSkipField[0];
-    while (i < original_skipfield.mSkipField.len) {
-        self.mComponentsArrays.items[i].DuplicateEntity(original_entity_id, new_entity_id);
-        i += 1;
-        i += original_skipfield.mSkipField[i];
-    }
 }

@@ -1,5 +1,4 @@
 const std = @import("std");
-const LinAlg = @import("../Math/LinAlg.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Entity = @import("..//GameObjects/Entity.zig");
@@ -10,8 +9,12 @@ const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const SceneSerializer = @import("SceneSerializer.zig");
-const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ComponentsArray = @import("../GameObjects/Components.zig").ComponentsList;
+const RenderSystem = @import("../GameObjects/Systems.zig").RenderSystem;
+const Event = @import("../Events/Event.zig").Event;
+const RenderManager = @import("../Renderer/Renderer.zig");
+const Mat4f32 = @import("../Math/LinAlg.zig").Mat4f32;
+
 const SceneManager = @This();
 
 pub const ESceneState = enum {
@@ -69,10 +72,22 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //pub fn OnRuntimeStart() void {}
 //pub fn OnRuntimeStop() void{}
 //pub fn OnUpdateRuntime() void {}
-//pub fn OnUpdateEditor() void {}
-//pub fn OnEvent() void {}
+pub fn OnUpdateEditor(self: SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) void {
+    //rendering
+    self.mFrameBuffer.Bind();
+    RenderManager.BeginScene(camera_projection, camera_transform);
+    self.mECSManager.SystemOnUpdate(RenderSystem);
+    RenderManager.EndScene();
+    self.mFrameBuffer.Unbind();
+}
+
 //pub fn SetSceneName() void {}
-//fn OnViewportResize void {}
+pub fn OnViewportResize(self: SceneManager, width: usize, height: usize) void {
+    self.mFrameBuffer.Resize(width, height);
+    for (self.mSceneStack.items) |scene_layer| {
+        scene_layer.OnViewportResize(width, height);
+    }
+}
 
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
     var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, 9999, &self.mECSManager);
