@@ -49,7 +49,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
         }
         if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            AddComponentPopupMenu(entity);
+            try AddComponentPopupMenu(entity);
         }
         try EntityImguiRender(entity);
     }
@@ -124,7 +124,7 @@ fn EntityImguiRender(entity: Entity) !void {
     }
 }
 
-fn AddComponentPopupMenu(entity: Entity) void {
+fn AddComponentPopupMenu(entity: Entity) !void {
     if (entity.HasComponent(CameraComponent) == false) {
         if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
             _ = try entity.AddComponent(CameraComponent, null);

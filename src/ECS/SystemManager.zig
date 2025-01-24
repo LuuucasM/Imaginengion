@@ -1,6 +1,6 @@
 const std = @import("std");
-const ISystem = @import("SystemClass.zig").ISystem;
-const SystemsList = @import("Systems.zig").SystemsList;
+const ISystem = @import("ISystem.zig").ISystem;
+const SystemsList = @import("../GameObjects/Systems.zig").SystemsList;
 const BitFieldType = @import("ComponentManager.zig").BitFieldType;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
@@ -33,7 +33,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, system_types: []const type) !System
     inline for (system_types) |system_type| {
         const new_system = try ECSAllocator.create(system_type);
 
-        new_system.* = system_type.Init();
+        new_system.* = system_type.Init(ECSAllocator);
 
         const i_system = ISystem.Init(new_system);
 
@@ -47,12 +47,12 @@ pub fn Deinit(self: *SystemManager) void {
         system_array.Deinit(self.mECSAllocator);
     }
     self.mSystemsArray.deinit();
-    self.mEntityBitField.deinit();
+    self.mEntitySkipField.deinit();
 }
 
 pub fn CreateEntity(self: *SystemManager, entityID: u32) void {
-    std.debug.assert(!self.mEntityBitField.hasSparse(entityID));
-    const dense_ind = self.mEntityBitField.add(entityID);
+    std.debug.assert(!self.mEntitySkipField.hasSparse(entityID));
+    const dense_ind = self.mEntitySkipField.add(entityID);
     self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(32 + 1).Init(.AllSkip);
 }
 
@@ -63,7 +63,7 @@ pub fn DestroyEntity(self: *SystemManager, entityID: u32) void {
 
     var i: usize = entity_skipfield.mSkipField[0];
     while (i < entity_skipfield.mSkipField.len) {
-        try self.mSystemsArray.items[i].RemoveEntity(entityID);
+        self.mSystemsArray.items[i].RemoveEntity(entityID);
         i += 1;
         i += entity_skipfield.mSkipField[i];
     }
@@ -87,29 +87,29 @@ pub fn DuplicateEntity(self: *SystemManager, original_entity_id: u32, new_entity
 }
 
 pub fn AddComponent(self: *SystemManager, component_skipfield: StaticSkipField(32 + 1), entity_id: u32) !void {
-    for (self.mSystemsArray, 0..) |array, system_index| {
+    for (self.mSystemsArray.items, 0..) |*array, system_index| {
         const component_field = array.GetComponentField();
         var compatible = true;
 
-        for (component_field, 0..) |val, j| {
+        for (component_field.mSkipField, 0..) |val, j| {
             if (val == 0 and component_skipfield.mSkipField[j] != 0) {
                 compatible = false;
                 break;
             }
         }
         if (compatible == true) {
-            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToUnskipped(system_index);
-            array.AddEntity(entity_id);
+            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToUnskipped(@intCast(system_index));
+            try array.AddEntity(entity_id);
         }
     }
 }
 
 pub fn RemoveComponent(self: *SystemManager, component_skipfield: StaticSkipField(32 + 1), entity_id: u32) void {
-    for (self.mSystemsArray, 0..) |*array, system_index| {
+    for (self.mSystemsArray.items, 0..) |*array, system_index| {
         const component_field = array.GetComponentField();
         var compatible = true;
 
-        for (component_field, 0..) |val, j| {
+        for (component_field.mSkipField, 0..) |val, j| {
             if (val == 0 and component_skipfield.mSkipField[j] != 0) {
                 compatible = false;
                 break;
@@ -117,12 +117,12 @@ pub fn RemoveComponent(self: *SystemManager, component_skipfield: StaticSkipFiel
         }
 
         if (!compatible) {
-            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(system_index);
+            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(@intCast(system_index));
             array.RemoveEntity(entity_id);
         }
     }
 }
 
 pub fn SystemOnUpdate(self: *SystemManager, comptime system: type, component_manager: ComponentManager) !void {
-    self.mSystemsArray.items[system.Ind].OnUpdate(component_manager);
+    try self.mSystemsArray.items[system.Ind].OnUpdate(component_manager);
 }

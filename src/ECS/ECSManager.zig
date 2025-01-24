@@ -59,7 +59,7 @@ pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u
 
 pub fn RemoveComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32) !void {
     try self.mComponentManager.RemoveComponent(ComponentType, entityID);
-    self.mSystemManager.RemoveComponent(self.mComponentManager.mEntitySkipField.getValueBySparse(entityID).*, entityID);
+    self.mSystemManager.RemoveComponent(@as(self.mEComponents, @enumFromInt(ComponentType.Ind)), self.mComponentManager.mEntitySkipField.getValueBySparse(entityID).*, entityID);
 }
 
 pub fn HasComponent(self: ECSManager, comptime ComponentType: type, entityID: u32) bool {
@@ -75,6 +75,6 @@ pub fn GetGroup(self: ECSManager, comptime ComponentTypes: []const type, allocat
 }
 
 //-----------System Manager------------
-pub fn SystemOnUpdate(self: ECSManager, comptime SystemType: type) void {
+pub fn SystemOnUpdate(self: *ECSManager, comptime SystemType: type) !void {
     try self.mSystemManager.SystemOnUpdate(SystemType, self.mComponentManager);
 }

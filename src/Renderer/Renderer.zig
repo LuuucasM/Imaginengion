@@ -64,7 +64,7 @@ pub fn SwapBuffers() void {
 }
 
 pub fn BeginScene(camera_projection: Mat4f32, camera_transform: Mat4f32) void {
-    RenderM.mR2D.mCameraBuffer = LinAlg.Mat4Mul(camera_projection, LinAlg.Mat4Inverse(camera_transform));
+    RenderM.mR2D.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
     RenderM.mR2D.mCameraUniformBuffer.SetData(&RenderM.mR2D.mCameraBuffer, @sizeOf(Mat4f32), 0);
 
     RenderM.mStats = std.mem.zeroes(Stats);
@@ -72,24 +72,22 @@ pub fn BeginScene(camera_projection: Mat4f32, camera_transform: Mat4f32) void {
     RenderM.mR2D.StartBatchSprite();
     RenderM.mR2D.StartBatchCircle();
     RenderM.mR2D.StartBatchELine();
-
-    RenderM.mTextureSlotIndex = 1;
 }
 
 pub fn EndScene() void {
     if (RenderM.mR2D.mSpriteVertexCount > 0) {
         RenderM.mR2D.FlushSprite();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mSpriteVertexArray, RenderM.mR2D.mSpriteIndexCount);
+        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mSpriteVertexArray, RenderM.mR2D.mSpriteVertexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
     if (RenderM.mR2D.mCircleVertexCount > 0) {
         RenderM.mR2D.FlushCircle();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mCircleVertexArray, RenderM.mR2D.mCircleIndexCount);
+        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mCircleVertexArray, RenderM.mR2D.mCircleVertexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
     if (RenderM.mR2D.mELineVertexCount > 0) {
         RenderM.mR2D.FlushELine();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mELineVertexArray, RenderM.mR2D.mELineIndexCount);
+        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mELineVertexArray, RenderM.mR2D.mELineVertexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
 }

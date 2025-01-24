@@ -29,8 +29,8 @@ mDistance: f32,
 mPitch: f32,
 mYaw: f32,
 
-mViewportWidth: f32,
-mViewportHeight: f32,
+mViewportWidth: usize,
+mViewportHeight: usize,
 
 pub fn Init() EditorCamera {
     return EditorCamera{
@@ -100,7 +100,7 @@ pub fn GetViewProjection(self: EditorCamera) Mat4f32 {
     return LinAlg.Mat4MulMat4(self.mProjectionMatrix, self.mViewMatrix);
 }
 
-pub fn SetViewportSize(self: *EditorCamera, width: f32, height: f32) void {
+pub fn SetViewportSize(self: *EditorCamera, width: usize, height: usize) void {
     self.mViewportWidth = width;
     self.mViewportHeight = height;
     self.UpdateProjection();
@@ -108,7 +108,7 @@ pub fn SetViewportSize(self: *EditorCamera, width: f32, height: f32) void {
 
 fn UpdateProjection(self: *EditorCamera) void {
     self.mAspectRatio = self.mViewportWidth / self.mViewportHeight;
-    self.mProjectionMatrix = LinAlg.PerspectiveRHNO(LinAlg.Radians(self.mFOVDegrees), self.mAspectRatio, self.mNearClip, self.mFarClip);
+    self.mProjectionMatrix = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mFOVDegrees), self.mAspectRatio, self.mNearClip, self.mFarClip);
 }
 
 fn UpdateView(self: *EditorCamera) void {

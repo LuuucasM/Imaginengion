@@ -1,10 +1,11 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
-const AssetMetaData = @import("./Assets/AssetMetaData.zig");
-const FileMetaData = @import("./Assets/FileMetaData.zig");
-const IDComponent = @import("./Assets/IDComponent.zig");
-const AssetsList = @import("Assets.zig").AssetsList;
+const Assets = @import("Assets.zig");
+const AssetMetaData = Assets.AssetMetaData;
+const FileMetaData = Assets.FileMetaData;
+const IDComponent = Assets.IDComponent;
+const AssetsList = Assets.AssetsList;
 const AssetHandle = @import("AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig");
@@ -22,20 +23,14 @@ mAssetECS: ECSManager,
 mAssetMemoryPool: std.heap.ArenaAllocator,
 mAssetPathToID: std.AutoHashMap(u64, u32),
 
-//note the head of the list is most recently used and tail is lease
-mAssetGPUCache: std.DoublyLinkedList(u32),
-mAssetCPUCache: std.DoublyLinkedList(u32),
-
 pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     AssetM = try EngineAllocator.create(AssetManager);
     AssetM.* = .{
         .mEngineAllocator = EngineAllocator,
         .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
-        .mAssetECS = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList),
+        .mAssetECS = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList, &[_]type{}),
         .mAssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator),
         .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetM.mAssetGPA.allocator()),
-        .mAssetCPUCache = std.DoublyLinkedList(u32){},
-        .mAssetGPUCache = std.DoublyLinkedList(u32){},
     };
 }
 

@@ -30,7 +30,7 @@ pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {
     if (self.Dirty == true) {
         defer self.Dirty = false;
 
-        self.Transform = LinAlg.Translate(self.Translation) * LinAlg.QuatToMat4(self.Rotation) * LinAlg.Scale(self.Scale);
+        self.Transform = LinAlg.Mat4MulMat4(LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.QuatToMat4(self.Rotation)), LinAlg.Scale(self.Scale));
     }
     return self.Transform;
 }

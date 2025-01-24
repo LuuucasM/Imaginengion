@@ -85,7 +85,7 @@ pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: 
     _ = self;
     vertex_array.Bind();
     const count = if (index_count > 0) index_count else vertex_array.GetIndexBuffer().GetCount();
-    glad.glDrawElements(glad.GL_TRIANGLES, count, glad.GL_UNSIGNED_INT, null);
+    glad.glDrawElements(glad.GL_TRIANGLES, @intCast(count), glad.GL_UNSIGNED_INT, null);
 }
 
 fn glDebugTypeToStr(debug_type: c_uint) []const u8 {

@@ -1,5 +1,5 @@
 const std = @import("std");
-const TextureFormat = @import("FrameBuffer.zig").TextureFormat;
+const TextureFormat = @import("InternalFrameBuffer.zig").TextureFormat;
 const glad = @import("../Core/CImports.zig").glad;
 
 pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: u32, comptime is_swap_chain_target: bool) type {
@@ -46,7 +46,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             _ = self;
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, 0);
         }
-        pub fn Resize(self: Self, width: usize, height: usize) void {
+        pub fn Resize(self: *Self, width: usize, height: usize) void {
             if (width < 1 or height < 1 or width > 8192 or height > 8192) {
                 std.log.warn("attachment index must be within bounds!\n", .{});
                 return;

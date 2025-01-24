@@ -77,7 +77,7 @@ pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     return new_entity;
 }
 
-pub fn OnViewportResize(self: SceneLayer, width: u32, height: u32) !void {
+pub fn OnViewportResize(self: SceneLayer, width: usize, height: usize) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();

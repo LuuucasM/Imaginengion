@@ -155,9 +155,9 @@ pub fn Translate(v: Vec3f32) Mat4f32 {
 pub fn Scale(v: Vec3f32) Mat4f32 {
     const m = InitMat4CompTime(1.0);
     var result = m;
-    result[0] = m[0] * v[0];
-    result[1] = m[1] * v[1];
-    result[2] = m[2] * v[2];
+    result[0] = m[0] * @as(Vec4f32, @splat(v[0]));
+    result[1] = m[1] * @as(Vec4f32, @splat(v[1]));
+    result[2] = m[2] * @as(Vec4f32, @splat(v[2]));
     result[3] = m[3];
     return result;
 }

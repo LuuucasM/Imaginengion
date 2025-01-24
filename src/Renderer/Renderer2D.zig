@@ -174,9 +174,10 @@ pub fn Init(
 pub fn DrawSprite(self: Renderer2D, transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32) void {
     var i: usize = 0;
     while (i < 4) : (i += 1) {
-        self.mSpriteVertexBufferPtr.Position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
+        const position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
+        self.mSpriteVertexBufferPtr.Position = Vec3f32{ position[0], position[1], position[2] };
         self.mSpriteVertexBufferPtr.Color = color;
-        self.mSpriteVertexBufferPtr.TexCoord = RectVertexPositions[i];
+        self.mSpriteVertexBufferPtr.TexCoord = RectTexCoordPositions[i];
         self.mSpriteVertexBufferPtr.TexIndex = texture_index;
         self.mSpriteVertexBufferPtr.TilingFactor = tiling_factor;
         self.mSpriteVertexBufferPtr += 1;
@@ -187,7 +188,8 @@ pub fn DrawCircle(self: Renderer2D, transform: Mat4f32, color: Vec4f32, thicknes
     var i: usize = 0;
 
     while (i < 4) : (i += 1) {
-        self.mCircleVertexBufferPtr.Position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
+        const position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
+        self.mCircleVertexBufferPtr.Position = Vec3f32{ position[0], position[1], position[2] };
         const local_pos = RectVertexPositions[i] * @as(Vec4f32, @splat(2.0));
         self.mCircleVertexBufferPtr.LocalPosition = Vec3f32{ local_pos[0], local_pos[1], local_pos[2] };
         self.mCircleVertexBufferPtr.Color = color;
@@ -210,35 +212,35 @@ pub fn DrawELine(self: Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) voi
     self.mELineVertexCount += 2;
 }
 
-pub fn StartBatchSprite(self: Renderer2D) void {
+pub fn StartBatchSprite(self: *Renderer2D) void {
     self.mSpriteVertexCount = 0;
     self.mSpriteVertexBufferPtr = &self.mSpriteVertexBufferBase[0];
 }
 
-pub fn StartBatchCircle(self: Renderer2D) void {
+pub fn StartBatchCircle(self: *Renderer2D) void {
     self.mCircleVertexCount = 0;
     self.mCircleVertexBufferPtr = &self.mCircleVertexBufferBase[0];
 }
 
-pub fn StartBatchELine(self: Renderer2D) void {
+pub fn StartBatchELine(self: *Renderer2D) void {
     self.mELineVertexCount = 0;
     self.mELineVertexBufferPtr = &self.mELineVertexBufferBase[0];
 }
 
 pub fn FlushSprite(self: Renderer2D) void {
-    const data_size: u32 = @intFromPtr(self.mSpriteVertexBufferPtr) - @intFromPtr(self.mSpriteVertexBufferBase);
-    self.mSpriteVertexBuffer.SetData(self.mSpriteVertexBufferBase, data_size);
+    const data_size: usize = @intFromPtr(self.mSpriteVertexBufferPtr) - @intFromPtr(self.mSpriteVertexBufferBase.ptr);
+    self.mSpriteVertexBuffer.SetData(self.mSpriteVertexBufferBase.ptr, data_size);
     self.mSpriteShader.Bind();
 }
 
 pub fn FlushCircle(self: Renderer2D) void {
-    const data_size: u32 = @intFromPtr(self.mCircleVertexBufferPtr) - @intFromPtr(self.mCircleVertexBufferBase);
-    self.mCircleVertexBuffer.SetData(self.mCircleVertexBufferBase, data_size);
+    const data_size: usize = @intFromPtr(self.mCircleVertexBufferPtr) - @intFromPtr(self.mCircleVertexBufferBase.ptr);
+    self.mCircleVertexBuffer.SetData(self.mCircleVertexBufferBase.ptr, data_size);
     self.mCircleShader.Bind();
 }
 
 pub fn FlushELine(self: Renderer2D) void {
-    const data_size: u32 = @intFromPtr(self.mELineVertexBufferPtr) - @intFromPtr(self.mELineVertexBufferBase);
-    self.mELineVertexBuffer.SetData(self.mELineVertexBufferBase, data_size);
+    const data_size: usize = @intFromPtr(self.mELineVertexBufferPtr) - @intFromPtr(self.mELineVertexBufferBase.ptr);
+    self.mELineVertexBuffer.SetData(self.mELineVertexBufferBase.ptr, data_size);
     self.mELineShader.Bind();
 }

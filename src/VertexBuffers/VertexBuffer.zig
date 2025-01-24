@@ -31,7 +31,7 @@ pub fn Unbind(self: VertexBuffer) void {
 }
 
 pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize) void {
-    self.mImpl.SetData(&self.mBufferID, data, size);
+    self.mImpl.SetData(data, size);
 }
 
 pub fn SetLayout(self: *VertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {

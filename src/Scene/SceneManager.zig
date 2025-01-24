@@ -2,7 +2,7 @@ const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Entity = @import("..//GameObjects/Entity.zig");
-const FrameBufferFile = @import("../FrameBuffers/FrameBuffer.zig");
+const FrameBufferFile = @import("../FrameBuffers/InternalFrameBuffer.zig");
 const FrameBuffer = FrameBufferFile.FrameBuffer;
 const TextureFormat = FrameBufferFile.TextureFormat;
 const SceneLayer = @import("SceneLayer.zig");
@@ -10,6 +10,7 @@ const LayerType = SceneLayer.LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const SceneSerializer = @import("SceneSerializer.zig");
 const ComponentsArray = @import("../GameObjects/Components.zig").ComponentsList;
+const SystemsArray = @import("../GameObjects/Systems.zig").SystemsList;
 const RenderSystem = @import("../GameObjects/Systems.zig").RenderSystem;
 const Event = @import("../Events/Event.zig").Event;
 const RenderManager = @import("../Renderer/Renderer.zig");
@@ -34,7 +35,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     return SceneManager{
         .mFrameBuffer = FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STENCIL8, 1, false).Init(width, height),
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
-        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray),
+        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray, &SystemsArray),
         .mSceneState = .Stop,
         .mLayerInsertIndex = 0,
     };
@@ -72,11 +73,11 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //pub fn OnRuntimeStart() void {}
 //pub fn OnRuntimeStop() void{}
 //pub fn OnUpdateRuntime() void {}
-pub fn OnUpdateEditor(self: SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) void {
+pub fn OnUpdateEditor(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     //rendering
     self.mFrameBuffer.Bind();
     RenderManager.BeginScene(camera_projection, camera_transform);
-    self.mECSManager.SystemOnUpdate(RenderSystem);
+    try self.mECSManager.SystemOnUpdate(RenderSystem);
     RenderManager.EndScene();
     self.mFrameBuffer.Unbind();
 }

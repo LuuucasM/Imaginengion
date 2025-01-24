@@ -1,6 +1,7 @@
 const LayerType = @import("../Scene/SceneLayer.zig").LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
+const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 
 pub const PanelType = enum {
     AssetHandles,
@@ -27,6 +28,7 @@ pub const ImguiEvent = union(enum) {
     ET_SelectEntityEvent: SelectEntityEvent,
     ET_SelectComponentEvent: SelectComponentEvent,
     ET_SelectScriptEvent: SelectScriptEvent,
+    ET_ViewportResizeEvent: ViewportResizeEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -80,4 +82,9 @@ pub const SelectComponentEvent = struct {
 
 pub const SelectScriptEvent = struct {
     mEditorWindow: EditorWindow,
+};
+
+pub const ViewportResizeEvent = struct {
+    mWidth: usize,
+    mHeight: usize,
 };

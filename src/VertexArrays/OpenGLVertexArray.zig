@@ -74,6 +74,10 @@ pub fn SetIndexBuffer(self: *OpenGLVertexArray, new_index_buffer: IndexBuffer) v
     self.mIndexBuffer = new_index_buffer;
 }
 
+pub fn GetIndexBuffer(self: OpenGLVertexArray) IndexBuffer {
+    return self.mIndexBuffer;
+}
+
 fn ShaderDataTypeToOpenGLBaseType(data_type: ShaderDataType) glad.GLenum {
     return switch (data_type) {
         .Float => glad.GL_FLOAT,

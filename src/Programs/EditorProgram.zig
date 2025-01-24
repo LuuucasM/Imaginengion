@@ -74,7 +74,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //---------GameLogic End-------------
 
     //---------Render Begin-------------
-    self.mSceneManager.OnUpdateEditor(self.mEditorCamera.mProjectionMatrix, self.mEditorCamera.mViewMatrix);
+    try self.mSceneManager.OnUpdateEditor(self.mEditorCamera.mProjectionMatrix, self.mEditorCamera.mViewMatrix);
     //Imgui begin
     ImGui.Begin();
     Dockspace.Begin();
@@ -84,11 +84,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
 
     try self._ComponentsPanel.OnImguiRender();
-    self._ScriptsPanel.OnImguiRender(self._ScenePanel.mSelectedEntity);
+    self._ScriptsPanel.OnImguiRender();
     try self._CSEditorPanel.OnImguiRender();
 
     self._ToolbarPanel.OnImguiRender();
-    self._ViewportPanel.OnImguiRender();
+    try self._ViewportPanel.OnImguiRender();
 
     try self._StatsPanel.OnImguiRender(dt);
 
@@ -186,6 +186,10 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_SelectScriptEvent => |e| {
                 try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
+            },
+            .ET_ViewportResizeEvent => |e| {
+                self.mEditorCamera.SetViewportSize(e.mWidth, e.mHeight);
+                self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
             },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }

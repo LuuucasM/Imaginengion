@@ -38,3 +38,7 @@ pub fn AddVertexBuffer(self: *VertexArray, new_vertex_buffer: VertexBuffer) !voi
 pub fn SetIndexBuffer(self: *VertexArray, new_index_buffer: IndexBuffer) void {
     self.mImpl.SetIndexBuffer(new_index_buffer);
 }
+
+pub fn GetIndexBuffer(self: VertexArray) IndexBuffer {
+    return self.mImpl.GetIndexBuffer();
+}

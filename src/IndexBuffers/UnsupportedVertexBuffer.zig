@@ -1,6 +1,6 @@
 const UnsupportedVertexBuffer = @This();
 
-pub fn Init(indices: []u32, count: u32) UnsupportedVertexBuffer {
+pub fn Init(indices: []u32, count: usize) UnsupportedVertexBuffer {
     _ = indices;
     _ = count;
     Unsupported();
@@ -22,7 +22,7 @@ pub fn Unbind(self: UnsupportedVertexBuffer) void {
     Unsupported();
 }
 
-pub fn GetCount(self: UnsupportedVertexBuffer) u32 {
+pub fn GetCount(self: UnsupportedVertexBuffer) usize {
     _ = self;
     Unsupported();
 }

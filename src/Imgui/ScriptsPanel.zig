@@ -14,12 +14,12 @@ pub fn Init() ScriptsPanel {
     };
 }
 
-pub fn OnImguiRender(self: ScriptsPanel, selected_entity_ref: ?Entity) void {
+pub fn OnImguiRender(self: ScriptsPanel) void {
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Scripts", null, 0);
     defer imgui.igEnd();
 
-    if (selected_entity_ref) |entity| {
+    if (self.mSelectedEntity) |entity| {
         _ = entity;
         //entity.ScriptsImguiRender();
     }
