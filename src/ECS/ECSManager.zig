@@ -39,7 +39,7 @@ pub fn DestroyEntity(self: *ECSManager, entityID: u32) !void {
     try self.mEntityManager.DestroyEntity(entityID);
 }
 
-pub fn GetAllEntities(self: ECSManager) std.AutoArrayHashMap(u32, EntityManager.ComponentMaskType) {
+pub fn GetAllEntities(self: ECSManager) ArraySet(u32) {
     return self.mEntityManager.GetAllEntities();
 }
 

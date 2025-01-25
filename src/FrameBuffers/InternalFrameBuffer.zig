@@ -38,16 +38,11 @@ pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_f
         pub fn Unbind(self: Self) void {
             self.mImpl.Unbind();
         }
-        pub fn Resize(self: Self, width: usize, height: usize) void {
+        pub fn Resize(self: *Self, width: usize, height: usize) void {
             self.mImpl.Resize(width, height);
         }
         pub fn ClearColorAttachment(self: Self, attachment_index: u8, value: u32) void {
             self.mImpl.ClearColorAttachment(attachment_index, value);
-        }
-
-        //For clicking on the viewport in the editor
-        pub fn ReadPixel(self: Self, attachment_index: u8, x: u32, y: u32) u32 {
-            self.mImpl.ReadPixel(attachment_index, x, y);
         }
     };
 }

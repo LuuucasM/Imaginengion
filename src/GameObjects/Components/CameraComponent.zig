@@ -29,35 +29,35 @@ mPerspectiveFOVDegrees: f32 = 45.0,
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 
-pub fn SetOrthographic(self: CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {
+pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {
     self.mOrthographicSize = size;
     self.mOrthographicNear = near_clip;
     self.mOrthographicFar = far_clip;
     self.RecalculateProjection();
 }
 
-pub fn SetPerspective(self: CameraComponent, fov_degrees: f32, near_clip: f32, far_clip: f32) void {
+pub fn SetPerspective(self: *CameraComponent, fov_degrees: f32, near_clip: f32, far_clip: f32) void {
     self.mPerspectiveFOVDegrees = fov_degrees;
     self.mPerspectiveNear = near_clip;
     self.mPerspectiveFar = far_clip;
     self.RecalculateProjection();
 }
 
-pub fn SetProjectionType(self: CameraComponent, new_projection_type: ProjectionType) void {
+pub fn SetProjectionType(self: *CameraComponent, new_projection_type: ProjectionType) void {
     self.mProjectionType = new_projection_type;
     self.RecalculateProjection();
 }
 
-pub fn SetViewportSize(self: CameraComponent, width: usize, height: usize) void {
+pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void {
     if (height > 0) {
-        self.mAspectRatio = @as(f32, @floatCast(width)) / @as(f32, @floatCast(height));
+        self.mAspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
     } else {
         self.mAspectRatio = 0.0;
     }
     self.RecalculateProjection();
 }
 
-fn RecalculateProjection(self: CameraComponent) void {
+fn RecalculateProjection(self: *CameraComponent) void {
     if (self.mProjectionType == .Perspective) {
         self.mProjection = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mPerspectiveFOVDegrees), self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
     } else {

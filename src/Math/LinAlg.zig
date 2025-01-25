@@ -79,8 +79,8 @@ pub fn PrintQuat(q: Quatf32) void {
 }
 
 pub fn DegreesToRadians(degrees: anytype) @TypeOf(degrees) {
-    std.debug.assert(@typeInfo(@TypeOf(degrees)) == .Float or
-        @typeInfo(@TypeOf(degrees)) == .ComptimeFloat);
+    std.debug.assert(@typeInfo(@TypeOf(degrees)) == .float or
+        @typeInfo(@TypeOf(degrees)) == .comptime_float);
     return degrees * math.pi / 180.0;
 }
 

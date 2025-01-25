@@ -107,7 +107,7 @@ pub fn SetViewportSize(self: *EditorCamera, width: usize, height: usize) void {
 }
 
 fn UpdateProjection(self: *EditorCamera) void {
-    self.mAspectRatio = self.mViewportWidth / self.mViewportHeight;
+    self.mAspectRatio = @as(f32, @floatFromInt(self.mViewportWidth)) / @as(f32, @floatFromInt(self.mViewportHeight));
     self.mProjectionMatrix = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mFOVDegrees), self.mAspectRatio, self.mNearClip, self.mFarClip);
 }
 

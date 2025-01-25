@@ -7,7 +7,6 @@ const StaticSkipField = @import("../../Core/SkipField.zig").StaticSkipField;
 const RenderSystem = @This();
 
 const Components = @import("../Components.zig");
-const EComponents = Components.EComponents;
 const TransformComponent = Components.TransformComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;

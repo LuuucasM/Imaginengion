@@ -171,7 +171,7 @@ pub fn Init(
     return new_renderer2d;
 }
 
-pub fn DrawSprite(self: Renderer2D, transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32) void {
+pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32) void {
     var i: usize = 0;
     while (i < 4) : (i += 1) {
         const position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
@@ -180,11 +180,12 @@ pub fn DrawSprite(self: Renderer2D, transform: Mat4f32, color: Vec4f32, texture_
         self.mSpriteVertexBufferPtr.TexCoord = RectTexCoordPositions[i];
         self.mSpriteVertexBufferPtr.TexIndex = texture_index;
         self.mSpriteVertexBufferPtr.TilingFactor = tiling_factor;
-        self.mSpriteVertexBufferPtr += 1;
+
+        self.mSpriteVertexCount += 1;
+        self.mSpriteVertexBufferPtr = &self.mSpriteVertexBufferBase[self.mSpriteVertexCount];
     }
-    self.mSpriteVertexCount += 6;
 }
-pub fn DrawCircle(self: Renderer2D, transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
+pub fn DrawCircle(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
     var i: usize = 0;
 
     while (i < 4) : (i += 1) {
@@ -195,12 +196,13 @@ pub fn DrawCircle(self: Renderer2D, transform: Mat4f32, color: Vec4f32, thicknes
         self.mCircleVertexBufferPtr.Color = color;
         self.mCircleVertexBufferPtr.Thickness = thickness;
         self.mCircleVertexBufferPtr.Fade = fade;
-        self.mCircleVertexBufferPtr += 1;
+
+        self.mCircleVertexCount += 1;
+        self.mCircleVertexBufferPtr = &self.mCircleVertexBufferBase[self.mCircleVertexCount];
     }
-    self.mCircleVertexCount += 6;
 }
 
-pub fn DrawELine(self: Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) void {
+pub fn DrawELine(self: *Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) void {
     self.mELineVertexBufferPtr.Position = p0;
     self.mELineVertexBufferPtr.Color = color;
     self.mELineVertexBufferPtr += 1;

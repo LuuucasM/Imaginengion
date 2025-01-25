@@ -75,6 +75,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     //---------Render Begin-------------
     try self.mSceneManager.OnUpdateEditor(self.mEditorCamera.mProjectionMatrix, self.mEditorCamera.mViewMatrix);
+
     //Imgui begin
     ImGui.Begin();
     Dockspace.Begin();
@@ -189,7 +190,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
             },
             .ET_ViewportResizeEvent => |e| {
                 self.mEditorCamera.SetViewportSize(e.mWidth, e.mHeight);
-                self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
+                try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
             },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),
         }

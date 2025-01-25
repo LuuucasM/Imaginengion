@@ -1,20 +1,20 @@
 const std = @import("std");
-const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const ECSManager = @import("../ECS/ECSManager.zig");
-const Entity = @import("..//GameObjects/Entity.zig");
-const FrameBufferFile = @import("../FrameBuffers/InternalFrameBuffer.zig");
-const FrameBuffer = FrameBufferFile.FrameBuffer;
-const TextureFormat = FrameBufferFile.TextureFormat;
+const Mat4f32 = @import("../Math/LinAlg.zig").Mat4f32;
+
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
-const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const SceneSerializer = @import("SceneSerializer.zig");
-const ComponentsArray = @import("../GameObjects/Components.zig").ComponentsList;
-const SystemsArray = @import("../GameObjects/Systems.zig").SystemsList;
-const RenderSystem = @import("../GameObjects/Systems.zig").RenderSystem;
-const Event = @import("../Events/Event.zig").Event;
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
+
+const ECSManager = @import("../ECS/ECSManager.zig");
+const Entity = @import("..//GameObjects/Entity.zig");
+const Components = @import("../GameObjects/Components.zig");
+const ComponentsArray = Components.ComponentsList;
+
 const RenderManager = @import("../Renderer/Renderer.zig");
-const Mat4f32 = @import("../Math/LinAlg.zig").Mat4f32;
+const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const InternalFrameBuffer = @import("../FrameBuffers/InternalFrameBuffer.zig").FrameBuffer;
+const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
 const SceneManager = @This();
 
@@ -25,19 +25,23 @@ pub const ESceneState = enum {
 
 var SceneManagerGPA: std.heap.GeneralPurposeAllocator(.{}) = .{};
 
-mFrameBuffer: FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STENCIL8, 1, false),
 mSceneStack: std.ArrayList(SceneLayer),
 mECSManager: ECSManager,
 mSceneState: ESceneState,
 mLayerInsertIndex: usize,
+mFrameBuffer: FrameBuffer,
+mViewportWidth: usize,
+mViewportHeight: usize,
 
 pub fn Init(width: usize, height: usize) !SceneManager {
     return SceneManager{
-        .mFrameBuffer = FrameBuffer(&[_]TextureFormat{ .RGBA8, .RED_INTEGER }, .DEPTH24STENCIL8, 1, false).Init(width, height),
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
-        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray, &SystemsArray),
+        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray, &[_]type{}),
         .mSceneState = .Stop,
         .mLayerInsertIndex = 0,
+        .mViewportWidth = width,
+        .mViewportHeight = height,
+        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1, false), width, height),
     };
 }
 
@@ -49,6 +53,7 @@ pub fn Deinit(self: *SceneManager) !void {
     self.mSceneStack.deinit();
     self.mFrameBuffer.Deinit();
     self.mECSManager.Deinit();
+    self.mFrameBuffer.Deinit();
     _ = SceneManagerGPA.deinit();
 }
 
@@ -74,24 +79,26 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //pub fn OnRuntimeStop() void{}
 //pub fn OnUpdateRuntime() void {}
 pub fn OnUpdateEditor(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
-    //rendering
-    self.mFrameBuffer.Bind();
-    RenderManager.BeginScene(camera_projection, camera_transform);
-    try self.mECSManager.SystemOnUpdate(RenderSystem);
-    RenderManager.EndScene();
-    self.mFrameBuffer.Unbind();
+    //render each scene
+    for (self.mSceneStack.items) |scene_layer| {
+        try scene_layer.Render(camera_projection, camera_transform);
+    }
+
+    //combine the scene_layers together into single buffer
 }
 
 //pub fn SetSceneName() void {}
-pub fn OnViewportResize(self: SceneManager, width: usize, height: usize) void {
+pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
+    self.mViewportWidth = width;
+    self.mViewportHeight = height;
     self.mFrameBuffer.Resize(width, height);
-    for (self.mSceneStack.items) |scene_layer| {
-        scene_layer.OnViewportResize(width, height);
+    for (self.mSceneStack.items) |*scene_layer| {
+        try scene_layer.OnViewportResize(width, height);
     }
 }
 
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, 9999, &self.mECSManager);
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, std.math.maxInt(usize), self.mViewportWidth, self.mViewportHeight);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
 
     try self.InsertScene(&new_scene);
@@ -106,7 +113,7 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     _ = self.mSceneStack.orderedRemove(scene_id);
 }
 pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), .GameLayer, self.mSceneStack.items.len, &self.mECSManager);
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), .GameLayer, self.mSceneStack.items.len, self.mViewportWidth, self.mViewportHeight);
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;

@@ -32,7 +32,7 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     try write_stream.objectField("LayerType");
     try write_stream.write(scene_layer.mLayerType);
 
-    var iter = scene_layer.mEntityIDs.iterator();
+    var iter = scene_layer.mECSManager.GetAllEntities().iterator();
     while (iter.next()) |entry| {
         const entity_id = entry.key_ptr.*;
         const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };

@@ -1,8 +1,11 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+
 const RenderContext = @import("RenderContext.zig");
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
+
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
@@ -10,6 +13,13 @@ const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
+
+const ECSManager = @import("../ECS/ECSManager.zig");
+
+const Components = @import("../GameObjects/Components.zig");
+const TransformComponent = Components.TransformComponent;
+const SpriteRenderComponent = Components.SpriteRenderComponent;
+const CircleRenderComponent = Components.CircleRenderComponent;
 
 const Renderer = @This();
 
@@ -63,6 +73,20 @@ pub fn SwapBuffers() void {
     RenderM.mRenderContext.SwapBuffers();
 }
 
+pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
+    BeginScene(camera_projection, camera_transform);
+    defer EndScene();
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const sprite_entities = try ecs_manager.GetGroup(&[_]type{SpriteRenderComponent}, allocator);
+    DrawSprites(sprite_entities, ecs_manager);
+    const circle_entities = try ecs_manager.GetGroup(&[_]type{CircleRenderComponent}, allocator);
+    DrawCircles(circle_entities, ecs_manager);
+}
+
 pub fn BeginScene(camera_projection: Mat4f32, camera_transform: Mat4f32) void {
     RenderM.mR2D.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
     RenderM.mR2D.mCameraUniformBuffer.SetData(&RenderM.mR2D.mCameraBuffer, @sizeOf(Mat4f32), 0);
@@ -92,28 +116,39 @@ pub fn EndScene() void {
     }
 }
 
-pub fn DrawSprite(transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32) void {
-    RenderM.mR2D.DrawSprite(transform, color, texture_index, tiling_factor);
+fn DrawSprites(sprite_entities: ArraySet(u32), ecs_manager: ECSManager) void {
+    var iter = sprite_entities.iterator();
+    while (iter.next()) |entry| {
+        const entity_id = entry.key_ptr.*;
+        const transform_component = ecs_manager.GetComponent(TransformComponent, entity_id);
+        const sprite_component = ecs_manager.GetComponent(SpriteRenderComponent, entity_id);
+        RenderM.mR2D.DrawSprite(transform_component.GetTransformMatrix(), sprite_component.mColor, 0, sprite_component.mTilingFactor); // TODO change 0 to actual texture index
 
-    RenderM.mStats.mTriCount += 2;
-    RenderM.mStats.mVertexCount += 4;
-    RenderM.mStats.mIndicesCount += 6;
-    RenderM.mStats.mSpriteNum += 1;
-}
-pub fn DrawCircle(transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
-    RenderM.mR2D.DrawCircle(transform, color, thickness, fade);
-
-    RenderM.mStats.mTriCount += 2;
-    RenderM.mStats.mVertexCount += 4;
-    RenderM.mStats.mIndicesCount += 6;
-    RenderM.mStats.mCircleNum += 1;
+        RenderM.mStats.mTriCount += 2;
+        RenderM.mStats.mVertexCount += 4;
+        RenderM.mStats.mIndicesCount += 6;
+        RenderM.mStats.mSpriteNum += 1;
+    }
 }
 
-pub fn DrawELine(p0: Vec3f32, p1: Vec3f32, color: Vec4f32, thickness: f32) void {
+fn DrawCircles(circle_entities: ArraySet(u32), ecs_manager: ECSManager) void {
+    var iter = circle_entities.iterator();
+    while (iter.next()) |entry| {
+        const entity_id = entry.key_ptr.*;
+        const transform_component = ecs_manager.GetComponent(TransformComponent, entity_id);
+        const circle_component = ecs_manager.GetComponent(CircleRenderComponent, entity_id);
+        RenderM.mR2D.DrawCircle(transform_component.GetTransformMatrix(), circle_component.mColor, circle_component.mThickness, circle_component.mFade); // TODO change 0 to actual texture index
+
+        RenderM.mStats.mTriCount += 2;
+        RenderM.mStats.mVertexCount += 4;
+        RenderM.mStats.mIndicesCount += 6;
+        RenderM.mStats.mCircleNum += 1;
+    }
+}
+
+fn DrawELine(p0: Vec3f32, p1: Vec3f32, color: Vec4f32, thickness: f32) void {
     RenderM.mR2D.DrawELine(p0, p1, color, thickness);
 
     RenderM.mStats.mVertexCount += 2;
     RenderM.mStats.mELineNum += 1;
 }
-
-pub fn Draw3D() void {}

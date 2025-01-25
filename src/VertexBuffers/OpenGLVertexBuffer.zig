@@ -35,12 +35,12 @@ pub fn Unbind() void {
 }
 
 pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize) void {
-    if (size <= self.Capacity) {
+    if (size <= self.mCapacity) {
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.mBufferID);
-        glad.glBufferSubData(glad.GL_ARRAY_BUFFER, 0, size, data);
+        glad.glBufferSubData(glad.GL_ARRAY_BUFFER, 0, @intCast(size), data);
     } else {
         glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.mBufferID);
-        glad.glNamedBufferData(self.mBufferID, size, data, glad.GL_DYNAMIC_DRAW);
+        glad.glNamedBufferData(self.mBufferID, @intCast(size), data, glad.GL_DYNAMIC_DRAW);
     }
 }
 

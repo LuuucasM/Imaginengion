@@ -58,16 +58,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
         pub fn ClearColorAttachment(self: Self, attachment_index: u32, value: u32) void {
             std.debug.assert(attachment_index < color_texture_formats.len);
 
-            glad.glClearTexImage(self.mColorAttachments[attachment_index], 0, TextureFormatToInternalFormat(self.mColorTextureFormats[attachment_index]), glad.GL_UNSIGNED_INT, &value);
-        }
-        //For clicking on the viewport in the editor
-        pub fn ReadPixel(self: Self, attachment_index: u8, x: u32, y: u32) u32 {
-            _ = self;
-            std.debug.assert(attachment_index < color_texture_formats.len);
-            glad.glReadBuffer(glad.GL_COLOR_ATTACHMENT0 + attachment_index);
-            const pixel_data: u32 = 0;
-            glad.glReadPixels(@intCast(x), @intCast(y), 1, 1, glad.GL_RED_INTEGER, glad.GL_UNSIGNED_INT, &pixel_data);
-            return pixel_data;
+            glad.glClearTexImage(self.mColorAttachments[attachment_index], 0, TextureFormatToInternalFormat(color_texture_formats[attachment_index]), glad.GL_UNSIGNED_INT, &value);
         }
 
         fn Create(self: *Self) void {

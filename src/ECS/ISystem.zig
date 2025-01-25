@@ -59,7 +59,6 @@ pub const ISystem = struct {
 
     pub fn Deinit(self: *ISystem, allocator: std.mem.Allocator) void {
         self.mVTable.Deinit(self.mPtr, allocator);
-        self.mEntities.deinit();
     }
 
     pub fn OnUpdate(self: *ISystem, component_manager: ComponentManager) !void {

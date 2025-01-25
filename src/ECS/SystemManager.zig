@@ -1,6 +1,5 @@
 const std = @import("std");
 const ISystem = @import("ISystem.zig").ISystem;
-const SystemsList = @import("../GameObjects/Systems.zig").SystemsList;
 const BitFieldType = @import("ComponentManager.zig").BitFieldType;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
@@ -43,7 +42,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, system_types: []const type) !System
 }
 
 pub fn Deinit(self: *SystemManager) void {
-    for (self.mSystemsArray) |system_array| {
+    for (self.mSystemsArray.items) |*system_array| {
         system_array.Deinit(self.mECSAllocator);
     }
     self.mSystemsArray.deinit();

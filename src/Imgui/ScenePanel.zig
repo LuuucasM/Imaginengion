@@ -124,7 +124,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             //print all of the entities in the scene
             if (is_tree_open) {
                 defer imgui.igTreePop();
-                var entity_iter = scene_layer.mEntityIDs.iterator();
+                var entity_iter = scene_layer.mECSManager.GetAllEntities().iterator();
                 while (entity_iter.next()) |entity_id| {
                     const entity = Entity{ .mEntityID = entity_id.key_ptr.*, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
