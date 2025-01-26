@@ -9,6 +9,7 @@ pub const IComponentArray = struct {
         DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
         HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
+        GetAllEntities: *const fn (*anyopaque, *usize) []u32,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
@@ -36,6 +37,10 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.RemoveComponent(entityID);
             }
+            fn GetAllEntities(ptr: *anyopaque, dense_len_out: *usize) []u32 {
+                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+                return self.GetAllEntities(dense_len_out);
+            }
         };
         return IComponentArray{
             .ptr = obj,
@@ -44,6 +49,7 @@ pub const IComponentArray = struct {
                 .DuplicateEntity = impl.DuplicateEntity,
                 .HasComponent = impl.HasComponent,
                 .RemoveComponent = impl.RemoveComponent,
+                .GetAllEntities = impl.GetAllEntities,
             },
         };
     }
@@ -59,6 +65,9 @@ pub const IComponentArray = struct {
     }
     pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
         return self.vtable.HasComponent(self.ptr, entityID);
+    }
+    pub fn GetAllEntities(self: IComponentArray, dense_len_out: *usize) []u32 {
+        return self.vtable.GetAllEntities(self.ptr, dense_len_out);
     }
 };
 
@@ -114,6 +123,10 @@ pub fn ComponentArray(comptime componentType: type) type {
         }
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
+        }
+        pub fn GetAllEntities(self: *Self, dense_len_out: *usize) []u32 {
+            dense_len_out.* = self.mComponents.dense_count;
+            return self.mComponents.dense_to_sparse;
         }
     };
 }

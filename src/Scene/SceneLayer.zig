@@ -98,9 +98,7 @@ pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
     const entity_ids = try self.mECSManager.GetGroup(&[_]type{CameraComponent}, allocator);
-    var iter = entity_ids.iterator();
-    while (iter.next()) |entry| {
-        const entity_id = entry.key_ptr.*;
+    for (entity_ids.items) |entity_id| {
         const camera_component = self.mECSManager.GetComponent(CameraComponent, entity_id);
         if (camera_component.mIsFixedAspectRatio == false) {
             camera_component.SetViewportSize(width, height);

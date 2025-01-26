@@ -125,47 +125,56 @@ pub fn GetComponent(self: ComponentManager, comptime component_type: type, entit
     return @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetComponent(entityID);
 }
 
-pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !ArraySet(u32) {
+pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     std.debug.assert(ComponentTypes.len > 0);
     if (ComponentTypes.len == 1) {
-        std.debug.assert(@hasDecl(ComponentTypes[0], "Ind"));
-        std.debug.assert(ComponentTypes[0].Ind < self.mComponentsArrays.items.len);
-        const component_array = @as(*ComponentArray(ComponentTypes[0]), @alignCast(@ptrCast(self.mComponentsArrays.items[ComponentTypes[0].Ind].ptr)));
-        var group = try ArraySet(u32).initCapacity(allocator, component_array.NumOfComponents());
-        const num_dense = component_array.NumOfComponents();
-        for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
-            _ = try group.add(value);
-        }
-        return group;
-    }
-
-    var smallest_ind: usize = 0;
-    var smallest_len: usize = std.math.maxInt(usize);
-    inline for (ComponentTypes, 0..) |component_type, i| {
+        const component_type = ComponentTypes[0];
         std.debug.assert(@hasDecl(component_type, "Ind"));
         std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-        const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
-        const num_dense = component_array.NumOfComponents();
-        if (num_dense < smallest_len) {
-            smallest_ind = i;
-            smallest_len = num_dense;
-        }
-    }
 
-    var group = try ArraySet(u32).initCapacity(allocator, smallest_len);
-    std.debug.assert(@hasDecl(ComponentTypes[smallest_ind], "Ind"));
-    std.debug.assert(ComponentTypes[smallest_ind].Ind < self.mComponentsArrays.items.len);
-    const smallest_component_array = @as(*ComponentArray(ComponentTypes[smallest_ind]), @alignCast(@ptrCast(self._ComponentsArrays.items[ComponentTypes[smallest_ind].Ind].ptr)));
-    outer: for (smallest_component_array.mComponents.dense_to_sparse[0..smallest_len]) |value| {
+        const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
+        var group = try std.ArrayList(u32).initCapacity(allocator, component_array.NumOfComponents());
+
+        const num_dense = component_array.NumOfComponents();
+        for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
+            try group.append(value);
+        }
+        return group;
+    } else {
+        var smallest_comptype_ind: usize = 0;
+        var smallest_comparr_ind: usize = 0;
+        var smallest_len: usize = std.math.maxInt(usize);
         inline for (ComponentTypes, 0..) |component_type, i| {
-            if (i == smallest_ind) continue;
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-            const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
-            if (!component_array.mComponents.hasSparse(value)) continue :outer;
-        }
-        _ = try group.add(value);
-    }
 
-    return group;
+            const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
+            const num_dense = component_array.NumOfComponents();
+
+            if (num_dense < smallest_len) {
+                smallest_comparr_ind = i;
+                smallest_comptype_ind = component_type.Ind;
+                smallest_len = num_dense;
+            }
+        }
+
+        var dense_len: usize = 0;
+        var group = try std.ArrayList(u32).initCapacity(allocator, smallest_len);
+        var smallest_component_array_entities = self.mComponentsArrays.items[smallest_comparr_ind].GetAllEntities(&dense_len);
+
+        outer: for (smallest_component_array_entities[0..dense_len]) |entity_id| {
+            inline for (ComponentTypes, 0..) |component_type, i| {
+                if (i != smallest_comptype_ind) {
+                    std.debug.assert(@hasDecl(component_type, "Ind"));
+                    std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
+
+                    const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
+                    if (!component_array.mComponents.hasSparse(entity_id)) continue :outer;
+                }
+            }
+            try group.append(entity_id);
+        }
+
+        return group;
+    }
 }

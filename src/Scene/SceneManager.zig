@@ -53,7 +53,6 @@ pub fn Deinit(self: *SceneManager) !void {
     self.mSceneStack.deinit();
     self.mFrameBuffer.Deinit();
     self.mECSManager.Deinit();
-    self.mFrameBuffer.Deinit();
     _ = SceneManagerGPA.deinit();
 }
 

@@ -37,11 +37,9 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 pub fn Deinit() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-    var group = try GetGroup(&[_]type{FileMetaData}, arena.allocator());
-    var iter = group.iterator();
-    while (iter.next()) |entry| {
-        const id = entry.key_ptr.*;
-        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, id);
+    const group = try GetGroup(&[_]type{FileMetaData}, arena.allocator());
+    for (group.items) |entity_id| {
+        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
     }
     AssetM.mAssetECS.Deinit();
@@ -95,18 +93,16 @@ pub fn OnUpdate() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const group = try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, arena.allocator());
-    var iter = group.iterator();
-    while (iter.next()) |entry| {
-        const id = entry.key_ptr.*;
-        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, id);
+    for (group.items) |entity_id| {
+        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         if (file_data.mSize == 0) {
-            try CheckAssetToDelete(id);
+            try CheckAssetToDelete(entity_id);
             continue;
         }
         //then check if the asset path is still valid
         const file = std.fs.openFileAbsolute(file_data.mAbsPath, .{}) catch |err| {
             if (err == error.FileNotFound) {
-                SetAssetToDelete(id);
+                SetAssetToDelete(entity_id);
                 continue;
             } else {
                 return err;
@@ -117,12 +113,12 @@ pub fn OnUpdate() !void {
         //then check if the asset needs to be updated
         const fstats = try file.stat();
         if (file_data.mLastModified != fstats.mtime) {
-            try UpdateAsset(id, file, fstats);
+            try UpdateAsset(entity_id, file, fstats);
         }
     }
 }
 
-pub fn GetGroup(comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !ArraySet(u32) {
+pub fn GetGroup(comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     return try AssetM.mAssetECS.GetGroup(ComponentTypes, allocator);
 }
 

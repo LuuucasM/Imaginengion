@@ -70,7 +70,7 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
     return self.mComponentManager.GetComponent(ComponentType, entityID);
 }
 
-pub fn GetGroup(self: ECSManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !ArraySet(u32) {
+pub fn GetGroup(self: ECSManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     return try self.mComponentManager.GetGroup(ComponentTypes, allocator);
 }
 
