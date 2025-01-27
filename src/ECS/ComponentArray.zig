@@ -1,4 +1,5 @@
 const std = @import("std");
+const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 
 pub const IComponentArray = struct {
@@ -9,7 +10,6 @@ pub const IComponentArray = struct {
         DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
         HasComponent: *const fn (*anyopaque, u32) bool,
         RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
-        GetAllEntities: *const fn (*anyopaque, *usize) []u32,
     };
 
     pub fn Init(obj: anytype) IComponentArray {
@@ -37,10 +37,6 @@ pub const IComponentArray = struct {
                 const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
                 try self.RemoveComponent(entityID);
             }
-            fn GetAllEntities(ptr: *anyopaque, dense_len_out: *usize) []u32 {
-                const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-                return self.GetAllEntities(dense_len_out);
-            }
         };
         return IComponentArray{
             .ptr = obj,
@@ -49,7 +45,6 @@ pub const IComponentArray = struct {
                 .DuplicateEntity = impl.DuplicateEntity,
                 .HasComponent = impl.HasComponent,
                 .RemoveComponent = impl.RemoveComponent,
-                .GetAllEntities = impl.GetAllEntities,
             },
         };
     }
@@ -65,9 +60,6 @@ pub const IComponentArray = struct {
     }
     pub fn HasComponent(self: IComponentArray, entityID: u32) bool {
         return self.vtable.HasComponent(self.ptr, entityID);
-    }
-    pub fn GetAllEntities(self: IComponentArray, dense_len_out: *usize) []u32 {
-        return self.vtable.GetAllEntities(self.ptr, dense_len_out);
     }
 };
 
@@ -124,9 +116,13 @@ pub fn ComponentArray(comptime componentType: type) type {
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
         }
-        pub fn GetAllEntities(self: *Self, dense_len_out: *usize) []u32 {
-            dense_len_out.* = self.mComponents.dense_count;
-            return self.mComponents.dense_to_sparse;
+        pub fn GetAllEntities(self: *Self, allocator: std.mem.Allocator) !Set(u32) {
+            var entity_set = Set(u32).init(allocator);
+            var i: usize = 0;
+            while (i < self.mComponents.dense_count) : (i += 1) {
+                _ = try entity_set.add(self.mComponents.dense_to_sparse[i]);
+            }
+            return entity_set;
         }
     };
 }

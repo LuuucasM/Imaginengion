@@ -44,10 +44,10 @@ pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_f
         pub fn ClearColorAttachment(self: Self, attachment_index: u8, value: u32) void {
             self.mImpl.ClearColorAttachment(attachment_index, value);
         }
-        pub fn BindColorAttachment(self: Self, attachment_index: u8, slot: u32) void {
+        pub fn BindColorAttachment(self: Self, attachment_index: u8, slot: usize) void {
             self.mImpl.BindColorAttachment(attachment_index, slot);
         }
-        pub fn BindDepthAttachment(self: Self, slot: u32) void {
+        pub fn BindDepthAttachment(self: Self, slot: usize) void {
             self.mImpl.BindDepthAttachment(slot);
         }
     };

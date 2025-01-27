@@ -3,11 +3,23 @@ const IComponentArray = @import("ComponentArray.zig").IComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
-const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
-
+pub const GroupQuery = union(enum) {
+    And: []const GroupQuery,
+    Or: []const GroupQuery,
+    Not: struct {
+        mFirst: GroupQuery,
+        mSecond: GroupQuery,
+    },
+    Component: type,
+    Filter: struct {
+        mEntities: GroupQuery,
+        mFunction: *const fn (entity_id: u32) bool,
+    },
+};
 mComponentsArrays: std.ArrayList(IComponentArray),
 mEntitySkipField: SparseSet(.{
     .SparseT = u32,
@@ -124,57 +136,54 @@ pub fn GetComponent(self: ComponentManager, comptime component_type: type, entit
     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
     return @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetComponent(entityID);
 }
+pub fn GetQuery(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+    var query_set = try self.InternalGetQuery(query, allocator);
+    defer query_set.deinit();
+    var result = std.ArrayList(u32).init(allocator);
 
-pub fn GetGroup(self: ComponentManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    std.debug.assert(ComponentTypes.len > 0);
-    if (ComponentTypes.len == 1) {
-        const component_type = ComponentTypes[0];
-        std.debug.assert(@hasDecl(component_type, "Ind"));
-        std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-
-        const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
-        var group = try std.ArrayList(u32).initCapacity(allocator, component_array.NumOfComponents());
-
-        const num_dense = component_array.NumOfComponents();
-        for (component_array.mComponents.dense_to_sparse[0..num_dense]) |value| {
-            try group.append(value);
-        }
-        return group;
-    } else {
-        var smallest_comptype_ind: usize = 0;
-        var smallest_comparr_ind: usize = 0;
-        var smallest_len: usize = std.math.maxInt(usize);
-        inline for (ComponentTypes, 0..) |component_type, i| {
+    var iter = query_set.iterator();
+    while (iter.next()) |entry| {
+        try result.append(entry.*);
+    }
+    return result;
+}
+fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !Set(u32) {
+    switch (query) {
+        .Component => |component_type| {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
+            return try @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetAllEntities(allocator);
+        },
+        .Not => |not| {
+            const result = try self.InternalGetQuery(not.mFirst, allocator);
+            const second = try self.InternalGetQuery(not.mSecond, allocator);
+            defer second.deinit();
 
-            const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
-            const num_dense = component_array.NumOfComponents();
-
-            if (num_dense < smallest_len) {
-                smallest_comparr_ind = i;
-                smallest_comptype_ind = component_type.Ind;
-                smallest_len = num_dense;
+            return try result.differenceUpdate(second);
+        },
+        .Filter => |filter| {
+            const result = try self.InternalGetQuery(filter.mEntities, allocator);
+            return try result.FilterUpdate(filter.mFunction);
+        },
+        .Or => |ors| {
+            var result = try self.InternalGetQuery(ors[0], allocator);
+            inline for (ors, 0..) |or_query, i| {
+                if (i == 0) continue;
+                var intermediate = try self.InternalGetQuery(or_query, allocator);
+                defer intermediate.deinit();
+                try result.unionUpdate(intermediate);
             }
-        }
-
-        var dense_len: usize = 0;
-        var group = try std.ArrayList(u32).initCapacity(allocator, smallest_len);
-        var smallest_component_array_entities = self.mComponentsArrays.items[smallest_comparr_ind].GetAllEntities(&dense_len);
-
-        outer: for (smallest_component_array_entities[0..dense_len]) |entity_id| {
-            inline for (ComponentTypes, 0..) |component_type, i| {
-                if (i != smallest_comptype_ind) {
-                    std.debug.assert(@hasDecl(component_type, "Ind"));
-                    std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-
-                    const component_array = @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr)));
-                    if (!component_array.mComponents.hasSparse(entity_id)) continue :outer;
-                }
+            return result;
+        },
+        .And => |ands| {
+            var result = try self.InternalGetQuery(ands[0], allocator);
+            inline for (ands, 0..) |and_query, i| {
+                if (i == 0) continue;
+                var intermediate = try self.InternalGetQuery(and_query, allocator);
+                defer intermediate.deinit();
+                try result.intersectionUpdate(intermediate);
             }
-            try group.append(entity_id);
-        }
-
-        return group;
+            return result;
+        },
     }
 }

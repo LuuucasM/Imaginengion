@@ -1,6 +1,7 @@
 const std = @import("std");
 const EntityManager = @import("EntityManager.zig");
 const ComponentManager = @import("ComponentManager.zig");
+const GroupQuery = ComponentManager.GroupQuery;
 const SystemManager = @import("SystemManager.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @This();
@@ -70,8 +71,8 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
     return self.mComponentManager.GetComponent(ComponentType, entityID);
 }
 
-pub fn GetGroup(self: ECSManager, comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    return try self.mComponentManager.GetGroup(ComponentTypes, allocator);
+pub fn GetQuery(self: ECSManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+    return try self.mComponentManager.GetQuery(query, allocator);
 }
 
 //-----------System Manager------------

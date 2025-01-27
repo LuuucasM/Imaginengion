@@ -12,8 +12,8 @@ const VTab = struct {
     Unbind: *const fn (*anyopaque) void,
     Resize: *const fn (*anyopaque, usize, usize) void,
     ClearColorAttachment: *const fn (*anyopaque, u8, u32) void,
-    BindColorAttachment: *const fn (*anyopaque, u8, u32) void,
-    BindDepthAttachment: *const fn (*anyopaque, u8, u32) void,
+    BindColorAttachment: *const fn (*anyopaque, u8, usize) void,
+    BindDepthAttachment: *const fn (*anyopaque, usize) void,
 };
 
 pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: usize, height: usize) !FrameBuffer {
@@ -45,11 +45,11 @@ pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: u
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.ClearColorAttachment(attachment_index, value);
         }
-        fn BindColorAttachment(ptr: *anyopaque, attachment_index: u8, slot: u32) void {
+        fn BindColorAttachment(ptr: *anyopaque, attachment_index: u8, slot: usize) void {
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.BindColorAttachment(attachment_index, slot);
         }
-        fn BindDepthAttachment(ptr: *anyopaque, slot: u32) void {
+        fn BindDepthAttachment(ptr: *anyopaque, slot: usize) void {
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.BindDepthAttachment(slot);
         }
@@ -92,9 +92,9 @@ pub fn Resize(self: FrameBuffer, width: usize, height: usize) void {
 pub fn ClearColorAttachment(self: FrameBuffer, attachment_index: u8, value: u32) void {
     self.mVTable.ClearColorAttachment(self.mPtr, attachment_index, value);
 }
-pub fn BindColorAttachment(self: FrameBuffer, attachment_index: u8, slot: u32) void {
+pub fn BindColorAttachment(self: FrameBuffer, attachment_index: u8, slot: usize) void {
     self.mVTable.BindColorAttachment(self.mPtr, attachment_index, slot);
 }
-pub fn BindDepthAttachment(self: FrameBuffer, slot: u32) void {
+pub fn BindDepthAttachment(self: FrameBuffer, slot: usize) void {
     self.mVTable.BindDepthAttachment(self.mPtr, slot);
 }

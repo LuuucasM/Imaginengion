@@ -30,12 +30,12 @@ pub fn UpdateDataPath(self: UnsupportedTexture2D, path: []const u8) void {
     _ = path;
     Unsupported();
 }
-pub fn Bind(self: UnsupportedTexture2D, slot: u32) void {
+pub fn Bind(self: UnsupportedTexture2D, slot: usize) void {
     _ = self;
     _ = slot;
     Unsupported();
 }
-pub fn Unbind(self: UnsupportedTexture2D, slot: u32) void {
+pub fn Unbind(self: UnsupportedTexture2D, slot: usize) void {
     _ = self;
     _ = slot;
     Unsupported();

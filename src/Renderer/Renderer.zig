@@ -23,6 +23,7 @@ const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Renderer = @This();
 
@@ -78,7 +79,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mTexturesMap = std.AutoHashMap(u32, usize).init(EngineAllocator),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(EngineAllocator, RenderM.mRenderContext.GetMaxTextureImageSlots()),
 
-        .mCameraBuffer = LinAlg.InitMat4CompTime(1, 0),
+        .mCameraBuffer = LinAlg.InitMat4CompTime(1.0),
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(Mat4f32)),
     };
     try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
@@ -101,7 +102,7 @@ pub fn SwapBuffers() void {
 
 pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
-    RenderM.mCameraUniformBuffer.SetData(&RenderM.mR2D.mCameraBuffer, @sizeOf(Mat4f32), 0);
+    RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(Mat4f32), 0);
 
     BeginScene();
     defer EndScene();
@@ -110,8 +111,8 @@ pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, cam
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const sprite_entities = try ecs_manager.GetGroup(&[_]type{ TransformComponent, SpriteRenderComponent }, allocator);
-    const circle_entities = try ecs_manager.GetGroup(&[_]type{ TransformComponent, CircleRenderComponent }, allocator);
+    const sprite_entities = try ecs_manager.GetQuery(GroupQuery{ .And = &[_]GroupQuery{ GroupQuery{ .Component = TransformComponent }, GroupQuery{ .Component = SpriteRenderComponent } } }, allocator);
+    const circle_entities = try ecs_manager.GetQuery(GroupQuery{ .And = &[_]GroupQuery{ GroupQuery{ .Component = TransformComponent }, GroupQuery{ .Component = CircleRenderComponent } } }, allocator);
 
     //cull entities that shouldnt be rendered
     const sprite_end_index = CullEntities(SpriteRenderComponent, sprite_entities, ecs_manager);
@@ -119,7 +120,7 @@ pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, cam
 
     //ensure textures are ready to go for draw
     try TextureSort(SpriteRenderComponent, sprite_entities, sprite_end_index, ecs_manager);
-    DrawSprites(sprite_entities, sprite_end_index, ecs_manager);
+    try DrawSprites(sprite_entities, sprite_end_index, ecs_manager);
     DrawCircles(circle_entities, circle_end_index, ecs_manager);
 }
 
@@ -186,8 +187,8 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), e
     }
 }
 
-fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs_manager: ECSManager) void {
-    for (RenderM.mTextures, 0..) |asset_handle, i| {
+fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs_manager: ECSManager) !void {
+    for (RenderM.mTextures.items, 0..) |asset_handle, i| {
         const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
         texture.Bind(i);
     }

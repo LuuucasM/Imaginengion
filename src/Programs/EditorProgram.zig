@@ -61,6 +61,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     //---------Inputs Begin--------------
     ApplicationManager.GetWindow().PollInputEvents();
+    self._ViewportPanel.mViewportCamera.InputUpdate();
     EventManager.ProcessEvents(.EC_Input);
     //---------Inputs End----------------
 
@@ -71,7 +72,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //---------GameLogic End-------------
 
     //---------Render Begin-------------
-    try self.mSceneManager.OnRenderEditor(self.mEditorCamera.mProjectionMatrix, self.mEditorCamera.mViewMatrix);
+    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCamera.mProjectionMatrix, self._ViewportPanel.mViewportCamera.mViewMatrix);
     Renderer.SwapBuffers();
     //----------Render End-----------------
 
@@ -185,7 +186,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
             },
             .ET_ViewportResizeEvent => |e| {
-                self.mEditorCamera.SetViewportSize(e.mWidth, e.mHeight);
+                self._ViewportPanel.OnViewportResize(e.mWidth, e.mHeight);
                 try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
             },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),

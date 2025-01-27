@@ -9,6 +9,7 @@ const AssetsList = Assets.AssetsList;
 const AssetHandle = @import("AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig");
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const AssetManager = @This();
 
@@ -37,7 +38,8 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 pub fn Deinit() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-    const group = try GetGroup(&[_]type{FileMetaData}, arena.allocator());
+    const allocator = arena.allocator();
+    const group = try AssetM.mAssetECS.GetQuery(.{ .Component = FileMetaData }, allocator);
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
@@ -92,7 +94,9 @@ pub fn GetAsset(comptime asset_type: type, asset_id: u32) !*asset_type {
 pub fn OnUpdate() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-    const group = try AssetM.mAssetECS.GetGroup(&[_]type{FileMetaData}, arena.allocator());
+    const allocator = arena.allocator();
+
+    const group = try AssetM.mAssetECS.GetQuery(.{ .Component = FileMetaData }, allocator);
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         if (file_data.mSize == 0) {
@@ -118,8 +122,8 @@ pub fn OnUpdate() !void {
     }
 }
 
-pub fn GetGroup(comptime ComponentTypes: []const type, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    return try AssetM.mAssetECS.GetGroup(ComponentTypes, allocator);
+pub fn GetQuery(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+    return try AssetM.mAssetECS.GetQuery(query, allocator);
 }
 
 fn CreateAsset(abs_path: []const u8) !AssetHandle {

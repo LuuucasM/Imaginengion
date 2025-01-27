@@ -230,6 +230,26 @@ pub fn HashSetManaged(comptime E: type) type {
             self.map = diffSet.map;
         }
 
+        pub fn Filter(self: Self, function: *const fn (E) bool) Allocator.Error!Self {
+            var filtered_set = Self.init(self.allocator);
+
+            var iter = self.map.iterator();
+            while (iter.next()) |pVal| {
+                if (function(pVal) == true) {
+                    _ = try filtered_set.add(pVal.*);
+                }
+            }
+            return filtered_set;
+        }
+
+        pub fn FilterUpdate(self: *Self, function: *const fn (E) bool) Allocator.Error!void {
+            const filtered_set = try self.Filter(function);
+
+            self.map.deinit(self.allocator);
+
+            self.map = filtered_set.map;
+        }
+
         fn dump(self: Self) void {
             std.log.err("\ncardinality: {d}\n", .{self.cardinality()});
             var iter = self.iterator();

@@ -2,7 +2,7 @@ const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const FrameBuffer = @import("../FrameBuffers/InternalFrameBuffer.zig");
-const EditorCamera = @import("../Camera/EditorCamera.zig");
+const EditorCamera = @import("ViewportCamera.zig");
 
 const ImguiManager = @import("Imgui.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
@@ -25,8 +25,6 @@ pub fn OnImguiRender(self: *ViewportPanel) !void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
-
-    self.mViewportCamera.OnUpdate();
 
     //update viewport size if needed
     var temp_viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
@@ -51,4 +49,8 @@ pub fn OnImguiRender(self: *ViewportPanel) !void {
 
 pub fn OnTogglePanelEvent(self: *ViewportPanel) void {
     self._PmOpen = !self.mP_Open;
+}
+
+pub fn OnViewportResize(self: *ViewportPanel, width: usize, height: usize) void {
+    self.mViewportCamera.SetViewportSize(width, height);
 }

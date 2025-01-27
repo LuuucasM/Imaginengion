@@ -8,7 +8,7 @@ _Height: c_int,
 _TextureID: c_uint,
 _InternalFormat: c_uint,
 _DataFormat: c_uint,
-mSlot: i32,
+mSlot: usize,
 
 pub fn Init(path: []const u8) !OpenGLTexture2D {
     var width: c_int = 0;
@@ -60,7 +60,7 @@ pub fn Init(path: []const u8) !OpenGLTexture2D {
         ._TextureID = new_texture_id,
         ._InternalFormat = internal_format,
         ._DataFormat = data_format,
-        .mSlot = -1,
+        .mSlot = std.math.maxInt(usize),
     };
 }
 
@@ -99,11 +99,11 @@ pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {
     self._Height = height;
     glad.glTextureSubImage2D(self._TextureID, 0, 0, 0, self._Width, self._Height, self._DataFormat, glad.GL_UNSIGNED_BYTE, data);
 }
-pub fn Bind(self: *OpenGLTexture2D, slot: u32) void {
-    glad.glBindTextureUnit(slot, self._TextureID);
+pub fn Bind(self: *OpenGLTexture2D, slot: usize) void {
+    glad.glBindTextureUnit(@intCast(slot), self._TextureID);
     self.mSlot = @intCast(slot);
 }
-pub fn Unbind(self: OpenGLTexture2D) void {
+pub fn Unbind(self: *OpenGLTexture2D) void {
     glad.glBindTextureUnit(self.mSlot, 0);
-    self.mSlot = -1;
+    self.mSlot = std.math.maxInt(usize);
 }

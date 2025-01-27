@@ -55,7 +55,7 @@ pub fn Init(width: usize, height: usize) EditorCamera {
     };
 }
 
-pub fn OnUpdate(self: *EditorCamera) void {
+pub fn InputUpdate(self: *EditorCamera) void {
     if (Input.IsKeyPressed(.LeftAlt)) {
         const new_pos = Input.GetMousePosition();
         const delta = new_pos - self.mCurrentMousePos * @as(Vec2f32, @splat(0.003));
@@ -113,7 +113,7 @@ fn UpdateProjection(self: *EditorCamera) void {
 
 fn UpdateView(self: *EditorCamera) void {
     self.CalculatePosition();
-    self.mViewMatrix = LinAlg.Mat4Inverse(LinAlg.Translate(LinAlg.InitMat4CompTime(1.0), self.mPosition) * LinAlg.QuatToMat4(self.GetOrientation()));
+    self.mViewMatrix = LinAlg.Mat4MulMat4(LinAlg.Mat4Inverse(LinAlg.Translate(self.mPosition)), LinAlg.QuatToMat4(self.GetOrientation()));
 }
 
 fn OnMouseScroll(self: *EditorCamera, e: MouseScrolledEvent) bool {
@@ -125,8 +125,8 @@ fn OnMouseScroll(self: *EditorCamera, e: MouseScrolledEvent) bool {
 
 fn MousePan(self: *EditorCamera, delta: Vec2f32) void {
     const speed = self.PanSpeed();
-    self._FocalPoint += -self.GetRightDirection() * @as(Vec3f32, @splat(delta[0])) * @as(Vec3f32, @splat(speed[0])) * @as(Vec3f32, @splat(self.mDistance));
-    self._FocalPoint += self.GetUpDirection() * @as(Vec3f32, @splat(delta[1])) * @as(Vec3f32, @splat(speed[1])) * @as(Vec3f32, @splat(self.mDistance));
+    self.mFocalPoint += -self.GetRightDirection() * @as(Vec3f32, @splat(delta[0])) * @as(Vec3f32, @splat(speed[0])) * @as(Vec3f32, @splat(self.mDistance));
+    self.mFocalPoint += self.GetUpDirection() * @as(Vec3f32, @splat(delta[1])) * @as(Vec3f32, @splat(speed[1])) * @as(Vec3f32, @splat(self.mDistance));
 }
 
 fn MouseRotate(self: *EditorCamera, delta: Vec2f32) void {
@@ -143,14 +143,14 @@ fn MouseZoom(self: *EditorCamera, delta: f32) void {
     }
 }
 
-fn CalculatePosition(self: EditorCamera) void {
+fn CalculatePosition(self: *EditorCamera) void {
     self.mPosition = self.mFocalPoint - self.GetForwardDirection() * @as(Vec3f32, @splat(self.mDistance));
 }
 
 fn PanSpeed(self: EditorCamera) Vec2f32 {
-    const x: f32 = if (self.mViewportWidth / 1000.0 < 2.4) self.mViewportWidth / 1000.0 else 2.4;
+    const x: f32 = if (@as(f32, @floatFromInt(self.mViewportWidth)) / 1000.0 < 2.4) @as(f32, @floatFromInt(self.mViewportWidth)) / 1000.0 else 2.4;
     const xFactor = 0.0336 * (x * x) - 0.1778 * x + 0.3021;
-    const y: f32 = if (self.mViewportHeight / 1000.0 < 2.4) self.mViewportHeight / 1000.0 else 2.4;
+    const y: f32 = if (@as(f32, @floatFromInt(self.mViewportWidth)) / 1000.0 < 2.4) @as(f32, @floatFromInt(self.mViewportWidth)) / 1000.0 else 2.4;
     const yFactor = 0.0336 * y * y - 0.1778 * y + 0.3021;
     return .{ xFactor, yFactor };
 }
@@ -183,5 +183,5 @@ fn GetForwardDirection(self: EditorCamera) Vec3f32 {
 }
 
 fn GetOrientation(self: EditorCamera) Quatf32 {
-    return LinAlg.Vec3ToQuat(Vec3f32{ -self._Pitch, -self._Yaw, 0.0 });
+    return LinAlg.Vec3ToQuat(Vec3f32{ -self.mPitch, -self.mYaw, 0.0 });
 }

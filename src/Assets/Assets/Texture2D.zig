@@ -35,10 +35,10 @@ pub fn UpdateData(self: *Texture2D, data: *anyopaque, size: usize) void {
 pub fn UpdateDataPath(self: *Texture2D, path: []const u8) !void {
     try self._Impl.UpdateDataPath(path);
 }
-pub fn Bind(self: *Texture2D, slot: u32) void {
+pub fn Bind(self: *Texture2D, slot: usize) void {
     self._Impl.Bind(slot);
 }
-pub fn Unbind(self: Texture2D, slot: u32) void {
+pub fn Unbind(self: Texture2D, slot: usize) void {
     self._Impl.Unbind(slot);
 }
 

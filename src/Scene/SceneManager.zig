@@ -77,7 +77,8 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //pub fn OnRuntimeStart() void {}
 //pub fn OnRuntimeStop() void{}
 //pub fn OnUpdateRuntime() void {}
-pub fn OnRenderEditor(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
+
+pub fn RenderUpdate(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     //render each scene
     for (self.mSceneStack.items) |scene_layer| {
         try scene_layer.Render(camera_projection, camera_transform); //this renders each scene_layer to its own frame buffer

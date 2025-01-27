@@ -14,7 +14,7 @@ pub fn Init(size: u32) OpenGLUniformBuffer {
 }
 
 pub fn Bind(self: OpenGLUniformBuffer, binding: usize) void {
-    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, binding, self.mBufferID);
+    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, @intCast(binding), self.mBufferID);
 }
 
 pub fn Deinit(self: OpenGLUniformBuffer) void {
