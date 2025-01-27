@@ -1,12 +1,15 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 
 const RenderContext = @import("RenderContext.zig");
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
 
+const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
+const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
@@ -41,13 +44,18 @@ const MaxVerticies: u32 = MaxTri * 3;
 const MaxIndices: u32 = MaxTri * 3;
 
 mEngineAllocator: std.mem.Allocator,
+
 mRenderContext: RenderContext,
+mStats: Stats,
+
 mR2D: Renderer2D,
 mR3D: Renderer3D,
+
 mTexturesMap: std.AutoHashMap(u32, usize),
 mTextures: std.ArrayList(AssetHandle),
 
-mStats: Stats,
+mCameraBuffer: Mat4f32,
+mCameraUniformBuffer: UniformBuffer,
 
 var RenderAllocator = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -56,19 +64,29 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
     RenderM = try EngineAllocator.create(Renderer);
     RenderM.* = .{
         .mEngineAllocator = EngineAllocator,
+
         .mRenderContext = new_render_context,
+        .mStats = std.mem.zeroes(Stats),
+
         .mR2D = try Renderer2D.Init(
             MaxVerticies,
             MaxIndices,
             RenderAllocator.allocator(),
         ),
         .mR3D = Renderer3D.Init(),
-        .mStats = std.mem.zeroes(Stats),
 
         .mTexturesMap = std.AutoHashMap(u32, usize).init(EngineAllocator),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(EngineAllocator, RenderM.mRenderContext.GetMaxTextureImageSlots()),
+
+        .mCameraBuffer = LinAlg.InitMat4CompTime(1, 0),
+        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(Mat4f32)),
     };
     try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
+
+    RenderM.mCameraUniformBuffer.Bind(0);
+    RenderM.mR2D.mSpriteShader.Bind();
+    RenderM.mR2D.mCircleShader.Bind();
+    RenderM.mR2D.mELineShader.Bind();
 }
 
 pub fn Deinit() void {
@@ -82,8 +100,8 @@ pub fn SwapBuffers() void {
 }
 
 pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
-    RenderM.mR2D.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
-    RenderM.mR2D.mCameraUniformBuffer.SetData(&RenderM.mR2D.mCameraBuffer, @sizeOf(Mat4f32), 0);
+    RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
+    RenderM.mCameraUniformBuffer.SetData(&RenderM.mR2D.mCameraBuffer, @sizeOf(Mat4f32), 0);
 
     BeginScene();
     defer EndScene();
@@ -169,6 +187,11 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), e
 }
 
 fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs_manager: ECSManager) void {
+    for (RenderM.mTextures, 0..) |asset_handle, i| {
+        const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
+        texture.Bind(i);
+    }
+
     var i: usize = 0;
     while (i < sprite_end_index) : (i += 1) {
         const entity_id = sprite_entities.items[i];

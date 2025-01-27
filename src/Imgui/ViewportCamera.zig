@@ -32,7 +32,7 @@ mYaw: f32,
 mViewportWidth: usize,
 mViewportHeight: usize,
 
-pub fn Init() EditorCamera {
+pub fn Init(width: usize, height: usize) EditorCamera {
     return EditorCamera{
         .mFOVDegrees = 45.0,
         .mAspectRatio = 1.778,
@@ -50,8 +50,8 @@ pub fn Init() EditorCamera {
         .mPitch = 0.0,
         .mYaw = 0.0,
 
-        .mViewportWidth = 1600.0,
-        .mViewportHeight = 900.0,
+        .mViewportWidth = width,
+        .mViewportHeight = height,
     };
 }
 

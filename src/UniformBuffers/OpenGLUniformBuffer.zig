@@ -3,14 +3,18 @@ const OpenGLUniformBuffer = @This();
 
 mBufferID: c_uint,
 
-pub fn Init(size: u32, binding: u32) OpenGLUniformBuffer {
+pub fn Init(size: u32) OpenGLUniformBuffer {
     var new_ub = OpenGLUniformBuffer{
         .mBufferID = undefined,
     };
     glad.glCreateBuffers(1, &new_ub.mBufferID);
     glad.glNamedBufferData(new_ub.mBufferID, size, null, glad.GL_DYNAMIC_DRAW);
-    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, binding, new_ub.mBufferID);
+
     return new_ub;
+}
+
+pub fn Bind(self: OpenGLUniformBuffer, binding: usize) void {
+    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, binding, self.mBufferID);
 }
 
 pub fn Deinit(self: OpenGLUniformBuffer) void {

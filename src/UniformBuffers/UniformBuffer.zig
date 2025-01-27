@@ -9,10 +9,14 @@ const UniformBuffer = @This();
 
 mImpl: Impl,
 
-pub fn Init(size: u32, binding: u32) UniformBuffer {
+pub fn Init(size: u32) UniformBuffer {
     return UniformBuffer{
-        .mImpl = Impl.Init(size, binding),
+        .mImpl = Impl.Init(size),
     };
+}
+
+pub fn Bind(self: UniformBuffer, binding: usize) void {
+    self.mImpl.Bind(binding);
 }
 
 pub fn Deinit(self: UniformBuffer) void {

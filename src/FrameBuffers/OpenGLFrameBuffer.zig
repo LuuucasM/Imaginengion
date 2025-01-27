@@ -61,6 +61,14 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             glad.glClearTexImage(self.mColorAttachments[attachment_index], 0, TextureFormatToInternalFormat(color_texture_formats[attachment_index]), glad.GL_UNSIGNED_INT, &value);
         }
 
+        pub fn BindColorAttachment(self: Self, attachment_index: u8, slot: u32) void {
+            glad.glBindTextureUnit(slot, self.mColorAttachments[attachment_index]);
+        }
+
+        pub fn BindDepthAttachment(self: Self, slot: u32) void {
+            glad.glBindTextureUnit(slot, self.mDepthAttachment);
+        }
+
         fn Create(self: *Self) void {
             glad.glCreateFramebuffers(1, &self.mBufferID);
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, self.mBufferID);

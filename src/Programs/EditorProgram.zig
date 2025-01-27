@@ -18,7 +18,6 @@ const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ImguiEvent = @import("../Imgui/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
-const EditorCamera = @import("../Camera/EditorCamera.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -30,7 +29,6 @@ _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
-mEditorCamera: EditorCamera,
 
 const EditorProgram = @This();
 
@@ -48,7 +46,6 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
-        .mEditorCamera = EditorCamera.Init(),
     };
 }
 
@@ -74,9 +71,17 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //---------GameLogic End-------------
 
     //---------Render Begin-------------
-    try self.mSceneManager.OnUpdateEditor(self.mEditorCamera.mProjectionMatrix, self.mEditorCamera.mViewMatrix);
+    try self.mSceneManager.OnRenderEditor(self.mEditorCamera.mProjectionMatrix, self.mEditorCamera.mViewMatrix);
+    Renderer.SwapBuffers();
+    //----------Render End-----------------
 
-    //Imgui begin
+    //----------Audio Begin----------------
+    //----------Audio End------------------
+
+    //----------Networking Begin-----------
+    //----------Networking End-------------
+
+    //----------Imgui begin----------------
     ImGui.Begin();
     Dockspace.Begin();
     try self._ContentBrowserPanel.OnImguiRender();
@@ -100,16 +105,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     Dockspace.End();
     ImGui.End();
-    //Imgui end
-
-    Renderer.SwapBuffers();
-    //----------Render End-----------------
-
-    //----------Audio Begin----------------
-    //----------Audio End------------------
-
-    //----------Networking Begin-----------
-    //----------Networking End-------------
+    //----------Imgui end------------------
 
     //Finally Process window events
     EventManager.ProcessEvents(.EC_Window);

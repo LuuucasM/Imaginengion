@@ -77,13 +77,26 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 //pub fn OnRuntimeStart() void {}
 //pub fn OnRuntimeStop() void{}
 //pub fn OnUpdateRuntime() void {}
-pub fn OnUpdateEditor(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
+pub fn OnRenderEditor(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     //render each scene
     for (self.mSceneStack.items) |scene_layer| {
-        try scene_layer.Render(camera_projection, camera_transform);
+        try scene_layer.Render(camera_projection, camera_transform); //this renders each scene_layer to its own frame buffer
     }
 
-    //combine the scene_layers together into single buffer
+    self.mFrameBuffer.Bind();
+
+    var i: usize = 0;
+    for (self.mSceneStack.items) |scene_layer| {
+        scene_layer.mFrameBuffer.BindColorAttachment(0, i);
+        i += 1;
+    }
+    for (self.mSceneStack.items) |scene_layer| {
+        scene_layer.mFrameBuffer.BindDepthAttachment(i);
+        i += 1;
+    }
+    //bind composite shader
+    //make a draw call
+    self.mFrameBuffer.Unbind();
 }
 
 //pub fn SetSceneName() void {}

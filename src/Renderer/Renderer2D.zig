@@ -3,7 +3,6 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const Shader = @import("../Shaders/Shaders.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
-const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const Renderer2D = @This();
@@ -74,9 +73,6 @@ mELineVertexCount: u32,
 mELineVertexBufferBase: []ELineVertex,
 mELineVertexBufferPtr: *ELineVertex,
 
-mCameraBuffer: Mat4f32,
-mCameraUniformBuffer: UniformBuffer,
-
 pub fn Init(
     max_vertices: u32,
     max_indices: u32,
@@ -114,9 +110,6 @@ pub fn Init(
         .mELineVertexCount = 0,
         .mELineVertexBufferBase = try allocator.alloc(ELineVertex, max_vertices),
         .mELineVertexBufferPtr = undefined,
-
-        .mCameraBuffer = LinAlg.InitMat4CompTime(1.0),
-        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(Mat4f32), 0),
     };
 
     var rect_indices = try allocator.alloc(u32, max_indices);
