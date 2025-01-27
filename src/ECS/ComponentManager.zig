@@ -167,8 +167,7 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
         },
         .Or => |ors| {
             var result = try self.InternalGetQuery(ors[0], allocator);
-            inline for (ors, 0..) |or_query, i| {
-                if (i == 0) continue;
+            inline for (ors[1..]) |or_query| {
                 var intermediate = try self.InternalGetQuery(or_query, allocator);
                 defer intermediate.deinit();
                 try result.unionUpdate(intermediate);
@@ -177,8 +176,7 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
         },
         .And => |ands| {
             var result = try self.InternalGetQuery(ands[0], allocator);
-            inline for (ands, 0..) |and_query, i| {
-                if (i == 0) continue;
+            inline for (ands[1..]) |and_query| {
                 var intermediate = try self.InternalGetQuery(and_query, allocator);
                 defer intermediate.deinit();
                 try result.intersectionUpdate(intermediate);
