@@ -42,7 +42,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
     return new_shader;
 }
 
-pub fn Deinit(self: OpenGLShader) void {
+pub fn Deinit(self: *OpenGLShader) void {
     glad.glDeleteShader(self.mShaderID);
 
     self.mBufferElements.deinit();
@@ -216,7 +216,7 @@ fn ReadFile(abs_path: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHa
     var source = std.ArrayList(u8).init(allocator);
     defer source.deinit();
 
-    const file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
+    const file = try std.fs.cwd().openFile(abs_path, .{});
     defer file.close();
 
     const file_size = try file.getEndPos();

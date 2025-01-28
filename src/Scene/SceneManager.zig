@@ -1,4 +1,5 @@
 const std = @import("std");
+const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const Mat4f32 = @import("../Math/LinAlg.zig").Mat4f32;
 
 const SceneLayer = @import("SceneLayer.zig");
@@ -15,6 +16,12 @@ const RenderManager = @import("../Renderer/Renderer.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const InternalFrameBuffer = @import("../FrameBuffers/InternalFrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
+
+const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
+const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
+const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
+const Shader = @import("../Shaders/Shaders.zig");
 
 const SceneManager = @This();
 
@@ -33,8 +40,13 @@ mFrameBuffer: FrameBuffer,
 mViewportWidth: usize,
 mViewportHeight: usize,
 
+mCompositeVertexArray: VertexArray,
+mCompositeVertexBuffer: VertexBuffer,
+mCompositeShader: Shader,
+mNumTexturesUniformBuffer: UniformBuffer,
+
 pub fn Init(width: usize, height: usize) !SceneManager {
-    return SceneManager{
+    var new_scene_manager = SceneManager{
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
         .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray, &[_]type{}),
         .mSceneState = .Stop,
@@ -42,7 +54,30 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mViewportWidth = width,
         .mViewportHeight = height,
         .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1, false), width, height),
+
+        .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
+        .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
+        .mCompositeShader = try Shader.Init(SceneManagerGPA.allocator(), "assets/shaders/Composite.glsl"),
+        .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
     };
+
+    const data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    const rect_index_buffer = IndexBuffer.Init(@constCast(&data_index_buffer), 6);
+
+    try new_scene_manager.mCompositeVertexBuffer.SetLayout(new_scene_manager.mCompositeShader.GetLayout());
+    new_scene_manager.mCompositeVertexBuffer.SetStride(new_scene_manager.mCompositeShader.GetStride());
+
+    const data_vertex_buffer = [4]Vec2f32{ Vec2f32{ -1.0, -1.0 }, Vec2f32{ 1.0, -1.0 }, Vec2f32{ 1.0, 1.0 }, Vec2f32{ -1.0, 1.0 } };
+    new_scene_manager.mCompositeVertexBuffer.SetData(@constCast(&data_vertex_buffer[0]), 4 * @sizeOf(Vec2f32));
+
+    try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
+
+    new_scene_manager.mCompositeVertexArray.SetIndexBuffer(rect_index_buffer);
+
+    new_scene_manager.mNumTexturesUniformBuffer.Bind(0);
+    new_scene_manager.mCompositeShader.Bind();
+
+    return new_scene_manager;
 }
 
 pub fn Deinit(self: *SceneManager) !void {
@@ -51,6 +86,9 @@ pub fn Deinit(self: *SceneManager) !void {
         try self.RemoveScene(scene_layer.mInternalID);
     }
     self.mSceneStack.deinit();
+    self.mCompositeShader.Deinit();
+    self.mCompositeVertexBuffer.Deinit();
+    self.mCompositeVertexArray.Deinit();
     self.mFrameBuffer.Deinit();
     self.mECSManager.Deinit();
     _ = SceneManagerGPA.deinit();
@@ -85,17 +123,23 @@ pub fn RenderUpdate(self: *SceneManager, camera_projection: Mat4f32, camera_tran
     }
 
     self.mFrameBuffer.Bind();
+    self.mCompositeShader.Bind();
 
     var i: usize = 0;
     for (self.mSceneStack.items) |scene_layer| {
         scene_layer.mFrameBuffer.BindColorAttachment(0, i);
         i += 1;
     }
+
+    self.mNumTexturesUniformBuffer.SetData(&i, @sizeOf(usize), 0);
+
     for (self.mSceneStack.items) |scene_layer| {
         scene_layer.mFrameBuffer.BindDepthAttachment(i);
         i += 1;
     }
-    //bind composite shader
+
+    RenderManager.DrawComposite(self.mCompositeVertexArray);
+
     //make a draw call
     self.mFrameBuffer.Unbind();
 }
@@ -111,7 +155,7 @@ pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void 
 }
 
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, std.math.maxInt(usize), self.mViewportWidth, self.mViewportHeight);
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, std.math.maxInt(usize), self.mViewportWidth, self.mViewportHeight, &self.mECSManager);
     _ = try new_scene.mName.writer().write("Unsaved Scene");
 
     try self.InsertScene(&new_scene);
@@ -126,7 +170,7 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     _ = self.mSceneStack.orderedRemove(scene_id);
 }
 pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), .GameLayer, self.mSceneStack.items.len, self.mViewportWidth, self.mViewportHeight);
+    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), .GameLayer, self.mSceneStack.items.len, self.mViewportWidth, self.mViewportHeight, &self.mECSManager);
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;

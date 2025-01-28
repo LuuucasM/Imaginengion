@@ -31,3 +31,7 @@ pub fn GetMaxTextureImageSlots(self: RenderContext) usize {
 pub fn DrawIndexed(self: RenderContext, vertex_array: VertexArray, index_count: usize) void {
     self.mImpl.DrawIndexed(vertex_array, index_count);
 }
+
+pub fn DrawELines(self: RenderContext, vertex_array: VertexArray, vertex_count: usize) void {
+    self.mImpl.DrawELines(vertex_array, vertex_count);
+}

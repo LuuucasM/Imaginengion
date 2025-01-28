@@ -39,6 +39,31 @@ pub fn SwapBuffers(self: OpenGLContext) void {
     glfw.glfwSwapBuffers(self.mWindow);
 }
 
+pub fn SetELineThickness(self: OpenGLContext, thickness: f32) void {
+    _ = self;
+    glad.glLineWidth(thickness);
+}
+
+pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
+    _ = self;
+    var num: c_int = 0;
+    glad.glGetIntegerv(glad.GL_MAX_IMAGE_UNITS, &num);
+    return @intCast(num);
+}
+
+pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: usize) void {
+    _ = self;
+    vertex_array.Bind();
+    const count = if (index_count > 0) index_count else vertex_array.GetIndexBuffer().GetCount();
+    glad.glDrawElements(glad.GL_TRIANGLES, @intCast(count), glad.GL_UNSIGNED_INT, null);
+}
+
+pub fn DrawELines(self: OpenGLContext, vertex_array: VertexArray, vertex_count: usize) void {
+    _ = self;
+    vertex_array.Bind();
+    glad.glDrawArrays(glad.GL_LINES, 0, @intCast(vertex_count));
+}
+
 fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uint, length: c_int, message: [*c]const u8, userParam: ?*const anyopaque) callconv(.C) void {
     _ = length;
     _ = userParam;
@@ -67,25 +92,6 @@ fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uin
 
         else => {},
     }
-}
-
-pub fn SetELineThickness(self: OpenGLContext, thickness: f32) void {
-    _ = self;
-    glad.glLineWidth(thickness);
-}
-
-pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
-    _ = self;
-    var num: c_int = 0;
-    glad.glGetIntegerv(glad.GL_MAX_IMAGE_UNITS, &num);
-    return @intCast(num);
-}
-
-pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: usize) void {
-    _ = self;
-    vertex_array.Bind();
-    const count = if (index_count > 0) index_count else vertex_array.GetIndexBuffer().GetCount();
-    glad.glDrawElements(glad.GL_TRIANGLES, @intCast(count), glad.GL_UNSIGNED_INT, null);
 }
 
 fn glDebugTypeToStr(debug_type: c_uint) []const u8 {

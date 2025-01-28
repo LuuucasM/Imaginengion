@@ -15,7 +15,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) UnsupportedShade
     Unsupported();
 }
 
-pub fn Deinit(self: UnsupportedShader) void {
+pub fn Deinit(self: *UnsupportedShader) void {
     _ = self;
     Unsupported();
 }

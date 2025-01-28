@@ -60,7 +60,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !Shader {
     };
 }
 
-pub fn Deinit(self: Shader) void {
+pub fn Deinit(self: *Shader) void {
     self.mImpl.Deinit();
 }
 

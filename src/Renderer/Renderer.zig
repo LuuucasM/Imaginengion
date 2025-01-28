@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
+const VertexArray = @import("../VertexArrays/VertexArray.zig");
 
 const RenderContext = @import("RenderContext.zig");
 const Renderer2D = @import("Renderer2D.zig");
@@ -91,6 +92,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 }
 
 pub fn Deinit() void {
+    RenderM.mR2D.Deinit();
     RenderM.mTexturesMap.deinit();
     RenderM.mTextures.deinit();
     RenderM.mEngineAllocator.destroy(RenderM);
@@ -100,12 +102,11 @@ pub fn SwapBuffers() void {
     RenderM.mRenderContext.SwapBuffers();
 }
 
-pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
+pub fn RenderSceneLayer(ecs_manager: *ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
     RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(Mat4f32), 0);
 
     BeginScene();
-    defer EndScene();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -122,6 +123,8 @@ pub fn RenderSceneLayer(ecs_manager: ECSManager, camera_projection: Mat4f32, cam
     try TextureSort(SpriteRenderComponent, sprite_entities, sprite_end_index, ecs_manager);
     try DrawSprites(sprite_entities, sprite_end_index, ecs_manager);
     DrawCircles(circle_entities, circle_end_index, ecs_manager);
+
+    try EndScene();
 }
 
 pub fn BeginScene() void {
@@ -132,25 +135,33 @@ pub fn BeginScene() void {
     RenderM.mR2D.StartBatchELine();
 }
 
-pub fn EndScene() void {
+pub fn EndScene() !void {
     if (RenderM.mR2D.mSpriteVertexCount > 0) {
         RenderM.mR2D.FlushSprite();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mSpriteVertexArray, RenderM.mR2D.mSpriteVertexCount);
+        for (RenderM.mTextures.items, 0..) |asset_handle, i| {
+            const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
+            texture.Bind(i);
+        }
+        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mSpriteVertexArray, RenderM.mR2D.mSpriteIndexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
     if (RenderM.mR2D.mCircleVertexCount > 0) {
         RenderM.mR2D.FlushCircle();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mCircleVertexArray, RenderM.mR2D.mCircleVertexCount);
+        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mCircleVertexArray, RenderM.mR2D.mCircleIndexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
     if (RenderM.mR2D.mELineVertexCount > 0) {
         RenderM.mR2D.FlushELine();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mELineVertexArray, RenderM.mR2D.mELineVertexCount);
+        RenderM.mRenderContext.DrawELines(RenderM.mR2D.mELineVertexArray, RenderM.mR2D.mELineVertexCount);
         RenderM.mStats.mDrawCalls += 1;
     }
 }
 
-fn CullEntities(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: ECSManager) usize {
+pub fn DrawComposite(composite_va: VertexArray) void {
+    RenderM.mRenderContext.DrawIndexed(composite_va, 6);
+}
+
+fn CullEntities(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: *ECSManager) usize {
     std.debug.assert(@hasField(component_type, "mShouldRender"));
 
     var write_index: usize = 0;
@@ -170,7 +181,7 @@ fn CullEntities(comptime component_type: type, entity_list: std.ArrayList(u32), 
     return write_index;
 }
 
-fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), entity_list_end_index: usize, ecs_manager: ECSManager) !void {
+fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), entity_list_end_index: usize, ecs_manager: *ECSManager) !void {
     std.debug.assert(@hasField(component_type, "mTexture"));
 
     RenderM.mTexturesMap.clearRetainingCapacity();
@@ -187,12 +198,7 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), e
     }
 }
 
-fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs_manager: ECSManager) !void {
-    for (RenderM.mTextures.items, 0..) |asset_handle, i| {
-        const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
-        texture.Bind(i);
-    }
-
+fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs_manager: *ECSManager) !void {
     var i: usize = 0;
     while (i < sprite_end_index) : (i += 1) {
         const entity_id = sprite_entities.items[i];
@@ -215,7 +221,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs
     }
 }
 
-fn DrawCircles(circle_entities: std.ArrayList(u32), circle_end_index: usize, ecs_manager: ECSManager) void {
+fn DrawCircles(circle_entities: std.ArrayList(u32), circle_end_index: usize, ecs_manager: *ECSManager) void {
     var i: usize = 0;
     while (i < circle_end_index) : (i += 1) {
         const entity_id = circle_entities.items[i];

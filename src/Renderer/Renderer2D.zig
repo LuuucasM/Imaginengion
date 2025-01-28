@@ -49,6 +49,8 @@ const RectTexCoordPositions = [4]Vec2f32{
     Vec2f32{ 0.0, 1.0 },
 };
 
+mAllocator: std.mem.Allocator,
+
 mSpriteVertexArray: VertexArray,
 mSpriteVertexBuffer: VertexBuffer,
 mSpriteShader: Shader,
@@ -62,10 +64,12 @@ mELineVertexBuffer: VertexBuffer,
 mELineShader: Shader,
 
 mSpriteVertexCount: u32,
+mSpriteIndexCount: u32,
 mSpriteVertexBufferBase: []SpriteVertex,
 mSpriteVertexBufferPtr: *SpriteVertex,
 
 mCircleVertexCount: u32,
+mCircleIndexCount: u32,
 mCircleVertexBufferBase: []CircleVertex,
 mCircleVertexBufferPtr: *CircleVertex,
 
@@ -78,32 +82,28 @@ pub fn Init(
     max_indices: u32,
     allocator: std.mem.Allocator,
 ) !Renderer2D {
-    var buffer: [MAX_PATH_LEN * 5]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-    const sprite_shader_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/shaders/2d/Sprite.glsl" });
-    const circle_shader_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/shaders/2d/Circle.glsl" });
-    const eline_shader_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/shaders/2d/ELine.glsl" });
-
     var new_renderer2d = Renderer2D{
+        .mAllocator = allocator,
+
         .mSpriteVertexArray = VertexArray.Init(allocator),
         .mSpriteVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(SpriteVertex)),
-        .mSpriteShader = try Shader.Init(allocator, sprite_shader_path),
+        .mSpriteShader = try Shader.Init(allocator, "assets/shaders/2d/Sprite.glsl"),
 
         .mCircleVertexArray = VertexArray.Init(allocator),
         .mCircleVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(CircleVertex)),
-        .mCircleShader = try Shader.Init(allocator, circle_shader_path),
+        .mCircleShader = try Shader.Init(allocator, "assets/shaders/2d/Circle.glsl"),
 
         .mELineVertexArray = VertexArray.Init(allocator),
         .mELineVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(ELineVertex)),
-        .mELineShader = try Shader.Init(allocator, eline_shader_path),
+        .mELineShader = try Shader.Init(allocator, "assets/shaders/2d/ELine.glsl"),
 
         .mSpriteVertexCount = 0,
+        .mSpriteIndexCount = 0,
         .mSpriteVertexBufferBase = try allocator.alloc(SpriteVertex, max_vertices),
         .mSpriteVertexBufferPtr = undefined,
 
         .mCircleVertexCount = 0,
+        .mCircleIndexCount = 0,
         .mCircleVertexBufferBase = try allocator.alloc(CircleVertex, max_vertices),
         .mCircleVertexBufferPtr = undefined,
 
@@ -164,6 +164,24 @@ pub fn Init(
     return new_renderer2d;
 }
 
+pub fn Deinit(self: *Renderer2D) void {
+    self.mSpriteVertexBuffer.Deinit();
+    self.mSpriteVertexArray.Deinit();
+    self.mSpriteShader.Deinit();
+
+    self.mCircleVertexBuffer.Deinit();
+    self.mCircleVertexBuffer.Deinit();
+    self.mCircleShader.Deinit();
+
+    self.mELineVertexBuffer.Deinit();
+    self.mELineVertexArray.Deinit();
+    self.mELineShader.Deinit();
+
+    self.mAllocator.free(self.mSpriteVertexBufferBase);
+    self.mAllocator.free(self.mCircleVertexBufferBase);
+    self.mAllocator.free(self.mELineVertexBufferBase);
+}
+
 pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32) void {
     var i: usize = 0;
     while (i < 4) : (i += 1) {
@@ -177,6 +195,7 @@ pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture
         self.mSpriteVertexCount += 1;
         self.mSpriteVertexBufferPtr = &self.mSpriteVertexBufferBase[self.mSpriteVertexCount];
     }
+    self.mSpriteIndexCount += 6;
 }
 pub fn DrawCircle(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
     var i: usize = 0;
@@ -193,6 +212,8 @@ pub fn DrawCircle(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, thickne
         self.mCircleVertexCount += 1;
         self.mCircleVertexBufferPtr = &self.mCircleVertexBufferBase[self.mCircleVertexCount];
     }
+
+    self.mCircleIndexCount += 6;
 }
 
 pub fn DrawELine(self: *Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) void {
@@ -209,11 +230,13 @@ pub fn DrawELine(self: *Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) vo
 
 pub fn StartBatchSprite(self: *Renderer2D) void {
     self.mSpriteVertexCount = 0;
+    self.mSpriteIndexCount = 0;
     self.mSpriteVertexBufferPtr = &self.mSpriteVertexBufferBase[0];
 }
 
 pub fn StartBatchCircle(self: *Renderer2D) void {
     self.mCircleVertexCount = 0;
+    self.mCircleIndexCount = 0;
     self.mCircleVertexBufferPtr = &self.mCircleVertexBufferBase[0];
 }
 
