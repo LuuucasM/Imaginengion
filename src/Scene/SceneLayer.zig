@@ -16,6 +16,7 @@ const InternalFrameBuffer = @import("../FrameBuffers/InternalFrameBuffer.zig").F
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
 const IDComponent = Components.IDComponent;
+const SceneIDComponent = Components.SceneIDComponent;
 const NameComponent = Components.NameComponent;
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
@@ -57,7 +58,6 @@ pub fn Deinit(self: *SceneLayer) void {
 
 pub fn CreateBlankEntity(self: *SceneLayer) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
-
     return new_entity;
 }
 
@@ -66,8 +66,8 @@ pub fn CreateEntity(self: *SceneLayer) !Entity {
 }
 pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
     const e = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
-
     _ = try e.AddComponent(IDComponent, .{ .ID = uuid });
+    _ = try e.AddComponent(SceneIDComponent, .{ .SceneID = self.mUUID });
     var name = [_]u8{0} ** 24;
     @memcpy(name[0..14], "Unnamed Entity");
     _ = try e.AddComponent(NameComponent, .{ .Name = name });
@@ -88,7 +88,7 @@ pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
 pub fn Render(self: SceneLayer, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     self.mFrameBuffer.Bind();
     defer self.mFrameBuffer.Unbind();
-    try RenderManager.RenderSceneLayer(self.mECSManagerRef, camera_projection, camera_transform);
+    try RenderManager.RenderSceneLayer(self.mUUID, self.mECSManagerRef, camera_projection, camera_transform);
 }
 
 pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {

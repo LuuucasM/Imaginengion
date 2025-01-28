@@ -8,6 +8,7 @@ const CameraComponent = Components.CameraComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
+const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 
@@ -149,6 +150,18 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         try write_stream.objectField("IDComponent");
         try write_stream.write(component_string.items);
     }
+    if (entity.HasComponent(SceneIDComponent) == true) {
+        const component = entity.GetComponent(SceneIDComponent);
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("SceneIDComponent");
+        try write_stream.write(component_string.items);
+    }
     if (entity.HasComponent(NameComponent) == true) {
         const component = entity.GetComponent(NameComponent);
 
@@ -218,6 +231,13 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
         const new_component_parsed = try std.json.parseFromSlice(IDComponent, fba.allocator(), component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(IDComponent, new_component_parsed.value);
+    } else if (std.mem.eql(u8, component_type_string, "SceneIDComponent")) {
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        const new_component_parsed = try std.json.parseFromSlice(SceneIDComponent, fba.allocator(), component_string, .{});
+        defer new_component_parsed.deinit();
+        _ = try entity.AddComponent(SceneIDComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "NameComponent")) {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);

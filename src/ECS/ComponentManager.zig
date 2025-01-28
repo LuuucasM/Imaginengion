@@ -7,6 +7,17 @@ const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetMan
 const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
+
+const Node = struct {
+    data: Runnable,
+};
+
+const Runnable = struct {
+    runFn: RunProto,
+};
+
+const RunProto = *const fn (*Runnable, id: ?usize) void;
+
 pub const GroupQuery = union(enum) {
     And: []const GroupQuery,
     Or: []const GroupQuery,
@@ -17,9 +28,31 @@ pub const GroupQuery = union(enum) {
     Component: type,
     Filter: struct {
         mEntities: GroupQuery,
-        mFunction: *const fn (entity_id: u32) bool,
+        mFunction: Node,
     },
 };
+
+pub fn SpawnFilter(allocator: std.mem.Allocator, comptime func: anytype, args: anytype) Node {
+    const Args = @TypeOf(args);
+    const Closure = struct {
+        arguments: Args,
+        run_node: Node = .{ .data = .{ .runFn = runFn } },
+
+        fn runFn(runnable: *Runnable) void {
+            const run_node: *Node = @fieldParentPtr("data", runnable);
+            const closure: *@This() = @alignCast(@fieldParentPtr("run_node", run_node));
+            @call(.auto, func, closure.arguments);
+        }
+    };
+
+    const closure = try allocator.create(Closure);
+    closure.* = .{
+        .arguments = args,
+    };
+
+    return closure.run_node;
+}
+
 mComponentsArrays: std.ArrayList(IComponentArray),
 mEntitySkipField: SparseSet(.{
     .SparseT = u32,
@@ -136,6 +169,7 @@ pub fn GetComponent(self: ComponentManager, comptime component_type: type, entit
     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
     return @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetComponent(entityID);
 }
+
 pub fn GetQuery(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     var query_set = try self.InternalGetQuery(query, allocator);
     defer query_set.deinit();
@@ -155,15 +189,16 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
             return try @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetAllEntities(allocator);
         },
         .Not => |not| {
-            const result = try self.InternalGetQuery(not.mFirst, allocator);
+            var result = try self.InternalGetQuery(not.mFirst, allocator);
             const second = try self.InternalGetQuery(not.mSecond, allocator);
             defer second.deinit();
-
-            return try result.differenceUpdate(second);
+            try result.differenceUpdate(second);
+            return result;
         },
         .Filter => |filter| {
-            const result = try self.InternalGetQuery(filter.mEntities, allocator);
-            return try result.FilterUpdate(filter.mFunction);
+            var result = try self.InternalGetQuery(filter.mEntities, allocator);
+            try result.FilterUpdate(filter.mFunction);
+            return result;
         },
         .Or => |ors| {
             var result = try self.InternalGetQuery(ors[0], allocator);

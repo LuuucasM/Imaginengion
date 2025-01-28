@@ -9,7 +9,6 @@ const ComponentsPanel = @This();
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
-const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;

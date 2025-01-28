@@ -235,7 +235,7 @@ pub fn HashSetManaged(comptime E: type) type {
 
             var iter = self.map.iterator();
             while (iter.next()) |pVal| {
-                if (function(pVal) == true) {
+                if (function(pVal.*) == true) {
                     _ = try filtered_set.add(pVal.*);
                 }
             }

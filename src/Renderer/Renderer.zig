@@ -19,9 +19,11 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const ECSManager = @import("../ECS/ECSManager.zig");
+const ComponentManager = @import("../ECS/ComponentManager.zig");
 
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
+const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
@@ -102,18 +104,39 @@ pub fn SwapBuffers() void {
     RenderM.mRenderContext.SwapBuffers();
 }
 
-pub fn RenderSceneLayer(ecs_manager: *ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
+pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
     RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(Mat4f32), 0);
-
     BeginScene();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const sprite_entities = try ecs_manager.GetQuery(GroupQuery{ .And = &[_]GroupQuery{ GroupQuery{ .Component = TransformComponent }, GroupQuery{ .Component = SpriteRenderComponent } } }, allocator);
-    const circle_entities = try ecs_manager.GetQuery(GroupQuery{ .And = &[_]GroupQuery{ GroupQuery{ .Component = TransformComponent }, GroupQuery{ .Component = CircleRenderComponent } } }, allocator);
+    const sprite_entities = try ecs_manager.GetQuery(
+        GroupQuery{ .And = &[_]GroupQuery{
+            GroupQuery{ .Filter = .{
+                .mEntities = GroupQuery{ .Component = SpriteRenderComponent },
+                .mFunction = ,
+            } },
+            GroupQuery{ .Component = TransformComponent },
+        } },
+        allocator,
+    );
+    const circle_entities = try ecs_manager.GetQuery(
+        GroupQuery{ .And = &[_]GroupQuery{
+            GroupQuery{ .Filter = .{
+                .mEntities = GroupQuery{ .Component = CircleRenderComponent },
+                .mFunction = struct {
+                    pub fn func(entity_id: u32) bool {
+                        return ecs_manager.GetComponent(SceneIDComponent, entity_id).SceneID == scene_uuid;
+                    }
+                }.func,
+            } },
+            GroupQuery{ .Component = TransformComponent },
+        } },
+        allocator,
+    );
 
     //cull entities that shouldnt be rendered
     const sprite_end_index = CullEntities(SpriteRenderComponent, sprite_entities, ecs_manager);
