@@ -8,7 +8,7 @@ const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
 
-const Node = struct {
+const Filter = struct {
     data: Runnable,
 };
 
@@ -16,7 +16,7 @@ const Runnable = struct {
     runFn: RunProto,
 };
 
-const RunProto = *const fn (*Runnable, id: ?usize) void;
+const RunProto = *const fn (*Runnable) bool;
 
 pub const GroupQuery = union(enum) {
     And: []const GroupQuery,
@@ -28,20 +28,21 @@ pub const GroupQuery = union(enum) {
     Component: type,
     Filter: struct {
         mEntities: GroupQuery,
-        mFunction: Node,
+        mFunction: Filter,
     },
 };
 
-pub fn SpawnFilter(allocator: std.mem.Allocator, comptime func: anytype, args: anytype) Node {
+pub fn SpawnFilter(allocator: std.mem.Allocator, comptime func: anytype, args: anytype) Filter {
     const Args = @TypeOf(args);
     const Closure = struct {
         arguments: Args,
-        run_node: Node = .{ .data = .{ .runFn = runFn } },
+        run_node: Filter = .{ .data = .{ .runFn = runFn } },
 
-        fn runFn(runnable: *Runnable) void {
-            const run_node: *Node = @fieldParentPtr("data", runnable);
+        fn runFn(runnable: *Runnable, entity_id: u32) bool {
+            const run_node: *Filter = @fieldParentPtr("data", runnable);
             const closure: *@This() = @alignCast(@fieldParentPtr("run_node", run_node));
-            @call(.auto, func, closure.arguments);
+            const new_args = .{ closure.arguments, entity_id };
+            return @call(.auto, func, new_args);
         }
     };
 
