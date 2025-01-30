@@ -42,6 +42,7 @@ mViewportHeight: usize,
 
 mCompositeVertexArray: VertexArray,
 mCompositeVertexBuffer: VertexBuffer,
+mCompositeIndexBuffer: IndexBuffer,
 mCompositeShader: Shader,
 mNumTexturesUniformBuffer: UniformBuffer,
 
@@ -57,12 +58,14 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 
         .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
         .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
+        .mCompositeIndexBuffer = undefined,
         .mCompositeShader = try Shader.Init(SceneManagerGPA.allocator(), "assets/shaders/Composite.glsl"),
         .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
     };
 
-    const data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    const rect_index_buffer = IndexBuffer.Init(@constCast(&data_index_buffer), 6);
+    var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    const rect_index_buffer = IndexBuffer.Init(&data_index_buffer, 6);
+    new_scene_manager.mCompositeIndexBuffer = rect_index_buffer;
 
     try new_scene_manager.mCompositeVertexBuffer.SetLayout(new_scene_manager.mCompositeShader.GetLayout());
     new_scene_manager.mCompositeVertexBuffer.SetStride(new_scene_manager.mCompositeShader.GetStride());
@@ -72,7 +75,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
-    new_scene_manager.mCompositeVertexArray.SetIndexBuffer(rect_index_buffer);
+    new_scene_manager.mCompositeVertexArray.SetIndexBuffer(new_scene_manager.mCompositeIndexBuffer);
 
     new_scene_manager.mNumTexturesUniformBuffer.Bind(0);
     new_scene_manager.mCompositeShader.Bind();
@@ -88,6 +91,7 @@ pub fn Deinit(self: *SceneManager) !void {
     self.mSceneStack.deinit();
     self.mCompositeShader.Deinit();
     self.mCompositeVertexBuffer.Deinit();
+    self.mCompositeIndexBuffer.Deinit();
     self.mCompositeVertexArray.Deinit();
     self.mFrameBuffer.Deinit();
     self.mECSManager.Deinit();

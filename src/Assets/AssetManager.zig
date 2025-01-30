@@ -39,7 +39,7 @@ pub fn Deinit() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const group = try AssetM.mAssetECS.GetQuery(.{ .Component = FileMetaData }, allocator);
+    const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, allocator);
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
@@ -96,7 +96,7 @@ pub fn OnUpdate() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const group = try AssetM.mAssetECS.GetQuery(.{ .Component = FileMetaData }, allocator);
+    const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, allocator);
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         if (file_data.mSize == 0) {
@@ -122,8 +122,8 @@ pub fn OnUpdate() !void {
     }
 }
 
-pub fn GetQuery(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    return try AssetM.mAssetECS.GetQuery(query, allocator);
+pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+    return try AssetM.mAssetECS.GetGroup(query, allocator);
 }
 
 fn CreateAsset(abs_path: []const u8) !AssetHandle {

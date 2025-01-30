@@ -43,7 +43,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
 }
 
 pub fn Deinit(self: *OpenGLShader) void {
-    glad.glDeleteShader(self.mShaderID);
+    glad.glDeleteProgram(self.mShaderID);
 
     self.mBufferElements.deinit();
     self.mUniforms.deinit();

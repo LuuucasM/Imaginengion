@@ -72,8 +72,20 @@ pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
     return self.mComponentManager.GetComponent(ComponentType, entityID);
 }
 
-pub fn GetQuery(self: ECSManager, query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    return try self.mComponentManager.GetQuery(query, allocator);
+pub fn GetGroup(self: ECSManager, query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+    return try self.mComponentManager.GetGroup(query, allocator);
+}
+
+pub fn EntityListDifference(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    try self.mComponentManager.EntityListDifference(result, list2, allocator);
+}
+
+pub fn EntityListUnion(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    try self.mComponentManager.EntityListUnion(result, list2, allocator);
+}
+
+pub fn EntityListIntersection(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    try self.mComponentManager.EntityListIntersection(result, list2, allocator);
 }
 
 //-----------System Manager------------

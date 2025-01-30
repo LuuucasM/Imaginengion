@@ -170,7 +170,7 @@ pub fn Deinit(self: *Renderer2D) void {
     self.mSpriteShader.Deinit();
 
     self.mCircleVertexBuffer.Deinit();
-    self.mCircleVertexBuffer.Deinit();
+    self.mCircleVertexArray.Deinit();
     self.mCircleShader.Deinit();
 
     self.mELineVertexBuffer.Deinit();

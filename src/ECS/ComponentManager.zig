@@ -135,18 +135,7 @@ pub fn GetComponent(self: ComponentManager, comptime component_type: type, entit
     return @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetComponent(entityID);
 }
 
-pub fn GetQuery(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    var query_set = try self.InternalGetQuery(query, allocator);
-    defer query_set.deinit();
-    var result = std.ArrayList(u32).init(allocator);
-
-    var iter = query_set.iterator();
-    while (iter.next()) |entry| {
-        try result.append(entry.*);
-    }
-    return result;
-}
-fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !Set(u32) {
+pub fn GetGroup(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     switch (query) {
         .Component => |component_type| {
             std.debug.assert(@hasDecl(component_type, "Ind"));
@@ -157,7 +146,7 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
             var result = try self.InternalGetQuery(not.mFirst, allocator);
             const second = try self.InternalGetQuery(not.mSecond, allocator);
             defer second.deinit();
-            try result.differenceUpdate(second);
+            try self.EntityListDifference(&result, second, allocator);
             return result;
         },
         .Or => |ors| {
@@ -165,7 +154,7 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
             inline for (ors[1..]) |or_query| {
                 var intermediate = try self.InternalGetQuery(or_query, allocator);
                 defer intermediate.deinit();
-                try result.unionUpdate(intermediate);
+                try self.EntityListUnion(&result, intermediate, allocator);
             }
             return result;
         },
@@ -174,9 +163,65 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
             inline for (ands[1..]) |and_query| {
                 var intermediate = try self.InternalGetQuery(and_query, allocator);
                 defer intermediate.deinit();
-                try result.intersectionUpdate(intermediate);
+                try self.EntityListIntersection(&result, intermediate, allocator);
             }
             return result;
         },
     }
+}
+
+pub fn EntityListDifference(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    _ = self;
+
+    var list2_set = Set(u32).init(allocator);
+    defer list2_set.deinit();
+    _ = try list2_set.appendSlice(list2.items);
+
+    var end_index: usize = result.items.len - 1;
+    var i: usize = 0;
+    while (i < end_index) {
+        if (list2_set.contains(result.items[i]) == true) {
+            result.items[i] = result.items[end_index];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    result.shrinkAndFree(end_index + 1);
+}
+
+pub fn EntityListUnion(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    _ = self;
+
+    var result_set = Set(u32).init(allocator);
+    defer result_set.deinit();
+    try result_set.appendSlice(result.items);
+
+    for (list2.items) |entity_id| {
+        if (result_set.contains(entity_id) == false) {
+            result.append(entity_id);
+        }
+    }
+}
+
+pub fn EntityListIntersection(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    _ = self;
+
+    var list2_set = Set(u32).init(allocator);
+    defer list2_set.deinit();
+    _ = try list2_set.appendSlice(list2.items);
+
+    var end_index: usize = result.items.len - 1;
+    var i: usize = 0;
+    while (i < end_index) {
+        if (list2_set.contains(result.items[i]) == true) {
+            i += 1;
+        } else {
+            result.items[i] = result.items[end_index];
+            end_index -= 1;
+        }
+    }
+
+    result.shrinkAndFree(end_index + 1);
 }

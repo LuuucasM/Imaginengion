@@ -113,32 +113,22 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    _ = scene_uuid;
+    var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
+    FilterSceneUUID(&sprite_entities, scene_uuid, ecs_manager);
+    try ecs_manager.EntityListIntersection(&sprite_entities, try ecs_manager.GetGroup(GroupQuery{ .Component = TransformComponent }, allocator), allocator);
 
-    const sprite_entities = try ecs_manager.GetQuery(
-        GroupQuery{ .And = &[_]GroupQuery{
-            GroupQuery{ .Component = SpriteRenderComponent },
-            GroupQuery{ .Component = TransformComponent },
-        } },
-        allocator,
-    );
-
-    const circle_entities = try ecs_manager.GetQuery(
-        GroupQuery{ .And = &[_]GroupQuery{
-            GroupQuery{ .Component = CircleRenderComponent },
-            GroupQuery{ .Component = TransformComponent },
-        } },
-        allocator,
-    );
+    var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
+    FilterSceneUUID(&circle_entities, scene_uuid, ecs_manager);
+    try ecs_manager.EntityListIntersection(&circle_entities, try ecs_manager.GetGroup(GroupQuery{ .Component = TransformComponent }, allocator), allocator);
 
     //cull entities that shouldnt be rendered
-    const sprite_end_index = CullEntities(SpriteRenderComponent, sprite_entities, ecs_manager);
-    const circle_end_index = CullEntities(CircleRenderComponent, circle_entities, ecs_manager);
+    CullEntities(SpriteRenderComponent, &sprite_entities, ecs_manager);
+    CullEntities(CircleRenderComponent, &circle_entities, ecs_manager);
 
     //ensure textures are ready to go for draw
-    try TextureSort(SpriteRenderComponent, sprite_entities, sprite_end_index, ecs_manager);
-    try DrawSprites(sprite_entities, sprite_end_index, ecs_manager);
-    DrawCircles(circle_entities, circle_end_index, ecs_manager);
+    try TextureSort(SpriteRenderComponent, sprite_entities, ecs_manager);
+    try DrawSprites(sprite_entities, ecs_manager);
+    DrawCircles(circle_entities, ecs_manager);
 
     try EndScene();
 }
@@ -177,34 +167,51 @@ pub fn DrawComposite(composite_va: VertexArray) void {
     RenderM.mRenderContext.DrawIndexed(composite_va, 6);
 }
 
-fn CullEntities(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: *ECSManager) usize {
-    std.debug.assert(@hasField(component_type, "mShouldRender"));
+fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
+    var end_index: usize = result.items.len - 1;
+    var i: usize = 0;
 
-    var write_index: usize = 0;
-    var read_index: usize = 0;
-
-    while (read_index < entity_list.items.len) : (read_index += 1) {
-        const entity_id = entity_list.items[read_index];
-        const render_component = ecs_manager.GetComponent(component_type, entity_id);
-
-        if (render_component.mShouldRender == true) {
-            const temp = entity_list.items[write_index];
-            entity_list.items[write_index] = entity_list.items[read_index];
-            entity_list.items[read_index] = temp;
-            write_index += 1;
+    while (i < end_index) {
+        const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
+        if (scene_id_component.SceneID != scene_uuid) {
+            result.items[i] = result.items[end_index];
+            end_index -= 1;
+        } else {
+            i += 1;
         }
     }
-    return write_index;
+
+    result.shrinkAndFree(end_index + 1);
 }
 
-fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), entity_list_end_index: usize, ecs_manager: *ECSManager) !void {
+fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_manager: *ECSManager) void {
+    std.debug.assert(@hasField(component_type, "mShouldRender"));
+
+    var end_index: usize = 0;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const entity_id = result.items[i];
+        const render_component = ecs_manager.GetComponent(component_type, entity_id);
+        if (render_component.mShouldRender == true) {
+            i += 1;
+        } else {
+            result.items[i] = result.items[end_index];
+            end_index -= 1;
+        }
+    }
+
+    result.shrinkAndFree(end_index + 1);
+}
+
+fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: *ECSManager) !void {
     std.debug.assert(@hasField(component_type, "mTexture"));
 
     RenderM.mTexturesMap.clearRetainingCapacity();
     RenderM.mTextures.clearRetainingCapacity();
 
     var i: usize = 0;
-    while (i < entity_list_end_index) : (i += 1) {
+    while (i < entity_list.items.len) : (i += 1) {
         const entity_id = entity_list.items[i];
         const render_component = ecs_manager.GetComponent(component_type, entity_id);
         if (RenderM.mTexturesMap.contains(render_component.mTexture.mID) == false) {
@@ -214,9 +221,9 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), e
     }
 }
 
-fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs_manager: *ECSManager) !void {
+fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: *ECSManager) !void {
     var i: usize = 0;
-    while (i < sprite_end_index) : (i += 1) {
+    while (i < sprite_entities.items.len) : (i += 1) {
         const entity_id = sprite_entities.items[i];
         const transform_component = ecs_manager.GetComponent(TransformComponent, entity_id);
         const sprite_component = ecs_manager.GetComponent(SpriteRenderComponent, entity_id);
@@ -237,9 +244,9 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), sprite_end_index: usize, ecs
     }
 }
 
-fn DrawCircles(circle_entities: std.ArrayList(u32), circle_end_index: usize, ecs_manager: *ECSManager) void {
+fn DrawCircles(circle_entities: std.ArrayList(u32), ecs_manager: *ECSManager) void {
     var i: usize = 0;
-    while (i < circle_end_index) : (i += 1) {
+    while (i < circle_entities.items.len) : (i += 1) {
         const entity_id = circle_entities.items[i];
         const transform_component = ecs_manager.GetComponent(TransformComponent, entity_id);
         const circle_component = ecs_manager.GetComponent(CircleRenderComponent, entity_id);

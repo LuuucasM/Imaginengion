@@ -19,7 +19,7 @@ pub fn Init(indices: []u32, count: usize) OpenGLIndexBuffer {
 }
 
 pub fn Deinit(self: OpenGLIndexBuffer) void {
-    glad.glDeleteBuffers(1, self.mBufferID);
+    glad.glDeleteBuffers(1, &self.mBufferID);
 }
 
 pub fn Bind(self: OpenGLIndexBuffer) void {

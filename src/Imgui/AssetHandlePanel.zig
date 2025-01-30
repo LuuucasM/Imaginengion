@@ -24,7 +24,7 @@ pub fn OnImguiRender(self: AssetHandlePanel) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const file_data_set = try AssetManager.GetQuery(.{ .Component = FileMetaData }, allocator);
+    const file_data_set = try AssetManager.GetGroup(.{ .Component = FileMetaData }, allocator);
     for (file_data_set.items) |asset_id| {
         const file_data = try AssetManager.GetAsset(FileMetaData, asset_id);
         const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ asset_id, file_data.mAbsPath });

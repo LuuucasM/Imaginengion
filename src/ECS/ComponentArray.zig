@@ -116,12 +116,9 @@ pub fn ComponentArray(comptime componentType: type) type {
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
         }
-        pub fn GetAllEntities(self: *Self, allocator: std.mem.Allocator) !Set(u32) {
-            var entity_set = Set(u32).init(allocator);
-            var i: usize = 0;
-            while (i < self.mComponents.dense_count) : (i += 1) {
-                _ = try entity_set.add(self.mComponents.dense_to_sparse[i]);
-            }
+        pub fn GetAllEntities(self: *Self, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+            var entity_set = std.ArrayList(u32).init(allocator);
+            try entity_set.appendSlice(self.mComponents.dense_to_sparse[0..self.mComponents.dense_count]);
             return entity_set;
         }
     };

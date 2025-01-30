@@ -77,7 +77,7 @@ pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
 }
 
 pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
-    try self.mECSManager.DestroyEntity(e.mEntityID);
+    try self.mECSManagerRef.DestroyEntity(e.mEntityID);
 }
 pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = &self };
@@ -98,7 +98,7 @@ pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const entity_ids = try self.mECSManagerRef.GetQuery(.{ .Component = CameraComponent }, allocator);
+    const entity_ids = try self.mECSManagerRef.GetGroup(.{ .Component = CameraComponent }, allocator);
     for (entity_ids.items) |entity_id| {
         const camera_component = self.mECSManagerRef.GetComponent(CameraComponent, entity_id);
         if (camera_component.mIsFixedAspectRatio == false) {

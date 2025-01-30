@@ -25,7 +25,6 @@ pub fn Init(allocator: std.mem.Allocator) OpenGLVertexArray {
 
 pub fn Deinit(self: OpenGLVertexArray) void {
     self.mVertexBuffers.deinit();
-    self.mIndexBuffer.Deinit();
     glad.glDeleteVertexArrays(1, &self.mArrayID);
 }
 
