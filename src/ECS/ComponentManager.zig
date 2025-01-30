@@ -8,16 +8,6 @@ const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary
 
-const Filter = struct {
-    data: Runnable,
-};
-
-const Runnable = struct {
-    runFn: RunProto,
-};
-
-const RunProto = *const fn (*Runnable) bool;
-
 pub const GroupQuery = union(enum) {
     And: []const GroupQuery,
     Or: []const GroupQuery,
@@ -26,33 +16,7 @@ pub const GroupQuery = union(enum) {
         mSecond: GroupQuery,
     },
     Component: type,
-    Filter: struct {
-        mEntities: GroupQuery,
-        mFunction: Filter,
-    },
 };
-
-pub fn SpawnFilter(allocator: std.mem.Allocator, comptime func: anytype, args: anytype) Filter {
-    const Args = @TypeOf(args);
-    const Closure = struct {
-        arguments: Args,
-        run_node: Filter = .{ .data = .{ .runFn = runFn } },
-
-        fn runFn(runnable: *Runnable, entity_id: u32) bool {
-            const run_node: *Filter = @fieldParentPtr("data", runnable);
-            const closure: *@This() = @alignCast(@fieldParentPtr("run_node", run_node));
-            const new_args = .{ closure.arguments, entity_id };
-            return @call(.auto, func, new_args);
-        }
-    };
-
-    const closure = try allocator.create(Closure);
-    closure.* = .{
-        .arguments = args,
-    };
-
-    return closure.run_node;
-}
 
 mComponentsArrays: std.ArrayList(IComponentArray),
 mEntitySkipField: SparseSet(.{
@@ -194,11 +158,6 @@ fn InternalGetQuery(self: ComponentManager, comptime query: GroupQuery, allocato
             const second = try self.InternalGetQuery(not.mSecond, allocator);
             defer second.deinit();
             try result.differenceUpdate(second);
-            return result;
-        },
-        .Filter => |filter| {
-            var result = try self.InternalGetQuery(filter.mEntities, allocator);
-            try result.FilterUpdate(filter.mFunction);
             return result;
         },
         .Or => |ors| {

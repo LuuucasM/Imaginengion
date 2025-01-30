@@ -19,7 +19,7 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const ECSManager = @import("../ECS/ECSManager.zig");
-const SpawnFilter = @import("../ECS/ComponentManager.zig").SpawnFilter;
+const ComponentManager = @import("../ECS/ComponentManager.zig");
 
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
@@ -113,32 +113,19 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const func = struct {
-        pub fn func(func_ecs_manager: *ECSManager, entity_id: u32, func_scene_uuid: u128) bool {
-            return func_ecs_manager.GetComponent(SceneIDComponent, entity_id).SceneID == func_scene_uuid;
-        }
-    }.func;
+    _ = scene_uuid;
 
     const sprite_entities = try ecs_manager.GetQuery(
         GroupQuery{ .And = &[_]GroupQuery{
-            GroupQuery{ .Filter = .{
-                .mEntities = GroupQuery{ .Component = SpriteRenderComponent },
-                .mFunction = SpawnFilter(allocator, func, .{ ecs_manager, scene_uuid }),
-            } },
+            GroupQuery{ .Component = SpriteRenderComponent },
             GroupQuery{ .Component = TransformComponent },
         } },
         allocator,
     );
+
     const circle_entities = try ecs_manager.GetQuery(
         GroupQuery{ .And = &[_]GroupQuery{
-            GroupQuery{ .Filter = .{
-                .mEntities = GroupQuery{ .Component = CircleRenderComponent },
-                .mFunction = struct {
-                    pub fn func(entity_id: u32) bool {
-                        return ecs_manager.GetComponent(SceneIDComponent, entity_id).SceneID == scene_uuid;
-                    }
-                }.func,
-            } },
+            GroupQuery{ .Component = CircleRenderComponent },
             GroupQuery{ .Component = TransformComponent },
         } },
         allocator,
