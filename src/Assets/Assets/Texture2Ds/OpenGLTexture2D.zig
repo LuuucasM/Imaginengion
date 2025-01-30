@@ -17,7 +17,7 @@ pub fn Init(path: []const u8) !OpenGLTexture2D {
     var data: ?*stb.stbi_uc = null;
     stb.stbi_set_flip_vertically_on_load(1);
 
-    var file = try std.fs.openFileAbsolute(path, .{});
+    var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
     const fstats = try file.stat();
 

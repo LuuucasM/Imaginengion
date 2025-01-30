@@ -104,7 +104,7 @@ pub fn OnUpdate() !void {
             continue;
         }
         //then check if the asset path is still valid
-        const file = std.fs.openFileAbsolute(file_data.mAbsPath, .{}) catch |err| {
+        const file = std.fs.cwd().openFile(file_data.mAbsPath, .{}) catch |err| {
             if (err == error.FileNotFound) {
                 SetAssetToDelete(entity_id);
                 continue;
@@ -145,9 +145,7 @@ fn CreateAsset(abs_path: []const u8) !AssetHandle {
         .ID = try GenUUID(),
     });
 
-    const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
-        return err;
-    };
+    const file = try std.fs.cwd().openFile(abs_path, .{});
     defer file.close();
     const fstats = try file.stat();
 

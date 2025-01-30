@@ -64,8 +64,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     };
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    const rect_index_buffer = IndexBuffer.Init(&data_index_buffer, 6);
-    new_scene_manager.mCompositeIndexBuffer = rect_index_buffer;
+    new_scene_manager.mCompositeIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6);
 
     try new_scene_manager.mCompositeVertexBuffer.SetLayout(new_scene_manager.mCompositeShader.GetLayout());
     new_scene_manager.mCompositeVertexBuffer.SetStride(new_scene_manager.mCompositeShader.GetStride());

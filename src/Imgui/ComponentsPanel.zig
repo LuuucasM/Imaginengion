@@ -13,6 +13,7 @@ const NameComponent = Components.NameComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 
+const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 _P_Open: bool,
@@ -138,7 +139,8 @@ fn AddComponentPopupMenu(entity: Entity) !void {
     }
     if (entity.HasComponent(SpriteRenderComponent) == false and entity.HasComponent(CircleRenderComponent) == false) {
         if (imgui.igMenuItem_Bool("SpriteRenderComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(SpriteRenderComponent, null);
+            const new_sprite_component = try entity.AddComponent(SpriteRenderComponent, null);
+            new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
             imgui.igCloseCurrentPopup();
         }
     }

@@ -77,6 +77,8 @@ mELineVertexCount: u32,
 mELineVertexBufferBase: []ELineVertex,
 mELineVertexBufferPtr: *ELineVertex,
 
+mRectIndexBuffer: IndexBuffer,
+
 pub fn Init(
     max_vertices: u32,
     max_indices: u32,
@@ -96,6 +98,8 @@ pub fn Init(
         .mELineVertexArray = VertexArray.Init(allocator),
         .mELineVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(ELineVertex)),
         .mELineShader = try Shader.Init(allocator, "assets/shaders/2d/ELine.glsl"),
+
+        .mRectIndexBuffer = undefined,
 
         .mSpriteVertexCount = 0,
         .mSpriteIndexCount = 0,
@@ -129,7 +133,7 @@ pub fn Init(
         offset += 4;
     }
 
-    const rect_index_buffer = IndexBuffer.Init(rect_indices, max_indices);
+    new_renderer2d.mRectIndexBuffer = IndexBuffer.Init(rect_indices, max_indices);
 
     //sprite
     try new_renderer2d.mSpriteVertexBuffer.SetLayout(new_renderer2d.mSpriteShader.GetLayout());
@@ -137,7 +141,7 @@ pub fn Init(
 
     try new_renderer2d.mSpriteVertexArray.AddVertexBuffer(new_renderer2d.mSpriteVertexBuffer);
 
-    new_renderer2d.mSpriteVertexArray.SetIndexBuffer(rect_index_buffer);
+    new_renderer2d.mSpriteVertexArray.SetIndexBuffer(new_renderer2d.mRectIndexBuffer);
 
     new_renderer2d.mSpriteVertexBufferPtr = &new_renderer2d.mSpriteVertexBufferBase[0];
 
@@ -147,7 +151,7 @@ pub fn Init(
 
     try new_renderer2d.mCircleVertexArray.AddVertexBuffer(new_renderer2d.mCircleVertexBuffer);
 
-    new_renderer2d.mCircleVertexArray.SetIndexBuffer(rect_index_buffer);
+    new_renderer2d.mCircleVertexArray.SetIndexBuffer(new_renderer2d.mRectIndexBuffer);
 
     new_renderer2d.mCircleVertexBufferPtr = &new_renderer2d.mCircleVertexBufferBase[0];
 
@@ -157,7 +161,7 @@ pub fn Init(
 
     try new_renderer2d.mELineVertexArray.AddVertexBuffer(new_renderer2d.mELineVertexBuffer);
 
-    new_renderer2d.mELineVertexArray.SetIndexBuffer(rect_index_buffer);
+    new_renderer2d.mELineVertexArray.SetIndexBuffer(new_renderer2d.mRectIndexBuffer);
 
     new_renderer2d.mELineVertexBufferPtr = &new_renderer2d.mELineVertexBufferBase[0];
 

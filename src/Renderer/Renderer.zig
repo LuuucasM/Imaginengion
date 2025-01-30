@@ -168,6 +168,8 @@ pub fn DrawComposite(composite_va: VertexArray) void {
 }
 
 fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
+    if (result.items.len == 0) return;
+
     var end_index: usize = result.items.len - 1;
     var i: usize = 0;
 
@@ -186,8 +188,9 @@ fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *
 
 fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_manager: *ECSManager) void {
     std.debug.assert(@hasField(component_type, "mShouldRender"));
+    if (result.items.len == 0) return;
 
-    var end_index: usize = 0;
+    var end_index: usize = result.items.len - 1;
     var i: usize = 0;
 
     while (i < end_index) {

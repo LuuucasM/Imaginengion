@@ -172,6 +172,7 @@ pub fn GetGroup(self: ComponentManager, comptime query: GroupQuery, allocator: s
 
 pub fn EntityListDifference(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
     _ = self;
+    if (result.items.len == 0) return;
 
     var list2_set = Set(u32).init(allocator);
     defer list2_set.deinit();
@@ -207,6 +208,7 @@ pub fn EntityListUnion(self: ComponentManager, result: *std.ArrayList(u32), list
 
 pub fn EntityListIntersection(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
     _ = self;
+    if (result.items.len == 0) return;
 
     var list2_set = Set(u32).init(allocator);
     defer list2_set.deinit();
