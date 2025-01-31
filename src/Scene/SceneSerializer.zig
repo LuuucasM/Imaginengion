@@ -12,6 +12,7 @@ const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 
+const AssetManager = @import("../Assets/AssetManager.zig");
 const SceneManager = @import("SceneManager.zig");
 
 pub fn SerializeText(scene_layer: *SceneLayer) !void {
@@ -177,7 +178,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
     if (entity.HasComponent(TransformComponent) == true) {
         const component = entity.GetComponent(TransformComponent);
 
-        var buffer: [260]u8 = undefined;
+        var buffer: [1000]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
         var component_string = std.ArrayList(u8).init(fba.allocator());
@@ -246,7 +247,7 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(NameComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "TransformComponent")) {
-        var buffer: [260]u8 = undefined;
+        var buffer: [1000]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
         const new_component_parsed = try std.json.parseFromSlice(TransformComponent, fba.allocator(), component_string, .{});
@@ -272,6 +273,7 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
 
         const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, fba.allocator(), component_string, .{});
         defer new_component_parsed.deinit();
-        _ = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
+        const sprite_component = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
+        sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
     }
 }

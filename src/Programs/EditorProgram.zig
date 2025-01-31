@@ -95,9 +95,13 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._CSEditorPanel.OnImguiRender();
 
     self._ToolbarPanel.OnImguiRender();
-    try self._ViewportPanel.OnImguiRender();
+    if (self.mSceneManager.mSceneStack.items.len > 0) {
+        try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mSceneStack.items[0].mFrameBuffer);
+    } else {
+        try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    }
 
-    try self._StatsPanel.OnImguiRender(dt);
+    try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
     try Dockspace.OnImguiRender();
 
@@ -186,7 +190,6 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
             },
             .ET_ViewportResizeEvent => |e| {
-                self._ViewportPanel.OnViewportResize(e.mWidth, e.mHeight);
                 try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
             },
             else => std.debug.print("This event has not been handled by editor program!\n", .{}),

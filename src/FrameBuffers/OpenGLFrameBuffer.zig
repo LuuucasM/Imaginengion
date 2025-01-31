@@ -4,7 +4,6 @@ const glad = @import("../Core/CImports.zig").glad;
 
 pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: u32, comptime is_swap_chain_target: bool) type {
     _ = is_swap_chain_target;
-    comptime std.debug.assert(color_texture_formats.len <= 5);
     return struct {
         const Self = @This();
 
@@ -48,12 +47,16 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
         }
         pub fn Resize(self: *Self, width: usize, height: usize) void {
             if (width < 1 or height < 1 or width > 8192 or height > 8192) {
-                std.log.warn("attachment index must be within bounds!\n", .{});
+                //std.log.warn("attachment index must be within bounds!\n", .{}); //TODO uncomment
                 return;
             }
             self.mWidth = width;
             self.mHeight = height;
             self.Invalidate();
+        }
+        pub fn GetColorAttachmentID(self: Self, attachment_index: u8) u32 {
+            std.debug.assert(attachment_index < color_texture_formats.len);
+            return self.mColorAttachments[attachment_index];
         }
         pub fn ClearColorAttachment(self: Self, attachment_index: u32, value: u32) void {
             std.debug.assert(attachment_index < color_texture_formats.len);

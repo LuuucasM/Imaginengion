@@ -57,7 +57,7 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
         const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}###{d}\x00", .{ trimmed_name, component_name, id_name });
         defer fba.allocator().free(name);
 
-        try dumpString(name);
+        //try dumpString(name);
 
         imgui.igSetNextWindowDockID(dockspace_id, imgui.ImGuiCond_Once);
 

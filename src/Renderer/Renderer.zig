@@ -32,7 +32,7 @@ const Renderer = @This();
 
 var RenderM: *Renderer = undefined;
 
-const Stats = struct {
+pub const RenderStats = struct {
     mDrawCalls: u32,
     mTriCount: u32,
     mVertexCount: u32,
@@ -50,7 +50,7 @@ const MaxIndices: u32 = MaxTri * 3;
 mEngineAllocator: std.mem.Allocator,
 
 mRenderContext: RenderContext,
-mStats: Stats,
+mStats: RenderStats,
 
 mR2D: Renderer2D,
 mR3D: Renderer3D,
@@ -70,7 +70,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mEngineAllocator = EngineAllocator,
 
         .mRenderContext = new_render_context,
-        .mStats = std.mem.zeroes(Stats),
+        .mStats = std.mem.zeroes(RenderStats),
 
         .mR2D = try Renderer2D.Init(
             MaxVerticies,
@@ -114,8 +114,11 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
     const allocator = arena.allocator();
 
     var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
+    std.debug.print("size of sprite_entities to start: {}\n", .{sprite_entities.items.len});
     FilterSceneUUID(&sprite_entities, scene_uuid, ecs_manager);
+    std.debug.print("size of sprite_entities after filter scene id: {}\n", .{sprite_entities.items.len});
     try ecs_manager.EntityListIntersection(&sprite_entities, try ecs_manager.GetGroup(GroupQuery{ .Component = TransformComponent }, allocator), allocator);
+    std.debug.print("size of sprite_entities after intersection: {}\n", .{sprite_entities.items.len});
 
     var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
     FilterSceneUUID(&circle_entities, scene_uuid, ecs_manager);
@@ -123,6 +126,7 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
 
     //cull entities that shouldnt be rendered
     CullEntities(SpriteRenderComponent, &sprite_entities, ecs_manager);
+    std.debug.print("size of sprite_entities after cull: {}\n", .{sprite_entities.items.len});
     CullEntities(CircleRenderComponent, &circle_entities, ecs_manager);
 
     //ensure textures are ready to go for draw
@@ -134,7 +138,7 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
 }
 
 pub fn BeginScene() void {
-    RenderM.mStats = std.mem.zeroes(Stats);
+    RenderM.mStats = std.mem.zeroes(RenderStats);
 
     RenderM.mR2D.StartBatchSprite();
     RenderM.mR2D.StartBatchCircle();
@@ -165,6 +169,10 @@ pub fn EndScene() !void {
 
 pub fn DrawComposite(composite_va: VertexArray) void {
     RenderM.mRenderContext.DrawIndexed(composite_va, 6);
+}
+
+pub fn GetRenderStats() RenderStats {
+    return RenderM.mStats;
 }
 
 fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
@@ -230,8 +238,6 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: *ECSManager) !v
         const entity_id = sprite_entities.items[i];
         const transform_component = ecs_manager.GetComponent(TransformComponent, entity_id);
         const sprite_component = ecs_manager.GetComponent(SpriteRenderComponent, entity_id);
-
-        std.debug.assert(RenderM.mTexturesMap.contains(sprite_component.mTexture.mID));
 
         RenderM.mR2D.DrawSprite(
             transform_component.GetTransformMatrix(),

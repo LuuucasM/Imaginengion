@@ -11,6 +11,7 @@ const VTab = struct {
     Bind: *const fn (*anyopaque) void,
     Unbind: *const fn (*anyopaque) void,
     Resize: *const fn (*anyopaque, usize, usize) void,
+    GetColorAttachmentID: *const fn (*anyopaque, u8) u32,
     ClearColorAttachment: *const fn (*anyopaque, u8, u32) void,
     BindColorAttachment: *const fn (*anyopaque, u8, usize) void,
     BindDepthAttachment: *const fn (*anyopaque, usize) void,
@@ -41,6 +42,10 @@ pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: u
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.Resize(resize_width, resize_height);
         }
+        fn GetColorAttachmentID(ptr: *anyopaque, attachment_index: u8) u32 {
+            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            return self.GetColorAttachmentID(attachment_index);
+        }
         fn ClearColorAttachment(ptr: *anyopaque, attachment_index: u8, value: u32) void {
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.ClearColorAttachment(attachment_index, value);
@@ -66,6 +71,7 @@ pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: u
             .Bind = impl.Bind,
             .Unbind = impl.Unbind,
             .Resize = impl.Resize,
+            .GetColorAttachmentID = impl.GetColorAttachmentID,
             .ClearColorAttachment = impl.ClearColorAttachment,
             .BindColorAttachment = impl.BindColorAttachment,
             .BindDepthAttachment = impl.BindDepthAttachment,
@@ -88,6 +94,9 @@ pub fn Unbind(self: FrameBuffer) void {
 }
 pub fn Resize(self: FrameBuffer, width: usize, height: usize) void {
     self.mVTable.Resize(self.mPtr, width, height);
+}
+pub fn GetColorAttachmentID(self: FrameBuffer, attachment_index: u8) u32 {
+    return self.mVTable.GetColorAttachmentID(self.mPtr, attachment_index);
 }
 pub fn ClearColorAttachment(self: FrameBuffer, attachment_index: u8, value: u32) void {
     self.mVTable.ClearColorAttachment(self.mPtr, attachment_index, value);

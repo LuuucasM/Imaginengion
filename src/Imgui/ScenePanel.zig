@@ -125,8 +125,9 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             if (is_tree_open) {
                 defer imgui.igTreePop();
                 var entity_iter = scene_layer.mECSManagerRef.GetAllEntities().iterator();
-                while (entity_iter.next()) |entity_id| {
-                    const entity = Entity{ .mEntityID = entity_id.key_ptr.*, .mSceneLayerRef = scene_layer };
+                while (entity_iter.next()) |entry| {
+                    const entity_id = entry.key_ptr.*;
+                    const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
 
                     if (self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID) {
@@ -134,6 +135,10 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     } else {
                         imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
                     }
+                    defer imgui.igPopStyleColor(1);
+
+                    imgui.igPushID_Int(@intCast(entity_id));
+                    defer imgui.igPopID();
 
                     if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
                         try ImguiManager.InsertEvent(.{
@@ -142,8 +147,6 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                             },
                         });
                     }
-
-                    imgui.igPopStyleColor(1);
                 }
             }
         }
