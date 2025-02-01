@@ -195,7 +195,6 @@ pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture
         self.mSpriteVertexBufferPtr.TexCoord = RectTexCoordPositions[i];
         self.mSpriteVertexBufferPtr.TexIndex = texture_index;
         self.mSpriteVertexBufferPtr.TilingFactor = tiling_factor;
-
         self.mSpriteVertexCount += 1;
         self.mSpriteVertexBufferPtr = &self.mSpriteVertexBufferBase[self.mSpriteVertexCount];
     }

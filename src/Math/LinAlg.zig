@@ -21,17 +21,18 @@ pub fn InitMat4CompTime(x: comptime_float) Mat4f32 {
     };
 }
 
-inline fn Mat4MulVec(m: Vec4f32, v: Mat4f32) Vec4f32 {
-    const mov0: Vec4f32 = @splat(m[0]);
-    const mov1: Vec4f32 = @splat(m[1]);
-    const mul0 = v[0] * mov0;
-    const mul1 = v[1] * mov1;
-    const add0 = mul0 + mul1;
+pub fn Mat4MulVec(m: Mat4f32, v: Vec4f32) Vec4f32 {
+    const mov0: Vec4f32 = @splat(v[0]);
+    const mov1: Vec4f32 = @splat(v[1]);
+    const mov2: Vec4f32 = @splat(v[2]);
+    const mov3: Vec4f32 = @splat(v[3]);
 
-    const mov2: Vec4f32 = @splat(m[2]);
-    const mov3: Vec4f32 = @splat(m[3]);
-    const mul2 = v[2] * mov2;
-    const mul3 = v[3] * mov3;
+    const mul0 = m[0] * mov0;
+    const mul1 = m[1] * mov1;
+    const mul2 = m[2] * mov2;
+    const mul3 = m[3] * mov3;
+
+    const add0 = mul0 + mul1;
     const add1 = mul2 + mul3;
 
     return add0 + add1;
@@ -55,9 +56,9 @@ pub fn Mat4MulVec4(m: Mat4f32, v: Vec4f32) Vec4f32 {
     };
 }
 pub fn PrintVec(v: anytype) void {
-    if (@typeInfo(@TypeOf(v)) != .Vector) return;
+    if (@typeInfo(@TypeOf(v)) != .vector) return;
 
-    const vlen = @typeInfo(@TypeOf(v)).Vector.len;
+    const vlen = @typeInfo(@TypeOf(v)).vector.len;
 
     var i: u32 = 0;
     while (i < vlen) : (i += 1) {
