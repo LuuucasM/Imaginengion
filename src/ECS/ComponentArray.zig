@@ -100,6 +100,8 @@ pub fn ComponentArray(comptime componentType: type) type {
 
             if (component) |comp| {
                 new_component.* = comp;
+            } else {
+                new_component.* = componentType{};
             }
 
             return new_component;

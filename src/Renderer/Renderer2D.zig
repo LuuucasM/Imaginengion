@@ -250,19 +250,23 @@ pub fn StartBatchELine(self: *Renderer2D) void {
 }
 
 pub fn FlushSprite(self: Renderer2D) void {
-    const data_size: usize = @intFromPtr(self.mSpriteVertexBufferPtr) - @intFromPtr(self.mSpriteVertexBufferBase.ptr);
+    const data_size: usize = @sizeOf(SpriteVertex) * self.mSpriteVertexCount;
+    std.debug.print("data size: {}\n", .{data_size});
     self.mSpriteVertexBuffer.SetData(self.mSpriteVertexBufferBase.ptr, data_size);
     self.mSpriteShader.Bind();
+    self.mSpriteVertexArray.Bind();
 }
 
 pub fn FlushCircle(self: Renderer2D) void {
-    const data_size: usize = @intFromPtr(self.mCircleVertexBufferPtr) - @intFromPtr(self.mCircleVertexBufferBase.ptr);
+    const data_size: usize = @sizeOf(CircleVertex) * self.mSpriteVertexCount;
     self.mCircleVertexBuffer.SetData(self.mCircleVertexBufferBase.ptr, data_size);
     self.mCircleShader.Bind();
+    self.mCircleVertexArray.Bind();
 }
 
 pub fn FlushELine(self: Renderer2D) void {
-    const data_size: usize = @intFromPtr(self.mELineVertexBufferPtr) - @intFromPtr(self.mELineVertexBufferBase.ptr);
+    const data_size: usize = @sizeOf(ELineVertex) * self.mSpriteVertexCount;
     self.mELineVertexBuffer.SetData(self.mELineVertexBufferBase.ptr, data_size);
     self.mELineShader.Bind();
+    self.mELineVertexArray.Bind();
 }

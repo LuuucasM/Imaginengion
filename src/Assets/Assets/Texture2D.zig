@@ -8,7 +8,7 @@ const Impl = switch (builtin.os.tag) {
     else => @import("Texture2Ds/UnsupportedTexture2D.zig"),
 };
 
-_Impl: Impl,
+_Impl: Impl = undefined,
 
 pub fn Init(path: []const u8) !Texture2D {
     return Texture2D{

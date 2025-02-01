@@ -85,10 +85,11 @@ pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     return new_entity;
 }
 
-pub fn Render(self: SceneLayer, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
+pub fn Render(self: SceneLayer) !void {
     self.mFrameBuffer.Bind();
+    self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
     defer self.mFrameBuffer.Unbind();
-    try RenderManager.RenderSceneLayer(self.mUUID, self.mECSManagerRef, camera_projection, camera_transform);
+    try RenderManager.RenderSceneLayer(self.mUUID, self.mECSManagerRef);
 }
 
 pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {

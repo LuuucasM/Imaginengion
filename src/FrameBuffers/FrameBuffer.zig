@@ -1,4 +1,5 @@
 const std = @import("std");
+const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const FrameBuffer = @This();
 
 mPtr: *anyopaque,
@@ -11,6 +12,7 @@ const VTab = struct {
     Bind: *const fn (*anyopaque) void,
     Unbind: *const fn (*anyopaque) void,
     Resize: *const fn (*anyopaque, usize, usize) void,
+    ClearFrameBuffer: *const fn (*anyopaque, Vec4f32) void,
     GetColorAttachmentID: *const fn (*anyopaque, u8) u32,
     ClearColorAttachment: *const fn (*anyopaque, u8, u32) void,
     BindColorAttachment: *const fn (*anyopaque, u8, usize) void,
@@ -42,6 +44,10 @@ pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: u
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.Resize(resize_width, resize_height);
         }
+        fn ClearFrameBuffer(ptr: *anyopaque, color: Vec4f32) void {
+            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            self.ClearFrameBuffer(color);
+        }
         fn GetColorAttachmentID(ptr: *anyopaque, attachment_index: u8) u32 {
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             return self.GetColorAttachmentID(attachment_index);
@@ -71,6 +77,7 @@ pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: u
             .Bind = impl.Bind,
             .Unbind = impl.Unbind,
             .Resize = impl.Resize,
+            .ClearFrameBuffer = impl.ClearFrameBuffer,
             .GetColorAttachmentID = impl.GetColorAttachmentID,
             .ClearColorAttachment = impl.ClearColorAttachment,
             .BindColorAttachment = impl.BindColorAttachment,
@@ -95,10 +102,13 @@ pub fn Unbind(self: FrameBuffer) void {
 pub fn Resize(self: FrameBuffer, width: usize, height: usize) void {
     self.mVTable.Resize(self.mPtr, width, height);
 }
+pub fn ClearFrameBuffer(self: FrameBuffer, color: Vec4f32) void {
+    self.mVTable.ClearFrameBuffer(self.mPtr, color);
+}
 pub fn GetColorAttachmentID(self: FrameBuffer, attachment_index: u8) u32 {
     return self.mVTable.GetColorAttachmentID(self.mPtr, attachment_index);
 }
-pub fn ClearColorAttachment(self: FrameBuffer, attachment_index: u8, value: u32) void {
+pub fn ClearColorAttachment(self: FrameBuffer, attachment_index: u8, value: Vec4f32) void {
     self.mVTable.ClearColorAttachment(self.mPtr, attachment_index, value);
 }
 pub fn BindColorAttachment(self: FrameBuffer, attachment_index: u8, slot: usize) void {

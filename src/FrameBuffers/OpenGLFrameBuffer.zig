@@ -1,4 +1,5 @@
 const std = @import("std");
+const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const TextureFormat = @import("InternalFrameBuffer.zig").TextureFormat;
 const glad = @import("../Core/CImports.zig").glad;
 
@@ -58,6 +59,11 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             std.debug.assert(attachment_index < color_texture_formats.len);
             return self.mColorAttachments[attachment_index];
         }
+        pub fn ClearFrameBuffer(self: Self, color: Vec4f32) void {
+            _ = self;
+            glad.glClearColor(color[0], color[1], color[2], color[3]);
+            glad.glClear(glad.GL_COLOR_BUFFER_BIT | glad.GL_DEPTH_BUFFER_BIT);
+        }
         pub fn ClearColorAttachment(self: Self, attachment_index: u32, value: u32) void {
             std.debug.assert(attachment_index < color_texture_formats.len);
 
@@ -79,8 +85,8 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             const multisampled: bool = samples > 1;
 
             //color attachments
-            if (self.mColorAttachments.len > 0) {
-                glad.glCreateTextures(TextureTarget(multisampled), self.mColorAttachments.len, &self.mColorAttachments[0]);
+            if (color_texture_formats.len > 0) {
+                glad.glCreateTextures(TextureTarget(multisampled), color_texture_formats.len, &self.mColorAttachments[0]);
                 for (color_texture_formats, 0..) |texture_format, i| {
                     glad.glBindTexture(TextureTarget(multisampled), self.mColorAttachments[i]);
                     AttachColorTexture(self.mColorAttachments[i], TextureFormatToInternalFormat(texture_format), TextureFormatToFormat(texture_format), @intCast(self.mWidth), @intCast(self.mHeight), @intCast(i), multisampled);
@@ -94,10 +100,10 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 AttachDepthTexture(self.mDepthAttachment, TextureFormatToInternalFormat(depth_texture_format), @intCast(self.mWidth), @intCast(self.mHeight), multisampled);
             }
 
-            if (self.mColorAttachments.len > 1) {
+            if (color_texture_formats.len > 1) {
                 const buffers: [5]glad.GLenum = .{ glad.GL_COLOR_ATTACHMENT0, glad.GL_COLOR_ATTACHMENT1, glad.GL_COLOR_ATTACHMENT2, glad.GL_COLOR_ATTACHMENT3, glad.GL_COLOR_ATTACHMENT4 };
                 glad.glDrawBuffers(@intCast(buffers.len), &buffers[0]);
-            } else if (self.mColorAttachments.len == 0) {
+            } else if (color_texture_formats.len == 0) {
                 glad.glDrawBuffer(glad.GL_NONE);
             }
 

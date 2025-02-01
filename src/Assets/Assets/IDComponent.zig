@@ -3,7 +3,7 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const GenUUID = @import("../../Core/UUID.zig").GenUUID;
 const IDComponent = @This();
 
-ID: u128,
+ID: u128 = std.math.maxInt(u128),
 
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

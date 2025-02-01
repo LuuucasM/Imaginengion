@@ -133,10 +133,9 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, texture.GetID())));
 
-            imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.8, .y = 0.3, .z = 0.2, .w = 1.0 });
             _ = imgui.igImageButton(
                 entry_name,
-                @ptrCast(texture_id),
+                texture_id,
                 .{ .x = thumbnail_size, .y = thumbnail_size },
                 .{ .x = 0.0, .y = 0.0 },
                 .{ .x = 1.0, .y = 1.0 },
@@ -158,8 +157,6 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
                 _ = try self.mCurrentDirectory.writer().write("/");
                 _ = try self.mCurrentDirectory.writer().write(entry.name);
             }
-
-            imgui.igPopStyleColor(1);
 
             imgui.igTextWrapped(@ptrCast(entry_name));
             imgui.igNextColumn();

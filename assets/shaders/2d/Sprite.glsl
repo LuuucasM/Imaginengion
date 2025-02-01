@@ -48,7 +48,7 @@ void main()
     vec4 texColor = fs_in.Color;
     int texIndex = int(fs_in.TexIndex);
     
-    texColor *= texture(u_Textures[texIndex], fs_in.TexCoord * fs_in.TilingFactor);
+    //texColor *= texture(u_Textures[texIndex], fs_in.TexCoord * fs_in.TilingFactor);
     
     o_Color = texColor;
 }

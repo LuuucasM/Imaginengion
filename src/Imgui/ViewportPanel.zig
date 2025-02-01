@@ -48,12 +48,12 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
     //render framebuffer
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, scene_frame_buffer.GetColorAttachmentID(0))));
     imgui.igImage(
-        @ptrCast(texture_id),
+        texture_id,
         imgui.struct_ImVec2{ .x = self.mViewportSize[0], .y = self.mViewportSize[1] },
-        imgui.struct_ImVec2{ .x = 0.0, .y = 1.0 },
-        imgui.struct_ImVec2{ .x = 1.0, .y = 0.0 },
+        imgui.struct_ImVec2{ .x = 0.0, .y = 0.0 },
+        imgui.struct_ImVec2{ .x = 1.0, .y = 1.0 },
         imgui.struct_ImVec4{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-        imgui.struct_ImVec4{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
+        imgui.struct_ImVec4{ .x = 1.0, .y = 1.0, .z = 0.0, .w = 0.0 },
     );
     //drag drop target for scenes
     //entity picking for selected entity

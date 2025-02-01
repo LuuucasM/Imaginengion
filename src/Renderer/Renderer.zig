@@ -89,8 +89,11 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 
     RenderM.mCameraUniformBuffer.Bind(0);
     RenderM.mR2D.mSpriteShader.Bind();
+    RenderM.mCameraUniformBuffer.Bind(0);
     RenderM.mR2D.mCircleShader.Bind();
+    RenderM.mCameraUniformBuffer.Bind(0);
     RenderM.mR2D.mELineShader.Bind();
+    RenderM.mCameraUniformBuffer.Bind(0);
 }
 
 pub fn Deinit() void {
@@ -104,9 +107,7 @@ pub fn SwapBuffers() void {
     RenderM.mRenderContext.SwapBuffers();
 }
 
-pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
-    RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
-    RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(Mat4f32), 0);
+pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager) !void {
     BeginScene();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -114,11 +115,8 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
     const allocator = arena.allocator();
 
     var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
-    std.debug.print("size of sprite_entities to start: {}\n", .{sprite_entities.items.len});
     FilterSceneUUID(&sprite_entities, scene_uuid, ecs_manager);
-    std.debug.print("size of sprite_entities after filter scene id: {}\n", .{sprite_entities.items.len});
     try ecs_manager.EntityListIntersection(&sprite_entities, try ecs_manager.GetGroup(GroupQuery{ .Component = TransformComponent }, allocator), allocator);
-    std.debug.print("size of sprite_entities after intersection: {}\n", .{sprite_entities.items.len});
 
     var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
     FilterSceneUUID(&circle_entities, scene_uuid, ecs_manager);
@@ -126,7 +124,6 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
 
     //cull entities that shouldnt be rendered
     CullEntities(SpriteRenderComponent, &sprite_entities, ecs_manager);
-    std.debug.print("size of sprite_entities after cull: {}\n", .{sprite_entities.items.len});
     CullEntities(CircleRenderComponent, &circle_entities, ecs_manager);
 
     //ensure textures are ready to go for draw
@@ -137,9 +134,13 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager, camera_proje
     try EndScene();
 }
 
-pub fn BeginScene() void {
+pub fn BeginRendering(camera_projection: Mat4f32, camera_transform: Mat4f32) void {
+    RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
+    RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(Mat4f32), 0);
     RenderM.mStats = std.mem.zeroes(RenderStats);
+}
 
+pub fn BeginScene() void {
     RenderM.mR2D.StartBatchSprite();
     RenderM.mR2D.StartBatchCircle();
     RenderM.mR2D.StartBatchELine();
@@ -242,7 +243,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: *ECSManager) !v
         RenderM.mR2D.DrawSprite(
             transform_component.GetTransformMatrix(),
             sprite_component.mColor,
-            @floatFromInt(RenderM.mTextures.items[RenderM.mTexturesMap.get(sprite_component.mTexture.mID).?].mID),
+            @floatFromInt(RenderM.mTexturesMap.get(sprite_component.mTexture.mID).?),
             sprite_component.mTilingFactor,
         );
 

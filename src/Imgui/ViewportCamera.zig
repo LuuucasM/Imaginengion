@@ -13,46 +13,31 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Quatf32 = LinAlg.Quatf32;
 const EditorCamera = @This();
 
-mFOVDegrees: f32,
-mAspectRatio: f32,
-mNearClip: f32,
-mFarClip: f32,
+mFOVDegrees: f32 = 45.0,
+mNearClip: f32 = 0.1,
+mFarClip: f32 = 1000.0,
 
-mProjectionMatrix: Mat4f32,
-mViewMatrix: Mat4f32,
+mProjectionMatrix: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
+mViewMatrix: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
 
-mFocalPoint: Vec3f32,
-mPosition: Vec3f32,
-mCurrentMousePos: Vec2f32,
+mFocalPoint: Vec3f32 = std.mem.zeroes(Vec3f32),
+mPosition: Vec3f32 = std.mem.zeroes(Vec3f32),
+mCurrentMousePos: Vec2f32 = std.mem.zeroes(Vec2f32),
 
-mDistance: f32,
-mPitch: f32,
-mYaw: f32,
+mDistance: f32 = 10.0,
+mPitch: f32 = 0.0,
+mYaw: f32 = 0.0,
 
-mViewportWidth: usize,
-mViewportHeight: usize,
+mViewportWidth: usize = undefined,
+mViewportHeight: usize = undefined,
+mAspectRatio: f32 = undefined,
 
 pub fn Init(width: usize, height: usize) EditorCamera {
-    return EditorCamera{
-        .mFOVDegrees = 45.0,
-        .mAspectRatio = 1.778,
-        .mNearClip = 0.1,
-        .mFarClip = 1000.0,
-
-        .mProjectionMatrix = LinAlg.InitMat4CompTime(1.0),
-        .mViewMatrix = LinAlg.InitMat4CompTime(1.0),
-
-        .mFocalPoint = std.mem.zeroes(Vec3f32),
-        .mPosition = std.mem.zeroes(Vec3f32),
-        .mCurrentMousePos = std.mem.zeroes(Vec2f32),
-
-        .mDistance = 10.0,
-        .mPitch = 0.0,
-        .mYaw = 0.0,
-
-        .mViewportWidth = width,
-        .mViewportHeight = height,
-    };
+    var new_camera = EditorCamera{};
+    new_camera.UpdateProjection();
+    new_camera.UpdateView();
+    new_camera.SetViewportSize(width, height);
+    return new_camera;
 }
 
 pub fn InputUpdate(self: *EditorCamera) void {
@@ -89,7 +74,7 @@ pub fn SetDistance(self: *EditorCamera, value: f32) void {
 }
 
 pub fn GetProjection(self: EditorCamera) Mat4f32 {
-    return self.ProjectionMatrix;
+    return self.mProjectionMatrix;
 }
 
 pub fn GetViewMatrix(self: EditorCamera) Mat4f32 {

@@ -121,11 +121,14 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
 
 pub fn RenderUpdate(self: *SceneManager, camera_projection: Mat4f32, camera_transform: Mat4f32) !void {
     //render each scene
+    RenderManager.BeginRendering(camera_projection, camera_transform);
+
     for (self.mSceneStack.items) |scene_layer| {
-        try scene_layer.Render(camera_projection, camera_transform); //this renders each scene_layer to its own frame buffer
+        try scene_layer.Render(); //this renders each scene_layer to its own frame buffer
     }
 
     self.mFrameBuffer.Bind();
+    self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
     self.mCompositeShader.Bind();
 
     var i: usize = 0;
