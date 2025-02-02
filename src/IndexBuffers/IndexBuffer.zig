@@ -9,9 +9,9 @@ const IndexBuffer = @This();
 
 mImpl: Impl,
 
-pub fn Init(indices: []u32, count: usize) IndexBuffer {
+pub fn Init(indices: []u32, size: usize) IndexBuffer {
     return IndexBuffer{
-        .mImpl = Impl.Init(indices, count),
+        .mImpl = Impl.Init(indices, size),
     };
 }
 

@@ -21,7 +21,7 @@ pub fn Mat4Identity() Mat4f32 {
     };
 }
 
-pub fn Mat4MulVec(m: Mat4f32, v: Vec4f32) Vec4f32 {
+pub fn Mat4MulVec4(m: Mat4f32, v: Vec4f32) Vec4f32 {
     const mov0: Vec4f32 = @splat(v[0]);
     const mov1: Vec4f32 = @splat(v[1]);
     const mov2: Vec4f32 = @splat(v[2]);
@@ -32,32 +32,15 @@ pub fn Mat4MulVec(m: Mat4f32, v: Vec4f32) Vec4f32 {
     const mul2 = m[2] * mov2;
     const mul3 = m[3] * mov3;
 
-    const add0 = mul0 + mul1;
-    const add1 = mul2 + mul3;
-
-    return add0 + add1;
+    return mul0 + mul1 + mul2 + mul3;
 }
 
 pub fn Mat4MulMat4(m1: Mat4f32, m2: Mat4f32) Mat4f32 {
-    const srca0 = m1[0];
-    const srca1 = m1[1];
-    const srca2 = m1[2];
-    const srca3 = m1[3];
-
-    const srcb0 = m2[0];
-    const srcb1 = m2[1];
-    const srcb2 = m2[2];
-    const srcb3 = m2[3];
-
     return Mat4f32{
-        srca0 * @as(Vec4f32, @splat(srcb0[0])) + srca1 * @as(Vec4f32, @splat(srcb0[1])) +
-            srca2 * @as(Vec4f32, @splat(srcb0[2])) + srca3 * @as(Vec4f32, @splat(srcb0[3])),
-        srca0 * @as(Vec4f32, @splat(srcb1[0])) + srca1 * @as(Vec4f32, @splat(srcb1[1])) +
-            srca2 * @as(Vec4f32, @splat(srcb1[2])) + srca3 * @as(Vec4f32, @splat(srcb1[3])),
-        srca0 * @as(Vec4f32, @splat(srcb2[0])) + srca1 * @as(Vec4f32, @splat(srcb2[1])) +
-            srca2 * @as(Vec4f32, @splat(srcb2[2])) + srca3 * @as(Vec4f32, @splat(srcb2[3])),
-        srca0 * @as(Vec4f32, @splat(srcb3[0])) + srca1 * @as(Vec4f32, @splat(srcb3[1])) +
-            srca2 * @as(Vec4f32, @splat(srcb3[2])) + srca3 * @as(Vec4f32, @splat(srcb3[3])),
+        Mat4MulVec4(m1, m2[0]),
+        Mat4MulVec4(m1, m2[1]),
+        Mat4MulVec4(m1, m2[2]),
+        Mat4MulVec4(m1, m2[3]),
     };
 }
 

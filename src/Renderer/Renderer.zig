@@ -86,18 +86,15 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mTexturesMap = std.AutoHashMap(u32, usize).init(EngineAllocator),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(EngineAllocator, RenderM.mRenderContext.GetMaxTextureImageSlots()),
 
-        .mCameraBuffer = .{ .mBuffer = LinAlg.InitMat4CompTime(1.0) },
+        .mCameraBuffer = .{ .mBuffer = LinAlg.Mat4Identity() },
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
     };
     try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
 
     RenderM.mCameraUniformBuffer.Bind(0);
     RenderM.mR2D.mSpriteShader.Bind();
-    RenderM.mCameraUniformBuffer.Bind(0);
     RenderM.mR2D.mCircleShader.Bind();
-    RenderM.mCameraUniformBuffer.Bind(0);
     RenderM.mR2D.mELineShader.Bind();
-    RenderM.mCameraUniformBuffer.Bind(0);
 }
 
 pub fn Deinit() void {
@@ -145,9 +142,7 @@ pub fn BeginRendering(camera_projection: Mat4f32, camera_transform: Mat4f32) voi
 }
 
 pub fn BeginScene() void {
-    RenderM.mR2D.StartBatchSprite();
-    RenderM.mR2D.StartBatchCircle();
-    RenderM.mR2D.StartBatchELine();
+    RenderM.mR2D.BeginScene();
 }
 
 pub fn EndScene() !void {

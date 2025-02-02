@@ -5,15 +5,15 @@ const OpenGLIndexBuffer = @This();
 mCount: usize,
 mBufferID: c_uint,
 
-pub fn Init(indices: []u32, count: usize) OpenGLIndexBuffer {
+pub fn Init(indices: []u32, size: usize) OpenGLIndexBuffer {
     var new_ib = OpenGLIndexBuffer{
-        .mCount = count,
+        .mCount = size,
         .mBufferID = undefined,
     };
 
     glad.glCreateBuffers(1, &new_ib.mBufferID);
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_ib.mBufferID);
-    glad.glBufferData(glad.GL_ARRAY_BUFFER, @intCast(count * @sizeOf(u32)), indices.ptr, glad.GL_STATIC_DRAW);
+    glad.glBufferData(glad.GL_ARRAY_BUFFER, @intCast(size), indices.ptr, glad.GL_STATIC_DRAW);
 
     return new_ib;
 }

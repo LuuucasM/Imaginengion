@@ -15,7 +15,7 @@ pub const ProjectionType = enum {
     Orthographic,
 };
 
-mProjection: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
+mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 mProjectionType: ProjectionType = .Perspective,
 
 mAspectRatio: f32 = 0.0,

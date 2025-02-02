@@ -17,8 +17,8 @@ mFOVDegrees: f32 = 45.0,
 mNearClip: f32 = 0.1,
 mFarClip: f32 = 1000.0,
 
-mProjectionMatrix: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
-mViewMatrix: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
+mProjectionMatrix: Mat4f32 = LinAlg.Mat4Identity(),
+mViewMatrix: Mat4f32 = LinAlg.Mat4Identity(),
 
 mFocalPoint: Vec3f32 = std.mem.zeroes(Vec3f32),
 mPosition: Vec3f32 = std.mem.zeroes(Vec3f32),

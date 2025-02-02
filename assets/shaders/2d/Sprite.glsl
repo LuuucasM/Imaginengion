@@ -26,7 +26,8 @@ void main()
     vs_out.TexCoord = a_TexCoord;
     vs_out.TilingFactor = a_TilingFactor;
     vs_out.TexIndex = a_TexIndex;
-	gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0);
+	//gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0);
+    gl_Position = vec4(a_Position, 1.0);
 }
 
 #type fragment
@@ -50,5 +51,6 @@ void main()
     
     //texColor *= texture(u_Textures[texIndex], fs_in.TexCoord * fs_in.TilingFactor);
     
-    o_Color = texColor;
+    //o_Color = texColor;
+    o_Color = vec4(1.0, 0.0, 0.0, 1.0);
 }

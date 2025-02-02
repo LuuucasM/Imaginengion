@@ -15,7 +15,7 @@ Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
 Scale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
 
-Transform: Mat4f32 = LinAlg.InitMat4CompTime(1.0),
+Transform: Mat4f32 = LinAlg.Mat4Identity(),
 Dirty: bool = true,
 
 pub const Ind: usize = blk: {
@@ -30,7 +30,7 @@ pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {
     if (self.Dirty == true) {
         defer self.Dirty = false;
 
-        self.Transform = LinAlg.Mat4MulMat4(LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.QuatToMat4(self.Rotation)), LinAlg.Scale(self.Scale));
+        self.Transform = LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.Mat4MulMat4(LinAlg.QuatToMat4(self.Rotation), LinAlg.Scale(self.Scale)));
     }
     return self.Transform;
 }
