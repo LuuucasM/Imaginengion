@@ -12,12 +12,12 @@ pub const Mat4f32 = [4]Vec4f32;
 //indecies 0-3: {w, x, y, z}
 pub const Quatf32 = @Vector(4, f32);
 
-pub fn InitMat4CompTime(x: comptime_float) Mat4f32 {
+pub fn Mat4Identity() Mat4f32 {
     return .{
-        Vec4f32{ x, 0.0, 0.0, 0.0 },
-        Vec4f32{ 0.0, x, 0.0, 0.0 },
-        Vec4f32{ 0.0, 0.0, x, 0.0 },
-        Vec4f32{ 0.0, 0.0, 0.0, x },
+        Vec4f32{ 1.0, 0.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 1.0, 0.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 1.0, 0.0 },
+        Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
     };
 }
 
@@ -38,23 +38,29 @@ pub fn Mat4MulVec(m: Mat4f32, v: Vec4f32) Vec4f32 {
     return add0 + add1;
 }
 
-pub fn Mat4MulMat4(m: Mat4f32, v: Mat4f32) Mat4f32 {
-    return .{
-        Mat4MulVec(m[0], v),
-        Mat4MulVec(m[1], v),
-        Mat4MulVec(m[2], v),
-        Mat4MulVec(m[3], v),
+pub fn Mat4MulMat4(m1: Mat4f32, m2: Mat4f32) Mat4f32 {
+    const srca0 = m1[0];
+    const srca1 = m1[1];
+    const srca2 = m1[2];
+    const srca3 = m1[3];
+
+    const srcb0 = m2[0];
+    const srcb1 = m2[1];
+    const srcb2 = m2[2];
+    const srcb3 = m2[3];
+
+    return Mat4f32{
+        srca0 * @as(Vec4f32, @splat(srcb0[0])) + srca1 * @as(Vec4f32, @splat(srcb0[1])) +
+            srca2 * @as(Vec4f32, @splat(srcb0[2])) + srca3 * @as(Vec4f32, @splat(srcb0[3])),
+        srca0 * @as(Vec4f32, @splat(srcb1[0])) + srca1 * @as(Vec4f32, @splat(srcb1[1])) +
+            srca2 * @as(Vec4f32, @splat(srcb1[2])) + srca3 * @as(Vec4f32, @splat(srcb1[3])),
+        srca0 * @as(Vec4f32, @splat(srcb2[0])) + srca1 * @as(Vec4f32, @splat(srcb2[1])) +
+            srca2 * @as(Vec4f32, @splat(srcb2[2])) + srca3 * @as(Vec4f32, @splat(srcb2[3])),
+        srca0 * @as(Vec4f32, @splat(srcb3[0])) + srca1 * @as(Vec4f32, @splat(srcb3[1])) +
+            srca2 * @as(Vec4f32, @splat(srcb3[2])) + srca3 * @as(Vec4f32, @splat(srcb3[3])),
     };
 }
 
-pub fn Mat4MulVec4(m: Mat4f32, v: Vec4f32) Vec4f32 {
-    return Vec4f32{
-        Vec4DotVec4(m[0], v),
-        Vec4DotVec4(m[1], v),
-        Vec4DotVec4(m[2], v),
-        Vec4DotVec4(m[3], v),
-    };
-}
 pub fn PrintVec(v: anytype) void {
     if (@typeInfo(@TypeOf(v)) != .vector) return;
 
@@ -110,10 +116,10 @@ pub fn OrthographicRHNO(left: f32, right: f32, bottom: f32, top: f32, near: f32,
 
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const len = @sqrt(@reduce(.Add, q * q));
-    if (len != 1 and len != 0) {
-        return q / @as(Quatf32, @splat(len));
+    if (len <= 0) {
+        return Quatf32{ 1.0, 0.0, 0.0, 0.0 };
     }
-    return q;
+    return q / @as(Quatf32, @splat(len));
 }
 
 pub fn QuatToMat4(q: Quatf32) Mat4f32 {
@@ -146,7 +152,7 @@ pub fn QuatToMat4(q: Quatf32) Mat4f32 {
 }
 
 pub fn Translate(v: Vec3f32) Mat4f32 {
-    const m = InitMat4CompTime(1.0);
+    const m = Mat4Identity();
     var result = m;
     result[3] = (m[0] * @as(Vec4f32, @splat(v[0]))) + (m[1] * @as(Vec4f32, @splat(v[1]))) + (m[2] * @as(Vec4f32, @splat(v[2]))) + m[3];
     return result;
@@ -154,13 +160,13 @@ pub fn Translate(v: Vec3f32) Mat4f32 {
 
 //TODO: code scale
 pub fn Scale(v: Vec3f32) Mat4f32 {
-    const m = InitMat4CompTime(1.0);
-    var result = m;
-    result[0] = m[0] * @as(Vec4f32, @splat(v[0]));
-    result[1] = m[1] * @as(Vec4f32, @splat(v[1]));
-    result[2] = m[2] * @as(Vec4f32, @splat(v[2]));
-    result[3] = m[3];
-    return result;
+    const m = Mat4Identity();
+    return Mat4f32{
+        m[0] * @as(Vec4f32, @splat(v[0])),
+        m[1] * @as(Vec4f32, @splat(v[1])),
+        m[2] * @as(Vec4f32, @splat(v[2])),
+        m[3],
+    };
 }
 
 pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
@@ -256,7 +262,7 @@ pub fn RotateVec3Quat(q: Quatf32, v: Vec3f32) Vec3f32 {
     const uv = Vec3CrossVec3(QuatVect, v);
     const uuv = Vec3CrossVec3(QuatVect, uv);
 
-    const expanded_uv = @as(Vec3f32, @splat(2.0 * q[0])) * uv;
+    const expanded_uv = @as(Vec3f32, @splat(2.0)) * (uv * @as(Vec3f32, @splat(q[0])));
     const expanded_uuv = @as(Vec3f32, @splat(2.0)) * uuv;
 
     return v + expanded_uv + expanded_uuv;
@@ -298,25 +304,28 @@ pub fn DegreesToQuat(euler_vector: Vec3f32) Quatf32 {
 }
 
 pub fn QuatToPitch(q: Quatf32) f32 {
-    const sinr_cosp = 2.0 * (q[0] * q[1] + q[2] * q[3]);
-    const cosr_cosp = 1.0 - 2.0 * (q[1] * q[1] + q[2] * q[2]);
-    return math.atan2(sinr_cosp, cosr_cosp);
+    const y = 2.0 * (q[2] * q[3] + q[0] * q[1]);
+    const x = 1.0 - 2.0 * (q[1] * q[1] + q[2] * q[2]);
+
+    if (std.math.approxEqRel(f32, x, 0.0, 0.0000001) and std.math.approxEqRel(f32, y, 0.0, 0.0000001)) {
+        return math.atan2(q[1], q[0]);
+    }
+    return math.atan2(y, x);
 }
 
 pub fn QuatToYaw(q: Quatf32) f32 {
-    const sinp = 2.0 * (q[0] * q[2] - q[3] * q[1]);
-    const sign = if (sinp >= 0.0) @as(f32, 1.0) else @as(f32, -1.0);
-
-    if (@abs(sinp) >= 1.0) {
-        return sign * (math.pi / 2.0);
-    }
-    return math.asin(sinp);
+    return math.asin(math.clamp(-2.0 * (q[1] * q[3] - q[0] * q[2]), -1.0, 1.0));
 }
 
 pub fn QuatToRoll(q: Quatf32) f32 {
-    const siny_cosp = 2.0 * (q[0] * q[3] + q[1] * q[2]);
-    const cosy_cosp = 1.0 - 2.0 * (q[2] * q[2] + q[3] * q[3]);
-    return math.atan2(siny_cosp, cosy_cosp);
+    const y = 2.0 * (q[1] * q[2] + q[0] * q[3]);
+    const sqr = q * q;
+    const x = sqr[0] + sqr[1] - sqr[2] - sqr[3];
+
+    if (std.math.approxEqRel(f32, x, 0.0, 0.0000001) and std.math.approxEqRel(f32, y, 0.0, 0.0000001)) {
+        return 0.0;
+    }
+    return math.atan2(y, x);
 }
 
 //----------------------------------UNIT TESTS----------------------------------------------------------------

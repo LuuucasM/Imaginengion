@@ -43,6 +43,10 @@ pub const RenderStats = struct {
     mELineNum: u32,
 };
 
+const CameraBuffer = extern struct {
+    mBuffer: Mat4f32,
+};
+
 const MaxTri: u32 = 10_000;
 const MaxVerticies: u32 = MaxTri * 3;
 const MaxIndices: u32 = MaxTri * 3;
@@ -58,7 +62,7 @@ mR3D: Renderer3D,
 mTexturesMap: std.AutoHashMap(u32, usize),
 mTextures: std.ArrayList(AssetHandle),
 
-mCameraBuffer: Mat4f32,
+mCameraBuffer: CameraBuffer,
 mCameraUniformBuffer: UniformBuffer,
 
 var RenderAllocator = std.heap.GeneralPurposeAllocator(.{}){};
@@ -82,8 +86,8 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
         .mTexturesMap = std.AutoHashMap(u32, usize).init(EngineAllocator),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(EngineAllocator, RenderM.mRenderContext.GetMaxTextureImageSlots()),
 
-        .mCameraBuffer = LinAlg.InitMat4CompTime(1.0),
-        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(Mat4f32)),
+        .mCameraBuffer = .{ .mBuffer = LinAlg.InitMat4CompTime(1.0) },
+        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
     };
     try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
 
@@ -135,8 +139,8 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager) !void {
 }
 
 pub fn BeginRendering(camera_projection: Mat4f32, camera_transform: Mat4f32) void {
-    RenderM.mCameraBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
-    RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(Mat4f32), 0);
+    RenderM.mCameraBuffer.mBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
+    RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(CameraBuffer), 0);
     RenderM.mStats = std.mem.zeroes(RenderStats);
 }
 
