@@ -193,6 +193,7 @@ pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture
     const positions = LinAlg.Mat4MulMat4(transform, RectVertexPositions);
     while (i < 4) : (i += 1) {
         self.mSpriteVertexBufferPtr.*.Position = Vec3f32{ positions[i][0], positions[i][1], positions[i][2] };
+        LinAlg.PrintVec(self.mSpriteVertexBufferPtr.Position);
         self.mSpriteVertexBufferPtr.*.Color = color;
         self.mSpriteVertexBufferPtr.*.TexCoord = RectTexCoordPositions[i];
         self.mSpriteVertexBufferPtr.*.TexIndex = texture_index;

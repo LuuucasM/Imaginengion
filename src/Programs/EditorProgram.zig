@@ -1,5 +1,5 @@
 const std = @import("std");
-const ApplicationManager = @import("../Core/Application.zig");
+const Window = @import("../Windows/Window.zig");
 const Event = @import("../Events/Event.zig").Event;
 const EventManager = @import("../Events/EventManager.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
@@ -29,14 +29,16 @@ _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
+mWindow: *Window,
 
 const EditorProgram = @This();
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !EditorProgram {
-    try ImGui.Init(EngineAllocator);
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !EditorProgram {
+    try ImGui.Init(EngineAllocator, window);
 
     return EditorProgram{
         .mSceneManager = try EditorSceneManager.Init(1600, 900),
+        .mWindow = window,
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
@@ -60,7 +62,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try AssetManager.OnUpdate();
 
     //---------Inputs Begin--------------
-    ApplicationManager.GetWindow().PollInputEvents();
+    self.mWindow.PollInputEvents();
     self._ViewportPanel.mViewportCamera.InputUpdate();
     EventManager.ProcessEvents(.EC_Input);
     //---------Inputs End----------------

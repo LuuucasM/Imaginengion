@@ -8,73 +8,65 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 
 const Application: type = @This();
 
-var ApplicationManager: *Application = undefined;
+mIsRunning: bool = true,
+mIsMinimized: bool = false,
+mEngineAllocator: std.mem.Allocator,
+mWindow: Window,
+mProgram: Program,
 
-_IsRunning: bool = true,
-_IsMinimized: bool = false,
-_EngineAllocator: std.mem.Allocator,
-_Window: Window,
-_Program: Program,
-
-pub fn Init(EngineAllocator: std.mem.Allocator) !void {
+pub fn Init(EngineAllocator: std.mem.Allocator) !Application {
     try AssetManager.Init(EngineAllocator);
-    try EventManager.Init(EngineAllocator, OnEvent);
     try Input.Init(EngineAllocator);
 
-    ApplicationManager = try EngineAllocator.create(Application);
-    ApplicationManager.* = .{
-        ._EngineAllocator = EngineAllocator,
-        ._Window = Window.Init(),
-        ._Program = try Program.Init(EngineAllocator),
+    var new_application = Application{
+        .mEngineAllocator = EngineAllocator,
+        .mWindow = Window.Init(),
+        .mProgram = undefined,
     };
-    ApplicationManager._Window.SetVSync(false);
+    new_application.mWindow.SetVSync(false);
+    return new_application;
 }
 
-pub fn Deinit() !void {
-    try ApplicationManager._Program.Deinit();
-    ApplicationManager._Window.Deinit();
+pub fn Deinit(self: *Application) !void {
+    try self.mProgram.Deinit();
+    self.mWindow.Deinit();
     try AssetManager.Deinit();
     EventManager.Deinit();
     Input.Deinit();
-    ApplicationManager._EngineAllocator.destroy(ApplicationManager);
 }
 
-pub fn Run() !void {
+pub fn Run(self: *Application) !void {
     var timer = try std.time.Timer.start();
     var delta_time: f64 = 0;
 
-    while (ApplicationManager._IsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
-        try ApplicationManager._Program.OnUpdate(delta_time);
+    while (self.mIsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
+        try self.mProgram.OnUpdate(delta_time);
     }
 }
 
-pub fn GetWindow() *const Window {
-    return &ApplicationManager._Window;
-}
-
-pub fn OnEvent(event: *Event) void {
+pub fn OnEvent(self: *Application, event: *Event) void {
     const result = switch (event.*) {
-        .ET_WindowClose => OnWindowClose(),
-        .ET_WindowResize => |e| OnWindowResize(e._Width, e._Height),
+        .ET_WindowClose => self.OnWindowClose(),
+        .ET_WindowResize => |e| self.OnWindowResize(e._Width, e._Height),
         else => false,
     };
     if (result == false) {
-        ApplicationManager._Program.OnEvent(event);
+        self.mProgram.OnEvent(event);
     }
 }
 
-fn OnWindowClose() bool {
-    ApplicationManager._IsRunning = false;
+fn OnWindowClose(self: *Application) bool {
+    self.mIsRunning = false;
     return true;
 }
 
-fn OnWindowResize(width: usize, height: usize) bool {
+fn OnWindowResize(self: *Application, width: usize, height: usize) bool {
     if ((width == 0) and (height == 0)) {
-        ApplicationManager._IsMinimized = true;
+        self.mIsMinimized = true;
     } else {
-        ApplicationManager._IsMinimized = false;
+        self.mIsMinimized = false;
     }
 
-    ApplicationManager._Window.OnWindowResize(width, height);
+    self.mWindow.OnWindowResize(width, height);
     return false;
 }

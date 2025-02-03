@@ -1,5 +1,6 @@
 const std = @import("std");
 const assert = std.debug.assert;
+const Application = @import("../Core/Application.zig");
 const Event = @import("Event.zig").Event;
 const EventCategory = @import("EventEnums.zig").EventCategory;
 const EventType = @import("EventEnums.zig").EventType;
@@ -10,17 +11,17 @@ var EventManager: *Self = undefined;
 _InputEventPool: std.ArrayList(Event),
 _WindowEventPool: std.ArrayList(Event),
 _EngineAllocator: std.mem.Allocator,
-_EventCallback: *const fn (*Event) void,
+mApplication: *Application,
 
 var EventGPA = std.heap.GeneralPurposeAllocator(.{}){};
 
-pub fn Init(EngineAllocator: std.mem.Allocator, eventCallback: fn (*Event) void) !void {
+pub fn Init(EngineAllocator: std.mem.Allocator, application: *Application) !void {
     EventManager = try EngineAllocator.create(Self);
     EventManager.* = .{
         ._InputEventPool = std.ArrayList(Event).init(EventGPA.allocator()),
         ._WindowEventPool = std.ArrayList(Event).init(EventGPA.allocator()),
         ._EngineAllocator = EngineAllocator,
-        ._EventCallback = eventCallback,
+        .mApplication = application,
     };
 }
 
@@ -45,7 +46,7 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
     };
 
     for (array.items) |*event| {
-        EventManager._EventCallback(event);
+        EventManager.mApplication.OnEvent(event);
     }
 }
 

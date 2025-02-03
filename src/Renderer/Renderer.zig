@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const Window = @import("../Windows/Window.zig");
 
 const RenderContext = @import("RenderContext.zig");
 const Renderer2D = @import("Renderer2D.zig");
@@ -67,8 +68,8 @@ mCameraUniformBuffer: UniformBuffer,
 
 var RenderAllocator = std.heap.GeneralPurposeAllocator(.{}){};
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !void {
-    const new_render_context = RenderContext.Init();
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
+    const new_render_context = RenderContext.Init(window);
     RenderM = try EngineAllocator.create(Renderer);
     RenderM.* = .{
         .mEngineAllocator = EngineAllocator,

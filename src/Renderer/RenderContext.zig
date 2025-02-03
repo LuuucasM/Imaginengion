@@ -1,4 +1,5 @@
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const Window = @import("../Windows/Window.zig");
 const builtin = @import("builtin");
 
 const Impl = switch (builtin.os.tag) {
@@ -10,9 +11,9 @@ const RenderContext = @This();
 
 mImpl: Impl,
 
-pub fn Init() RenderContext {
+pub fn Init(window: *Window) RenderContext {
     return RenderContext{
-        .mImpl = Impl.Init(),
+        .mImpl = Impl.Init(window),
     };
 }
 

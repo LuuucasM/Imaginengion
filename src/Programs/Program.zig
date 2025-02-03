@@ -1,15 +1,16 @@
 const std = @import("std");
 const Event = @import("../Events/Event.zig").Event;
 const Renderer = @import("../Renderer/Renderer.zig");
+const Window = @import("../Windows/Window.zig");
 const Program = @This();
 
 const Impl = @import("EditorProgram.zig");
 _Impl: Impl,
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !Program {
-    try Renderer.Init(EngineAllocator);
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !Program {
+    try Renderer.Init(EngineAllocator, window);
     return Program{
-        ._Impl = try Impl.Init(EngineAllocator),
+        ._Impl = try Impl.Init(EngineAllocator, window),
     };
 }
 

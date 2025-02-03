@@ -11,11 +11,12 @@ var ImguiManager: *Imgui = undefined;
 mEngineAllocator: std.mem.Allocator,
 mEventArray: std.ArrayList(ImguiEvent) = std.ArrayList(ImguiEvent).init(std.heap.page_allocator),
 mEventAllocator: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-
-pub fn Init(EngineAllocator: std.mem.Allocator) !void {
+mWindow: *Window,
+pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
     ImguiManager = try EngineAllocator.create(Imgui);
     ImguiManager.* = .{
         .mEngineAllocator = EngineAllocator,
+        .mWindow = window,
     };
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
@@ -35,8 +36,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator) !void {
 
     SetDarkThemeColors(style);
 
-    const window = Application.GetWindow().GetNativeWindow();
-    _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window), true);
+    _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window.GetNativeWindow()), true);
     _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
 }
 pub fn Deinit() void {
@@ -55,7 +55,7 @@ pub fn Begin() void {
 pub fn End() void {
     const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
-    const window: *Window = @ptrCast(@alignCast(Application.GetWindow().GetNativeWindow()));
+    const window: *Window = ImguiManager.mWindow;
 
     io.DisplaySize = .{ .x = @floatFromInt(window.GetWidth()), .y = @floatFromInt(window.GetHeight()) };
 
@@ -71,7 +71,6 @@ pub fn End() void {
 
 pub fn InsertEvent(event: ImguiEvent) !void {
     try ImguiManager.mEventArray.append(event);
-    
 }
 
 pub fn GetEventArray() *std.ArrayList(ImguiEvent) {

@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Application = @import("../Core/Application.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const Window = @import("../Windows/Window.zig");
 
 const glad = @import("../Core/CImports.zig").glad;
 const glfw = @import("../Core/CImports.zig").glfw;
@@ -10,8 +11,8 @@ const OpenGLContext = @This();
 
 mWindow: ?*glfw.struct_GLFWwindow,
 
-pub fn Init() OpenGLContext {
-    const window: ?*glfw.struct_GLFWwindow = @ptrCast(Application.GetWindow().GetNativeWindow());
+pub fn Init(in_window: *Window) OpenGLContext {
+    const window: ?*glfw.struct_GLFWwindow = @ptrCast(in_window.GetNativeWindow());
 
     glfw.glfwMakeContextCurrent(window);
     const procaddr: glad.GLADloadproc = @ptrCast(&glfw.glfwGetProcAddress);
