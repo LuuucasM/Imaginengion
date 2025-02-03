@@ -10,21 +10,17 @@ const Application: type = @This();
 
 mIsRunning: bool = true,
 mIsMinimized: bool = false,
-mEngineAllocator: std.mem.Allocator,
-mWindow: Window,
-mProgram: Program,
+mEngineAllocator: std.mem.Allocator = undefined,
+mWindow: Window = undefined,
+mProgram: Program = undefined,
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !Application {
+pub fn Init(self: *Application, EngineAllocator: std.mem.Allocator) !void {
     try AssetManager.Init(EngineAllocator);
     try Input.Init(EngineAllocator);
+    try EventManager.Init(EngineAllocator, self);
 
-    var new_application = Application{
-        .mEngineAllocator = EngineAllocator,
-        .mWindow = Window.Init(),
-        .mProgram = undefined,
-    };
-    new_application.mWindow.SetVSync(false);
-    return new_application;
+    self.mWindow = Window.Init();
+    self.mProgram = try Program.Init(EngineAllocator, &self.mWindow);
 }
 
 pub fn Deinit(self: *Application) !void {
