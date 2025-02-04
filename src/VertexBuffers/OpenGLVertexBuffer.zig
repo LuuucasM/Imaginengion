@@ -38,17 +38,6 @@ pub fn Unbind() void {
 pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize) void {
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, self.mBufferID);
     glad.glBufferSubData(glad.GL_ARRAY_BUFFER, 0, @intCast(size), data);
-
-    const mapped_data = glad.glMapBuffer(glad.GL_ARRAY_BUFFER, glad.GL_READ_ONLY);
-    if (mapped_data != null) {
-        // Cast the opaque pointer to a float array pointer
-        const vertices: [*]const f32 = @ptrCast(@alignCast(mapped_data));
-        var i: usize = 0;
-        while (i < 12) : (i += 3) { // Print first 4 vertices
-            std.debug.print("Vertex {}: ({}, {}, {})\n", .{ i / 3, vertices[i], vertices[i + 1], vertices[i + 2] });
-        }
-        _ = glad.glUnmapBuffer(glad.GL_ARRAY_BUFFER);
-    }
 }
 
 pub fn SetLayout(self: *OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {

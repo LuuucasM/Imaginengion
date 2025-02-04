@@ -8,32 +8,23 @@ const KeyCodes = @import("KeyCodes.zig").KeyCodes;
 const MouseCodes = @import("MouseCodes.zig").MouseCodes;
 const Input = @This();
 
-var InputManager: *Input = undefined;
+var InputManager: Input = Input{};
 
-_EngineAllocator: std.mem.Allocator,
-
-_KeyPressedSet: HashMap(KeyCodes, u32),
-_MousePressedSet: Set(MouseCodes),
-_MousePosition: Vec2f32,
-_MouseScrolled: Vec2f32,
+_KeyPressedSet: HashMap(KeyCodes, u32) = undefined,
+_MousePressedSet: Set(MouseCodes) = undefined,
+_MousePosition: Vec2f32 = std.mem.zeroes(Vec2f32),
+_MouseScrolled: Vec2f32 = std.mem.zeroes(Vec2f32),
 
 var InputGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !void {
-    InputManager = try EngineAllocator.create(Input);
-    InputManager.* = .{
-        ._EngineAllocator = EngineAllocator,
-        ._KeyPressedSet = HashMap(KeyCodes, u32).init(InputGPA.allocator()),
-        ._MousePressedSet = Set(MouseCodes).init(InputGPA.allocator()),
-        ._MousePosition = std.mem.zeroes(Vec2f32),
-        ._MouseScrolled = std.mem.zeroes(Vec2f32),
-    };
+pub fn Init() !void {
+    InputManager._KeyPressedSet = HashMap(KeyCodes, u32).init(InputGPA.allocator());
+    InputManager._MousePressedSet = Set(MouseCodes).init(InputGPA.allocator());
 }
 pub fn Deinit() void {
     InputManager._KeyPressedSet.deinit();
     InputManager._MousePressedSet.deinit();
     _ = InputGPA.deinit();
-    InputManager._EngineAllocator.destroy(InputManager);
 }
 
 pub fn SetKeyPressed(key: KeyCodes, on: bool) !void {

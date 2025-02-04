@@ -51,6 +51,5 @@ void main()
     
     //texColor *= texture(u_Textures[texIndex], fs_in.TexCoord * fs_in.TilingFactor);
     
-    //o_Color = texColor;
-    o_Color = vec4(1.0, 0.0, 0.0, 1.0);
+    o_Color = texColor;
 }

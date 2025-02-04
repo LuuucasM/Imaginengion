@@ -126,6 +126,7 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager) !void {
 
     //cull entities that shouldnt be rendered
     CullEntities(SpriteRenderComponent, &sprite_entities, ecs_manager);
+    std.debug.print("size of sprite entities: {}\n", .{sprite_entities.items.len});
     CullEntities(CircleRenderComponent, &circle_entities, ecs_manager);
 
     //ensure textures are ready to go for draw
@@ -179,27 +180,27 @@ pub fn GetRenderStats() RenderStats {
 fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
     if (result.items.len == 0) return;
 
-    var end_index: usize = result.items.len - 1;
+    var end_index: usize = result.items.len;
     var i: usize = 0;
 
     while (i < end_index) {
         const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
         if (scene_id_component.SceneID != scene_uuid) {
-            result.items[i] = result.items[end_index];
+            result.items[i] = result.items[end_index - 1];
             end_index -= 1;
         } else {
             i += 1;
         }
     }
 
-    result.shrinkAndFree(end_index + 1);
+    result.shrinkAndFree(end_index);
 }
 
 fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_manager: *ECSManager) void {
     std.debug.assert(@hasField(component_type, "mShouldRender"));
     if (result.items.len == 0) return;
 
-    var end_index: usize = result.items.len - 1;
+    var end_index: usize = result.items.len;
     var i: usize = 0;
 
     while (i < end_index) {
@@ -208,12 +209,12 @@ fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_
         if (render_component.mShouldRender == true) {
             i += 1;
         } else {
-            result.items[i] = result.items[end_index];
+            result.items[i] = result.items[end_index - 1];
             end_index -= 1;
         }
     }
 
-    result.shrinkAndFree(end_index + 1);
+    result.shrinkAndFree(end_index);
 }
 
 fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: *ECSManager) !void {

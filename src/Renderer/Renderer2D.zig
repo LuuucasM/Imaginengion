@@ -15,24 +15,24 @@ const Mat4f32 = LinAlg.Mat4f32;
 const MAX_PATH_LEN = 256;
 
 pub const SpriteVertex = extern struct {
-    Position: Vec3f32,
-    Color: Vec4f32,
-    TexCoord: Vec2f32,
+    Position: [3]f32,
+    Color: [4]f32,
+    TexCoord: [2]f32,
     TexIndex: f32,
     TilingFactor: f32,
 };
 
 pub const CircleVertex = extern struct {
-    Position: Vec3f32,
-    LocalPosition: Vec3f32,
-    Color: Vec4f32,
+    Position: [3]f32,
+    Color: [4]f32,
+    LocalPosition: [3]f32,
     Thickness: f32,
     Fade: f32,
 };
 
 pub const ELineVertex = extern struct {
-    Position: Vec3f32,
-    Color: Vec4f32,
+    Position: [3]f32,
+    Color: [4]f32,
 };
 
 const RectVertexPositions = Mat4f32{
@@ -192,10 +192,10 @@ pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture
     var i: usize = 0;
     const positions = LinAlg.Mat4MulMat4(transform, RectVertexPositions);
     while (i < 4) : (i += 1) {
-        self.mSpriteVertexBufferPtr.*.Position = Vec3f32{ positions[i][0], positions[i][1], positions[i][2] };
+        self.mSpriteVertexBufferPtr.*.Position = [3]f32{ positions[i][0], positions[i][1], positions[i][2] };
         LinAlg.PrintVec(self.mSpriteVertexBufferPtr.Position);
-        self.mSpriteVertexBufferPtr.*.Color = color;
-        self.mSpriteVertexBufferPtr.*.TexCoord = RectTexCoordPositions[i];
+        self.mSpriteVertexBufferPtr.*.Color = [4]f32{ color[0], color[1], color[2], color[3] };
+        self.mSpriteVertexBufferPtr.*.TexCoord = [2]f32{ RectTexCoordPositions[i][0], RectTexCoordPositions[i][1] };
         self.mSpriteVertexBufferPtr.*.TexIndex = texture_index;
         self.mSpriteVertexBufferPtr.*.TilingFactor = tiling_factor;
         self.mSpriteVertexCount += 1;
@@ -205,15 +205,14 @@ pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture
 }
 pub fn DrawCircle(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, thickness: f32, fade: f32) void {
     var i: usize = 0;
+    const positions = LinAlg.Mat4MulMat4(transform, RectVertexPositions);
     while (i < 4) : (i += 1) {
-        const position = LinAlg.Mat4MulVec4(transform, RectVertexPositions[i]);
-        self.mCircleVertexBufferPtr.Position = Vec3f32{ position[0], position[1], position[2] };
+        self.mCircleVertexBufferPtr.Position = [3]f32{ positions[i][0], positions[i][1], positions[i][2] };
+        self.mCircleVertexBufferPtr.Color = [4]f32{ color[0], color[1], color[2], color[3] };
         const local_pos = RectVertexPositions[i] * @as(Vec4f32, @splat(2.0));
-        self.mCircleVertexBufferPtr.LocalPosition = Vec3f32{ local_pos[0], local_pos[1], local_pos[2] };
-        self.mCircleVertexBufferPtr.Color = color;
+        self.mCircleVertexBufferPtr.LocalPosition = [3]f32{ local_pos[0], local_pos[1], local_pos[2] };
         self.mCircleVertexBufferPtr.Thickness = thickness;
         self.mCircleVertexBufferPtr.Fade = fade;
-
         self.mCircleVertexCount += 1;
         self.mCircleVertexBufferPtr = &self.mCircleVertexBufferBase[self.mCircleVertexCount];
     }
@@ -222,12 +221,12 @@ pub fn DrawCircle(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, thickne
 }
 
 pub fn DrawELine(self: *Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) void {
-    self.mELineVertexBufferPtr.Position = p0;
-    self.mELineVertexBufferPtr.Color = color;
+    self.mELineVertexBufferPtr.Position = [3]f32{ p0[0], p0[1], p0[2] };
+    self.mELineVertexBufferPtr.Color = [4]f32{ color[0], color[1], color[2], color[3] };
     self.mELineVertexBufferPtr += 1;
 
-    self.mELineVertexBufferPtr.Position = p1;
-    self.mELineVertexBufferPtr.Color = color;
+    self.mELineVertexBufferPtr.Position = [3]f32{ p1[0], p1[1], p1[2] };
+    self.mELineVertexBufferPtr.Color = [4]f32{ color[0], color[1], color[2], color[3] };
     self.mELineVertexBufferPtr += 1;
 
     self.mELineVertexCount += 2;

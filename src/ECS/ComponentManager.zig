@@ -178,18 +178,18 @@ pub fn EntityListDifference(self: ComponentManager, result: *std.ArrayList(u32),
     defer list2_set.deinit();
     _ = try list2_set.appendSlice(list2.items);
 
-    var end_index: usize = result.items.len - 1;
+    var end_index: usize = result.items.len;
     var i: usize = 0;
     while (i < end_index) {
         if (list2_set.contains(result.items[i]) == true) {
-            result.items[i] = result.items[end_index];
+            result.items[i] = result.items[end_index - 1];
             end_index -= 1;
         } else {
             i += 1;
         }
     }
 
-    result.shrinkAndFree(end_index + 1);
+    result.shrinkAndFree(end_index);
 }
 
 pub fn EntityListUnion(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
@@ -214,16 +214,16 @@ pub fn EntityListIntersection(self: ComponentManager, result: *std.ArrayList(u32
     defer list2_set.deinit();
     _ = try list2_set.appendSlice(list2.items);
 
-    var end_index: usize = result.items.len - 1;
+    var end_index: usize = result.items.len;
     var i: usize = 0;
     while (i < end_index) {
         if (list2_set.contains(result.items[i]) == true) {
             i += 1;
         } else {
-            result.items[i] = result.items[end_index];
+            result.items[i] = result.items[end_index - 1];
             end_index -= 1;
         }
     }
 
-    result.shrinkAndFree(end_index + 1);
+    result.shrinkAndFree(end_index);
 }
