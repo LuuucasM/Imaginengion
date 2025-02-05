@@ -44,6 +44,15 @@ pub fn Mat4MulMat4(m1: Mat4f32, m2: Mat4f32) Mat4f32 {
     };
 }
 
+pub fn Mat4ToArray(m1: Mat4f32) [4][4]f32 {
+    return [4][4]f32{
+        [4]f32{ m1[0][0], m1[0][1], m1[0][2], m1[0][3] },
+        [4]f32{ m1[1][0], m1[1][1], m1[1][2], m1[1][3] },
+        [4]f32{ m1[2][0], m1[2][1], m1[2][2], m1[2][3] },
+        [4]f32{ m1[3][0], m1[3][1], m1[3][2], m1[3][3] },
+    };
+}
+
 pub fn PrintVec(v: anytype) void {
     if (@typeInfo(@TypeOf(v)) != .vector) return;
 

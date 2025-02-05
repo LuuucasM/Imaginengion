@@ -26,8 +26,7 @@ void main()
     vs_out.TexCoord = a_TexCoord;
     vs_out.TilingFactor = a_TilingFactor;
     vs_out.TexIndex = a_TexIndex;
-	//gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0);
-    gl_Position = vec4(a_Position, 1.0);
+	gl_Position = Camera.u_ViewProjection * vec4(a_Position, 1.0);
 }
 
 #type fragment

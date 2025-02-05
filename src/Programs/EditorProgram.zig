@@ -74,7 +74,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //---------GameLogic End-------------
 
     //---------Render Begin-------------
-    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCamera.GetProjection(), self._ViewportPanel.mViewportCamera.GetViewMatrix());
+    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCamera.GetViewProjection());
     Renderer.SwapBuffers();
     //----------Render End-----------------
 

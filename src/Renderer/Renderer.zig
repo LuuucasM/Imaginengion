@@ -45,7 +45,7 @@ pub const RenderStats = struct {
 };
 
 const CameraBuffer = extern struct {
-    mBuffer: Mat4f32,
+    mBuffer: [4][4]f32,
 };
 
 const MaxTri: u32 = 10_000;
@@ -126,7 +126,6 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager) !void {
 
     //cull entities that shouldnt be rendered
     CullEntities(SpriteRenderComponent, &sprite_entities, ecs_manager);
-    std.debug.print("size of sprite entities: {}\n", .{sprite_entities.items.len});
     CullEntities(CircleRenderComponent, &circle_entities, ecs_manager);
 
     //ensure textures are ready to go for draw
@@ -137,8 +136,8 @@ pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager) !void {
     try EndScene();
 }
 
-pub fn BeginRendering(camera_projection: Mat4f32, camera_transform: Mat4f32) void {
-    RenderM.mCameraBuffer.mBuffer = LinAlg.Mat4MulMat4(camera_projection, LinAlg.Mat4Inverse(camera_transform));
+pub fn BeginRendering(camera_viewprojection: Mat4f32) void {
+    RenderM.mCameraBuffer.mBuffer = LinAlg.Mat4ToArray(camera_viewprojection);
     RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(CameraBuffer), 0);
     RenderM.mStats = std.mem.zeroes(RenderStats);
 }
@@ -150,6 +149,7 @@ pub fn BeginScene() void {
 pub fn EndScene() !void {
     if (RenderM.mR2D.mSpriteVertexCount > 0) {
         RenderM.mR2D.FlushSprite();
+        RenderM.mCameraUniformBuffer.Bind(0);
         for (RenderM.mTextures.items, 0..) |asset_handle, i| {
             const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
             texture.Bind(i);
