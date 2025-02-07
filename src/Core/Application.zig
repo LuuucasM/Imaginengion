@@ -17,7 +17,7 @@ mProgram: Program = undefined,
 pub fn Init(self: *Application, EngineAllocator: std.mem.Allocator) !void {
     try AssetManager.Init(EngineAllocator);
     try Input.Init();
-    try EventManager.Init(EngineAllocator, self);
+    try EventManager.Init(self);
 
     self.mWindow = Window.Init();
     self.mProgram = try Program.Init(EngineAllocator, &self.mWindow);

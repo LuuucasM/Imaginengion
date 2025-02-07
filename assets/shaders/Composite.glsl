@@ -19,26 +19,22 @@ in vec2 texCoord;
 out vec4 fragColor;
 
 // Uniforms for textures
-uniform sampler2D u_ColorTextures[16];  // Array for color textures
-uniform sampler2D u_DepthTextures[16];  // Separate array for depth textures
+uniform sampler2D u_Textures[32];
 layout(std140, binding = 0) uniform NumTextures {
-    uint numLayers;  // Number of layers to process
+    uint numLayers;
 } Num;
 
 void main() {
-    // Initialize with maximum depth and transparent color
     float minDepth = 1.0;
     vec4 finalColor = vec4(0.0);
     
-    // Loop through all layers
     for (uint i = 0u; i < Num.numLayers; i++) {
-        // Sample depth first for early rejection
-        float currentDepth = texture(u_DepthTextures[i], texCoord).r;
+        float currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).r;
         
         // Only sample color if depth is closer
         if (currentDepth < minDepth) {
             minDepth = currentDepth;
-            finalColor = texture(u_ColorTextures[i], texCoord);
+            finalColor = texture(u_Textures[i], texCoord);
         }
     }
     

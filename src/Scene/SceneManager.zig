@@ -64,13 +64,13 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     };
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_scene_manager.mCompositeIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6);
+    new_scene_manager.mCompositeIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
 
     try new_scene_manager.mCompositeVertexBuffer.SetLayout(new_scene_manager.mCompositeShader.GetLayout());
     new_scene_manager.mCompositeVertexBuffer.SetStride(new_scene_manager.mCompositeShader.GetStride());
 
-    const data_vertex_buffer = [4]Vec2f32{ Vec2f32{ -1.0, -1.0 }, Vec2f32{ 1.0, -1.0 }, Vec2f32{ 1.0, 1.0 }, Vec2f32{ -1.0, 1.0 } };
-    new_scene_manager.mCompositeVertexBuffer.SetData(@constCast(&data_vertex_buffer[0]), 4 * @sizeOf(Vec2f32));
+    var data_vertex_buffer = [4]Vec2f32{ Vec2f32{ -1.0, -1.0 }, Vec2f32{ 1.0, -1.0 }, Vec2f32{ 1.0, 1.0 }, Vec2f32{ -1.0, 1.0 } };
+    new_scene_manager.mCompositeVertexBuffer.SetData(&data_vertex_buffer[0], 4 * @sizeOf(Vec2f32));
 
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
@@ -78,6 +78,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 
     new_scene_manager.mNumTexturesUniformBuffer.Bind(0);
     new_scene_manager.mCompositeShader.Bind();
+    new_scene_manager.mNumTexturesUniformBuffer.Bind(0);
 
     return new_scene_manager;
 }
@@ -130,7 +131,7 @@ pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
     self.mFrameBuffer.Bind();
     self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
     self.mCompositeShader.Bind();
-
+    self.mNumTexturesUniformBuffer.Bind(0);
     var i: usize = 0;
     for (self.mSceneStack.items) |scene_layer| {
         scene_layer.mFrameBuffer.BindColorAttachment(0, i);
@@ -146,7 +147,6 @@ pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
 
     RenderManager.DrawComposite(self.mCompositeVertexArray);
 
-    //make a draw call
     self.mFrameBuffer.Unbind();
 }
 

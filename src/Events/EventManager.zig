@@ -6,29 +6,23 @@ const EventCategory = @import("EventEnums.zig").EventCategory;
 const EventType = @import("EventEnums.zig").EventType;
 const Self = @This();
 
-var EventManager: *Self = undefined;
+var EventManager: Self = .{};
 
-_InputEventPool: std.ArrayList(Event),
-_WindowEventPool: std.ArrayList(Event),
-_EngineAllocator: std.mem.Allocator,
-mApplication: *Application,
+_InputEventPool: std.ArrayList(Event) = undefined,
+_WindowEventPool: std.ArrayList(Event) = undefined,
+_Application: *Application = undefined,
 
 var EventGPA = std.heap.GeneralPurposeAllocator(.{}){};
 
-pub fn Init(EngineAllocator: std.mem.Allocator, application: *Application) !void {
-    EventManager = try EngineAllocator.create(Self);
-    EventManager.* = .{
-        ._InputEventPool = std.ArrayList(Event).init(EventGPA.allocator()),
-        ._WindowEventPool = std.ArrayList(Event).init(EventGPA.allocator()),
-        ._EngineAllocator = EngineAllocator,
-        .mApplication = application,
-    };
+pub fn Init(application: *Application) !void {
+    EventManager._InputEventPool = std.ArrayList(Event).init(EventGPA.allocator());
+    EventManager._WindowEventPool = std.ArrayList(Event).init(EventGPA.allocator());
+    EventManager._Application = application;
 }
 
 pub fn Deinit() void {
     EventManager._InputEventPool.deinit();
     EventManager._WindowEventPool.deinit();
-    EventManager._EngineAllocator.destroy(EventManager);
     _ = EventGPA.deinit();
 }
 
@@ -46,12 +40,11 @@ pub fn ProcessEvents(eventCategory: EventCategory) void {
     };
 
     for (array.items) |*event| {
-        EventManager.mApplication.OnEvent(event);
+        EventManager._Application.OnEvent(event);
     }
 }
 
 pub fn EventsReset() void {
-    //const capacity = std.heap.ArenaAllocator.ResetMode{ .retain_with_limit = 20 };
     _ = EventManager._InputEventPool.clearAndFree();
     _ = EventManager._WindowEventPool.clearAndFree();
 }
