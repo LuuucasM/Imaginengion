@@ -83,6 +83,12 @@ pub fn DegreesToRadians(degrees: anytype) @TypeOf(degrees) {
     return degrees * math.pi / 180.0;
 }
 
+pub fn RadiansToDegrees(radians: anytype) @TypeOf(radians) {
+    std.debug.assert(@typeInfo(@TypeOf(radians)) == .float or
+        @typeInfo(@TypeOf(radians)) == .comptime_float);
+    return radians * 180.0 / math.pi;
+}
+
 pub fn PerspectiveRHNO(fovy_radians: f32, aspect: f32, zNear: f32, zFar: f32) Mat4f32 {
     const tanHalfFovy = math.tan(fovy_radians / 2);
     return .{
@@ -112,6 +118,26 @@ pub fn QuatNormalize(q: Quatf32) Quatf32 {
         return Quatf32{ 1.0, 0.0, 0.0, 0.0 };
     }
     return q / @as(Quatf32, @splat(len));
+}
+
+pub fn QuatAngleAxis(angle_degrees: f32, axis: Vec3f32) Quatf32 {
+    const rad_ang = DegreesToRadians(angle_degrees);
+    const half_sin = math.sin(rad_ang * 0.5);
+    return Quatf32{
+        math.cos(half_sin),
+        axis[0] * half_sin,
+        axis[1] * half_sin,
+        axis[2] * half_sin,
+    };
+}
+
+pub fn QuatMulQuat(p: Quatf32, q: Quatf32) Quatf32 {
+    return Quatf32{
+        p[0] * q[0] - p[1] * q[1] - p[2] * q[2] - p[3] * q[3],
+        p[0] * q[1] + p[1] * q[0] + p[2] * q[3] - p[3] * q[2],
+        p[0] * q[2] + p[2] * q[0] + p[3] * q[1] - p[1] * q[3],
+        p[0] * q[3] + p[3] * q[0] + p[1] * q[2] - p[2] * q[1],
+    };
 }
 
 pub fn QuatToMat4(q: Quatf32) Mat4f32 {
