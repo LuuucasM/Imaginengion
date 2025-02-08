@@ -47,10 +47,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, 0);
         }
         pub fn Resize(self: *Self, width: usize, height: usize) void {
-            if (width < 1 or height < 1 or width > 8192 or height > 8192) {
-                //std.log.warn("attachment index must be within bounds!\n", .{}); //TODO uncomment
-                return;
-            }
+            if (width < 1 or height < 1 or width > 8192 or height > 8192) return;
             self.mWidth = width;
             self.mHeight = height;
             self.Invalidate();
@@ -100,12 +97,12 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 AttachDepthTexture(self.mDepthAttachment, TextureFormatToInternalFormat(depth_texture_format), @intCast(self.mWidth), @intCast(self.mHeight), multisampled);
             }
 
-            if (color_texture_formats.len > 1) {
-                const buffers: [5]glad.GLenum = .{ glad.GL_COLOR_ATTACHMENT0, glad.GL_COLOR_ATTACHMENT1, glad.GL_COLOR_ATTACHMENT2, glad.GL_COLOR_ATTACHMENT3, glad.GL_COLOR_ATTACHMENT4 };
-                glad.glDrawBuffers(@intCast(buffers.len), &buffers[0]);
-            } else if (color_texture_formats.len == 0) {
-                glad.glDrawBuffer(glad.GL_NONE);
-            }
+            const buffers: [5]glad.GLenum = .{ glad.GL_COLOR_ATTACHMENT0, glad.GL_COLOR_ATTACHMENT1, glad.GL_COLOR_ATTACHMENT2, glad.GL_COLOR_ATTACHMENT3, glad.GL_COLOR_ATTACHMENT4 };
+            glad.glDrawBuffers(@intCast(buffers.len), &buffers[0]);
+
+            //if (color_texture_formats.len > 1) {} else if (color_texture_formats.len == 0) {
+            //    glad.glDrawBuffer(glad.GL_NONE);
+            //}
 
             std.debug.assert(glad.glCheckFramebufferStatus(glad.GL_FRAMEBUFFER) == glad.GL_FRAMEBUFFER_COMPLETE);
 
@@ -127,8 +124,11 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_R, glad.GL_CLAMP_TO_EDGE);
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_S, glad.GL_CLAMP_TO_EDGE);
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_T, glad.GL_CLAMP_TO_EDGE);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_R, glad.GL_RED);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_G, glad.GL_GREEN);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_B, glad.GL_BLUE);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_A, glad.GL_ALPHA);
             }
-
             glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, @as(c_uint, @intCast(glad.GL_COLOR_ATTACHMENT0)) + index, TextureTarget(multisampled), attachment_id, 0);
         }
 
@@ -143,6 +143,10 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_R, glad.GL_CLAMP_TO_EDGE);
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_S, glad.GL_CLAMP_TO_EDGE);
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_WRAP_T, glad.GL_CLAMP_TO_EDGE);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_R, glad.GL_RED);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_G, glad.GL_GREEN);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_B, glad.GL_BLUE);
+                glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_A, glad.GL_ALPHA);
             }
 
             glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, glad.GL_DEPTH_STENCIL_ATTACHMENT, TextureTarget(multisampled), attachment_id, 0);

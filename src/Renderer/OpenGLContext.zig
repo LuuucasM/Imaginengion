@@ -26,6 +26,9 @@ pub fn Init(in_window: *Window) OpenGLContext {
         glad.glDebugMessageControl(glad.GL_DONT_CARE, glad.GL_DONT_CARE, glad.GL_DONT_CARE, 0, null, glad.GL_TRUE);
     }
 
+    glad.glEnable(glad.GL_DEPTH_TEST);
+    glad.glDepthFunc(glad.GL_LESS);
+
     std.log.info("OpenGL Info: \n", .{});
     std.log.info("\tVendor: {s}\n", .{glad.glGetString(glad.GL_VENDOR)});
     std.log.info("\tRenderer: {s}\n", .{glad.glGetString(glad.GL_RENDERER)});

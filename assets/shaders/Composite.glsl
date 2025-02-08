@@ -1,4 +1,3 @@
-// Vertex Shader
 #type vertex
 #version 460 core
 
@@ -11,14 +10,12 @@ void main() {
     texCoord = aPosition * 0.5 + 0.5;
 }
 
-// Fragment Shader
 #type fragment
 #version 460 core
 
 in vec2 texCoord;
 out vec4 fragColor;
 
-// Uniforms for textures
 uniform sampler2D u_Textures[32];
 layout(std140, binding = 0) uniform NumTextures {
     uint numLayers;
@@ -29,7 +26,7 @@ void main() {
     vec4 finalColor = vec4(0.0);
     
     for (uint i = 0u; i < Num.numLayers; i++) {
-        float currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).r;
+        float currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).x;
         
         // Only sample color if depth is closer
         if (currentDepth < minDepth) {
@@ -37,6 +34,6 @@ void main() {
             finalColor = texture(u_Textures[i], texCoord);
         }
     }
-    
-    fragColor = finalColor;
+    //fragColor = finalColor;
+    fragColor = vec4(minDepth, minDepth, minDepth, 1.0);
 }

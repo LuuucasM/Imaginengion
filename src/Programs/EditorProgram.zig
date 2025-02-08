@@ -75,6 +75,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     //---------Render Begin-------------
     try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCamera.GetViewProjection());
+
     Renderer.SwapBuffers();
     //----------Render End-----------------
 
@@ -97,6 +98,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._CSEditorPanel.OnImguiRender();
 
     self._ToolbarPanel.OnImguiRender();
+    //if (self.mSceneManager.mSceneStack.items.len > 0) {
+    //    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mSceneStack.items[0].mFrameBuffer);
+    //} else {
+    //    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    //}
     try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
