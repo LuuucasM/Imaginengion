@@ -127,22 +127,15 @@ pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
     for (self.mSceneStack.items) |scene_layer| {
         try scene_layer.Render(); //this renders each scene_layer to its own frame buffer
     }
-
+    self.mNumTexturesUniformBuffer.SetData(&self.mSceneStack.items.len, @sizeOf(usize), 0);
     self.mFrameBuffer.Bind();
     self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
+    self.mNumTexturesUniformBuffer.Bind(0);
     self.mCompositeShader.Bind();
     self.mNumTexturesUniformBuffer.Bind(0);
-    var i: usize = 0;
-    for (self.mSceneStack.items) |scene_layer| {
+    for (self.mSceneStack.items, 0..) |scene_layer, i| {
         scene_layer.mFrameBuffer.BindColorAttachment(0, i);
-        i += 1;
-    }
-
-    self.mNumTexturesUniformBuffer.SetData(&i, @sizeOf(usize), 0);
-
-    for (self.mSceneStack.items) |scene_layer| {
-        scene_layer.mFrameBuffer.BindDepthAttachment(i);
-        i += 1;
+        scene_layer.mFrameBuffer.BindDepthAttachment(i + self.mSceneStack.items.len);
     }
 
     RenderManager.DrawComposite(self.mCompositeVertexArray);

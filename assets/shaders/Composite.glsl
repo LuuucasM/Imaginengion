@@ -38,10 +38,5 @@ void main() {
         }
     }
     
-    // Discard fully transparent pixels
-    if (finalColor.a < 0.001) {
-        discard;
-    }
-    
     fragColor = finalColor;
 }
