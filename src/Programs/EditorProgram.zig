@@ -63,7 +63,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     //---------Inputs Begin--------------
     self.mWindow.PollInputEvents();
-    self._ViewportPanel.mViewportCamera.InputUpdate();
+    self._ViewportPanel.OnUpdate();
     EventManager.ProcessEvents(.EC_Input);
     //---------Inputs End----------------
 

@@ -13,6 +13,17 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Quatf32 = LinAlg.Quatf32;
 const EditorCamera = @This();
 
+pub const ProjectionType = enum {
+    Perspective,
+    Orthographic,
+};
+
+mProjectionType: ProjectionType = .Perspective,
+
+mOrthographicSize: f32 = 10.0,
+mOrthographicNear: f32 = -1.0,
+mOrthographicFar: f32 = 1.0,
+
 mFOVDegrees: f32 = 45.0,
 mNearClip: f32 = 0.1,
 mFarClip: f32 = 1000.0,
@@ -31,6 +42,7 @@ mYaw: f32 = 0.0,
 mViewportWidth: usize = undefined,
 mViewportHeight: usize = undefined,
 mAspectRatio: f32 = undefined,
+mIsFixedAspectRatio: bool = false,
 
 pub fn Init(width: usize, height: usize) EditorCamera {
     var new_camera = EditorCamera{};

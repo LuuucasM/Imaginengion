@@ -25,6 +25,7 @@ const SceneLayer = @This();
 
 //.gscl
 //.oscl
+
 pub const LayerType = enum {
     GameLayer,
     OverlayLayer,

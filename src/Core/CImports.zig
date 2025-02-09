@@ -13,6 +13,7 @@ pub const imgui = @cImport({
     @cDefine("CIMGUI_USE_OPENGL3", "");
     @cInclude("cimgui.h");
     @cInclude("cimgui_impl.h");
+    @cInclude("cimguizmo.h");
 });
 
 pub const nativeos = switch (builtin.os.tag) {

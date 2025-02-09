@@ -16,6 +16,7 @@ pub fn build(b: *std.Build) void {
             "imgui/imgui_tables.cpp",
             "imgui/imgui_widgets.cpp",
             "cimgui.cpp",
+            "cimguizmo.cpp",
         },
         .flags = &[_][]const u8{
             "-D_CRT_SECURE_NO_WARNINGS",

@@ -51,6 +51,7 @@ pub fn Begin() void {
     imgui.ImGui_ImplOpenGL3_NewFrame();
     imgui.ImGui_ImplGlfw_NewFrame();
     imgui.igNewFrame();
+    imgui.ImGuizmo_BeginFrame();
 }
 pub fn End() void {
     const my_null_ptr: ?*anyopaque = null;

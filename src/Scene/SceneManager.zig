@@ -54,7 +54,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mLayerInsertIndex = 0,
         .mViewportWidth = width,
         .mViewportHeight = height,
-        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1, false), width, height),
+        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false), width, height),
 
         .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
         .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),

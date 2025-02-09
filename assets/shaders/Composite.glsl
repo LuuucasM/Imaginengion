@@ -34,6 +34,5 @@ void main() {
             finalColor = texture(u_Textures[i], texCoord);
         }
     }
-    //fragColor = finalColor;
-    fragColor = vec4(minDepth, minDepth, minDepth, 1.0);
+    fragColor = finalColor;
 }
