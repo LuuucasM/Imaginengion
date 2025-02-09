@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
             "imgui/imgui_draw.cpp",
             "imgui/imgui_tables.cpp",
             "imgui/imgui_widgets.cpp",
+            "ImGuizmo/ImGuizmo.cpp",
             "cimgui.cpp",
             "cimguizmo.cpp",
         },
