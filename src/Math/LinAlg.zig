@@ -270,10 +270,14 @@ pub fn Decompose(transform: [4][4]f32, translation: *Vec3f32, rotation: *Quatf32
         local_matrix[3][3] = 1.0;
     }
 
+    //translation
     translation.* = Vec3f32{ local_matrix[3][0], local_matrix[3][1], local_matrix[3][2] };
     local_matrix[3][0] = 0.0;
     local_matrix[3][1] = 0.0;
     local_matrix[3][2] = 0.0;
+
+    //scale
+    //rotation
 }
 
 pub fn Vec4DotVec4(v1: Vec4f32, v2: Vec4f32) f32 {
