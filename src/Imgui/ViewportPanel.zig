@@ -6,6 +6,7 @@ const EditorCamera = @import("ViewportCamera.zig");
 
 const ImguiManager = @import("Imgui.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const InputEvents = @import("../Events/InputEvents.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const TransformComponent = @import("../GameObjects/Components.zig").TransformComponent;
 const InputManager = @import("../Inputs/Input.zig");
@@ -92,8 +93,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
             viewport_bounds[1] = imgui.struct_ImVec2{ .x = window_pos.x + window_size.x, .y = window_pos.y + window_size.y };
 
             imgui.ImGuizmo_SetOrthographic(false);
-            var draw_list = imgui.struct_ImDrawList{};
-            imgui.ImGuizmo_SetDrawlist(&draw_list);
+            imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
             imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
 
             imgui.ImGuizmo_SetOrthographic(if (self.mViewportCamera.mProjectionType == .Orthographic) true else false);
@@ -129,4 +129,34 @@ pub fn OnTogglePanelEvent(self: *ViewportPanel) void {
 
 pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
+}
+
+pub fn OnKeyPressedEvent(self: *ViewportPanel, e: InputEvents.KeyPressedEvent) bool {
+    if (e._RepeatCount > 0) {
+        return false;
+    }
+    switch (e._KeyCode) {
+        .Q => {
+            if (imgui.ImGuizmo_IsUsing() == false) {
+                self.mGizmoType = .None;
+            }
+        },
+        .W => {
+            if (imgui.ImGuizmo_IsUsing() == false) {
+                self.mGizmoType = .Translate;
+            }
+        },
+        .E => {
+            if (imgui.ImGuizmo_IsUsing() == false) {
+                self.mGizmoType = .Rotation;
+            }
+        },
+        .R => {
+            if (imgui.ImGuizmo_IsUsing() == false) {
+                self.mGizmoType = .Scale;
+            }
+        },
+        else => return false,
+    }
+    return false;
 }

@@ -1,5 +1,6 @@
 const std = @import("std");
 const Event = @import("../Events/Event.zig").Event;
+const InputEvents = @import("../Events/InputEvents.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const Window = @import("../Windows/Window.zig");
 const Program = @This();
@@ -23,6 +24,6 @@ pub fn OnUpdate(self: *Program, dt: f64) !void {
     try self._Impl.OnUpdate(dt);
 }
 
-pub fn OnEvent(self: Program, event: *Event) void {
-    self._Impl.OnEvent(event);
+pub fn OnKeyPressedEvent(self: *Program, e: InputEvents.KeyPressedEvent) bool {
+    return self._Impl.OnKeyPressedEvent(e);
 }

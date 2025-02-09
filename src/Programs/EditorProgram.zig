@@ -1,6 +1,7 @@
 const std = @import("std");
 const Window = @import("../Windows/Window.zig");
 const Event = @import("../Events/Event.zig").Event;
+const InputEvents = @import("../Events/InputEvents.zig");
 const EventManager = @import("../Events/EventManager.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 
@@ -123,9 +124,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     EventManager.EventsReset();
 }
 
-pub fn OnEvent(self: EditorProgram, event: *Event) void {
-    _ = self;
-    _ = event;
+pub fn OnKeyPressedEvent(self: *EditorProgram, e: InputEvents.KeyPressedEvent) bool {
+    if (self._ViewportPanel.OnKeyPressedEvent(e) == true) {
+        return true;
+    }
+    return false;
 }
 
 pub fn ProcessImguiEvents(self: *EditorProgram) !void {
@@ -186,6 +189,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                 self._ScenePanel.OnSelectEntityEvent(e.SelectedEntity);
                 self._ComponentsPanel.OnSelectEntityEvent(e.SelectedEntity);
                 self._ScriptsPanel.OnSelectEntityEvent(e.SelectedEntity);
+                self._ViewportPanel.OnSelectEntityEvent(e.SelectedEntity);
             },
             .ET_SelectComponentEvent => |e| {
                 try self._CSEditorPanel.OnSelectComponentEvent(e.mEditorWindow);

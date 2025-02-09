@@ -44,11 +44,10 @@ pub fn OnEvent(self: *Application, event: *Event) void {
     const result = switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| self.OnWindowResize(e._Width, e._Height),
+        .ET_KeyPressed => |e| self.mProgram.OnKeyPressedEvent(e),
         else => false,
     };
-    if (result == false) {
-        self.mProgram.OnEvent(event);
-    }
+    _ = result;
 }
 
 fn OnWindowClose(self: *Application) bool {
