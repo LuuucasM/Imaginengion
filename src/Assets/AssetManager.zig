@@ -16,22 +16,17 @@ const AssetManager = @This();
 const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
-var AssetM: *AssetManager = undefined;
+var AssetM: AssetManager = AssetManager{};
+var AssetGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
+var AssetMemoryPool: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-mEngineAllocator: std.mem.Allocator,
-mAssetGPA: std.heap.GeneralPurposeAllocator(.{}),
-mAssetECS: ECSManager,
-mAssetMemoryPool: std.heap.ArenaAllocator,
-mAssetPathToID: std.AutoHashMap(u64, u32),
+mAssetECS: ECSManager = undefined,
+mAssetPathToID: std.AutoHashMap(u64, u32) = undefined,
 
-pub fn Init(EngineAllocator: std.mem.Allocator) !void {
-    AssetM = try EngineAllocator.create(AssetManager);
-    AssetM.* = .{
-        .mEngineAllocator = EngineAllocator,
-        .mAssetGPA = std.heap.GeneralPurposeAllocator(.{}){},
-        .mAssetECS = try ECSManager.Init(AssetM.mAssetGPA.allocator(), &AssetsList, &[_]type{}),
-        .mAssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-        .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetM.mAssetGPA.allocator()),
+pub fn Init() !void {
+    AssetM = AssetManager{
+        .mAssetECS = try ECSManager.Init(AssetGPA.allocator(), &AssetsList, &[_]type{}),
+        .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetGPA.allocator()),
     };
 }
 
@@ -42,13 +37,10 @@ pub fn Deinit() !void {
     const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, allocator);
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
-        AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
+        AssetGPA.allocator().free(file_data.mAbsPath);
     }
     AssetM.mAssetECS.Deinit();
-    AssetM.mAssetMemoryPool.deinit();
     AssetM.mAssetPathToID.deinit();
-    _ = AssetM.mAssetGPA.deinit();
-    AssetM.mEngineAllocator.destroy(AssetM);
 }
 
 pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
@@ -135,7 +127,7 @@ fn CreateAsset(abs_path: []const u8) !AssetHandle {
     });
 
     _ = try AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
-        .mAbsPath = try AssetM.mAssetGPA.allocator().dupe(u8, abs_path),
+        .mAbsPath = try AssetGPA.allocator().dupe(u8, abs_path),
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,
@@ -160,7 +152,7 @@ fn DeleteAsset(asset_id: u32) !void {
     hasher.update(file_data.mAbsPath);
     const abs_path_hash = hasher.final();
     _ = AssetM.mAssetPathToID.remove(abs_path_hash);
-    AssetM.mAssetGPA.allocator().free(file_data.mAbsPath);
+    AssetGPA.allocator().free(file_data.mAbsPath);
     try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 

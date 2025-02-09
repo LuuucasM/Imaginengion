@@ -11,6 +11,8 @@ const Entity = @import("../GameObjects/Entity.zig");
 const TransformComponent = @import("../GameObjects/Components.zig").TransformComponent;
 const InputManager = @import("../Inputs/Input.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
+const Vec3f32 = LinAlg.Vec3f32;
+const Quatf32 = LinAlg.Quatf32;
 
 const ViewportPanel = @This();
 
@@ -118,7 +120,17 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
                 null,
             );
 
-            if (imgui.ImGuizmo_IsUsing() == true) {}
+            if (imgui.ImGuizmo_IsUsing() == true) {
+                var translation: Vec3f32 = undefined;
+                var rotation: Quatf32 = undefined;
+                var scale: Vec3f32 = undefined;
+
+                LinAlg.Decompose(entity_transform, &translation, &rotation, &scale);
+
+                entity_transform_component.Translation = translation;
+                entity_transform_component.Rotation = rotation;
+                entity_transform_component.Scale = scale;
+            }
         }
     }
 }

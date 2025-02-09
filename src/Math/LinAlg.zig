@@ -250,6 +250,32 @@ pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
     };
 }
 
+pub fn Decompose(transform: [4][4]f32, translation: *Vec3f32, rotation: *Quatf32, scale: *Vec3f32) void {
+    var local_matrix = transform;
+    const eps: f32 = 0.00001;
+
+    if (math.abs(local_matrix[3][3] - 0.0) < eps) {
+        return false;
+    }
+
+    // First, isolate perspective. This is the messiest part.
+    if (math.abs(local_matrix[0][3]) > eps or
+        math.abs(local_matrix[1][3]) > eps or
+        math.abs(local_matrix[2][3]) > eps)
+    {
+        // Clear the perspective partition
+        local_matrix[0][3] = 0.0;
+        local_matrix[1][3] = 0.0;
+        local_matrix[2][3] = 0.0;
+        local_matrix[3][3] = 1.0;
+    }
+
+    translation.* = Vec3f32{ local_matrix[3][0], local_matrix[3][1], local_matrix[3][2] };
+    local_matrix[3][0] = 0.0;
+    local_matrix[3][1] = 0.0;
+    local_matrix[3][2] = 0.0;
+}
+
 pub fn Vec4DotVec4(v1: Vec4f32, v2: Vec4f32) f32 {
     return @reduce(.Add, v1 * v2);
 }
