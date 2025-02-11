@@ -100,6 +100,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
 
             imgui.ImGuizmo_SetOrthographic(if (self.mViewportCamera.mProjectionType == .Orthographic) true else false);
             var camera_proj = LinAlg.Mat4ToArray(self.mViewportCamera.GetProjection());
+            camera_proj[1][1] *= -1;
             var camera_view = LinAlg.Mat4ToArray(self.mViewportCamera.GetViewMatrix());
 
             const entity_transform_component = entity.GetComponent(TransformComponent);
@@ -130,6 +131,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
                 entity_transform_component.Translation = translation;
                 entity_transform_component.Rotation = rotation;
                 entity_transform_component.Scale = scale;
+                entity_transform_component.Dirty = true;
             }
         }
     }

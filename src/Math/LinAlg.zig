@@ -93,7 +93,7 @@ pub fn PerspectiveRHNO(fovy_radians: f32, aspect: f32, zNear: f32, zFar: f32) Ma
     const tanHalfFovy = math.tan(fovy_radians / 2);
     return .{
         Vec4f32{ 1.0 / (aspect * tanHalfFovy), 0.0, 0.0, 0.0 },
-        Vec4f32{ 0.0, 1 / tanHalfFovy, 0.0, 0.0 },
+        Vec4f32{ 0.0, -1 / tanHalfFovy, 0.0, 0.0 },
         Vec4f32{ 0.0, 0.0, -((zFar + zNear) / (zFar - zNear)), -1.0 },
         Vec4f32{ 0.0, 0.0, -((2.0 * zFar * zNear) / (zFar - zNear)), 0.0 },
     };
@@ -254,14 +254,14 @@ pub fn Decompose(transform: [4][4]f32, translation: *Vec3f32, rotation: *Quatf32
     var local_matrix = transform;
     const eps: f32 = 0.00001;
 
-    if (math.abs(local_matrix[3][3] - 0.0) < eps) {
-        return false;
+    if (@abs(local_matrix[3][3] - 0.0) < eps) {
+        return;
     }
 
     // First, isolate perspective. This is the messiest part.
-    if (math.abs(local_matrix[0][3]) > eps or
-        math.abs(local_matrix[1][3]) > eps or
-        math.abs(local_matrix[2][3]) > eps)
+    if (@abs(local_matrix[0][3]) > eps or
+        @abs(local_matrix[1][3]) > eps or
+        @abs(local_matrix[2][3]) > eps)
     {
         // Clear the perspective partition
         local_matrix[0][3] = 0.0;
@@ -344,7 +344,7 @@ pub fn Vec3ToQuat(v: Vec3f32) Quatf32 {
     };
 }
 
-pub fn Vec3Mag(v: Vec3f32) Vec3f32 {
+pub fn Vec3Mag(v: Vec3f32) f32 {
     return @reduce(.Add, v * v);
 }
 
