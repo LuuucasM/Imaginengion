@@ -276,8 +276,56 @@ pub fn Decompose(transform: [4][4]f32, translation: *Vec3f32, rotation: *Quatf32
     local_matrix[3][1] = 0.0;
     local_matrix[3][2] = 0.0;
 
+    var row = Mat3f32{
+        Vec3f32{ local_matrix[0][0], local_matrix[0][1], local_matrix[0][2] },
+        Vec3f32{ local_matrix[1][0], local_matrix[1][1], local_matrix[1][2] },
+        Vec3f32{ local_matrix[2][0], local_matrix[2][1], local_matrix[2][2] },
+    };
+
     //scale
+    scale.* = Vec3f32{
+        Vec3Mag(row[0]),
+        Vec3Mag(row[1]),
+        Vec3Mag(row[2]),
+    };
+
     //rotation
+    row[0] = row[0] / @as(Vec3f32, @splat(scale[0]));
+    row[1] = row[1] / @as(Vec3f32, @splat(scale[1]));
+    row[2] = row[2] / @as(Vec3f32, @splat(scale[2]));
+    RotationMatrixToQuat(row, rotation);
+}
+
+pub fn RotationMatrixToQuat(row: Mat3f32, rotation: *Quatf32) void {
+    const four_x_squared_minus_one = row[0][0] - row[1][1] - row[2][2];
+    const four_y_squared_minus_one = row[1][1] - row[0][0] - row[2][2];
+    const four_z_suqared_minus_one = row[2][2] - row[0][0] - row[1][1];
+    const four_w_squared_minus_one = row[0][0] + row[1][1] + row[2][2];
+
+    var biggest_index: u32 = 0;
+    var biggest_four = four_w_squared_minus_one;
+    if (four_x_squared_minus_one > biggest_four) {
+        biggest_four = four_x_squared_minus_one;
+        biggest_index = 1;
+    }
+    if (four_y_squared_minus_one > biggest_four) {
+        biggest_four = four_y_squared_minus_one;
+        biggest_index = 2;
+    }
+    if (four_z_suqared_minus_one > biggest_four) {
+        biggest_four = four_z_suqared_minus_one;
+        biggest_index = 3;
+    }
+
+    const biggest_val = @sqrt(biggest_four + 1.0 * 0.5);
+    const mult = 0.25 / biggest_val;
+    switch (biggest_index) {
+        0 => rotation.* = Quatf32{ biggest_val, (row[1][2] - row[2][1]) * mult, (row[2][0] - row[0][2]) * mult, (row[0][1] - row[1][0]) * mult },
+        1 => rotation.* = Quatf32{ (row[1][2] - row[2][1]) * mult, biggest_val, (row[0][1] + row[1][0]) * mult, (row[2][0] + row[0][2]) * mult },
+        2 => rotation.* = Quatf32{ (row[2][0] - row[0][2]) * mult, (row[0][1] + row[1][0]) * mult, biggest_val, (row[1][2] + row[2][1]) * mult },
+        3 => rotation.* = Quatf32{ (row[0][1] - row[1][0]) * mult, (row[2][0] + row[0][2]) * mult, (row[1][2] + row[2][1]) * mult, biggest_val },
+        else => @panic("Not valid index! This shouldnt really happen though!\n"),
+    }
 }
 
 pub fn Vec4DotVec4(v1: Vec4f32, v2: Vec4f32) f32 {
@@ -294,6 +342,10 @@ pub fn Vec3ToQuat(v: Vec3f32) Quatf32 {
         c[0] * s[1] * c[2] + s[0] * c[1] * s[2],
         c[0] * c[1] * s[2] - s[0] * s[1] * c[2],
     };
+}
+
+pub fn Vec3Mag(v: Vec3f32) Vec3f32 {
+    return @reduce(.Add, v * v);
 }
 
 pub fn Vec3CrossVec3(x: Vec3f32, y: Vec3f32) Vec3f32 {
