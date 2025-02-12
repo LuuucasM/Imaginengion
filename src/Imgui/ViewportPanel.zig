@@ -80,6 +80,19 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
         imgui.struct_ImVec4{ .x = 1.0, .y = 1.0, .z = 0.0, .w = 0.0 },
     );
     //drag drop target for scenes
+    if (imgui.igBeginDragDropTarget() == true) {
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+            const path_len = payload.*.DataSize;
+            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            const new_event = ImguiEvent{
+                .ET_OpenSceneEvent = .{
+                    .Path = try ImguiManager.EventAllocator().dupe(u8, path),
+                },
+            };
+            try ImguiManager.InsertEvent(new_event);
+        }
+    }
     //entity picking for selected entity
 
     //gizmos

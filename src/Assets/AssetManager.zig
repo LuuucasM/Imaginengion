@@ -17,8 +17,8 @@ const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
 var AssetM: AssetManager = AssetManager{};
-var AssetGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
-var AssetMemoryPool: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+var AssetGPA = std.heap.DebugAllocator(.{}).init;
+var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 mAssetECS: ECSManager = undefined,
 mAssetPathToID: std.AutoHashMap(u64, u32) = undefined,

@@ -30,7 +30,7 @@ pub const ESceneState = enum {
     Play,
 };
 
-var SceneManagerGPA: std.heap.GeneralPurposeAllocator(.{}) = .{};
+var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 
 mSceneStack: std.ArrayList(SceneLayer),
 mECSManager: ECSManager,

@@ -31,17 +31,17 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Renderer = @This();
 
-var RenderM: *Renderer = undefined;
+var RenderM: Renderer = .{};
 
 pub const RenderStats = struct {
-    mDrawCalls: u32,
-    mTriCount: u32,
-    mVertexCount: u32,
-    mIndicesCount: u32,
+    mDrawCalls: u32 = 0,
+    mTriCount: u32 = 0,
+    mVertexCount: u32 = 0,
+    mIndicesCount: u32 = 0,
 
-    mSpriteNum: u32,
-    mCircleNum: u32,
-    mELineNum: u32,
+    mSpriteNum: u32 = 0,
+    mCircleNum: u32 = 0,
+    mELineNum: u32 = 0,
 };
 
 const CameraBuffer = extern struct {
@@ -52,30 +52,24 @@ const MaxTri: u32 = 10_000;
 const MaxVerticies: u32 = MaxTri * 3;
 const MaxIndices: u32 = MaxTri * 3;
 
-mEngineAllocator: std.mem.Allocator,
+mRenderContext: RenderContext = undefined,
+mStats: RenderStats = .{},
 
-mRenderContext: RenderContext,
-mStats: RenderStats,
+mR2D: Renderer2D = undefined,
+mR3D: Renderer3D = undefined,
 
-mR2D: Renderer2D,
-mR3D: Renderer3D,
+mTexturesMap: std.AutoHashMap(u32, usize) = undefined,
+mTextures: std.ArrayList(AssetHandle) = undefined,
 
-mTexturesMap: std.AutoHashMap(u32, usize),
-mTextures: std.ArrayList(AssetHandle),
+mCameraBuffer: CameraBuffer = std.mem.zeroes(CameraBuffer),
+mCameraUniformBuffer: UniformBuffer = undefined,
 
-mCameraBuffer: CameraBuffer,
-mCameraUniformBuffer: UniformBuffer,
-
-var RenderAllocator = std.heap.GeneralPurposeAllocator(.{}){};
+var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
     const new_render_context = RenderContext.Init(window);
-    RenderM = try EngineAllocator.create(Renderer);
-    RenderM.* = .{
-        .mEngineAllocator = EngineAllocator,
-
+    RenderM = Renderer{
         .mRenderContext = new_render_context,
-        .mStats = std.mem.zeroes(RenderStats),
 
         .mR2D = try Renderer2D.Init(
             MaxVerticies,
@@ -87,7 +81,6 @@ pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
         .mTexturesMap = std.AutoHashMap(u32, usize).init(EngineAllocator),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(EngineAllocator, RenderM.mRenderContext.GetMaxTextureImageSlots()),
 
-        .mCameraBuffer = .{ .mBuffer = LinAlg.Mat4Identity() },
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
     };
     try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
@@ -102,7 +95,6 @@ pub fn Deinit() void {
     RenderM.mR2D.Deinit();
     RenderM.mTexturesMap.deinit();
     RenderM.mTextures.deinit();
-    RenderM.mEngineAllocator.destroy(RenderM);
 }
 
 pub fn SwapBuffers() void {

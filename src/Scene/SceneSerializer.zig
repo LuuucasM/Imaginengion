@@ -16,9 +16,9 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const SceneManager = @import("SceneManager.zig");
 
 pub fn SerializeText(scene_layer: *SceneLayer) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     var out = std.ArrayList(u8).init(allocator);
     defer out.deinit();
@@ -53,9 +53,9 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     try file.writeAll(out.items);
 }
 pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
     const file = try std.fs.openFileAbsolute(scene_layer.mPath.items, .{});
     defer file.close();
@@ -69,12 +69,8 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
     var scanner = std.json.Scanner.initCompleteInput(allocator, buffer);
     defer scanner.deinit();
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    const token_allocator = arena.allocator();
-    defer arena.deinit();
-
     while (true) {
-        const token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+        const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const value = switch (token) {
             .string => |value| value,
             .number => |value| value,
@@ -85,7 +81,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
         };
         if (value.len > 0) {
             if (std.mem.eql(u8, value, "UUID") == true) {
-                const uuid_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                const uuid_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
                 const uuid_value = switch (uuid_token) {
                     .number => |uuid_value| uuid_value,
                     .allocated_number => |uuid_value| uuid_value,
@@ -93,7 +89,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                 };
                 scene_layer.mUUID = try std.fmt.parseUnsigned(u128, uuid_value, 10);
             } else if (std.mem.eql(u8, value, "LayerType") == true) {
-                const layer_type_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                const layer_type_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
                 const layer_type_value = switch (layer_type_token) {
                     .string => |layer_type_value| layer_type_value,
                     .allocated_string => |layer_type_value| layer_type_value,
@@ -104,7 +100,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                 const new_entity = try scene_layer.CreateBlankEntity();
                 _ = try scanner.next(); //for the start of the new object
                 while (true) {
-                    const component_type_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                    const component_type_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
                     const component_type_string = switch (component_type_token) {
                         .string => |component_type| component_type,
                         .allocated_string => |component_type| component_type,
@@ -112,7 +108,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                         else => @panic("should be a string!\n"),
                     };
 
-                    const component_data_token = try scanner.nextAlloc(token_allocator, .alloc_if_needed);
+                    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
                     const component_data_string = switch (component_data_token) {
                         .string => |component_data| component_data,
                         .allocated_string => |component_data| component_data,

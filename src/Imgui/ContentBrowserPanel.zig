@@ -19,24 +19,15 @@ mSceneTextureHandle: AssetHandle,
 mProjectDirectory: std.ArrayList(u8),
 mCurrentDirectory: std.ArrayList(u8),
 mProjectFile: ?std.fs.File = null,
-var PathGPA: std.heap.GeneralPurposeAllocator(.{}) = .{};
+var PathGPA = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init() !ContentBrowserPanel {
-    var buffer: [MAX_PATH_LEN * 5]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-    const cwd_dir_path = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-    const dir_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/foldericon.png" });
-    const png_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/pngicon.png" });
-    const backarrow_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/backarrowicon.png" });
-    const scene_icon_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd_dir_path, "/assets/textures/sceneicon.png" });
-
     return ContentBrowserPanel{
         .mIsVisible = true,
-        .mDirTextureHandle = try AssetManager.GetAssetHandleRef(dir_icon_path),
-        .mPngTextureHandle = try AssetManager.GetAssetHandleRef(png_icon_path),
-        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef(backarrow_icon_path),
-        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef(scene_icon_path),
+        .mDirTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/foldericon.png"),
+        .mPngTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/pngicon.png"),
+        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/backarrowicon.png"),
+        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/sceneicon.png"),
         .mProjectDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mCurrentDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mProjectFile = null,

@@ -24,7 +24,7 @@ pub fn Deinit(self: *EntityManager) void {
 
 pub fn CreateEntity(self: *EntityManager) !u32 {
     if (self._IDsRemoved.items.len != 0) {
-        const new_id = self._IDsRemoved.pop();
+        const new_id = self._IDsRemoved.pop().?;
         _ = try self._IDsInUse.add(new_id);
         return new_id;
     } else {

@@ -15,7 +15,7 @@ _MousePressedSet: Set(MouseCodes) = undefined,
 _MousePosition: Vec2f32 = std.mem.zeroes(Vec2f32),
 _MouseScrolled: Vec2f32 = std.mem.zeroes(Vec2f32),
 
-var InputGPA: std.heap.GeneralPurposeAllocator(.{}) = std.heap.GeneralPurposeAllocator(.{}){};
+var InputGPA = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init() !void {
     InputManager._KeyPressedSet = HashMap(KeyCodes, u32).init(InputGPA.allocator());

@@ -9,7 +9,7 @@ const CSEditorPanel = @This();
 
 mP_Open: bool,
 mEditorWindows: std.AutoArrayHashMap(u64, EditorWindow),
-var EditorWindowsGPA = std.heap.GeneralPurposeAllocator(.{}){};
+var EditorWindowsGPA = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init() CSEditorPanel {
     return CSEditorPanel{

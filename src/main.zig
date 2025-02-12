@@ -3,7 +3,7 @@ const Application = @import("Core/Application.zig");
 
 pub fn main() !void {
     std.log.info("Initializing Application", .{});
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+    var gpa = std.heap.DebugAllocator(.{}).init;
     const EngineAllocator = gpa.allocator();
     defer _ = gpa.deinit();
     var application = Application{};

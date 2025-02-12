@@ -12,7 +12,7 @@ _InputEventPool: std.ArrayList(Event) = undefined,
 _WindowEventPool: std.ArrayList(Event) = undefined,
 _Application: *Application = undefined,
 
-var EventGPA = std.heap.GeneralPurposeAllocator(.{}){};
+var EventGPA = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(application: *Application) !void {
     EventManager._InputEventPool = std.ArrayList(Event).init(EventGPA.allocator());

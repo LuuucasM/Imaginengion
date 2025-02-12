@@ -705,7 +705,7 @@ test "clone" {
         _ = try a.appendSlice(&.{ 20, 30, 40 });
 
         // Use a different allocator than the test one.
-        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        var gpa = std.heap.DebugAllocator(.{}).init;
         const tmpAlloc = gpa.allocator();
         defer {
             const deinit_status = gpa.deinit();
