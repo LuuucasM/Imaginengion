@@ -24,10 +24,10 @@ var PathGPA = std.heap.DebugAllocator(.{}).init;
 pub fn Init() !ContentBrowserPanel {
     return ContentBrowserPanel{
         .mIsVisible = true,
-        .mDirTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/foldericon.png"),
-        .mPngTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/pngicon.png"),
-        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/backarrowicon.png"),
-        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("/assets/textures/sceneicon.png"),
+        .mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png"),
+        .mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png"),
+        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png"),
+        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png"),
         .mProjectDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mCurrentDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
         .mProjectFile = null,

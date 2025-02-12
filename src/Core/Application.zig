@@ -21,6 +21,7 @@ pub fn Init(self: *Application, EngineAllocator: std.mem.Allocator) !void {
 
     self.mWindow = Window.Init();
     self.mProgram = try Program.Init(EngineAllocator, &self.mWindow);
+    self.mWindow.SetVSync(false);
 }
 
 pub fn Deinit(self: *Application) !void {
