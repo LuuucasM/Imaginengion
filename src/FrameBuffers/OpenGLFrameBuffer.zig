@@ -152,7 +152,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_A, glad.GL_ALPHA);
             }
 
-            glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, TextureFormatToFormat(texture_format), GLMultiSampled, attachment_id, 0);
+            glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, if (texture_format == .DEPTH24STENCIL8) glad.GL_DEPTH_STENCIL_ATTACHMENT else glad.GL_DEPTH_ATTACHMENT, GLMultiSampled, attachment_id, 0);
         }
 
         fn TextureFormatToInternalFormat(format: TextureFormat) glad.GLenum {
@@ -169,7 +169,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 .RGBA8 => glad.GL_RGBA,
                 .RGBA16F => glad.GL_RGBA,
                 .RED_INTEGER => glad.GL_RED_INTEGER,
-                .DEPTH24STENCIL8 => glad.GL_DEPTH_STENCIL_ATTACHMENT,
+                .DEPTH24STENCIL8 => glad.GL_DEPTH_STENCIL,
                 else => @panic("This texture format isnt implemented yet!"),
             };
         }
@@ -177,6 +177,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             return switch (format) {
                 .RGBA8 => glad.GL_UNSIGNED_BYTE,
                 .RGBA16F => glad.GL_HALF_FLOAT,
+                .DEPTH24STENCIL8 => glad.GL_UNSIGNED_INT_24_8,
                 else => @panic("This texture format isnt implemented yet!"),
             };
         }

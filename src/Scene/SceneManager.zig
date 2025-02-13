@@ -54,7 +54,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mLayerInsertIndex = 0,
         .mViewportWidth = width,
         .mViewportHeight = height,
-        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false), width, height),
+        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1, false), width, height),
 
         .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
         .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
@@ -130,9 +130,7 @@ pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
     self.mNumTexturesUniformBuffer.SetData(&self.mSceneStack.items.len, @sizeOf(usize), 0);
     self.mFrameBuffer.Bind();
     self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
-    self.mNumTexturesUniformBuffer.Bind(0);
     self.mCompositeShader.Bind();
-    self.mNumTexturesUniformBuffer.Bind(0);
     for (self.mSceneStack.items, 0..) |scene_layer, i| {
         scene_layer.mFrameBuffer.BindColorAttachment(0, i);
         scene_layer.mFrameBuffer.BindDepthAttachment(i + self.mSceneStack.items.len);
