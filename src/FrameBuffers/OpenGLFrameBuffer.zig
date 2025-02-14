@@ -83,6 +83,9 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
 
         pub fn BindDepthAttachment(self: Self, slot: usize) void {
             glad.glBindTextureUnit(@intCast(slot), self.mDepthAttachment);
+            var boundTexture: glad.GLint = 0;
+            glad.glGetIntegerv(glad.GL_TEXTURE_BINDING_2D, &boundTexture);
+            std.debug.print("Bound texture: {}\n", .{boundTexture});
         }
 
         fn Create(self: *Self) void {
@@ -152,7 +155,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 glad.glTexParameteri(glad.GL_TEXTURE_2D, glad.GL_TEXTURE_SWIZZLE_A, glad.GL_ALPHA);
             }
 
-            glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, if (texture_format == .DEPTH24STENCIL8) glad.GL_DEPTH_STENCIL_ATTACHMENT else glad.GL_DEPTH_ATTACHMENT, GLMultiSampled, attachment_id, 0);
+            glad.glFramebufferTexture2D(glad.GL_FRAMEBUFFER, TextureFormatToFormat(texture_format), GLMultiSampled, attachment_id, 0);
         }
 
         fn TextureFormatToInternalFormat(format: TextureFormat) glad.GLenum {
@@ -169,7 +172,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
                 .RGBA8 => glad.GL_RGBA,
                 .RGBA16F => glad.GL_RGBA,
                 .RED_INTEGER => glad.GL_RED_INTEGER,
-                .DEPTH24STENCIL8 => glad.GL_DEPTH_STENCIL,
+                .DEPTH24STENCIL8 => glad.GL_DEPTH_STENCIL_ATTACHMENT,
                 else => @panic("This texture format isnt implemented yet!"),
             };
         }

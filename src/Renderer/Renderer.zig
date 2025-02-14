@@ -140,8 +140,8 @@ pub fn BeginScene() void {
 
 pub fn EndScene() !void {
     if (RenderM.mR2D.mSpriteVertexCount > 0) {
-        RenderM.mR2D.FlushSprite();
         RenderM.mCameraUniformBuffer.Bind(0);
+        RenderM.mR2D.FlushSprite();
         for (RenderM.mTextures.items, 0..) |asset_handle, i| {
             const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
             texture.Bind(i);

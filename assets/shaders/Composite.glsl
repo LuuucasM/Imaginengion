@@ -25,14 +25,14 @@ void main() {
     float minDepth = 1.0;
     vec4 finalColor = vec4(0.0);
     
-    for (uint i = 0u; i < Num.numLayers; i++) {
-        float currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).x;
+    //for (uint i = 0u; i < Num.numLayers; i++) {
+    //    float currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).x;
         
         // Only sample color if depth is closer
-        if (currentDepth < minDepth) {
-            minDepth = currentDepth;
-            finalColor = texture(u_Textures[i], texCoord);
-        }
-    }
-    fragColor = finalColor;
+    //    if (currentDepth < minDepth) {
+    //        minDepth = currentDepth;
+    //        finalColor = texture(u_Textures[i], texCoord);
+    //    }
+    //}
+    fragColor = texture(u_Textures[0], texCoord);
 }
