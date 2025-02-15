@@ -27,6 +27,8 @@ pub fn StaticSkipField(size: usize) type {
             }
         }
         pub fn ChangeToSkipped(self: *Self, index: SkipFieldType) void {
+            std.debug.assert(self.mSkipField.len > index);
+
             //alreday a skipped index
             if (self.mSkipField[index] != 0) return;
 
@@ -65,6 +67,8 @@ pub fn StaticSkipField(size: usize) type {
             }
         }
         pub fn ChangeToUnskipped(self: *Self, index: SkipFieldType) void {
+            std.debug.assert(self.mSkipField.len > index);
+
             //alreday a skipped index
             if (self.mSkipField[index] == 0) return;
 

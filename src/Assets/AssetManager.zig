@@ -25,7 +25,7 @@ mAssetPathToID: std.AutoHashMap(u64, u32) = undefined,
 
 pub fn Init() !void {
     AssetM = AssetManager{
-        .mAssetECS = try ECSManager.Init(AssetGPA.allocator(), &AssetsList, &[_]type{}),
+        .mAssetECS = try ECSManager.Init(AssetGPA.allocator(), &AssetsList),
         .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetGPA.allocator()),
     };
 }
@@ -47,6 +47,8 @@ pub fn Deinit() !void {
 }
 
 pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
+    std.debug.assert(abs_path.len != 0);
+
     const path_hash = ComputePathHash(abs_path);
 
     if (AssetM.mAssetPathToID.get(path_hash)) |entity_id| {
@@ -122,6 +124,8 @@ fn ComputePathHash(path: []const u8) u64 {
 }
 
 fn CreateAsset(abs_path: []const u8) !AssetHandle {
+    std.debug.assert(abs_path.len != 0);
+
     const new_handle = AssetHandle{
         .mID = try AssetM.mAssetECS.CreateEntity(),
     };

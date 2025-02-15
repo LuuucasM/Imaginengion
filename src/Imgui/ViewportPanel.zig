@@ -151,7 +151,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
 }
 
 pub fn OnTogglePanelEvent(self: *ViewportPanel) void {
-    self._PmOpen = !self.mP_Open;
+    self.mP_Open = !self.mP_Open;
 }
 
 pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {

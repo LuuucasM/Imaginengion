@@ -31,11 +31,5 @@ pub fn GetInd(self: NameComponent) u32 {
 }
 
 pub fn EditorRender(self: *NameComponent) !void {
-    var buffer: [24]u8 = undefined;
-    @memset(&buffer, 0);
-    @memcpy(&buffer, &self.Name);
-
-    if (imgui.igInputText("##Name", &buffer, buffer.len, imgui.ImGuiInputTextFlags_None, null, null) == true) {
-        self.Name = buffer;
-    }
+    _ = imgui.igInputText("##Name", &self.Name, self.Name.len, imgui.ImGuiInputTextFlags_None, null, null);
 }

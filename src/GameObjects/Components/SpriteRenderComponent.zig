@@ -48,7 +48,7 @@ pub fn EditorRender(self: *SpriteRenderComponent) !void {
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (try self.mTexture.GetAsset(Texture2D)).GetID())));
     imgui.igImage(
         texture_id,
-        .{ .x = 100.0, .y = 100.0 },
+        .{ .x = 50.0, .y = 50.0 },
         .{ .x = 0.0, .y = 0.0 },
         .{ .x = 1.0, .y = 1.0 },
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },

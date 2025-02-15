@@ -49,7 +49,7 @@ mNumTexturesUniformBuffer: UniformBuffer,
 pub fn Init(width: usize, height: usize) !SceneManager {
     var new_scene_manager = SceneManager{
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
-        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray, &[_]type{}),
+        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray),
         .mSceneState = .Stop,
         .mLayerInsertIndex = 0,
         .mViewportWidth = width,
@@ -75,10 +75,6 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
     new_scene_manager.mCompositeVertexArray.SetIndexBuffer(new_scene_manager.mCompositeIndexBuffer);
-
-    new_scene_manager.mNumTexturesUniformBuffer.Bind(0);
-    new_scene_manager.mCompositeShader.Bind();
-    new_scene_manager.mNumTexturesUniformBuffer.Bind(0);
 
     return new_scene_manager;
 }
@@ -115,10 +111,6 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
     std.debug.assert(scene_id < self.mSceneStack.items.len);
     return self.mSceneStack.items[scene_id].DuplicateEntity(original_entity.EntityID);
 }
-
-//pub fn OnRuntimeStart() void {}
-//pub fn OnRuntimeStop() void{}
-//pub fn OnUpdateRuntime() void {}
 
 pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
     //render each scene
@@ -167,6 +159,7 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     scene_layer.Deinit();
     _ = self.mSceneStack.orderedRemove(scene_id);
 }
+
 pub fn LoadScene(self: *SceneManager, path: []const u8) !usize {
     var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), .GameLayer, self.mSceneStack.items.len, self.mViewportWidth, self.mViewportHeight, &self.mECSManager);
 

@@ -143,6 +143,7 @@ pub fn ProcessImguiEvents(self: *EditorProgram) !void {
                     .Scene => self._ScenePanel.OnTogglePanelEvent(),
                     .Scripts => self._ScriptsPanel.OnTogglePanelEvent(),
                     .Stats => self._StatsPanel.OnTogglePanelEvent(),
+                    .Viewport => self._ViewportPanel.OnTogglePanelEvent(),
                     else => @panic("This event has not been handled by this type of panel yet!\n"),
                 }
             },

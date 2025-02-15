@@ -1,6 +1,6 @@
 const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
-const ComponentArray = @import("AComponentArray.zig");
+const ComponentArray = @import("ComponentArray.zig");
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
@@ -119,12 +119,14 @@ pub fn RemoveComponent(self: *ComponentManager, comptime component_type: type, e
 
 pub fn HasComponent(self: ComponentManager, comptime component_type: type, entityID: u32) bool {
     std.debug.assert(@hasDecl(component_type, "Ind"));
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
     return @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
 }
 
 pub fn GetComponent(self: ComponentManager, comptime component_type: type, entityID: u32) *component_type {
     std.debug.assert(@hasDecl(component_type, "Ind"));
+    std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
     std.debug.assert(self.HasComponent(component_type, entityID));
     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
     return @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);

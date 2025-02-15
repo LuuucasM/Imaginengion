@@ -84,11 +84,6 @@ pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
     };
     try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
-
-    RenderM.mCameraUniformBuffer.Bind(0);
-    RenderM.mR2D.mSpriteShader.Bind();
-    RenderM.mR2D.mCircleShader.Bind();
-    RenderM.mR2D.mELineShader.Bind();
 }
 
 pub fn Deinit() void {
@@ -139,8 +134,8 @@ pub fn BeginScene() void {
 }
 
 pub fn EndScene() !void {
+    RenderM.mCameraUniformBuffer.Bind(0);
     if (RenderM.mR2D.mSpriteVertexCount > 0) {
-        RenderM.mCameraUniformBuffer.Bind(0);
         RenderM.mR2D.FlushSprite();
         for (RenderM.mTextures.items, 0..) |asset_handle, i| {
             const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);

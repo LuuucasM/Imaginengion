@@ -29,10 +29,15 @@ pub fn ComponentArray(comptime componentType: type) type {
             self.mComponents.deinit();
         }
         pub fn DuplicateEntity(self: *Self, original_entity_id: u32, new_entity_id: u32) void {
+            std.debug.assert(self.mComponents.hasSparse(original_entity_id));
+            std.debug.assert(!self.mComponents.hasSparse(new_entity_id));
+
             const new_dense_ind = self.mComponents.add(new_entity_id);
             self.mComponents.getValueByDense(new_dense_ind).* = self.mComponents.getValueBySparse(original_entity_id).*;
         }
         pub fn AddComponent(self: *Self, entityID: u32, component: ?componentType) !*componentType {
+            std.debug.assert(!self.mComponents.hasSparse(entityID));
+
             const dense_ind = self.mComponents.add(entityID);
 
             const new_component = self.mComponents.getValueByDense(dense_ind);
@@ -46,12 +51,16 @@ pub fn ComponentArray(comptime componentType: type) type {
             return new_component;
         }
         pub fn RemoveComponent(self: *Self, entityID: u32) !void {
+            std.debug.assert(self.mComponents.hasSparse(entityID));
+
             self.mComponents.remove(entityID);
         }
         pub fn HasComponent(self: Self, entityID: u32) bool {
             return self.mComponents.hasSparse(entityID);
         }
         pub fn GetComponent(self: Self, entityID: u32) *componentType {
+            std.debug.assert(self.mComponents.hasSparse(entityID));
+
             return self.mComponents.getValueBySparse(entityID);
         }
         pub fn NumOfComponents(self: *Self) usize {

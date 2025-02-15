@@ -57,7 +57,7 @@ fn OnWindowClose(self: *Application) bool {
 }
 
 fn OnWindowResize(self: *Application, width: usize, height: usize) bool {
-    if ((width == 0) and (height == 0)) {
+    if ((width == 0) or (height == 0)) {
         self.mIsMinimized = true;
     } else {
         self.mIsMinimized = false;

@@ -4,6 +4,7 @@ const EditorWindow = @import("EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 
 pub const PanelType = enum {
+    Default,
     AssetHandles,
     Components,
     ContentBrowser,
