@@ -108,14 +108,15 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                         else => @panic("should be a string!\n"),
                     };
 
+                    const actual_component_type_string = try allocator.dupe(u8, component_type_string);
+
                     const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
                     const component_data_string = switch (component_data_token) {
                         .string => |component_data| component_data,
                         .allocated_string => |component_data| component_data,
                         else => @panic("should be a string!!\n"),
                     };
-
-                    try DeStringify(new_entity, component_type_string, component_data_string);
+                    try DeStringify(new_entity, actual_component_type_string, component_data_string);
                 }
             }
         }
@@ -221,53 +222,35 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
     }
 }
 fn DeStringify(entity: Entity, component_type_string: []const u8, component_string: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
     if (std.mem.eql(u8, component_type_string, "IDComponent")) {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(IDComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(IDComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(IDComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "SceneIDComponent")) {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(SceneIDComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(SceneIDComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(SceneIDComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "NameComponent")) {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(NameComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(NameComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(NameComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "TransformComponent")) {
-        var buffer: [1000]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(TransformComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(TransformComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "CameraComponent")) {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(CameraComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(CameraComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(CameraComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "CircleRenderComponent")) {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(CircleRenderComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(CircleRenderComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(CircleRenderComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "SpriteRenderComponent")) {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-
-        const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, fba.allocator(), component_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         const sprite_component = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
         sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");

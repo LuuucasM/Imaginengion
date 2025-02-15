@@ -41,7 +41,7 @@ in VS_OUT {
     flat float TexIndex;
 } fs_in;
 
-uniform sampler2D u_Textures[32];
+layout(binding = 0) uniform sampler2D u_Textures[32];
 
 void main()
 {
