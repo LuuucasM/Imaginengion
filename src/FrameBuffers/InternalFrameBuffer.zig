@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
+
 const Impl = switch (builtin.os.tag) {
     .windows => @import("OpenGLFrameBuffer.zig").OpenGLFrameBuffer,
     else => @import("UnsupportedFrameBuffer.zig").UnsupportedFrameBuffer,

@@ -1,6 +1,6 @@
 const std = @import("std");
-const IComponentArray = @import("ComponentArray.zig").IComponentArray;
-const ComponentArray = @import("ComponentArray.zig").ComponentArray;
+const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
+const ComponentArray = @import("AComponentArray.zig");
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
@@ -18,7 +18,7 @@ pub const GroupQuery = union(enum) {
     Component: type,
 };
 
-mComponentsArrays: std.ArrayList(IComponentArray),
+mComponentsArrays: std.ArrayList(ComponentArray),
 mEntitySkipField: SparseSet(.{
     .SparseT = u32,
     .DenseT = u32,
@@ -30,7 +30,7 @@ mECSAllocator: std.mem.Allocator,
 
 pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !ComponentManager {
     var new_component_manager = ComponentManager{
-        .mComponentsArrays = std.ArrayList(IComponentArray).init(ECSAllocator),
+        .mComponentsArrays = std.ArrayList(ComponentArray).init(ECSAllocator),
         .mEntitySkipField = try SparseSet(.{
             .SparseT = u32,
             .DenseT = u32,
@@ -42,13 +42,8 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
     };
 
     inline for (components_list) |component_type| {
-        const component_array = try ECSAllocator.create(ComponentArray(component_type));
-
-        component_array.* = try ComponentArray(component_type).Init(ECSAllocator);
-
-        const i_component_array = IComponentArray.Init(component_array);
-
-        try new_component_manager.mComponentsArrays.append(i_component_array);
+        const new_component_array = try ComponentArray.Init(ECSAllocator, component_type);
+        try new_component_manager.mComponentsArrays.append(new_component_array);
     }
 
     return new_component_manager;
@@ -57,7 +52,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const t
 pub fn Deinit(self: *ComponentManager) void {
     //delete component arrays
     for (self.mComponentsArrays.items) |component_array| {
-        component_array.Deinit(self.mECSAllocator);
+        component_array.Deinit();
     }
 
     self.mComponentsArrays.deinit();
@@ -108,7 +103,7 @@ pub fn AddComponent(self: *ComponentManager, comptime component_type: type, enti
 
     self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_type.Ind);
 
-    return try @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).AddComponent(entityID, component);
+    return try @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).AddComponent(entityID, component);
 }
 
 pub fn RemoveComponent(self: *ComponentManager, comptime component_type: type, entityID: u32) !void {
@@ -125,14 +120,14 @@ pub fn RemoveComponent(self: *ComponentManager, comptime component_type: type, e
 pub fn HasComponent(self: ComponentManager, comptime component_type: type, entityID: u32) bool {
     std.debug.assert(@hasDecl(component_type, "Ind"));
     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-    return @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).HasComponent(entityID);
+    return @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
 }
 
 pub fn GetComponent(self: ComponentManager, comptime component_type: type, entityID: u32) *component_type {
     std.debug.assert(@hasDecl(component_type, "Ind"));
     std.debug.assert(self.HasComponent(component_type, entityID));
     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-    return @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetComponent(entityID);
+    return @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);
 }
 
 pub fn GetGroup(self: ComponentManager, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
@@ -140,7 +135,7 @@ pub fn GetGroup(self: ComponentManager, comptime query: GroupQuery, allocator: s
         .Component => |component_type| {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-            return try @as(*ComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].ptr))).GetAllEntities(allocator);
+            return try @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetAllEntities(allocator);
         },
         .Not => |not| {
             var result = try self.InternalGetQuery(not.mFirst, allocator);

@@ -1,5 +1,7 @@
 const std = @import("std");
 const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
+const TextureFormat = @import("InternalFrameBuffer.zig").TextureFormat;
+const InternalFrameBuffer = @import("InternalFrameBuffer.zig").FrameBuffer;
 const FrameBuffer = @This();
 
 mPtr: *anyopaque,
@@ -19,8 +21,8 @@ const VTab = struct {
     BindDepthAttachment: *const fn (*anyopaque, usize) void,
 };
 
-pub fn Init(allocator: std.mem.Allocator, comptime internal_type: type, width: usize, height: usize) !FrameBuffer {
-    std.debug.assert(@typeInfo(internal_type) == .@"struct" and std.mem.startsWith(u8, @typeName(internal_type), "FrameBuffers.InternalFrameBuffer"));
+pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: u32, comptime is_swap_chain_target: bool, width: usize, height: usize) !FrameBuffer {
+    const internal_type = InternalFrameBuffer(color_texture_formats, depth_texture_format, samples, is_swap_chain_target);
 
     const impl = struct {
         fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) void {

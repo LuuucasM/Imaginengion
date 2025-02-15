@@ -46,7 +46,7 @@ pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id:
         .mPath = std.ArrayList(u8).init(ECSAllocator),
         .mLayerType = layer_type,
         .mInternalID = internal_id,
-        .mFrameBuffer = try FrameBuffer.Init(ECSAllocator, InternalFrameBuffer(&[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false), width, height),
+        .mFrameBuffer = try FrameBuffer.Init(ECSAllocator, &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, width, height),
         .mECSManagerRef = ecs_manager_ref,
     };
 }

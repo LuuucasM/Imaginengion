@@ -34,20 +34,22 @@ pub fn Deinit() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+
     const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, allocator);
+
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         AssetGPA.allocator().free(file_data.mAbsPath);
     }
+
     AssetM.mAssetECS.Deinit();
     AssetM.mAssetPathToID.deinit();
 }
 
 pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
-    var hasher = std.hash.Fnv1a_64.init();
-    hasher.update(abs_path);
-    const abs_path_hash = hasher.final();
-    if (AssetM.mAssetPathToID.get(abs_path_hash)) |entity_id| {
+    const path_hash = ComputePathHash(abs_path);
+
+    if (AssetM.mAssetPathToID.get(path_hash)) |entity_id| {
         AssetM.mAssetECS.GetComponent(AssetMetaData, entity_id).mRefs += 1;
         return AssetHandle{
             .mID = entity_id,
@@ -55,7 +57,7 @@ pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
     } else {
         const asset_handle = try CreateAsset(abs_path);
         AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).mRefs += 1;
-        try AssetM.mAssetPathToID.put(abs_path_hash, asset_handle.mID);
+        try AssetM.mAssetPathToID.put(path_hash, asset_handle.mID);
         return asset_handle;
     }
 }
@@ -63,23 +65,18 @@ pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
 pub fn ReleaseAssetHandleRef(asset_id: u32) void {
     const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_id);
     asset_meta_data.mRefs -= 1;
-    if (asset_meta_data.mRefs == 0) {
-        SetAssetToDelete(asset_id);
-    }
 }
 
 pub fn GetAsset(comptime asset_type: type, asset_id: u32) !*asset_type {
-    if (asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent) {
+    const is_meta_component = asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent;
+    if (is_meta_component) {
         return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
-    }
-
-    if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
+    } else if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
         return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
     } else {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
         const new_asset: asset_type = try asset_type.Init(file_data.mAbsPath);
-        const new_component = try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
-        return new_component;
+        return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
     }
 }
 
@@ -92,13 +89,13 @@ pub fn OnUpdate() !void {
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         if (file_data.mSize == 0) {
-            try CheckAssetToDelete(entity_id);
+            try CheckAssetForDeletion(entity_id);
             continue;
         }
         //then check if the asset path is still valid
         const file = std.fs.cwd().openFile(file_data.mAbsPath, .{}) catch |err| {
             if (err == error.FileNotFound) {
-                SetAssetToDelete(entity_id);
+                MarkAssetToDelete(entity_id);
                 continue;
             } else {
                 return err;
@@ -116,6 +113,12 @@ pub fn OnUpdate() !void {
 
 pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     return try AssetM.mAssetECS.GetGroup(query, allocator);
+}
+
+fn ComputePathHash(path: []const u8) u64 {
+    var hasher = std.hash.Fnv1a_64.init();
+    hasher.update(path);
+    return hasher.final();
 }
 
 fn CreateAsset(abs_path: []const u8) !AssetHandle {
@@ -148,15 +151,13 @@ fn CreateAsset(abs_path: []const u8) !AssetHandle {
 
 fn DeleteAsset(asset_id: u32) !void {
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
-    var hasher = std.hash.Fnv1a_64.init();
-    hasher.update(file_data.mAbsPath);
-    const abs_path_hash = hasher.final();
-    _ = AssetM.mAssetPathToID.remove(abs_path_hash);
+    const path_hash = ComputePathHash(file_data.mAbsPath);
+    _ = AssetM.mAssetPathToID.remove(path_hash);
     AssetGPA.allocator().free(file_data.mAbsPath);
     try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 
-fn SetAssetToDelete(asset_id: u32) void {
+fn MarkAssetToDelete(asset_id: u32) void {
     const file_meta_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
     file_meta_data.mLastModified = std.time.nanoTimestamp();
     file_meta_data.mSize = 0;
@@ -168,6 +169,7 @@ fn UpdateAsset(asset_id: u32, file: std.fs.File, fstats: std.fs.File.Stat) !void
     var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer file_arena.deinit();
     const allocator = file_arena.allocator();
+
     var file_hasher = std.hash.Fnv1a_64.init();
     file_hasher.update(try file.readToEndAlloc(allocator, MAX_FILE_SIZE));
 
@@ -176,7 +178,7 @@ fn UpdateAsset(asset_id: u32, file: std.fs.File, fstats: std.fs.File.Stat) !void
     file_data.mSize = fstats.size;
 }
 
-fn CheckAssetToDelete(asset_id: u32) !void {
+fn CheckAssetForDeletion(asset_id: u32) !void {
     //check to see if we can recover the asset
     if (try RetryAssetExists(asset_id)) return;
 
