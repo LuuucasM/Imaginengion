@@ -78,22 +78,12 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
 
         pub fn BindColorAttachment(self: Self, attachment_index: u8, slot: usize) void {
             std.debug.assert(attachment_index < color_texture_formats.len);
-            glad.glActiveTexture(@intCast(glad.GL_TEXTURE0 + @as(c_int, @intCast(slot))));
-            glad.glBindTexture(glad.GL_TEXTURE_2D, self.mColorAttachments[attachment_index]);
-            //glad.glBindTextureUnit(@intCast(slot), self.mColorAttachments[attachment_index]);
-            var activeUnit: glad.GLint = undefined;
-            glad.glGetIntegerv(glad.GL_ACTIVE_TEXTURE, &activeUnit);
-            std.debug.print("Active unit should be {}, is: {}\n", .{ slot, activeUnit - glad.GL_TEXTURE0 });
+            glad.glBindTextureUnit(@intCast(slot), self.mColorAttachments[attachment_index]);
         }
 
         pub fn BindDepthAttachment(self: Self, slot: usize) void {
             std.debug.assert(self.mDepthAttachment != 0);
-            glad.glActiveTexture(@intCast(glad.GL_TEXTURE0 + @as(c_int, @intCast(slot))));
-            glad.glBindTexture(glad.GL_TEXTURE_2D, self.mDepthAttachment);
-            //glad.glBindTextureUnit(@intCast(slot), self.mDepthAttachment);
-            var activeUnit: glad.GLint = undefined;
-            glad.glGetIntegerv(glad.GL_ACTIVE_TEXTURE, &activeUnit);
-            std.debug.print("Active unit should be {}, is: {}\n", .{ slot, activeUnit - glad.GL_TEXTURE0 });
+            glad.glBindTextureUnit(@intCast(slot), self.mDepthAttachment);
         }
 
         fn Create(self: *Self) void {

@@ -129,7 +129,7 @@ pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
     }
     self.mNumTexturesUniformBuffer.SetData(&self.mSceneStack.items.len, @sizeOf(usize), 0);
     self.mFrameBuffer.Bind();
-    self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
+    self.mFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
     self.mNumTexturesUniformBuffer.Bind(0);
     self.mCompositeShader.Bind();
     for (self.mSceneStack.items, 0..) |scene_layer, i| {

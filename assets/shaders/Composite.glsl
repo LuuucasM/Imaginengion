@@ -23,10 +23,11 @@ layout(std140, binding = 0) uniform NumTextures {
 
 void main() {
     float minDepth = 1.0;
+    float currentDepth = minDepth;
     vec4 finalColor = vec4(0.0);
     
     for (uint i = 0u; i < Num.numLayers; i++) {
-        float currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).x;
+        currentDepth = texture(u_Textures[i + Num.numLayers], texCoord).x;
         
         // Only sample color if depth is closer
         if (currentDepth < minDepth) {
@@ -34,5 +35,10 @@ void main() {
             finalColor = texture(u_Textures[i], texCoord);
         }
     }
+
+    if (currentDepth == 1.0){
+        discard;
+    }
+
     fragColor = finalColor;
 }

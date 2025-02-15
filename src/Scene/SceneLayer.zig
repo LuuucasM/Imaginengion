@@ -88,7 +88,7 @@ pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
 
 pub fn Render(self: SceneLayer) !void {
     self.mFrameBuffer.Bind();
-    self.mFrameBuffer.ClearFrameBuffer(.{ 0.8, 0.8, 0.0, 1.0 });
+    self.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
     defer self.mFrameBuffer.Unbind();
     try RenderManager.RenderSceneLayer(self.mUUID, self.mECSManagerRef);
 }
