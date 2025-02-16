@@ -47,7 +47,7 @@ pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !EditorProgram 
         ._ScenePanel = ScenePanel.Init(),
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
-        ._ToolbarPanel = ToolbarPanel.Init(),
+        ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
     };
 }
@@ -98,12 +98,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     self._ScriptsPanel.OnImguiRender();
     try self._CSEditorPanel.OnImguiRender();
 
-    self._ToolbarPanel.OnImguiRender();
-    //if (self.mSceneManager.mSceneStack.items.len > 0) {
-    //    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mSceneStack.items[0].mFrameBuffer);
-    //} else {
-    //    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
-    //}
+    try self._ToolbarPanel.OnImguiRender();
     try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());

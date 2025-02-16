@@ -134,7 +134,6 @@ pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
     self.mFrameBuffer.Unbind();
 }
 
-//pub fn SetSceneName() void {}
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
     self.mViewportWidth = width;
     self.mViewportHeight = height;
