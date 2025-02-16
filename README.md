@@ -1,3 +1,5 @@
-This is a game engine I am making in zig.
+# Imaginengion
+### A modern Scaleable game engine
 
-Currently I use the zig master version from the zig website x86_64 for compiler 
+### Zig Version
+Currently compiles using the zig master on https://ziglang.org/download/

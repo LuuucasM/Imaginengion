@@ -376,33 +376,6 @@ pub fn QuatToDegrees(q: Quatf32) Vec3f32 {
     return rad * to_deg;
 }
 
-//TODO: for degrees to quat look into the following website:
-//https://gamedev.stackexchange.com/questions/13436/glm-euler-angles-to-quaternion
-pub fn DegreesToQuat(euler_vector: Vec3f32) Quatf32 {
-    const to_rad = @as(Vec3f32, @splat(math.pi / 180.0));
-    const rad = euler_vector * to_rad;
-
-    const half = @as(Vec3f32, @splat(0.5));
-    const half_angles = rad * half;
-
-    const c = @cos(half_angles);
-    const s = @sin(half_angles);
-
-    const cr = c[0];
-    const cp = c[1];
-    const cy = c[2];
-    const sr = s[0];
-    const sp = s[1];
-    const sy = s[2];
-
-    return Quatf32{
-        cr * cp * cy + sr * sp * sy,
-        sr * cp * cy - cr * sp * sy,
-        cr * sp * cy + sr * cp * sy,
-        cr * cp * sy - sr * sp * cy,
-    };
-}
-
 pub fn QuatToPitch(q: Quatf32) f32 {
     const y = 2.0 * (q[2] * q[3] + q[0] * q[1]);
     const x = 1.0 - 2.0 * (q[1] * q[1] + q[2] * q[2]);
@@ -427,6 +400,33 @@ pub fn QuatToRoll(q: Quatf32) f32 {
     }
     return math.atan2(y, x);
 }
+
+//TODO: for degrees to quat look into the following website:
+//https://gamedev.stackexchange.com/questions/13436/glm-euler-angles-to-quaternion
+//pub fn DegreesToQuat(euler_vector: Vec3f32) Quatf32 {
+//    const to_rad = @as(Vec3f32, @splat(math.pi / 180.0));
+//    const rad = euler_vector * to_rad;
+//
+//    const half = @as(Vec3f32, @splat(0.5));
+//    const half_angles = rad * half;
+//
+//    const c = @cos(half_angles);
+//    const s = @sin(half_angles);
+//
+//    const cr = c[0];
+//    const cp = c[1];
+//    const cy = c[2];
+//    const sr = s[0];
+//    const sp = s[1];
+//    const sy = s[2];
+//
+//    return Quatf32{
+//        cr * cp * cy + sr * sp * sy,
+//        sr * cp * cy - cr * sp * sy,
+//        cr * sp * cy + sr * cp * sy,
+//        cr * cp * sy - sr * sp * cy,
+//    };
+//}
 
 //----------------------------------UNIT TESTS----------------------------------------------------------------
 //###############################################################################################################
