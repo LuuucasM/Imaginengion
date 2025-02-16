@@ -1,8 +1,8 @@
 const std = @import("std");
 
 const Input = @import("../Inputs/Input.zig");
-const Event = @import("../Events/Event.zig").Event;
-const MouseScrolledEvent = @import("../Events/InputEvents.zig").MouseScrolledEvent;
+const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
+const MouseScrolledEvent = @import("../Events/SystemEvent.zig").MouseScrolledEvent;
 
 const math = std.math;
 const LinAlg = @import("../Math/LinAlg.zig");
@@ -70,10 +70,10 @@ pub fn InputUpdate(self: *EditorCamera) void {
     self.UpdateView();
 }
 
-pub fn OnInputEvent(self: *EditorCamera, event: Event) void {
+pub fn OnInputEvent(self: *EditorCamera, event: SystemEvent) void {
     switch (event) {
         .ET_MouseScrolled => |e| self.OnMouseScroll(e),
-        else => false,
+        else => {},
     }
 }
 

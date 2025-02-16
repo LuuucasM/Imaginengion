@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
-const Event = @import("../Events/Event.zig").Event;
-const EventManager = @import("../Events/EventManager.zig");
+const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
+const EventManager = @import("../Events/SystemEventManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
 
 const glfw = @import("../Core/CImports.zig").glfw;
@@ -106,7 +106,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
                 std.log.err("{}\n", .{err});
                 @panic("Cant set key pressed true in WindowsWindow::GLFWKeyCallback\n");
             };
-            break :blk Event{
+            break :blk SystemEvent{
                 .ET_KeyPressed = .{
                     ._KeyCode = @enumFromInt(key),
                     ._RepeatCount = 0,
@@ -118,7 +118,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
                 std.log.err("{}\n", .{err});
                 @panic("Cant set key pressed false in WindowsWindow::GLFWKeyCallback\n");
             };
-            break :blk Event{
+            break :blk SystemEvent{
                 .ET_KeyReleased = .{
                     ._KeyCode = @enumFromInt(key),
                 },
@@ -129,7 +129,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
                 std.log.err("{}\n", .{err});
                 @panic("Cant set key pressed true in WindowsWindow::GLFWKeyCallback\n");
             };
-            break :blk Event{
+            break :blk SystemEvent{
                 .ET_KeyPressed = .{
                     ._KeyCode = @enumFromInt(key),
                     ._RepeatCount = 1,
@@ -153,7 +153,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
                 std.log.err("{}\n", .{err});
                 @panic("Cant set mouse pressed true in WindowsWindow::GLFWMouseButtonCallback\n");
             };
-            break :blk Event{
+            break :blk SystemEvent{
                 .ET_MouseButtonPressed = .{
                     ._MouseCode = @enumFromInt(button),
                 },
@@ -165,7 +165,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
                 std.log.err("{}\n", .{err});
                 @panic("Cant set mouse pressed false in WindowsWindow::GLFWMouseBUtotnCallback\n");
             };
-            break :blk Event{
+            break :blk SystemEvent{
                 .ET_MouseButtonReleased = .{
                     ._MouseCode = @enumFromInt(button),
                 },
@@ -182,7 +182,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
 export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.C) void {
     _ = window;
     InputManager.SetMousePosition(Vec2f32{ @floatCast(xPos), @floatCast(yPos) });
-    const new_event = Event{
+    const new_event = SystemEvent{
         .ET_MouseMoved = .{
             ._MouseX = @floatCast(xPos),
             ._MouseY = @floatCast(yPos),
@@ -197,7 +197,7 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
 export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.C) void {
     _ = window;
     InputManager.SetMouseScrolled(Vec2f32{ @floatCast(xOffset), @floatCast(yOffset) });
-    const new_event = Event{
+    const new_event = SystemEvent{
         .ET_MouseScrolled = .{
             ._XOffset = @floatCast(xOffset),
             ._YOffset = @floatCast(yOffset),
@@ -211,7 +211,7 @@ export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f
 
 export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.C) void {
     _ = window;
-    const new_event = Event{
+    const new_event = SystemEvent{
         .ET_WindowClose = .{},
     };
     EventManager.Insert(new_event) catch |err| {
@@ -222,7 +222,7 @@ export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.C)
 
 export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.C) void {
     _ = window;
-    const new_event = Event{
+    const new_event = SystemEvent{
         .ET_WindowResize = .{
             ._Width = @intCast(width),
             ._Height = @intCast(height),

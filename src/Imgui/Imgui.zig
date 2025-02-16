@@ -3,21 +3,14 @@ const Application = @import("../Core/Application.zig");
 const Window = @import("../Windows/Window.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const glfw = @import("../Core/CImports.zig").glfw;
-const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const Imgui = @This();
 
-var ImguiManager: *Imgui = undefined;
+var ImguiManager: Imgui = .{};
 
-mEngineAllocator: std.mem.Allocator,
-mEventArray: std.ArrayList(ImguiEvent) = std.ArrayList(ImguiEvent).init(std.heap.page_allocator),
-mEventAllocator: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-mWindow: *Window,
-pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
-    ImguiManager = try EngineAllocator.create(Imgui);
-    ImguiManager.* = .{
-        .mEngineAllocator = EngineAllocator,
-        .mWindow = window,
-    };
+mWindow: *Window = undefined,
+
+pub fn Init(window: *Window) !void {
+    ImguiManager.mWindow = window;
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
     io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard;
@@ -43,9 +36,6 @@ pub fn Deinit() void {
     imgui.ImGui_ImplOpenGL3_Shutdown();
     imgui.ImGui_ImplGlfw_Shutdown();
     imgui.igDestroyContext(null);
-    ImguiManager.mEventArray.deinit();
-    ImguiManager.mEventAllocator.deinit();
-    ImguiManager.mEngineAllocator.destroy(ImguiManager);
 }
 pub fn Begin() void {
     imgui.ImGui_ImplOpenGL3_NewFrame();
@@ -68,23 +58,6 @@ pub fn End() void {
         imgui.igRenderPlatformWindowsDefault(@ptrCast(@alignCast(my_null_ptr)), @ptrCast(@alignCast(my_null_ptr)));
         glfw.glfwMakeContextCurrent(backup_current_context);
     }
-}
-
-pub fn InsertEvent(event: ImguiEvent) !void {
-    try ImguiManager.mEventArray.append(event);
-}
-
-pub fn GetEventArray() *std.ArrayList(ImguiEvent) {
-    return &ImguiManager.mEventArray;
-}
-
-pub fn EventAllocator() std.mem.Allocator {
-    return ImguiManager.mEventAllocator.allocator();
-}
-
-pub fn ClearEvents() void {
-    ImguiManager.mEventArray.clearAndFree();
-    _ = ImguiManager.mEventAllocator.reset(.free_all);
 }
 
 fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {

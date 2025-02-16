@@ -1,22 +1,21 @@
 const std = @import("std");
 const assert = std.debug.assert;
 const Application = @import("../Core/Application.zig");
-const Event = @import("Event.zig").Event;
-const EventCategory = @import("EventEnums.zig").EventCategory;
-const EventType = @import("EventEnums.zig").EventType;
+const SystemEvent = @import("SystemEvent.zig").SystemEvent;
+const SystemEventCategory = @import("SystemEvent.zig").SystemEventCategory;
 const Self = @This();
 
 var EventManager: Self = .{};
 
-_InputEventPool: std.ArrayList(Event) = undefined,
-_WindowEventPool: std.ArrayList(Event) = undefined,
+_InputEventPool: std.ArrayList(SystemEvent) = undefined,
+_WindowEventPool: std.ArrayList(SystemEvent) = undefined,
 _Application: *Application = undefined,
 
 var EventGPA = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(application: *Application) !void {
-    EventManager._InputEventPool = std.ArrayList(Event).init(EventGPA.allocator());
-    EventManager._WindowEventPool = std.ArrayList(Event).init(EventGPA.allocator());
+    EventManager._InputEventPool = std.ArrayList(SystemEvent).init(EventGPA.allocator());
+    EventManager._WindowEventPool = std.ArrayList(SystemEvent).init(EventGPA.allocator());
     EventManager._Application = application;
 }
 
@@ -26,17 +25,19 @@ pub fn Deinit() void {
     _ = EventGPA.deinit();
 }
 
-pub fn Insert(event: Event) !void {
+pub fn Insert(event: SystemEvent) !void {
     switch (event.GetEventCategory()) {
         .EC_Input => try EventManager._InputEventPool.append(event),
         .EC_Window => try EventManager._WindowEventPool.append(event),
+        else => @panic("Default Events are not allowed!\n"),
     }
 }
 
-pub fn ProcessEvents(eventCategory: EventCategory) void {
+pub fn ProcessEvents(eventCategory: SystemEventCategory) void {
     const array = switch (eventCategory) {
         .EC_Input => EventManager._InputEventPool,
         .EC_Window => EventManager._WindowEventPool,
+        else => @panic("Default Events are not allowed!\n"),
     };
 
     for (array.items) |*event| {

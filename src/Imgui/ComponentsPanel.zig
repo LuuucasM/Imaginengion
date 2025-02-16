@@ -1,8 +1,8 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiManager = @import("../Imgui/Imgui.zig");
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const EditorWindow = @import("EditorWindow.zig");
-const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const ComponentsPanel = @This();
 
@@ -78,7 +78,7 @@ fn EntityImguiRender(entity: Entity) !void {
                     .mEditorWindow = EditorWindow.Init(entity.GetComponent(NameComponent), entity),
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
     if (entity.HasComponent(TransformComponent) == true) {
@@ -89,7 +89,7 @@ fn EntityImguiRender(entity: Entity) !void {
                     .mEditorWindow = new_editor_window,
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
     if (entity.HasComponent(CameraComponent) == true) {
@@ -99,7 +99,7 @@ fn EntityImguiRender(entity: Entity) !void {
                     .mEditorWindow = EditorWindow.Init(entity.GetComponent(CameraComponent), entity),
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
     if (entity.HasComponent(CircleRenderComponent) == true) {
@@ -109,7 +109,7 @@ fn EntityImguiRender(entity: Entity) !void {
                     .mEditorWindow = EditorWindow.Init(entity.GetComponent(CircleRenderComponent), entity),
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
     if (entity.HasComponent(SpriteRenderComponent) == true) {
@@ -119,7 +119,7 @@ fn EntityImguiRender(entity: Entity) !void {
                     .mEditorWindow = EditorWindow.Init(entity.GetComponent(SpriteRenderComponent), entity),
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
 }

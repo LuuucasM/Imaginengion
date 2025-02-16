@@ -1,6 +1,6 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const RenderStats = @import("../Renderer/Renderer.zig").RenderStats;
 const StatsPanel = @This();
 

@@ -4,9 +4,9 @@ const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const EditorCamera = @import("ViewportCamera.zig");
 
-const ImguiManager = @import("Imgui.zig");
-const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
-const InputEvents = @import("../Events/InputEvents.zig");
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
+const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const TransformComponent = @import("../GameObjects/Components.zig").TransformComponent;
 const InputManager = @import("../Inputs/Input.zig");
@@ -63,7 +63,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
                 .mHeight = @intFromFloat(viewport_size.y),
             },
         };
-        try ImguiManager.InsertEvent(new_imgui_event);
+        try ImguiEventManager.Insert(new_imgui_event);
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
         self.mViewportCamera.SetViewportSize(@intFromFloat(viewport_size.x), @intFromFloat(viewport_size.y));
@@ -87,10 +87,10 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             const new_event = ImguiEvent{
                 .ET_OpenSceneEvent = .{
-                    .Path = try ImguiManager.EventAllocator().dupe(u8, path),
+                    .Path = try ImguiEventManager.EventAllocator().dupe(u8, path),
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
     //entity picking for selected entity
@@ -158,7 +158,7 @@ pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
 }
 
-pub fn OnKeyPressedEvent(self: *ViewportPanel, e: InputEvents.KeyPressedEvent) bool {
+pub fn OnKeyPressedEvent(self: *ViewportPanel, e: KeyPressedEvent) bool {
     if (e._RepeatCount > 0) {
         return false;
     }

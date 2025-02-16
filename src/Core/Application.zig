@@ -1,10 +1,12 @@
 const std = @import("std");
-const EventManager = @import("../Events/EventManager.zig");
-const Event = @import("../Events/Event.zig").Event;
+const EventManager = @import("../Events/SystemEventManager.zig");
+const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const Window = @import("../Windows/Window.zig");
 const Input = @import("../Inputs/Input.zig");
 const Program = @import("../Programs/Program.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const GameEventManager = @import("../Events/GameEventManager.zig");
 
 const Application: type = @This();
 
@@ -14,13 +16,15 @@ mEngineAllocator: std.mem.Allocator = undefined,
 mWindow: Window = undefined,
 mProgram: Program = undefined,
 
-pub fn Init(self: *Application, EngineAllocator: std.mem.Allocator) !void {
+pub fn Init(self: *Application) !void {
     try AssetManager.Init();
     try Input.Init();
     try EventManager.Init(self);
 
     self.mWindow = Window.Init();
-    self.mProgram = try Program.Init(EngineAllocator, &self.mWindow);
+    self.mProgram = try Program.Init(&self.mWindow);
+    try ImguiEventManager.Init(&self.mProgram);
+    try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);
 }
 
@@ -41,7 +45,7 @@ pub fn Run(self: *Application) !void {
     }
 }
 
-pub fn OnEvent(self: *Application, event: *Event) void {
+pub fn OnEvent(self: *Application, event: *SystemEvent) void {
     const result = switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| self.OnWindowResize(e._Width, e._Height),

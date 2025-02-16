@@ -66,7 +66,7 @@ mCameraUniformBuffer: UniformBuffer = undefined,
 
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
-pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
+pub fn Init(window: *Window) !void {
     const new_render_context = RenderContext.Init(window);
     RenderM = Renderer{
         .mRenderContext = new_render_context,
@@ -78,8 +78,8 @@ pub fn Init(EngineAllocator: std.mem.Allocator, window: *Window) !void {
         ),
         .mR3D = Renderer3D.Init(),
 
-        .mTexturesMap = std.AutoHashMap(u32, usize).init(EngineAllocator),
-        .mTextures = try std.ArrayList(AssetHandle).initCapacity(EngineAllocator, RenderM.mRenderContext.GetMaxTextureImageSlots()),
+        .mTexturesMap = std.AutoHashMap(u32, usize).init(RenderAllocator.allocator()),
+        .mTextures = try std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), RenderM.mRenderContext.GetMaxTextureImageSlots()),
 
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
     };

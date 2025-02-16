@@ -1,7 +1,7 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiManager = @import("../Imgui/Imgui.zig");
-const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
@@ -63,7 +63,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true) {
                 self.mSelectedScene = scene_layer.mInternalID;
-                try ImguiManager.InsertEvent(.{
+                try ImguiEventManager.Insert(.{
                     .ET_SelectSceneEvent = .{
                         .SelectedScene = scene_layer.mInternalID,
                     },
@@ -100,7 +100,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                                 .NewPos = new_pos,
                             },
                         };
-                        try ImguiManager.InsertEvent(new_event);
+                        try ImguiEventManager.Insert(new_event);
                         if (new_pos < current_pos) {
                             if (self.mSelectedScene) |scene_id| {
                                 if (new_pos <= scene_id and scene_id < current_pos) {
@@ -141,7 +141,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                     defer imgui.igPopID();
 
                     if (imgui.igSelectable_Bool(entity_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-                        try ImguiManager.InsertEvent(.{
+                        try ImguiEventManager.Insert(.{
                             .ET_SelectEntityEvent = .{
                                 .SelectedEntity = entity,
                             },
@@ -158,10 +158,10 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             const new_event = ImguiEvent{
                 .ET_OpenSceneEvent = .{
-                    .Path = try ImguiManager.EventAllocator().dupe(u8, path),
+                    .Path = try ImguiEventManager.EventAllocator().dupe(u8, path),
                 },
             };
-            try ImguiManager.InsertEvent(new_event);
+            try ImguiEventManager.Insert(new_event);
         }
     }
     if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsItemClicked(imgui.ImGuiMouseButton_Right) == true) {
@@ -177,7 +177,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                         .SceneID = selected_scene_id,
                     },
                 };
-                try ImguiManager.InsertEvent(new_event);
+                try ImguiEventManager.Insert(new_event);
             }
         }
 
@@ -189,7 +189,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                         .mLayerType = .GameLayer,
                     },
                 };
-                try ImguiManager.InsertEvent(new_event);
+                try ImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true) {
                 const new_event = ImguiEvent{
@@ -197,7 +197,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                         .mLayerType = .OverlayLayer,
                     },
                 };
-                try ImguiManager.InsertEvent(new_event);
+                try ImguiEventManager.Insert(new_event);
             }
         }
     }

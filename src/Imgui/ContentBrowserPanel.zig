@@ -1,6 +1,6 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEvents = @import("ImguiEvent.zig");
+const ImguiEvents = @import("../Events/ImguiEvent.zig");
 const ImguiEvent = ImguiEvents.ImguiEvent;
 const NewProjectEvent = ImguiEvents.NewProjectEvent;
 const OpenProjectEvent = ImguiEvents.OpenProjectEvent;

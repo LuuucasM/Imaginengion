@@ -1,6 +1,6 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
 const AssetHandlePanel = @This();
