@@ -1,6 +1,7 @@
 const std = @import("std");
-const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
-const Mat4f32 = @import("../Math/LinAlg.zig").Mat4f32;
+const LinAlg = @import("../Math/LinAlg.zig");
+const Vec2f32 = LinAlg.Vec2f32;
+const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
@@ -10,6 +11,8 @@ const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Entity = @import("..//GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
+const TransformComponent = Components.TransformComponent;
+const CameraComponent = Components.CameraComponent;
 const ComponentsArray = Components.ComponentsList;
 
 const RenderManager = @import("../Renderer/Renderer.zig");
@@ -39,6 +42,7 @@ mLayerInsertIndex: usize,
 mFrameBuffer: FrameBuffer,
 mViewportWidth: usize,
 mViewportHeight: usize,
+mEditorCameraEntityID: u32,
 
 mCompositeVertexArray: VertexArray,
 mCompositeVertexBuffer: VertexBuffer,
@@ -61,6 +65,8 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mCompositeIndexBuffer = undefined,
         .mCompositeShader = try Shader.Init(SceneManagerGPA.allocator(), "assets/shaders/Composite.glsl"),
         .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
+
+        .mEditorCameraEntityID = std.math.maxInt(u32),
     };
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -75,6 +81,12 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
     new_scene_manager.mCompositeVertexArray.SetIndexBuffer(new_scene_manager.mCompositeIndexBuffer);
+    new_scene_manager.mEditorCameraEntityID = try new_scene_manager.mECSManager.CreateEntity();
+    _ = try new_scene_manager.mECSManager.AddComponent(TransformComponent, new_scene_manager.mEditorCameraEntityID, null);
+
+    var new_camera = CameraComponent{};
+    new_camera.SetViewportSize(width, height);
+    _ = try new_scene_manager.mECSManager.AddComponent(CameraComponent, new_scene_manager.mEditorCameraEntityID, new_camera);
 
     return new_scene_manager;
 }
@@ -112,9 +124,12 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
     return self.mSceneStack.items[scene_id].DuplicateEntity(original_entity.EntityID);
 }
 
-pub fn RenderUpdate(self: *SceneManager, camera_viewprojection: Mat4f32) !void {
+pub fn RenderUpdate(self: *SceneManager) !void {
     //render each scene
-    RenderManager.BeginRendering(camera_viewprojection);
+    const camera_component = self.mECSManager.GetComponent(CameraComponent, self.mEditorCameraEntityID);
+    const camera_transform = self.mECSManager.GetComponent(TransformComponent, self.mEditorCameraEntityID);
+    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
+    RenderManager.BeginRendering(camera_view_projection);
 
     for (self.mSceneStack.items) |scene_layer| {
         try scene_layer.Render(); //this renders each scene_layer to its own frame buffer

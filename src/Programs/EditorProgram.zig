@@ -80,7 +80,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);
-    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCamera.GetViewProjection());
+    try self.mSceneManager.RenderUpdate();
 
     Renderer.SwapBuffers();
     //----------Render End-----------------

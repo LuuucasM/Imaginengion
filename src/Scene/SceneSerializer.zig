@@ -3,6 +3,7 @@ const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 
+const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
@@ -34,9 +35,9 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     try write_stream.objectField("LayerType");
     try write_stream.write(scene_layer.mLayerType);
 
-    var iter = scene_layer.mECSManagerRef.GetAllEntities().iterator();
-    while (iter.next()) |entry| {
-        const entity_id = entry.key_ptr.*;
+    var group = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = SceneIDComponent }, allocator);
+    FilterSceneUUID(&group, scene_layer.mUUID, scene_layer.mECSManagerRef);
+    for (group.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
 
         try write_stream.objectField("Entity");
@@ -255,4 +256,23 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
         const sprite_component = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
         sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
     }
+}
+
+fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
+    if (result.items.len == 0) return;
+
+    var end_index: usize = result.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
+        if (scene_id_component.SceneID != scene_uuid) {
+            result.items[i] = result.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    result.shrinkAndFree(end_index);
 }

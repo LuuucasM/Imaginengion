@@ -5,17 +5,15 @@ const PlatformUtils = @This();
 pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
     var outPath: [*c]nfd.nfdchar_t = undefined;
     const folder_result = nfd.NFD_PickFolder(null, &outPath);
-    defer nfd.free(outPath);
 
-    switch (folder_result) {
-        nfd.NFD_OKAY => {},
-        nfd.NFD_CANCEL => return &[_]u8{},
-        nfd.NFD_ERROR => {
+    if (folder_result != nfd.NFD_OKAY) {
+        if (folder_result == nfd.NFD_ERROR) {
             std.log.err("NFD Error: {s}\n", .{nfd.NFD_GetError()});
-            return &[_]u8{};
-        },
-        else => return &[_]u8{},
+        }
+        return &[_]u8{};
     }
+
+    defer nfd.free(outPath);
 
     const len = std.mem.len(outPath);
     const path_result = try allocator.alloc(u8, len);
@@ -27,17 +25,15 @@ pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
 pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
     var outPath: [*c]nfd.nfdchar_t = undefined;
     const file_result = nfd.NFD_OpenDialog(&filter[1], null, &outPath);
-    defer nfd.free(outPath);
 
-    switch (file_result) {
-        nfd.NFD_OKAY => {},
-        nfd.NFD_CANCEL => return &[_]u8{},
-        nfd.NFD_ERROR => {
+    if (file_result != nfd.NFD_OKAY) {
+        if (file_result == nfd.NFD_ERROR) {
             std.log.err("NFD Error: {s}\n", .{nfd.NFD_GetError()});
-            return &[_]u8{};
-        },
-        else => return &[_]u8{},
+        }
+        return &[_]u8{};
     }
+
+    defer nfd.free(outPath);
 
     const path_len = std.mem.len(outPath);
     const path_result = try allocator.alloc(u8, path_len);
@@ -49,18 +45,16 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
 
 pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
     var outPath: [*c]nfd.nfdchar_t = undefined;
-    const folder_result = nfd.NFD_SaveDialog(&filter[1], null, &outPath);
-    defer nfd.free(outPath);
+    const file_result = nfd.NFD_SaveDialog(&filter[1], null, &outPath);
 
-    switch (folder_result) {
-        nfd.NFD_OKAY => {},
-        nfd.NFD_CANCEL => return &[_]u8{},
-        nfd.NFD_ERROR => {
+    if (file_result != nfd.NFD_OKAY) {
+        if (file_result == nfd.NFD_ERROR) {
             std.log.err("NFD Error: {s}\n", .{nfd.NFD_GetError()});
-            return &[_]u8{};
-        },
-        else => return &[_]u8{},
+        }
+        return &[_]u8{};
     }
+
+    defer nfd.free(outPath);
 
     const path_len = std.mem.len(outPath);
     const filter_len = std.mem.len(filter);

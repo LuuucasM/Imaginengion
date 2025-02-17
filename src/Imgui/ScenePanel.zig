@@ -7,6 +7,11 @@ const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ScenePanel = @This();
 
+const ECSManager = @import("../ECS/ECSManager.zig");
+const Components = @import("../GameObjects/Components.zig");
+const SceneIDComponent = Components.SceneIDComponent;
+const NameComponent = Components.NameComponent;
+
 mIsVisible: bool,
 mSelectedScene: ?usize,
 mSelectedEntity: ?Entity,
@@ -123,10 +128,14 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
             //print all of the entities in the scene
             if (is_tree_open) {
+                var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+                defer arena.deinit();
+                const allocator = arena.allocator();
+
                 defer imgui.igTreePop();
-                var entity_iter = scene_layer.mECSManagerRef.GetAllEntities().iterator();
-                while (entity_iter.next()) |entry| {
-                    const entity_id = entry.key_ptr.*;
+                var group = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = NameComponent }, allocator);
+                FilterSceneUUID(&group, scene_layer.mUUID, scene_layer.mECSManagerRef);
+                for (group.items) |entity_id| {
                     const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
 
@@ -213,4 +222,23 @@ pub fn OnSelectSceneEvent(self: *ScenePanel, new_scene_id: ?usize) void {
 
 pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
+}
+
+fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
+    if (result.items.len == 0) return;
+
+    var end_index: usize = result.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
+        if (scene_id_component.SceneID != scene_uuid) {
+            result.items[i] = result.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    result.shrinkAndFree(end_index);
 }
