@@ -2,9 +2,10 @@
 ### A high-performance game engine designed to leverage emerging technologies with a strong focus on modern hardware optimization.
 
 ## Table of contents:
+1. [Introduction](#introduction)
 1. [Compatability and Instillation](#CandI)
 
-## Introduction
+## Introduction <a name="introduction"></a>
 I havnt written a proper introduction yet ^_^
 
 ## Compatability and Instillation <a name="CandI"></a>
