@@ -1,8 +1,11 @@
 # Imaginengion
-### A high-performance game engine designed to leverage emerging technologies with a strong focus on cache locality and modern hardware optimization. Built from the ground up in Zig, it aims to push the boundaries of real-time performance by optimizing data structures, minimizing CPU cache misses, and leveraging Zig's easy-to-use compile time processing.
+### A high-performance game engine designed to leverage emerging technologies with a strong focus on modern hardware optimization.
 
-# Table of contents:
+## Table of contents:
 1. [Compatability and Instillation](#CandI)
+
+## Introduction
+I havnt written a proper introduction yet ^_^
 
 ## Compatability and Instillation <a name="CandI"></a>
 ### Compatability
@@ -13,6 +16,5 @@ to warrent additional compatability
 ### Instillation
 1. Have this repo downloaded and in its own folder
 2. Have the master-version x86_64 zig compiler installed
-3. Run FirstBuild.bat
-
-Step 3 should produce a GameEngine.exe in the same folder as the .bat file. Run this exe.
+3. Run FirstBuild.bat file provided with the engine
+4. Run GameEngine.exe (appears after running FirstBuild.bat)
