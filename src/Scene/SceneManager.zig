@@ -1,6 +1,7 @@
 const std = @import("std");
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
+const Vec3f32 = LinAlg.Vec3f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneLayer = @import("SceneLayer.zig");
@@ -81,9 +82,11 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
     new_scene_manager.mCompositeVertexArray.SetIndexBuffer(new_scene_manager.mCompositeIndexBuffer);
-    new_scene_manager.mEditorCameraEntityID = try new_scene_manager.mECSManager.CreateEntity();
-    _ = try new_scene_manager.mECSManager.AddComponent(TransformComponent, new_scene_manager.mEditorCameraEntityID, null);
 
+    new_scene_manager.mEditorCameraEntityID = try new_scene_manager.mECSManager.CreateEntity();
+    var new_transform = TransformComponent{};
+    new_transform.Translation = Vec3f32{ 0.0, 0.0, -10.0 };
+    _ = try new_scene_manager.mECSManager.AddComponent(TransformComponent, new_scene_manager.mEditorCameraEntityID, new_transform);
     var new_camera = CameraComponent{};
     new_camera.SetViewportSize(width, height);
     _ = try new_scene_manager.mECSManager.AddComponent(CameraComponent, new_scene_manager.mEditorCameraEntityID, new_camera);
