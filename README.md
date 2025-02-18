@@ -3,7 +3,8 @@
 
 ## Table of contents:
 1. [Introduction](#introduction)
-1. [Compatability and Instillation](#CandI)
+2. [Compatability and Instillation](#CandI)
+3. [How To Use](#howtouse)
 
 ## Introduction <a name="introduction"></a>
 I havnt written a proper introduction yet ^_^
@@ -19,3 +20,6 @@ to warrent additional compatability
 2. Have the master-version x86_64 zig compiler installed
 3. Run FirstBuild.bat file provided with the engine
 4. Run GameEngine.exe (appears after running FirstBuild.bat)
+
+## How To Use <a name="howtouse"></a>
+I havnt written anything for this yet because its still in development ^_^
