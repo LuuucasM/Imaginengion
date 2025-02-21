@@ -1,9 +1,9 @@
 const std = @import("std");
-const Application = @import("Core/Application.zig");
+const IM = @import("IM");
 
 pub fn main() !void {
     std.log.info("Initializing Application", .{});
-    var application = Application{};
+    var application = IM.Application{};
     try application.Init();
     std.log.info("Running Application", .{});
     try application.Run();

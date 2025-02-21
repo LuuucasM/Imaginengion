@@ -1,10 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const buildglfw = @import("src/Vendor/GLFW/buildglfw.zig");
-const buildglad = @import("src/Vendor/Glad/buildglad.zig");
-const buildimgui = @import("src/Vendor/imgui/buildimgui.zig");
-const buildstb = @import("src/Vendor/stb/buildstb.zig");
-const buildnativefiledialog = @import("src/Vendor/nativefiledialog/buildnativefiledialog.zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -17,41 +12,41 @@ pub fn build(b: *std.Build) void {
     const glfw_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "GLFW",
-        .root_module = b.createModule(.{
+        .root_module = b.addModule("GLFW", .{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
-            .root_source_file = null,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/glfw.zig" } },
         }),
     });
-    glfw_lib.addIncludePath(.{ .src_path = "src/Vendor/GLFW/include/" });
+    glfw_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
     {
         const options = switch (builtin.os.tag) {
             .windows => blk: {
                 glfw_lib.linkSystemLibrary("gdi32");
                 break :blk std.Build.Module.AddCSourceFilesOptions{
                     .files = &[_][]const u8{
-                        "src/Vendor/GLFW/src/context.c",
-                        "src/Vendor/GLFW/src/init.c",
-                        "src/Vendor/GLFW/src/input.c",
-                        "src/Vendor/GLFW/src/monitor.c",
-                        "src/Vendor/GLFW/src/vulkan.c",
-                        "src/Vendor/GLFW/src/window.c",
-                        "src/Vendor/GLFW/src/platform.c",
-                        "src/Vendor/GLFW/src/null_init.c",
-                        "src/Vendor/GLFW/src/null_monitor.c",
-                        "src/Vendor/GLFW/src/null_window.c",
-                        "src/Vendor/GLFW/src/null_joystick.c",
-                        "src/Vendor/GLFW/src/win32_init.c",
-                        "src/Vendor/GLFW/src/win32_joystick.c",
-                        "src/Vendor/GLFW/src/win32_monitor.c",
-                        "src/Vendor/GLFW/src/win32_time.c",
-                        "src/Vendor/GLFW/src/win32_thread.c",
-                        "src/Vendor/GLFW/src/win32_window.c",
-                        "src/Vendor/GLFW/src/wgl_context.c",
-                        "src/Vendor/GLFW/src/egl_context.c",
-                        "src/Vendor/GLFW/src/osmesa_context.c",
-                        "src/Vendor/GLFW/src/win32_module.c",
+                        "src/Imaginengion/Vendor/GLFW/src/context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/init.c",
+                        "src/Imaginengion/Vendor/GLFW/src/input.c",
+                        "src/Imaginengion/Vendor/GLFW/src/monitor.c",
+                        "src/Imaginengion/Vendor/GLFW/src/vulkan.c",
+                        "src/Imaginengion/Vendor/GLFW/src/window.c",
+                        "src/Imaginengion/Vendor/GLFW/src/platform.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_init.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_monitor.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_window.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_joystick.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_init.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_joystick.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_monitor.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_time.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_thread.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_window.c",
+                        "src/Imaginengion/Vendor/GLFW/src/wgl_context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/egl_context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/osmesa_context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/win32_module.c",
                     },
                     .flags = &[_][]const u8{
                         "-D_GLFW_WIN32",
@@ -62,27 +57,27 @@ pub fn build(b: *std.Build) void {
             .linux => blk: {
                 break :blk std.Build.Module.AddCSourceFilesOptions{
                     .files = &[_][]const u8{
-                        "src/Vendor/GLFW/src/context.c",
-                        "src/Vendor/GLFW/src/init.c",
-                        "src/Vendor/GLFW/src/input.c",
-                        "src/Vendor/GLFW/src/monitor.c",
-                        "src/Vendor/GLFW/src/vulkan.c",
-                        "src/Vendor/GLFW/src/window.c",
-                        "src/Vendor/GLFW/src/platform.c",
-                        "src/Vendor/GLFW/src/null_init.c",
-                        "src/Vendor/GLFW/src/null_monitor.c",
-                        "src/Vendor/GLFW/src/null_window.c",
-                        "src/Vendor/GLFW/src/null_joystick.c",
-                        "src/Vendor/GLFW/src/x11_init.c",
-                        "src/Vendor/GLFW/src/x11_monitor.c",
-                        "src/Vendor/GLFW/src/xx1_window.c",
-                        "src/Vendor/GLFW/src/xkb_unicode.c",
-                        "src/Vendor/GLFW/src/posix_time.c",
-                        "src/Vendor/GLFW/src/posix_thread.c",
-                        "src/Vendor/GLFW/src/glx_context.c",
-                        "src/Vendor/GLFW/src/egl_context.c",
-                        "src/Vendor/GLFW/src/osmesa_context.c",
-                        "src/Vendor/GLFW/src/linux_joystick.c",
+                        "src/Imaginengion/Vendor/GLFW/src/context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/init.c",
+                        "src/Imaginengion/Vendor/GLFW/src/input.c",
+                        "src/Imaginengion/Vendor/GLFW/src/monitor.c",
+                        "src/Imaginengion/Vendor/GLFW/src/vulkan.c",
+                        "src/Imaginengion/Vendor/GLFW/src/window.c",
+                        "src/Imaginengion/Vendor/GLFW/src/platform.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_init.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_monitor.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_window.c",
+                        "src/Imaginengion/Vendor/GLFW/src/null_joystick.c",
+                        "src/Imaginengion/Vendor/GLFW/src/x11_init.c",
+                        "src/Imaginengion/Vendor/GLFW/src/x11_monitor.c",
+                        "src/Imaginengion/Vendor/GLFW/src/xx1_window.c",
+                        "src/Imaginengion/Vendor/GLFW/src/xkb_unicode.c",
+                        "src/Imaginengion/Vendor/GLFW/src/posix_time.c",
+                        "src/Imaginengion/Vendor/GLFW/src/posix_thread.c",
+                        "src/Imaginengion/Vendor/GLFW/src/glx_context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/egl_context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/osmesa_context.c",
+                        "src/Imaginengion/Vendor/GLFW/src/linux_joystick.c",
                     },
                     .flags = &[_][]const u8{
                         "-D_GLFW_X11",
@@ -94,49 +89,61 @@ pub fn build(b: *std.Build) void {
         };
         glfw_lib.addCSourceFiles(options);
     }
-    //------------END GLFW---------------
-    //-----------GLAD--------------
+    //-------------------------------------------------END GLFW----------------------------------------------------
+    //---------------------------------------------------GLAD----------------------------------------------
     const glad_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "GLAD",
-        .root_module = b.createModule(.{
+        .root_module = b.addModule("GLAD", .{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/glad.zig" } },
         }),
     });
-    glad_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/Glad/include/" } });
+    glad_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/include/" } });
     {
         const options = std.Build.Module.AddCSourceFilesOptions{
             .files = &[_][]const u8{
-                "src/Vendor/Glad/src/glad.c",
+                "src/Imaginengion/Vendor/Glad/src/glad.c",
             },
         };
         glad_lib.addCSourceFiles(options);
     }
-    //-----------IMGUI--------------
+    //------------------------------------------------------------END GLAD-----------------------------------------------------------------
+    //-------------------------------------------------------------IMGUI---------------------------------------------------------
     const imgui_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "IMGUI",
-        .root_module = b.createModule(.{
+        .root_module = b.addModule("IMGUI", .{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
             .link_libcpp = true,
-            .root_source_file = null,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui.zig" } },
+            .imports = &[_]std.Build.Module.Import{
+                .{
+                    .name = "GLFW",
+                    .module = glfw_lib.root_module,
+                },
+            },
         }),
     });
+    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/" } });
+    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });
     {
         const options = std.Build.Module.AddCSourceFilesOptions{
             .files = &[_][]const u8{
-                "src/Vendor/imgui/imgui/imgui.cpp",
-                "src/Vendor/imgui/imgui/imgui_demo.cpp",
-                "src/Vendor/imgui/imgui/imgui_draw.cpp",
-                "src/Vendor/imgui/imgui/imgui_tables.cpp",
-                "src/Vendor/imgui/imgui/imgui_widgets.cpp",
-                "src/Vendor/imgui/ImGuizmo/ImGuizmo.cpp",
-                "src/Vendor/imgui/cimgui.cpp",
-                "src/Vendor/imgui/cimguizmo.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/imgui.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/imgui_demo.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/imgui_draw.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/imgui_tables.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/imgui_widgets.cpp",
+                "src/Imaginengion/Vendor/imgui/ImGuizmo/ImGuizmo.cpp",
+                "src/Imaginengion/Vendor/imgui/cimgui.cpp",
+                "src/Imaginengion/Vendor/imgui/cimguizmo.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_opengl3.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_glfw.cpp",
             },
             .flags = &[_][]const u8{
                 "-D_CRT_SECURE_NO_WARNINGS",
@@ -146,45 +153,43 @@ pub fn build(b: *std.Build) void {
         };
         imgui_lib.addCSourceFiles(options);
     }
-    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/" } });
-    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/imgui/imgui/" } });
-    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/GLFW/include/" } });
-    imgui_lib.linkLibrary(glfw_lib);
-    //TODO: might have to add glfw as a module to imgui_lib for imgui to be able to access the glfw stuff? if not remove this
-    //-----------NFD--------------
+    //----------------------------------------------END IMGUI------------------------------------------------------------
+    //----------------------------------------------------NFD---------------------------------------------------------
     const nfd_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "NFD",
-        .root_module = b.createModule(.{
+        .root_module = b.addModule("NFD", .{
             .target = target,
             .optimize = optimize,
             .link_libc = true,
             .link_libcpp = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/nativefiledialog/nfd.zig" } },
         }),
     });
+    nfd_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/nativefiledialog/src/include/" } });
     {
         const options = switch (builtin.os.tag) {
             .windows => blk: {
                 break :blk std.Build.Module.AddCSourceFilesOptions{
                     .files = &[_][]const u8{
-                        "src/Vendor/nativefiledialog/src/nfd_common.c",
-                        "src/Vendor/nativefiledialog/src/nfd_win.cpp",
+                        "src/Imaginengion/Vendor/nativefiledialog/src/nfd_common.c",
+                        "src/Imaginengion/Vendor/nativefiledialog/src/nfd_win.cpp",
                     },
                 };
             },
             .linux => blk: {
                 break :blk std.Build.Module.AddCSourceFilesOptions{
                     .files = &[_][]const u8{
-                        "src/Vendor/nativefiledialog/src/nfd_common.c",
-                        "src/Vendor/nativefiledialog/src/nfd_gtk.c",
+                        "src/Imaginengion/Vendor/nativefiledialog/src/nfd_common.c",
+                        "src/Imaginengion/Vendor/nativefiledialog/src/nfd_gtk.c",
                     },
                 };
             },
             .macos => blk: {
                 break :blk std.Build.Module.AddCSourceFilesOptions{
                     .files = &[_][]const u8{
-                        "src/Vendor/nativefiledialog/src/nfd_common.c",
-                        "src/Vendor/nativefiledialog/src/nfd_cocoa.m",
+                        "src/Imaginengion/Vendor/nativefiledialog/src/nfd_common.c",
+                        "src/Imaginengion/Vendor/nativefiledialog/src/nfd_cocoa.m",
                     },
                 };
             },
@@ -192,36 +197,51 @@ pub fn build(b: *std.Build) void {
         };
         nfd_lib.addCSourceFiles(options);
     }
-
-    nfd_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/nativefiledialog/src/include/" } });
-    //-----------IMAGINENGION EDITOR---------------
-    const engine_lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "Imaginengion",
-        .root_module = b.createModule(
-            .{
-                .optimize = optimize,
-                .target = target,
-                .link_libc = true,
-                .link_libcpp = true,
-                .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion.zig" } },
+    //---------------------------------------------------END NFD-------------------------------------------------------------------
+    //------------------------------------------------------IMAGINENGION-------------------------------------------------------
+    const engine_lib = b.addLibrary(.{ .linkage = .static, .name = "Imaginengion", .root_module = b.addModule(
+        "ImaginEngion",
+        .{
+            .optimize = optimize,
+            .target = target,
+            .link_libc = true,
+            .link_libcpp = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion.zig" } },
+            .imports = &[_]std.Build.Module.Import{
+                std.Build.Module.Import{
+                    .name = "GLFW",
+                    .module = glfw_lib.root_module,
+                },
+                std.Build.Module.Import{
+                    .name = "GLAD",
+                    .module = glad_lib.root_module,
+                },
+                std.Build.Module.Import{
+                    .name = "IMGUI",
+                    .module = imgui_lib.root_module,
+                },
+                std.Build.Module.Import{
+                    .name = "NFD",
+                    .module = nfd_lib.root_module,
+                },
             },
-        ),
-    });
-
-    //-----------STB--------------
+        },
+    ) });
+    //-------------------------------------------------------- END IMAGINENGION--------------------------------------------------------------
+    //--------------------------------------------------------------STB----------------------------------------------------------------------
     {
         const options = std.Build.Module.AddCSourceFilesOptions{
             .files = &[_][]const u8{
-                "src/Vendor/stb/stb.c",
+                "src/Imaginengion/Vendor/stb/stb.c",
             },
             .flags = &[_][]const u8{
                 "-std=c99",
             },
         };
         engine_lib.addCSourceFiles(options);
-        engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Vendor/stb/" } });
+        engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/stb/" } });
     }
+    //------------------------------------------------------------END STB----------------------------------------------------------------------
 
     if (builtin.os.tag == .windows) {
         glfw_lib.linkSystemLibrary("gdi32");
@@ -231,25 +251,31 @@ pub fn build(b: *std.Build) void {
         nfd_lib.linkSystemLibrary("ole32");
     }
 
-    //TODO: convert these from their own files into this file
-    //buildglfw.Add(exe, b);
-    //buildglad.Add(exe, b);
-    //buildimgui.Add(exe, b);
-    //buildstb.Add(exe, b);
-    //buildnativefiledialog.Add(exe, b);
+    const editor_exe = b.addExecutable(.{
+        .name = "ImaginEditor",
+        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Editor.zig" } },
+            .imports = &[_]std.Build.Module.Import{
+                std.Build.Module.Import{
+                    .name = "IM",
+                    .module = engine_lib.root_module,
+                },
+            },
+        }),
+    });
 
-    b.installArtifact(engine_lib);
+    const run_cmd = b.addRunArtifact(editor_exe);
+    run_cmd.step.dependOn(b.getInstallStep());
 
-    //TODO: define an exe which links and depends on the engine_lib
-    //const run_cmd = b.addRunArtifact(exe);
-    //run_cmd.step.dependOn(b.getInstallStep());
-    //
-    //// This allows the user to pass arguments to the application in the build
-    //// command itself, like this: `zig build run -- arg1 arg2 etc`
-    //if (b.args) |args| {
-    //    run_cmd.addArgs(args);
-    //}
-    //
-    //const run_step = b.step("run", "Run the app");
-    //run_step.dependOn(&run_cmd.step);
+    // This allows the user to pass arguments to the application in the build
+    // command itself, like this: `zig build run -- arg1 arg2 etc`
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    }
+
+    const run_step = b.step("run", "Run the app");
+    run_step.dependOn(&run_cmd.step);
 }
