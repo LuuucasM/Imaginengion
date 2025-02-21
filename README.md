@@ -11,7 +11,7 @@ I havnt written a proper introduction yet ^_^
 
 ## Compatability and Instillation <a name="CandI"></a>
 ### Compatability
-Currently compiles using the newest master-version x86_64 zig compiler from the website https://ziglang.org/download/
+Currently compiles using the newest master-version x86_64 zig compiler for windows from the website https://ziglang.org/download/ 
 There is plan to extend compatability to other systems in the future but for now there is too many other things to develop
 to warrent additional compatability
 
