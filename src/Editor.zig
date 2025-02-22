@@ -2,8 +2,8 @@ const std = @import("std");
 const IM = @import("IM");
 
 pub fn main() !void {
-    std.log.info("Initializing Application", .{});
     var application = IM.Application{};
+    std.log.info("Initializing Application", .{});
     try application.Init();
     std.log.info("Running Application", .{});
     try application.Run();

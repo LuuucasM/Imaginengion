@@ -85,7 +85,8 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 
     new_scene_manager.mEditorCameraEntityID = try new_scene_manager.mECSManager.CreateEntity();
     var new_transform = TransformComponent{};
-    new_transform.Translation = Vec3f32{ 0.0, 0.0, -10.0 };
+    new_transform.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+
     _ = try new_scene_manager.mECSManager.AddComponent(TransformComponent, new_scene_manager.mEditorCameraEntityID, new_transform);
     var new_camera = CameraComponent{};
     new_camera.SetViewportSize(width, height);

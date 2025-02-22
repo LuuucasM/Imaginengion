@@ -8,7 +8,8 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    //-----------GLFW--------------
+    //--------------------------------------------------GLFW---------------------------------------------------------------------------
+    //make library
     const glfw_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "GLFW",
@@ -19,7 +20,11 @@ pub fn build(b: *std.Build) void {
             .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/glfw.zig" } },
         }),
     });
+
+    //add include paths
     glfw_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
+
+    //add c source files
     {
         const options = switch (builtin.os.tag) {
             .windows => blk: {
@@ -89,8 +94,15 @@ pub fn build(b: *std.Build) void {
         };
         glfw_lib.addCSourceFiles(options);
     }
+
+    //add system libraries
+    if (builtin.os.tag == .windows) {
+        glfw_lib.linkSystemLibrary("gdi32");
+    }
     //-------------------------------------------------END GLFW----------------------------------------------------
+
     //---------------------------------------------------GLAD----------------------------------------------
+    //make lib
     const glad_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "GLAD",
@@ -101,7 +113,10 @@ pub fn build(b: *std.Build) void {
             .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/glad.zig" } },
         }),
     });
+    //add include paths
     glad_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/include/" } });
+
+    //add c source files
     {
         const options = std.Build.Module.AddCSourceFilesOptions{
             .files = &[_][]const u8{
@@ -111,7 +126,9 @@ pub fn build(b: *std.Build) void {
         glad_lib.addCSourceFiles(options);
     }
     //------------------------------------------------------------END GLAD-----------------------------------------------------------------
+
     //-------------------------------------------------------------IMGUI---------------------------------------------------------
+    //make library
     const imgui_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "IMGUI",
@@ -121,16 +138,16 @@ pub fn build(b: *std.Build) void {
             .link_libc = true,
             .link_libcpp = true,
             .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui.zig" } },
-            .imports = &[_]std.Build.Module.Import{
-                .{
-                    .name = "GLFW",
-                    .module = glfw_lib.root_module,
-                },
-            },
         }),
     });
+
+    //add include paths
     imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/" } });
     imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });
+    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
+    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/include/" } });
+
+    //add c source files
     {
         const options = std.Build.Module.AddCSourceFilesOptions{
             .files = &[_][]const u8{
@@ -142,19 +159,24 @@ pub fn build(b: *std.Build) void {
                 "src/Imaginengion/Vendor/imgui/ImGuizmo/ImGuizmo.cpp",
                 "src/Imaginengion/Vendor/imgui/cimgui.cpp",
                 "src/Imaginengion/Vendor/imgui/cimguizmo.cpp",
-                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_opengl3.cpp",
-                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_glfw.cpp",
             },
             .flags = &[_][]const u8{
                 "-D_CRT_SECURE_NO_WARNINGS",
-                "-lstdc++",
+                if (builtin.os.tag == .windows) "-lstdc++" else "",
                 "-D_IMGUI_IMPL_OPENGL_LOADER_GL3W",
             },
         };
         imgui_lib.addCSourceFiles(options);
     }
+
+    //add system libraries
+    if (builtin.os.tag == .windows) {
+        imgui_lib.linkSystemLibrary("gdi32");
+    }
     //----------------------------------------------END IMGUI------------------------------------------------------------
+
     //----------------------------------------------------NFD---------------------------------------------------------
+    //make library
     const nfd_lib = b.addLibrary(.{
         .linkage = .static,
         .name = "NFD",
@@ -166,7 +188,11 @@ pub fn build(b: *std.Build) void {
             .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/nativefiledialog/nfd.zig" } },
         }),
     });
+
+    //add include paths
     nfd_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/nativefiledialog/src/include/" } });
+
+    //add c source files
     {
         const options = switch (builtin.os.tag) {
             .windows => blk: {
@@ -197,8 +223,16 @@ pub fn build(b: *std.Build) void {
         };
         nfd_lib.addCSourceFiles(options);
     }
+
+    //add system libraries
+    if (builtin.os.tag == .windows) {
+        nfd_lib.linkSystemLibrary("comdlg32");
+        nfd_lib.linkSystemLibrary("ole32");
+    }
     //---------------------------------------------------END NFD-------------------------------------------------------------------
+
     //------------------------------------------------------IMAGINENGION-------------------------------------------------------
+    //make library
     const engine_lib = b.addLibrary(.{ .linkage = .static, .name = "Imaginengion", .root_module = b.addModule(
         "ImaginEngion",
         .{
@@ -206,7 +240,7 @@ pub fn build(b: *std.Build) void {
             .target = target,
             .link_libc = true,
             .link_libcpp = true,
-            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion.zig" } },
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
             .imports = &[_]std.Build.Module.Import{
                 std.Build.Module.Import{
                     .name = "GLFW",
@@ -227,8 +261,13 @@ pub fn build(b: *std.Build) void {
             },
         },
     ) });
-    //-------------------------------------------------------- END IMAGINENGION--------------------------------------------------------------
-    //--------------------------------------------------------------STB----------------------------------------------------------------------
+
+    //add include paths
+    engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });
+    engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
+    engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/stb/" } });
+
+    //add c source files
     {
         const options = std.Build.Module.AddCSourceFilesOptions{
             .files = &[_][]const u8{
@@ -239,18 +278,26 @@ pub fn build(b: *std.Build) void {
             },
         };
         engine_lib.addCSourceFiles(options);
-        engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/stb/" } });
     }
-    //------------------------------------------------------------END STB----------------------------------------------------------------------
-
-    if (builtin.os.tag == .windows) {
-        glfw_lib.linkSystemLibrary("gdi32");
-        imgui_lib.linkSystemLibrary("gdi32");
-
-        nfd_lib.linkSystemLibrary("comdlg32");
-        nfd_lib.linkSystemLibrary("ole32");
+    {
+        const options = std.Build.Module.AddCSourceFilesOptions{
+            .files = &[_][]const u8{
+                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_glfw.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_opengl3.cpp",
+            },
+            .flags = &[_][]const u8{
+                "-D_CRT_SECURE_NO_WARNINGS",
+                "-DIMGUI_IMPL_API=extern\"C\"",
+                "-DIMGUI_IMPL_OPENGL_LOADER_GLAD",
+                "-includesrc/Imaginengion/Vendor/Glad/include/glad/glad.h",
+            },
+        };
+        engine_lib.addCSourceFiles(options);
     }
+    b.installArtifact(engine_lib);
+    //-------------------------------------------------------- END IMAGINENGION--------------------------------------------------------------
 
+    //make exe
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",
         .optimize = optimize,
@@ -266,7 +313,7 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
-
+    b.installArtifact(editor_exe);
     const run_cmd = b.addRunArtifact(editor_exe);
     run_cmd.step.dependOn(b.getInstallStep());
 

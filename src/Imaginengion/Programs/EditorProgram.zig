@@ -2,6 +2,11 @@ const std = @import("std");
 const Window = @import("../Windows/Window.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 
+const LinAlg = @import("../Math/LinAlg.zig");
+const Components = @import("../GameObjects/Components.zig");
+const CameraComponent = Components.CameraComponent;
+const TransformComponent = Components.TransformComponent;
+
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
@@ -75,7 +80,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //---------Physics End---------------
 
     //---------Game Logic Begin----------
-    self._ViewportPanel.OnUpdate();
     //---------GameLogic End-------------
 
     //---------Render Begin-------------
@@ -104,7 +108,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._CSEditorPanel.OnImguiRender();
 
     try self._ToolbarPanel.OnImguiRender();
-    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, self.mSceneManager.mEditorCameraEntityID);
+    const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, self.mSceneManager.mEditorCameraEntityID);
+    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
+    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component.mProjectionType, camera_component.mProjection, camera_view_projection);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 

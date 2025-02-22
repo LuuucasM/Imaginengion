@@ -2,7 +2,6 @@ const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const EditorCamera = @import("ViewportCamera.zig");
 
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
@@ -13,6 +12,9 @@ const InputManager = @import("../Inputs/Input.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
+const Mat4f32 = LinAlg.Mat4f32;
+
+const ProjectionType = @import("../GameObjects/Components.zig").CameraComponent.ProjectionType;
 
 const ViewportPanel = @This();
 
@@ -26,7 +28,6 @@ const GizmoType = enum(c_uint) {
 mP_Open: bool,
 mViewportWidth: usize,
 mViewportHeight: usize,
-mViewportCamera: EditorCamera,
 mSelectedEntity: ?Entity,
 mGizmoType: GizmoType,
 
@@ -35,17 +36,12 @@ pub fn Init() ViewportPanel {
         .mP_Open = true,
         .mViewportWidth = 1600,
         .mViewportHeight = 900,
-        .mViewportCamera = EditorCamera.Init(1600, 900),
         .mSelectedEntity = null,
         .mGizmoType = .None,
     };
 }
 
-pub fn OnUpdate(self: *ViewportPanel) void {
-    self.mViewportCamera.InputUpdate();
-}
-
-pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !void {
+pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, camera_projection_type: ProjectionType, camera_projection: Mat4f32, camera_viewprojection: Mat4f32) !void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
@@ -66,7 +62,6 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
         try ImguiEventManager.Insert(new_imgui_event);
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
-        self.mViewportCamera.SetViewportSize(@intFromFloat(viewport_size.x), @intFromFloat(viewport_size.y));
     }
 
     //render framebuffer
@@ -111,10 +106,10 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
             imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
             imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
 
-            imgui.ImGuizmo_SetOrthographic(if (self.mViewportCamera.mProjectionType == .Orthographic) true else false);
-            var camera_proj = LinAlg.Mat4ToArray(self.mViewportCamera.GetProjection());
+            imgui.ImGuizmo_SetOrthographic(if (camera_projection_type == .Orthographic) true else false);
+            var camera_proj = LinAlg.Mat4ToArray(camera_projection);
             camera_proj[1][1] *= -1;
-            var camera_view = LinAlg.Mat4ToArray(self.mViewportCamera.GetViewMatrix());
+            var camera_view = LinAlg.Mat4ToArray(camera_viewprojection);
 
             const entity_transform_component = entity.GetComponent(TransformComponent);
             var entity_transform = LinAlg.Mat4ToArray(entity_transform_component.GetTransformMatrix());
