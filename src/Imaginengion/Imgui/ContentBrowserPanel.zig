@@ -19,17 +19,16 @@ mSceneTextureHandle: AssetHandle,
 mProjectDirectory: std.ArrayList(u8),
 mCurrentDirectory: std.ArrayList(u8),
 mProjectFile: ?std.fs.File = null,
-var PathGPA = std.heap.DebugAllocator(.{}).init;
 
-pub fn Init() !ContentBrowserPanel {
+pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
     return ContentBrowserPanel{
         .mIsVisible = true,
         .mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png"),
         .mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png"),
         .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png"),
         .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png"),
-        .mProjectDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
-        .mCurrentDirectory = std.ArrayList(u8).init(PathGPA.allocator()),
+        .mProjectDirectory = std.ArrayList(u8).init(engine_allocator),
+        .mCurrentDirectory = std.ArrayList(u8).init(engine_allocator),
         .mProjectFile = null,
     };
 }

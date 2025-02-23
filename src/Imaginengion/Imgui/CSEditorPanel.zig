@@ -9,19 +9,17 @@ const CSEditorPanel = @This();
 
 mP_Open: bool,
 mEditorWindows: std.AutoArrayHashMap(u64, EditorWindow),
-var EditorWindowsGPA = std.heap.DebugAllocator(.{}).init;
 
-pub fn Init() CSEditorPanel {
+pub fn Init(engine_allocator: std.mem.Allocator) CSEditorPanel {
     return CSEditorPanel{
         .mP_Open = true,
-        .mEditorWindows = std.AutoArrayHashMap(u64, EditorWindow).init(EditorWindowsGPA.allocator()),
+        .mEditorWindows = std.AutoArrayHashMap(u64, EditorWindow).init(engine_allocator),
     };
 }
 
 pub fn Deinit(self: *CSEditorPanel) void {
     //TODO: deallocate all of the keys in mEditorWindow
     self.mEditorWindows.deinit();
-    EditorWindowsGPA.deinit();
 }
 
 pub fn OnImguiRender(self: *CSEditorPanel) !void {

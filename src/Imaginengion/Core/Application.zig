@@ -12,17 +12,16 @@ const Application: type = @This();
 
 mIsRunning: bool = true,
 mIsMinimized: bool = false,
-mEngineAllocator: std.mem.Allocator = undefined,
 mWindow: Window = undefined,
 mProgram: Program = undefined,
 
-pub fn Init(self: *Application) !void {
+pub fn Init(self: *Application, engine_allocator: std.mem.Allocator) !void {
     try AssetManager.Init();
     try Input.Init();
     try EventManager.Init(self);
 
     self.mWindow = Window.Init();
-    self.mProgram = try Program.Init(&self.mWindow);
+    self.mProgram = try Program.Init(engine_allocator, &self.mWindow);
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);

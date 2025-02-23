@@ -28,6 +28,7 @@ const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
+const ScriptManager = @import("../Scripts/ScriptManager.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -40,10 +41,11 @@ _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
 mWindow: *Window,
+mScriptManager: ScriptManager,
 
 const EditorProgram = @This();
 
-pub fn Init(window: *Window) !EditorProgram {
+pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
     try ImGui.Init(window);
 
     return EditorProgram{
@@ -51,13 +53,14 @@ pub fn Init(window: *Window) !EditorProgram {
         .mWindow = window,
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
-        ._ContentBrowserPanel = try ContentBrowserPanel.Init(),
-        ._CSEditorPanel = CSEditorPanel.Init(),
+        ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
+        ._CSEditorPanel = CSEditorPanel.Init(engine_allocator),
         ._ScenePanel = ScenePanel.Init(),
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
+        .mScriptManager = ScriptManager.Init(engine_allocator),
     };
 }
 
@@ -80,7 +83,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //---------Physics End---------------
 
     //---------Game Logic Begin----------
-    //---------GameLogic End-------------
+    //---------Game Logic End-------------
 
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);

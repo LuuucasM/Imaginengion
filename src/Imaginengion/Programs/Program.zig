@@ -10,10 +10,10 @@ const Program = @This();
 const Impl = @import("EditorProgram.zig");
 _Impl: Impl,
 
-pub fn Init(window: *Window) !Program {
+pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !Program {
     try Renderer.Init(window);
     return Program{
-        ._Impl = try Impl.Init(window),
+        ._Impl = try Impl.Init(engine_allocator, window),
     };
 }
 
