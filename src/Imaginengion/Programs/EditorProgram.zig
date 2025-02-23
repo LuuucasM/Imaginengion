@@ -28,7 +28,7 @@ const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
-const ScriptManager = @import("../Scripts/ScriptManager.zig");
+//const ScriptManager = @import("../Scripts/ScriptManager.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -41,7 +41,7 @@ _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
 mWindow: *Window,
-mScriptManager: ScriptManager,
+//mScriptManager: ScriptManager,
 
 const EditorProgram = @This();
 
@@ -60,7 +60,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(),
-        .mScriptManager = ScriptManager.Init(engine_allocator),
+        //.mScriptManager = ScriptManager.Init(engine_allocator),
     };
 }
 
