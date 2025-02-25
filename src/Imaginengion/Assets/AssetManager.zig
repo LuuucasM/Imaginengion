@@ -111,6 +111,8 @@ pub fn OnUpdate() !void {
             try UpdateAsset(entity_id, file, fstats);
         }
     }
+
+    AssetM.mAssetECS.ProcessDestroyedEntities();
 }
 
 pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {

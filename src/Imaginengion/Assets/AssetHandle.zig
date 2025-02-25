@@ -12,10 +12,10 @@ pub fn GetAsset(self: *AssetHandle, comptime component_type: type) !*component_t
         const IDComponent = Assets.IDComponent;
         const Texture2D = Assets.Texture2D;
 
-        if (component_type == AssetMetaData or component_type == FileMetaData) {
+        if (component_type == AssetMetaData) {
             @compileError("Cannot call AssetHandle.GetAsset with AssetMetaData or FileMetaData");
         }
-        if (component_type != Texture2D and component_type != IDComponent) {
+        if (component_type != Texture2D and component_type != IDComponent and component_type != FileMetaData) {
             @compileError("Cannot call AssetHandle.GetAsset with a non-asset type!");
         }
     }

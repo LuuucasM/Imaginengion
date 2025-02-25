@@ -31,8 +31,15 @@ pub fn CreateEntity(self: *ECSManager) !u32 {
 }
 
 pub fn DestroyEntity(self: *ECSManager, entityID: u32) !void {
-    try self.mComponentManager.DestroyEntity(entityID);
-    try self.mEntityManager.DestroyEntity(entityID);
+    try self.mEntityManager.SetToDestroy(entityID);
+}
+
+pub fn ProcessDestroyedEntities(self: *ECSManager) !void {
+    for (self.mEntityManager.mIDsToRemove.items) |entity_id| {
+        self.mEntityManager.DestroyEntity(entity_id);
+        try self.mComponentManager.DestroyEntity(entity_id);
+    }
+    self.mEntityManager.mIDsToRemove.clearAndFree();
 }
 
 pub fn GetAllEntities(self: ECSManager) ArraySet(u32) {

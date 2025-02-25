@@ -14,6 +14,8 @@ const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
+const Assets = @import("../Assets/Assets.zig");
+const FileMetaData = Assets.FileMetaData;
 const SceneManager = @import("SceneManager.zig");
 
 pub fn SerializeText(scene_layer: *SceneLayer) !void {
@@ -117,7 +119,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                         .allocated_string => |component_data| component_data,
                         else => @panic("should be a string!!\n"),
                     };
-                    try DeStringify(new_entity, actual_component_type_string, component_data_string);
+                    try DeStringify(new_entity, actual_component_type_string, component_data_string, scanner);
                 }
             }
         }
@@ -219,10 +221,24 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         try std.json.stringify(component, .{}, component_string.writer());
 
         try write_stream.objectField("SpriteRenderComponent");
+
+        try write_stream.beginObject();
+
+        try write_stream.objectField("Component");
         try write_stream.write(component_string.items);
+
+        try write_stream.objectField("Path");
+        if (component.mTexture.mID != std.math.maxInt(u32)) {
+            const asset_meta_data = try component.mTexture.GetAsset(FileMetaData);
+            try write_stream.write(asset_meta_data.mAbsPath);
+        } else {
+            try write_stream.write("No Texture");
+        }
+
+        try write_stream.endObject();
     }
 }
-fn DeStringify(entity: Entity, component_type_string: []const u8, component_string: []const u8) !void {
+fn DeStringify(entity: Entity, component_type_string: []const u8, component_string: []const u8, scanner: std.json.Scanner) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -253,8 +269,18 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
     } else if (std.mem.eql(u8, component_type_string, "SpriteRenderComponent")) {
         const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
-        const sprite_component = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
-        sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
+        if (new_component_parsed.value.mTexture.mID != std.math.maxInt(u32)) {
+            const path_object_field_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const path_string = switch (path_object_field_token) {
+                .string => |path| path,
+                .allocated_string => |path| path,
+                else => @panic("should be path string!\n"),
+            };
+            new_component_parsed.value.mTexture = AssetManager.GetAssetHandleRef(path_string);
+        } else {
+            new_component_parsed.value.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
+        }
+        _ = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
     }
 }
 

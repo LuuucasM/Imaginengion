@@ -126,8 +126,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     ImGui.End();
     //----------Imgui end------------------
 
-    //Finally Process window events
+    //Process window events
     SystemEventManager.ProcessEvents(.EC_Window);
+
+    //handle deleted objects this frame
+    self.mSceneManager.mECSManager.ProcessDestroyedEntities();
 
     //end of frame resets
     SystemEventManager.EventsReset();
