@@ -95,20 +95,11 @@ pub fn OnUpdate() !void {
             continue;
         }
         //then check if the asset path is still valid
-        const file = std.fs.cwd().openFile(file_data.mAbsPath, .{}) catch |err| {
-            if (err == error.FileNotFound) {
-                MarkAssetToDelete(entity_id);
-                continue;
-            } else {
-                return err;
-            }
-        };
-        defer file.close();
+        if (try GetFileIfExists(file_data.mAbsPath, entity_id)) |file| {
+            defer file.close();
 
-        //then check if the asset needs to be updated
-        const fstats = try file.stat();
-        if (file_data.mLastModified != fstats.mtime) {
-            try UpdateAsset(entity_id, file, fstats);
+            //check to see if the file needs to be updated
+            CheckLastModified(file, file_data.mLastModified, entity_id);
         }
     }
 
@@ -117,6 +108,24 @@ pub fn OnUpdate() !void {
 
 pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
     return try AssetM.mAssetECS.GetGroup(query, allocator);
+}
+
+fn GetFileIfExists(path: []const u8, entity_id: u32) !?std.fs.File {
+    return std.fs.cwd().openFile(path, .{}) catch |err| {
+        if (err == error.FileNotFound) {
+            MarkAssetToDelete(entity_id);
+            return null;
+        } else {
+            return err;
+        }
+    };
+}
+
+fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: u32) void {
+    const fstats = try file.stat();
+    if (last_modified != fstats.mtime) {
+        try UpdateAsset(entity_id, file, fstats);
+    }
 }
 
 fn ComputePathHash(path: []const u8) u64 {

@@ -1,4 +1,11 @@
 const Entity = @import("IM").Entity;
+const ScriptFuncDef = @import("IM").ScriptFuncDef;
+
+const ScriptMask: u16 = ScriptFuncDef.None;
+
+pub export fn GetScriptMask() u16 {
+    return ScriptMask;
+}
 
 //pub export fn PreInputUpdate(entity: Entity) void {
 //    //your code goes here
