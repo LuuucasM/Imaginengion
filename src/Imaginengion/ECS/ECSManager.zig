@@ -36,7 +36,7 @@ pub fn DestroyEntity(self: *ECSManager, entityID: u32) !void {
 
 pub fn ProcessDestroyedEntities(self: *ECSManager) !void {
     for (self.mEntityManager.mIDsToRemove.items) |entity_id| {
-        self.mEntityManager.DestroyEntity(entity_id);
+        try self.mEntityManager.DestroyEntity(entity_id);
         try self.mComponentManager.DestroyEntity(entity_id);
     }
     self.mEntityManager.mIDsToRemove.clearAndFree();

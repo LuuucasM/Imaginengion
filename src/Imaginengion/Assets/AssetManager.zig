@@ -99,11 +99,11 @@ pub fn OnUpdate() !void {
             defer file.close();
 
             //check to see if the file needs to be updated
-            CheckLastModified(file, file_data.mLastModified, entity_id);
+            try CheckLastModified(file, file_data.mLastModified, entity_id);
         }
     }
 
-    AssetM.mAssetECS.ProcessDestroyedEntities();
+    try AssetM.mAssetECS.ProcessDestroyedEntities();
 }
 
 pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
@@ -121,7 +121,7 @@ fn GetFileIfExists(path: []const u8, entity_id: u32) !?std.fs.File {
     };
 }
 
-fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: u32) void {
+fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: u32) !void {
     const fstats = try file.stat();
     if (last_modified != fstats.mtime) {
         try UpdateAsset(entity_id, file, fstats);

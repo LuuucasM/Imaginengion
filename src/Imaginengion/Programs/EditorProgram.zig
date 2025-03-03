@@ -130,7 +130,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     SystemEventManager.ProcessEvents(.EC_Window);
 
     //handle deleted objects this frame
-    self.mSceneManager.mECSManager.ProcessDestroyedEntities();
+    try self.mSceneManager.mECSManager.ProcessDestroyedEntities();
 
     //end of frame resets
     SystemEventManager.EventsReset();

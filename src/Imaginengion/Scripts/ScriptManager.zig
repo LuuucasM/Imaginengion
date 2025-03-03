@@ -49,8 +49,8 @@ pub fn RunScript(self: ScriptManager, script_tag: type) !void {
         if (self.mECSManager.HasComponent(CollisionScript, entity_id)) {
             const entity_script = self.mECSManager.GetComponent(CollisionScript, entity_id);
             std.debug.print("type name in run script: {s}\n", .{@typeName(script_tag)});
-            if (entity_script.mScript.lookup(fn (Entity) void, @typeName(script_tag))) |func| {
-                @call(.auto, func, .{entity_script.mEntity});
+            if (entity_script.mScript.lookup(fn (Entity, Entity) void, @typeName(script_tag))) |func| {
+                @call(.auto, func, .{ entity_script.mEntity1, entity_script.mEntity2 });
             }
         }
         if (self.mECSManager.HasComponent(AnimationScript, entity_id)) {

@@ -21,7 +21,6 @@ pub fn OnImguiRender(self: ScriptsPanel) void {
 
     if (self.mSelectedEntity) |entity| {
         _ = entity;
-        //entity.ScriptsImguiRender();
     }
 }
 

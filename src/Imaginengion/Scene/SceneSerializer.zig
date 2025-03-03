@@ -119,7 +119,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
                         .allocated_string => |component_data| component_data,
                         else => @panic("should be a string!!\n"),
                     };
-                    try DeStringify(new_entity, actual_component_type_string, component_data_string, scanner);
+                    try DeStringify(new_entity, actual_component_type_string, component_data_string, &scanner);
                 }
             }
         }
@@ -238,7 +238,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         try write_stream.endObject();
     }
 }
-fn DeStringify(entity: Entity, component_type_string: []const u8, component_string: []const u8, scanner: std.json.Scanner) !void {
+fn DeStringify(entity: Entity, component_type_string: []const u8, component_string: []const u8, scanner: *std.json.Scanner) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -267,7 +267,7 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
         defer new_component_parsed.deinit();
         _ = try entity.AddComponent(CircleRenderComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, component_type_string, "SpriteRenderComponent")) {
-        const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, allocator, component_string, .{});
+        var new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, allocator, component_string, .{});
         defer new_component_parsed.deinit();
         if (new_component_parsed.value.mTexture.mID != std.math.maxInt(u32)) {
             const path_object_field_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
@@ -276,7 +276,7 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
                 .allocated_string => |path| path,
                 else => @panic("should be path string!\n"),
             };
-            new_component_parsed.value.mTexture = AssetManager.GetAssetHandleRef(path_string);
+            new_component_parsed.value.mTexture = try AssetManager.GetAssetHandleRef(path_string);
         } else {
             new_component_parsed.value.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
         }

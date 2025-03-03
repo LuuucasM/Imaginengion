@@ -47,7 +47,7 @@ pub fn GetAllEntities(self: EntityManager) ArraySet(u32) {
     return self._IDsInUse;
 }
 
-pub fn SetToDestroy(self: *EntityManager, entityID: u32) void {
+pub fn SetToDestroy(self: *EntityManager, entityID: u32) !void {
     std.debug.assert(self._IDsInUse.contains(entityID));
-    self.mIDsToRemove.append(entityID);
+    try self.mIDsToRemove.append(entityID);
 }
