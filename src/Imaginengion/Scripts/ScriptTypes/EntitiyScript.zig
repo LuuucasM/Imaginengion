@@ -1,11 +1,10 @@
+const std = @import("std");
 const Entity = @import("IM").Entity;
-const ScriptFuncDef = @import("IM").ScriptFuncDef;
+const ComponentsList = @import("../ScriptTypes.zig").ComponentsList;
+const EntityScript = @This();
 
-const ScriptMask: u16 = ScriptFuncDef.None;
-
-pub export fn GetScriptMask() u16 {
-    return ScriptMask;
-}
+mEntity: Entity,
+mScript: std.DynLib,
 
 //pub export fn PreInputUpdate(entity: Entity) void {
 //    //your code goes here
@@ -54,3 +53,11 @@ pub export fn GetScriptMask() u16 {
 //pub export fn PostNetworkingUpdate(entity: Entity) void {
 //    //your code goes here
 //}
+
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == EntityScript) {
+            break :blk i;
+        }
+    }
+};
