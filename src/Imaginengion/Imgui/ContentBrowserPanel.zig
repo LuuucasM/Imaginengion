@@ -54,6 +54,21 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     //if we dont have a project directory yet dont try to print stuff
     if (self.mCurrentDirectory.items.len == 0) return;
 
+    //right click function
+    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImguiMouseButton_Right, false) == true) {
+        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImguiPopupFlags_None);
+    }
+    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
+        defer imgui.igEndPopup();
+        if (imgui.igBeginMenu("New Script", true) == true) {
+            if (imgui.igMenuItem_Bool("Entity Script", "", false, true) == true) {
+                //do the make new file promp with PlatformUtils
+                //then copy the default Entity Script to the location with the name
+                //from the PlatformUtil query
+            }
+        }
+    }
+
     //calculate column stuff
     const padding: f32 = 8.0;
     const thumbnail_size: f32 = 70.0;
