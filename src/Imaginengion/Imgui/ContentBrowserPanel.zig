@@ -7,7 +7,9 @@ const OpenProjectEvent = ImguiEvents.OpenProjectEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
-const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const Assets = @import("../Assets/Assets.zig");
+const Texture2D = Assets.Texture2D;
+const Script = Assets.Script;
 
 const MAX_PATH_LEN = 260;
 
@@ -16,6 +18,7 @@ mDirTextureHandle: AssetHandle,
 mPngTextureHandle: AssetHandle,
 mBackArrowTextureHandle: AssetHandle,
 mSceneTextureHandle: AssetHandle,
+mScriptTextureHandle: AssetHandle,
 mProjectDirectory: std.ArrayList(u8),
 mCurrentDirectory: std.ArrayList(u8),
 mProjectFile: ?std.fs.File = null,
@@ -27,6 +30,7 @@ pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
         .mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png"),
         .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png"),
         .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png"),
+        .mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png"),
         .mProjectDirectory = std.ArrayList(u8).init(engine_allocator),
         .mCurrentDirectory = std.ArrayList(u8).init(engine_allocator),
         .mProjectFile = null,
@@ -38,6 +42,7 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
     AssetManager.ReleaseAssetHandleRef(self.mPngTextureHandle.mID);
     AssetManager.ReleaseAssetHandleRef(self.mBackArrowTextureHandle.mID);
     AssetManager.ReleaseAssetHandleRef(self.mSceneTextureHandle.mID);
+    AssetManager.ReleaseAssetHandleRef(self.mScriptTextureHandle);
     self.mProjectDirectory.deinit();
     self.mCurrentDirectory.deinit();
     if (self.mProjectFile != null) {
@@ -62,9 +67,10 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
         defer imgui.igEndPopup();
         if (imgui.igBeginMenu("New Script", true) == true) {
             if (imgui.igMenuItem_Bool("Entity Script", "", false, true) == true) {
-                //do the make new file promp with PlatformUtils
-                //then copy the default Entity Script to the location with the name
-                //from the PlatformUtil query
+                var buffer: [260]u8 = undefined;
+                var fba = std.heap.FixedBufferAllocator.init(&buffer);
+                const dest_path = try std.fs.path.join(fba.allocator(), .{ self.mCurrentDirectory.items, "NewEntityScript.zig" });
+                std.fs.copyFileAbsolute(std.fs.cwd().makePath("src/assets/Imaginengion/Scripts/ScripTypes/EntityScript.zig"), dest_path, .{});
             }
         }
     }
@@ -128,6 +134,8 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             icon_ptr = try self.mPngTextureHandle.GetAsset(Texture2D);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             icon_ptr = try self.mSceneTextureHandle.GetAsset(Texture2D);
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
+            icon_ptr = try self.mScriptTextureHandle.GetAsset(Script);
         }
         if (icon_ptr) |texture| {
             var name_buf: [260]u8 = undefined;
@@ -156,6 +164,8 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
                     _ = imgui.igSetDragDropPayload("IMSCLoad", full_path.ptr, full_path.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
                     _ = imgui.igSetDragDropPayload("PNGLoad", full_path.ptr, full_path.len, 0);
+                } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
+                    _ = imgui.igSetDragDropPayload("ScriptPayload", full_path.ptr, full_path.len, 0);
                 }
             }
             if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
