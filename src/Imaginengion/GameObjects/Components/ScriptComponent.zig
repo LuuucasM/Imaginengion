@@ -4,6 +4,8 @@ const ScriptComponent = @This();
 
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
+const EditorWindow = @import("../../Imgui/EditorWindow.zig");
+
 mFirst: u32 = std.math.maxInt(u32),
 mPrev: u32 = std.math.maxInt(u32),
 mNext: u32 = std.math.maxInt(u32),
@@ -17,3 +19,21 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn GetEditorWindow(self: *ScriptComponent) EditorWindow {
+    return EditorWindow.Init(self);
+}
+
+pub fn GetName(self: ScriptComponent) []const u8 {
+    _ = self;
+    return "ScriptComponent";
+}
+
+pub fn GetInd(self: ScriptComponent) u32 {
+    _ = self;
+    return @intCast(Ind);
+}
+
+pub fn EditorRender(self: *ScriptComponent) !void {
+    self.mScriptHandle.GetAsset(ScriptComponent);
+}

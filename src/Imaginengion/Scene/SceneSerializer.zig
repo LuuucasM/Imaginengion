@@ -12,6 +12,7 @@ const NameComponent = Components.NameComponent;
 const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
+const ScriptComponent = Components.ScriptComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const Assets = @import("../Assets/Assets.zig");
@@ -229,6 +230,35 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
 
         try write_stream.objectField("Path");
         if (component.mTexture.mID != std.math.maxInt(u32)) {
+            const asset_meta_data = try component.mTexture.GetAsset(FileMetaData);
+            try write_stream.write(asset_meta_data.mAbsPath);
+        } else {
+            try write_stream.write("No Texture");
+        }
+
+        try write_stream.endObject();
+    }
+    if (entity.HasComponent(ScriptComponent) == true) {
+        const component = entity.GetComponent(ScriptComponent);
+        var ecs = entity.mSceneLayerRef.mECSManagerRef;
+
+        var buffer: [260]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+
+        var component_string = std.ArrayList(u8).init(fba.allocator());
+        try std.json.stringify(component, .{}, component_string.writer());
+
+        try write_stream.objectField("ScriptComponent");
+
+        try write_stream.beginObject();
+
+        try write_stream.objectField("Component");
+        try write_stream.write(component_string.items);
+
+        var iter = ecs.GetComponent(ScriptComponent, component.mFirst);
+
+        try write_stream.objectField("Path");
+        if (component.m != std.math.maxInt(u32)) {
             const asset_meta_data = try component.mTexture.GetAsset(FileMetaData);
             try write_stream.write(asset_meta_data.mAbsPath);
         } else {

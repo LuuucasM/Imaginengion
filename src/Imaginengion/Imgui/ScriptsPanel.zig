@@ -75,8 +75,16 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     }
 
     if (self.mSelectedEntity) |entity| {
-        _ = entity;
-        //iterate all of the entities scripts and display them to the panel using the same method that i use for components
+        if (entity.HasComponent(ScriptComponent)) {
+            var ecs = entity.mSceneLayerRef.mECSManagerRef;
+            var iter = entity.GetComponent(ScriptComponent);
+            iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
+            iter.EditorRender();
+            while (iter.mNext != std.math.maxInt(u32)) {
+                iter = ecs.GetComponent(ScriptComponent, iter.mNext);
+                iter.EditorRender();
+            }
+        }
     }
 }
 
