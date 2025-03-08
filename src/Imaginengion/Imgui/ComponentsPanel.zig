@@ -142,7 +142,7 @@ fn AddComponentPopupMenu(entity: Entity) !void {
     if (entity.HasComponent(SpriteRenderComponent) == false and entity.HasComponent(CircleRenderComponent) == false) {
         if (imgui.igMenuItem_Bool("SpriteRenderComponent", "", false, true) == true) {
             const new_sprite_component = try entity.AddComponent(SpriteRenderComponent, null);
-            new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png");
+            new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Rel);
             imgui.igCloseCurrentPopup();
         }
     }

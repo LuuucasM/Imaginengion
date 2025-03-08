@@ -13,6 +13,11 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const AssetManager = @This();
 
+const PathType = enum {
+    Rel,
+    Abs,
+};
+
 const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
@@ -46,10 +51,23 @@ pub fn Deinit() !void {
     AssetM.mAssetPathToID.deinit();
 }
 
-pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
-    std.debug.assert(abs_path.len != 0);
+pub fn GetAssetHandleRef(path: []const u8, path_type: PathType) !AssetHandle {
+    std.debug.assert(path.len != 0);
+    var buffer: [260 * 2]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
 
-    const path_hash = ComputePathHash(abs_path);
+    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+
+    const file_path = blk: {
+        if (path_type == .Rel) {
+            break :blk try std.fs.path.join(allocator, .{ cwd, path });
+        } else {
+            break :blk path;
+        }
+    };
+
+    const path_hash = ComputePathHash(file_path);
 
     if (AssetM.mAssetPathToID.get(path_hash)) |entity_id| {
         AssetM.mAssetECS.GetComponent(AssetMetaData, entity_id).mRefs += 1;
@@ -57,7 +75,7 @@ pub fn GetAssetHandleRef(abs_path: []const u8) !AssetHandle {
             .mID = entity_id,
         };
     } else {
-        const asset_handle = try CreateAsset(abs_path);
+        const asset_handle = try CreateAsset(file_path);
         AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).mRefs += 1;
         try AssetM.mAssetPathToID.put(path_hash, asset_handle.mID);
         return asset_handle;

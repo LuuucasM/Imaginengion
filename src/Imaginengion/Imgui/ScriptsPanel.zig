@@ -28,12 +28,48 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                //first check if it has a script component already, if so then iterate to end of linked list and then add
-                //else add a new script component
-                const new_script_handle = try AssetManager.GetAssetHandleRef(path);
-                //entity.AddComponent(ScriptComponent, )
-                _ = entity;
-                _ = new_script_handle;
+                var ecs = entity.mSceneLayerRef.mECSManagerRef;
+
+                const new_script_handle = try AssetManager.GetAssetHandleRef(path, .Abs);
+                const new_script_entity = try ecs.CreateEntity();
+                if (entity.HasComponent(ScriptComponent)) {
+                    var iter_id = entity.GetComponent(ScriptComponent).mFirst;
+                    var iter = ecs.GetComponent(ScriptComponent, iter_id);
+                    while (iter.mNext != std.math.maxInt(u32)) {
+                        iter_id = iter.mNext;
+                        iter = ecs.GetComponent(ScriptComponent, iter.mNext);
+                    }
+
+                    const new_script_component = ScriptComponent{
+                        .mFirst = iter.mFirst,
+                        .mNext = std.math.maxInt(u32),
+                        .mParent = iter.mParent,
+                        .mPrev = iter_id,
+                        .mScriptHandle = new_script_handle,
+                    };
+                    ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
+
+                    iter.mNext = new_script_entity;
+                }
+                {
+                    const entity_script_comp_new = ScriptComponent{
+                        .mFirst = new_script_entity,
+                        .mNext = std.math.maxInt(u32),
+                        .mParent = entity.mEntityID,
+                        .mPrev = std.math.maxInt(u32),
+                        .mScriptHandle = .{ .mID = std.math.maxInt(u32) },
+                    };
+                    entity.AddComponent(ScriptComponent, entity_script_comp_new);
+
+                    const new_script_component = ScriptComponent{
+                        .mFirst = new_script_entity,
+                        .mNext = std.math.maxInt(u32),
+                        .mParent = entity.mEntityID,
+                        .mPrev = std.math.maxInt(u32),
+                        .mScriptHandle = new_script_handle,
+                    };
+                    ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
+                }
             }
         }
     }
