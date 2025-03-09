@@ -2,6 +2,9 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const ScriptComponent = @This();
 
+const Assets = @import("../../Assets/Assets.zig");
+const Script = Assets.Script;
+
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
@@ -35,5 +38,5 @@ pub fn GetInd(self: ScriptComponent) u32 {
 }
 
 pub fn EditorRender(self: *ScriptComponent) !void {
-    self.mScriptHandle.GetAsset(ScriptComponent);
+    self.mScriptHandle.GetAsset(Script).EditorRender();
 }

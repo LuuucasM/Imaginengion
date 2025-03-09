@@ -47,7 +47,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         .mPrev = iter_id,
                         .mScriptHandle = new_script_handle,
                     };
-                    ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
+                    _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
 
                     iter.mNext = new_script_entity;
                 }
@@ -59,7 +59,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         .mPrev = std.math.maxInt(u32),
                         .mScriptHandle = .{ .mID = std.math.maxInt(u32) },
                     };
-                    entity.AddComponent(ScriptComponent, entity_script_comp_new);
+                    _ = try entity.AddComponent(ScriptComponent, entity_script_comp_new);
 
                     const new_script_component = ScriptComponent{
                         .mFirst = new_script_entity,
@@ -68,7 +68,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         .mPrev = std.math.maxInt(u32),
                         .mScriptHandle = new_script_handle,
                     };
-                    ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
+                    _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
                 }
             }
         }

@@ -61,7 +61,7 @@ pub fn GetAssetHandleRef(path: []const u8, path_type: PathType) !AssetHandle {
 
     const file_path = blk: {
         if (path_type == .Rel) {
-            break :blk try std.fs.path.join(allocator, .{ cwd, path });
+            break :blk try std.fs.path.join(allocator, &[_][]const u8{ cwd, path });
         } else {
             break :blk path;
         }

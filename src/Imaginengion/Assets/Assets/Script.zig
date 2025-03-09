@@ -2,16 +2,11 @@ const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const Script = @This();
 
-pub const ScriptType = enum {
-    None,
-    EntityScript,
-    CollisionScript,
-};
+const imgui = @import("../../Core/CImports.zig").imgui;
 
-mType: ScriptType = .None,
 mLib: std.DynLib = undefined,
 
-pub fn Init(path: []const u8, script_type: ScriptType) !Script {
+pub fn Init(path: []const u8) !Script {
     var buffer: [260 * 2]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
@@ -20,12 +15,11 @@ pub fn Init(path: []const u8, script_type: ScriptType) !Script {
     const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ cwd_dir_path, path });
 
     return Script{
-        .mLib = std.DynLib.open(abs_path),
-        .mType = script_type,
+        .mLib = try std.DynLib.open(abs_path),
     };
 }
 
-pub fn Deinit(self: Script) void {
+pub fn Deinit(self: *Script) void {
     self.mLib.close();
 }
 
@@ -36,3 +30,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn EditorRender(self: *Script) !void {
+    _ = self;
+    imgui.igText("Nothing for now!", "");
+}

@@ -9,7 +9,6 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
-const Script = Assets.Script;
 
 const MAX_PATH_LEN = 260;
 
@@ -60,17 +59,19 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     if (self.mCurrentDirectory.items.len == 0) return;
 
     //right click function
-    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImguiMouseButton_Right, false) == true) {
-        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImguiPopupFlags_None);
+    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
+        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igBeginMenu("New Script", true) == true) {
             if (imgui.igMenuItem_Bool("Entity Script", "", false, true) == true) {
-                var buffer: [260]u8 = undefined;
+                var buffer: [260 * 3]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const dest_path = try std.fs.path.join(fba.allocator(), .{ self.mCurrentDirectory.items, "NewEntityScript.zig" });
-                std.fs.copyFileAbsolute(std.fs.cwd().makePath("src/assets/Imaginengion/Scripts/ScripTypes/EntityScript.zig"), dest_path, .{});
+                const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
+                const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/assets/Imaginengion/Scripts/ScripTypes/EntityScript.zig" });
+                const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewEntityScript.zig" });
+                try std.fs.copyFileAbsolute(source_path, dest_path, .{});
             }
         }
     }
@@ -135,7 +136,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             icon_ptr = try self.mSceneTextureHandle.GetAsset(Texture2D);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-            icon_ptr = try self.mScriptTextureHandle.GetAsset(Script);
+            icon_ptr = try self.mScriptTextureHandle.GetAsset(Texture2D);
         }
         if (icon_ptr) |texture| {
             var name_buf: [260]u8 = undefined;

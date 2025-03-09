@@ -107,7 +107,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
 
     try self._ComponentsPanel.OnImguiRender();
-    self._ScriptsPanel.OnImguiRender();
+    try self._ScriptsPanel.OnImguiRender();
     try self._CSEditorPanel.OnImguiRender();
 
     try self._ToolbarPanel.OnImguiRender();

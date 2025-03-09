@@ -12,12 +12,13 @@ pub fn GetAsset(self: *AssetHandle, comptime component_type: type) !*component_t
         const FileMetaData = Assets.FileMetaData;
         const IDComponent = Assets.IDComponent;
         const Texture2D = Assets.Texture2D;
+        const Script = Assets.Script;
 
         if (component_type == AssetMetaData) {
-            @compileError("Cannot call AssetHandle.GetAsset with AssetMetaData or FileMetaData");
+            @compileError("Cannot call AssetHandle.GetAsset with AssetMetaData\n");
         }
-        if (component_type != Texture2D and component_type != IDComponent and component_type != FileMetaData) {
-            @compileError("Cannot call AssetHandle.GetAsset with a non-asset type!");
+        if (component_type != Texture2D and component_type != IDComponent and component_type != FileMetaData and component_type != Script) {
+            @compileError("Cannot call AssetHandle.GetAsset with a non-asset type!\n");
         }
     }
     return try AssetManager.GetAsset(component_type, self.mID);
