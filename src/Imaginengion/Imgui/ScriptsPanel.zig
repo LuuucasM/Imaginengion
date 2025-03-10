@@ -79,10 +79,10 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             var ecs = entity.mSceneLayerRef.mECSManagerRef;
             var iter = entity.GetComponent(ScriptComponent);
             iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
-            iter.EditorRender();
+            try iter.EditorRender();
             while (iter.mNext != std.math.maxInt(u32)) {
                 iter = ecs.GetComponent(ScriptComponent, iter.mNext);
-                iter.EditorRender();
+                try iter.EditorRender();
             }
         }
     }

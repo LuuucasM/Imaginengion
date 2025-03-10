@@ -61,7 +61,7 @@ pub fn EditorRender(self: *SpriteRenderComponent) !void {
             if (self.mTexture.mID != std.math.maxInt(u32)) {
                 AssetM.ReleaseAssetHandleRef(self.mTexture.mID);
             }
-            self.mTexture = try AssetM.GetAssetHandleRef(path, .Rel);
+            self.mTexture = try AssetM.GetAssetHandleRef(path, .Abs);
         }
     }
 }

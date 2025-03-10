@@ -41,7 +41,7 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
     AssetManager.ReleaseAssetHandleRef(self.mPngTextureHandle.mID);
     AssetManager.ReleaseAssetHandleRef(self.mBackArrowTextureHandle.mID);
     AssetManager.ReleaseAssetHandleRef(self.mSceneTextureHandle.mID);
-    AssetManager.ReleaseAssetHandleRef(self.mScriptTextureHandle);
+    AssetManager.ReleaseAssetHandleRef(self.mScriptTextureHandle.mID);
     self.mProjectDirectory.deinit();
     self.mCurrentDirectory.deinit();
     if (self.mProjectFile != null) {

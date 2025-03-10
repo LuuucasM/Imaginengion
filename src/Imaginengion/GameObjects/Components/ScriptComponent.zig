@@ -38,5 +38,6 @@ pub fn GetInd(self: ScriptComponent) u32 {
 }
 
 pub fn EditorRender(self: *ScriptComponent) !void {
-    self.mScriptHandle.GetAsset(Script).EditorRender();
+    const script = try self.mScriptHandle.GetAsset(Script);
+    try script.EditorRender();
 }
