@@ -310,7 +310,7 @@ fn DeStringify(entity: Entity, component_type_string: []const u8, component_stri
                 .allocated_string => |path| path,
                 else => @panic("should be path string!\n"),
             };
-            new_component_parsed.value.mTexture = try AssetManager.GetAssetHandleRef(path_string, .Abs);
+            new_component_parsed.value.mTexture = try AssetManager.GetAssetHandleRef(path_string, .Prj);
         } else {
             new_component_parsed.value.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Rel);
         }

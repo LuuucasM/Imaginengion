@@ -30,7 +30,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             if (self.mSelectedEntity) |entity| {
                 var ecs = entity.mSceneLayerRef.mECSManagerRef;
 
-                const new_script_handle = try AssetManager.GetAssetHandleRef(path, .Abs);
+                const new_script_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
                 const new_script_entity = try ecs.CreateEntity();
                 if (entity.HasComponent(ScriptComponent)) {
                     var iter_id = entity.GetComponent(ScriptComponent).mFirst;
