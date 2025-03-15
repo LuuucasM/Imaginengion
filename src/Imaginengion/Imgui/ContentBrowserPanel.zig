@@ -158,13 +158,15 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             );
             if (entry.kind == .file and imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                 defer imgui.igEndDragDropSource();
-                var buffer: [MAX_PATH_LEN]u8 = undefined;
+                var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const full_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
+                const allocator = fba.allocator();
+                const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
+
                 if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
                     _ = imgui.igSetDragDropPayload("IMSCLoad", full_path.ptr, full_path.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-                    _ = imgui.igSetDragDropPayload("PNGLoad", full_path.ptr, full_path.len, 0);
+                    _ = imgui.igSetDragDropPayload("PNGLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
                     _ = imgui.igSetDragDropPayload("ScriptPayload", full_path.ptr, full_path.len, 0);
                 }

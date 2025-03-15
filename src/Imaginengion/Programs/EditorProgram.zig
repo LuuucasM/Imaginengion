@@ -163,11 +163,13 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_NewProjectEvent => |e| {
             if (e.Path.len > 0) {
                 try self._ContentBrowserPanel.OnNewProjectEvent(e.Path);
+                try AssetManager.OnNewProjectEvent(e.Path);
             }
         },
         .ET_OpenProjectEvent => |e| {
             if (e.Path.len > 0) {
                 try self._ContentBrowserPanel.OnOpenProjectEvent(e.Path);
+                try AssetManager.OnOpenProjectEvent(e.Path);
             }
         },
         .ET_NewSceneEvent => |e| {

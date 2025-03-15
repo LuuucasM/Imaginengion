@@ -59,6 +59,12 @@ pub fn Deinit(self: *ComponentManager) void {
     self.mEntitySkipField.deinit();
 }
 
+pub fn clearAndFree(self: *ComponentManager) void {
+    for (self.mComponentsArrays.items) |component_array| {
+        component_array.clearAndFree();
+    }
+}
+
 pub fn CreateEntity(self: *ComponentManager, entityID: u32) !void {
     std.debug.assert(!self.mEntitySkipField.hasSparse(entityID));
     const dense_ind = self.mEntitySkipField.add(entityID);

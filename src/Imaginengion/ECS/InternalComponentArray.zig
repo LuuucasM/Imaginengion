@@ -71,5 +71,8 @@ pub fn ComponentArray(comptime componentType: type) type {
             try entity_set.appendSlice(self.mComponents.dense_to_sparse[0..self.mComponents.dense_count]);
             return entity_set;
         }
+        pub fn clearAndFree(self: *Self) void {
+            self.mComponents.clear();
+        }
     };
 }

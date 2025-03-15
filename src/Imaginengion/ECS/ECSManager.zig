@@ -23,6 +23,11 @@ pub fn Deinit(self: *ECSManager) void {
     self.mComponentManager.Deinit();
 }
 
+pub fn clearAndFree(self: *ECSManager) void {
+    self.mEntityManager.clearAndFree();
+    self.mComponentManager.clearAndFree();
+}
+
 //---------------EntityManager--------------
 pub fn CreateEntity(self: *ECSManager) !u32 {
     const entityID = try self.mEntityManager.CreateEntity();

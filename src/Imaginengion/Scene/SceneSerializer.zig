@@ -88,8 +88,8 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
             else => @panic("This shouldnt happen!"),
         };
 
-        const actual_value = allocator.dupe(u8, value);
-        Destringify(allocator, actual_value, &scanner, scene_layer, &entity);
+        const actual_value = try allocator.dupe(u8, value);
+        try Destringify(allocator, actual_value, &scanner, scene_layer, &entity);
     }
 }
 
@@ -172,10 +172,12 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         try write_stream.write(component_string.items);
         component_string.clearAndFree();
 
-        try write_stream.objectField("Path");
+        try write_stream.objectField("AssetFileData");
         if (component.mTexture.mID != std.math.maxInt(u32)) {
             const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
-            try write_stream.write(asset_file_data.mAbsPath);
+            try std.json.stringify(asset_file_data, .{}, component_string.writer());
+            try write_stream.write(component_string.items);
+            component_string.clearAndFree();
         } else {
             try write_stream.write("No Texture");
         }
@@ -202,7 +204,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         };
         scene_layer.mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
     } else if (std.mem.eql(u8, value, "Entity")) {
-        current_entity.* = scene_layer.CreateBlankEntity();
+        current_entity.* = try scene_layer.CreateBlankEntity();
     } else if (std.mem.eql(u8, value, "IDComponent")) {
         const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const component_data_string = switch (component_data_token) {
@@ -293,11 +295,11 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
 
         //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
         if (sprite_render_component.mTexture.mID != std.math.maxInt(u32)) {
-            const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, component_data_string, .{});
+            const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
             defer file_data_component.deinit();
             const file_data = file_data_component.value;
 
-            sprite_render_component.mTexture = AssetManager.GetAssetHandleRef(file_data.mAbsPath, file_data.mPathType);
+            sprite_render_component.mTexture = try AssetManager.GetAssetHandleRef(file_data.mRelPath, file_data.mPathType);
         }
     }
 }

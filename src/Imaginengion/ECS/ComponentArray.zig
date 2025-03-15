@@ -7,6 +7,7 @@ const VTab = struct {
     DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
     HasComponent: *const fn (*anyopaque, u32) bool,
     RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
+    clearAndFree: *const fn (*anyopaque) void,
 };
 
 mPtr: *anyopaque,
@@ -34,6 +35,10 @@ pub fn Init(allocator: std.mem.Allocator, comptime component_type: type) !Compon
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             try self.RemoveComponent(entityID);
         }
+        fn clearAndFree(ptr: *anyopaque) void {
+            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            self.clearAndFree();
+        }
     };
 
     const new_component_array = try allocator.create(internal_type);
@@ -46,6 +51,7 @@ pub fn Init(allocator: std.mem.Allocator, comptime component_type: type) !Compon
             .DuplicateEntity = impl.DuplicateEntity,
             .HasComponent = impl.HasComponent,
             .RemoveComponent = impl.RemoveComponent,
+            .clearAndFree = impl.clearAndFree,
         },
         .mAllocator = allocator,
     };
@@ -62,4 +68,7 @@ pub fn RemoveComponent(self: ComponentArray, entityID: u32) anyerror!void {
 }
 pub fn HasComponent(self: ComponentArray, entityID: u32) bool {
     return self.mVtable.HasComponent(self.mPtr, entityID);
+}
+pub fn clearAndFree(self: ComponentArray) void {
+    self.mVtable.clearAndFree(self.mPtr);
 }

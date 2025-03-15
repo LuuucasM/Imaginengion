@@ -25,6 +25,12 @@ pub fn Deinit(self: *EntityManager) void {
     self.mIDsToRemove.deinit();
 }
 
+pub fn clearAndFree(self: *EntityManager) void {
+    self._IDsInUse.clearAndFree();
+    self._IDsRemoved.clearAndFree();
+    self.mIDsToRemove.clearAndFree();
+}
+
 pub fn CreateEntity(self: *EntityManager) !u32 {
     if (self._IDsRemoved.items.len != 0) {
         const new_id = self._IDsRemoved.pop().?;
