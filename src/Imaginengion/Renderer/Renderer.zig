@@ -233,6 +233,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: *ECSManager) !v
             sprite_component.mColor,
             @floatFromInt(RenderM.mTexturesMap.get(sprite_component.mTexture.mID).?),
             sprite_component.mTilingFactor,
+            sprite_component.mTexCoords,
         );
 
         RenderM.mStats.mTriCount += 2;

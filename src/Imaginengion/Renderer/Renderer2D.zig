@@ -42,13 +42,6 @@ const RectVertexPositions = Mat4f32{
     Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
 };
 
-const RectTexCoordPositions = [4]Vec2f32{
-    Vec2f32{ 0.0, 0.0 },
-    Vec2f32{ 1.0, 0.0 },
-    Vec2f32{ 1.0, 1.0 },
-    Vec2f32{ 0.0, 1.0 },
-};
-
 mAllocator: std.mem.Allocator,
 
 mSpriteVertexArray: VertexArray,
@@ -188,13 +181,13 @@ pub fn Deinit(self: *Renderer2D) void {
     self.mAllocator.free(self.mELineVertexBufferBase);
 }
 
-pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32) void {
+pub fn DrawSprite(self: *Renderer2D, transform: Mat4f32, color: Vec4f32, texture_index: f32, tiling_factor: f32, tex_coords: [4]Vec2f32) void {
     var i: usize = 0;
     const positions = LinAlg.Mat4MulMat4(transform, RectVertexPositions);
     while (i < 4) : (i += 1) {
         self.mSpriteVertexBufferPtr.*.Position = [3]f32{ positions[i][0], positions[i][1], positions[i][2] };
         self.mSpriteVertexBufferPtr.*.Color = [4]f32{ color[0], color[1], color[2], color[3] };
-        self.mSpriteVertexBufferPtr.*.TexCoord = [2]f32{ RectTexCoordPositions[i][0], RectTexCoordPositions[i][1] };
+        self.mSpriteVertexBufferPtr.*.TexCoord = [2]f32{ tex_coords[i][0], tex_coords[i][1] };
         self.mSpriteVertexBufferPtr.*.TexIndex = texture_index;
         self.mSpriteVertexBufferPtr.*.TilingFactor = tiling_factor;
         self.mSpriteVertexCount += 1;

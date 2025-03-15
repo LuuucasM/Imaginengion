@@ -25,11 +25,11 @@ mProjectFile: ?std.fs.File = null,
 pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
     return ContentBrowserPanel{
         .mIsVisible = true,
-        .mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png", .Rel),
-        .mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png", .Rel),
-        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Rel),
-        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Rel),
-        .mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Rel),
+        .mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png", .Cwd),
+        .mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png", .Cwd),
+        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Cwd),
+        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Cwd),
+        .mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Cwd),
         .mProjectDirectory = std.ArrayList(u8).init(engine_allocator),
         .mCurrentDirectory = std.ArrayList(u8).init(engine_allocator),
         .mProjectFile = null,
@@ -192,26 +192,10 @@ pub fn OnNewProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
     _ = try self.mProjectDirectory.writer().write(path);
     _ = try self.mCurrentDirectory.writer().write(path);
 
-    var dir = try std.fs.openDirAbsolute(self.mProjectDirectory.items, .{});
-    defer dir.close();
-
-    const file_exists: bool = blk: {
-        dir.access("NewGame.imprj", .{}) catch |err| {
-            if (err == error.FileNotFound) break :blk false;
-            return err;
-        };
-        break :blk true;
-    };
-
     var buffer: [MAX_PATH_LEN]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const file_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mProjectDirectory.items, "NewGame.imprj" });
-
-    if (file_exists == false) {
-        self.mProjectFile = try std.fs.createFileAbsolute(file_path, .{});
-    } else {
-        self.mProjectFile = try std.fs.openFileAbsolute(file_path, .{});
-    }
+    self.mProjectFile = try std.fs.createFileAbsolute(file_path, .{});
 }
 
 pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {

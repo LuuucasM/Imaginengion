@@ -21,8 +21,8 @@ pub fn Init() !ToolbarPanel {
     return ToolbarPanel{
         .mP_Open = true,
         .mState = .Stop,
-        .mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Rel),
-        .mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Rel),
+        .mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Cwd),
+        .mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Cwd),
     };
 }
 

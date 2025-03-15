@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
+const Vec2f32 = @import("../../Math/LinAlg.zig").Vec2f32;
 const AssetM = @import("../../Assets/AssetManager.zig");
 const Texture2D = @import("../../Assets/Assets/Texture2D.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
@@ -14,6 +15,12 @@ mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
 mTexture: AssetHandle = .{ .mID = std.math.maxInt(u32) },
 mTilingFactor: f32 = 1.0,
+mTexCoords: [4]Vec2f32 = [4]Vec2f32{
+    Vec2f32{ 0, 0 },
+    Vec2f32{ 1, 0 },
+    Vec2f32{ 1, 1 },
+    Vec2f32{ 0, 1 },
+},
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

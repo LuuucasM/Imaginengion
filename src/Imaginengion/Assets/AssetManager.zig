@@ -14,7 +14,7 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const AssetManager = @This();
 
 const PathType = enum {
-    Rel,
+    Cwd,
     Prj,
 };
 
@@ -27,12 +27,13 @@ var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 mAssetECS: ECSManager = undefined,
 mAssetPathToID: std.AutoHashMap(u64, u32) = undefined,
-mProjectDirectory: std.ArrayList(u8),
+mProjectDirectory: std.ArrayList(u8) = undefined,
 
 pub fn Init() !void {
     AssetM = AssetManager{
         .mAssetECS = try ECSManager.Init(AssetGPA.allocator(), &AssetsList),
         .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetGPA.allocator()),
+        .mProjectDirectory = std.ArrayList(u8).init(AssetGPA.allocator()),
     };
 }
 
@@ -59,7 +60,7 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
     const allocator = fba.allocator();
 
     const abs_path = blk: {
-        if (path_type == .Rel) {
+        if (path_type == .Cwd) {
             const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
             break :blk try std.fs.path.join(allocator, &[_][]const u8{ cwd, rel_path });
         } else {
