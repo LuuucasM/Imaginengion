@@ -11,3 +11,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn EditorRender(entity_script: CollisionScript) void {
+    _ = entity_script;
+    //your code goes here
+}

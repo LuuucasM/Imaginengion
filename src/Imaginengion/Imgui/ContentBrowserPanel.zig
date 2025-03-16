@@ -55,26 +55,28 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     _ = imgui.igBegin("ContentBrowser", null, 0);
     defer imgui.igEnd();
 
-    //if we dont have a project directory yet dont try to print stuff
-    if (self.mCurrentDirectory.items.len == 0) return;
-
-    //right click function
     if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
         imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igBeginMenu("New Script", true) == true) {
+            defer imgui.igEndMenu();
             if (imgui.igMenuItem_Bool("Entity Script", "", false, true) == true) {
                 var buffer: [260 * 3]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-                const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/assets/Imaginengion/Scripts/ScripTypes/EntityScript.zig" });
+                const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/scripts/EntityScript.zig" });
                 const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewEntityScript.zig" });
                 try std.fs.copyFileAbsolute(source_path, dest_path, .{});
             }
         }
     }
+
+    //if we dont have a project directory yet dont try to print stuff
+    if (self.mCurrentDirectory.items.len == 0) return;
+
+    //right click function
 
     //calculate column stuff
     const padding: f32 = 8.0;
@@ -168,7 +170,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
                     _ = imgui.igSetDragDropPayload("PNGLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-                    _ = imgui.igSetDragDropPayload("ScriptPayload", full_path.ptr, full_path.len, 0);
+                    _ = imgui.igSetDragDropPayload("ScriptPayload", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
                 }
             }
             if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {

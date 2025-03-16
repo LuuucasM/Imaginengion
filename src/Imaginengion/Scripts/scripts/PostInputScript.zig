@@ -8,3 +8,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn EditorRender(entity_script: PostInputScript) void {
+    _ = entity_script;
+    //your code goes here
+}

@@ -21,6 +21,25 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     _ = imgui.igBegin("Scripts", null, 0);
     defer imgui.igEnd();
 
+    var available_region: imgui.ImVec2 = undefined;
+    imgui.igGetContentRegionAvail(&available_region);
+
+    if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
+        defer imgui.igEndChild();
+        if (self.mSelectedEntity) |entity| {
+            if (entity.HasComponent(ScriptComponent)) {
+                var ecs = entity.mSceneLayerRef.mECSManagerRef;
+                var iter = entity.GetComponent(ScriptComponent);
+
+                iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
+                if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
+                while (iter.mNext != std.math.maxInt(u32)) {
+                    iter = ecs.GetComponent(ScriptComponent, iter.mNext);
+                    if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
+                }
+            }
+        }
+    }
     //drag drop target for scripts
     if (imgui.igBeginDragDropTarget() == true) {
         defer imgui.igEndDragDropTarget();
@@ -40,6 +59,8 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         iter = ecs.GetComponent(ScriptComponent, iter.mNext);
                     }
 
+                    iter.mNext = new_script_entity;
+
                     const new_script_component = ScriptComponent{
                         .mFirst = iter.mFirst,
                         .mNext = std.math.maxInt(u32),
@@ -48,19 +69,19 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         .mScriptHandle = new_script_handle,
                     };
                     _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
+                } else {
 
-                    iter.mNext = new_script_entity;
-                }
-                {
-                    const entity_script_comp_new = ScriptComponent{
+                    //add the script component to the entity of interest
+                    const entity_new_script_component = ScriptComponent{
                         .mFirst = new_script_entity,
-                        .mNext = std.math.maxInt(u32),
+                        .mNext = new_script_entity,
                         .mParent = entity.mEntityID,
                         .mPrev = std.math.maxInt(u32),
                         .mScriptHandle = .{ .mID = std.math.maxInt(u32) },
                     };
-                    _ = try entity.AddComponent(ScriptComponent, entity_script_comp_new);
+                    _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
 
+                    //add script component to script entity
                     const new_script_component = ScriptComponent{
                         .mFirst = new_script_entity,
                         .mNext = std.math.maxInt(u32),
@@ -70,19 +91,6 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                     };
                     _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
                 }
-            }
-        }
-    }
-
-    if (self.mSelectedEntity) |entity| {
-        if (entity.HasComponent(ScriptComponent)) {
-            var ecs = entity.mSceneLayerRef.mECSManagerRef;
-            var iter = entity.GetComponent(ScriptComponent);
-            iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
-            try iter.EditorRender();
-            while (iter.mNext != std.math.maxInt(u32)) {
-                iter = ecs.GetComponent(ScriptComponent, iter.mNext);
-                try iter.EditorRender();
             }
         }
     }

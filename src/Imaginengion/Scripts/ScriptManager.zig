@@ -1,5 +1,5 @@
 const std = @import("std");
-const Scripts = @import("ScriptTypes.zig");
+const Scripts = @import("Scripts.zig");
 const ScriptsList = Scripts.ComponentsList;
 const EntityScript = Scripts.EntityScript;
 const AnimationScript = Scripts.AnimationScript;

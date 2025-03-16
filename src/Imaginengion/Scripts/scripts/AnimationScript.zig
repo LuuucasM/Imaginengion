@@ -11,3 +11,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn EditorRender(entity_script: AnimationScript) void {
+    _ = entity_script;
+    //your code goes here
+}

@@ -1,7 +1,7 @@
-pub const AnimationScript = @import("ScriptTypes/AnimationScript.zig");
-pub const CollisionScript = @import("ScriptTypes/CollisionScript.zig");
-pub const EntityScript = @import("ScriptTypes/EntitiyScript.zig");
-pub const PostInputScript = @import("ScriptTypes/PostInputScript.zig");
+pub const AnimationScript = @import("scripts/AnimationScript.zig");
+pub const CollisionScript = @import("scripts/CollisionScript.zig");
+pub const EntityScript = @import("scripts/EntityScript.zig");
+pub const PostInputScript = @import("scripts/PostInputScript.zig");
 
 pub const ComponentsList = [_]type{
     AnimationScript,
