@@ -62,12 +62,12 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
         defer imgui.igEndPopup();
         if (imgui.igBeginMenu("New Script", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("Entity Script", "", false, true) == true) {
+            if (imgui.igMenuItem_Bool("On Key Pressed Script", "", false, true) == true) {
                 var buffer: [260 * 3]u8 = undefined;
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-                const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/scripts/EntityScript.zig" });
-                const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewEntityScript.zig" });
+                const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/OnKeyPressScript.zig" });
+                const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnKeyPressedScript.zig" });
                 try std.fs.copyFileAbsolute(source_path, dest_path, .{});
             }
         }
@@ -75,8 +75,6 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
 
     //if we dont have a project directory yet dont try to print stuff
     if (self.mCurrentDirectory.items.len == 0) return;
-
-    //right click function
 
     //calculate column stuff
     const padding: f32 = 8.0;

@@ -4,6 +4,10 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const ScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
+
+const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
+const OnKeyPressedScriptTag = @import("../GameObjects/Components.zig").OnKeyPressedScriptTag;
+
 const ScriptsPanel = @This();
 
 _P_Open: bool,
@@ -24,6 +28,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     var available_region: imgui.ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&available_region);
 
+    //making a child so that drag drop target will tae the entire available region
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
@@ -48,10 +53,17 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
                 var ecs = entity.mSceneLayerRef.mECSManagerRef;
-
-                const new_script_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
+                var new_script_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
+                const script_asset = try new_script_handle.GetAsset(ScriptAsset);
                 const new_script_entity = try ecs.CreateEntity();
+
+                _ = switch (script_asset.mScriptType) {
+                    .OnKeyPressed => try ecs.AddComponent(OnKeyPressedScriptTag, new_script_entity, null),
+                };
+
                 if (entity.HasComponent(ScriptComponent)) {
+
+                    //entity already has a script so iterate until the end of the linked list
                     var iter_id = entity.GetComponent(ScriptComponent).mFirst;
                     var iter = ecs.GetComponent(ScriptComponent, iter_id);
                     while (iter.mNext != std.math.maxInt(u32)) {
@@ -66,7 +78,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         .mNext = std.math.maxInt(u32),
                         .mParent = iter.mParent,
                         .mPrev = iter_id,
-                        .mScriptHandle = new_script_handle,
+                        .mScriptAssetHandle = new_script_handle,
                     };
                     _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
                 } else {
@@ -75,9 +87,9 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                     const entity_new_script_component = ScriptComponent{
                         .mFirst = new_script_entity,
                         .mNext = new_script_entity,
-                        .mParent = entity.mEntityID,
+                        .mParent = std.math.maxInt(u32),
                         .mPrev = std.math.maxInt(u32),
-                        .mScriptHandle = .{ .mID = std.math.maxInt(u32) },
+                        .mScriptAssetHandle = .{ .mID = std.math.maxInt(u32) },
                     };
                     _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
 
@@ -87,19 +99,12 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                         .mNext = std.math.maxInt(u32),
                         .mParent = entity.mEntityID,
                         .mPrev = std.math.maxInt(u32),
-                        .mScriptHandle = new_script_handle,
+                        .mScriptAssetHandle = new_script_handle,
                     };
                     _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
                 }
             }
         }
-    }
-}
-
-pub fn OnImguiEvent(self: *ScriptsPanel, event: *ImguiEvent) void {
-    switch (event.*) {
-        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
-        else => @panic("This event isnt haneled yet in ScriptsPanel\n"),
     }
 }
 

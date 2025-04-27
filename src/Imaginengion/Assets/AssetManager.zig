@@ -64,7 +64,6 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
             break :blk try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, rel_path });
         }
     };
-
     const path_hash = ComputePathHash(abs_path);
 
     if (AssetM.mAssetPathToID.get(path_hash)) |entity_id| {
@@ -139,12 +138,10 @@ pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.A
 }
 
 pub fn OnNewProjectEvent(path: []const u8) !void {
-    AssetM.mAssetECS.clearAndFree();
-    AssetM.mAssetPathToID.clearAndFree();
-
     if (AssetM.mProjectDirectory.items.len != 0) {
         AssetM.mProjectDirectory.clearAndFree();
     }
+    //note: the path for this function is the path where we are going to make a new .imprj file so we can just use it as is
     _ = try AssetM.mProjectDirectory.writer().write(path);
 }
 
@@ -152,7 +149,7 @@ pub fn OnOpenProjectEvent(path: []const u8) !void {
     if (AssetM.mProjectDirectory.items.len != 0) {
         AssetM.mProjectDirectory.clearAndFree();
     }
-
+    //note: the path for this function is the path of the .imprj file so we have to strip the file from the path before setting it
     const dir = std.fs.path.dirname(path).?;
     _ = try AssetM.mProjectDirectory.writer().write(dir);
 }

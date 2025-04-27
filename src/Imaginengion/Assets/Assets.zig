@@ -2,14 +2,14 @@ pub const AssetMetaData = @import("Assets/AssetMetaData.zig");
 pub const FileMetaData = @import("Assets/FileMetaData.zig");
 pub const IDComponent = @import("Assets/IDComponent.zig");
 pub const Texture2D = @import("Assets/Texture2D.zig");
-pub const Script = @import("Assets/Script.zig");
+pub const ScriptAsset = @import("Assets/ScriptAsset.zig");
 
 pub const AssetsList = [_]type{
     AssetMetaData,
     FileMetaData,
     IDComponent,
     Texture2D,
-    Script,
+    ScriptAsset,
 };
 
 pub const EAssets = enum(usize) {
@@ -17,5 +17,5 @@ pub const EAssets = enum(usize) {
     FileMetaData = FileMetaData.Ind,
     IDComponent = IDComponent.Ind,
     Texture2D = Texture2D.Ind,
-    Script = Script.Ind,
+    Script = ScriptAsset.Ind,
 };
