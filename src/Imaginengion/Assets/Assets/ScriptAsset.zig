@@ -27,7 +27,7 @@ pub fn Init(path: []const u8) !ScriptAsset {
             "zig",
             "build",
             "--build-file",
-            "assets/build_dyn/",
+            "build_dyn.zig",
             file_arg,
         },
         allocator,
@@ -41,13 +41,10 @@ pub fn Init(path: []const u8) !ScriptAsset {
     std.log.debug("child exited with code {}", .{result});
 
     //get the path of the newly create dyn lib and open it
-    const dyn_path = try std.fmt.allocPrint(allocator, "./{s}.dll", .{std.fs.path.basename(abs_path)});
+    const dyn_path = try std.fmt.allocPrint(allocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
 
     var lib = try std.DynLib.open(dyn_path);
     const script_type_func = lib.lookup(*const fn () ScriptType, "GetScriptType").?;
-
-    //we want to clean up and delete it when we are done with it
-    try std.fs.cwd().deleteFile(dyn_path);
 
     return ScriptAsset{
         .mLib = lib,
