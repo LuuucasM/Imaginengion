@@ -6,7 +6,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const ScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
 
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
-const OnKeyPressedScriptTag = @import("../GameObjects/Components.zig").OnKeyPressedScriptTag;
+const OnKeyPressedScript = @import("../GameObjects/Components.zig").OnKeyPressedScript;
 
 const ScriptsPanel = @This();
 
@@ -58,7 +58,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
                 const new_script_entity = try ecs.CreateEntity();
 
                 _ = switch (script_asset.mScriptType) {
-                    .OnKeyPressed => try ecs.AddComponent(OnKeyPressedScriptTag, new_script_entity, null),
+                    .OnKeyPressed => try ecs.AddComponent(OnKeyPressedScript, new_script_entity, null),
                 };
 
                 if (entity.HasComponent(ScriptComponent)) {

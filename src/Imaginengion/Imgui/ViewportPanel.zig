@@ -7,7 +7,10 @@ const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
 const Entity = @import("../GameObjects/Entity.zig");
-const TransformComponent = @import("../GameObjects/Components.zig").TransformComponent;
+const Components = @import("../GameObjects/Components.zig");
+const TransformComponent = Components.TransformComponent;
+const CameraComponent = Components.CameraComponent;
+const SceneManager = @import("../Scene/SceneManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -29,19 +32,33 @@ mP_Open: bool,
 mViewportWidth: usize,
 mViewportHeight: usize,
 mSelectedEntity: ?Entity,
+mSceneManagerRef: *SceneManager,
+mViewportCameraID: u32,
 mGizmoType: GizmoType,
 
-pub fn Init() ViewportPanel {
+pub fn Init(scene_manager_ref: *SceneManager) !ViewportPanel {
+
+    //setup camera for viewport editing
+    const new_viewport_camera = try scene_manager_ref.mECSManager.CreateEntity();
+    const new_transform = TransformComponent{ .Translation = Vec3f32{ 0.0, 0.0, 15.0 } };
+    _ = try scene_manager_ref.mECSManager.AddComponent(TransformComponent, new_viewport_camera, new_transform);
+
+    var new_camera = CameraComponent{};
+    new_camera.SetViewportSize(scene_manager_ref.mViewportWidth, scene_manager_ref.mViewportHeight);
+    _ = try scene_manager_ref.mECSManager.AddComponent(CameraComponent, new_viewport_camera, new_camera);
+
     return ViewportPanel{
         .mP_Open = true,
         .mViewportWidth = 1600,
         .mViewportHeight = 900,
         .mSelectedEntity = null,
+        .mSceneManagerRef = scene_manager_ref,
+        .mViewportCameraID = new_viewport_camera,
         .mGizmoType = .None,
     };
 }
 
-pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, camera_projection_type: ProjectionType, camera_projection: Mat4f32, camera_viewprojection: Mat4f32) !void {
+pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
@@ -106,8 +123,12 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, cam
             imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
             imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
 
-            imgui.ImGuizmo_SetOrthographic(if (camera_projection_type == .Orthographic) true else false);
-            var camera_proj = LinAlg.Mat4ToArray(camera_projection);
+            const camera_component = self.mSceneManagerRef.mECSManager.GetComponent(CameraComponent, self.mViewportCameraID);
+            const camera_transform = self.mSceneManagerRef.mECSManager.GetComponent(TransformComponent, self.mViewportCameraID);
+            const camera_viewprojection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
+
+            imgui.ImGuizmo_SetOrthographic(if (camera_component.mProjectionType == .Orthographic) true else false);
+            var camera_proj = LinAlg.Mat4ToArray(camera_component.mProjection);
             camera_proj[1][1] *= -1;
             var camera_view = LinAlg.Mat4ToArray(camera_viewprojection);
 
@@ -154,9 +175,6 @@ pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
 }
 
 pub fn OnKeyPressedEvent(self: *ViewportPanel, e: KeyPressedEvent) bool {
-    if (e._RepeatCount > 0) {
-        return false;
-    }
     switch (e._KeyCode) {
         .Q => {
             if (imgui.ImGuizmo_IsUsing() == false) {

@@ -1,0 +1,11 @@
+- In Game objects -> Components.zig
+	- Add to components lists
+	- Add to components enum
+- in components panel
+	- add to definitions at the top
+	- add if statement to entityimguirender
+	- add if statement to add componentpopup menu
+- in scene serializer panel
+	- add to type definitions at the top
+	- add if statement to stringify
+	- add if statement to destringify

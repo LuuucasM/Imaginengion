@@ -33,7 +33,7 @@ pub fn Insert(event: SystemEvent) !void {
     }
 }
 
-pub fn ProcessEvents(eventCategory: SystemEventCategory) void {
+pub fn ProcessEvents(eventCategory: SystemEventCategory) !void {
     const array = switch (eventCategory) {
         .EC_Input => EventManager._InputEventPool,
         .EC_Window => EventManager._WindowEventPool,
@@ -41,7 +41,7 @@ pub fn ProcessEvents(eventCategory: SystemEventCategory) void {
     };
 
     for (array.items) |*event| {
-        EventManager._Application.OnEvent(event);
+        try EventManager._Application.OnEvent(event);
     }
 }
 

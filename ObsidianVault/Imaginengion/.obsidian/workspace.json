@@ -13,15 +13,64 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Welcome.md",
+                "file": "NewNote1.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Welcome"
+              "title": "NewNote1"
+            }
+          },
+          {
+            "id": "db05fa421e1d24c4",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Adding new components to engine.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Adding new components to engine"
+            }
+          },
+          {
+            "id": "90119a27e6e91022",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          },
+          {
+            "id": "73272777163bafae",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
+            }
+          },
+          {
+            "id": "175ee7b2478e0ab8",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "General TODO.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "General TODO"
             }
           }
-        ]
+        ],
+        "currentTab": 4
       }
     ],
     "direction": "vertical"
@@ -40,7 +89,7 @@
             "state": {
               "type": "file-explorer",
               "state": {
-                "sortOrder": "alphabetical",
+                "sortOrder": "byModifiedTime",
                 "autoReveal": false
               },
               "icon": "lucide-folder-closed",
@@ -94,7 +143,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Welcome.md",
+                "file": "Second note.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +153,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Welcome"
+              "title": "Backlinks for Second note"
             }
           },
           {
@@ -113,12 +162,12 @@
             "state": {
               "type": "outgoing-link",
               "state": {
-                "file": "Welcome.md",
+                "file": "Second note.md",
                 "linksCollapsed": false,
                 "unlinkedCollapsed": true
               },
               "icon": "links-going-out",
-              "title": "Outgoing links from Welcome"
+              "title": "Outgoing links from Second note"
             }
           },
           {
@@ -142,13 +191,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Welcome.md",
+                "file": "Second note.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of Welcome"
+              "title": "Outline of Second note"
             }
           }
         ]
@@ -168,9 +217,20 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "227b09fd17928a22",
+  "active": "175ee7b2478e0ab8",
   "lastOpenFiles": [
-    "create a link.md",
-    "Welcome.md"
+    "ECS.md",
+    "Scene Manager.md",
+    "Adding new scripts to engine.md",
+    "Adding new components to engine.md",
+    "General TODO.md",
+    "Scene Manager Design philosophy.md",
+    "ECS Design Philosophy.md",
+    "Scene Manager.canvas",
+    "ECS.canvas",
+    "Home.canvas",
+    "2025-04-29.md",
+    "Welcome.md",
+    "create a link.md"
   ]
 }

@@ -26,7 +26,7 @@ pub fn OnUpdate(self: *Program, dt: f64) !void {
     try self._Impl.OnUpdate(dt);
 }
 
-pub fn OnKeyPressedEvent(self: *Program, e: KeyPressedEvent) bool {
+pub fn OnKeyPressedEvent(self: *Program, e: KeyPressedEvent) !bool {
     return self._Impl.OnKeyPressedEvent(e);
 }
 

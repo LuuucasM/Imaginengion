@@ -14,7 +14,12 @@ const Entity = @import("..//GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
+const OnKeyPressedScript = Components.OnKeyPressedScript;
+const ScriptComponent = Components.ScriptComponent;
 const ComponentsArray = Components.ComponentsList;
+
+const Assets = @import("../Assets/Assets.zig");
+const ScriptAsset = Assets.ScriptAsset;
 
 const RenderManager = @import("../Renderer/Renderer.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
@@ -26,6 +31,8 @@ const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const Shader = @import("../Shaders/Shaders.zig");
+
+const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
 
 const SceneManager = @This();
 
@@ -43,8 +50,6 @@ mLayerInsertIndex: usize,
 mFrameBuffer: FrameBuffer,
 mViewportWidth: usize,
 mViewportHeight: usize,
-mEditorCameraEntityID: u32,
-
 mCompositeVertexArray: VertexArray,
 mCompositeVertexBuffer: VertexBuffer,
 mCompositeIndexBuffer: IndexBuffer,
@@ -66,8 +71,6 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mCompositeIndexBuffer = undefined,
         .mCompositeShader = try Shader.Init(SceneManagerGPA.allocator(), "assets/shaders/Composite.glsl"),
         .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
-
-        .mEditorCameraEntityID = std.math.maxInt(u32),
     };
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -82,15 +85,6 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
     new_scene_manager.mCompositeVertexArray.SetIndexBuffer(new_scene_manager.mCompositeIndexBuffer);
-
-    new_scene_manager.mEditorCameraEntityID = try new_scene_manager.mECSManager.CreateEntity();
-    var new_transform = TransformComponent{};
-    new_transform.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
-
-    _ = try new_scene_manager.mECSManager.AddComponent(TransformComponent, new_scene_manager.mEditorCameraEntityID, new_transform);
-    var new_camera = CameraComponent{};
-    new_camera.SetViewportSize(width, height);
-    _ = try new_scene_manager.mECSManager.AddComponent(CameraComponent, new_scene_manager.mEditorCameraEntityID, new_camera);
 
     return new_scene_manager;
 }
@@ -128,10 +122,11 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
     return self.mSceneStack.items[scene_id].DuplicateEntity(original_entity.EntityID);
 }
 
-pub fn RenderUpdate(self: *SceneManager) !void {
+pub fn RenderUpdate(self: *SceneManager, camera_id: u32) !void {
+    const camera_component = self.mECSManager.GetComponent(CameraComponent, camera_id);
+    const camera_transform = self.mECSManager.GetComponent(TransformComponent, camera_id);
+
     //render each scene
-    const camera_component = self.mECSManager.GetComponent(CameraComponent, self.mEditorCameraEntityID);
-    const camera_transform = self.mECSManager.GetComponent(TransformComponent, self.mEditorCameraEntityID);
     const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
     RenderManager.BeginRendering(camera_view_projection);
 
@@ -151,6 +146,26 @@ pub fn RenderUpdate(self: *SceneManager) !void {
     RenderManager.DrawComposite(self.mCompositeVertexArray);
 
     self.mFrameBuffer.Unbind();
+}
+
+pub fn OnKeyPressedEvent(self: *SceneManager, e: KeyPressedEvent) !bool {
+    //get all of the entities with key pressed event scripts and call the run function on them
+    //also it has to go from the top layer to the bottom layer that way if a layer blocks the key press it wont go to the lower layers
+    //which means i will have to call filter on the group starting from the top most scene stack itemand work backwards
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const key_pressed_script_group = try self.mECSManager.GetGroup(.{ .Component = OnKeyPressedScript }, allocator);
+
+    for (group.items) |script_id| {
+        const script_component = self.mECSManager.GetComponent(ScriptComponent, script_id);
+        const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
+
+        const run_func = script_asset.mLib.lookup(*const fn (*std.mem.Allocator, *Entity, *KeyPressedEvent) anyerror!void, "Run").?;
+        run_func(allocator, script_component.mParent, e);
+    }
+    return false;
 }
 
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
@@ -266,4 +281,9 @@ fn InsertScene(self: *SceneManager, scene_layer: *SceneLayer) !void {
             changed_scene_layer.mInternalID += 1;
         }
     }
+}
+
+fn FilterSceneUUID(group: *std.ArrayList(u32), scene_uuid: u128, ecs_manager, *ECSManager, allocator: std.mem.Allocator) std.ArrayList(u32) {
+    //create a new group based on the input group which is a member of a specific scene
+
 }

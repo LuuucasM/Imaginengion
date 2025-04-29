@@ -1,0 +1,21 @@
+- Finish FilterSceneUUID function in [[Scene Manager]] that creates a new group of entityIDs who contains the specific scene UUID to use for OnKeyPressedEvent function
+- Finish OnKeyPressedEvent function by iterating over scenes starting from the top of the stack and getting the group of entities that are part of that scene and then running the scripts for that group
+- Scripts can now be compiled and added to an entity. since scripts are just components, need to add the rest of the stuff for when adding a new component ----> that stuff. then i need to make it so that my editor camera has the correct scripts so that it can move
+- add primary camera functionality to the editor "play" mode. I envision that on the beginning of a scene it looks for a camera set as the primary camera and then stores it somewhere, rather than looking every frame like it did in the c++ engine.
+- add scripts functionality to the editor "play" mode
+- at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
+- nothing gets released ever for assethandlerefs lol
+- make animation system
+- write physics and collision system
+- make it so u cant make scenes or anything until you have a project selected first
+- Give an editor option that is a viewport which is what you see from the in game perspective like from the set primary camera. And when you hit "play" for the scene instead of getting rid of changing the main viewport you just save and play and then in the secondary viewport you do the same that way you can get the editor POV during testing. But it needs to be an option because not all computers can handle literally double the rendering
+- Editor settings file
+- Add localization for Korean
+- add profiling via Tracy (or if all else fails hand roll something)
+- review files to add possible unit tests and asserts
+- start making vampire survivors but using Pokémon sprites so like a little fan made Pokémon game
+- add a way to export the game into its standalone
+- add in reinforcement learning to the ECS for sorting components lists
+- Make a git page website
+- i don't ever delete dynamic libraries and maybe i shouldn't but i should probably sort them into their own folder so it doesn't clutter the zig-out/bin folder
+- add a way to calculate constants e.g. how many total entities a scene could have. or stuff like that. This way when creating the game executable we can initialize everything at the right capacities and what not to hyper optimize game performance

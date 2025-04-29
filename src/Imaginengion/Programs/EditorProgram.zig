@@ -28,7 +28,6 @@ const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
-//const ScriptManager = @import("../Scripts/ScriptManager.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -41,14 +40,13 @@ _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
 mWindow: *Window,
-//mScriptManager: ScriptManager,
 
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
     try ImGui.Init(window);
 
-    return EditorProgram{
+    var new_editor_program = EditorProgram{
         .mSceneManager = try EditorSceneManager.Init(1600, 900),
         .mWindow = window,
         ._AssetHandlePanel = AssetHandlePanel.Init(),
@@ -59,9 +57,12 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
-        ._ViewportPanel = ViewportPanel.Init(),
-        //.mScriptManager = ScriptManager.Init(engine_allocator),
+        ._ViewportPanel = undefined,
     };
+
+    new_editor_program._ViewportPanel = try ViewportPanel.Init(&new_editor_program.mSceneManager);
+
+    return new_editor_program;
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -74,31 +75,31 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //update asset manager
     try AssetManager.OnUpdate();
 
-    //---------Inputs Begin--------------
+    //-------------Inputs Begin------------------
     self.mWindow.PollInputEvents();
-    SystemEventManager.ProcessEvents(.EC_Input);
-    //---------Inputs End----------------
+    try SystemEventManager.ProcessEvents(.EC_Input);
+    //-------------Inputs End--------------------
 
-    //---------Physics Begin-------------
-    //---------Physics End---------------
+    //-------------Physics Begin-----------------
+    //-------------Physics End-------------------
 
-    //---------Game Logic Begin----------
-    //---------Game Logic End-------------
+    //-------------Game Logic Begin--------------
+    //-------------Game Logic End----------------
 
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);
-    try self.mSceneManager.RenderUpdate();
+    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCameraID);
 
     Renderer.SwapBuffers();
-    //----------Render End-----------------
+    //--------------Render End-------------------
 
-    //----------Audio Begin----------------
-    //----------Audio End------------------
+    //--------------Audio Begin------------------
+    //--------------Audio End--------------------
 
-    //----------Networking Begin-----------
-    //----------Networking End-------------
+    //--------------Networking Begin-------------
+    //--------------Networking End---------------
 
-    //----------Imgui begin----------------
+    //--------------Imgui begin------------------
     ImGui.Begin();
     Dockspace.Begin();
     try self._ContentBrowserPanel.OnImguiRender();
@@ -111,10 +112,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     try self._CSEditorPanel.OnImguiRender();
 
     try self._ToolbarPanel.OnImguiRender();
-    const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, self.mSceneManager.mEditorCameraEntityID);
-    const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, self.mSceneManager.mEditorCameraEntityID);
-    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
-    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component.mProjectionType, camera_component.mProjection, camera_view_projection);
+
+    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -124,8 +123,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     Dockspace.End();
     ImGui.End();
-    //----------Imgui end------------------
+    //--------------Imgui end------------------
 
+    //--------------Frame Cleanup--------------
     //Process window events
     SystemEventManager.ProcessEvents(.EC_Window);
 
@@ -136,12 +136,12 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     SystemEventManager.EventsReset();
     GameEventManager.EventsReset();
     ImguiEventManager.EventsReset();
+    //--------------End Frame Cleanup---------
 }
 
-pub fn OnKeyPressedEvent(self: *EditorProgram, e: KeyPressedEvent) bool {
-    if (self._ViewportPanel.OnKeyPressedEvent(e) == true) {
-        return true;
-    }
+pub fn OnKeyPressedEvent(self: *EditorProgram, e: KeyPressedEvent) !bool {
+    try self.mSceneManager.OnKeyPressedEvent(e);
+    self._ViewportPanel.OnKeyPressedEvent(e);
     return false;
 }
 
