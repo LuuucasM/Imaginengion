@@ -1,6 +1,8 @@
 - Finish FilterSceneUUID function in [[Scene Manager]] that creates a new group of entityIDs who contains the specific scene UUID to use for OnKeyPressedEvent function
-- Finish OnKeyPressedEvent function by iterating over scenes starting from the top of the stack and getting the group of entities that are part of that scene and then running the scripts for that group
-- Scripts can now be compiled and added to an entity. since scripts are just components, need to add the rest of the stuff for when adding a new component ----> that stuff. then i need to make it so that my editor camera has the correct scripts so that it can move
+- Finish OnKeyPressedEvent function in [[Scene Manager]] by iterating over scenes starting from the top of the stack and getting the group of entities that are part of that scene and then running the scripts for that group
+- Properly write the [[Adding new scripts to engine]] Note so that I can use it now and in the future
+- Scripts can now be compiled and added to an entity. since scripts are just components, need to add the rest of the stuff for when adding a new component [[Adding new scripts to engine]]. 
+- add the correct scripts to the [[Viewport Panel]] Editor Camera so that it can move around
 - add primary camera functionality to the editor "play" mode. I envision that on the beginning of a scene it looks for a camera set as the primary camera and then stores it somewhere, rather than looking every frame like it did in the c++ engine.
 - add scripts functionality to the editor "play" mode
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
