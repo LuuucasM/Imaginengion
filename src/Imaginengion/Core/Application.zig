@@ -45,18 +45,19 @@ pub fn Run(self: *Application) !void {
 }
 
 pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
-    const result = switch (event.*) {
+    var cont_bool = true;
+
+    cont_bool = cont_bool and switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| self.OnWindowResize(e._Width, e._Height),
         .ET_KeyPressed => |e| try self.mProgram.OnKeyPressedEvent(e),
-        else => false,
+        else => true,
     };
-    _ = result;
 }
 
 fn OnWindowClose(self: *Application) bool {
     self.mIsRunning = false;
-    return true;
+    return false;
 }
 
 fn OnWindowResize(self: *Application, width: usize, height: usize) bool {
@@ -67,5 +68,5 @@ fn OnWindowResize(self: *Application, width: usize, height: usize) bool {
     }
 
     self.mWindow.OnWindowResize(width, height);
-    return false;
+    return true;
 }

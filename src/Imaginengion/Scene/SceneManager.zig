@@ -16,6 +16,7 @@ const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
 const OnKeyPressedScript = Components.OnKeyPressedScript;
 const ScriptComponent = Components.ScriptComponent;
+const SceneIDComponent = Components.SceneIDComponent;
 const ComponentsArray = Components.ComponentsList;
 
 const Assets = @import("../Assets/Assets.zig");
@@ -156,16 +157,29 @@ pub fn OnKeyPressedEvent(self: *SceneManager, e: KeyPressedEvent) !bool {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const key_pressed_script_group = try self.mECSManager.GetGroup(.{ .Component = OnKeyPressedScript }, allocator);
+    const group = try self.mECSManager.GetGroup(.{ .Component = OnKeyPressedScript }, allocator);
 
-    for (group.items) |script_id| {
-        const script_component = self.mECSManager.GetComponent(ScriptComponent, script_id);
-        const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
+    var iter = std.mem.reverseIterator(self.mSceneStack.items);
+    var cont_bool = true;
+    while (iter.next()) |*scene_layer| {
+        if (cont_bool == false) continue;
+        //sort group by scene layer where the first items in the group are entity id's which
+        //are from the top most layer, than second most layer, etc
+        for (group.items) |script_id| {
+            const script_component = self.mECSManager.GetComponent(ScriptComponent, script_id);
+            const scene_uuid_component = self.mECSManager.GetComponent(SceneIDComponent, script_component.mParent);
 
-        const run_func = script_asset.mLib.lookup(*const fn (*std.mem.Allocator, *Entity, *KeyPressedEvent) anyerror!void, "Run").?;
-        run_func(allocator, script_component.mParent, e);
+            if (scene_uuid_component.SceneID != scene_layer.mUUID) continue;
+
+            const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
+            const run_func = script_asset.mLib.lookup(*const fn (*const std.mem.Allocator, *Entity, *const KeyPressedEvent) bool, "Run").?;
+
+            var entity = Entity{ .mEntityID = script_component.mParent, .mSceneLayerRef = @constCast(scene_layer) };
+
+            cont_bool = cont_bool and run_func(&allocator, &entity, &e);
+        }
     }
-    return false;
+    return cont_bool;
 }
 
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
@@ -281,9 +295,4 @@ fn InsertScene(self: *SceneManager, scene_layer: *SceneLayer) !void {
             changed_scene_layer.mInternalID += 1;
         }
     }
-}
-
-fn FilterSceneUUID(group: *std.ArrayList(u32), scene_uuid: u128, ecs_manager, *ECSManager, allocator: std.mem.Allocator) std.ArrayList(u32) {
-    //create a new group based on the input group which is a member of a specific scene
-
 }

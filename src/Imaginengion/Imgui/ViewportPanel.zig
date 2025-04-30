@@ -32,7 +32,6 @@ mP_Open: bool,
 mViewportWidth: usize,
 mViewportHeight: usize,
 mSelectedEntity: ?Entity,
-mSceneManagerRef: *SceneManager,
 mViewportCameraID: u32,
 mGizmoType: GizmoType,
 
@@ -52,16 +51,17 @@ pub fn Init(scene_manager_ref: *SceneManager) !ViewportPanel {
         .mViewportWidth = 1600,
         .mViewportHeight = 900,
         .mSelectedEntity = null,
-        .mSceneManagerRef = scene_manager_ref,
         .mViewportCameraID = new_viewport_camera,
         .mGizmoType = .None,
     };
 }
 
-pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !void {
+pub fn OnImguiRender(self: *ViewportPanel, scene_manager_ref: *SceneManager) !void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
+
+    const scene_frame_buffer = scene_manager_ref.mFrameBuffer;
 
     //update viewport size if needed
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
@@ -123,14 +123,13 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
             imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
             imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
 
-            const camera_component = self.mSceneManagerRef.mECSManager.GetComponent(CameraComponent, self.mViewportCameraID);
-            const camera_transform = self.mSceneManagerRef.mECSManager.GetComponent(TransformComponent, self.mViewportCameraID);
-            const camera_viewprojection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
+            const camera_component = scene_manager_ref.mECSManager.GetComponent(CameraComponent, self.mViewportCameraID);
+            const camera_transform = scene_manager_ref.mECSManager.GetComponent(TransformComponent, self.mViewportCameraID);
 
             imgui.ImGuizmo_SetOrthographic(if (camera_component.mProjectionType == .Orthographic) true else false);
             var camera_proj = LinAlg.Mat4ToArray(camera_component.mProjection);
             camera_proj[1][1] *= -1;
-            var camera_view = LinAlg.Mat4ToArray(camera_viewprojection);
+            var camera_view = LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix());
 
             const entity_transform_component = entity.GetComponent(TransformComponent);
             var entity_transform = LinAlg.Mat4ToArray(entity_transform_component.GetTransformMatrix());
@@ -196,7 +195,7 @@ pub fn OnKeyPressedEvent(self: *ViewportPanel, e: KeyPressedEvent) bool {
                 self.mGizmoType = .Scale;
             }
         },
-        else => return false,
+        else => return true,
     }
-    return false;
+    return true;
 }

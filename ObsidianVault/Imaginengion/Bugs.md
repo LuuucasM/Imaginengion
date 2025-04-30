@@ -1,0 +1,1 @@
+- Fix Imgui error when minimizing application saying that it must end in a child or something

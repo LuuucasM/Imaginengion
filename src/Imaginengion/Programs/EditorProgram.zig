@@ -113,7 +113,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     try self._ToolbarPanel.OnImguiRender();
 
-    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    try self._ViewportPanel.OnImguiRender(&self.mSceneManager);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -127,7 +127,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
     //--------------Frame Cleanup--------------
     //Process window events
-    SystemEventManager.ProcessEvents(.EC_Window);
+    try SystemEventManager.ProcessEvents(.EC_Window);
 
     //handle deleted objects this frame
     try self.mSceneManager.mECSManager.ProcessDestroyedEntities();
@@ -140,9 +140,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 }
 
 pub fn OnKeyPressedEvent(self: *EditorProgram, e: KeyPressedEvent) !bool {
-    try self.mSceneManager.OnKeyPressedEvent(e);
-    self._ViewportPanel.OnKeyPressedEvent(e);
-    return false;
+    var cont_bool = true;
+    cont_bool = cont_bool and try self.mSceneManager.OnKeyPressedEvent(e);
+    cont_bool = cont_bool and self._ViewportPanel.OnKeyPressedEvent(e);
+    return cont_bool;
 }
 
 pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
