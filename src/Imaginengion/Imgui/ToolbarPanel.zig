@@ -7,9 +7,9 @@ const ImguiManager = @import("Imgui.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const ToolbarPanel = @This();
 
-pub const EditorState = enum {
-    Play,
-    Stop,
+pub const EditorState = enum(u2) {
+    Play = 0,
+    Stop = 1,
 };
 
 mP_Open: bool,

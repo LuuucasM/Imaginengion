@@ -3,16 +3,16 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 
-pub const PanelType = enum {
-    Default,
-    AssetHandles,
-    Components,
-    ContentBrowser,
-    CSEditor,
-    Scene,
-    Scripts,
-    Stats,
-    Viewport,
+pub const PanelType = enum(u4) {
+    Default = 0,
+    AssetHandles = 1,
+    Components = 2,
+    ContentBrowser = 3,
+    CSEditor = 4,
+    Scene = 5,
+    Scripts = 6,
+    Stats = 7,
+    Viewport = 8,
 };
 pub const ImguiEvent = union(enum) {
     ET_DefaultEvent: DefaultEvent,

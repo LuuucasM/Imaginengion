@@ -1,4 +1,4 @@
-pub const KeyCodes = enum(u16) {
+pub const KeyCodes = enum(u32) {
     Space = 32,
     Apostrophe = 39, // { ' }
     Comma = 44, // { , }

@@ -1,4 +1,3 @@
-- Finish bug with [[Viewport Panel]] where the gizmos are not showing up properly
 - Finish OnKeyPressedEvent function in [[Scene Manager]] by iterating over scenes starting from the top of the stack and getting the group of entities that are part of that scene and then running the scripts for that group
 - Properly write the [[Adding new scripts to engine]] Note so that I can use it now and in the future
 - Scripts can now be compiled and added to an entity. since scripts are just components, need to add the rest of the stuff for when adding a new component [[Adding new scripts to engine]]. 

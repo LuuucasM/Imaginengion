@@ -1,10 +1,10 @@
 const KeyCodes = @import("../Inputs/KeyCodes.zig").KeyCodes;
 const MouseCodes = @import("../Inputs/MouseCodes.zig").MouseCodes;
 
-pub const SystemEventCategory = enum(u8) {
-    EC_Default,
-    EC_Input,
-    EC_Window,
+pub const SystemEventCategory = enum(u2) {
+    EC_Default = 0,
+    EC_Input = 1,
+    EC_Window = 2,
 };
 
 pub const SystemEvent = union(enum) {

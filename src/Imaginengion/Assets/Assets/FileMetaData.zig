@@ -2,9 +2,9 @@ const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const FileMetaData = @This();
 
-pub const PathType = enum {
-    Cwd,
-    Prj,
+pub const PathType = enum(u1) {
+    Cwd = 0,
+    Prj = 1,
 };
 
 mRelPath: []const u8 = undefined,

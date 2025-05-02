@@ -4,8 +4,8 @@ const ScriptAsset = @This();
 
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const ScriptType = enum {
-    OnKeyPressed,
+pub const ScriptType = enum(u8) {
+    OnKeyPressed = 0,
 };
 
 mLib: std.DynLib = undefined,

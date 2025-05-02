@@ -16,7 +16,7 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const Shader = @This();
 
-pub const ShaderDataType = enum(u16) {
+pub const ShaderDataType = enum(u4) {
     Float,
     Float2,
     Float3,

@@ -37,9 +37,9 @@ const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
 
 const SceneManager = @This();
 
-pub const ESceneState = enum {
-    Stop,
-    Play,
+pub const ESceneState = enum(u1) {
+    Stop = 0,
+    Play = 1,
 };
 
 var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
@@ -159,6 +159,8 @@ pub fn OnKeyPressedEvent(self: *SceneManager, e: KeyPressedEvent) !bool {
 
     const group = try self.mECSManager.GetGroup(.{ .Component = OnKeyPressedScript }, allocator);
 
+    std.debug.print("key pressed in scene manager is: {}\n at memory location {*}\n", .{ @intFromEnum(e._KeyCode), &e });
+
     var iter = std.mem.reverseIterator(self.mSceneStack.items);
     var cont_bool = true;
     while (iter.next()) |*scene_layer| {
@@ -172,7 +174,7 @@ pub fn OnKeyPressedEvent(self: *SceneManager, e: KeyPressedEvent) !bool {
             if (scene_uuid_component.SceneID != scene_layer.mUUID) continue;
 
             const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
-            const run_func = script_asset.mLib.lookup(*const fn (*const std.mem.Allocator, *Entity, *const KeyPressedEvent) bool, "Run").?;
+            const run_func = script_asset.mLib.lookup(*const fn (*const std.mem.Allocator, *Entity, *const KeyPressedEvent) callconv(.C) bool, "Run").?;
 
             var entity = Entity{ .mEntityID = script_component.mParent, .mSceneLayerRef = @constCast(scene_layer) };
 

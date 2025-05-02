@@ -3,9 +3,9 @@ const std = @import("std");
 pub fn StaticSkipField(size: usize) type {
     return struct {
         const Self = @This();
-        const InitOption = enum {
-            AllSkip,
-            NoSkip,
+        const InitOption = enum(u1) {
+            AllSkip = 0,
+            NoSkip = 1,
         };
         const SkipFieldType = std.math.IntFittingRange(0, size);
 

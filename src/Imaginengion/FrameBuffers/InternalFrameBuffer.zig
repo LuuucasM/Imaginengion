@@ -7,15 +7,15 @@ const Impl = switch (builtin.os.tag) {
     else => @import("UnsupportedFrameBuffer.zig").UnsupportedFrameBuffer,
 };
 
-pub const TextureFormat = enum {
-    None,
-    RGBA8,
-    RGBA16F,
-    RGBA32F,
-    RG32F,
-    RED_INTEGER,
-    DEPTH32F,
-    DEPTH24STENCIL8,
+pub const TextureFormat = enum(u4) {
+    None = 0,
+    RGBA8 = 1,
+    RGBA16F = 2,
+    RGBA32F = 3,
+    RG32F = 4,
+    RED_INTEGER = 5,
+    DEPTH32F = 6,
+    DEPTH24STENCIL8 = 7,
 };
 
 pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_format: TextureFormat, samples: u32, is_swap_chain_target: bool) type {

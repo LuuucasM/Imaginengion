@@ -13,9 +13,9 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Quatf32 = LinAlg.Quatf32;
 const EditorCamera = @This();
 
-pub const ProjectionType = enum {
-    Perspective,
-    Orthographic,
+pub const ProjectionType = enum(u1) {
+    Perspective = 0,
+    Orthographic = 1,
 };
 
 mProjectionType: ProjectionType = .Perspective,

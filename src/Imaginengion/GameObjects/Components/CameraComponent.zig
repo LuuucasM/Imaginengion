@@ -10,9 +10,9 @@ const Mat4f32 = LinAlg.Mat4f32;
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-pub const ProjectionType = enum {
-    Perspective,
-    Orthographic,
+pub const ProjectionType = enum(u1) {
+    Perspective = 0,
+    Orthographic = 1,
 };
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),

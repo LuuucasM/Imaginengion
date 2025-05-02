@@ -26,9 +26,9 @@ const SceneLayer = @This();
 //.gscl
 //.oscl
 
-pub const LayerType = enum {
-    GameLayer,
-    OverlayLayer,
+pub const LayerType = enum(u1) {
+    GameLayer = 0,
+    OverlayLayer = 1,
 };
 
 mName: std.ArrayList(u8),
