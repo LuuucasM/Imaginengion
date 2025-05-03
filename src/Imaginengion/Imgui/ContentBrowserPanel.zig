@@ -9,6 +9,8 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
+const ImguiUtils = @import("ImguiUtils.zig");
+const NewScriptEvent = @import("../Events/ImguiEvent.zig").NewScriptEvent;
 
 const MAX_PATH_LEN = 260;
 
@@ -60,17 +62,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-        if (imgui.igBeginMenu("New Script", true) == true) {
-            defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("On Key Pressed Script", "", false, true) == true) {
-                var buffer: [260 * 3]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
-                const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/OnKeyPressScript.zig" });
-                const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnKeyPressedScript.zig" });
-                try std.fs.copyFileAbsolute(source_path, dest_path, .{});
-            }
-        }
+        try ImguiUtils.ScriptPopupMenu();
     }
 
     //if we dont have a project directory yet dont try to print stuff
@@ -211,4 +203,22 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
     _ = try self.mCurrentDirectory.writer().write(dir);
 
     self.mProjectFile = try std.fs.openFileAbsolute(path, .{});
+}
+
+pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptEvent) !void {
+    var buffer: [260 * 3]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
+    switch (new_script_event.mScriptType) {
+        .OnKeyPressed => {
+            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/OnKeyPressScript.zig" });
+            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnKeyPressedScript.zig" });
+            try std.fs.copyFileAbsolute(source_path, dest_path, .{});
+        },
+        .OnUpdateInput => {
+            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/OnUpdateInput.zig" });
+            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnUpdateInput.zig" });
+            try std.fs.copyFileAbsolute(source_path, dest_path, .{});
+        },
+    }
 }

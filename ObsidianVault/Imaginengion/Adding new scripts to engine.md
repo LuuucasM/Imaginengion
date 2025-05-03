@@ -1,11 +1,22 @@
 
+- In the Scripts folder
+	- Create a new script template
+	- make sure the template has GetScriptType set to the right type from the ScriptAsset enum
+- In Components -> TagComponents.zig
+	- Add Tag to list of TagComponents
 - In game objects -> Components.zig
 	- Add to components lists
 	- Add to components enum
-- In Scripts panel
-	- Add to definitions at the top
-	- add if statement to entityimguirender
-	- add if statement to add component popup menu
+- In Assets -> ScriptAsset ->
+	- Add new type to enum
+- In ImguiUtils
+	- Add if statement to script popup menu
+- In ContentBrowserPanel -> OnNewScriptEvent
+	- add new script type to the creating script event
+- In ScriptsPanel
+	- In drag drop target for the add component add new script type
+- Scripts processor
+	- write the function to process the scripts
 - in scene serializer panel
 	- add to type definitions at the top
 	- add if statement to stringify

@@ -7,6 +7,7 @@ const Program = @import("../Programs/Program.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
+const EngineContext = @import("EngineContext.zig");
 
 const Application: type = @This();
 
@@ -25,6 +26,8 @@ pub fn Init(self: *Application, engine_allocator: std.mem.Allocator) !void {
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);
+
+    EngineContext.Init();
 }
 
 pub fn Deinit(self: *Application) !void {

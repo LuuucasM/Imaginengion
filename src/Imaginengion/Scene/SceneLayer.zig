@@ -6,7 +6,7 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Mat4f32 = LinAlg.Mat4f32;
 
 const ECSManager = @import("../ECS/ECSManager.zig");
-const Entity = @import("..//GameObjects/Entity.zig");
+const Entity = @import("..//GameObjects/Entity.zig").Entity;
 const Components = @import("../GameObjects/Components.zig");
 const ComponentsArray = Components.ComponentsList;
 
@@ -58,7 +58,7 @@ pub fn Deinit(self: *SceneLayer) void {
 }
 
 pub fn CreateBlankEntity(self: *SceneLayer) !Entity {
-    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
+    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mECSManagerRef = self.mECSManagerRef };
     return new_entity;
 }
 
@@ -66,7 +66,7 @@ pub fn CreateEntity(self: *SceneLayer) !Entity {
     return self.CreateEntityWithUUID(try GenUUID());
 }
 pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
-    const e = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
+    const e = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mECSManagerRef = self.mECSManagerRef };
     _ = try e.AddComponent(IDComponent, .{ .ID = uuid });
     _ = try e.AddComponent(SceneIDComponent, .{ .SceneID = self.mUUID });
     var name = [_]u8{0} ** 24;
@@ -80,8 +80,8 @@ pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
 pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
     try self.mECSManagerRef.DestroyEntity(e.mEntityID);
 }
-pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
-    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = &self };
+pub fn DuplicateEntity(self: *SceneLayer, original_entity: Entity) !Entity {
+    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.DuplicateEntity(original_entity.mEntityID), .mECSManagerRef = self.mECSManagerRef };
 
     return new_entity;
 }

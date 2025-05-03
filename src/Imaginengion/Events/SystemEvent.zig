@@ -31,7 +31,7 @@ pub const DefaultEvent = struct {
     }
 };
 
-pub const KeyPressedEvent = struct {
+pub const KeyPressedEvent = extern struct {
     pub fn GetEventCategory(self: KeyPressedEvent) SystemEventCategory {
         _ = self;
         return .EC_Input;

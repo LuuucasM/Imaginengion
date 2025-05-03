@@ -227,34 +227,38 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
 
     //------------------------------------------------------IMAGINENGION-------------------------------------------------------
     //make library
-    const engine_lib = b.addLibrary(.{ .linkage = .static, .name = "Imaginengion", .root_module = b.addModule(
-        "ImaginEngion",
-        .{
-            .optimize = optimize,
-            .target = target,
-            .link_libc = true,
-            .link_libcpp = true,
-            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
-            .imports = &[_]std.Build.Module.Import{
-                std.Build.Module.Import{
-                    .name = "GLFW",
-                    .module = glfw_lib.root_module,
-                },
-                std.Build.Module.Import{
-                    .name = "GLAD",
-                    .module = glad_lib.root_module,
-                },
-                std.Build.Module.Import{
-                    .name = "IMGUI",
-                    .module = imgui_lib.root_module,
-                },
-                std.Build.Module.Import{
-                    .name = "NFD",
-                    .module = nfd_lib.root_module,
+    const engine_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "Imaginengion",
+        .root_module = b.addModule(
+            "ImaginEngion",
+            .{
+                .optimize = optimize,
+                .target = target,
+                .link_libc = true,
+                .link_libcpp = true,
+                .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
+                .imports = &[_]std.Build.Module.Import{
+                    std.Build.Module.Import{
+                        .name = "GLFW",
+                        .module = glfw_lib.root_module,
+                    },
+                    std.Build.Module.Import{
+                        .name = "GLAD",
+                        .module = glad_lib.root_module,
+                    },
+                    std.Build.Module.Import{
+                        .name = "IMGUI",
+                        .module = imgui_lib.root_module,
+                    },
+                    std.Build.Module.Import{
+                        .name = "NFD",
+                        .module = nfd_lib.root_module,
+                    },
                 },
             },
-        },
-    ) });
+        ),
+    });
 
     //add include paths
     engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });

@@ -1,5 +1,6 @@
 //Core Stuff -----------------------------------
 pub const Application = @import("Core/Application.zig");
+pub const EngineContext = @import("Core/EngineContext.zig");
 
 //Input Stuff -----------------------------------
 pub const InputManager = @import("Inputs/Input.zig");
@@ -9,7 +10,7 @@ pub const GameEvent = @import("Events/GameEvent.zig");
 pub const SystemEvent = @import("Events/SystemEvent.zig");
 
 //Game Object stuff -------------------------------
-pub const Entity = @import("GameObjects/Entity.zig");
+pub const Entity = @import("GameObjects/Entity.zig").Entity;
 const Components = @import("GameObjects/Components.zig");
 pub const TransformComponent = Components.TransformComponent;
 

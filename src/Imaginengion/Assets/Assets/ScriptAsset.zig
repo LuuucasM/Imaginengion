@@ -6,6 +6,7 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 
 pub const ScriptType = enum(u8) {
     OnKeyPressed = 0,
+    OnUpdateInput = 1,
 };
 
 mLib: std.DynLib = undefined,

@@ -1,7 +1,7 @@
 const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig").Entity;
 
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
@@ -41,7 +41,7 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     var group = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = SceneIDComponent }, allocator);
     FilterSceneUUID(&group, scene_layer.mUUID, scene_layer.mECSManagerRef);
     for (group.items) |entity_id| {
-        const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
+        const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerRef };
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
@@ -73,7 +73,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
     var scanner = std.json.Scanner.initCompleteInput(allocator, buffer);
     defer scanner.deinit();
 
-    var entity = Entity{ .mEntityID = std.math.maxInt(u32), .mSceneLayerRef = scene_layer };
+    var entity = Entity{ .mEntityID = std.math.maxInt(u32), .mECSManagerRef = scene_layer.mECSManagerRef };
 
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);

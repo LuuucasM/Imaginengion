@@ -3,7 +3,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig").Entity;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ScenePanel = @This();
 
@@ -136,7 +136,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                 var group = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = NameComponent }, allocator);
                 FilterSceneUUID(&group, scene_layer.mUUID, scene_layer.mECSManagerRef);
                 for (group.items) |entity_id| {
-                    const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
+                    const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerRef };
                     const entity_name = entity.GetName();
 
                     if (self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID) {

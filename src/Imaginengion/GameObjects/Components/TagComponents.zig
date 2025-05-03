@@ -11,3 +11,14 @@ pub const OnKeyPressedScript = struct {
         }
     };
 };
+
+pub const OnUpdateInputScript = struct {
+    bit: u1 = 0,
+    pub const Ind: usize = blk: {
+        for (ComponentsList, 0..) |component_type, i| {
+            if (component_type == OnUpdateInputScript) {
+                break :blk i;
+            }
+        }
+    };
+};

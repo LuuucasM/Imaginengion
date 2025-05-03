@@ -102,7 +102,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
     _ = mods;
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
-            InputManager.SetKeyPressed(@enumFromInt(key), true) catch |err| {
+            InputManager.SetKeyPressed(@enumFromInt(key)) catch |err| {
                 std.log.err("{}\n", .{err});
                 @panic("Cant set key pressed true in WindowsWindow::GLFWKeyCallback\n");
             };
@@ -114,10 +114,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
             };
         },
         glfw.GLFW_RELEASE => blk: {
-            InputManager.SetKeyPressed(@enumFromInt(key), false) catch |err| {
-                std.log.err("{}\n", .{err});
-                @panic("Cant set key pressed false in WindowsWindow::GLFWKeyCallback\n");
-            };
+            InputManager.SetKeyReleased(@enumFromInt(key));
             break :blk SystemEvent{
                 .ET_KeyReleased = .{
                     ._KeyCode = @enumFromInt(key),
@@ -125,7 +122,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
             };
         },
         glfw.GLFW_REPEAT => blk: {
-            InputManager.SetKeyPressed(@enumFromInt(key), true) catch |err| {
+            InputManager.SetKeyPressed(@enumFromInt(key)) catch |err| {
                 std.log.err("{}\n", .{err});
                 @panic("Cant set key pressed true in WindowsWindow::GLFWKeyCallback\n");
             };
@@ -149,7 +146,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
     _ = mods;
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
-            InputManager.SetMousePressed(@enumFromInt(button), true) catch |err| {
+            InputManager.SetMousePressed(@enumFromInt(button)) catch |err| {
                 std.log.err("{}\n", .{err});
                 @panic("Cant set mouse pressed true in WindowsWindow::GLFWMouseButtonCallback\n");
             };
@@ -161,10 +158,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
         },
 
         glfw.GLFW_RELEASE => blk: {
-            InputManager.SetMousePressed(@enumFromInt(button), false) catch |err| {
-                std.log.err("{}\n", .{err});
-                @panic("Cant set mouse pressed false in WindowsWindow::GLFWMouseBUtotnCallback\n");
-            };
+            InputManager.SetMouseReleased(@enumFromInt(button));
             break :blk SystemEvent{
                 .ET_MouseButtonReleased = .{
                     ._MouseCode = @enumFromInt(button),

@@ -1,7 +1,6 @@
 const std = @import("std");
 const EntityManager = @import("EntityManager.zig");
 const ComponentManager = @import("ComponentManager.zig");
-const Filter = ComponentManager.Filter;
 const GroupQuery = ComponentManager.GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @This();

@@ -14,9 +14,9 @@ pub fn build(b: *std.Build) !void {
 
     const engine_lib = MakeEngineLib(b, target, optimize);
 
-    const script_dll = b.addSharedLibrary(.{
+    const script_dll = b.addLibrary(.{
+        .linkage = .dynamic,
         .name = name,
-        .optimize = optimize,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,

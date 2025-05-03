@@ -10,7 +10,7 @@ const SceneSerializer = @import("SceneSerializer.zig");
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const ECSManager = @import("../ECS/ECSManager.zig");
-const Entity = @import("..//GameObjects/Entity.zig");
+const Entity = @import("..//GameObjects/Entity.zig").Entity;
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
@@ -147,41 +147,6 @@ pub fn RenderUpdate(self: *SceneManager, camera_id: u32) !void {
     RenderManager.DrawComposite(self.mCompositeVertexArray);
 
     self.mFrameBuffer.Unbind();
-}
-
-pub fn OnKeyPressedEvent(self: *SceneManager, e: KeyPressedEvent) !bool {
-    //get all of the entities with key pressed event scripts and call the run function on them
-    //also it has to go from the top layer to the bottom layer that way if a layer blocks the key press it wont go to the lower layers
-    //which means i will have to call filter on the group starting from the top most scene stack itemand work backwards
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    const group = try self.mECSManager.GetGroup(.{ .Component = OnKeyPressedScript }, allocator);
-
-    std.debug.print("key pressed in scene manager is: {}\n at memory location {*}\n", .{ @intFromEnum(e._KeyCode), &e });
-
-    var iter = std.mem.reverseIterator(self.mSceneStack.items);
-    var cont_bool = true;
-    while (iter.next()) |*scene_layer| {
-        if (cont_bool == false) continue;
-        //sort group by scene layer where the first items in the group are entity id's which
-        //are from the top most layer, than second most layer, etc
-        for (group.items) |script_id| {
-            const script_component = self.mECSManager.GetComponent(ScriptComponent, script_id);
-            const scene_uuid_component = self.mECSManager.GetComponent(SceneIDComponent, script_component.mParent);
-
-            if (scene_uuid_component.SceneID != scene_layer.mUUID) continue;
-
-            const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
-            const run_func = script_asset.mLib.lookup(*const fn (*const std.mem.Allocator, *Entity, *const KeyPressedEvent) callconv(.C) bool, "Run").?;
-
-            var entity = Entity{ .mEntityID = script_component.mParent, .mSceneLayerRef = @constCast(scene_layer) };
-
-            cont_bool = cont_bool and run_func(&allocator, &entity, &e);
-        }
-    }
-    return cont_bool;
 }
 
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {

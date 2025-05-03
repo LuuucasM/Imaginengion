@@ -2,11 +2,14 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../GameObjects/Entity.zig").Entity;
 const ScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
+const ImguiUtils = @import("ImguiUtils.zig");
 
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
-const OnKeyPressedScript = @import("../GameObjects/Components.zig").OnKeyPressedScript;
+const Components = @import("../GameObjects/Components.zig");
+const OnKeyPressedScript = Components.OnKeyPressedScript;
+const OnUpdateInputScript = Components.OnUpdateInputScript;
 
 const ScriptsPanel = @This();
 
@@ -28,12 +31,20 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     var available_region: imgui.ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&available_region);
 
+    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
+        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
+    }
+    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
+        defer imgui.igEndPopup();
+        try ImguiUtils.ScriptPopupMenu();
+    }
+
     //making a child so that drag drop target will tae the entire available region
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
             if (entity.HasComponent(ScriptComponent)) {
-                var ecs = entity.mSceneLayerRef.mECSManagerRef;
+                var ecs = entity.mECSManagerRef;
                 var iter = entity.GetComponent(ScriptComponent);
 
                 iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
@@ -52,13 +63,14 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                var ecs = entity.mSceneLayerRef.mECSManagerRef;
+                var ecs = entity.mECSManagerRef;
                 var new_script_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
                 const script_asset = try new_script_handle.GetAsset(ScriptAsset);
                 const new_script_entity = try ecs.CreateEntity();
 
                 _ = switch (script_asset.mScriptType) {
                     .OnKeyPressed => try ecs.AddComponent(OnKeyPressedScript, new_script_entity, null),
+                    .OnUpdateInput => try ecs.AddComponent(OnUpdateInputScript, new_script_entity, null),
                 };
 
                 if (entity.HasComponent(ScriptComponent)) {

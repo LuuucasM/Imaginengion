@@ -1,8 +1,11 @@
 const std = @import("std");
+
 const Window = @import("../Windows/Window.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
+const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
+
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const TransformComponent = Components.TransformComponent;
@@ -78,13 +81,20 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
     //-------------Inputs Begin------------------
     self.mWindow.PollInputEvents();
     try SystemEventManager.ProcessEvents(.EC_Input);
+    _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
     //-------------Inputs End--------------------
+
+    //-------------AI Begin--------------
+    //-------------AI End----------------
 
     //-------------Physics Begin-----------------
     //-------------Physics End-------------------
 
     //-------------Game Logic Begin--------------
     //-------------Game Logic End----------------
+
+    //-------------Animation Begin--------------
+    //-------------Animation End----------------
 
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);
@@ -141,7 +151,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
 
 pub fn OnKeyPressedEvent(self: *EditorProgram, e: KeyPressedEvent) !bool {
     var cont_bool = true;
-    cont_bool = cont_bool and try self.mSceneManager.OnKeyPressedEvent(e);
+    cont_bool = cont_bool and try ScriptsProcessor.OnKeyPressedEvent(&self.mSceneManager, e);
     cont_bool = cont_bool and self._ViewportPanel.OnKeyPressedEvent(e);
     return cont_bool;
 }
@@ -216,6 +226,9 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_ViewportResizeEvent => |e| {
             try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
+        },
+        .ET_NewScriptEvent => |e| {
+            try self._ContentBrowserPanel.OnNewScriptEvent(e);
         },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
