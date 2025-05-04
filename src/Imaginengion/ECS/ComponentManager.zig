@@ -4,6 +4,7 @@ const ComponentArray = @import("ComponentArray.zig");
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
+
 const ComponentManager = @This();
 
 pub const BitFieldType: type = std.meta.Int(.unsigned, 32); //32 is abitrary

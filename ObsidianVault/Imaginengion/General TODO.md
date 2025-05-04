@@ -1,4 +1,4 @@
-- Properly write the [[Adding new scripts to engine]] Note so that I can use it now and in the future
+- Script serialization and deserialization
 - Scripts can now be compiled and added to an entity. since scripts are just components, need to add the rest of the stuff for when adding a new component [[Adding new scripts to engine]]. 
 - add the correct scripts to the [[Viewport Panel]] Editor Camera so that it can move around
 - add primary camera functionality to the editor "play" mode. I envision that on the beginning of a scene it looks for a camera set as the primary camera and then stores it somewhere, rather than looking every frame like it did in the c++ engine.

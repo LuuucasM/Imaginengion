@@ -3,7 +3,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const Entity = @import("../GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const ComponentsPanel = @This();
 
 const Components = @import("../GameObjects/Components.zig");

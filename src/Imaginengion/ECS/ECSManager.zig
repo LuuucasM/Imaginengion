@@ -56,7 +56,24 @@ pub fn DuplicateEntity(self: *ECSManager, original_entity_id: u32) !u32 {
     return new_entity_id;
 }
 
-//components
+//for getting groups of entities
+pub fn GetGroup(self: ECSManager, query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+    return try self.mComponentManager.GetGroup(query, allocator);
+}
+
+pub fn EntityListDifference(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    try self.mComponentManager.EntityListDifference(result, list2, allocator);
+}
+
+pub fn EntityListUnion(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    try self.mComponentManager.EntityListUnion(result, list2, allocator);
+}
+
+pub fn EntityListIntersection(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
+    try self.mComponentManager.EntityListIntersection(result, list2, allocator);
+}
+
+//adding components
 pub fn AddComponent(self: *ECSManager, comptime ComponentType: type, entityID: u32, component: ?ComponentType) !*ComponentType {
     const new_component = try self.mComponentManager.AddComponent(ComponentType, entityID, component);
     return new_component;
@@ -72,20 +89,4 @@ pub fn HasComponent(self: ECSManager, comptime ComponentType: type, entityID: u3
 
 pub fn GetComponent(self: ECSManager, comptime ComponentType: type, entityID: u32) *ComponentType {
     return self.mComponentManager.GetComponent(ComponentType, entityID);
-}
-
-pub fn GetGroup(self: ECSManager, query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
-    return try self.mComponentManager.GetGroup(query, allocator);
-}
-
-pub fn EntityListDifference(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
-    try self.mComponentManager.EntityListDifference(result, list2, allocator);
-}
-
-pub fn EntityListUnion(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
-    try self.mComponentManager.EntityListUnion(result, list2, allocator);
-}
-
-pub fn EntityListIntersection(self: ECSManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
-    try self.mComponentManager.EntityListIntersection(result, list2, allocator);
 }

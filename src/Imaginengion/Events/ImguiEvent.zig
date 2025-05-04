@@ -1,5 +1,5 @@
 const LayerType = @import("../Scene/SceneLayer.zig").LayerType;
-const Entity = @import("../GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const ScriptType = @import("../Assets/Assets.zig").ScriptAsset.ScriptType;

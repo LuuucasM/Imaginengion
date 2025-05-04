@@ -3,7 +3,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const Entity = @import("../GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ScenePanel = @This();
 

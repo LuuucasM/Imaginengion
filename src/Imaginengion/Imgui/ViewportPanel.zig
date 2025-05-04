@@ -6,12 +6,12 @@ const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
-const Entity = @import("../GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
 const SceneManager = @import("../Scene/SceneManager.zig");
-const InputManager = @import("../Inputs/Input.zig");
+const StaticInputContext = @import("../Inputs/Input.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
@@ -144,7 +144,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_manager_ref: *SceneManager) !vo
                 imgui.LOCAL,
                 &entity_transform[0][0],
                 null,
-                if (InputManager.IsKeyPressed(.LeftControl) == true) &snap_values else null,
+                if (StaticInputContext.IsKeyPressed(.LeftControl) == true) &snap_values else null,
                 null,
                 null,
             );

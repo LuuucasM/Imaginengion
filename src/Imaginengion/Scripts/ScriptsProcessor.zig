@@ -18,9 +18,7 @@ const SceneIDComponent = Components.SceneIDComponent;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 
-const Entity = @import("../GameObjects/Entity.zig").Entity;
-
-const InputManager = @import("../Inputs/Input.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 
 pub fn OnKeyPressedEvent(scene_manager: *SceneManager, e: KeyPressedEvent) !bool {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);

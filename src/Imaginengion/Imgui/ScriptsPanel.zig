@@ -2,7 +2,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
-const Entity = @import("../GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const ScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
 const ImguiUtils = @import("ImguiUtils.zig");
 
@@ -10,6 +10,8 @@ const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
 const Components = @import("../GameObjects/Components.zig");
 const OnKeyPressedScript = Components.OnKeyPressedScript;
 const OnUpdateInputScript = Components.OnUpdateInputScript;
+
+const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const ScriptsPanel = @This();
 
@@ -63,58 +65,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                var ecs = entity.mECSManagerRef;
-                var new_script_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
-                const script_asset = try new_script_handle.GetAsset(ScriptAsset);
-                const new_script_entity = try ecs.CreateEntity();
-
-                _ = switch (script_asset.mScriptType) {
-                    .OnKeyPressed => try ecs.AddComponent(OnKeyPressedScript, new_script_entity, null),
-                    .OnUpdateInput => try ecs.AddComponent(OnUpdateInputScript, new_script_entity, null),
-                };
-
-                if (entity.HasComponent(ScriptComponent)) {
-
-                    //entity already has a script so iterate until the end of the linked list
-                    var iter_id = entity.GetComponent(ScriptComponent).mFirst;
-                    var iter = ecs.GetComponent(ScriptComponent, iter_id);
-                    while (iter.mNext != std.math.maxInt(u32)) {
-                        iter_id = iter.mNext;
-                        iter = ecs.GetComponent(ScriptComponent, iter.mNext);
-                    }
-
-                    iter.mNext = new_script_entity;
-
-                    const new_script_component = ScriptComponent{
-                        .mFirst = iter.mFirst,
-                        .mNext = std.math.maxInt(u32),
-                        .mParent = iter.mParent,
-                        .mPrev = iter_id,
-                        .mScriptAssetHandle = new_script_handle,
-                    };
-                    _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
-                } else {
-
-                    //add the script component to the entity of interest
-                    const entity_new_script_component = ScriptComponent{
-                        .mFirst = new_script_entity,
-                        .mNext = new_script_entity,
-                        .mParent = std.math.maxInt(u32),
-                        .mPrev = std.math.maxInt(u32),
-                        .mScriptAssetHandle = .{ .mID = std.math.maxInt(u32) },
-                    };
-                    _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
-
-                    //add script component to script entity
-                    const new_script_component = ScriptComponent{
-                        .mFirst = new_script_entity,
-                        .mNext = std.math.maxInt(u32),
-                        .mParent = entity.mEntityID,
-                        .mPrev = std.math.maxInt(u32),
-                        .mScriptAssetHandle = new_script_handle,
-                    };
-                    _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
-                }
+                try GameObjectUtils.AddScriptToEntity(entity, path);
             }
         }
     }

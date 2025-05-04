@@ -9,7 +9,7 @@ pub const EngineContext = extern struct {
     pub fn GetDeltaTime(self: *EngineContext) f32 {
         return self._DeltaTime;
     }
-    pub fn GetInputManager(self: *EngineContext) *InputContext {
+    pub fn GetInputContext(self: *EngineContext) *InputContext {
         return self._StaticInputContext;
     }
 };

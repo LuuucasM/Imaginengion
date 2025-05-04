@@ -10,7 +10,7 @@ const SceneSerializer = @import("SceneSerializer.zig");
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const ECSManager = @import("../ECS/ECSManager.zig");
-const Entity = @import("..//GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;

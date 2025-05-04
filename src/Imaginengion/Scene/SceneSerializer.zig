@@ -1,7 +1,7 @@
 const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
-const Entity = @import("../GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
@@ -13,6 +13,12 @@ const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 const ScriptComponent = Components.ScriptComponent;
+
+//component tags
+const OnKeyPressedScript = Components.OnKeyPressedScript;
+const OnUpdateInputScript = Components.OnUpdateInputScript;
+
+const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const Assets = @import("../Assets/Assets.zig");
@@ -112,63 +118,67 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
     defer component_string.deinit();
 
     if (entity.HasComponent(IDComponent) == true) {
-        const component = entity.GetComponent(IDComponent);
-
-        try std.json.stringify(component, .{}, component_string.writer());
-
         try write_stream.objectField("IDComponent");
+
+        const component = entity.GetComponent(IDComponent);
+        try std.json.stringify(component, .{}, component_string.writer());
         try write_stream.write(component_string.items);
+
         component_string.clearAndFree();
     }
     if (entity.HasComponent(SceneIDComponent) == true) {
+        try write_stream.objectField("SceneIDComponent");
+
         const component = entity.GetComponent(SceneIDComponent);
         try std.json.stringify(component, .{}, component_string.writer());
-
-        try write_stream.objectField("SceneIDComponent");
         try write_stream.write(component_string.items);
+
         component_string.clearAndFree();
     }
     if (entity.HasComponent(NameComponent) == true) {
+        try write_stream.objectField("NameComponent");
+
         const component = entity.GetComponent(NameComponent);
         try std.json.stringify(component, .{}, component_string.writer());
-
-        try write_stream.objectField("NameComponent");
         try write_stream.write(component_string.items);
+
         component_string.clearAndFree();
     }
     if (entity.HasComponent(TransformComponent) == true) {
+        try write_stream.objectField("TransformComponent");
+
         const component = entity.GetComponent(TransformComponent);
         try std.json.stringify(component, .{}, component_string.writer());
-
-        try write_stream.objectField("TransformComponent");
         try write_stream.write(component_string.items);
+
         component_string.clearAndFree();
     }
     if (entity.HasComponent(CameraComponent) == true) {
+        try write_stream.objectField("CameraComponent");
+
         const component = entity.GetComponent(CameraComponent);
         try std.json.stringify(component, .{}, component_string.writer());
-
-        try write_stream.objectField("CameraComponent");
         try write_stream.write(component_string.items);
+
         component_string.clearAndFree();
     }
     if (entity.HasComponent(CircleRenderComponent) == true) {
+        try write_stream.objectField("CircleRenderComponent");
+
         const component = entity.GetComponent(CircleRenderComponent);
         try std.json.stringify(component, .{}, component_string.writer());
-
-        try write_stream.objectField("CircleRenderComponent");
         try write_stream.write(component_string.items);
+
         component_string.clearAndFree();
     }
     if (entity.HasComponent(SpriteRenderComponent) == true) {
-        const component = entity.GetComponent(SpriteRenderComponent);
-        try std.json.stringify(component, .{}, component_string.writer());
-
         try write_stream.objectField("SpriteRenderComponent");
 
         try write_stream.beginObject();
 
         try write_stream.objectField("Component");
+        const component = entity.GetComponent(SpriteRenderComponent);
+        try std.json.stringify(component, .{}, component_string.writer());
         try write_stream.write(component_string.items);
         component_string.clearAndFree();
 
@@ -180,6 +190,39 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
             component_string.clearAndFree();
         } else {
             try write_stream.write("No Texture");
+            component_string.clearAndFree();
+        }
+
+        try write_stream.endObject();
+    }
+    if (entity.HasComponent(ScriptComponent) == true) {
+        try write_stream.objectField("ScriptComponent");
+
+        try write_stream.beginObject();
+
+        const ecs = entity.mECSManagerRef;
+        var current_id = entity.mEntityID;
+        var component: *ScriptComponent = undefined;
+        while (current_id != std.math.maxInt(u32)) {
+            try write_stream.objectField("Component");
+
+            component = ecs.GetComponent(ScriptComponent, current_id);
+            try std.json.stringify(component, .{}, component_string.writer());
+            try write_stream.write(component_string.items);
+            component_string.clearAndFree();
+
+            try write_stream.objectField("AssetFileData");
+            if (component.mScriptAssetHandle.mID != std.math.maxInt(u32)) {
+                const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
+                try std.json.stringify(asset_file_data, .{}, component_string.writer());
+                try write_stream.write(component_string.items);
+                component_string.clearAndFree();
+            } else {
+                try write_stream.write("No Script Asset");
+                component_string.clearAndFree();
+            }
+
+            current_id = component.mNext;
         }
 
         try write_stream.endObject();
@@ -301,8 +344,49 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
 
             sprite_render_component.mTexture = try AssetManager.GetAssetHandleRef(file_data.mRelPath, file_data.mPathType);
         }
+    } else if (std.mem.eql(u8, value, "ScriptComponent")) {
+        //skip past begin object token
+        _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+
+        var current_id: u32 = current_entity.mEntityID;
+        while (current_id != std.math.maxInt(u32)) {
+            //skip past object field
+            _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+
+            const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const component_data_string = switch (component_data_token) {
+                .string => |component_data| component_data,
+                .allocated_string => |component_data| component_data,
+                else => @panic("should be a string!!\n"),
+            };
+            const new_component_parsed = try std.json.parseFromSlice(ScriptComponent, allocator, component_data_string, .{});
+            defer new_component_parsed.deinit();
+
+            const parsed_script_component = new_component_parsed.value;
+
+            //skip past the object field token
+            _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+
+            //read the next token which will be the potential path of the asset
+            const file_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const file_data_string = switch (file_data_token) {
+                .string => |component_data| component_data,
+                .allocated_string => |component_data| component_data,
+                else => @panic("should be a string!!\n"),
+            };
+
+            if (parsed_script_component.mScriptAssetHandle.mID != std.math.maxInt(u32)) {
+                const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
+                defer file_data_component.deinit();
+                const file_data = file_data_component.value;
+
+                try GameObjectUtils.AddScriptToEntity(current_entity.*, file_data.mRelPath);
+            }
+            current_id = parsed_script_component.mNext;
+        }
     }
 }
+
 fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
     if (result.items.len == 0) return;
 

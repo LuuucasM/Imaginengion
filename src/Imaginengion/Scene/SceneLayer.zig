@@ -6,7 +6,7 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Mat4f32 = LinAlg.Mat4f32;
 
 const ECSManager = @import("../ECS/ECSManager.zig");
-const Entity = @import("..//GameObjects/Entity.zig").Entity;
+const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const ComponentsArray = Components.ComponentsList;
 

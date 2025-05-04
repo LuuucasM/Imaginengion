@@ -89,12 +89,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Adding new scripts to engine.md",
+                "file": "ECS.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Adding new scripts to engine"
+              "title": "ECS"
             }
           }
         ],
@@ -247,9 +247,9 @@
   },
   "active": "951b8cf8be951c27",
   "lastOpenFiles": [
-    "General TODO.md",
     "Scripts.md",
     "Adding new scripts to engine.md",
+    "General TODO.md",
     "Scene Manager.md",
     "Bugs.md",
     "Imgui.md",

@@ -1,6 +1,6 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Entity = @import("IM").Entity;
+const Entity = @import("IM");
 const ScriptType = @import("IM").ScriptType;
 const KeyPressedEvent = @import("IM").SystemEvent.KeyPressedEvent;
 const OnKeyPressedTemplate = @This();
