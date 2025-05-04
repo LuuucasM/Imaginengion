@@ -24,11 +24,12 @@ pub fn OnImguiRender(self: StatsPanel, dt: f64, render_stats: RenderStats) !void
     const frame_text = try std.fmt.allocPrint(allocator, "Frame Data: \n", .{});
     imgui.igTextUnformatted(frame_text.ptr, frame_text.ptr + frame_text.len);
 
-    const ms_text = try std.fmt.allocPrint(allocator, "\tDelta time: {d:.2}\n", .{dt});
-    imgui.igTextUnformatted(ms_text.ptr, ms_text.ptr + ms_text.len);
+    const us_time = std.time.us_per_s * dt;
+    const us_text = try std.fmt.allocPrint(allocator, "\tDelta time in micro seconds: {d:.0}\n", .{us_time});
+    imgui.igTextUnformatted(us_text.ptr, us_text.ptr + us_text.len);
 
-    const fps = std.time.ms_per_s / dt;
-    const fps_text = try std.fmt.allocPrint(allocator, "\tFPS: {d:.2}\n", .{fps});
+    const fps = 1.0 / dt;
+    const fps_text = try std.fmt.allocPrint(allocator, "\tFPS: {d:.0}\n", .{fps});
     imgui.igTextUnformatted(fps_text.ptr, fps_text.ptr + fps_text.len);
 
     imgui.igSeparator();

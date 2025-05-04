@@ -7,7 +7,7 @@ const Program = @import("../Programs/Program.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
-const EngineContext = @import("EngineContext.zig");
+const StaticEngineContext = @import("EngineContext.zig");
 
 const Application: type = @This();
 
@@ -27,7 +27,7 @@ pub fn Init(self: *Application, engine_allocator: std.mem.Allocator) !void {
     try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);
 
-    EngineContext.Init();
+    StaticEngineContext.Init();
 }
 
 pub fn Deinit(self: *Application) !void {
@@ -40,9 +40,10 @@ pub fn Deinit(self: *Application) !void {
 
 pub fn Run(self: *Application) !void {
     var timer = try std.time.Timer.start();
-    var delta_time: f64 = 0;
+    var delta_time: f32 = 0;
 
-    while (self.mIsRunning) : (delta_time = @as(f64, @floatFromInt(timer.lap())) / std.time.ns_per_ms) {
+    while (self.mIsRunning) : (delta_time = @as(f32, @floatFromInt(timer.lap())) / std.time.ns_per_s) {
+        StaticEngineContext.SetDT(delta_time);
         try self.mProgram.OnUpdate(delta_time);
     }
 }

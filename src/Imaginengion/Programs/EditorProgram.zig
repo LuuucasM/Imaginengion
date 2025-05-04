@@ -74,7 +74,12 @@ pub fn Deinit(self: *EditorProgram) !void {
     ImGui.Deinit();
 }
 
-pub fn OnUpdate(self: *EditorProgram, dt: f64) !void {
+//Note other systems to consider in the on update loop
+//that isnt there already:
+//particles
+//handling the loading and unloading of assets and scene transitions
+//debug/profiling
+pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //update asset manager
     try AssetManager.OnUpdate();
 

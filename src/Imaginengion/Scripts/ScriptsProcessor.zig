@@ -1,7 +1,8 @@
 //! This file exists as a location to group together all the functions that run
 //! scripts rather than cluddering up other engine files like scene manager or something
 const std = @import("std");
-const EngineContext = @import("../Core/EngineContext.zig");
+const StaticEngineContext = @import("../Core/EngineContext.zig");
+const EngineContext = StaticEngineContext.EngineContext;
 const SceneManager = @import("../Scene/SceneManager.zig");
 
 const GameEvent = @import("../Events/GameEvent.zig");
@@ -45,7 +46,7 @@ pub fn OnKeyPressedEvent(scene_manager: *SceneManager, e: KeyPressedEvent) !bool
 
             var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = scene_layer.mECSManagerRef };
 
-            cont_bool = cont_bool and run_func(EngineContext.GetInstance(), &allocator, &entity, &e);
+            cont_bool = cont_bool and run_func(StaticEngineContext.GetInstance(), &allocator, &entity, &e);
         }
     }
     return cont_bool;
@@ -55,9 +56,6 @@ pub fn OnUpdateInput(scene_manager: *SceneManager) !bool {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
-    std.debug.print("Is the w key down OnUpdateInput? {}\n", .{InputManager.IsKeyPressed(.W)});
-    EngineContext.Init();
 
     const group = try scene_manager.mECSManager.GetGroup(.{ .Component = OnUpdateInputScript }, allocator);
 
@@ -78,7 +76,7 @@ pub fn OnUpdateInput(scene_manager: *SceneManager) !bool {
 
             var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = scene_layer.mECSManagerRef };
 
-            cont_bool = cont_bool and run_func(EngineContext.GetInstance(), &allocator, &entity);
+            cont_bool = cont_bool and run_func(StaticEngineContext.GetInstance(), &allocator, &entity);
         }
     }
     return cont_bool;

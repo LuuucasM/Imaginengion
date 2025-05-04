@@ -22,7 +22,7 @@ pub fn Deinit(self: *Program) !void {
     Renderer.Deinit();
 }
 
-pub fn OnUpdate(self: *Program, dt: f64) !void {
+pub fn OnUpdate(self: *Program, dt: f32) !void {
     try self._Impl.OnUpdate(dt);
 }
 

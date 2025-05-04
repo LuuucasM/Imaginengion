@@ -1,6 +1,6 @@
 //Core Stuff -----------------------------------
 pub const Application = @import("Core/Application.zig");
-pub const EngineContext = @import("Core/EngineContext.zig");
+pub const EngineContext = @import("Core/EngineContext.zig").EngineContext;
 
 //Input Stuff -----------------------------------
 pub const InputManager = @import("Inputs/Input.zig");
