@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Window = @import("../Windows/Window.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
+const StaticInputContext = @import("../Inputs/Input.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
@@ -85,6 +86,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     //-------------Inputs Begin------------------
     self.mWindow.PollInputEvents();
+    StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
     _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
     //-------------Inputs End--------------------

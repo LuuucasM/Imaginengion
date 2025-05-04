@@ -16,3 +16,9 @@ pub const TransformComponent = Components.TransformComponent;
 
 //Script Stuff ----------------------------------------------
 pub const ScriptType = @import("Assets/Assets/ScriptAsset.zig").ScriptType;
+
+//LinAlg stuff
+pub const LinAlg = @import("Math/LinAlg.zig");
+pub const Vec2f32 = LinAlg.Vec2f32;
+pub const Vec3f32 = LinAlg.Vec3f32;
+pub const Quatf32 = LinAlg.Quatf32;

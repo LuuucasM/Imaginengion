@@ -1,4 +1,13 @@
-pub const KeyCodes = enum(u32) {
+pub const InputCodes = enum(u16) {
+    MouseButtonLeft = 0,
+    MouseButtonRight = 1,
+    MouseButtonMiddle = 2,
+    MouseButton3 = 3,
+    MouseButton4 = 4,
+    MouseButton5 = 5,
+    MouseButton6 = 6,
+    MouseButtonLast = 7,
+
     Space = 32,
     Apostrophe = 39, // { ' }
     Comma = 44, // { , }

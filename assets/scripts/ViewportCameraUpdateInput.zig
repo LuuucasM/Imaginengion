@@ -1,0 +1,59 @@
+const std = @import("std");
+const EngineContext = @import("../Core/EngineContext.zig");
+const Entity = @import("IM").Entity;
+const LinAlg = @import("IM").LinAlg;
+const Vec3f32 = @import("IM").Vec3f32;
+const Quatf32 = @import("IM").Quatf32;
+const Vec2f32 = @import("IM").Vec2f32;
+const ScriptType = @import("IM").ScriptType;
+const TransformComponent = @import("IM").TransformComponent;
+const OnUpdateInputTemplate = @This();
+
+/// Function that gets executed every frame after polling inputs and input events
+/// if this function returns true it allows the event to be propegated to other layers/systems
+/// if it returns false it will stop at this layer
+pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.C) bool {
+    _ = allocator;
+    const input_context = engine_context.GetInputContext();
+    if (input_context.IsInputPressed(.LeftAlt) == true) {
+        const PanSpeed = 0.01;
+        const RotateSpeed = 0.005;
+        const ZoomSpeed = 0.05;
+        const mouse_delta = input_context.GetMousePositionDelta();
+
+        const transform_component = self.GetComponent(TransformComponent);
+        var translation = transform_component.Translation;
+        var rotation = transform_component.Rotation;
+
+        if (input_context.IsMouseButtonPressed(.ButtonMiddle)) {
+            const right_dir = GetRightDirection(rotation);
+            const up_dir = GetUpDirection(rotation);
+
+            translation = translation - (right_dir * (mouse_delta[0] * PanSpeed) + (up_dir * (mouse_delta[1] * PanSpeed)));
+        } else if (input_context.IsMouseButtonPressed(.ButtonLeft)) {
+            //rotate the camera
+        } else if (input_context.IsMouseButtonPressed(.ButtonRight)) {
+            const forward_dir = GetForwardDirection(rotation);
+            translation += forward_dir * mouse_delta[1] * ZoomSpeed;
+        }
+    }
+
+    return true;
+}
+
+pub export fn EditorRender() callconv(.C) void {}
+
+//Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
+pub export fn GetScriptType() callconv(.C) ScriptType {
+    return ScriptType.OnUpdateInput;
+}
+
+fn GetUpDirection(rotation: Quatf32) Vec3f32 {
+    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 1.0, 0.0 });
+}
+fn GetRightDirection(rotation: Quatf32) Vec3f32 {
+    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 1.0, 0.0, 0.0 });
+}
+fn GetForwardDirection(rotation: Quatf32) Vec3f32 {
+    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 0.0, -1.0 });
+}

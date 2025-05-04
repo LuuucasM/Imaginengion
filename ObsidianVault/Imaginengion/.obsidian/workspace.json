@@ -4,59 +4,11 @@
     "type": "split",
     "children": [
       {
-        "id": "f0f78c9bb78ea351",
+        "id": "1a9a00d6580c846c",
         "type": "tabs",
         "children": [
           {
-            "id": "aa157f4d807536e6",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "NewNote1.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "NewNote1"
-            }
-          },
-          {
-            "id": "db05fa421e1d24c4",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "Adding new components to engine.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "Adding new components to engine"
-            }
-          },
-          {
-            "id": "90119a27e6e91022",
-            "type": "leaf",
-            "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
-            }
-          },
-          {
-            "id": "73272777163bafae",
-            "type": "leaf",
-            "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
-            }
-          },
-          {
-            "id": "175ee7b2478e0ab8",
+            "id": "01b066259cf300ae",
             "type": "leaf",
             "state": {
               "type": "markdown",
@@ -67,38 +19,9 @@
               },
               "icon": "lucide-file",
               "title": "General TODO"
-            }
-          },
-          {
-            "id": "8b5a124c5cd1e18d",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "General TODO.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "General TODO"
-            }
-          },
-          {
-            "id": "951b8cf8be951c27",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "ECS.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "ECS"
             }
           }
-        ],
-        "currentTab": 6
+        ]
       }
     ],
     "direction": "vertical"
@@ -245,16 +168,16 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "951b8cf8be951c27",
+  "active": "01b066259cf300ae",
   "lastOpenFiles": [
+    "Viewport Panel.md",
+    "General TODO.md",
+    "ECS.md",
     "Scripts.md",
     "Adding new scripts to engine.md",
-    "General TODO.md",
     "Scene Manager.md",
     "Bugs.md",
     "Imgui.md",
-    "Viewport Panel.md",
-    "ECS.md",
     "Adding new components to engine.md",
     "Scene Manager Design philosophy.md",
     "ECS Design Philosophy.md",
