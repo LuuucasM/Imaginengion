@@ -10,9 +10,9 @@ const Impl = switch (builtin.os.tag) {
 
 _Impl: Impl = undefined,
 
-pub fn Init(path: []const u8) !Texture2D {
+pub fn Init(abs_path: []const u8) !Texture2D {
     return Texture2D{
-        ._Impl = try Impl.Init(path),
+        ._Impl = try Impl.Init(abs_path),
     };
 }
 

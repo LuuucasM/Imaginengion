@@ -14,7 +14,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
-const OnKeyPressedScript = Components.OnKeyPressedScript;
+const OnInputPressedScript = Components.OnInputPressedScript;
 const ScriptComponent = Components.ScriptComponent;
 const SceneIDComponent = Components.SceneIDComponent;
 const ComponentsArray = Components.ComponentsList;
@@ -33,7 +33,7 @@ const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const Shader = @import("../Shaders/Shaders.zig");
 
-const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
+const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 
 const SceneManager = @This();
 

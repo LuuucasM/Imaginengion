@@ -2,7 +2,7 @@ const std = @import("std");
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
-const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
+const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const Renderer = @import("../Renderer/Renderer.zig");
 const Window = @import("../Windows/Window.zig");
 const Program = @This();
@@ -26,8 +26,8 @@ pub fn OnUpdate(self: *Program, dt: f32) !void {
     try self._Impl.OnUpdate(dt);
 }
 
-pub fn OnKeyPressedEvent(self: *Program, e: KeyPressedEvent) !bool {
-    return self._Impl.OnKeyPressedEvent(e);
+pub fn OnInputPressedEvent(self: *Program, e: InputPressedEvent) !bool {
+    return self._Impl.OnInputPressedEvent(e);
 }
 
 pub fn OnImguiEvent(self: *Program, event: *ImguiEvent) !void {

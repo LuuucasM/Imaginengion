@@ -1,5 +1,4 @@
-const KeyCodes = @import("../Inputs/KeyCodes.zig").KeyCodes;
-const MouseCodes = @import("../Inputs/MouseCodes.zig").MouseCodes;
+const InputCodes = @import("../Inputs/InputCodes.zig").InputCodes;
 
 pub const SystemEventCategory = enum(u2) {
     EC_Default = 0,
@@ -11,10 +10,8 @@ pub const SystemEvent = union(enum) {
     ET_DefaultEvent: DefaultEvent,
     ET_WindowClose: WindowCloseEvent,
     ET_WindowResize: WindowResizeEvent,
-    ET_KeyPressed: KeyPressedEvent,
-    ET_KeyReleased: KeyReleasedEvent,
-    ET_MouseButtonPressed: MouseButtonPressedEvent,
-    ET_MouseButtonReleased: MouseButtonReleasedEvent,
+    ET_InputPressed: InputPressedEvent,
+    ET_InputReleased: InputReleasedEvent,
     ET_MouseMoved: MouseMovedEvent,
     ET_MouseScrolled: MouseScrolledEvent,
     pub fn GetEventCategory(self: SystemEvent) SystemEventCategory {
@@ -31,39 +28,23 @@ pub const DefaultEvent = struct {
     }
 };
 
-pub const KeyPressedEvent = extern struct {
-    pub fn GetEventCategory(self: KeyPressedEvent) SystemEventCategory {
+pub const InputPressedEvent = struct {
+    pub fn GetEventCategory(self: InputPressedEvent) SystemEventCategory {
         _ = self;
         return .EC_Input;
     }
-    _KeyCode: KeyCodes,
-    _RepeatCount: u32,
-};
 
-pub const KeyReleasedEvent = struct {
-    pub fn GetEventCategory(self: KeyReleasedEvent) SystemEventCategory {
+    _InputCode: InputCodes,
+    _Repeat: u16,
+};
+pub const InputReleasedEvent = struct {
+    pub fn GetEventCategory(self: InputReleasedEvent) SystemEventCategory {
         _ = self;
         return .EC_Input;
     }
-    _KeyCode: KeyCodes,
-};
 
-pub const MouseButtonPressedEvent = struct {
-    pub fn GetEventCategory(self: MouseButtonPressedEvent) SystemEventCategory {
-        _ = self;
-        return .EC_Window;
-    }
-    _MouseCode: MouseCodes,
+    _InputCode: InputCodes,
 };
-
-pub const MouseButtonReleasedEvent = struct {
-    pub fn GetEventCategory(self: MouseButtonReleasedEvent) SystemEventCategory {
-        _ = self;
-        return .EC_Input;
-    }
-    _MouseCode: MouseCodes,
-};
-
 pub const MouseMovedEvent = struct {
     pub fn GetEventCategory(self: MouseMovedEvent) SystemEventCategory {
         _ = self;

@@ -14,10 +14,6 @@ const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 const ScriptComponent = Components.ScriptComponent;
 
-//component tags
-const OnKeyPressedScript = Components.OnKeyPressedScript;
-const OnUpdateInputScript = Components.OnUpdateInputScript;
-
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const AssetManager = @import("../Assets/AssetManager.zig");
@@ -380,7 +376,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
                 defer file_data_component.deinit();
                 const file_data = file_data_component.value;
 
-                try GameObjectUtils.AddScriptToEntity(current_entity.*, file_data.mRelPath);
+                try GameObjectUtils.AddScriptToEntity(current_entity.*, file_data.mRelPath, .Prj);
             }
             current_id = parsed_script_component.mNext;
         }

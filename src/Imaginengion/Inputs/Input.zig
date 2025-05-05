@@ -23,11 +23,8 @@ pub const InputContext = struct {
     _MousePositionDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
     _MouseScrolledDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 
-    pub fn IsKeyPressed(self: *InputContext, key: InputCodes) bool {
+    pub fn IsInputPressed(self: *InputContext, key: InputCodes) bool {
         return self._InputPressedSet.contains(key);
-    }
-    pub fn IsMouseButtonPressed(self: *InputContext, button: InputCodes) bool {
-        return self._InputPressedSet.contains(button);
     }
     pub fn GetMousePosition(self: *InputContext) Vec2f32 {
         return self._MousePositionNew;
@@ -69,7 +66,6 @@ pub fn SetInputPressed(input: InputCodes) !void {
         try StaticInputContext._InputPressedSet.put(input, 1);
     } else {
         try StaticInputContext._InputPressedSet.put(input, 0);
-        StaticInputContext._InputPressBuffer.Push(.{ .mInputCode = input, .mTimestamp = @intCast(std.time.milliTimestamp()) });
     }
 }
 
@@ -80,14 +76,14 @@ pub fn IsInputPressed(input: InputCodes) bool {
     return StaticInputContext._InputPressedSet.contains(input);
 }
 pub fn SetMousePosition(new_pos: Vec2f32) void {
-    StaticInputContext._MousePosition = new_pos;
+    StaticInputContext._MousePositionNew = new_pos;
 }
 pub fn GetMousePosition() Vec2f32 {
-    return StaticInputContext._MousePosition;
+    return StaticInputContext._MousePositionNew;
 }
 pub fn SetMouseScrolled(new_scrolled: Vec2f32) void {
-    StaticInputContext._MouseScrolled = new_scrolled;
+    StaticInputContext._MouseScrolledNew = new_scrolled;
 }
 pub fn GetMouseScrolled() Vec2f32 {
-    return StaticInputContext._MouseScrolled;
+    return StaticInputContext._MouseScrolledNew;
 }

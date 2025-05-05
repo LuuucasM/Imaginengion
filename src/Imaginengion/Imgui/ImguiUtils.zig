@@ -9,7 +9,7 @@ pub fn ScriptPopupMenu() !void {
         if (imgui.igMenuItem_Bool("On Key Pressed Script", "", false, true) == true) {
             const new_script_event = ImguiEvent{
                 .ET_NewScriptEvent = .{
-                    .mScriptType = .OnKeyPressed,
+                    .mScriptType = .OnInputPressed,
                 },
             };
             try ImguiEventManager.Insert(new_script_event);

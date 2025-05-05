@@ -1,5 +1,5 @@
 const std = @import("std");
-const EngineContext = @import("../Core/EngineContext.zig");
+const EngineContext = @import("IM").EngineContext;
 const Entity = @import("IM").Entity;
 const LinAlg = @import("IM").LinAlg;
 const Vec3f32 = @import("IM").Vec3f32;
@@ -16,29 +16,48 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
     _ = allocator;
     const input_context = engine_context.GetInputContext();
     if (input_context.IsInputPressed(.LeftAlt) == true) {
-        const PanSpeed = 0.01;
-        const RotateSpeed = 0.005;
+        const PanSpeed = 0.05;
+        const RotateSpeed = 5.0;
         const ZoomSpeed = 0.05;
+
         const mouse_delta = input_context.GetMousePositionDelta();
 
         const transform_component = self.GetComponent(TransformComponent);
         var translation = transform_component.Translation;
         var rotation = transform_component.Rotation;
 
-        if (input_context.IsMouseButtonPressed(.ButtonMiddle)) {
+        if (input_context.IsInputPressed(.MouseButtonMiddle) == true) {
             const right_dir = GetRightDirection(rotation);
             const up_dir = GetUpDirection(rotation);
+            translation = translation - right_dir * @as(Vec3f32, @splat(mouse_delta[0] * PanSpeed)) + (up_dir * @as(Vec3f32, @splat(mouse_delta[1] * PanSpeed)));
+            transform_component.SetTranslation(translation);
+        } else if (input_context.IsInputPressed(.MouseButtonLeft) == true) {
+            const up_dir = GetUpDirection(rotation);
+            const right_dir = GetRightDirection(rotation);
 
-            translation = translation - (right_dir * (mouse_delta[0] * PanSpeed) + (up_dir * (mouse_delta[1] * PanSpeed)));
-        } else if (input_context.IsMouseButtonPressed(.ButtonLeft)) {
-            //rotate the camera
-        } else if (input_context.IsMouseButtonPressed(.ButtonRight)) {
+            const yaw = LinAlg.QuatAngleAxis(-mouse_delta[0] * RotateSpeed, right_dir);
+            const pitch = LinAlg.QuatAngleAxis(-mouse_delta[1] * RotateSpeed, up_dir);
+
+            rotation = yaw * rotation * pitch;
+            transform_component.SetRotation(rotation);
+        } else if (input_context.IsInputPressed(.MouseButtonRight) == true) {
             const forward_dir = GetForwardDirection(rotation);
-            translation += forward_dir * mouse_delta[1] * ZoomSpeed;
+            translation += forward_dir * @as(Vec3f32, @splat(mouse_delta[1] * ZoomSpeed));
+            transform_component.SetTranslation(translation);
         }
     }
 
     return true;
+}
+
+fn GetRightDirection(rotation: Quatf32) Vec3f32 {
+    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 1.0, 0.0, 0.0 });
+}
+fn GetUpDirection(rotation: Quatf32) Vec3f32 {
+    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 1.0, 0.0 });
+}
+fn GetForwardDirection(rotation: Quatf32) Vec3f32 {
+    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 0.0, -1.0 });
 }
 
 pub export fn EditorRender() callconv(.C) void {}
@@ -46,14 +65,4 @@ pub export fn EditorRender() callconv(.C) void {}
 //Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
 pub export fn GetScriptType() callconv(.C) ScriptType {
     return ScriptType.OnUpdateInput;
-}
-
-fn GetUpDirection(rotation: Quatf32) Vec3f32 {
-    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 1.0, 0.0 });
-}
-fn GetRightDirection(rotation: Quatf32) Vec3f32 {
-    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 1.0, 0.0, 0.0 });
-}
-fn GetForwardDirection(rotation: Quatf32) Vec3f32 {
-    return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 0.0, -1.0 });
 }

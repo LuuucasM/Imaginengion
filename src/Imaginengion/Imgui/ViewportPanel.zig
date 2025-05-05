@@ -5,13 +5,15 @@ const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
+const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
+const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const StaticInputContext = @import("../Inputs/Input.zig");
+
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
@@ -32,26 +34,31 @@ mP_Open: bool,
 mViewportWidth: usize,
 mViewportHeight: usize,
 mSelectedEntity: ?Entity,
-mViewportCameraID: u32,
+mCameraEntity: Entity,
 mGizmoType: GizmoType,
 
 pub fn Init(scene_manager_ref: *SceneManager) !ViewportPanel {
 
     //setup camera for viewport editing
     const new_viewport_camera = try scene_manager_ref.mECSManager.CreateEntity();
-    const new_transform = TransformComponent{ .Translation = Vec3f32{ 0.0, 0.0, 15.0 } };
-    _ = try scene_manager_ref.mECSManager.AddComponent(TransformComponent, new_viewport_camera, new_transform);
+
+    const camera_entity = Entity{ .mEntityID = new_viewport_camera, .mECSManagerRef = &scene_manager_ref.mECSManager };
+
+    const new_transform_component = TransformComponent{ .Translation = Vec3f32{ 0.0, 0.0, 15.0 } };
+    _ = try camera_entity.AddComponent(TransformComponent, new_transform_component);
 
     var new_camera = CameraComponent{};
     new_camera.SetViewportSize(scene_manager_ref.mViewportWidth, scene_manager_ref.mViewportHeight);
-    _ = try scene_manager_ref.mECSManager.AddComponent(CameraComponent, new_viewport_camera, new_camera);
+    _ = try camera_entity.AddComponent(CameraComponent, new_camera);
+
+    try GameObjectUtils.AddScriptToEntity(camera_entity, "assets/scripts/EditorCameraInput.zig", .Cwd);
 
     return ViewportPanel{
         .mP_Open = true,
         .mViewportWidth = 1600,
         .mViewportHeight = 900,
         .mSelectedEntity = null,
-        .mViewportCameraID = new_viewport_camera,
+        .mCameraEntity = camera_entity,
         .mGizmoType = .None,
     };
 }
@@ -61,6 +68,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_manager_ref: *SceneManager) !vo
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
 
+    self.mCameraEntity.mECSManagerRef = &scene_manager_ref.mECSManager;
     const scene_frame_buffer = scene_manager_ref.mFrameBuffer;
 
     //update viewport size if needed
@@ -123,8 +131,8 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_manager_ref: *SceneManager) !vo
             imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
             imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
 
-            const camera_component = scene_manager_ref.mECSManager.GetComponent(CameraComponent, self.mViewportCameraID);
-            const camera_transform = scene_manager_ref.mECSManager.GetComponent(TransformComponent, self.mViewportCameraID);
+            const camera_component = self.mCameraEntity.GetComponent(CameraComponent);
+            const camera_transform = self.mCameraEntity.GetComponent(TransformComponent);
 
             imgui.ImGuizmo_SetOrthographic(if (camera_component.mProjectionType == .Orthographic) true else false);
             var camera_proj = LinAlg.Mat4ToArray(camera_component.mProjection);
@@ -144,7 +152,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_manager_ref: *SceneManager) !vo
                 imgui.LOCAL,
                 &entity_transform[0][0],
                 null,
-                if (StaticInputContext.IsKeyPressed(.LeftControl) == true) &snap_values else null,
+                if (StaticInputContext.IsInputPressed(.LeftControl) == true) &snap_values else null,
                 null,
                 null,
             );
@@ -173,8 +181,8 @@ pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
 }
 
-pub fn OnKeyPressedEvent(self: *ViewportPanel, e: KeyPressedEvent) bool {
-    switch (e._KeyCode) {
+pub fn OnInputPressedEvent(self: *ViewportPanel, e: InputPressedEvent) bool {
+    switch (e._InputCode) {
         .Q => {
             if (imgui.ImGuizmo_IsUsing() == false) {
                 self.mGizmoType = .None;

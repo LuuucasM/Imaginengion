@@ -8,7 +8,6 @@ const ImguiUtils = @import("ImguiUtils.zig");
 
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
 const Components = @import("../GameObjects/Components.zig");
-const OnKeyPressedScript = Components.OnKeyPressedScript;
 const OnUpdateInputScript = Components.OnUpdateInputScript;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
@@ -65,7 +64,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                try GameObjectUtils.AddScriptToEntity(entity, path);
+                try GameObjectUtils.AddScriptToEntity(entity, path, .Prj);
             }
         }
     }

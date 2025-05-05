@@ -5,21 +5,17 @@ const ScriptAsset = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 
 pub const ScriptType = enum(u8) {
-    OnKeyPressed = 0,
+    OnInputPressed = 0,
     OnUpdateInput = 1,
 };
 
 mLib: std.DynLib = undefined,
 mScriptType: ScriptType = undefined,
 
-pub fn Init(path: []const u8) !ScriptAsset {
+pub fn Init(abs_path: []const u8) !ScriptAsset {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
-    //get the path of the abs path of the script
-    const cwd_dir_path = try std.fs.cwd().realpathAlloc(allocator, ".");
-    const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ cwd_dir_path, path });
 
     //spawn a child to handle compiling the zig file into a dll
     const file_arg = try std.fmt.allocPrint(allocator, "-Dscript_abs_path={s}", .{abs_path});

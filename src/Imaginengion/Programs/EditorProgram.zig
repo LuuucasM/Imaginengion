@@ -7,12 +7,13 @@ const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 
+const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const TransformComponent = Components.TransformComponent;
 
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
-const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
+const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
@@ -105,7 +106,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);
-    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mViewportCameraID);
+    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mCameraEntity.mEntityID);
 
     Renderer.SwapBuffers();
     //--------------Render End-------------------
@@ -156,10 +157,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------End Frame Cleanup---------
 }
 
-pub fn OnKeyPressedEvent(self: *EditorProgram, e: KeyPressedEvent) !bool {
+pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
     var cont_bool = true;
-    cont_bool = cont_bool and try ScriptsProcessor.OnKeyPressedEvent(&self.mSceneManager, e);
-    cont_bool = cont_bool and self._ViewportPanel.OnKeyPressedEvent(e);
+    cont_bool = cont_bool and try ScriptsProcessor.OnInputPressedEvent(&self.mSceneManager, e);
+    cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
     return cont_bool;
 }
 

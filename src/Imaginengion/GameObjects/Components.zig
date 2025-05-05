@@ -8,7 +8,7 @@ pub const TransformComponent = @import("Components/TransformComponent.zig").Tran
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
-pub const OnKeyPressedScript = TagComponents.OnKeyPressedScript;
+pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
 pub const OnUpdateInputScript = TagComponents.OnUpdateInputScript;
 
 pub const ComponentsList = [_]type{
@@ -20,7 +20,7 @@ pub const ComponentsList = [_]type{
     SpriteRenderComponent,
     TransformComponent,
     ScriptComponent,
-    OnKeyPressedScript,
+    OnInputPressedScript,
     OnUpdateInputScript,
 };
 
@@ -33,6 +33,6 @@ pub const EComponents = enum(usize) {
     SpriteRenderComponent = SpriteRenderComponent.Ind,
     TransformComponent = TransformComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
-    OnKeyPressedScript = OnKeyPressedScript.Ind,
+    OnInputPressed = OnInputPressedScript.Ind,
     OnUpdateInput = OnUpdateInputScript.Ind,
 };

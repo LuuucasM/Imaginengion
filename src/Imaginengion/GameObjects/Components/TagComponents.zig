@@ -1,11 +1,11 @@
 const ComponentsList = @import("../Components.zig").ComponentsList;
 
 //scripts
-pub const OnKeyPressedScript = struct {
+pub const OnInputPressedScript = struct {
     bit: u1 = 0,
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == OnKeyPressedScript) {
+            if (component_type == OnInputPressedScript) {
                 break :blk i;
             }
         }

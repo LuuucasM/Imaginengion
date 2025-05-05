@@ -10,14 +10,14 @@ _InternalFormat: c_uint,
 _DataFormat: c_uint,
 mSlot: usize,
 
-pub fn Init(path: []const u8) !OpenGLTexture2D {
+pub fn Init(abs_path: []const u8) !OpenGLTexture2D {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
     var data: ?*stb.stbi_uc = null;
     stb.stbi_set_flip_vertically_on_load(1);
 
-    var file = try std.fs.cwd().openFile(path, .{});
+    var file = try std.fs.cwd().openFile(abs_path, .{});
     defer file.close();
     const fstats = try file.stat();
 
@@ -37,7 +37,7 @@ pub fn Init(path: []const u8) !OpenGLTexture2D {
         internal_format = glad.GL_RGB8;
         data_format = glad.GL_RGB;
     } else {
-        std.log.err("Textureformat not supported in OpenGLTexture2D when loading file: {s}", .{path});
+        std.log.err("Textureformat not supported in OpenGLTexture2D when loading file: {s}", .{abs_path});
         @panic("");
     }
 

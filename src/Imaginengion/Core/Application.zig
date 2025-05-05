@@ -54,7 +54,7 @@ pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
     cont_bool = cont_bool and switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| self.OnWindowResize(e._Width, e._Height),
-        .ET_KeyPressed => |e| try self.mProgram.OnKeyPressedEvent(e),
+        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e),
         else => true,
     };
 }

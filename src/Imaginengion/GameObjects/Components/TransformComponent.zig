@@ -30,11 +30,11 @@ pub const TransformComponent = extern struct {
         self.Dirty = true;
     }
     pub fn SetRotation(self: *TransformComponent, new_rot: Quatf32) void {
-        self.Translation = new_rot;
+        self.Rotation = new_rot;
         self.Dirty = true;
     }
     pub fn SetScale(self: *TransformComponent, new_scale: Vec3f32) void {
-        self.Translation = new_scale;
+        self.Scale = new_scale;
         self.Dirty = true;
     }
     pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {

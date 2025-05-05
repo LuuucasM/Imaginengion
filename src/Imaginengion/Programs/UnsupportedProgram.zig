@@ -1,7 +1,7 @@
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
-const KeyPressedEvent = @import("../Events/SystemEvent.zig").KeyPressedEvent;
+const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 
 const UnsupportedProgram = @This();
 
@@ -21,7 +21,7 @@ pub fn OnUpdate(self: *UnsupportedProgram, dt: f64) !void {
     Unsupported();
 }
 
-pub fn OnKeyPressedEvent(self: *UnsupportedProgram, e: KeyPressedEvent) bool {
+pub fn OnInputPressedEvent(self: *UnsupportedProgram, e: InputPressedEvent) bool {
     _ = self;
     _ = e;
     Unsupported();

@@ -3,12 +3,13 @@ const Entity = @import("Entity.zig");
 const StaticAssetContext = @import("../Assets/AssetManager.zig");
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
 const ScriptComponent = @import("Components.zig").ScriptComponent;
-const OnKeyPressedScript = @import("Components.zig").OnKeyPressedScript;
+const OnInputPressedScript = @import("Components.zig").OnInputPressedScript;
 const OnUpdateInputScript = @import("Components.zig").OnUpdateInputScript;
+const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
 
-pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8) !void {
+pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_type: PathType) !void {
     var ecs = entity.mECSManagerRef;
-    var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, .Prj);
+    var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(ScriptAsset);
     const new_script_entity = try ecs.CreateEntity();
 
@@ -34,7 +35,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8) !void {
         _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
 
         _ = switch (script_asset.mScriptType) {
-            .OnKeyPressed => try ecs.AddComponent(OnKeyPressedScript, new_script_entity, null),
+            .OnInputPressed => try ecs.AddComponent(OnInputPressedScript, new_script_entity, null),
             .OnUpdateInput => try ecs.AddComponent(OnUpdateInputScript, new_script_entity, null),
         };
     } else {
@@ -50,7 +51,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8) !void {
         _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
 
         _ = switch (script_asset.mScriptType) {
-            .OnKeyPressed => try entity.AddComponent(OnKeyPressedScript, null),
+            .OnInputPressed => try entity.AddComponent(OnInputPressedScript, null),
             .OnUpdateInput => try entity.AddComponent(OnUpdateInputScript, null),
         };
     }
