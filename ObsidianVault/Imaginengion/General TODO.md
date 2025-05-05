@@ -1,9 +1,9 @@
 - add the correct scripts to the [[Viewport Panel]] Editor Camera so that it can move around
+- make it so each scene keeps a record of the entitie IDs that it contains using an ArraySet. - have scenes keep a set of what entities are in that scene so that the rendering and script systems, scene panel, scene serializer dont have to do filtering and take all that extra time. this will increase the memory footprint of the engine but thats ok
 - add primary camera functionality to the editor "play" mode. I envision that on the beginning of a scene it looks for a camera set as the primary camera and then stores it somewhere, rather than looking every frame like it did in the c++ engine.
 - add scripts functionality to the editor "play" mode
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
 - nothing gets released ever for assethandlerefs lol
-- have scenes keep a set of what entities are in that scene so that the rendering and script systems, scene panel, scene serializer dont have to do filtering and take all that extra time. this will increase the memory footprint of the engine but thats ok
 - make animation system
 - write physics and collision system
 - make it so u cant make scenes or anything until you have a project selected first
