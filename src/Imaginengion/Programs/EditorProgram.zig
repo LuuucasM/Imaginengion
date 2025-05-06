@@ -19,6 +19,7 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
 const GameEventManager = @import("../Events/GameEventManager.zig");
+const ChangeEditorStateEvent = @import("../Events/ImguiEvent.zig").ChangeEditorStateEvent;
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -35,6 +36,7 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
+const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -48,25 +50,13 @@ _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
 _SceneLayer: SceneLayer,
 mWindow: *Window,
+_EditorState: EditorState,
 
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
     try ImGui.Init(window);
-    return EditorProgram{
-        .mSceneManager = try EditorSceneManager.Init(window.GetWidth(), window.GetHeight()),
-        .mWindow = window,
-        ._AssetHandlePanel = AssetHandlePanel.Init(),
-        ._ComponentsPanel = ComponentsPanel.Init(),
-        ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
-        ._CSEditorPanel = CSEditorPanel.Init(engine_allocator),
-        ._ScenePanel = ScenePanel.Init(),
-        ._ScriptsPanel = ScriptsPanel.Init(),
-        ._StatsPanel = StatsPanel.Init(),
-        ._ToolbarPanel = try ToolbarPanel.Init(),
-        ._ViewportPanel = undefined,
-        ._SceneLayer = undefined,
-    };
+    return EditorProgram{ .mSceneManager = try EditorSceneManager.Init(window.GetWidth(), window.GetHeight()), .mWindow = window, ._AssetHandlePanel = AssetHandlePanel.Init(), ._ComponentsPanel = ComponentsPanel.Init(), ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator), ._CSEditorPanel = CSEditorPanel.Init(engine_allocator), ._ScenePanel = ScenePanel.Init(), ._ScriptsPanel = ScriptsPanel.Init(), ._StatsPanel = StatsPanel.Init(), ._ToolbarPanel = try ToolbarPanel.Init(), ._ViewportPanel = undefined, ._SceneLayer = undefined, ._EditorState = .Stop };
 }
 
 pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
@@ -94,7 +84,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
-    _ = try ScriptsProcessor.OnUpdateInputEditor(&self.mSceneManager, &self._SceneLayer);
+    if (self._EditorState == .play) {
+        _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
+    }
+
     //-------------Inputs End--------------------
 
     //-------------AI Begin--------------
@@ -124,6 +117,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------Networking End---------------
 
     //--------------Imgui begin------------------
+
+    ScriptsProcessor.OnUpdateInputEditor(self._SceneLayer, self._ViewportPanel.mIsFocused);
+
     ImGui.Begin();
     Dockspace.Begin();
     try self._ContentBrowserPanel.OnImguiRender();
@@ -165,8 +161,13 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
     var cont_bool = true;
-    cont_bool = cont_bool and try ScriptsProcessor.OnInputPressedEventEditor(&self.mSceneManager, e, &self._SceneLayer);
+    if (self._EditorState == .Play) {
+        cont_bool = cont_bool and try ScriptsProcessor.OnInputPressedEvent(&self.mSceneManager, e);
+    }
+
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
+
+    try ScriptsProcessor.OnInputPressedEventEditor(self._SceneLayer, e, self._ViewportPanel.mIsFocused);
     return cont_bool;
 }
 
@@ -245,6 +246,9 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
         },
+        .ET_ChangeEditorStateEvent => |e| {
+            self.OnChangeEditorStateEvent(e);
+        },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
 }
@@ -254,5 +258,16 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
     switch (event.*) {
         .ET_PrimaryCameraChangeEvent => {},
         else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
+    }
+}
+
+pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) void {
+    if (event.mEditorState == .Play and self._EditorState == .Stop) {
+        self.mSceneManager.SaveAllScenes();
+        self._EditorState = .Play;
+    }
+    if (event.mEditorState == .Stop and self._EditorState == .Play) {
+        self.mSceneManager.ReloadAllScenes();
+        self._EditorState = .Stop;
     }
 }

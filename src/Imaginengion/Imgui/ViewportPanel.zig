@@ -36,6 +36,7 @@ mViewportHeight: usize,
 mSelectedEntity: ?Entity,
 mCameraEntity: Entity,
 mGizmoType: GizmoType,
+mIsFocused: bool = false,
 
 pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height: usize) !ViewportPanel {
 
@@ -59,6 +60,7 @@ pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height
         .mSelectedEntity = null,
         .mCameraEntity = camera_entity,
         .mGizmoType = .None,
+        .mIsFocused = false,
     };
 }
 
@@ -84,6 +86,9 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
     }
+
+    //get if the window is focused or not
+    self.mIsFocused = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
     //render framebuffer
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, scene_frame_buffer.GetColorAttachmentID(0))));

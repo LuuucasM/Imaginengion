@@ -3,6 +3,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const ScriptType = @import("../Assets/Assets.zig").ScriptAsset.ScriptType;
+const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 
 pub const PanelType = enum(u4) {
     Default = 0,
@@ -32,6 +33,7 @@ pub const ImguiEvent = union(enum) {
     ET_SelectScriptEvent: SelectScriptEvent,
     ET_ViewportResizeEvent: ViewportResizeEvent,
     ET_NewScriptEvent: NewScriptEvent,
+    ET_ChangeEditorStateEvent: ChangeEditorStateEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -94,4 +96,8 @@ pub const ViewportResizeEvent = struct {
 
 pub const NewScriptEvent = struct {
     mScriptType: ScriptType,
+};
+
+pub const ChangeEditorStateEvent = struct {
+    mEditorState: EditorState,
 };

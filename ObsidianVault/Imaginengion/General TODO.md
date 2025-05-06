@@ -1,4 +1,5 @@
 - add primary camera functionality to the editor "play" mode. I envision that on the beginning of a scene it looks for a camera set as the primary camera and then stores it somewhere, rather than looking every frame like it did in the c++ engine.
+- make a new window when they hit the play button that shows the game from the primary camera POV 
 - add scripts functionality to the editor "play" mode
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
 - nothing gets released ever for assethandlerefs lol
