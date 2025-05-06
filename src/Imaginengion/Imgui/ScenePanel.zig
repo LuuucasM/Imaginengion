@@ -2,6 +2,7 @@ const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
+const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
@@ -24,7 +25,7 @@ pub fn Init() ScenePanel {
     };
 }
 
-pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLayer)) !void {
+pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     if (self.mIsVisible == false) return;
 
     _ = imgui.igBegin("Scenes", null, 0);
@@ -35,10 +36,17 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
-        var i: usize = scene_stack_ref.items.len;
+
+        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+        defer arena.deinit();
+        const allocator = arena.allocator();
+
+        const name_entities = try scene_manager.mECSManager.GetGroup(.{ .Component = NameComponent }, allocator);
+
+        var i: usize = scene_manager.mSceneStack.items.len;
         while (i > 0) {
             i -= 1;
-            const scene_layer = &scene_stack_ref.items[i];
+            const scene_layer = &scene_manager.mSceneStack.items[i];
 
             var name_buf: [260]u8 = undefined;
             const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{scene_layer.mName.items});
@@ -95,7 +103,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
                 defer imgui.igEndDragDropTarget();
                 if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
                     const payload_internal_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
-                    const payload_scene = scene_stack_ref.items[payload_internal_id];
+                    const payload_scene = scene_manager.mSceneStack.items[payload_internal_id];
                     const current_pos = payload_scene.mInternalID;
                     const new_pos = i;
                     if (current_pos != new_pos) {
@@ -128,15 +136,14 @@ pub fn OnImguiRender(self: *ScenePanel, scene_stack_ref: *std.ArrayList(SceneLay
 
             //print all of the entities in the scene
             if (is_tree_open) {
-                var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-                defer arena.deinit();
-                const allocator = arena.allocator();
-
                 defer imgui.igTreePop();
-                var group = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = NameComponent }, allocator);
-                FilterSceneUUID(&group, scene_layer.mUUID, scene_layer.mECSManagerRef);
-                for (group.items) |entity_id| {
-                    const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerRef };
+
+                var scene_names = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+                try scene_names.appendSlice(scene_layer.mEntityList.items);
+                try scene_manager.mECSManager.EntityListIntersection(&scene_names, name_entities, allocator);
+
+                for (scene_names.items) |entity_id| {
+                    const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
 
                     if (self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID) {
@@ -222,23 +229,4 @@ pub fn OnSelectSceneEvent(self: *ScenePanel, new_scene_id: ?usize) void {
 
 pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
-}
-
-fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
-    if (result.items.len == 0) return;
-
-    var end_index: usize = result.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
-        if (scene_id_component.SceneID != scene_uuid) {
-            result.items[i] = result.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    result.shrinkAndFree(end_index);
 }

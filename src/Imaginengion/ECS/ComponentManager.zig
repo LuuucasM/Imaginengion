@@ -3,7 +3,7 @@ const InternalComponentArray = @import("InternalComponentArray.zig").ComponentAr
 const ComponentArray = @import("ComponentArray.zig");
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
-const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
+const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 
 const ComponentManager = @This();
 
@@ -147,25 +147,25 @@ pub fn GetGroup(self: ComponentManager, comptime query: GroupQuery, allocator: s
             return try @as(*InternalComponentArray(component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetAllEntities(allocator);
         },
         .Not => |not| {
-            var result = try self.InternalGetQuery(not.mFirst, allocator);
-            const second = try self.InternalGetQuery(not.mSecond, allocator);
+            var result = try self.GetGroup(not.mFirst, allocator);
+            const second = try self.GetGroup(not.mSecond, allocator);
             defer second.deinit();
             try self.EntityListDifference(&result, second, allocator);
             return result;
         },
         .Or => |ors| {
-            var result = try self.InternalGetQuery(ors[0], allocator);
+            var result = try self.GetGroup(ors[0], allocator);
             inline for (ors[1..]) |or_query| {
-                var intermediate = try self.InternalGetQuery(or_query, allocator);
+                var intermediate = try self.GetGroup(or_query, allocator);
                 defer intermediate.deinit();
                 try self.EntityListUnion(&result, intermediate, allocator);
             }
             return result;
         },
         .And => |ands| {
-            var result = try self.InternalGetQuery(ands[0], allocator);
+            var result = try self.GetGroup(ands[0], allocator);
             inline for (ands[1..]) |and_query| {
-                var intermediate = try self.InternalGetQuery(and_query, allocator);
+                var intermediate = try self.GetGroup(and_query, allocator);
                 defer intermediate.deinit();
                 try self.EntityListIntersection(&result, intermediate, allocator);
             }
@@ -178,7 +178,7 @@ pub fn EntityListDifference(self: ComponentManager, result: *std.ArrayList(u32),
     _ = self;
     if (result.items.len == 0) return;
 
-    var list2_set = Set(u32).init(allocator);
+    var list2_set = HashSet(u32).init(allocator);
     defer list2_set.deinit();
     _ = try list2_set.appendSlice(list2.items);
 
@@ -199,7 +199,7 @@ pub fn EntityListDifference(self: ComponentManager, result: *std.ArrayList(u32),
 pub fn EntityListUnion(self: ComponentManager, result: *std.ArrayList(u32), list2: std.ArrayList(u32), allocator: std.mem.Allocator) !void {
     _ = self;
 
-    var result_set = Set(u32).init(allocator);
+    var result_set = HashSet(u32).init(allocator);
     defer result_set.deinit();
     try result_set.appendSlice(result.items);
 
@@ -214,7 +214,7 @@ pub fn EntityListIntersection(self: ComponentManager, result: *std.ArrayList(u32
     _ = self;
     if (result.items.len == 0) return;
 
-    var list2_set = Set(u32).init(allocator);
+    var list2_set = HashSet(u32).init(allocator);
     defer list2_set.deinit();
     _ = try list2_set.appendSlice(list2.items);
 

@@ -1,6 +1,5 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Mat4f32 = LinAlg.Mat4f32;
@@ -34,6 +33,8 @@ pub const LayerType = enum(u1) {
 mName: std.ArrayList(u8),
 mUUID: u128,
 mPath: std.ArrayList(u8),
+mEntityList: std.ArrayList(u32),
+mEntitySet: std.AutoHashMap(u32, usize),
 mLayerType: LayerType,
 mInternalID: usize,
 mFrameBuffer: FrameBuffer,
@@ -44,6 +45,8 @@ pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id:
         .mUUID = try GenUUID(),
         .mName = std.ArrayList(u8).init(ECSAllocator),
         .mPath = std.ArrayList(u8).init(ECSAllocator),
+        .mEntityList = std.ArrayList(u32).init(ECSAllocator),
+        .mEntitySet = std.AutoHashMap(u32, usize).init(ECSAllocator),
         .mLayerType = layer_type,
         .mInternalID = internal_id,
         .mFrameBuffer = try FrameBuffer.Init(ECSAllocator, &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, width, height),
@@ -54,11 +57,16 @@ pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id:
 pub fn Deinit(self: *SceneLayer) void {
     self.mName.deinit();
     self.mPath.deinit();
+    self.mEntityList.deinit();
+    self.mEntitySet.deinit();
     self.mFrameBuffer.Deinit();
 }
 
 pub fn CreateBlankEntity(self: *SceneLayer) !Entity {
-    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mECSManagerRef = self.mECSManagerRef };
+    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
+    try self.mEntityList.append(new_entity.mEntityID);
+    try self.mEntitySet.put(new_entity.mEntityID, self.mEntityList.items.len - 1);
+
     return new_entity;
 }
 
@@ -66,7 +74,9 @@ pub fn CreateEntity(self: *SceneLayer) !Entity {
     return self.CreateEntityWithUUID(try GenUUID());
 }
 pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
-    const e = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mECSManagerRef = self.mECSManagerRef };
+    const e = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
+    try self.mEntityList.append(e.mEntityID);
+    try self.mEntitySet.put(e.mEntityID, self.mEntityList.items.len - 1);
     _ = try e.AddComponent(IDComponent, .{ .ID = uuid });
     _ = try e.AddComponent(SceneIDComponent, .{ .SceneID = self.mUUID });
     var name = [_]u8{0} ** 24;
@@ -79,18 +89,17 @@ pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
 
 pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
     try self.mECSManagerRef.DestroyEntity(e.mEntityID);
+    const remove_loc = self.mEntitySet.get(e.mEntityID).?;
+    const last_entity_id = self.mEntityList.items[self.mEntityList.items.len - 1];
+    try self.mEntitySet.put(last_entity_id, remove_loc);
+    self.mEntityList.swapRemove(remove_loc);
 }
+
 pub fn DuplicateEntity(self: *SceneLayer, original_entity: Entity) !Entity {
-    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.DuplicateEntity(original_entity.mEntityID), .mECSManagerRef = self.mECSManagerRef };
-
+    const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = self };
+    try self.mEntityList.append(new_entity.mEntityID);
+    try self.mEntitySet.put(new_entity.mEntityID, self.mEntityList.items.len - 1);
     return new_entity;
-}
-
-pub fn Render(self: SceneLayer) !void {
-    self.mFrameBuffer.Bind();
-    self.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
-    defer self.mFrameBuffer.Unbind();
-    try RenderManager.RenderSceneLayer(self.mUUID, self.mECSManagerRef);
 }
 
 pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {
@@ -100,8 +109,12 @@ pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const entity_ids = try self.mECSManagerRef.GetGroup(.{ .Component = CameraComponent }, allocator);
-    for (entity_ids.items) |entity_id| {
+    var camera_entities = try std.ArrayList(u32).initCapacity(allocator, self.mEntityList.items.len);
+    try camera_entities.appendSlice(self.mEntityList.items);
+
+    try self.mECSManagerRef.EntityListIntersection(&camera_entities, try self.mECSManagerRef.GetGroup(.{ .Component = CameraComponent }, allocator), allocator);
+
+    for (camera_entities.items) |entity_id| {
         const camera_component = self.mECSManagerRef.GetComponent(CameraComponent, entity_id);
         if (camera_component.mIsFixedAspectRatio == false) {
             camera_component.SetViewportSize(width, height);

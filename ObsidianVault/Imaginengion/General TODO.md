@@ -1,11 +1,12 @@
-- add the correct scripts to the [[Viewport Panel]] Editor Camera so that it can move around
-- make it so each scene keeps a record of the entitie IDs that it contains using an ArraySet. - have scenes keep a set of what entities are in that scene so that the rendering and script systems, scene panel, scene serializer dont have to do filtering and take all that extra time. this will increase the memory footprint of the engine but thats ok
 - add primary camera functionality to the editor "play" mode. I envision that on the beginning of a scene it looks for a camera set as the primary camera and then stores it somewhere, rather than looking every frame like it did in the c++ engine.
 - add scripts functionality to the editor "play" mode
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
 - nothing gets released ever for assethandlerefs lol
+- go over all the files looking for places to optimize. make sure to minimizes things like hashes, jumps (if statement loops etc), make sure things look clean and logical
 - make animation system
+- go over all the files looking for places to optimize. make sure to minimizes things like hashes, jumps (if statement loops etc), make sure things look clean and logical
 - write physics and collision system
+- go over all the files looking for places to optimize. make sure to minimizes things like hashes, jumps (if statement loops etc), make sure things look clean and logical
 - make it so u cant make scenes or anything until you have a project selected first
 - Give an editor option that is a viewport which is what you see from the in game perspective like from the set primary camera. And when you hit "play" for the scene instead of getting rid of changing the main viewport you just save and play and then in the secondary viewport you do the same that way you can get the editor POV during testing. But it needs to be an option because not all computers can handle literally double the rendering
 - Editor settings file

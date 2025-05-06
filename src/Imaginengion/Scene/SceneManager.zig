@@ -123,32 +123,6 @@ pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: us
     return self.mSceneStack.items[scene_id].DuplicateEntity(original_entity.EntityID);
 }
 
-pub fn RenderUpdate(self: *SceneManager, camera_id: u32) !void {
-    const camera_component = self.mECSManager.GetComponent(CameraComponent, camera_id);
-    const camera_transform = self.mECSManager.GetComponent(TransformComponent, camera_id);
-
-    //render each scene
-    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
-    RenderManager.BeginRendering(camera_view_projection);
-
-    for (self.mSceneStack.items) |scene_layer| {
-        try scene_layer.Render(); //this renders each scene_layer to its own frame buffer
-    }
-    self.mNumTexturesUniformBuffer.SetData(&self.mSceneStack.items.len, @sizeOf(usize), 0);
-    self.mFrameBuffer.Bind();
-    self.mFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
-    self.mNumTexturesUniformBuffer.Bind(0);
-    self.mCompositeShader.Bind();
-    for (self.mSceneStack.items, 0..) |scene_layer, i| {
-        scene_layer.mFrameBuffer.BindColorAttachment(0, i);
-        scene_layer.mFrameBuffer.BindDepthAttachment(i + self.mSceneStack.items.len);
-    }
-
-    RenderManager.DrawComposite(self.mCompositeVertexArray);
-
-    self.mFrameBuffer.Unbind();
-}
-
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
     self.mViewportWidth = width;
     self.mViewportHeight = height;

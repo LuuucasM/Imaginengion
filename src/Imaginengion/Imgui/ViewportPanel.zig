@@ -11,7 +11,7 @@ const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
 const StaticInputContext = @import("../Inputs/Input.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
@@ -37,39 +37,35 @@ mSelectedEntity: ?Entity,
 mCameraEntity: Entity,
 mGizmoType: GizmoType,
 
-pub fn Init(scene_manager_ref: *SceneManager) !ViewportPanel {
+pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height: usize) !ViewportPanel {
 
     //setup camera for viewport editing
-    const new_viewport_camera = try scene_manager_ref.mECSManager.CreateEntity();
+    const camera_entity = try scene_layer_ref.CreateEntity();
 
-    const camera_entity = Entity{ .mEntityID = new_viewport_camera, .mECSManagerRef = &scene_manager_ref.mECSManager };
-
-    const new_transform_component = TransformComponent{ .Translation = Vec3f32{ 0.0, 0.0, 15.0 } };
-    _ = try camera_entity.AddComponent(TransformComponent, new_transform_component);
+    const transform_component = camera_entity.GetComponent(TransformComponent);
+    transform_component.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    transform_component.Dirty = true;
 
     var new_camera = CameraComponent{};
-    new_camera.SetViewportSize(scene_manager_ref.mViewportWidth, scene_manager_ref.mViewportHeight);
+    new_camera.SetViewportSize(viewport_width, viewport_height);
     _ = try camera_entity.AddComponent(CameraComponent, new_camera);
 
     try GameObjectUtils.AddScriptToEntity(camera_entity, "assets/scripts/EditorCameraInput.zig", .Cwd);
 
     return ViewportPanel{
         .mP_Open = true,
-        .mViewportWidth = 1600,
-        .mViewportHeight = 900,
+        .mViewportWidth = viewport_width,
+        .mViewportHeight = viewport_height,
         .mSelectedEntity = null,
         .mCameraEntity = camera_entity,
         .mGizmoType = .None,
     };
 }
 
-pub fn OnImguiRender(self: *ViewportPanel, scene_manager_ref: *SceneManager) !void {
+pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
-
-    self.mCameraEntity.mECSManagerRef = &scene_manager_ref.mECSManager;
-    const scene_frame_buffer = scene_manager_ref.mFrameBuffer;
 
     //update viewport size if needed
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };

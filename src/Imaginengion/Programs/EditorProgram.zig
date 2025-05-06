@@ -32,7 +32,9 @@ const StatsPanel = @import("../Imgui/StatsPanel.zig");
 const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
+
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -44,15 +46,15 @@ _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
 mSceneManager: EditorSceneManager,
+_SceneLayer: SceneLayer,
 mWindow: *Window,
 
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
     try ImGui.Init(window);
-
-    var new_editor_program = EditorProgram{
-        .mSceneManager = try EditorSceneManager.Init(1600, 900),
+    return EditorProgram{
+        .mSceneManager = try EditorSceneManager.Init(window.GetWidth(), window.GetHeight()),
         .mWindow = window,
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
@@ -63,11 +65,14 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = undefined,
+        ._SceneLayer = undefined,
     };
+}
 
-    new_editor_program._ViewportPanel = try ViewportPanel.Init(&new_editor_program.mSceneManager);
+pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
+    self._SceneLayer = try SceneLayer.Init(engine_allocator, .OverlayLayer, std.math.maxInt(usize), self.mWindow.GetWidth(), self.mWindow.GetHeight(), &self.mSceneManager.mECSManager);
 
-    return new_editor_program;
+    self._ViewportPanel = try ViewportPanel.Init(&self._SceneLayer, self.mWindow.GetHeight(), self.mWindow.GetWidth());
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -89,7 +94,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
-    _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
+    _ = try ScriptsProcessor.OnUpdateInputEditor(&self.mSceneManager, &self._SceneLayer);
     //-------------Inputs End--------------------
 
     //-------------AI Begin--------------
@@ -106,7 +111,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);
-    try self.mSceneManager.RenderUpdate(self._ViewportPanel.mCameraEntity.mEntityID);
+
+    try Renderer.OnUpdate(&self.mSceneManager, self._ViewportPanel.mCameraEntity.mEntityID);
 
     Renderer.SwapBuffers();
     //--------------Render End-------------------
@@ -123,7 +129,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try self._ContentBrowserPanel.OnImguiRender();
     try self._AssetHandlePanel.OnImguiRender();
 
-    try self._ScenePanel.OnImguiRender(&self.mSceneManager.mSceneStack);
+    try self._ScenePanel.OnImguiRender(&self.mSceneManager);
 
     try self._ComponentsPanel.OnImguiRender();
     try self._ScriptsPanel.OnImguiRender();
@@ -131,7 +137,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     try self._ToolbarPanel.OnImguiRender();
 
-    try self._ViewportPanel.OnImguiRender(&self.mSceneManager);
+    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -159,7 +165,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
     var cont_bool = true;
-    cont_bool = cont_bool and try ScriptsProcessor.OnInputPressedEvent(&self.mSceneManager, e);
+    cont_bool = cont_bool and try ScriptsProcessor.OnInputPressedEventEditor(&self.mSceneManager, e, &self._SceneLayer);
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
     return cont_bool;
 }
@@ -233,6 +239,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
+            try self._SceneLayer.OnViewportResize(e.mWidth, e.mHeight);
             try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {

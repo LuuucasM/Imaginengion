@@ -19,6 +19,8 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
+const SceneManager = @import("../Scene/SceneManager.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ECSManager = @import("../ECS/ECSManager.zig");
 const ComponentManager = @import("../ECS/ComponentManager.zig");
 
@@ -27,6 +29,8 @@ const TransformComponent = Components.TransformComponent;
 const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
+const CameraComponent = Components.CameraComponent;
+
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Renderer = @This();
@@ -96,31 +100,67 @@ pub fn SwapBuffers() void {
     RenderM.mRenderContext.SwapBuffers();
 }
 
-pub fn RenderSceneLayer(scene_uuid: u128, ecs_manager: *ECSManager) !void {
-    BeginScene();
+pub fn OnUpdate(scene_manager: *SceneManager, camera_id: u32) !void {
+    const camera_component = scene_manager.mECSManager.GetComponent(CameraComponent, camera_id);
+    const camera_transform = scene_manager.mECSManager.GetComponent(TransformComponent, camera_id);
+    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
+    BeginRendering(camera_view_projection);
 
+    try RenderSceneLayers(scene_manager);
+
+    RenderFinalImage(scene_manager);
+}
+
+pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
-    FilterSceneUUID(&sprite_entities, scene_uuid, ecs_manager);
-    try ecs_manager.EntityListIntersection(&sprite_entities, try ecs_manager.GetGroup(GroupQuery{ .Component = TransformComponent }, allocator), allocator);
+    const ecs_manager = scene_manager.mECSManager;
 
-    var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
-    FilterSceneUUID(&circle_entities, scene_uuid, ecs_manager);
-    try ecs_manager.EntityListIntersection(&circle_entities, try ecs_manager.GetGroup(GroupQuery{ .Component = TransformComponent }, allocator), allocator);
+    const sprite_entities = try ecs_manager.GetGroup(GroupQuery{
+        .And = &[_]GroupQuery{
+            GroupQuery{ .Component = SpriteRenderComponent },
+            GroupQuery{ .Component = TransformComponent },
+        },
+    }, allocator);
 
-    //cull entities that shouldnt be rendered
-    CullEntities(SpriteRenderComponent, &sprite_entities, ecs_manager);
-    CullEntities(CircleRenderComponent, &circle_entities, ecs_manager);
+    const circle_entities = try ecs_manager.GetGroup(GroupQuery{
+        .And = &[_]GroupQuery{
+            GroupQuery{ .Component = CircleRenderComponent },
+            GroupQuery{ .Component = TransformComponent },
+        },
+    }, allocator);
 
-    //ensure textures are ready to go for draw
-    try TextureSort(SpriteRenderComponent, sprite_entities, ecs_manager);
-    try DrawSprites(sprite_entities, ecs_manager);
-    DrawCircles(circle_entities, ecs_manager);
+    for (scene_manager.mSceneStack.items) |scene_layer| {
+        BeginScene();
 
-    try EndScene();
+        scene_layer.mFrameBuffer.Bind();
+        scene_layer.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
+        defer scene_layer.mFrameBuffer.Unbind();
+
+        var scene_sprites = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+        try scene_sprites.appendSlice(scene_layer.mEntityList.items);
+        try ecs_manager.EntityListIntersection(&scene_sprites, sprite_entities, allocator);
+
+        var scene_circles = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+        try scene_circles.appendSlice(scene_layer.mEntityList.items);
+        try ecs_manager.EntityListIntersection(&scene_circles, circle_entities, allocator);
+
+        //cull entities that shouldnt be rendered
+        CullEntities(SpriteRenderComponent, &scene_sprites, ecs_manager);
+        CullEntities(CircleRenderComponent, &scene_circles, ecs_manager);
+
+        //draw sprites
+        //first sort and bind textures
+        try TextureSort(SpriteRenderComponent, scene_sprites, ecs_manager);
+        try DrawSprites(scene_sprites, ecs_manager);
+
+        //draw circles
+        DrawCircles(scene_circles, ecs_manager);
+
+        try EndScene();
+    }
 }
 
 pub fn BeginRendering(camera_viewprojection: Mat4f32) void {
@@ -156,34 +196,25 @@ pub fn EndScene() !void {
     }
 }
 
-pub fn DrawComposite(composite_va: VertexArray) void {
-    RenderM.mRenderContext.DrawIndexed(composite_va, 6);
+pub fn RenderFinalImage(scene_manager: *SceneManager) void {
+    scene_manager.mNumTexturesUniformBuffer.SetData(&scene_manager.mSceneStack.items.len, @sizeOf(usize), 0);
+    scene_manager.mFrameBuffer.Bind();
+    defer scene_manager.mFrameBuffer.Unbind();
+    scene_manager.mFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
+    scene_manager.mNumTexturesUniformBuffer.Bind(0);
+    scene_manager.mCompositeShader.Bind();
+    for (scene_manager.mSceneStack.items, 0..) |scene_layer, i| {
+        scene_layer.mFrameBuffer.BindColorAttachment(0, i);
+        scene_layer.mFrameBuffer.BindDepthAttachment(i + scene_manager.mSceneStack.items.len);
+    }
+    RenderM.mRenderContext.DrawIndexed(scene_manager.mCompositeVertexArray, 6);
 }
 
 pub fn GetRenderStats() RenderStats {
     return RenderM.mStats;
 }
 
-fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
-    if (result.items.len == 0) return;
-
-    var end_index: usize = result.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
-        if (scene_id_component.SceneID != scene_uuid) {
-            result.items[i] = result.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    result.shrinkAndFree(end_index);
-}
-
-fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_manager: *ECSManager) void {
+fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_manager: ECSManager) void {
     std.debug.assert(@hasField(component_type, "mShouldRender"));
     if (result.items.len == 0) return;
 
@@ -204,7 +235,7 @@ fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), ecs_
     result.shrinkAndFree(end_index);
 }
 
-fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: *ECSManager) !void {
+fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), ecs_manager: ECSManager) !void {
     std.debug.assert(@hasField(component_type, "mTexture"));
 
     RenderM.mTexturesMap.clearRetainingCapacity();
@@ -221,7 +252,7 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), e
     }
 }
 
-fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: *ECSManager) !void {
+fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: ECSManager) !void {
     var i: usize = 0;
     while (i < sprite_entities.items.len) : (i += 1) {
         const entity_id = sprite_entities.items[i];
@@ -243,7 +274,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), ecs_manager: *ECSManager) !v
     }
 }
 
-fn DrawCircles(circle_entities: std.ArrayList(u32), ecs_manager: *ECSManager) void {
+fn DrawCircles(circle_entities: std.ArrayList(u32), ecs_manager: ECSManager) void {
     var i: usize = 0;
     while (i < circle_entities.items.len) : (i += 1) {
         const entity_id = circle_entities.items[i];

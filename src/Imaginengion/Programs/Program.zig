@@ -17,6 +17,10 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !Program {
     };
 }
 
+pub fn Setup(self: *Program, engine_allocator: std.mem.Allocator) !void {
+    try self._Impl.Setup(engine_allocator);
+}
+
 pub fn Deinit(self: *Program) !void {
     try self._Impl.Deinit();
     Renderer.Deinit();

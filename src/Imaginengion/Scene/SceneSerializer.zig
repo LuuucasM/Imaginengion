@@ -40,10 +40,8 @@ pub fn SerializeText(scene_layer: *SceneLayer) !void {
     try write_stream.objectField("LayerType");
     try write_stream.write(scene_layer.mLayerType);
 
-    var group = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = SceneIDComponent }, allocator);
-    FilterSceneUUID(&group, scene_layer.mUUID, scene_layer.mECSManagerRef);
-    for (group.items) |entity_id| {
-        const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerRef };
+    for (scene_layer.mEntityList.items) |entity_id| {
+        const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
@@ -75,7 +73,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
     var scanner = std.json.Scanner.initCompleteInput(allocator, buffer);
     defer scanner.deinit();
 
-    var entity = Entity{ .mEntityID = std.math.maxInt(u32), .mECSManagerRef = scene_layer.mECSManagerRef };
+    var entity = Entity{ .mEntityID = std.math.maxInt(u32), .mSceneLayerRef = scene_layer };
 
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
@@ -196,7 +194,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
 
         try write_stream.beginObject();
 
-        const ecs = entity.mECSManagerRef;
+        const ecs = entity.mSceneLayerRef.mECSManagerRef;
         var current_id = entity.mEntityID;
         var component: *ScriptComponent = undefined;
         while (current_id != std.math.maxInt(u32)) {
@@ -381,23 +379,4 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
             current_id = parsed_script_component.mNext;
         }
     }
-}
-
-fn FilterSceneUUID(result: *std.ArrayList(u32), scene_uuid: u128, ecs_manager: *ECSManager) void {
-    if (result.items.len == 0) return;
-
-    var end_index: usize = result.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const scene_id_component = ecs_manager.GetComponent(SceneIDComponent, result.items[i]);
-        if (scene_id_component.SceneID != scene_uuid) {
-            result.items[i] = result.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    result.shrinkAndFree(end_index);
 }

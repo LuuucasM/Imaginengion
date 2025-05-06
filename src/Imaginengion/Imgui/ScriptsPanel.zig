@@ -45,7 +45,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
             if (entity.HasComponent(ScriptComponent)) {
-                var ecs = entity.mECSManagerRef;
+                var ecs = entity.mSceneLayerRef.mECSManagerRef;
                 var iter = entity.GetComponent(ScriptComponent);
 
                 iter = ecs.GetComponent(ScriptComponent, iter.mFirst);

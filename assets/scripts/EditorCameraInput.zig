@@ -16,9 +16,9 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
     _ = allocator;
     const input_context = engine_context.GetInputContext();
     if (input_context.IsInputPressed(.LeftAlt) == true) {
-        const PanSpeed = 0.03;
-        const RotateSpeed = 0.06;
-        const ZoomSpeed = 0.04;
+        const PanSpeed = 0.015;
+        const RotateSpeed = 0.08;
+        const ZoomSpeed = 0.03;
 
         const mouse_delta = input_context.GetMousePositionDelta();
 
@@ -32,7 +32,8 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
             translation = translation - right_dir * @as(Vec3f32, @splat(mouse_delta[0] * PanSpeed)) + (up_dir * @as(Vec3f32, @splat(mouse_delta[1] * PanSpeed)));
             transform_component.SetTranslation(translation);
         } else if (input_context.IsInputPressed(.MouseButtonLeft) == true) {
-            const up_dir = GetUpDirection(rotation); //yaw
+            //const up_dir = GetUpDirection(rotation); //yaw
+            const up_dir = Vec3f32{ 0.0, 1.0, 0.0 }; //yaw
             const right_dir = GetRightDirection(rotation); //pitch
 
             const yaw = LinAlg.QuatAngleAxis(-mouse_delta[0] * RotateSpeed, up_dir);

@@ -8,7 +8,7 @@ const OnUpdateInputScript = @import("Components.zig").OnUpdateInputScript;
 const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
 
 pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_type: PathType) !void {
-    var ecs = entity.mECSManagerRef;
+    var ecs = entity.mSceneLayerRef.mECSManagerRef;
     var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(ScriptAsset);
     const new_script_entity = try ecs.CreateEntity();

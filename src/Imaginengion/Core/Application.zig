@@ -23,6 +23,7 @@ pub fn Init(self: *Application, engine_allocator: std.mem.Allocator) !void {
 
     self.mWindow = Window.Init();
     self.mProgram = try Program.Init(engine_allocator, &self.mWindow);
+    try self.mProgram.Setup(engine_allocator);
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);
