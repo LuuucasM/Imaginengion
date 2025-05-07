@@ -15,6 +15,8 @@ pub const ProjectionType = enum(u1) {
     Orthographic = 1,
 };
 
+mIsPrimaryCamera: bool = false,
+
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 mProjectionType: ProjectionType = .Perspective,
 
@@ -93,5 +95,27 @@ pub fn GetInd(self: CameraComponent) u32 {
 }
 
 pub fn EditorRender(self: *CameraComponent) !void {
-    _ = self;
+
+    //----------------------------------
+    //set this to be a selectable bool maybe instead? check box doesnt
+    //make much sense when i want primary camera to be an event not a variable to set
+    //but then when scenes are loaded how will the primary camera be changed in game?
+    var set_primary_camera: bool = false;
+    imgui.igCheckbox("Set as primary camera", &set_primary_camera);
+    if (set_primary_camera == true) {}
+    //-----------------------
+    imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
+    if (imgui.igBeginCombo("Projection type", @tagName(self.mProjectionType), imgui.ImGuiComboFlags_None) == true) {
+        defer imgui.igEndCombo();
+        if (imgui.igSelectable_Bool("Perspective", if (self.mProjectionType == .Perspective) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
+            self.mProjectionType = .Perspective;
+            self.RecalculateProjection();
+        }
+        if (imgui.igSelectable_Bool("Orthographic", if (self.mProjectionType == .Orthographic) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
+            self.mProjectionType = .Orthographic;
+            self.RecalculateProjection();
+        }
+    }
+    //if type is perspective print the perspective variables
+    //if orthographic print orthographic variables
 }

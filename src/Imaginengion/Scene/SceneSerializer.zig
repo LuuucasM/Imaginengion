@@ -13,6 +13,7 @@ const SceneIDComponent = Components.SceneIDComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
 const ScriptComponent = Components.ScriptComponent;
+const PrimaryCameraTag = Components.PrimaryCameraTag;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
@@ -150,11 +151,21 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
     if (entity.HasComponent(CameraComponent) == true) {
         try write_stream.objectField("CameraComponent");
 
+        try write_stream.beginObject();
+
+        try write_stream.objectField("Component");
         const component = entity.GetComponent(CameraComponent);
         try std.json.stringify(component, .{}, component_string.writer());
         try write_stream.write(component_string.items);
-
         component_string.clearAndFree();
+
+        try write_stream.objectField("IsPrimary");
+        if (entity.HasComponent(PrimaryCameraTag) == true) {
+            try write_stream.write("True");
+        } else {
+            try write_stream.write("False");
+        }
+        try write_stream.endObject();
     }
     if (entity.HasComponent(CircleRenderComponent) == true) {
         try write_stream.objectField("CircleRenderComponent");
@@ -283,6 +294,11 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         defer new_component_parsed.deinit();
         _ = try current_entity.AddComponent(TransformComponent, new_component_parsed.value);
     } else if (std.mem.eql(u8, value, "CameraComponent")) {
+        //skip past begin object token
+        _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        //skip past the object field token
+        _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+
         const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const component_data_string = switch (component_data_token) {
             .string => |component_data| component_data,
@@ -292,6 +308,19 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         const new_component_parsed = try std.json.parseFromSlice(CameraComponent, allocator, component_data_string, .{});
         defer new_component_parsed.deinit();
         _ = try current_entity.AddComponent(CameraComponent, new_component_parsed.value);
+
+        //skip past object field token
+        _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+
+        const is_primary_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const is_primary_data_string = switch (is_primary_data_token) {
+            .string => |component_data| component_data,
+            .allocated_string => |component_data| component_data,
+            else => @panic("should be a string!!\n"),
+        };
+        if (std.mem.eql(u8, is_primary_data_string, "True") == true) {
+            current_entity.AddComponent(PrimaryCameraTag, null);
+        }
     } else if (std.mem.eql(u8, value, "CircleRenderComponent")) {
         const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const component_data_string = switch (component_data_token) {

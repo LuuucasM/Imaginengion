@@ -56,6 +56,7 @@ mCompositeVertexBuffer: VertexBuffer,
 mCompositeIndexBuffer: IndexBuffer,
 mCompositeShader: Shader,
 mNumTexturesUniformBuffer: UniformBuffer,
+mPrimaryCamera: u32,
 
 pub fn Init(width: usize, height: usize) !SceneManager {
     var new_scene_manager = SceneManager{

@@ -41,12 +41,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Application.md",
+                "file": "Adding new components to engine.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Application"
+              "title": "Adding new components to engine"
             }
           }
         ],
@@ -199,8 +199,8 @@
   },
   "active": "618237ae188163fd",
   "lastOpenFiles": [
-    "ECS Manager.md",
     "Application.md",
+    "ECS Manager.md",
     "Component Manager.md",
     "General TODO.md",
     "Viewport Panel.md",
