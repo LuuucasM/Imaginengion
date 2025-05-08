@@ -10,6 +10,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
 const CameraComponent = Components.CameraComponent;
+const EditorCameraTag = Components.EditorCameraTag;
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const StaticInputContext = @import("../Inputs/Input.zig");
@@ -50,6 +51,7 @@ pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height
     var new_camera = CameraComponent{};
     new_camera.SetViewportSize(viewport_width, viewport_height);
     _ = try camera_entity.AddComponent(CameraComponent, new_camera);
+    _ = try camera_entity.AddComponent(EditorCameraTag, null);
 
     try GameObjectUtils.AddScriptToEntity(camera_entity, "assets/scripts/EditorCameraInput.zig", .Cwd);
 

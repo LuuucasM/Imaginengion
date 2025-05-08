@@ -27,6 +27,7 @@ const AssetHandlePanel = @import("../Imgui/AssethandlePanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const CSEditorPanel = @import("../Imgui/CSEditorPanel.zig");
+const PlayPanel = @import("../Imgui/PlayPanel.zig");
 const ScenePanel = @import("../Imgui/ScenePanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
@@ -42,6 +43,7 @@ _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
 _ContentBrowserPanel: ContentBrowserPanel,
 _CSEditorPanel: CSEditorPanel,
+_PlayPanel: PlayPanel,
 _ScenePanel: ScenePanel,
 _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
@@ -87,6 +89,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     if (self._EditorState == .play) {
         _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
     }
+    ScriptsProcessor.OnUpdateInputEditor(self._SceneLayer, self._ViewportPanel.mIsFocused);
 
     //-------------Inputs End--------------------
 
@@ -105,21 +108,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //---------Render Begin-------------
     try GameEventManager.ProcessEvents(.EC_PreRender);
 
-    try Renderer.OnUpdate(&self.mSceneManager, self._ViewportPanel.mCameraEntity.mEntityID);
-
-    Renderer.SwapBuffers();
-    //--------------Render End-------------------
-
-    //--------------Audio Begin------------------
-    //--------------Audio End--------------------
-
-    //--------------Networking Begin-------------
-    //--------------Networking End---------------
-
-    //--------------Imgui begin------------------
-
-    ScriptsProcessor.OnUpdateInputEditor(self._SceneLayer, self._ViewportPanel.mIsFocused);
-
     ImGui.Begin();
     Dockspace.Begin();
     try self._ContentBrowserPanel.OnImguiRender();
@@ -133,7 +121,18 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     try self._ToolbarPanel.OnImguiRender();
 
+    const editor_camera_group = self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCamera }, allocator);
+    try Renderer.OnUpdate(
+        &self.mSceneManager,
+    );
     try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+
+    if (self._EditorState == .Play) {
+        try Renderer.OnUpdate(
+            &self.mSceneManager,
+        );
+        try self._PlayPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    }
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -143,9 +142,19 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     Dockspace.End();
     ImGui.End();
-    //--------------Imgui end------------------
+    //--------------Render End-------------------
 
-    //--------------Frame Cleanup--------------
+    //--------------Audio Begin------------------
+    //--------------Audio End--------------------
+
+    //--------------Networking Begin-------------
+    //--------------Networking End---------------
+
+    //-----------------Start End of Frame-----------------
+    //swap buffers
+    Renderer.SwapBuffers();
+    //play a sound?
+
     //Process window events
     try SystemEventManager.ProcessEvents(.EC_Window);
 
@@ -156,7 +165,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     SystemEventManager.EventsReset();
     GameEventManager.EventsReset();
     ImguiEventManager.EventsReset();
-    //--------------End Frame Cleanup---------
+    //-----------------End End of Frame-------------------
 }
 
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
@@ -264,10 +273,12 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) void {
     if (event.mEditorState == .Play and self._EditorState == .Stop) {
         self.mSceneManager.SaveAllScenes();
+        //open up a new imgui window which plays the scene from the pov of the primary camera
         self._EditorState = .Play;
     }
     if (event.mEditorState == .Stop and self._EditorState == .Play) {
         self.mSceneManager.ReloadAllScenes();
+        //close imgui window that plays the scene from the pov of the primary camera
         self._EditorState = .Stop;
     }
 }

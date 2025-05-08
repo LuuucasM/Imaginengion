@@ -11,10 +11,11 @@ pub const PanelType = enum(u4) {
     Components = 2,
     ContentBrowser = 3,
     CSEditor = 4,
-    Scene = 5,
-    Scripts = 6,
-    Stats = 7,
-    Viewport = 8,
+    PlayPanel = 5,
+    Scene = 6,
+    Scripts = 7,
+    Stats = 8,
+    Viewport = 9,
 };
 pub const ImguiEvent = union(enum) {
     ET_DefaultEvent: DefaultEvent,

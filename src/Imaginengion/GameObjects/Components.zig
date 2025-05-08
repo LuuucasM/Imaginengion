@@ -11,6 +11,7 @@ const TagComponents = @import("Components/TagComponents.zig");
 pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
 pub const OnUpdateInputScript = TagComponents.OnUpdateInputScript;
 pub const PrimaryCameraTag = TagComponents.PrimaryCameraTag;
+pub const EditorCameraTag = TagComponents.EditorCameraTag;
 
 pub const ComponentsList = [_]type{
     CameraComponent,
@@ -24,6 +25,7 @@ pub const ComponentsList = [_]type{
     OnInputPressedScript,
     OnUpdateInputScript,
     PrimaryCameraTag,
+    EditorCameraTag,
 };
 
 pub const EComponents = enum(usize) {
@@ -38,4 +40,5 @@ pub const EComponents = enum(usize) {
     OnInputPressed = OnInputPressedScript.Ind,
     OnUpdateInput = OnUpdateInputScript.Ind,
     PrimaryCameraTag = PrimaryCameraTag.Ind,
+    EditorCameraTag = EditorCameraTag.Ind,
 };
