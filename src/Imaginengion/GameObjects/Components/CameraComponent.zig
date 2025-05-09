@@ -15,8 +15,6 @@ pub const ProjectionType = enum(u1) {
     Orthographic = 1,
 };
 
-mIsPrimaryCamera: bool = false,
-
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 mProjectionType: ProjectionType = .Perspective,
 
@@ -27,7 +25,7 @@ mOrthographicSize: f32 = 10.0,
 mOrthographicNear: f32 = -1.0,
 mOrthographicFar: f32 = 1.0,
 
-mPerspectiveFOVDegrees: f32 = 45.0,
+mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(45.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 
@@ -38,8 +36,8 @@ pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_cl
     self.RecalculateProjection();
 }
 
-pub fn SetPerspective(self: *CameraComponent, fov_degrees: f32, near_clip: f32, far_clip: f32) void {
-    self.mPerspectiveFOVDegrees = fov_degrees;
+pub fn SetPerspective(self: *CameraComponent, fov_radians: f32, near_clip: f32, far_clip: f32) void {
+    self.mPerspectiveFOVRad = fov_radians;
     self.mPerspectiveNear = near_clip;
     self.mPerspectiveFar = far_clip;
     self.RecalculateProjection();
@@ -61,7 +59,7 @@ pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void
 
 fn RecalculateProjection(self: *CameraComponent) void {
     if (self.mProjectionType == .Perspective) {
-        self.mProjection = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mPerspectiveFOVDegrees), self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
+        self.mProjection = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mPerspectiveFOVRad), self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
     } else {
         const ortho_left = -1.0 * self.mOrthographicSize * self.mAspectRatio * 0.5;
         const ortho_right = self.mOrthographicSize * self.mAspectRatio * 0.5;
@@ -116,6 +114,33 @@ pub fn EditorRender(self: *CameraComponent) !void {
             self.RecalculateProjection();
         }
     }
-    //if type is perspective print the perspective variables
-    //if orthographic print orthographic variables
+
+    //print the relevant variables depending on projection type
+    if (self.mProjectionType == .Perspective) {
+        var perspective_degrees = LinAlg.RadiansToDegrees(self.mPerspectiveFOVRad);
+        if (imgui.igDragFloat("FOV", &perspective_degrees, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+            self.mPerspectiveFOVRad = LinAlg.DegreesToRadians(perspective_degrees);
+            self.RecalculateProjection();
+        }
+
+        if (imgui.igDragFloat("Near", &self.mPerspectiveNear, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+            self.RecalculateProjection();
+        }
+
+        if (imgui.igDragFloat("Far", &self.mPerspectiveFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+            self.RecalculateProjection();
+        }
+    } else {
+        if (imgui.igDragFloat("Size", &self.mOrthographicSize, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+            self.RecalculateProjection();
+        }
+
+        if (imgui.igDragFloat("Near", &self.mOrthographicNear, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+            self.RecalculateProjection();
+        }
+
+        if (imgui.igDragFloat("Far", &self.mOrthographicFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+            self.RecalculateProjection();
+        }
+    }
 }

@@ -11,6 +11,8 @@ const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const TransformComponent = Components.TransformComponent;
+const EditorCameraTag = Components.EditorCameraTag;
+const PrimaryCameraTag = Components.PrimaryCameraTag;
 
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
@@ -53,12 +55,29 @@ mSceneManager: EditorSceneManager,
 _SceneLayer: SceneLayer,
 mWindow: *Window,
 _EditorState: EditorState,
+_UsePlayPanel: bool,
 
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
     try ImGui.Init(window);
-    return EditorProgram{ .mSceneManager = try EditorSceneManager.Init(window.GetWidth(), window.GetHeight()), .mWindow = window, ._AssetHandlePanel = AssetHandlePanel.Init(), ._ComponentsPanel = ComponentsPanel.Init(), ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator), ._CSEditorPanel = CSEditorPanel.Init(engine_allocator), ._ScenePanel = ScenePanel.Init(), ._ScriptsPanel = ScriptsPanel.Init(), ._StatsPanel = StatsPanel.Init(), ._ToolbarPanel = try ToolbarPanel.Init(), ._ViewportPanel = undefined, ._SceneLayer = undefined, ._EditorState = .Stop };
+    return EditorProgram{
+        .mSceneManager = try EditorSceneManager.Init(window.GetWidth(), window.GetHeight()),
+        .mWindow = window,
+        ._AssetHandlePanel = AssetHandlePanel.Init(),
+        ._ComponentsPanel = ComponentsPanel.Init(),
+        ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
+        ._CSEditorPanel = CSEditorPanel.Init(engine_allocator),
+        ._ScenePanel = ScenePanel.Init(),
+        ._ScriptsPanel = ScriptsPanel.Init(),
+        ._StatsPanel = StatsPanel.Init(),
+        ._ToolbarPanel = try ToolbarPanel.Init(),
+        ._ViewportPanel = undefined,
+        ._SceneLayer = undefined,
+        ._EditorState = .Stop,
+        ._PlayPanel = PlayPanel.Init(),
+        ._UsePlayPanel = true,
+    };
 }
 
 pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
@@ -90,7 +109,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
     }
     ScriptsProcessor.OnUpdateInputEditor(self._SceneLayer, self._ViewportPanel.mIsFocused);
-
     //-------------Inputs End--------------------
 
     //-------------AI Begin--------------
@@ -121,17 +139,34 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     try self._ToolbarPanel.OnImguiRender();
 
-    const editor_camera_group = self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCamera }, allocator);
-    try Renderer.OnUpdate(
-        &self.mSceneManager,
-    );
-    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    var buffer: [300]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
 
-    if (self._EditorState == .Play) {
-        try Renderer.OnUpdate(
-            &self.mSceneManager,
-        );
-        try self._PlayPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+    if (self._UsePlayPanel == true) {
+        const editor_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCameraTag }, allocator);
+        try Renderer.OnUpdate(&self.mSceneManager, editor_camera_group.items[0]);
+        try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+
+        if (self._EditorState == .Play) {
+            const primary_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
+            if (primary_camera_group.items.len > 0) {
+                try Renderer.OnUpdate(&self.mSceneManager, primary_camera_group.items[0]);
+                try self._PlayPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+            }
+        }
+    } else {
+        if (self._EditorState == .Play) {
+            const primary_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
+            if (primary_camera_group.items.len > 0) {
+                try Renderer.OnUpdate(&self.mSceneManager, primary_camera_group.items[0]);
+                try self._ViewportPanel.OnImguiRenderPlay(&self.mSceneManager.mFrameBuffer);
+            }
+        } else {
+            const editor_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCameraTag }, allocator);
+            try Renderer.OnUpdate(&self.mSceneManager, editor_camera_group.items[0]);
+            try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+        }
     }
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
