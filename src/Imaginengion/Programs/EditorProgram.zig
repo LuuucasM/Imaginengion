@@ -40,6 +40,9 @@ const EditorSceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 
+const OnInputPressedScript = @import("../GameObjects/Components.zig").OnInputPressedScript;
+const OnUpdateInputScript = @import("../GameObjects/Components.zig").OnUpdateInputScript;
+
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
 _ContentBrowserPanel: ContentBrowserPanel,
@@ -105,9 +108,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
     if (self._EditorState == .Play) {
-        _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
+        _ = try ScriptsProcessor.RunScript(&self.mSceneManager, OnUpdateInputScript, .{});
     }
-    _ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
+    //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
+    _ = try ScriptsProcessor.RunScriptEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused, OnUpdateInputScript, .{});
     //-------------Inputs End--------------------
 
     //-------------AI Begin--------------
@@ -213,12 +217,12 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
     var cont_bool = true;
     if (self._EditorState == .Play) {
-        cont_bool = cont_bool and try ScriptsProcessor.OnInputPressedEvent(&self.mSceneManager, e);
+        cont_bool = cont_bool and try ScriptsProcessor.RunScript(&self.mSceneManager, OnInputPressedScript, .{&e});
     }
 
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
 
-    _ = try ScriptsProcessor.OnInputPressedEventEditor(&self._SceneLayer, e, self._ViewportPanel.mIsFocused);
+    _ = try ScriptsProcessor.RunScriptEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused, OnInputPressedScript, .{&e});
     return cont_bool;
 }
 
