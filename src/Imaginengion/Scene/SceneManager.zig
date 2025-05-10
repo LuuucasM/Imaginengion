@@ -9,7 +9,7 @@ const LayerType = SceneLayer.LayerType;
 const SceneSerializer = @import("SceneSerializer.zig");
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
-const ECSManager = @import("../ECS/ECSManager.zig");
+const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const TransformComponent = Components.TransformComponent;
@@ -24,7 +24,6 @@ const ScriptAsset = Assets.ScriptAsset;
 
 const RenderManager = @import("../Renderer/Renderer.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const InternalFrameBuffer = @import("../FrameBuffers/InternalFrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
@@ -42,10 +41,12 @@ pub const ESceneState = enum(u1) {
     Play = 1,
 };
 
+pub const ECSManagerScenes = ECSManager(u32, ComponentsArray.len);
+
 var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 
 mSceneStack: std.ArrayList(SceneLayer),
-mECSManager: ECSManager,
+mECSManager: ECSManagerScenes,
 mSceneState: ESceneState,
 mLayerInsertIndex: usize,
 mFrameBuffer: FrameBuffer,
@@ -60,7 +61,7 @@ mNumTexturesUniformBuffer: UniformBuffer,
 pub fn Init(width: usize, height: usize) !SceneManager {
     var new_scene_manager = SceneManager{
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
-        .mECSManager = try ECSManager.Init(SceneManagerGPA.allocator(), &ComponentsArray),
+        .mECSManager = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &ComponentsArray),
         .mSceneState = .Stop,
         .mLayerInsertIndex = 0,
         .mViewportWidth = width,

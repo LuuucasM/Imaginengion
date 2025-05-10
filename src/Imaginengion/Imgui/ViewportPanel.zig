@@ -59,13 +59,12 @@ pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height
         .mViewportWidth = viewport_width,
         .mViewportHeight = viewport_height,
         .mSelectedEntity = null,
-        .mCameraEntity = camera_entity,
         .mGizmoType = .None,
         .mIsFocused = false,
     };
 }
 
-pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !void {
+pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
@@ -132,9 +131,6 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !vo
             imgui.ImGuizmo_SetOrthographic(false);
             imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
             imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
-
-            const camera_component = self.mCameraEntity.GetComponent(CameraComponent);
-            const camera_transform = self.mCameraEntity.GetComponent(TransformComponent);
 
             imgui.ImGuizmo_SetOrthographic(if (camera_component.mProjectionType == .Orthographic) true else false);
             var camera_proj = LinAlg.Mat4ToArray(camera_component.mProjection);

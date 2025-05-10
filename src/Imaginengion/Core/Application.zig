@@ -16,6 +16,7 @@ mIsMinimized: bool = false,
 mWindow: Window = undefined,
 mProgram: Program = undefined,
 
+///Initializes
 pub fn Init(self: *Application, engine_allocator: std.mem.Allocator) !void {
     try AssetManager.Init();
     try Input.Init();

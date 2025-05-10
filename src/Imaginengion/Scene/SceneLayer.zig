@@ -4,7 +4,7 @@ const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const LinAlg = @import("../Math/LinAlg.zig");
 const Mat4f32 = LinAlg.Mat4f32;
 
-const ECSManager = @import("../ECS/ECSManager.zig");
+const ECSManagerScenes = @import("SceneManager.zig").ECSManagerScenes;
 const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const ComponentsArray = Components.ComponentsList;
@@ -38,9 +38,9 @@ mEntitySet: std.AutoHashMap(u32, usize),
 mLayerType: LayerType,
 mInternalID: usize,
 mFrameBuffer: FrameBuffer,
-mECSManagerRef: *ECSManager,
+mECSManagerRef: *ECSManagerScenes,
 
-pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id: usize, width: usize, height: usize, ecs_manager_ref: *ECSManager) !SceneLayer {
+pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id: usize, width: usize, height: usize, ecs_manager_ref: *ECSManagerScenes) !SceneLayer {
     return SceneLayer{
         .mUUID = try GenUUID(),
         .mName = std.ArrayList(u8).init(ECSAllocator),

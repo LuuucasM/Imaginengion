@@ -8,16 +8,17 @@ const PlayPanel = @This();
 
 mViewportWidth: usize,
 mViewportHeight: usize,
+mIsFocused: bool,
 
 pub fn Init() PlayPanel {
     return PlayPanel{
         .mViewportWidth = 1280,
         .mViewportHeight = 720,
+        .mIsFocused = false,
     };
 }
 
 pub fn OnImguiRender(self: *PlayPanel, scene_frame_buffer: *FrameBuffer) !void {
-    if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
 

@@ -1,29 +1,10 @@
 # ECS Manager
 ---
-### Design Choices
-- 
-### Member Variables
-- [[Entity Manager]]
-- [[Component Manager]]
-- Allocator
-### Public Functions
-- Init - Used to initialize the ECS
-- Deinit - Used To deinitialize the ECS
-- CreateEntity - Use to create an entity, which for the purpose of the ECS is simply an integer
-- DestroyEntity - Marks an entity to be destroyed
-- ProcessDestroyedEntities - Remove all of the components of the entity and release the identifier 
-- GetAllEntities - Gets all the entities in the ECS
-- DuplicateEntities - Creates a
-- GetGroup
-- EntityListDifference
-- EntityListUnion
-- EntityListIntersection
-- AddComponent
-- RemoveComponent
-- HasComponent
-- GetComponent
-### Private Functions
-- None
+### TODO
+- try and move the scripts into the ECS where you pass a script list like a component list
+- change entity IDs to split the 32 bits into 16 and 16 bits where the bottom half is the generation and the top half is the object ID
+- change sparse set to use pages instead of just raw array using IDs. split the entity id (now 16bit) into 2 parts 8 and 8 bits. use the bottom 8 bits for page number and use the top 8 bits for the entity ID
+- change components so that they have to provide another parameter for the ECS when they are added to the ECS which says whether the ECS should use contiguous sparse sets or paged sparse sets
 ### Other Related Topics
 [[Adding new components to engine]] 
 [[Adding new scripts to engine]] 

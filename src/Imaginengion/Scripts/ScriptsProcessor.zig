@@ -105,7 +105,7 @@ pub fn OnInputPressedEventEditor(editor_scene_layer: *SceneLayer, e: InputPresse
 
         var entity = Entity{ .mEntityID = script_component.mParent, .mSceneLayerRef = @constCast(editor_scene_layer) };
 
-        run_func(StaticEngineContext.GetInstance(), &allocator, &entity, &e);
+        _ = run_func(StaticEngineContext.GetInstance(), &allocator, &entity, &e);
     }
 
     return true;
@@ -131,7 +131,7 @@ pub fn OnUpdateInputEditor(editor_scene_layer: *SceneLayer, editor_window_in_foc
 
         var entity = Entity{ .mEntityID = script_component.mParent, .mSceneLayerRef = @constCast(editor_scene_layer) };
 
-        run_func(StaticEngineContext.GetInstance(), &allocator, &entity);
+        _ = run_func(StaticEngineContext.GetInstance(), &allocator, &entity);
     }
 
     return true;

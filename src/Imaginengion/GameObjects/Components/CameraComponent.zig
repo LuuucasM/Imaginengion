@@ -59,7 +59,7 @@ pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void
 
 fn RecalculateProjection(self: *CameraComponent) void {
     if (self.mProjectionType == .Perspective) {
-        self.mProjection = LinAlg.PerspectiveRHNO(LinAlg.DegreesToRadians(self.mPerspectiveFOVRad), self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
+        self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
     } else {
         const ortho_left = -1.0 * self.mOrthographicSize * self.mAspectRatio * 0.5;
         const ortho_right = self.mOrthographicSize * self.mAspectRatio * 0.5;
@@ -94,15 +94,10 @@ pub fn GetInd(self: CameraComponent) u32 {
 
 pub fn EditorRender(self: *CameraComponent) !void {
 
-    //----------------------------------
-    //set this to be a selectable bool maybe instead? check box doesnt
-    //make much sense when i want primary camera to be an event not a variable to set
-    //but then when scenes are loaded how will the primary camera be changed in game?
-    var set_primary_camera: bool = false;
-    imgui.igCheckbox("Set as primary camera", &set_primary_camera);
-    if (set_primary_camera == true) {}
-    //-----------------------
-    imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
+    //aspect ratio
+    _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
+
+    //projection type
     if (imgui.igBeginCombo("Projection type", @tagName(self.mProjectionType), imgui.ImGuiComboFlags_None) == true) {
         defer imgui.igEndCombo();
         if (imgui.igSelectable_Bool("Perspective", if (self.mProjectionType == .Perspective) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
@@ -115,7 +110,7 @@ pub fn EditorRender(self: *CameraComponent) !void {
         }
     }
 
-    //print the relevant variables depending on projection type
+    //print the size/far/near variables depending on projection type
     if (self.mProjectionType == .Perspective) {
         var perspective_degrees = LinAlg.RadiansToDegrees(self.mPerspectiveFOVRad);
         if (imgui.igDragFloat("FOV", &perspective_degrees, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {

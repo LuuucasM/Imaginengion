@@ -7,7 +7,6 @@ const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 
-const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const TransformComponent = Components.TransformComponent;
@@ -76,7 +75,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._SceneLayer = undefined,
         ._EditorState = .Stop,
         ._PlayPanel = PlayPanel.Init(),
-        ._UsePlayPanel = true,
+        ._UsePlayPanel = false,
     };
 }
 
@@ -105,10 +104,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
-    if (self._EditorState == .play) {
+    if (self._EditorState == .Play) {
         _ = try ScriptsProcessor.OnUpdateInput(&self.mSceneManager);
     }
-    ScriptsProcessor.OnUpdateInputEditor(self._SceneLayer, self._ViewportPanel.mIsFocused);
+    _ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
     //-------------Inputs End--------------------
 
     //-------------AI Begin--------------
@@ -145,13 +144,17 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
     if (self._UsePlayPanel == true) {
         const editor_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCameraTag }, allocator);
-        try Renderer.OnUpdate(&self.mSceneManager, editor_camera_group.items[0]);
-        try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+        const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, editor_camera_group.items[0]);
+        const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, editor_camera_group.items[0]);
+        try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
+        try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component, camera_transform);
 
         if (self._EditorState == .Play) {
             const primary_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
             if (primary_camera_group.items.len > 0) {
-                try Renderer.OnUpdate(&self.mSceneManager, primary_camera_group.items[0]);
+                const play_camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, primary_camera_group.items[0]);
+                const play_camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, primary_camera_group.items[0]);
+                try Renderer.OnUpdate(&self.mSceneManager, play_camera_component, play_camera_transform);
                 try self._PlayPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
             }
         }
@@ -159,13 +162,17 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         if (self._EditorState == .Play) {
             const primary_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
             if (primary_camera_group.items.len > 0) {
-                try Renderer.OnUpdate(&self.mSceneManager, primary_camera_group.items[0]);
+                const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, primary_camera_group.items[0]);
+                const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, primary_camera_group.items[0]);
+                try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
                 try self._ViewportPanel.OnImguiRenderPlay(&self.mSceneManager.mFrameBuffer);
             }
         } else {
             const editor_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCameraTag }, allocator);
-            try Renderer.OnUpdate(&self.mSceneManager, editor_camera_group.items[0]);
-            try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
+            const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, editor_camera_group.items[0]);
+            const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, editor_camera_group.items[0]);
+            try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
+            try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component, camera_transform);
         }
     }
 
@@ -211,7 +218,7 @@ pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
 
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
 
-    try ScriptsProcessor.OnInputPressedEventEditor(self._SceneLayer, e, self._ViewportPanel.mIsFocused);
+    _ = try ScriptsProcessor.OnInputPressedEventEditor(&self._SceneLayer, e, self._ViewportPanel.mIsFocused);
     return cont_bool;
 }
 
@@ -307,13 +314,15 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) void {
     if (event.mEditorState == .Play and self._EditorState == .Stop) {
-        self.mSceneManager.SaveAllScenes();
+        //TODO:
+        //self.mSceneManager.SaveAllScenes();
         //open up a new imgui window which plays the scene from the pov of the primary camera
-        self._EditorState = .Play;
+        //self._EditorState = .Play;
     }
     if (event.mEditorState == .Stop and self._EditorState == .Play) {
-        self.mSceneManager.ReloadAllScenes();
+        //TODO
+        //self.mSceneManager.ReloadAllScenes();
         //close imgui window that plays the scene from the pov of the primary camera
-        self._EditorState = .Stop;
+        //self._EditorState = .Stop;
     }
 }

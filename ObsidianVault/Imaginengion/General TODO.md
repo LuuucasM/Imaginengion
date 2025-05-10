@@ -1,6 +1,10 @@
+- extend scenes to also utilize the script system where scripts will be called on scene start
+- have scenes generate at least 1 player on game startup
+- using the new scene-script system now devs can write game logic where they can tell the scene where to assign 
 - finish up adding the primary camera by filling in the editor render function for camera and then implementing the event function the SetPrimaryCameraEvent and camera component imgui render.
 - make a new window when they hit the play button that shows the game from the primary camera POV 
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
+- get the newest updated versions of zig set and zig sparse set from git
 - nothing gets released ever for assethandlerefs lol
 - go over all the files looking for places to optimize. make sure to minimizes things like hashes, jumps (if statement loops etc), make sure things look clean and logical
 - make animation system

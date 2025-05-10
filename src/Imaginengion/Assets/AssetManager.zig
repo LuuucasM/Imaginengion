@@ -8,7 +8,7 @@ const IDComponent = Assets.IDComponent;
 const AssetsList = Assets.AssetsList;
 const AssetHandle = @import("AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
-const ECSManager = @import("../ECS/ECSManager.zig");
+const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const AssetManager = @This();
@@ -22,13 +22,15 @@ var AssetM: AssetManager = AssetManager{};
 var AssetGPA = std.heap.DebugAllocator(.{}).init;
 var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-mAssetECS: ECSManager = undefined,
+const ECSManagerAssets = ECSManager(u32, AssetsList.len);
+
+mAssetECS: ECSManagerAssets = undefined,
 mAssetPathToID: std.AutoHashMap(u64, u32) = undefined,
 mProjectDirectory: std.ArrayList(u8) = undefined,
 
 pub fn Init() !void {
     AssetM = AssetManager{
-        .mAssetECS = try ECSManager.Init(AssetGPA.allocator(), &AssetsList),
+        .mAssetECS = try ECSManagerAssets.Init(AssetGPA.allocator(), &AssetsList),
         .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetGPA.allocator()),
         .mProjectDirectory = std.ArrayList(u8).init(AssetGPA.allocator()),
     };

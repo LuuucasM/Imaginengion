@@ -8,7 +8,6 @@ const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ScenePanel = @This();
 
-const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
 const SceneIDComponent = Components.SceneIDComponent;
 const NameComponent = Components.NameComponent;

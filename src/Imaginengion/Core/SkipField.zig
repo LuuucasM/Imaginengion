@@ -18,12 +18,15 @@ pub fn StaticSkipField(size: usize) type {
         }
 
         pub fn Reset(self: *Self, option: InitOption) void {
-            if (option == .NoSkip) return;
-            self.mSkipField[0] = size;
-            self.mSkipField[size - 1] = size;
-            var j: SkipFieldType = 1;
-            while (j < size - 1) : (j += 1) {
-                self.mSkipField[j] = j + 1;
+            if (option == .AllSkip) {
+                self.mSkipField[0] = size;
+                self.mSkipField[size - 1] = size;
+                var j: SkipFieldType = 1;
+                while (j < size - 1) : (j += 1) {
+                    self.mSkipField[j] = j + 1;
+                }
+            } else { //NoSkip option
+                self.mSkipField = std.mem.zeroes([size]SkipFieldType);
             }
         }
         pub fn ChangeToSkipped(self: *Self, index: SkipFieldType) void {

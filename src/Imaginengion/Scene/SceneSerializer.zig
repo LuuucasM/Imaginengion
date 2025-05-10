@@ -3,7 +3,6 @@ const SceneLayer = @import("SceneLayer.zig");
 const LayerType = SceneLayer.LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 
-const ECSManager = @import("../ECS/ECSManager.zig");
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
@@ -319,7 +318,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
             else => @panic("should be a string!!\n"),
         };
         if (std.mem.eql(u8, is_primary_data_string, "True") == true) {
-            current_entity.AddComponent(PrimaryCameraTag, null);
+            _ = try current_entity.AddComponent(PrimaryCameraTag, null);
         }
     } else if (std.mem.eql(u8, value, "CircleRenderComponent")) {
         const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
