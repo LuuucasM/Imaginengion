@@ -56,25 +56,25 @@ mELineVertexArray: VertexArray,
 mELineVertexBuffer: VertexBuffer,
 mELineShader: Shader,
 
-mSpriteVertexCount: u32,
-mSpriteIndexCount: u32,
+mSpriteVertexCount: usize,
+mSpriteIndexCount: usize,
 mSpriteVertexBufferBase: []SpriteVertex,
 mSpriteVertexBufferPtr: *SpriteVertex,
 
-mCircleVertexCount: u32,
-mCircleIndexCount: u32,
+mCircleVertexCount: usize,
+mCircleIndexCount: usize,
 mCircleVertexBufferBase: []CircleVertex,
 mCircleVertexBufferPtr: *CircleVertex,
 
-mELineVertexCount: u32,
+mELineVertexCount: usize,
 mELineVertexBufferBase: []ELineVertex,
 mELineVertexBufferPtr: *ELineVertex,
 
 mRectIndexBuffer: IndexBuffer,
 
 pub fn Init(
-    max_vertices: u32,
-    max_indices: u32,
+    max_vertices: usize,
+    max_indices: usize,
     allocator: std.mem.Allocator,
 ) !Renderer2D {
     var new_renderer2d = Renderer2D{

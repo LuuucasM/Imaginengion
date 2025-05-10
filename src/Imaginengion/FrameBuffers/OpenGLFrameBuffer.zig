@@ -3,7 +3,7 @@ const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const TextureFormat = @import("InternalFrameBuffer.zig").TextureFormat;
 const glad = @import("../Core/CImports.zig").glad;
 
-pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: u32, comptime is_swap_chain_target: bool) type {
+pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize, comptime is_swap_chain_target: bool) type {
     _ = is_swap_chain_target;
     return struct {
         const Self = @This();
@@ -19,15 +19,15 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
         };
 
         mBufferID: c_uint,
-        mColorAttachments: [color_texture_formats.len]u32,
-        mDepthAttachment: u32,
+        mColorAttachments: [color_texture_formats.len]c_uint,
+        mDepthAttachment: c_uint,
         mWidth: usize,
         mHeight: usize,
 
         pub fn Init(width: usize, height: usize) Self {
             var new_framebuffer = Self{
                 .mBufferID = 0,
-                .mColorAttachments = std.mem.zeroes([color_texture_formats.len]u32),
+                .mColorAttachments = std.mem.zeroes([color_texture_formats.len]c_uint),
                 .mDepthAttachment = 0,
                 .mWidth = width,
                 .mHeight = height,
@@ -62,7 +62,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             self.mHeight = height;
             self.Invalidate();
         }
-        pub fn GetColorAttachmentID(self: Self, attachment_index: u8) u32 {
+        pub fn GetColorAttachmentID(self: Self, attachment_index: u8) usize {
             std.debug.assert(attachment_index < color_texture_formats.len);
             return self.mColorAttachments[attachment_index];
         }
@@ -71,7 +71,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             glad.glClearColor(color[0], color[1], color[2], color[3]);
             glad.glClear(glad.GL_COLOR_BUFFER_BIT | glad.GL_DEPTH_BUFFER_BIT);
         }
-        pub fn ClearColorAttachment(self: Self, attachment_index: u32, value: u32) void {
+        pub fn ClearColorAttachment(self: Self, attachment_index: usize, value: u32) void {
             std.debug.assert(attachment_index < color_texture_formats.len);
             glad.glClearTexImage(self.mColorAttachments[attachment_index], 0, TextureFormatToInternalFormat(color_texture_formats[attachment_index]), glad.GL_UNSIGNED_INT, &value);
         }

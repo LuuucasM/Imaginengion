@@ -35,7 +35,7 @@ pub fn GetLayout(self: UnsupportedShader) std.ArrayList(VertexBufferElement) {
     Unsupported();
 }
 
-pub fn GetStride(self: UnsupportedShader) u32 {
+pub fn GetStride(self: UnsupportedShader) usize {
     _ = self;
     Unsupported();
 }

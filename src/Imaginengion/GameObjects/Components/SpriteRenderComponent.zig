@@ -6,6 +6,7 @@ const AssetM = @import("../../Assets/AssetManager.zig");
 const Texture2D = @import("../../Assets/Assets/Texture2D.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const SpriteRenderComponent = @This();
+const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -13,7 +14,7 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
-mTexture: AssetHandle = .{ .mID = std.math.maxInt(u32) },
+mTexture: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
 mTilingFactor: f32 = 1.0,
 mTexCoords: [4]Vec2f32 = [4]Vec2f32{
     Vec2f32{ 0, 0 },
@@ -65,7 +66,7 @@ pub fn EditorRender(self: *SpriteRenderComponent) !void {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            if (self.mTexture.mID != std.math.maxInt(u32)) {
+            if (self.mTexture.mID != std.math.maxInt(AssetType)) {
                 AssetM.ReleaseAssetHandleRef(self.mTexture.mID);
             }
             self.mTexture = try AssetM.GetAssetHandleRef(path, .Prj);

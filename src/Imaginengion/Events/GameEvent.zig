@@ -1,3 +1,5 @@
+const EntityType = @import("../Scene/SceneManager.zig").EntityType;
+
 pub const GameEventCategory = enum(u8) {
     EC_Default,
     EC_PreRender,
@@ -21,7 +23,7 @@ pub const DefaultEvent = struct {
 };
 
 pub const PrimaryCameraChangeEvent = struct {
-    mEntityID: u32,
+    mEntityID: EntityType,
     pub fn GetEventCategory(self: PrimaryCameraChangeEvent) GameEventCategory {
         _ = self;
         return .EC_PreRender;

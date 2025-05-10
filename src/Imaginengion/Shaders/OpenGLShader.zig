@@ -13,8 +13,8 @@ const Mat4f32 = LinAlg.Mat4f32;
 const OpenGLShader = @This();
 
 mBufferElements: std.ArrayList(VertexBufferElement),
-mUniforms: std.AutoHashMap(u32, i32),
-mBufferStride: u32,
+mUniforms: std.AutoHashMap(usize, i32),
+mBufferStride: usize,
 mShaderID: u32,
 mName: []const u8,
 mAllocator: std.mem.Allocator,
@@ -22,7 +22,7 @@ mAllocator: std.mem.Allocator,
 pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
     var new_shader = OpenGLShader{
         .mBufferElements = std.ArrayList(VertexBufferElement).init(allocator),
-        .mUniforms = std.AutoHashMap(u32, i32).init(allocator),
+        .mUniforms = std.AutoHashMap(usize, i32).init(allocator),
         .mBufferStride = 0,
         .mShaderID = 0,
         .mName = undefined,
@@ -63,7 +63,7 @@ pub fn GetLayout(self: OpenGLShader) std.ArrayList(VertexBufferElement) {
     return self.mBufferElements;
 }
 
-pub fn GetStride(self: OpenGLShader) u32 {
+pub fn GetStride(self: OpenGLShader) usize {
     return self.mBufferStride;
 }
 
@@ -199,7 +199,7 @@ fn DiscoverUniforms(self: *OpenGLShader) !void {
     }
 }
 fn CalculateOffsets(self: OpenGLShader) void {
-    var offset: u32 = 0;
+    var offset: usize = 0;
     for (self.mBufferElements.items) |*element| {
         element.mOffset = offset;
         offset += element.mSize;

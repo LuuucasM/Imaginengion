@@ -3,10 +3,12 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
-pub const NullEntity: u32 = ~0;
+const EntityType = @import("../Scene/SceneManager.zig").EntityType;
+
+pub const NullEntity: EntityType = ~0;
 const Entity = @This();
 
-mEntityID: u32,
+mEntityID: EntityType,
 mSceneLayerRef: *SceneLayer,
 
 pub fn AddComponent(self: Entity, comptime component_type: type, component: ?component_type) !*component_type {

@@ -4,8 +4,8 @@ const ShaderDataTypeSize = @import("../Shaders/Shaders.zig").ShaderDataTypeSize;
 const VertexBufferElement = @This();
 
 mType: ShaderDataType,
-mSize: u32,
-mOffset: u32,
+mSize: usize,
+mOffset: usize,
 mIsNormalized: bool,
 
 pub fn Init(data_type: ShaderDataType, normalized: bool) VertexBufferElement {

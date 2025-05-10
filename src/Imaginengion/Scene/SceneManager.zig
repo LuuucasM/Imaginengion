@@ -41,7 +41,8 @@ pub const ESceneState = enum(u1) {
     Play = 1,
 };
 
-pub const ECSManagerScenes = ECSManager(u32, ComponentsArray.len);
+pub const EntityType = u32;
+pub const ECSManagerScenes = ECSManager(EntityType, ComponentsArray.len);
 
 var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 

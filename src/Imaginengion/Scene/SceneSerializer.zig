@@ -20,6 +20,8 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const SceneManager = @import("SceneManager.zig");
+const EntityType = SceneManager.EntityType;
+const AssetType = AssetManager.AssetType;
 
 pub fn SerializeText(scene_layer: *SceneLayer) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -73,7 +75,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer) !void {
     var scanner = std.json.Scanner.initCompleteInput(allocator, buffer);
     defer scanner.deinit();
 
-    var entity = Entity{ .mEntityID = std.math.maxInt(u32), .mSceneLayerRef = scene_layer };
+    var entity = Entity{ .mEntityID = std.math.maxInt(EntityType), .mSceneLayerRef = scene_layer };
 
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
@@ -187,7 +189,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         component_string.clearAndFree();
 
         try write_stream.objectField("AssetFileData");
-        if (component.mTexture.mID != std.math.maxInt(u32)) {
+        if (component.mTexture.mID != std.math.maxInt(AssetType)) {
             const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
             try std.json.stringify(asset_file_data, .{}, component_string.writer());
             try write_stream.write(component_string.items);
@@ -207,7 +209,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         const ecs = entity.mSceneLayerRef.mECSManagerRef;
         var current_id = entity.mEntityID;
         var component: *ScriptComponent = undefined;
-        while (current_id != std.math.maxInt(u32)) {
+        while (current_id != std.math.maxInt(EntityType)) {
             try write_stream.objectField("Component");
 
             component = ecs.GetComponent(ScriptComponent, current_id);
@@ -216,7 +218,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
             component_string.clearAndFree();
 
             try write_stream.objectField("AssetFileData");
-            if (component.mScriptAssetHandle.mID != std.math.maxInt(u32)) {
+            if (component.mScriptAssetHandle.mID != std.math.maxInt(EntityType)) {
                 const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
                 try std.json.stringify(asset_file_data, .{}, component_string.writer());
                 try write_stream.write(component_string.items);
@@ -359,7 +361,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         };
 
         //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
-        if (sprite_render_component.mTexture.mID != std.math.maxInt(u32)) {
+        if (sprite_render_component.mTexture.mID != std.math.maxInt(AssetType)) {
             const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
             defer file_data_component.deinit();
             const file_data = file_data_component.value;
@@ -370,8 +372,8 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         //skip past begin object token
         _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
 
-        var current_id: u32 = current_entity.mEntityID;
-        while (current_id != std.math.maxInt(u32)) {
+        var current_id = current_entity.mEntityID;
+        while (current_id != std.math.maxInt(EntityType)) {
             //skip past object field
             _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
 
@@ -397,7 +399,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
                 else => @panic("should be a string!!\n"),
             };
 
-            if (parsed_script_component.mScriptAssetHandle.mID != std.math.maxInt(u32)) {
+            if (parsed_script_component.mScriptAssetHandle.mID != std.math.maxInt(AssetType)) {
                 const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
                 defer file_data_component.deinit();
                 const file_data = file_data_component.value;

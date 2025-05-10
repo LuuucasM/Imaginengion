@@ -5,9 +5,9 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 pub fn EntityManager(entity_t: type) type {
     return struct {
         const Self = @This();
-        pub const NullEntity: u32 = ~0;
+        pub const NullEntity: entity_t = ~0;
 
-        var NextID: u32 = 0;
+        var NextID: entity_t = 0;
 
         _IDsInUse: ArraySet(entity_t),
         _IDsRemoved: std.ArrayList(entity_t),
@@ -15,9 +15,9 @@ pub fn EntityManager(entity_t: type) type {
 
         pub fn Init(ECSAllocator: std.mem.Allocator) Self {
             return Self{
-                ._IDsInUse = ArraySet(u32).init(ECSAllocator),
-                ._IDsRemoved = std.ArrayList(u32).init(ECSAllocator),
-                .mIDsToRemove = std.ArrayList(u32).init(ECSAllocator),
+                ._IDsInUse = ArraySet(entity_t).init(ECSAllocator),
+                ._IDsRemoved = std.ArrayList(entity_t).init(ECSAllocator),
+                .mIDsToRemove = std.ArrayList(entity_t).init(ECSAllocator),
             };
         }
 
@@ -33,7 +33,7 @@ pub fn EntityManager(entity_t: type) type {
             self.mIDsToRemove.clearAndFree();
         }
 
-        pub fn CreateEntity(self: *Self) !u32 {
+        pub fn CreateEntity(self: *Self) !entity_t {
             if (self._IDsRemoved.items.len != 0) {
                 const new_id = self._IDsRemoved.pop().?;
                 _ = try self._IDsInUse.add(new_id);
@@ -46,16 +46,16 @@ pub fn EntityManager(entity_t: type) type {
             }
         }
 
-        pub fn DestroyEntity(self: *Self, entityID: u32) !void {
+        pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
             _ = self._IDsInUse.remove(entityID);
             try self._IDsRemoved.append(entityID);
         }
 
-        pub fn GetAllEntities(self: Self) ArraySet(u32) {
+        pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
             return self._IDsInUse;
         }
 
-        pub fn SetToDestroy(self: *Self, entityID: u32) !void {
+        pub fn SetToDestroy(self: *Self, entityID: entity_t) !void {
             std.debug.assert(self._IDsInUse.contains(entityID));
             try self.mIDsToRemove.append(entityID);
         }

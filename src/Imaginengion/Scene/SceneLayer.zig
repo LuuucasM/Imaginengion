@@ -5,6 +5,7 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Mat4f32 = LinAlg.Mat4f32;
 
 const ECSManagerScenes = @import("SceneManager.zig").ECSManagerScenes;
+const EntityType = @import("SceneManager.zig").EntityType;
 const Entity = @import("../GameObjects/Entity.zig");
 const Components = @import("../GameObjects/Components.zig");
 const ComponentsArray = Components.ComponentsList;
@@ -33,8 +34,8 @@ pub const LayerType = enum(u1) {
 mName: std.ArrayList(u8),
 mUUID: u128,
 mPath: std.ArrayList(u8),
-mEntityList: std.ArrayList(u32),
-mEntitySet: std.AutoHashMap(u32, usize),
+mEntityList: std.ArrayList(EntityType),
+mEntitySet: std.AutoHashMap(EntityType, usize),
 mLayerType: LayerType,
 mInternalID: usize,
 mFrameBuffer: FrameBuffer,
@@ -45,8 +46,8 @@ pub fn Init(ECSAllocator: std.mem.Allocator, layer_type: LayerType, internal_id:
         .mUUID = try GenUUID(),
         .mName = std.ArrayList(u8).init(ECSAllocator),
         .mPath = std.ArrayList(u8).init(ECSAllocator),
-        .mEntityList = std.ArrayList(u32).init(ECSAllocator),
-        .mEntitySet = std.AutoHashMap(u32, usize).init(ECSAllocator),
+        .mEntityList = std.ArrayList(EntityType).init(ECSAllocator),
+        .mEntitySet = std.AutoHashMap(EntityType, usize).init(ECSAllocator),
         .mLayerType = layer_type,
         .mInternalID = internal_id,
         .mFrameBuffer = try FrameBuffer.Init(ECSAllocator, &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, width, height),
@@ -109,7 +110,7 @@ pub fn OnViewportResize(self: *SceneLayer, width: usize, height: usize) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var camera_entities = try std.ArrayList(u32).initCapacity(allocator, self.mEntityList.items.len);
+    var camera_entities = try std.ArrayList(EntityType).initCapacity(allocator, self.mEntityList.items.len);
     try camera_entities.appendSlice(self.mEntityList.items);
 
     try self.mECSManagerRef.EntityListIntersection(&camera_entities, try self.mECSManagerRef.GetGroup(.{ .Component = CameraComponent }, allocator), allocator);

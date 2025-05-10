@@ -5,15 +5,15 @@ pub fn Init(path: []const u8) !UnsupportedTexture2D {
     _ = path;
     Unsupported();
 }
-pub fn GetWidth(self: UnsupportedTexture2D) u32 {
+pub fn GetWidth(self: UnsupportedTexture2D) usize {
     _ = self;
     Unsupported();
 }
-pub fn GetHeight(self: UnsupportedTexture2D) u32 {
+pub fn GetHeight(self: UnsupportedTexture2D) usize {
     _ = self;
     Unsupported();
 }
-pub fn GetID(self: UnsupportedTexture2D) u32 {
+pub fn GetID(self: UnsupportedTexture2D) usize {
     _ = self;
     Unsupported();
 }

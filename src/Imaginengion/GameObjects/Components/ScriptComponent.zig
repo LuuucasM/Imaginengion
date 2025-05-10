@@ -9,11 +9,14 @@ const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-mFirst: u32 = std.math.maxInt(u32),
-mPrev: u32 = std.math.maxInt(u32),
-mNext: u32 = std.math.maxInt(u32),
-mParent: u32 = std.math.maxInt(u32),
-mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(u32) },
+const EntityType = @import("../../Scene/SceneManager.zig").EntityType;
+const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
+
+mFirst: EntityType = std.math.maxInt(EntityType),
+mPrev: EntityType = std.math.maxInt(EntityType),
+mNext: EntityType = std.math.maxInt(EntityType),
+mParent: EntityType = std.math.maxInt(EntityType),
+mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

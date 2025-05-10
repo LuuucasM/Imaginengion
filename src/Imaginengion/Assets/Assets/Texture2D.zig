@@ -20,13 +20,13 @@ pub fn Deinit(self: Texture2D) void {
     self._Impl.Deinit();
 }
 
-pub fn GetWidth(self: Texture2D) u32 {
+pub fn GetWidth(self: Texture2D) usize {
     return self._Impl.GetWidth();
 }
-pub fn GetHeight(self: Texture2D) u32 {
+pub fn GetHeight(self: Texture2D) usize {
     return self._Impl.GetHeight();
 }
-pub fn GetID(self: Texture2D) u32 {
+pub fn GetID(self: Texture2D) c_uint {
     return self._Impl.GetID();
 }
 pub fn UpdateData(self: *Texture2D, data: *anyopaque, size: usize) void {

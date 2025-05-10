@@ -76,7 +76,7 @@ pub fn GetLayout(self: Shader) std.ArrayList(VertexBufferElement) {
     return self.mImpl.GetLayout();
 }
 
-pub fn GetStride(self: Shader) u32 {
+pub fn GetStride(self: Shader) usize {
     return self.mImpl.GetStride();
 }
 

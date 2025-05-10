@@ -3,6 +3,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneManager = @import("../Scene/SceneManager.zig");
+const EntityType = SceneManager.EntityType;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
@@ -137,7 +138,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             if (is_tree_open) {
                 defer imgui.igTreePop();
 
-                var scene_names = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+                var scene_names = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
                 try scene_names.appendSlice(scene_layer.mEntityList.items);
                 try scene_manager.mECSManager.EntityListIntersection(&scene_names, name_entities, allocator);
 

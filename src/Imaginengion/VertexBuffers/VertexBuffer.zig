@@ -38,7 +38,7 @@ pub fn SetLayout(self: *VertexBuffer, layout: std.ArrayList(VertexBufferElement)
     try self.mImpl.SetLayout(layout);
 }
 
-pub fn SetStride(self: *VertexBuffer, stride: u32) void {
+pub fn SetStride(self: *VertexBuffer, stride: usize) void {
     self.mImpl.SetStride(stride);
 }
 
@@ -46,6 +46,6 @@ pub fn GetLayout(self: VertexBuffer) std.ArrayList(VertexBufferElement) {
     return self.mImpl.GetLayout();
 }
 
-pub fn GetStride(self: VertexBuffer) u32 {
+pub fn GetStride(self: VertexBuffer) usize {
     return self.mImpl.GetStride();
 }

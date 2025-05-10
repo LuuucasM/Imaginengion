@@ -15,13 +15,13 @@ const VTab = struct {
     Unbind: *const fn (*anyopaque) void,
     Resize: *const fn (*anyopaque, usize, usize) void,
     ClearFrameBuffer: *const fn (*anyopaque, Vec4f32) void,
-    GetColorAttachmentID: *const fn (*anyopaque, u8) u32,
+    GetColorAttachmentID: *const fn (*anyopaque, u8) usize,
     ClearColorAttachment: *const fn (*anyopaque, u8, u32) void,
     BindColorAttachment: *const fn (*anyopaque, u8, usize) void,
     BindDepthAttachment: *const fn (*anyopaque, usize) void,
 };
 
-pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: u32, comptime is_swap_chain_target: bool, width: usize, height: usize) !FrameBuffer {
+pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize, comptime is_swap_chain_target: bool, width: usize, height: usize) !FrameBuffer {
     const internal_type = InternalFrameBuffer(color_texture_formats, depth_texture_format, samples, is_swap_chain_target);
 
     const impl = struct {
@@ -50,7 +50,7 @@ pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []cons
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             self.ClearFrameBuffer(color);
         }
-        fn GetColorAttachmentID(ptr: *anyopaque, attachment_index: u8) u32 {
+        fn GetColorAttachmentID(ptr: *anyopaque, attachment_index: u8) usize {
             const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
             return self.GetColorAttachmentID(attachment_index);
         }
@@ -107,7 +107,7 @@ pub fn Resize(self: FrameBuffer, width: usize, height: usize) void {
 pub fn ClearFrameBuffer(self: FrameBuffer, color: Vec4f32) void {
     self.mVTable.ClearFrameBuffer(self.mPtr, color);
 }
-pub fn GetColorAttachmentID(self: FrameBuffer, attachment_index: u8) u32 {
+pub fn GetColorAttachmentID(self: FrameBuffer, attachment_index: u8) usize {
     return self.mVTable.GetColorAttachmentID(self.mPtr, attachment_index);
 }
 pub fn ClearColorAttachment(self: FrameBuffer, attachment_index: u8, value: Vec4f32) void {

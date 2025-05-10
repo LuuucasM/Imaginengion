@@ -1,15 +1,14 @@
 const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
 
-const VTab = struct {
-    Deinit: *const fn (*anyopaque, std.mem.Allocator) void,
-    DuplicateEntity: *const fn (*anyopaque, u32, u32) void,
-    HasComponent: *const fn (*anyopaque, u32) bool,
-    RemoveComponent: *const fn (*anyopaque, u32) anyerror!void,
-    clearAndFree: *const fn (*anyopaque) void,
-};
-
 pub fn ComponentArray(entity_t: type) type {
+    const VTab = struct {
+        Deinit: *const fn (*anyopaque, std.mem.Allocator) void,
+        DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
+        HasComponent: *const fn (*anyopaque, entity_t) bool,
+        RemoveComponent: *const fn (*anyopaque, entity_t) anyerror!void,
+        clearAndFree: *const fn (*anyopaque) void,
+    };
     return struct {
         const Self = @This();
         mPtr: *anyopaque,

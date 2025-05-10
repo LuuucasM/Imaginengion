@@ -12,6 +12,8 @@ const OnUpdateInputScript = Components.OnUpdateInputScript;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
+const EntityType = @import("../Scene/SceneManager.zig").EntityType;
+
 const ScriptsPanel = @This();
 
 _P_Open: bool,
@@ -50,7 +52,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
 
                 iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
                 if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
-                while (iter.mNext != std.math.maxInt(u32)) {
+                while (iter.mNext != std.math.maxInt(EntityType)) {
                     iter = ecs.GetComponent(ScriptComponent, iter.mNext);
                     if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
                 }

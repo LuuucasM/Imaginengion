@@ -20,6 +20,7 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneManager = @import("../Scene/SceneManager.zig");
+const EntityType = SceneManager.EntityType;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentManager = @import("../ECS/ComponentManager.zig");
 
@@ -37,23 +38,23 @@ const Renderer = @This();
 var RenderM: Renderer = .{};
 
 pub const RenderStats = struct {
-    mDrawCalls: u32 = 0,
-    mTriCount: u32 = 0,
-    mVertexCount: u32 = 0,
-    mIndicesCount: u32 = 0,
+    mDrawCalls: usize = 0,
+    mTriCount: usize = 0,
+    mVertexCount: usize = 0,
+    mIndicesCount: usize = 0,
 
-    mSpriteNum: u32 = 0,
-    mCircleNum: u32 = 0,
-    mELineNum: u32 = 0,
+    mSpriteNum: usize = 0,
+    mCircleNum: usize = 0,
+    mELineNum: usize = 0,
 };
 
 const CameraBuffer = extern struct {
     mBuffer: [4][4]f32,
 };
 
-const MaxTri: u32 = 10_000;
-const MaxVerticies: u32 = MaxTri * 3;
-const MaxIndices: u32 = MaxTri * 3;
+const MaxTri: usize = 10_000;
+const MaxVerticies: usize = MaxTri * 3;
+const MaxIndices: usize = MaxTri * 3;
 
 mRenderContext: RenderContext = undefined,
 mStats: RenderStats = .{},
@@ -61,7 +62,7 @@ mStats: RenderStats = .{},
 mR2D: Renderer2D = undefined,
 mR3D: Renderer3D = undefined,
 
-mTexturesMap: std.AutoHashMap(u32, usize) = undefined,
+mTexturesMap: std.AutoHashMap(usize, usize) = undefined,
 mTextures: std.ArrayList(AssetHandle) = undefined,
 
 mCameraBuffer: CameraBuffer = std.mem.zeroes(CameraBuffer),
@@ -81,7 +82,7 @@ pub fn Init(window: *Window) !void {
         ),
         .mR3D = Renderer3D.Init(),
 
-        .mTexturesMap = std.AutoHashMap(u32, usize).init(RenderAllocator.allocator()),
+        .mTexturesMap = std.AutoHashMap(usize, usize).init(RenderAllocator.allocator()),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), RenderM.mRenderContext.GetMaxTextureImageSlots()),
 
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
@@ -136,11 +137,11 @@ pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
         scene_layer.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
         defer scene_layer.mFrameBuffer.Unbind();
 
-        var scene_sprites = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+        var scene_sprites = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
         try scene_sprites.appendSlice(scene_layer.mEntityList.items);
         try ecs_manager.EntityListIntersection(&scene_sprites, sprite_entities, allocator);
 
-        var scene_circles = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+        var scene_circles = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
         try scene_circles.appendSlice(scene_layer.mEntityList.items);
         try ecs_manager.EntityListIntersection(&scene_circles, circle_entities, allocator);
 
@@ -211,7 +212,7 @@ pub fn GetRenderStats() RenderStats {
     return RenderM.mStats;
 }
 
-fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), scene_manager: *SceneManager) void {
+fn CullEntities(comptime component_type: type, result: *std.ArrayList(EntityType), scene_manager: *SceneManager) void {
     std.debug.assert(@hasField(component_type, "mShouldRender"));
     if (result.items.len == 0) return;
 
@@ -232,7 +233,7 @@ fn CullEntities(comptime component_type: type, result: *std.ArrayList(u32), scen
     result.shrinkAndFree(end_index);
 }
 
-fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), scene_manager: *SceneManager) !void {
+fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(EntityType), scene_manager: *SceneManager) !void {
     std.debug.assert(@hasField(component_type, "mTexture"));
 
     RenderM.mTexturesMap.clearRetainingCapacity();
@@ -249,7 +250,7 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(u32), s
     }
 }
 
-fn DrawSprites(sprite_entities: std.ArrayList(u32), scene_manager: *SceneManager) !void {
+fn DrawSprites(sprite_entities: std.ArrayList(EntityType), scene_manager: *SceneManager) !void {
     var i: usize = 0;
     while (i < sprite_entities.items.len) : (i += 1) {
         const entity_id = sprite_entities.items[i];
@@ -271,7 +272,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(u32), scene_manager: *SceneManager
     }
 }
 
-fn DrawCircles(circle_entities: std.ArrayList(u32), scene_manager: *SceneManager) void {
+fn DrawCircles(circle_entities: std.ArrayList(EntityType), scene_manager: *SceneManager) void {
     var i: usize = 0;
     while (i < circle_entities.items.len) : (i += 1) {
         const entity_id = circle_entities.items[i];

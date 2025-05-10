@@ -4,6 +4,7 @@ const std = @import("std");
 const StaticEngineContext = @import("../Core/EngineContext.zig");
 const EngineContext = StaticEngineContext.EngineContext;
 const SceneManager = @import("../Scene/SceneManager.zig");
+const EntityType = SceneManager.EntityType;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
@@ -37,7 +38,7 @@ pub fn RunScript(scene_manager: *SceneManager, comptime script_type: type, args:
     while (iter.next()) |*scene_layer| {
         if (cont_bool == false) break;
 
-        var scene_scripts = try std.ArrayList(u32).initCapacity(allocator, scene_layer.mEntityList.items.len);
+        var scene_scripts = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
         try scene_scripts.appendSlice(scene_layer.mEntityList.items);
         try ecs_manager.EntityListIntersection(&scene_scripts, input_pressed_entities, allocator);
 
@@ -64,7 +65,7 @@ pub fn RunScriptEditor(editor_scene_layer: *SceneLayer, editor_window_in_focus: 
 
     const input_pressed_entities = if (editor_window_in_focus == true) try ecs_manager.GetGroup(.{ .Component = script_type }, allocator) else try ecs_manager.GetGroup(.{ .Not = .{ .mFirst = GroupQuery{ .Component = script_type }, .mSecond = GroupQuery{ .Component = CameraComponent } } }, allocator);
 
-    var scene_scripts = try std.ArrayList(u32).initCapacity(allocator, editor_scene_layer.mEntityList.items.len);
+    var scene_scripts = try std.ArrayList(EntityType).initCapacity(allocator, editor_scene_layer.mEntityList.items.len);
     try scene_scripts.appendSlice(editor_scene_layer.mEntityList.items);
     try ecs_manager.EntityListIntersection(&scene_scripts, input_pressed_entities, allocator);
 

@@ -75,6 +75,6 @@ pub const WindowResizeEvent = struct {
         _ = self;
         return .EC_Window;
     }
-    _Width: u32,
-    _Height: u32,
+    _Width: usize,
+    _Height: usize,
 };

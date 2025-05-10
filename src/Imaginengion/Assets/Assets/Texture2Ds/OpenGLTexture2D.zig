@@ -67,10 +67,10 @@ pub fn Init(abs_path: []const u8) !OpenGLTexture2D {
 pub fn Deinit(self: OpenGLTexture2D) void {
     glad.glDeleteTextures(1, &self._TextureID);
 }
-pub fn GetWidth(self: OpenGLTexture2D) u32 {
+pub fn GetWidth(self: OpenGLTexture2D) usize {
     return self._Width;
 }
-pub fn GetHeight(self: OpenGLTexture2D) u32 {
+pub fn GetHeight(self: OpenGLTexture2D) usize {
     return self._Height;
 }
 pub fn GetID(self: OpenGLTexture2D) c_uint {

@@ -22,16 +22,18 @@ var AssetM: AssetManager = AssetManager{};
 var AssetGPA = std.heap.DebugAllocator(.{}).init;
 var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
-const ECSManagerAssets = ECSManager(u32, AssetsList.len);
+pub const AssetType = u32;
+
+pub const ECSManagerAssets = ECSManager(AssetType, AssetsList.len);
 
 mAssetECS: ECSManagerAssets = undefined,
-mAssetPathToID: std.AutoHashMap(u64, u32) = undefined,
+mAssetPathToID: std.AutoHashMap(u64, AssetType) = undefined,
 mProjectDirectory: std.ArrayList(u8) = undefined,
 
 pub fn Init() !void {
     AssetM = AssetManager{
         .mAssetECS = try ECSManagerAssets.Init(AssetGPA.allocator(), &AssetsList),
-        .mAssetPathToID = std.AutoHashMap(u64, u32).init(AssetGPA.allocator()),
+        .mAssetPathToID = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
         .mProjectDirectory = std.ArrayList(u8).init(AssetGPA.allocator()),
     };
 }
@@ -81,12 +83,12 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
     }
 }
 
-pub fn ReleaseAssetHandleRef(asset_id: u32) void {
+pub fn ReleaseAssetHandleRef(asset_id: AssetType) void {
     const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_id);
     asset_meta_data.mRefs -= 1;
 }
 
-pub fn GetAsset(comptime asset_type: type, asset_id: u32) !*asset_type {
+pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
     const is_meta_component = asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent;
     if (is_meta_component) {
         return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
@@ -135,7 +137,7 @@ pub fn OnUpdate() !void {
     try AssetM.mAssetECS.ProcessDestroyedEntities();
 }
 
-pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(u32) {
+pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(AssetType) {
     return try AssetM.mAssetECS.GetGroup(query, allocator);
 }
 
@@ -156,7 +158,7 @@ pub fn OnOpenProjectEvent(path: []const u8) !void {
     _ = try AssetM.mProjectDirectory.writer().write(dir);
 }
 
-fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: u32) !?std.fs.File {
+fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File {
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
@@ -180,7 +182,7 @@ fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: u32) !?
     };
 }
 
-fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: u32) !void {
+fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: AssetType) !void {
     const fstats = try file.stat();
     if (last_modified != fstats.mtime) {
         try UpdateAsset(entity_id, file, fstats);
@@ -221,7 +223,7 @@ fn CreateAsset(abs_path: []const u8, rel_path: []const u8, path_type: PathType) 
     return new_handle;
 }
 
-fn DeleteAsset(asset_id: u32) !void {
+fn DeleteAsset(asset_id: AssetType) !void {
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
 
     var buffer: [260]u8 = undefined;
@@ -243,13 +245,13 @@ fn DeleteAsset(asset_id: u32) !void {
     try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 
-fn MarkAssetToDelete(asset_id: u32) void {
+fn MarkAssetToDelete(asset_id: AssetType) void {
     const file_meta_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
     file_meta_data.mLastModified = std.time.nanoTimestamp();
     file_meta_data.mSize = 0;
 }
 
-fn UpdateAsset(asset_id: u32, file: std.fs.File, fstats: std.fs.File.Stat) !void {
+fn UpdateAsset(asset_id: AssetType, file: std.fs.File, fstats: std.fs.File.Stat) !void {
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
 
     var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -264,7 +266,7 @@ fn UpdateAsset(asset_id: u32, file: std.fs.File, fstats: std.fs.File.Stat) !void
     file_data.mSize = fstats.size;
 }
 
-fn CheckAssetForDeletion(asset_id: u32) !void {
+fn CheckAssetForDeletion(asset_id: AssetType) !void {
     //check to see if we can recover the asset
     if (try RetryAssetExists(asset_id)) return;
 
@@ -277,7 +279,7 @@ fn CheckAssetForDeletion(asset_id: u32) !void {
 
 //This function checks again to see if we can open the file maybe there was
 //some weird issue last frame but this frame the file is ok so we can recover it
-fn RetryAssetExists(asset_id: u32) !bool {
+fn RetryAssetExists(asset_id: AssetType) !bool {
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
 
     var buffer: [260]u8 = undefined;

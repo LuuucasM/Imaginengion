@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub fn CircularBuffer(comptime T: type, comptime size: u32) type {
+pub fn CircularBuffer(comptime T: type, comptime size: usize) type {
     return struct {
         const Self = @This();
         _Buffer: [size]T = std.mem.zeroes([size]T),

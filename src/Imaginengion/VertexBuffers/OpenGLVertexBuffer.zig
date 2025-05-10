@@ -7,7 +7,7 @@ const OpenGLVertexBuffer = @This();
 mBufferID: c_uint,
 mCapacity: usize,
 mLayout: std.ArrayList(VertexBufferElement),
-mStride: c_uint,
+mStride: usize,
 
 pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
     var new_vb = OpenGLVertexBuffer{
@@ -46,7 +46,7 @@ pub fn SetLayout(self: *OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferEl
     self.mLayout.shrinkAndFree(layout.items.len);
 }
 
-pub fn SetStride(self: *OpenGLVertexBuffer, stride: u32) void {
+pub fn SetStride(self: *OpenGLVertexBuffer, stride: usize) void {
     self.mStride = stride;
 }
 
@@ -54,6 +54,6 @@ pub fn GetLayout(self: OpenGLVertexBuffer) std.ArrayList(VertexBufferElement) {
     return self.mLayout;
 }
 
-pub fn GetStride(self: OpenGLVertexBuffer) u32 {
+pub fn GetStride(self: OpenGLVertexBuffer) usize {
     return self.mStride;
 }

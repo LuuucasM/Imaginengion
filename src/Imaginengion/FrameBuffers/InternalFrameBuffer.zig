@@ -18,7 +18,7 @@ pub const TextureFormat = enum(u4) {
     DEPTH24STENCIL8 = 7,
 };
 
-pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_format: TextureFormat, samples: u32, is_swap_chain_target: bool) type {
+pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_format: TextureFormat, samples: usize, is_swap_chain_target: bool) type {
     return struct {
         const Self = @This();
         mImpl: Impl(color_texture_formats, depth_texture_format, samples, is_swap_chain_target),
@@ -43,7 +43,7 @@ pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_f
         pub fn Resize(self: *Self, width: usize, height: usize) void {
             self.mImpl.Resize(width, height);
         }
-        pub fn GetColorAttachmentID(self: Self, attachment_index: u8) u32 {
+        pub fn GetColorAttachmentID(self: Self, attachment_index: u8) usize {
             return self.mImpl.GetColorAttachmentID(attachment_index);
         }
         pub fn ClearFrameBuffer(self: Self, color: Vec4f32) void {
