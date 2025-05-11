@@ -36,20 +36,21 @@ const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent
 
 const SceneManager = @This();
 
-pub const ESceneState = enum(u1) {
-    Stop = 0,
-    Play = 1,
-};
-
 pub const EntityType = u32;
-pub const ECSManagerScenes = ECSManager(EntityType, ComponentsArray.len);
+pub const ECSManagerGameObj = ECSManager(EntityType, ComponentsArray.len);
+
+pub const SceneType = u24;
+pub const ECSManagerScenes = ECSManager(SceneType, ComponentsArray.len);
 
 var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 
+//scene stuff
 mSceneStack: std.ArrayList(SceneLayer),
-mECSManager: ECSManagerScenes,
-mSceneState: ESceneState,
+mECSManagerGO: ECSManagerGameObj,
+mECSManagerSC: ECSManagerScenes,
 mLayerInsertIndex: usize,
+
+//render stuff
 mFrameBuffer: FrameBuffer,
 mViewportWidth: usize,
 mViewportHeight: usize,
@@ -62,7 +63,7 @@ mNumTexturesUniformBuffer: UniformBuffer,
 pub fn Init(width: usize, height: usize) !SceneManager {
     var new_scene_manager = SceneManager{
         .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
-        .mECSManager = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &ComponentsArray),
+        .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &ComponentsArray),
         .mSceneState = .Stop,
         .mLayerInsertIndex = 0,
         .mViewportWidth = width,

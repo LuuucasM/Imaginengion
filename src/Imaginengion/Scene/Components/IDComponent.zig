@@ -1,12 +1,12 @@
 const std = @import("std");
-const AssetsList = @import("../Assets.zig").AssetsList;
+const ComponentsList = @import("../Components.zig").ComponentsList;
 const IDComponent = @This();
 
 ID: u128 = std.math.maxInt(u128),
 
 pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == IDComponent) {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == IDComponent) {
             break :blk i;
         }
     }

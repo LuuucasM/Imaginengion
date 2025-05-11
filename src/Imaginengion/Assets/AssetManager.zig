@@ -108,7 +108,7 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
                 break :blk try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, file_data.mRelPath });
             }
         };
-        const new_asset: asset_type = try asset_type.Init(abs_path);
+        const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), abs_path);
         return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
     }
 }

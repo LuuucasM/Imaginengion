@@ -1,7 +1,9 @@
+- change the like initialization of the engine. I think for things that dont need allocations or run time setup like opengl, glfw, etc they can be initialized straight from the beginning. Like most of the imgui panels just have a bool that can easily be set with a default value which means that the panel in EditorProgram can also be set with a default value, which means that Program in application can also be set with a default value. Maybe this can solve some of the issues where like something needs reference of something else but its not initialized yet.. maybe not tho idk
 - extend scenes to also utilize the script system where scripts will be called on scene start
 - have scenes generate at least 1 player on game startup
 - using the new scene-script system now devs can write game logic where they can tell the scene where to assign 
 - finish up adding the primary camera by filling in the editor render function for camera and then implementing the event function the SetPrimaryCameraEvent and camera component imgui render.
+- does alt + f4 work natively with every program or does it need to be implemented?
 - make a new window when they hit the play button that shows the game from the primary camera POV 
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
 - get the newest updated versions of zig set and zig sparse set from git

@@ -10,7 +10,8 @@ _InternalFormat: c_uint,
 _DataFormat: c_uint,
 mSlot: usize,
 
-pub fn Init(abs_path: []const u8) !OpenGLTexture2D {
+pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D {
+    _ = allocator;
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;

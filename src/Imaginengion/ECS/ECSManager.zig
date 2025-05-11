@@ -75,7 +75,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             try self.mComponentManager.EntityListIntersection(result, list2, allocator);
         }
 
-        //adding components
+        //components related functions
         pub fn AddComponent(self: *Self, comptime ComponentType: type, entityID: entity_t, component: ?ComponentType) !*ComponentType {
             const new_component = try self.mComponentManager.AddComponent(ComponentType, entityID, component);
             return new_component;

@@ -31,9 +31,9 @@ pub const LayerType = enum(u1) {
     OverlayLayer = 1,
 };
 
-mName: std.ArrayList(u8),
-mUUID: u128,
-mPath: std.ArrayList(u8),
+mName: std.ArrayList(u8), //yes
+mUUID: u128, //yes
+mPath: std.ArrayList(u8), //need
 mEntityList: std.ArrayList(EntityType),
 mEntitySet: std.AutoHashMap(EntityType, usize),
 mLayerType: LayerType,
