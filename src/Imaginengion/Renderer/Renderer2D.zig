@@ -1,7 +1,7 @@
 const std = @import("std");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
-const Shader = @import("../Shaders/Shaders.zig");
+const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
@@ -46,15 +46,15 @@ mAllocator: std.mem.Allocator,
 
 mSpriteVertexArray: VertexArray,
 mSpriteVertexBuffer: VertexBuffer,
-mSpriteShader: Shader,
+mSpriteShaderAsset: AssetHandle,
 
 mCircleVertexArray: VertexArray,
 mCircleVertexBuffer: VertexBuffer,
-mCircleShader: Shader,
+mCircleShaderAsset: AssetHandle,
 
 mELineVertexArray: VertexArray,
 mELineVertexBuffer: VertexBuffer,
-mELineShader: Shader,
+mELineShaderAsset: AssetHandle,
 
 mSpriteVertexCount: usize,
 mSpriteIndexCount: usize,
@@ -82,15 +82,15 @@ pub fn Init(
 
         .mSpriteVertexArray = VertexArray.Init(allocator),
         .mSpriteVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(SpriteVertex)),
-        .mSpriteShader = try Shader.Init(allocator, "assets/shaders/2d/Sprite.glsl"),
+        .mSpriteShaderAsset = try AssetManager.GetAssetHandleRef("assets/shaders/2d/Circle.glsl", .Eng),
 
         .mCircleVertexArray = VertexArray.Init(allocator),
         .mCircleVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(CircleVertex)),
-        .mCircleShader = try Shader.Init(allocator, "assets/shaders/2d/Circle.glsl"),
+        .mCircleShaderAsset = try AssetManager.GetAssetHandleRef("assets/shaders/2d/Circle.glsl", .Eng),
 
         .mELineVertexArray = VertexArray.Init(allocator),
         .mELineVertexBuffer = VertexBuffer.Init(allocator, max_vertices * @sizeOf(ELineVertex)),
-        .mELineShader = try Shader.Init(allocator, "assets/shaders/2d/ELine.glsl"),
+        .mELineShaderAsset = try AssetManager.GetAssetHandleRef("assets/shaders/2d/ELine.glsl", .Eng),
 
         .mRectIndexBuffer = undefined,
 
@@ -129,8 +129,9 @@ pub fn Init(
     new_renderer2d.mRectIndexBuffer = IndexBuffer.Init(rect_indices, max_indices * @sizeOf(u32));
 
     //sprite
-    try new_renderer2d.mSpriteVertexBuffer.SetLayout(new_renderer2d.mSpriteShader.GetLayout());
-    new_renderer2d.mSpriteVertexBuffer.SetStride(new_renderer2d.mSpriteShader.GetStride());
+    const sprite_shader_asset = try new_renderer2d.mSpriteShaderAsset.GetAsset(ShaderAsset);
+    try new_renderer2d.mSpriteVertexBuffer.SetLayout(sprite_shader_asset.mShader.GetLayout());
+    new_renderer2d.mSpriteVertexBuffer.SetStride(sprite_shader_asset.mShader.GetLayout());
 
     try new_renderer2d.mSpriteVertexArray.AddVertexBuffer(new_renderer2d.mSpriteVertexBuffer);
 
@@ -139,8 +140,9 @@ pub fn Init(
     new_renderer2d.mSpriteVertexBufferPtr = &new_renderer2d.mSpriteVertexBufferBase[0];
 
     //circle
-    try new_renderer2d.mCircleVertexBuffer.SetLayout(new_renderer2d.mCircleShader.GetLayout());
-    new_renderer2d.mCircleVertexBuffer.SetStride(new_renderer2d.mCircleShader.GetStride());
+    const circle_shader_asset = try new_renderer2d.mCircleShaderAsset.GetAsset(ShaderAsset);
+    try new_renderer2d.mCircleVertexBuffer.SetLayout(circle_shader_asset.mShader.GetLayout());
+    new_renderer2d.mCircleVertexBuffer.SetStride(circle_shader_asset.mShader.GetStride());
 
     try new_renderer2d.mCircleVertexArray.AddVertexBuffer(new_renderer2d.mCircleVertexBuffer);
 
@@ -149,8 +151,9 @@ pub fn Init(
     new_renderer2d.mCircleVertexBufferPtr = &new_renderer2d.mCircleVertexBufferBase[0];
 
     //editor line
-    try new_renderer2d.mELineVertexBuffer.SetLayout(new_renderer2d.mELineShader.GetLayout());
-    new_renderer2d.mELineVertexBuffer.SetStride(new_renderer2d.mELineShader.GetStride());
+    const line_shader_asset = try new_renderer2d.mELineShaderAsset.GetAsset(ShaderAsset);
+    try new_renderer2d.mELineVertexBuffer.SetLayout(line_shader_asset.mShader.GetLayout());
+    new_renderer2d.mELineVertexBuffer.SetStride(line_shader_asset.mShader.GetStride());
 
     try new_renderer2d.mELineVertexArray.AddVertexBuffer(new_renderer2d.mELineVertexBuffer);
 
@@ -164,15 +167,18 @@ pub fn Init(
 pub fn Deinit(self: *Renderer2D) void {
     self.mSpriteVertexBuffer.Deinit();
     self.mSpriteVertexArray.Deinit();
-    self.mSpriteShader.Deinit();
+    const sprite_shader_asset = try self.mSpriteShaderAsset.GetAsset(ShaderAsset);
+    sprite_shader_asset.Deinit();
 
     self.mCircleVertexBuffer.Deinit();
     self.mCircleVertexArray.Deinit();
-    self.mCircleShader.Deinit();
+    const circle_shader_asset = try self.mCircleShaderAsset.GetAsset(ShaderAsset);
+    circle_shader_asset.Deinit();
 
     self.mELineVertexBuffer.Deinit();
     self.mELineVertexArray.Deinit();
-    self.mELineShader.Deinit();
+    const line_shader_asset = try self.mELineShaderAsset.GetAsset(ShaderAsset);
+    line_shader_asset.Deinit();
 
     self.mRectIndexBuffer.Deinit();
 
@@ -240,20 +246,23 @@ pub fn BeginScene(self: *Renderer2D) void {
 pub fn FlushSprite(self: Renderer2D) void {
     const data_size: usize = @sizeOf(SpriteVertex) * self.mSpriteVertexCount;
     self.mSpriteVertexBuffer.SetData(self.mSpriteVertexBufferBase.ptr, data_size);
-    self.mSpriteShader.Bind();
+    const sprite_shader_asset = try self.mSpriteShaderAsset.GetAsset(ShaderAsset);
+    sprite_shader_asset.mShader.Bind();
     self.mSpriteVertexArray.Bind();
 }
 
 pub fn FlushCircle(self: Renderer2D) void {
     const data_size: usize = @sizeOf(CircleVertex) * self.mSpriteVertexCount;
     self.mCircleVertexBuffer.SetData(self.mCircleVertexBufferBase.ptr, data_size);
-    self.mCircleShader.Bind();
+    const circle_shader_asset = try self.mCircleShaderAsset.GetAsset(ShaderAsset);
+    circle_shader_asset.mShader.Bind();
     self.mCircleVertexArray.Bind();
 }
 
 pub fn FlushELine(self: Renderer2D) void {
     const data_size: usize = @sizeOf(ELineVertex) * self.mSpriteVertexCount;
     self.mELineVertexBuffer.SetData(self.mELineVertexBufferBase.ptr, data_size);
-    self.mELineShader.Bind();
+    const line_shader_asset = try self.mELineShaderAsset.GetAsset(ShaderAsset);
+    line_shader_asset.mShader.Bind();
     self.mELineVertexArray.Bind();
 }

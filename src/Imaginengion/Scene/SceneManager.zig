@@ -5,7 +5,7 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneLayer = @import("SceneLayer.zig");
-const LayerType = SceneLayer.LayerType;
+const LayerType = @import("Components/SceneComponent.zig").LayerType;
 const SceneSerializer = @import("SceneSerializer.zig");
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
@@ -18,6 +18,9 @@ const OnInputPressedScript = Components.OnInputPressedScript;
 const ScriptComponent = Components.ScriptComponent;
 const SceneIDComponent = Components.SceneIDComponent;
 const ComponentsArray = Components.ComponentsList;
+const SceneComponents = @import("SceneComponents.zig");
+const SceneComponentsList = SceneComponents.ComponentsList;
+const SceneComponent = SceneComponents.SceneComponent;
 
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
@@ -39,16 +42,16 @@ const SceneManager = @This();
 pub const EntityType = u32;
 pub const ECSManagerGameObj = ECSManager(EntityType, ComponentsArray.len);
 
-pub const SceneType = u24;
+pub const SceneType = u32;
 pub const ECSManagerScenes = ECSManager(SceneType, ComponentsArray.len);
 
 var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 
 //scene stuff
-mSceneStack: std.ArrayList(SceneLayer),
+//mSceneStack: std.ArrayList(SceneLayer),
 mECSManagerGO: ECSManagerGameObj,
 mECSManagerSC: ECSManagerScenes,
-mLayerInsertIndex: usize,
+//mLayerInsertIndex: usize,
 
 //render stuff
 mFrameBuffer: FrameBuffer,
@@ -62,14 +65,14 @@ mNumTexturesUniformBuffer: UniformBuffer,
 
 pub fn Init(width: usize, height: usize) !SceneManager {
     var new_scene_manager = SceneManager{
-        .mSceneStack = std.ArrayList(SceneLayer).init(SceneManagerGPA.allocator()),
+        //scene stuff
         .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &ComponentsArray),
-        .mSceneState = .Stop,
-        .mLayerInsertIndex = 0,
+        .mECSManagerSC = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &SceneComponentsList),
+
+        //render stuff
         .mViewportWidth = width,
         .mViewportHeight = height,
         .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, width, height),
-
         .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
         .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
         .mCompositeIndexBuffer = undefined,
@@ -94,55 +97,62 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 }
 
 pub fn Deinit(self: *SceneManager) !void {
-    var iter = std.mem.reverseIterator(self.mSceneStack.items);
-    while (iter.next()) |scene_layer| {
-        try self.RemoveScene(scene_layer.mInternalID);
-    }
-    self.mSceneStack.deinit();
     self.mCompositeShader.Deinit();
     self.mCompositeVertexBuffer.Deinit();
     self.mCompositeIndexBuffer.Deinit();
     self.mCompositeVertexArray.Deinit();
     self.mFrameBuffer.Deinit();
-    self.mECSManager.Deinit();
+    self.mECSManagerGO.Deinit();
+    self.mECSManagerSC.Deinit();
     _ = SceneManagerGPA.deinit();
 }
 
 pub fn CreateEntity(self: SceneManager, scene_id: usize) !Entity {
-    std.debug.assert(scene_id < self.mSceneStack.items.len);
-    return self.mSceneStack.items[scene_id].CreateEntity();
+    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
+    return scene_component.CreateEntity();
 }
 pub fn CreateEntityWithUUID(self: SceneManager, uuid: u128, scene_id: usize) !Entity {
-    std.debug.assert(scene_id < self.mSceneStack.items.len);
-    return self.mSceneStack.items[scene_id].CreateEntityWithUUID(uuid);
+    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
+    return scene_component.CreateEntityWithUUID(uuid);
 }
 
 pub fn DestroyEntity(self: SceneManager, e: Entity, scene_id: usize) !void {
-    std.debug.assert(scene_id < self.mSceneStack.items.len);
-    self.mSceneStack.items[scene_id].DestroyEntity(e.EntityID);
+    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
+    scene_component.DestroyEntity(e);
 }
 pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: usize) !Entity {
-    std.debug.assert(scene_id < self.mSceneStack.items.len);
-    return self.mSceneStack.items[scene_id].DuplicateEntity(original_entity.EntityID);
+    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
+    scene_component.DuplicateEntity(original_entity);
 }
 
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
-    self.mViewportWidth = width;
-    self.mViewportHeight = height;
-    self.mFrameBuffer.Resize(width, height);
-    for (self.mSceneStack.items) |*scene_layer| {
-        try scene_layer.OnViewportResize(width, height);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const scene_group = try self.mECSManagerSC.GetGroup(.{ .Component = SceneComponent }, allocator);
+    for (scene_group.items) |scene_id| {
+        const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
+        scene_component.OnViewportResize(width, height);
     }
 }
 
-pub fn NewScene(self: *SceneManager, layer_type: LayerType) !usize {
-    var new_scene = try SceneLayer.Init(SceneManagerGPA.allocator(), layer_type, std.math.maxInt(usize), self.mViewportWidth, self.mViewportHeight, &self.mECSManager);
-    _ = try new_scene.mName.writer().write("Unsaved Scene");
+pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
+    const new_scene_id = try self.mECSManagerSC.CreateEntity();
+    const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
 
-    try self.InsertScene(&new_scene);
-
-    return new_scene.mInternalID;
+    const new_scene_component = SceneComponent{
+        .mEntityList = std.ArrayList(EntityType).init(SceneManagerGPA.allocator()),
+        .mEntitySet = std.AutoHashMap(EntityType, usize).init(SceneManagerGPA.allocator()),
+        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mViewportWidth, self.mViewportHeight),
+        .mLayerType = layer_type,
+        .mECSManagerRef = self.mECSManagerSC,
+    };
+    scene_layer.AddComponent(SceneComponent, new_scene_component);
+    //TODO: add an id component
+    //TODO: add an name component
+    //TODO: add an stackpos component
 }
+
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     std.debug.assert(scene_id < self.mSceneStack.items.len);
     const scene_layer = &self.mSceneStack.items[scene_id];

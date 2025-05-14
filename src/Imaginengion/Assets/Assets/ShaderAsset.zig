@@ -16,6 +16,11 @@ pub fn Deinit(self: *ShaderAsset) void {
     self.mShader.Deinit();
 }
 
+pub fn EditorRender(self: *ShaderAsset) !void {
+    _ = self;
+    imgui.igText("Nothing for now!", "");
+}
+
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
         if (asset_type == ShaderAsset) {
@@ -23,8 +28,3 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-pub fn EditorRender(self: *ShaderAsset) !void {
-    _ = self;
-    imgui.igText("Nothing for now!", "");
-}

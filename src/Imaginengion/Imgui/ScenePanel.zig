@@ -185,9 +185,8 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     }
     if (imgui.igBeginPopup("scene_context", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-
-        if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true) {
-            if (self.mSelectedScene) |selected_scene_id| {
+        if (self.mSelectedScene) |selected_scene_id| {
+            if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_NewEntityEvent = .{
                         .SceneID = selected_scene_id,
