@@ -1,7 +1,7 @@
 const std = @import("std");
 const AssetManager = @import("AssetManager.zig");
 const AssetHandle = @This();
-pub const EmptyHandle = std.math.maxInt(AssetManager.AssetType);
+pub const NullHandle = std.math.maxInt(AssetManager.AssetType);
 
 mID: AssetManager.AssetType,
 

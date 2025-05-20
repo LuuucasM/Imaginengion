@@ -18,13 +18,7 @@ mNext: EntityType = std.math.maxInt(EntityType),
 mParent: EntityType = std.math.maxInt(EntityType),
 mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
 
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == ScriptComponent) {
-            break :blk i;
-        }
-    }
-};
+pub fn Deinit(_: *ScriptComponent) !void {}
 
 pub fn GetEditorWindow(self: *ScriptComponent) EditorWindow {
     return EditorWindow.Init(self);
@@ -44,3 +38,11 @@ pub fn EditorRender(self: *ScriptComponent) !void {
     const script = try self.mScriptHandle.GetAsset(ScriptAsset);
     try script.EditorRender();
 }
+
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == ScriptComponent) {
+            break :blk i;
+        }
+    }
+};

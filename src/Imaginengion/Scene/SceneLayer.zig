@@ -1,15 +1,14 @@
 const std = @import("std");
-const ECSManagerScenes = @import("SceneManager.zig").ECSManagerScenes;
+const ECSManagerGameObj = @import("SceneManager.zig").ECSManagerGameObj;
 const Components = @import("SceneComponents.zig");
 const IDComponent = Components.IDComponent;
-const NameComponent = Components.NameComponent;
 const SceneType = @import("../Scene/SceneManager.zig").SceneType;
 
 pub const NullEntity: SceneType = ~0;
 const SceneLayer = @This();
 
 mSceneID: SceneType,
-mECSManagerSCRef: *ECSManagerScenes,
+mECSManagerRef: *ECSManagerGameObj,
 
 pub fn AddComponent(self: SceneLayer, comptime component_type: type, component: ?component_type) !*component_type {
     return try self.mECSManagerSCRef.AddComponent(component_type, self.mSceneID, component);
@@ -25,9 +24,6 @@ pub fn HasComponent(self: SceneLayer, comptime component_type: type) bool {
 }
 pub fn GetUUID(self: SceneLayer) u128 {
     return self.mECSManagerSCRef.GetComponent(IDComponent, self.mSceneID).*.ID;
-}
-pub fn GetName(self: SceneLayer) []const u8 {
-    return &self.mECSManagerSCRef.GetComponent(NameComponent, self.mSceneID).*.Name;
 }
 pub fn Duplicate(self: SceneLayer) !SceneLayer {
     return try self.mECSManagerSCRef.DuplicateEntity(self.mSceneID);

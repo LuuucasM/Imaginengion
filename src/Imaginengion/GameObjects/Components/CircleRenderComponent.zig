@@ -12,13 +12,7 @@ mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
 mThickness: f32 = 1.0,
 mFade: f32 = 0.005,
 
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == CircleRenderComponent) {
-            break :blk i;
-        }
-    }
-};
+pub fn Deinit(_: *CircleRenderComponent) !void {}
 
 pub fn GetEditorWindow(self: *CircleRenderComponent) EditorWindow {
     return EditorWindow.Init(self);
@@ -37,3 +31,11 @@ pub fn GetInd(self: CircleRenderComponent) u32 {
 pub fn EditorRender(self: *CircleRenderComponent) !void {
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
 }
+
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == CircleRenderComponent) {
+            break :blk i;
+        }
+    }
+};

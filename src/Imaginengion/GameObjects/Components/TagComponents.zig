@@ -9,6 +9,7 @@ const InputPressedEvent = @import("../../Events/SystemEvent.zig").InputPressedEv
 pub const OnInputPressedScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *Entity, *const InputPressedEvent) callconv(.C) bool;
     bit: u1 = 0,
+    pub fn Deinit(_: *OnInputPressedScript) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnInputPressedScript) {
@@ -21,6 +22,7 @@ pub const OnInputPressedScript = struct {
 pub const OnUpdateInputScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *Entity) callconv(.C) bool;
     bit: u1 = 0,
+    pub fn Deinit(_: *OnUpdateInputScript) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnUpdateInputScript) {
@@ -32,6 +34,7 @@ pub const OnUpdateInputScript = struct {
 
 pub const PrimaryCameraTag = struct {
     bit: u1 = 0,
+    pub fn Deinit(_: *PrimaryCameraTag) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == PrimaryCameraTag) {
@@ -43,6 +46,7 @@ pub const PrimaryCameraTag = struct {
 
 pub const EditorCameraTag = struct {
     bit: u1 = 0,
+    pub fn Deinit(_: *EditorCameraTag) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == EditorCameraTag) {

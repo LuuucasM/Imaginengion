@@ -5,6 +5,7 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
 const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");
 const GenUUID = @import("../../Core/UUID.zig").GenUUID;
+const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 const GameComponents = @import("../../GameObjects/Components.zig");
 const IDComponent = GameComponents.IDComponent;
@@ -20,12 +21,6 @@ pub const LayerType = enum(u1) {
     OverlayLayer = 1,
 };
 
-mEntityList: std.ArrayList(EntityType),
-mEntitySet: std.AutoHashMap(EntityType, usize),
-mLayerType: LayerType,
-mFrameBuffer: FrameBuffer,
-mECSManagerRef: *ECSManagerScenes,
-
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == SceneComponent) {
@@ -33,6 +28,13 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+mSceneAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
+mLayerType: LayerType = undefined,
+mFrameBuffer: FrameBuffer = undefined,
+mECSManagerRef: *ECSManagerScenes = undefined,
+
+pub fn Deinit(_: *SceneComponent) !void {}
 
 pub fn CreateBlankEntity(self: *SceneComponent) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerRef.CreateEntity(), .mSceneLayerRef = self };
@@ -93,4 +95,14 @@ pub fn OnViewportResize(self: *SceneComponent, width: usize, height: usize) !voi
             camera_component.SetViewportSize(width, height);
         }
     }
+}
+
+pub fn GetInd(self: SceneComponent) u32 {
+    _ = self;
+    return @intCast(Ind);
+}
+
+pub fn GetName(self: SceneComponent) []const u8 {
+    _ = self;
+    return "SceneComponent";
 }

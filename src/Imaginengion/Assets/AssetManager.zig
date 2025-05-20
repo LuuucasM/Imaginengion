@@ -61,11 +61,13 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
     const allocator = fba.allocator();
 
     const abs_path = blk: {
-        if (path_type == .Cwd) {
+        if (path_type == .Eng) {
             const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
             break :blk try std.fs.path.join(allocator, &[_][]const u8{ cwd, rel_path });
-        } else {
+        } else if (path_type == .Prj) {
             break :blk try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, rel_path });
+        } else { //path is abs
+            break :blk rel_path;
         }
     };
     const path_hash = ComputePathHash(abs_path);

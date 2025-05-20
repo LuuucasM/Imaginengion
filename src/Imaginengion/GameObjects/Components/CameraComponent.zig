@@ -29,6 +29,8 @@ mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(45.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 
+pub fn Deinit(_: *CameraComponent) !void {}
+
 pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {
     self.mOrthographicSize = size;
     self.mOrthographicNear = near_clip;

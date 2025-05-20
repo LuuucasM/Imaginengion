@@ -23,6 +23,8 @@ mTexCoords: [4]Vec2f32 = [4]Vec2f32{
     Vec2f32{ 0, 1 },
 },
 
+pub fn Deinit(_: *SpriteRenderComponent) !void {}
+
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == SpriteRenderComponent) {

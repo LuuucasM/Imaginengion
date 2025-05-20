@@ -8,6 +8,8 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 Name: [24]u8 = std.mem.zeroes([24]u8),
 
+pub fn Deinit(_: *NameComponent) !void {}
+
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == NameComponent) {

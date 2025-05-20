@@ -12,12 +12,6 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 const SceneType = @import("../../Scene/SceneManager.zig").SceneType;
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
-mFirst: SceneType = std.math.maxInt(SceneType),
-mPrev: SceneType = std.math.maxInt(SceneType),
-mNext: SceneType = std.math.maxInt(SceneType),
-mParent: SceneType = std.math.maxInt(SceneType),
-mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
-
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == ScriptComponent) {
@@ -25,6 +19,14 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+mFirst: SceneType = std.math.maxInt(SceneType),
+mPrev: SceneType = std.math.maxInt(SceneType),
+mNext: SceneType = std.math.maxInt(SceneType),
+mParent: SceneType = std.math.maxInt(SceneType),
+mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
+
+pub fn Deinit(_: *ScriptComponent) !void {}
 
 pub fn GetEditorWindow(self: *ScriptComponent) EditorWindow {
     return EditorWindow.Init(self);
