@@ -159,6 +159,10 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
 
     _ = try scene_layer.AddComponent(SceneIDComponent, .{ .ID = try GenUUID() });
 
+    const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .Name = std.ArrayList(u8).init(SceneManagerGPA.allocator()) });
+    scene_name_component.Name.clearAndFree();
+    scene_name_component.Name.writer().write("Unsaved Scene");
+
     self.InsertScene(scene_layer);
 }
 
@@ -200,11 +204,10 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
     return new_scene_id;
 }
 pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
-    //TODO: convert to new scene system
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
     const scene_component = scene_layer.GetComponent(SceneComponent, scene_id);
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        try SceneSerializer.SerializeText(scene_layer);
+        try SceneSerializer.SerializeText(scene_layer, scene_component.mSceneAssetHandle);
     } else {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -214,17 +217,15 @@ pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
     }
 }
 pub fn SaveSceneAs(self: *SceneManager, scene_id: usize, path: []const u8) !void {
-    //TODO: convert to new scene system
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
-    scene_layer.mName.clearAndFree();
-    _ = try scene_layer.mName.writer().write(scene_name);
-    scene_layer.mPath.clearAndFree();
-    _ = try scene_layer.mPath.writer().write(path);
+    const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
+    scene_name_component.Name.clearAndFree();
+    scene_name_component.Name.writer().write(scene_name);
 
     try SceneSerializer.SerializeText(scene_layer);
 }

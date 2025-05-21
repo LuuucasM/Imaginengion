@@ -6,9 +6,11 @@ const NameComponent = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-Name: [24]u8 = std.mem.zeroes([24]u8),
+Name: std.ArrayList(u8),
 
-pub fn Deinit(_: *NameComponent) !void {}
+pub fn Deinit(self: *NameComponent) !void {
+    self.Name.deinit();
+}
 
 pub fn GetEditorWindow(self: *NameComponent) EditorWindow {
     return EditorWindow.Init(self);

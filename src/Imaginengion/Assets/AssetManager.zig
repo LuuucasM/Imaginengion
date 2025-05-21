@@ -60,16 +60,7 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
 
-    const abs_path = blk: {
-        if (path_type == .Eng) {
-            const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
-            break :blk try std.fs.path.join(allocator, &[_][]const u8{ cwd, rel_path });
-        } else if (path_type == .Prj) {
-            break :blk try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, rel_path });
-        } else { //path is abs
-            break :blk rel_path;
-        }
-    };
+    const abs_path = GetAbsPath(rel_path, path_type, allocator);
     const path_hash = ComputePathHash(abs_path);
 
     if (AssetM.mAssetPathToID.get(path_hash)) |entity_id| {
@@ -102,14 +93,7 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
 
-        const abs_path = blk: {
-            if (file_data.mPathType == .Cwd) {
-                const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
-                break :blk try std.fs.path.join(allocator, &[_][]const u8{ cwd, file_data.mRelPath });
-            } else {
-                break :blk try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, file_data.mRelPath });
-            }
-        };
+        const abs_path = GetAbsPath(file_data.mRelPath, file_data.mPathType, allocator);
         const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), abs_path);
         return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
     }
@@ -158,6 +142,17 @@ pub fn OnOpenProjectEvent(path: []const u8) !void {
     //note: the path for this function is the path of the .imprj file so we have to strip the file from the path before setting it
     const dir = std.fs.path.dirname(path).?;
     _ = try AssetM.mProjectDirectory.writer().write(dir);
+}
+
+pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.Allocator) []const u8 {
+    if (path_type == .Eng) {
+        const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+        return try std.fs.path.join(allocator, &[_][]const u8{ cwd, rel_path });
+    } else if (path_type == .Prj) {
+        return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, rel_path });
+    } else { //path is abs
+        return rel_path;
+    }
 }
 
 fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File {

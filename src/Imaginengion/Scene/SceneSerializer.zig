@@ -66,8 +66,10 @@ pub fn SerializeText(scene_layer: *SceneLayer, scene_asset_handle: AssetHandle) 
         try write_stream.endObject();
     }
     try write_stream.endObject();
+    const file_meta_data = try scene_asset_handle.GetAsset(FileMetaData);
+    const file_abs_path = AssetManager.GetAbsPath(file_meta_data.mRelPath, file_meta_data.mPathType);
     const file = try std.fs.createFileAbsolute(
-        scene_layer.mPath.items,
+        file_abs_path,
         .{ .read = false, .truncate = true },
     );
     defer file.close();
