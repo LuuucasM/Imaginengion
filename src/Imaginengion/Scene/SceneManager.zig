@@ -169,7 +169,8 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     self.SaveScene(scene_id);
 
-    const entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent });
+    const entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, SceneManagerGPA.allocator());
+    defer entity_scene_entities.deinit();
 
     self.FilterByScene(entity_scene_entities, scene_id);
 
@@ -232,33 +233,44 @@ pub fn SaveSceneAs(self: *SceneManager, scene_id: usize, path: []const u8) !void
 
 pub fn MoveScene(self: *SceneManager, scene_id: usize, move_to_pos: usize) void {
     //TODO: convert to new scene system
-    const current_scene = self.mSceneStack.items[scene_id];
-    const current_pos = scene_id;
+    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
+    const stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id);
+    const current_pos = stack_pos_component.mPosition;
 
     var new_pos: usize = 0;
-    if (current_scene.mLayerType == .OverlayLayer and move_to_pos < self.mLayerInsertIndex) {
-        new_pos = self.mLayerInsertIndex;
-    } else if (current_scene.mLayerType == .GameLayer and move_to_pos >= self.mLayerInsertIndex) {
-        new_pos = self.mLayerInsertIndex - 1;
+    if (scene_component.mLayerType == .OverlayLayer and move_to_pos < self.mGameLayerInsertIndex) {
+        new_pos = self.mGameLayerInsertIndex;
+    } else if (scene_component.mLayerType == .GameLayer and move_to_pos >= self.mGameLayerInsertIndex) {
+        new_pos = self.mGameLayerInsertIndex - 1;
     } else {
         new_pos = move_to_pos;
     }
 
-    if (new_pos < current_pos) {
-        std.mem.copyBackwards(SceneLayer, self.mSceneStack.items[new_pos + 1 .. current_pos + 1], self.mSceneStack.items[new_pos..current_pos]);
+    if (new_pos == current_pos) {
+        return;
+    } else if (new_pos < current_pos) {
+        //we are moving the scene down in position so we need to move everything between new_pos and current_pos up 1 position
+        const scene_stack_pos_list = self.mECSManagerSC.GetAllEntities();
 
-        for (self.mSceneStack.items[new_pos + 1 .. current_pos + 1]) |*scene_layer| {
-            scene_layer.mInternalID += 1;
+        for (scene_stack_pos_list.items) |list_scene_id| {
+            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id);
+            if (scene_stack_pos_component.mPosition >= new_pos and scene_stack_pos_component.mPosition < current_pos) {
+                scene_stack_pos_component.mPosition += 1;
+            }
         }
     } else {
-        std.mem.copyForwards(SceneLayer, self.mSceneStack.items[current_pos..new_pos], self.mSceneStack.items[current_pos + 1 .. new_pos + 1]);
+        //we are moving the scene up in position so we need to move everything between current_pos and new_pos down 1 position
+        const scene_stack_pos_list = self.mECSManagerSC.GetAllEntities();
 
-        for (self.mSceneStack.items[current_pos..new_pos]) |*scene_layer| {
-            scene_layer.mInternalID -= 1;
+        for (scene_stack_pos_list.items) |list_scene_id| {
+            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id);
+            if (scene_stack_pos_component.mPosition > current_pos and scene_stack_pos_component.mPosition <= new_pos) {
+                scene_stack_pos_component.mPosition -= 1;
+            }
         }
     }
-    self.mSceneStack.items[new_pos] = current_scene;
-    self.mSceneStack.items[new_pos].mInternalID = new_pos;
+
+    stack_pos_component.mPosition = new_pos;
 }
 
 pub fn FilterByScene(self: *SceneManager, result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {

@@ -1,5 +1,6 @@
 const LayerType = @import("../Scene/SceneLayer.zig").LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const ScriptType = @import("../Assets/Assets.zig").ScriptAsset.ScriptType;
@@ -75,7 +76,7 @@ pub const NewEntityEvent = struct {
 };
 
 pub const SelectSceneEvent = struct {
-    SelectedScene: ?usize,
+    SelectedScene: ?SceneLayer,
 };
 
 pub const SelectEntityEvent = struct {

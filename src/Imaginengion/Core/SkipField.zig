@@ -1,5 +1,31 @@
+//! Provides a skip field data structure for tracking active/inactive indices.
+//!
+//! This module defines a generic `StaticSkipField(size)` type which efficiently marks and manages
+//! skipped (inactive) and unskipped (active) elements within a fixed-size array.
+//!
+//! The skip field is particularly useful in scenarios such as:
+//! - Component pools in ECS systems where components may be dynamically removed and re-added.
+//! - Sparse memory management schemes.
+//! - Custom allocators or free lists for small object reuse.
+//!
+//! The API supports:
+//! - Initializing the field in either a fully skipped or unskipped state.
+//! - Marking individual elements as skipped or unskipped.
+//! - Merging and splitting skip spans to maintain compact ranges.
+//!
+//! Internally, it uses a simple linear encoding to store skip run lengths, allowing O(1) operations
+//! in most common cases.
 const std = @import("std");
 
+/// Creates a static skip field structure of a fixed size.
+/// This can be used to efficiently track and modify "skipped" elements,
+/// similar to a free-list or block allocation system.
+///
+/// Parameters:
+/// - `size`: The fixed size of the skip field.
+///
+/// Returns:
+/// - A struct with methods to initialize, reset, and toggle skipped states for indices.
 pub fn StaticSkipField(size: usize) type {
     return struct {
         const Self = @This();
@@ -11,12 +37,26 @@ pub fn StaticSkipField(size: usize) type {
 
         mSkipField: [size]SkipFieldType = std.mem.zeroes([size]SkipFieldType),
 
+        /// Initializes a new skip field instance with the given option.
+        ///
+        /// Parameters:
+        /// - `option`: Whether to set the field to "all skipped" or "none skipped" for initialization.
+        ///
+        /// Returns:
+        /// - A new `Self` instance with its skip field initialized accordingly.
         pub fn Init(option: InitOption) Self {
             var new_skipfield = Self{};
             if (option == .AllSkip) new_skipfield.Reset(option);
             return new_skipfield;
         }
 
+        /// Resets the skip field based on the specified option.
+        ///
+        /// Parameters:
+        /// - `option`: If `AllSkip`, all indices are marked as skipped.
+        ///             If `NoSkip`, all indices are marked as unskipped.
+        /// Returns:
+        ///  - Nothing
         pub fn Reset(self: *Self, option: InitOption) void {
             if (option == .AllSkip) {
                 self.mSkipField[0] = size;
@@ -29,6 +69,18 @@ pub fn StaticSkipField(size: usize) type {
                 self.mSkipField = std.mem.zeroes([size]SkipFieldType);
             }
         }
+
+        /// Marks the element at the specified index as skipped.
+        ///
+        /// Parameters:
+        /// - `index`: The index to mark as skipped.
+        ///
+        /// Notes:
+        /// - Skipping is only applied if the index is currently unskipped.
+        /// - This function coalesces adjacent skipped ranges.
+        ///
+        /// Returns:
+        /// - Nothing
         pub fn ChangeToSkipped(self: *Self, index: SkipFieldType) void {
             std.debug.assert(self.mSkipField.len > index);
 
@@ -69,6 +121,17 @@ pub fn StaticSkipField(size: usize) type {
                 }
             }
         }
+
+        /// Marks the element at the specified index as unskipped.
+        ///
+        /// Parameters:
+        /// - `index`: The index to mark as unskipped.
+        ///
+        /// Notes:
+        /// - Unskipping splits or shrinks adjacent skip ranges.
+        ///
+        /// Returns:
+        /// - Nothing
         pub fn ChangeToUnskipped(self: *Self, index: SkipFieldType) void {
             std.debug.assert(self.mSkipField.len > index);
 

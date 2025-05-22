@@ -4,17 +4,24 @@ const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EntityType = SceneManager.EntityType;
+const SceneType = SceneManager.SceneType;
+const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const ScenePanel = @This();
+
+const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneComponent = SceneComponents.SceneComponent;
+const SceneStackPos = SceneComponents.StackPosComponent;
+const SceneNameComponent = SceneComponents.NameComponent;
 
 const Components = @import("../GameObjects/Components.zig");
 const SceneIDComponent = Components.SceneIDComponent;
 const NameComponent = Components.NameComponent;
 
 mIsVisible: bool,
-mSelectedScene: ?usize,
+mSelectedScene: ?SceneLayer,
 mSelectedEntity: ?Entity,
 
 pub fn Init() ScenePanel {
@@ -41,15 +48,20 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
         defer arena.deinit();
         const allocator = arena.allocator();
 
-        const name_entities = try scene_manager.mECSManager.GetGroup(.{ .Component = NameComponent }, allocator);
+        const name_entities = try scene_manager.mECSManagerGO.GetGroup(.{ .Component = NameComponent }, allocator);
 
-        var i: usize = scene_manager.mSceneStack.items.len;
-        while (i > 0) {
-            i -= 1;
-            const scene_layer = &scene_manager.mSceneStack.items[i];
+        const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
-            var name_buf: [260]u8 = undefined;
-            const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{scene_layer.mName.items});
+        std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, lessThanFn);
+
+        for (stack_pos_scenes.items) |scene_id| {
+            const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerRef = scene_manager.mECSManagerGO };
+
+            const scene_component = scene_layer.GetComponent(SceneComponent);
+
+            const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
+            var name_buf: [100]u8 = undefined;
+            const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{scene_name_component.Name.items});
 
             const selected_text_col = imgui.ImVec4{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 };
             const other_text_col = imgui.ImVec4{ .x = 0.7, .y = 0.7, .z = 0.7, .w = 1.0 };
@@ -60,7 +72,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             _ = imgui.igPushID_Str(scene_name.ptr);
             defer imgui.igPopID();
 
-            if (self.mSelectedScene == scene_layer.mInternalID) {
+            if (self.mSelectedScene == scene_id) {
                 imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
                 imgui.igPushFont(bold_font);
             } else {
@@ -69,16 +81,16 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
             const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
             const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
-            if (self.mSelectedScene == scene_layer.mInternalID) {
+            if (self.mSelectedScene == scene_id) {
                 imgui.igPopFont();
             }
             imgui.igPopStyleColor(1);
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true) {
-                self.mSelectedScene = scene_layer.mInternalID;
+                self.mSelectedScene = scene_id;
                 try ImguiEventManager.Insert(.{
                     .ET_SelectSceneEvent = .{
-                        .SelectedScene = scene_layer.mInternalID,
+                        .SelectedScene = scene_layer,
                     },
                 });
             }
@@ -88,7 +100,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             var max_pos: imgui.ImVec2 = undefined;
             imgui.igGetItemRectMin(&min_pos);
             imgui.igGetItemRectMax(&max_pos);
-            if (scene_layer.mLayerType == .OverlayLayer) {
+            if (scene_component.mLayerType == .OverlayLayer) {
                 imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFFEBCE87, 0.0, imgui.ImDrawFlags_None, 1.0);
             } else {
                 imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, 0xFF84A4C4, 0.0, imgui.ImDrawFlags_None, 1.0);
@@ -102,47 +114,27 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             if (imgui.igBeginDragDropTarget() == true) {
                 defer imgui.igEndDragDropTarget();
                 if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
-                    const payload_internal_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
-                    const payload_scene = scene_manager.mSceneStack.items[payload_internal_id];
-                    const current_pos = payload_scene.mInternalID;
-                    const new_pos = i;
-                    if (current_pos != new_pos) {
-                        const new_event = ImguiEvent{
-                            .ET_MoveSceneEvent = .{
-                                .SceneID = current_pos,
-                                .NewPos = new_pos,
-                            },
-                        };
-                        try ImguiEventManager.Insert(new_event);
-                        if (new_pos < current_pos) {
-                            if (self.mSelectedScene) |scene_id| {
-                                if (new_pos <= scene_id and scene_id < current_pos) {
-                                    self.mSelectedScene.? += 1;
-                                }
-                            }
-                        } else {
-                            if (self.mSelectedScene) |scene_id| {
-                                if (current_pos < scene_id and scene_id <= new_pos) {
-                                    self.mSelectedScene.? -= 1;
-                                }
-                            }
-                        }
-                        if (payload_internal_id == self.mSelectedScene) {
-                            self.mSelectedScene = i;
-                        }
-                    }
+                    const payload_scene_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
+                    const new_pos = scene_layer.GetComponent(SceneStackPos).mPosition;
+                    const new_event = ImguiEvent{
+                        .ET_MoveSceneEvent = .{
+                            .SceneID = payload_scene_id,
+                            .NewPos = new_pos,
+                        },
+                    };
+                    try ImguiEventManager.Insert(new_event);
                 }
             }
 
             //print all of the entities in the scene
             if (is_tree_open) {
                 defer imgui.igTreePop();
+                var scene_name_entities = try name_entities.clone();
+                defer scene_name_entities.deinit();
 
-                var scene_names = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
-                try scene_names.appendSlice(scene_layer.mEntityList.items);
-                try scene_manager.mECSManager.EntityListIntersection(&scene_names, name_entities, allocator);
+                scene_manager.FilterByScene(scene_name_entities, scene_id);
 
-                for (scene_names.items) |entity_id| {
+                for (scene_name_entities.items) |entity_id| {
                     const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
                     const entity_name = entity.GetName();
 
@@ -222,10 +214,17 @@ pub fn OnTogglePanelEvent(self: *ScenePanel) void {
     self.mIsVisible = !self.mIsVisible;
 }
 
-pub fn OnSelectSceneEvent(self: *ScenePanel, new_scene_id: ?usize) void {
-    self.mSelectedScene = new_scene_id;
+pub fn OnSelectSceneEvent(self: *ScenePanel, selected_scene: ?SceneLayer) void {
+    self.mSelectedScene = selected_scene;
 }
 
 pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
+}
+
+fn lessThanFn(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
+    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a);
+    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b);
+
+    return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }

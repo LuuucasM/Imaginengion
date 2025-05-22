@@ -1,7 +1,13 @@
-//! This module defines the main Application struct, which manages
-//! the program (editor or runtime), windowing, input, and initializes
-//! core systems like asset management, event management, input management and engine context.
-//! This module also contains the main run loop
+//! Defines the central `Application` struct, which acts as the entry point for the engine.
+//!
+//! This module is responsible for initializing and managing all core engine systems,
+//! including windowing, input, asset management, event routing, and the engine context.
+//!
+//! It encapsulates both the runtime and editor modes of the engine, coordinating setup and teardown,
+//! and it provides the main execution loop that drives updates, event polling, and rendering.
+//!
+//! Typical usage involves constructing an `Application`, calling `Init`, and running the main loop
+//! via the appropriate `Run` method for the editor or game.
 
 const std = @import("std");
 const EventManager = @import("../Events/SystemEventManager.zig");

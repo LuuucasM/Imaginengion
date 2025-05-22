@@ -55,16 +55,30 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "ECS Manager.md",
+                "file": "General TODO.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ECS Manager"
+              "title": "General TODO"
+            }
+          },
+          {
+            "id": "818c94556da7f3eb",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Static SkipField.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Static SkipField"
             }
           }
         ],
-        "currentTab": 3
+        "currentTab": 4
       }
     ],
     "direction": "vertical"
@@ -211,12 +225,13 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "4933303ca5fc4ba0",
+  "active": "818c94556da7f3eb",
   "lastOpenFiles": [
-    "Renderer.md",
-    "ECS Manager.md",
-    "Inputs.md",
     "General TODO.md",
+    "Static SkipField.md",
+    "ECS Manager.md",
+    "Renderer.md",
+    "Inputs.md",
     "Application.md",
     "Adding new components to engine.md",
     "Component Manager.md",
