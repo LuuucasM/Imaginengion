@@ -21,15 +21,21 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EntityType = SceneManager.EntityType;
+const SceneType = SceneManager.SceneType;
+const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentManager = @import("../ECS/ComponentManager.zig");
 
-const Components = @import("../GameObjects/Components.zig");
-const TransformComponent = Components.TransformComponent;
-const SceneIDComponent = Components.SceneIDComponent;
-const SpriteRenderComponent = Components.SpriteRenderComponent;
-const CircleRenderComponent = Components.CircleRenderComponent;
-const CameraComponent = Components.CameraComponent;
+const EntityComponents = @import("../GameObjects/Components.zig");
+const TransformComponent = EntityComponents.TransformComponent;
+const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
+const CircleRenderComponent = EntityComponents.CircleRenderComponent;
+const CameraComponent = EntityComponents.CameraComponent;
+
+const SceneComponents = @import("../Scene/SceneComponents.zig");
+const StackPosComponent = SceneComponents.StackPosComponent;
+const SceneComponent = SceneComponents.SceneComponent;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
@@ -114,48 +120,37 @@ pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const ecs_manager = scene_manager.mECSManager;
+    const ecs_manager = scene_manager.mECSManagerGO;
 
-    const sprite_entities = try ecs_manager.GetGroup(GroupQuery{
-        .And = &[_]GroupQuery{
-            GroupQuery{ .Component = SpriteRenderComponent },
-            GroupQuery{ .Component = TransformComponent },
-        },
-    }, allocator);
+    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = StackPosComponent }, allocator);
+    std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, lessThanFn);
 
-    const circle_entities = try ecs_manager.GetGroup(GroupQuery{
-        .And = &[_]GroupQuery{
-            GroupQuery{ .Component = CircleRenderComponent },
-            GroupQuery{ .Component = TransformComponent },
-        },
-    }, allocator);
-
-    for (scene_manager.mSceneStack.items) |scene_layer| {
+    for (stack_pos_scenes.items) |scene_id| {
+        const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = scene_manager.mECSManagerGO, .mECSManagerSCRef = scene_manager.mECSManagerSC };
         BeginScene();
 
-        scene_layer.mFrameBuffer.Bind();
-        scene_layer.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
-        defer scene_layer.mFrameBuffer.Unbind();
+        const scene_component = scene_layer.GetComponent(SceneComponent);
+        scene_component.mFrameBuffer.Bind();
+        scene_component.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
+        defer scene_component.mFrameBuffer.Unbind();
 
-        var scene_sprites = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
-        try scene_sprites.appendSlice(scene_layer.mEntityList.items);
-        try ecs_manager.EntityListIntersection(&scene_sprites, sprite_entities, allocator);
+        var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
+        scene_manager.FilterByScene(sprite_entities, scene_id);
 
-        var scene_circles = try std.ArrayList(EntityType).initCapacity(allocator, scene_layer.mEntityList.items.len);
-        try scene_circles.appendSlice(scene_layer.mEntityList.items);
-        try ecs_manager.EntityListIntersection(&scene_circles, circle_entities, allocator);
+        var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
+        scene_manager.FilterByScene(circle_entities, scene_id);
 
         //cull entities that shouldnt be rendered
-        CullEntities(SpriteRenderComponent, &scene_sprites, scene_manager);
-        CullEntities(CircleRenderComponent, &scene_circles, scene_manager);
+        CullEntities(SpriteRenderComponent, &sprite_entities, scene_manager);
+        CullEntities(CircleRenderComponent, &circle_entities, scene_manager);
 
         //draw sprites
         //first sort and bind textures
-        try TextureSort(SpriteRenderComponent, scene_sprites, scene_manager);
-        try DrawSprites(scene_sprites, scene_manager);
+        try TextureSort(SpriteRenderComponent, sprite_entities, scene_manager);
+        try DrawSprites(sprite_entities, scene_manager);
 
         //draw circles
-        DrawCircles(scene_circles, scene_manager);
+        DrawCircles(circle_entities, scene_manager);
 
         try EndScene();
     }
@@ -195,6 +190,7 @@ pub fn EndScene() !void {
 }
 
 pub fn RenderFinalImage(scene_manager: *SceneManager) void {
+    //TODO: convert to new scene system
     scene_manager.mNumTexturesUniformBuffer.SetData(&scene_manager.mSceneStack.items.len, @sizeOf(usize), 0);
     scene_manager.mFrameBuffer.Bind();
     defer scene_manager.mFrameBuffer.Unbind();
@@ -213,6 +209,7 @@ pub fn GetRenderStats() RenderStats {
 }
 
 fn CullEntities(comptime component_type: type, result: *std.ArrayList(EntityType), scene_manager: *SceneManager) void {
+    //TODO: convert to new scene system
     std.debug.assert(@hasField(component_type, "mShouldRender"));
     if (result.items.len == 0) return;
 
@@ -234,6 +231,7 @@ fn CullEntities(comptime component_type: type, result: *std.ArrayList(EntityType
 }
 
 fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(EntityType), scene_manager: *SceneManager) !void {
+    //TODO: convert to new scene system
     std.debug.assert(@hasField(component_type, "mTexture"));
 
     RenderM.mTexturesMap.clearRetainingCapacity();
@@ -251,6 +249,7 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(EntityT
 }
 
 fn DrawSprites(sprite_entities: std.ArrayList(EntityType), scene_manager: *SceneManager) !void {
+    //TODO: convert to new scene system
     var i: usize = 0;
     while (i < sprite_entities.items.len) : (i += 1) {
         const entity_id = sprite_entities.items[i];
@@ -273,6 +272,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(EntityType), scene_manager: *Scene
 }
 
 fn DrawCircles(circle_entities: std.ArrayList(EntityType), scene_manager: *SceneManager) void {
+    //TODO: convert to new scene system
     var i: usize = 0;
     while (i < circle_entities.items.len) : (i += 1) {
         const entity_id = circle_entities.items[i];
@@ -292,4 +292,11 @@ fn DrawELine(p0: Vec3f32, p1: Vec3f32, color: Vec4f32, thickness: f32) void {
 
     RenderM.mStats.mVertexCount += 2;
     RenderM.mStats.mELineNum += 1;
+}
+
+fn lessThanFn(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
+    const a_stack_pos_comp = ecs_manager_sc.GetComponent(StackPosComponent, a);
+    const b_stack_pos_comp = ecs_manager_sc.GetComponent(StackPosComponent, b);
+
+    return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }

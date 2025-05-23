@@ -25,7 +25,7 @@ const std = @import("std");
 /// - `size`: The fixed size of the skip field.
 ///
 /// Returns:
-/// - A struct with methods to initialize, reset, and toggle skipped states for indices.
+/// - A struct type for a specific sized static skipfield, with methods to initialize, reset, and toggle skipped states for indices.
 pub fn StaticSkipField(size: usize) type {
     return struct {
         const Self = @This();
