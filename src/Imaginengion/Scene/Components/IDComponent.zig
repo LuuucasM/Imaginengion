@@ -1,5 +1,5 @@
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
+const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const IDComponent = @This();
 
 ID: u128 = std.math.maxInt(u128),

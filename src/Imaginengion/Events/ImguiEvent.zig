@@ -1,6 +1,7 @@
-const LayerType = @import("../Scene/SceneLayer.zig").LayerType;
+const LayerType = @import("../Scene/SceneComponents.zig").SceneComponent.LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
+const SceneType = @import("../Scene/SceneManager.zig").SceneType;
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const ScriptType = @import("../Assets/Assets.zig").ScriptAsset.ScriptType;
@@ -67,12 +68,12 @@ pub const OpenSceneEvent = struct {
 };
 
 pub const MoveSceneEvent = struct {
-    SceneID: usize,
+    SceneID: SceneType,
     NewPos: usize,
 };
 
 pub const NewEntityEvent = struct {
-    SceneID: usize,
+    SceneID: SceneType,
 };
 
 pub const SelectSceneEvent = struct {

@@ -1,4 +1,5 @@
-const ComponentsList = @import("../Components.zig").ComponentsList;
+const std = @import("std");
+const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const StackPosComponent = @This();
 
 pub const Ind: usize = blk: {
@@ -9,6 +10,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-mPosition: usize,
+mPosition: usize = std.math.maxInt(usize),
 
 pub fn Deinit(_: *StackPosComponent) !void {}

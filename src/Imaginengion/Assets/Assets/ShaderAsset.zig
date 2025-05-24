@@ -4,11 +4,11 @@ const Shader = @import("../../Shaders/Shaders.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
 const ShaderAsset = @This();
 
-mShader: Shader,
+mShader: Shader = undefined,
 
 pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !ShaderAsset {
     return ShaderAsset{
-        .mShader = Shader.Init(allocator, abs_path),
+        .mShader = try Shader.Init(allocator, abs_path),
     };
 }
 

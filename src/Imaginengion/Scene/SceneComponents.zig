@@ -10,15 +10,17 @@ pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
 pub const ComponentsList = [_]type{
     IDComponent,
     NameComponent,
+    SceneComponent,
     ScriptComponent,
-    OnSceneStartScript,
     StackPosComponent,
+    OnSceneStartScript,
 };
 
 pub const EComponents = enum(usize) {
     IDComponent = IDComponent.Ind,
     NameComponent = NameComponent.Ind,
+    SceneComponent = SceneComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
-    OnSceneStartScript = OnSceneStartScript.Ind,
     StackPosComponent = StackPosComponent.Ind,
+    OnSceneStartScript = OnSceneStartScript.Ind,
 };

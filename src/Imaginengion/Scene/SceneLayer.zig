@@ -40,21 +40,21 @@ pub fn Duplicate(self: SceneLayer) !SceneLayer {
 }
 
 //for the entities in the scenes
-pub fn CreateBlankEntity(self: *SceneLayer) !Entity {
+pub fn CreateBlankEntity(self: SceneLayer) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
-    new_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
+    _ = try new_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
     return new_entity;
 }
 
-pub fn CreateEntity(self: *SceneLayer) !Entity {
+pub fn CreateEntity(self: SceneLayer) !Entity {
     return self.CreateEntityWithUUID(try GenUUID());
 }
 
-pub fn CreateEntityWithUUID(self: *SceneLayer, uuid: u128) !Entity {
+pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u128) !Entity {
     const e = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
     _ = try e.AddComponent(EntityIDComponent, .{ .ID = uuid });
-    _ = try e.AddComponent(SceneIDComponent, .{ .SceneID = self.mSceneID });
+    _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
     var name = [_]u8{0} ** 24;
     @memcpy(name[0..14], "Unnamed Entity");
     _ = try e.AddComponent(EntityNameComponent, .{ .Name = name });
@@ -67,7 +67,7 @@ pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
     try self.mECSManagerGORef.DestroyEntity(e.mEntityID);
 }
 
-pub fn DuplicateEntity(self: *SceneLayer, original_entity: Entity) !Entity {
+pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerGORef.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = self.mECSManagerGORef };
     return new_entity;
 }

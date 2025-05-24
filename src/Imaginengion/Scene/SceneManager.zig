@@ -18,7 +18,7 @@ const CameraComponent = Components.CameraComponent;
 const OnInputPressedScript = Components.OnInputPressedScript;
 const ScriptComponent = Components.ScriptComponent;
 const EntitySceneComponent = Components.SceneIDComponent;
-const ComponentsArray = Components.ComponentsList;
+const EntityComponentsArray = Components.ComponentsList;
 
 const SceneComponents = @import("SceneComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
@@ -48,10 +48,10 @@ const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent
 const SceneManager = @This();
 
 pub const EntityType = u32;
-pub const ECSManagerGameObj = ECSManager(EntityType, ComponentsArray.len);
+pub const ECSManagerGameObj = ECSManager(EntityType, EntityComponentsArray.len);
 
 pub const SceneType = u32;
-pub const ECSManagerScenes = ECSManager(SceneType, ComponentsArray.len);
+pub const ECSManagerScenes = ECSManager(SceneType, EntityComponentsArray.len);
 
 var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 
@@ -74,7 +74,7 @@ mNumTexturesUniformBuffer: UniformBuffer,
 pub fn Init(width: usize, height: usize) !SceneManager {
     var new_scene_manager = SceneManager{
         //scene stuff
-        .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &ComponentsArray),
+        .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &EntityComponentsArray),
         .mECSManagerSC = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &SceneComponentsList),
         .mGameLayerInsertIndex = 0,
         .mNumofLayers = 0,
@@ -117,43 +117,46 @@ pub fn Deinit(self: *SceneManager) !void {
     _ = SceneManagerGPA.deinit();
 }
 
-pub fn CreateEntity(self: SceneManager, scene_id: usize) !Entity {
-    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
-    return scene_component.CreateEntity();
+pub fn CreateEntity(self: *SceneManager, scene_id: SceneType) !Entity {
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    return scene_layer.CreateEntity();
 }
-pub fn CreateEntityWithUUID(self: SceneManager, uuid: u128, scene_id: usize) !Entity {
-    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
-    return scene_component.CreateEntityWithUUID(uuid);
+pub fn CreateEntityWithUUID(self: *SceneManager, uuid: u128, scene_id: SceneType) !Entity {
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    return scene_layer.CreateEntityWithUUID(uuid);
 }
 
-pub fn DestroyEntity(self: SceneManager, e: Entity, scene_id: usize) !void {
-    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
-    scene_component.DestroyEntity(e);
+pub fn DestroyEntity(self: *SceneManager, e: Entity, scene_id: SceneType) !void {
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    scene_layer.DestroyEntity(e);
 }
-pub fn DuplicateEntity(self: SceneManager, original_entity: Entity, scene_id: usize) !Entity {
-    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
-    scene_component.DuplicateEntity(original_entity);
+pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneType) !Entity {
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    scene_layer.DuplicateEntity(original_entity);
 }
 
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    const scene_group = try self.mECSManagerSC.GetGroup(.{ .Component = SceneComponent }, allocator);
-    for (scene_group.items) |scene_id| {
-        const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
-        scene_component.OnViewportResize(width, height);
+
+    const camera_group = try self.mECSManagerGO.GetGroup(.{ .Component = CameraComponent }, allocator);
+    for (camera_group.items) |entity_id| {
+        const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &self.mECSManagerGO };
+        const camera_component = entity.GetComponent(CameraComponent);
+        if (camera_component.mIsFixedAspectRatio == false) {
+            camera_component.SetViewportSize(width, height);
+        }
     }
 }
 
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
-    const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
+    const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 
     const new_scene_component = SceneComponent{
         .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mViewportWidth, self.mViewportHeight),
         .mLayerType = layer_type,
-        .mECSManagerRef = self.mECSManagerGO,
     };
     _ = try scene_layer.AddComponent(SceneComponent, new_scene_component);
 
@@ -161,9 +164,11 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
 
     const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .Name = std.ArrayList(u8).init(SceneManagerGPA.allocator()) });
     scene_name_component.Name.clearAndFree();
-    scene_name_component.Name.writer().write("Unsaved Scene");
+    _ = try scene_name_component.Name.writer().write("Unsaved Scene");
 
-    self.InsertScene(scene_layer);
+    try self.InsertScene(scene_layer);
+
+    return new_scene_id;
 }
 
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
@@ -183,7 +188,7 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
 
 pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
-    const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
+    const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     const scene_asset_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
     const scene_asset = try scene_asset_handle.GetAsset(SceneAsset);
 
@@ -191,7 +196,6 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
         .mSceneAssetHandle = scene_asset_handle,
         .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mViewportWidth, self.mViewportHeight),
         .mLayerType = undefined,
-        .mECSManagerRef = self.mECSManagerGO,
     };
 
     _ = try scene_layer.AddComponent(SceneComponent, new_scene_component);
@@ -200,39 +204,42 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
 
     try SceneSerializer.DeSerializeText(scene_layer, scene_asset);
 
-    try self.InsertScene(&scene_layer);
+    try self.InsertScene(scene_layer);
 
     return new_scene_id;
 }
-pub fn SaveScene(self: *SceneManager, scene_id: usize) !void {
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
-    const scene_component = scene_layer.GetComponent(SceneComponent, scene_id);
+pub fn SaveScene(self: *SceneManager, scene_id: SceneType) !void {
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    const scene_component = scene_layer.GetComponent(SceneComponent);
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
         try SceneSerializer.SerializeText(scene_layer, scene_component.mSceneAssetHandle);
     } else {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
-        self.SaveSceneAs(scene_id, path);
-        scene_component.mSceneAssetHandle = AssetManager.GetAssetHandleRef(path, .Abs);
+        try self.SaveSceneAs(scene_id, path);
+        scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(path, .Abs);
     }
 }
-pub fn SaveSceneAs(self: *SceneManager, scene_id: usize, path: []const u8) !void {
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerSCRef = &self.mECSManagerSC };
-
+pub fn SaveSceneAs(self: *SceneManager, scene_id: SceneType, path: []const u8) !void {
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    const scene_component = scene_layer.GetComponent(SceneComponent);
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
     scene_name_component.Name.clearAndFree();
-    scene_name_component.Name.writer().write(scene_name);
+    _ = try scene_name_component.Name.writer().write(scene_name);
 
-    try SceneSerializer.SerializeText(scene_layer);
+    try SceneSerializer.SerializeText(scene_layer, scene_component.mSceneAssetHandle);
 }
 
-pub fn MoveScene(self: *SceneManager, scene_id: usize, move_to_pos: usize) void {
-    //TODO: convert to new scene system
+pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
     const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
     const stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id);
     const current_pos = stack_pos_component.mPosition;
@@ -250,7 +257,7 @@ pub fn MoveScene(self: *SceneManager, scene_id: usize, move_to_pos: usize) void 
         return;
     } else if (new_pos < current_pos) {
         //we are moving the scene down in position so we need to move everything between new_pos and current_pos up 1 position
-        const scene_stack_pos_list = self.mECSManagerSC.GetAllEntities();
+        const scene_stack_pos_list = try self.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
         for (scene_stack_pos_list.items) |list_scene_id| {
             const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id);
@@ -260,7 +267,7 @@ pub fn MoveScene(self: *SceneManager, scene_id: usize, move_to_pos: usize) void 
         }
     } else {
         //we are moving the scene up in position so we need to move everything between current_pos and new_pos down 1 position
-        const scene_stack_pos_list = self.mECSManagerSC.GetAllEntities();
+        const scene_stack_pos_list = try self.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
         for (scene_stack_pos_list.items) |list_scene_id| {
             const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id);
@@ -280,7 +287,7 @@ pub fn FilterByScene(self: *SceneManager, result_list: *std.ArrayList(EntityType
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, result_list[i]);
+        const entity_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, result_list.items[i]);
         if (entity_scene_component.SceneID != scene_id) {
             result_list.items[i] = result_list.items[end_index - 1];
             end_index -= 1;
@@ -292,10 +299,17 @@ pub fn FilterByScene(self: *SceneManager, result_list: *std.ArrayList(EntityType
     result_list.shrinkAndFree(end_index);
 }
 
+pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
+    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a);
+    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b);
+
+    return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
+}
+
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent);
     if (scene_component.mLayerType == .GameLayer) {
-        scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mGameLayerInsertIndex });
+        _ = try scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mGameLayerInsertIndex });
         var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
         defer arena.deinit();
         const allocator = arena.allocator();
@@ -308,7 +322,7 @@ fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
         }
         self.mGameLayerInsertIndex += 1;
     } else {
-        scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mNumofLayers });
+        _ = try scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mNumofLayers });
     }
     self.mNumofLayers += 1;
 }

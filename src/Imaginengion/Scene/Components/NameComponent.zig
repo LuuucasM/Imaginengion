@@ -1,12 +1,12 @@
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
+const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const NameComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-Name: std.ArrayList(u8),
+Name: std.ArrayList(u8) = undefined,
 
 pub fn Deinit(self: *NameComponent) !void {
     self.Name.deinit();

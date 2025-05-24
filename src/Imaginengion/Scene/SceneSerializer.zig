@@ -31,8 +31,7 @@ const SceneType = SceneManager.SceneType;
 const AssetType = AssetManager.AssetType;
 const SceneAsset = Assets.SceneAsset;
 
-pub fn SerializeText(scene_layer: *SceneLayer, scene_asset_handle: AssetHandle) !void {
-    //TODO: change to new scene system
+pub fn SerializeText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -53,12 +52,12 @@ pub fn SerializeText(scene_layer: *SceneLayer, scene_asset_handle: AssetHandle) 
     const scene_component = scene_layer.GetComponent(SceneComponent);
     try write_stream.write(scene_component.mLayerType);
 
-    const entity_list = try scene_layer.mECSManagerRef.GetGroup(.{ .Component = EntitySceneComponent });
+    var entity_list = try scene_layer.mECSManagerGORef.GetGroup(.{ .Component = EntitySceneComponent }, allocator);
 
-    FilterByScene(scene_layer.mECSManagerRef, entity_list, scene_id_component.ID);
+    FilterByScene(scene_layer.mECSManagerGORef, &entity_list, scene_layer.mSceneID);
 
     for (entity_list.items) |entity_id| {
-        const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
+        const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerGORef };
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
@@ -67,7 +66,7 @@ pub fn SerializeText(scene_layer: *SceneLayer, scene_asset_handle: AssetHandle) 
     }
     try write_stream.endObject();
     const file_meta_data = try scene_asset_handle.GetAsset(FileMetaData);
-    const file_abs_path = AssetManager.GetAbsPath(file_meta_data.mRelPath, file_meta_data.mPathType);
+    const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath, file_meta_data.mPathType, allocator);
     const file = try std.fs.createFileAbsolute(
         file_abs_path,
         .{ .read = false, .truncate = true },
@@ -75,8 +74,7 @@ pub fn SerializeText(scene_layer: *SceneLayer, scene_asset_handle: AssetHandle) 
     defer file.close();
     try file.writeAll(out.items);
 }
-pub fn DeSerializeText(scene_layer: *SceneLayer, scene_asset: SceneAsset) !void {
-    //TODO: change to new scene system
+pub fn DeSerializeText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -84,7 +82,7 @@ pub fn DeSerializeText(scene_layer: *SceneLayer, scene_asset: SceneAsset) !void 
     var scanner = std.json.Scanner.initCompleteInput(allocator, scene_asset.mSceneContents.items);
     defer scanner.deinit();
 
-    var entity = Entity{ .mEntityID = Entity.NullEntity, .mSceneLayerRef = scene_layer };
+    var entity = Entity{ .mEntityID = Entity.NullEntity, .mECSManagerRef = scene_layer.mECSManagerGORef };
 
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
@@ -116,7 +114,6 @@ pub fn DeserializeBinary(path: []const u8, scene_manager: SceneManager, allocato
 }
 
 fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }), entity: Entity) !void {
-    //TODO: finish changing to new scene system
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -216,7 +213,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
 
         try write_stream.beginObject();
 
-        const ecs = entity.mSceneLayerRef.mECSManagerRef;
+        const ecs = entity.mECSManagerRef;
         var current_id = entity.mEntityID;
         var component: *ScriptComponent = undefined;
         while (current_id != std.math.maxInt(EntityType)) {
@@ -245,7 +242,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
     }
 }
 
-fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.json.Scanner, scene_layer: *SceneLayer, current_entity: *Entity) !void {
+fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.json.Scanner, scene_layer: SceneLayer, current_entity: *Entity) !void {
     if (std.mem.eql(u8, value, "UUID") == true) {
         const uuid_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const uuid_value = switch (uuid_token) {
@@ -261,10 +258,9 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
             .allocated_string => |layer_type_value| layer_type_value,
             else => @panic("Should be a string!\n"),
         };
-        scene_layer.GetComponent(SceneComponent).mLayerType = layer_type_value;
+        scene_layer.GetComponent(SceneComponent).mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
     } else if (std.mem.eql(u8, value, "Entity")) {
-        const scene_component = scene_layer.GetComponent(SceneComponent);
-        current_entity.* = try scene_component.CreateBlankEntity();
+        current_entity.* = try scene_layer.CreateBlankEntity();
     } else if (std.mem.eql(u8, value, "EntityIDComponent")) {
         const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const component_data_string = switch (component_data_token) {
@@ -429,7 +425,7 @@ pub fn FilterByScene(ecs_manager_ref: *ECSManagerGameObj, result_list: *std.Arra
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_scene_component = ecs_manager_ref.GetComponent(EntitySceneComponent, result_list[i]);
+        const entity_scene_component = ecs_manager_ref.GetComponent(EntitySceneComponent, result_list.items[i]);
         if (entity_scene_component.SceneID != scene_id) {
             result_list.items[i] = result_list.items[end_index - 1];
             end_index -= 1;

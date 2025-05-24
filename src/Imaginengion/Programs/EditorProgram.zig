@@ -7,11 +7,13 @@ const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 
-const Components = @import("../GameObjects/Components.zig");
-const CameraComponent = Components.CameraComponent;
-const TransformComponent = Components.TransformComponent;
-const EditorCameraTag = Components.EditorCameraTag;
-const PrimaryCameraTag = Components.PrimaryCameraTag;
+const EntityComponents = @import("../GameObjects/Components.zig");
+const CameraComponent = EntityComponents.CameraComponent;
+const TransformComponent = EntityComponents.TransformComponent;
+const EditorCameraTag = EntityComponents.EditorCameraTag;
+const PrimaryCameraTag = EntityComponents.PrimaryCameraTag;
+const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneComponent = SceneComponents.SceneComponent;
 
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
@@ -82,8 +84,9 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
     };
 }
 
-pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
-    self._SceneLayer = try SceneLayer.Init(engine_allocator, .OverlayLayer, std.math.maxInt(usize), self.mWindow.GetWidth(), self.mWindow.GetHeight(), &self.mSceneManager.mECSManager);
+pub fn Setup(self: *EditorProgram) !void {
+    self._SceneLayer = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.CreateEntity(), .mECSManagerGORef = &self.mSceneManager.mECSManagerGO, .mECSManagerSCRef = &self.mSceneManager.mECSManagerSC };
+    _ = try self._SceneLayer.AddComponent(SceneComponent, SceneComponent{ .mLayerType = .GameLayer });
 
     self._ViewportPanel = try ViewportPanel.Init(&self._SceneLayer, self.mWindow.GetHeight(), self.mWindow.GetWidth());
 }
@@ -147,34 +150,34 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     const allocator = fba.allocator();
 
     if (self._UsePlayPanel == true) {
-        const editor_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCameraTag }, allocator);
-        const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, editor_camera_group.items[0]);
-        const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, editor_camera_group.items[0]);
+        const editor_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = EditorCameraTag }, allocator);
+        const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
+        const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, editor_camera_group.items[0]);
         try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
         try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component, camera_transform);
 
         if (self._EditorState == .Play) {
-            const primary_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
+            const primary_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
             if (primary_camera_group.items.len > 0) {
-                const play_camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, primary_camera_group.items[0]);
-                const play_camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, primary_camera_group.items[0]);
+                const play_camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, primary_camera_group.items[0]);
+                const play_camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, primary_camera_group.items[0]);
                 try Renderer.OnUpdate(&self.mSceneManager, play_camera_component, play_camera_transform);
                 try self._PlayPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
             }
         }
     } else {
         if (self._EditorState == .Play) {
-            const primary_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
+            const primary_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
             if (primary_camera_group.items.len > 0) {
-                const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, primary_camera_group.items[0]);
-                const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, primary_camera_group.items[0]);
+                const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, primary_camera_group.items[0]);
+                const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, primary_camera_group.items[0]);
                 try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
                 try self._ViewportPanel.OnImguiRenderPlay(&self.mSceneManager.mFrameBuffer);
             }
         } else {
-            const editor_camera_group = try self.mSceneManager.mECSManager.GetGroup(.{ .Component = EditorCameraTag }, allocator);
-            const camera_component = self.mSceneManager.mECSManager.GetComponent(CameraComponent, editor_camera_group.items[0]);
-            const camera_transform = self.mSceneManager.mECSManager.GetComponent(TransformComponent, editor_camera_group.items[0]);
+            const editor_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = EditorCameraTag }, allocator);
+            const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
+            const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, editor_camera_group.items[0]);
             try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
             try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component, camera_transform);
         }
@@ -205,7 +208,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try SystemEventManager.ProcessEvents(.EC_Window);
 
     //handle deleted objects this frame
-    try self.mSceneManager.mECSManager.ProcessDestroyedEntities();
+    try self.mSceneManager.mECSManagerGO.ProcessDestroyedEntities();
+    try self.mSceneManager.mECSManagerSC.ProcessDestroyedEntities();
+    try AssetManager.ProcessDestroyedAssets();
 
     //end of frame resets
     SystemEventManager.EventsReset();
@@ -257,14 +262,14 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             _ = try self.mSceneManager.NewScene(e.mLayerType);
         },
         .ET_SaveSceneEvent => {
-            if (self._ScenePanel.mSelectedScene) |scene_id| {
-                try self.mSceneManager.SaveScene(scene_id);
+            if (self._ScenePanel.mSelectedScene) |scene_layer| {
+                try self.mSceneManager.SaveScene(scene_layer.mSceneID);
             }
         },
         .ET_SaveSceneAsEvent => |e| {
-            if (self._ScenePanel.mSelectedScene) |scene_id| {
+            if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.Path.len > 0) {
-                    try self.mSceneManager.SaveSceneAs(scene_id, e.Path);
+                    try self.mSceneManager.SaveSceneAs(scene_layer.mSceneID, e.Path);
                 }
             }
         },
@@ -274,7 +279,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             }
         },
         .ET_MoveSceneEvent => |e| {
-            self.mSceneManager.MoveScene(e.SceneID, e.NewPos);
+            try self.mSceneManager.MoveScene(e.SceneID, e.NewPos);
         },
         .ET_NewEntityEvent => |e| {
             _ = try self.mSceneManager.CreateEntity(e.SceneID);
@@ -295,7 +300,6 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            try self._SceneLayer.OnViewportResize(e.mWidth, e.mHeight);
             try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {

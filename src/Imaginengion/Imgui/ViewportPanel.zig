@@ -52,7 +52,7 @@ pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height
     _ = try camera_entity.AddComponent(CameraComponent, new_camera);
     _ = try camera_entity.AddComponent(EditorCameraTag, null);
 
-    try GameObjectUtils.AddScriptToEntity(camera_entity, "assets/scripts/EditorCameraInput.zig", .Cwd);
+    try GameObjectUtils.AddScriptToEntity(camera_entity, "assets/scripts/EditorCameraInput.zig", .Eng);
 
     return ViewportPanel{
         .mP_Open = true,

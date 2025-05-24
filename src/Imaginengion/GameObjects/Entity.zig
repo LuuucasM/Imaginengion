@@ -5,7 +5,7 @@ const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const EntityType = @import("../Scene/SceneManager.zig").EntityType;
 
-pub const NullEntity: EntityType = ~0;
+pub const NullEntity: EntityType = std.math.maxInt(EntityType);
 const Entity = @This();
 
 mEntityID: EntityType,

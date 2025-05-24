@@ -52,10 +52,10 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
         const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
-        std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, lessThanFn);
+        std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
 
         for (stack_pos_scenes.items) |scene_id| {
-            const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerRef = scene_manager.mECSManagerGO };
+            const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
 
             const scene_component = scene_layer.GetComponent(SceneComponent);
 
@@ -72,7 +72,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             _ = imgui.igPushID_Str(scene_name.ptr);
             defer imgui.igPopID();
 
-            if (self.mSelectedScene == scene_id) {
+            if (self.mSelectedScene != null and self.mSelectedScene.?.mSceneID == scene_id) {
                 imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
                 imgui.igPushFont(bold_font);
             } else {
@@ -81,13 +81,13 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
             const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
             const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
-            if (self.mSelectedScene == scene_id) {
+            if (self.mSelectedScene != null and self.mSelectedScene.?.mSceneID == scene_id) {
                 imgui.igPopFont();
             }
             imgui.igPopStyleColor(1);
 
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true) {
-                self.mSelectedScene = scene_id;
+                self.mSelectedScene = scene_layer;
                 try ImguiEventManager.Insert(.{
                     .ET_SelectSceneEvent = .{
                         .SelectedScene = scene_layer,
@@ -108,13 +108,13 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
             if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                 defer imgui.igEndDragDropSource();
-                _ = imgui.igSetDragDropPayload("SceneMove", @ptrCast(&scene_layer.mInternalID), @sizeOf(usize), imgui.ImGuiCond_Once);
+                _ = imgui.igSetDragDropPayload("SceneMove", @ptrCast(&scene_id), @sizeOf(SceneType), imgui.ImGuiCond_Once);
             }
 
             if (imgui.igBeginDragDropTarget() == true) {
                 defer imgui.igEndDragDropTarget();
                 if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
-                    const payload_scene_id = @as(*usize, @ptrCast(@alignCast(payload.*.Data))).*;
+                    const payload_scene_id = @as(*SceneType, @ptrCast(@alignCast(payload.*.Data))).*;
                     const new_pos = scene_layer.GetComponent(SceneStackPos).mPosition;
                     const new_event = ImguiEvent{
                         .ET_MoveSceneEvent = .{
@@ -132,10 +132,10 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
                 var scene_name_entities = try name_entities.clone();
                 defer scene_name_entities.deinit();
 
-                scene_manager.FilterByScene(scene_name_entities, scene_id);
+                scene_manager.FilterByScene(&scene_name_entities, scene_id);
 
                 for (scene_name_entities.items) |entity_id| {
-                    const entity = Entity{ .mEntityID = entity_id, .mSceneLayerRef = scene_layer };
+                    const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };
                     const entity_name = entity.GetName();
 
                     if (self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID) {
@@ -177,11 +177,11 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     }
     if (imgui.igBeginPopup("scene_context", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-        if (self.mSelectedScene) |selected_scene_id| {
+        if (self.mSelectedScene) |selected_scene_layer| {
             if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_NewEntityEvent = .{
-                        .SceneID = selected_scene_id,
+                        .SceneID = selected_scene_layer.mSceneID,
                     },
                 };
                 try ImguiEventManager.Insert(new_event);
@@ -220,11 +220,4 @@ pub fn OnSelectSceneEvent(self: *ScenePanel, selected_scene: ?SceneLayer) void {
 
 pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
-}
-
-fn lessThanFn(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
-    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a);
-    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b);
-
-    return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }
