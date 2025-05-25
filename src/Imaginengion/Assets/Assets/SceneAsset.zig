@@ -12,12 +12,11 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !SceneAsset {
 
     const file_size = try file.getEndPos();
 
-    const new_scene_asset = SceneAsset{
+    var new_scene_asset = SceneAsset{
         .mSceneContents = try std.ArrayList(u8).initCapacity(allocator, file_size),
     };
-
+    try new_scene_asset.mSceneContents.resize(file_size);
     _ = try file.readAll(new_scene_asset.mSceneContents.items);
-
     return new_scene_asset;
 }
 

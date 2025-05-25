@@ -202,6 +202,14 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
 
     _ = try scene_layer.AddComponent(SceneIDComponent, .{ .ID = undefined });
 
+    const scene_basename = std.fs.path.basename(path);
+    const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
+    const scene_name = scene_basename[0..dot_location];
+    var new_scene_name_component = SceneNameComponent{ .Name = std.ArrayList(u8).init(SceneManagerGPA.allocator()) };
+    _ = try new_scene_name_component.Name.writer().write(scene_name);
+
+    _ = try scene_layer.AddComponent(SceneNameComponent, new_scene_name_component);
+
     try SceneSerializer.DeSerializeText(scene_layer, scene_asset);
 
     try self.InsertScene(scene_layer);

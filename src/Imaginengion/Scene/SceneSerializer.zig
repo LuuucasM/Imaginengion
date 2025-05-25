@@ -88,7 +88,9 @@ pub fn DeSerializeText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !void 
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const value = switch (token) {
             .string => |value| value,
+            .allocated_string => |value| value,
             .number => |value| value,
+            .allocated_number => |value| value,
             .object_begin => continue,
             .object_end => continue,
             //.allocated_string => |value| value,

@@ -207,7 +207,6 @@ fn CreateAsset(abs_path: []const u8, rel_path: []const u8, path_type: PathType) 
     _ = try AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
         .ID = try GenUUID(),
     });
-    std.debug.print("abs path: {s}\n", .{abs_path});
     const file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
     defer file.close();
     const fstats = try file.stat();
