@@ -156,7 +156,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
                 const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
 
                 if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-                    _ = imgui.igSetDragDropPayload("IMSCLoad", full_path.ptr, full_path.len, 0);
+                    _ = imgui.igSetDragDropPayload("IMSCLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
                     _ = imgui.igSetDragDropPayload("PNGLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {

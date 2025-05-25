@@ -380,8 +380,8 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
 
         var current_id = current_entity.mEntityID;
-        while (current_id != std.math.maxInt(EntityType)) {
-            //skip past object field
+        while (current_id != Entity.NullEntity) {
+            //skip past object field called "component"
             _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
 
             const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
@@ -395,7 +395,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
 
             const parsed_script_component = new_component_parsed.value;
 
-            //skip past the object field token
+            //skip past the object field called "AssetFileData"
             _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
 
             //read the next token which will be the potential path of the asset
