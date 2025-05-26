@@ -6,9 +6,18 @@ const NameComponent = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == NameComponent) {
+            break :blk i;
+        }
+    }
+};
+
 Name: std.ArrayList(u8) = undefined,
 
 pub fn Deinit(self: *NameComponent) !void {
+    std.debug.print("deinitializing scene: {s}\n", .{self.Name.items});
     self.Name.deinit();
 }
 
@@ -29,11 +38,3 @@ pub fn GetInd(self: NameComponent) u32 {
 pub fn EditorRender(self: *NameComponent) !void {
     _ = imgui.igInputText("##Name", &self.Name, self.Name.len, imgui.ImGuiInputTextFlags_None, null, null);
 }
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == NameComponent) {
-            break :blk i;
-        }
-    }
-};

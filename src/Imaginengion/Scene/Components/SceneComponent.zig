@@ -6,6 +6,7 @@ const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
 const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");
 const GenUUID = @import("../../Core/UUID.zig").GenUUID;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
+const AssetManager = @import("../../Assets/AssetManager.zig");
 
 const GameComponents = @import("../../GameObjects/Components.zig");
 const IDComponent = GameComponents.IDComponent;
@@ -33,7 +34,12 @@ mSceneAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 mLayerType: LayerType = undefined,
 mFrameBuffer: FrameBuffer = undefined,
 
-pub fn Deinit(_: *SceneComponent) !void {}
+pub fn Deinit(self: *SceneComponent) !void {
+    self.mFrameBuffer.Deinit();
+    if (self.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
+        AssetManager.ReleaseAssetHandleRef(self.mSceneAssetHandle.mID);
+    }
+}
 
 pub fn GetInd(self: SceneComponent) u32 {
     _ = self;

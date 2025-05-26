@@ -26,6 +26,10 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
             };
         }
         pub fn Deinit(self: *Self) void {
+            var i: usize = 0;
+            while (i < self.mComponents.dense_count) : (i += 1) {
+                try self.mComponents.values[i].Deinit();
+            }
             self.mComponents.deinit();
         }
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {

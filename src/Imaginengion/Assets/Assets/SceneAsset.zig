@@ -20,7 +20,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !SceneAsset {
     return new_scene_asset;
 }
 
-pub fn Deinit(self: *SceneAsset) void {
+pub fn Deinit(self: *SceneAsset) !void {
     self.mSceneContents.deinit();
 }
 

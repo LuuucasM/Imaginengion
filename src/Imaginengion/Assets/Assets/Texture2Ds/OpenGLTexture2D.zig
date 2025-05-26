@@ -65,7 +65,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D
     };
 }
 
-pub fn Deinit(self: OpenGLTexture2D) void {
+pub fn Deinit(self: OpenGLTexture2D) !void {
     glad.glDeleteTextures(1, &self._TextureID);
 }
 pub fn GetWidth(self: OpenGLTexture2D) usize {

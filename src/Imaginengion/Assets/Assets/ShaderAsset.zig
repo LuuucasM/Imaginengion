@@ -12,7 +12,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !ShaderAsset {
     };
 }
 
-pub fn Deinit(self: *ShaderAsset) void {
+pub fn Deinit(self: *ShaderAsset) !void {
     self.mShader.Deinit();
 }
 

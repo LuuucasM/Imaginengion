@@ -16,8 +16,8 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !Texture2D {
     };
 }
 
-pub fn Deinit(self: Texture2D) void {
-    self._Impl.Deinit();
+pub fn Deinit(self: Texture2D) !void {
+    try self._Impl.Deinit();
 }
 
 pub fn GetWidth(self: Texture2D) usize {

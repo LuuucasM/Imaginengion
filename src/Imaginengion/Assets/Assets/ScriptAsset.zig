@@ -47,7 +47,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !ScriptAsset {
     };
 }
 
-pub fn Deinit(self: *ScriptAsset) void {
+pub fn Deinit(self: *ScriptAsset) !void {
     self.mLib.close();
 }
 
