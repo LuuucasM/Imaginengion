@@ -17,7 +17,6 @@ pub const Ind: usize = blk: {
 Name: std.ArrayList(u8) = undefined,
 
 pub fn Deinit(self: *NameComponent) !void {
-    std.debug.print("deinitializing scene: {s}\n", .{self.Name.items});
     self.Name.deinit();
 }
 

@@ -2,6 +2,7 @@ const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
@@ -240,6 +241,27 @@ pub fn OnInputPressedEvent(self: *ViewportPanel, e: InputPressedEvent) bool {
             }
         },
         else => return true,
+    }
+    return true;
+}
+
+pub fn OnWindowResize(self: *ViewportPanel, _: usize, _: usize) !bool {
+    //update viewport size if needed
+    var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
+    imgui.igGetContentRegionAvail(&viewport_size);
+    if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
+        //viewport resize event
+        if (viewport_size.x < 0) viewport_size.x = 0;
+        if (viewport_size.y < 0) viewport_size.y = 0;
+        const new_imgui_event = ImguiEvent{
+            .ET_ViewportResizeEvent = .{
+                .mWidth = @intFromFloat(viewport_size.x),
+                .mHeight = @intFromFloat(viewport_size.y),
+            },
+        };
+        try ImguiEventManager.Insert(new_imgui_event);
+        self.mViewportWidth = @intFromFloat(viewport_size.x);
+        self.mViewportHeight = @intFromFloat(viewport_size.y);
     }
     return true;
 }

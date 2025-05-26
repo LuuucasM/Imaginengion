@@ -2,6 +2,7 @@ const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
+const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 
 const UnsupportedProgram = @This();
 
@@ -18,6 +19,10 @@ pub fn Deinit(self: UnsupportedProgram) !void {
 pub fn OnUpdate(self: *UnsupportedProgram, dt: f64) !void {
     _ = self;
     _ = dt;
+    Unsupported();
+}
+
+pub fn OnWindowResize(_: *UnsupportedProgram, _: WindowResizeEvent) !bool {
     Unsupported();
 }
 

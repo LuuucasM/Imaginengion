@@ -53,7 +53,7 @@ pub const ECSManagerGameObj = ECSManager(EntityType, EntityComponentsArray.len);
 pub const SceneType = u32;
 pub const ECSManagerScenes = ECSManager(SceneType, EntityComponentsArray.len);
 
-var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
+pub var SceneManagerGPA = std.heap.DebugAllocator(.{}).init;
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj,

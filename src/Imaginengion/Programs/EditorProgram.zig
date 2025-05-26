@@ -17,6 +17,7 @@ const SceneComponent = SceneComponents.SceneComponent;
 
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
+const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
@@ -41,6 +42,8 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
+const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
 const OnInputPressedScript = @import("../GameObjects/Components.zig").OnInputPressedScript;
 const OnUpdateInputScript = @import("../GameObjects/Components.zig").OnUpdateInputScript;
@@ -86,7 +89,10 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
 
 pub fn Setup(self: *EditorProgram) !void {
     self._SceneLayer = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.CreateEntity(), .mECSManagerGORef = &self.mSceneManager.mECSManagerGO, .mECSManagerSCRef = &self.mSceneManager.mECSManagerSC };
-    _ = try self._SceneLayer.AddComponent(SceneComponent, SceneComponent{ .mLayerType = .GameLayer });
+    _ = try self._SceneLayer.AddComponent(SceneComponent, SceneComponent{
+        .mLayerType = .GameLayer,
+        .mFrameBuffer = try FrameBuffer.Init(EditorSceneManager.SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
+    });
 
     self._ViewportPanel = try ViewportPanel.Init(&self._SceneLayer, self.mWindow.GetHeight(), self.mWindow.GetWidth());
 }
@@ -217,6 +223,14 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     GameEventManager.EventsReset();
     ImguiEventManager.EventsReset();
     //-----------------End End of Frame-------------------
+}
+
+pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize) !bool {
+    const editor_scene_component = self._SceneLayer.GetComponent(SceneComponent);
+    editor_scene_component.mFrameBuffer.Resize(width, height);
+
+    _ = try self._ViewportPanel.OnWindowResize(width, height);
+    return true;
 }
 
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {

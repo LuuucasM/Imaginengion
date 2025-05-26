@@ -3,6 +3,7 @@ const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
+const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 const Renderer = @import("../Renderer/Renderer.zig");
 const Window = @import("../Windows/Window.zig");
 const Program = @This();
@@ -28,6 +29,10 @@ pub fn Deinit(self: *Program) !void {
 
 pub fn OnUpdate(self: *Program, dt: f32) !void {
     try self._Impl.OnUpdate(dt);
+}
+
+pub fn OnWindowResize(self: *Program, width: usize, height: usize) !bool {
+    return try self._Impl.OnWindowResize(width, height);
 }
 
 pub fn OnInputPressedEvent(self: *Program, e: InputPressedEvent) !bool {

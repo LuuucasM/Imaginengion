@@ -95,7 +95,7 @@ pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
 
     cont_bool = cont_bool and switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
-        .ET_WindowResize => |e| self.OnWindowResize(e._Width, e._Height),
+        .ET_WindowResize => |e| try self.OnWindowResize(e._Width, e._Height),
         .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e),
         else => true,
     };
@@ -122,7 +122,7 @@ fn OnWindowClose(self: *Application) bool {
 ///
 /// Returns:
 /// - `true` to continue event propagation.
-fn OnWindowResize(self: *Application, width: usize, height: usize) bool {
+fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
     if ((width == 0) or (height == 0)) {
         self.mIsMinimized = true;
     } else {
@@ -130,5 +130,6 @@ fn OnWindowResize(self: *Application, width: usize, height: usize) bool {
     }
 
     self.mWindow.OnWindowResize(width, height);
+    _ = try self.mProgram.OnWindowResize(width, height);
     return true;
 }
