@@ -76,9 +76,10 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
     }
 }
 
-pub fn ReleaseAssetHandleRef(asset_id: AssetType) void {
-    const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_id);
+pub fn ReleaseAssetHandleRef(asset_handle: *AssetHandle) void {
+    const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID);
     asset_meta_data.mRefs -= 1;
+    asset_handle.mID = AssetHandle.NullHandle;
 }
 
 pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {

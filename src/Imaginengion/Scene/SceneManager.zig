@@ -32,6 +32,7 @@ const Assets = @import("../Assets/Assets.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const SceneAsset = Assets.SceneAsset;
+const ShaderAsset = Assets.ShaderAsset;
 
 const RenderManager = @import("../Renderer/Renderer.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
@@ -68,7 +69,7 @@ mViewportHeight: usize,
 mCompositeVertexArray: VertexArray,
 mCompositeVertexBuffer: VertexBuffer,
 mCompositeIndexBuffer: IndexBuffer,
-mCompositeShader: Shader,
+mCompositeShaderHandle: AssetHandle,
 mNumTexturesUniformBuffer: UniformBuffer,
 
 pub fn Init(width: usize, height: usize) !SceneManager {
@@ -86,13 +87,14 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
         .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
         .mCompositeIndexBuffer = undefined,
-        .mCompositeShader = try Shader.Init(SceneManagerGPA.allocator(), "assets/shaders/Composite.glsl"),
+        .mCompositeShaderHandle = AssetManager.GetAssetHandleRef("assets/shaders/Composite.glsl", .Eng),
         .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
     };
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
     new_scene_manager.mCompositeIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
 
+    new_scene_manager.mCompositeShaderHandle.GetAsset(ShaderAsset);
     try new_scene_manager.mCompositeVertexBuffer.SetLayout(new_scene_manager.mCompositeShader.GetLayout());
     new_scene_manager.mCompositeVertexBuffer.SetStride(new_scene_manager.mCompositeShader.GetStride());
 
@@ -107,7 +109,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 }
 
 pub fn Deinit(self: *SceneManager) !void {
-    self.mCompositeShader.Deinit();
+    AssetManager.ReleaseAssetHandleRef(self.mCompositeShader);
     self.mCompositeVertexBuffer.Deinit();
     self.mCompositeIndexBuffer.Deinit();
     self.mCompositeVertexArray.Deinit();
