@@ -5,8 +5,12 @@ const ScriptAsset = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 
 pub const ScriptType = enum(u8) {
+    //Game object scripts
     OnInputPressed = 0,
     OnUpdateInput = 1,
+
+    //Scene Scripts
+    OnSceneStart = 2,
 };
 
 mLib: std.DynLib = undefined,
