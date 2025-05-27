@@ -52,7 +52,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
 
                 iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
                 if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
-                while (iter.mNext != std.math.maxInt(EntityType)) {
+                while (iter.mNext != Entity.NullEntity) {
                     iter = ecs.GetComponent(ScriptComponent, iter.mNext);
                     if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
                 }

@@ -14,7 +14,7 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
-mTexture: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
+mTexture: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 mTilingFactor: f32 = 1.0,
 mTexCoords: [4]Vec2f32 = [4]Vec2f32{
     Vec2f32{ 0, 0 },
@@ -68,8 +68,8 @@ pub fn EditorRender(self: *SpriteRenderComponent) !void {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            if (self.mTexture.mID != std.math.maxInt(AssetType)) {
-                AssetM.ReleaseAssetHandleRef(self.mTexture.mID);
+            if (self.mTexture.mID != AssetHandle.NullHandle) {
+                AssetM.ReleaseAssetHandleRef(&self.mTexture);
             }
             self.mTexture = try AssetM.GetAssetHandleRef(path, .Prj);
         }

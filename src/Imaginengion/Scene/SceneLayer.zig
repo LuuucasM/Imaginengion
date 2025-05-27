@@ -12,7 +12,7 @@ const SceneType = @import("../Scene/SceneManager.zig").SceneType;
 const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 
-pub const NullEntity: SceneType = ~0;
+pub const NullScene: SceneType = ~0;
 const SceneLayer = @This();
 
 mSceneID: SceneType,

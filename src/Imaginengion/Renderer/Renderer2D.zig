@@ -167,15 +167,15 @@ pub fn Init(
 pub fn Deinit(self: *Renderer2D) !void {
     self.mSpriteVertexBuffer.Deinit();
     self.mSpriteVertexArray.Deinit();
-    AssetManager.ReleaseAssetHandleRef(self.mSpriteShaderAsset.mID);
+    AssetManager.ReleaseAssetHandleRef(&self.mSpriteShaderAsset);
 
     self.mCircleVertexBuffer.Deinit();
     self.mCircleVertexArray.Deinit();
-    AssetManager.ReleaseAssetHandleRef(self.mCircleShaderAsset.mID);
+    AssetManager.ReleaseAssetHandleRef(&self.mCircleShaderAsset);
 
     self.mELineVertexBuffer.Deinit();
     self.mELineVertexArray.Deinit();
-    AssetManager.ReleaseAssetHandleRef(self.mELineShaderAsset.mID);
+    AssetManager.ReleaseAssetHandleRef(&self.mELineShaderAsset);
 
     self.mRectIndexBuffer.Deinit();
 

@@ -52,9 +52,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
             const script_component = self.mScenelayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
             const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
             const script_name = std.fs.path.basename(file_meta_data.mRelPath);
-
             imgui.igText(script_name);
-
             curr_id = script_component.mNext;
         }
     }

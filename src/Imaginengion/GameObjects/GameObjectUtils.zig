@@ -18,7 +18,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
         //entity already has a script so iterate until the end of the linked list
         var iter_id = entity.mEntityID;
         var iter = ecs.GetComponent(ScriptComponent, iter_id);
-        while (iter.mNext != std.math.maxInt(EntityType)) {
+        while (iter.mNext != Entity.NullEntity) {
             iter_id = iter.mNext;
             iter = ecs.GetComponent(ScriptComponent, iter.mNext);
         }
@@ -27,7 +27,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
 
         const new_script_component = ScriptComponent{
             .mFirst = iter.mFirst,
-            .mNext = std.math.maxInt(EntityType),
+            .mNext = Entity.NullEntity,
             .mParent = iter.mParent,
             .mPrev = iter_id,
             .mScriptAssetHandle = new_script_handle,
@@ -43,9 +43,9 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
         //add new script component to entity
         const entity_new_script_component = ScriptComponent{
             .mFirst = entity.mEntityID,
-            .mNext = std.math.maxInt(EntityType),
+            .mNext = Entity.NullEntity,
             .mParent = entity.mEntityID,
-            .mPrev = std.math.maxInt(EntityType),
+            .mPrev = Entity.NullEntity,
             .mScriptAssetHandle = new_script_handle,
         };
 

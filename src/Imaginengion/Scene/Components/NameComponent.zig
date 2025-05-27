@@ -20,10 +20,6 @@ pub fn Deinit(self: *NameComponent) !void {
     self.Name.deinit();
 }
 
-pub fn GetEditorWindow(self: *NameComponent) EditorWindow {
-    return EditorWindow.Init(self);
-}
-
 pub fn GetName(self: NameComponent) []const u8 {
     _ = self;
     return "NameComponent";
@@ -32,8 +28,4 @@ pub fn GetName(self: NameComponent) []const u8 {
 pub fn GetInd(self: NameComponent) u32 {
     _ = self;
     return @intCast(Ind);
-}
-
-pub fn EditorRender(self: *NameComponent) !void {
-    _ = imgui.igInputText("##Name", &self.Name, self.Name.len, imgui.ImGuiInputTextFlags_None, null, null);
 }

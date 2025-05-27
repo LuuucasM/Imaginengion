@@ -389,18 +389,17 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             const value = self.getValueBySparse(sparse).*;
 
             if (new_pos < current_pos) {
-                std.mem.copyBackwards(ValueT, self.values[new_pos + 1 .. current_pos+1], self.values[new_pos .. current_pos]);
-                std.mem.copyBackwards(SparseT, self.dense_to_sparse[new_pos + 1 .. current_pos+1], self.dense_to_sparse[new_pos .. current_pos]);
+                std.mem.copyBackwards(ValueT, self.values[new_pos + 1 .. current_pos + 1], self.values[new_pos..current_pos]);
+                std.mem.copyBackwards(SparseT, self.dense_to_sparse[new_pos + 1 .. current_pos + 1], self.dense_to_sparse[new_pos..current_pos]);
 
-                for (self.dense_to_sparse[new_pos + 1 .. current_pos+1]) |sparse_id| {
+                for (self.dense_to_sparse[new_pos + 1 .. current_pos + 1]) |sparse_id| {
                     self.sparse_to_dense[@intCast(sparse_id)] += 1;
                 }
-
             } else {
-                std.mem.copyForwards(ValueT, self.values[current_pos .. new_pos], self.values[current_pos + 1 .. new_pos+1]);
-                std.mem.copyForwards(SparseT, self.dense_to_sparse[current_pos .. new_pos], self.dense_to_sparse[current_pos + 1 .. new_pos+1]);
+                std.mem.copyForwards(ValueT, self.values[current_pos..new_pos], self.values[current_pos + 1 .. new_pos + 1]);
+                std.mem.copyForwards(SparseT, self.dense_to_sparse[current_pos..new_pos], self.dense_to_sparse[current_pos + 1 .. new_pos + 1]);
 
-                for (self.dense_to_sparse[current_pos .. new_pos]) |sparse_id| {
+                for (self.dense_to_sparse[current_pos..new_pos]) |sparse_id| {
                     self.sparse_to_dense[@intCast(sparse_id)] -= 1;
                 }
             }
@@ -425,6 +424,12 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
                 return error.OutOfBounds;
             }
 
+            return self.hasSparse(sparse);
+        }
+
+        ///Returns true if the sparse is registered to a dense index, but will not have an error if sprase is out of bounds
+        pub fn HasSparse(self: Self, sparse: SparseT) bool {
+            if (sparse >= self.capacity_sparse) return false;
             return self.hasSparse(sparse);
         }
 
@@ -602,7 +607,7 @@ test "move" {
     ss.move(ent1, 4);
     try std.testing.expect(ss.sparse_to_dense[ent5] == 3);
     try std.testing.expect(ss.sparse_to_dense[ent1] == 4);
-    
+
     ss.move(ent3, 1);
     try std.testing.expect(ss.sparse_to_dense[ent3] == 1);
 

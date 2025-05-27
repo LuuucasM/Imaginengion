@@ -37,7 +37,7 @@ mFrameBuffer: FrameBuffer = undefined,
 pub fn Deinit(self: *SceneComponent) !void {
     self.mFrameBuffer.Deinit();
     if (self.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        AssetManager.ReleaseAssetHandleRef(self.mSceneAssetHandle.mID);
+        AssetManager.ReleaseAssetHandleRef(&self.mSceneAssetHandle);
     }
 }
 

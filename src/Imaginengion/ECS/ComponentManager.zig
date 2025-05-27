@@ -66,13 +66,13 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
         }
 
         pub fn CreateEntity(self: *Self, entityID: entity_t) !void {
-            std.debug.assert(!self.mEntitySkipField.hasSparse(entityID));
+            std.debug.assert(!self.mEntitySkipField.HasSparse(entityID));
             const dense_ind = self.mEntitySkipField.add(entityID);
             self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(component_type_size).Init(.AllSkip);
         }
 
         pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
-            std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
 
             const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
 
@@ -86,8 +86,8 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
         }
 
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
-            std.debug.assert(self.mEntitySkipField.hasSparse(original_entity_id));
-            std.debug.assert(self.mEntitySkipField.hasSparse(new_entity_id));
+            std.debug.assert(self.mEntitySkipField.HasSparse(original_entity_id));
+            std.debug.assert(self.mEntitySkipField.HasSparse(new_entity_id));
 
             const original_skipfield = self.mEntitySkipField.getValueBySparse(original_entity_id);
             const new_skipfield = self.mEntitySkipField.getValueBySparse(new_entity_id);
@@ -104,7 +104,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
         pub fn AddComponent(self: *Self, comptime component_type: type, entityID: entity_t, component: ?component_type) !*component_type {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(!self.HasComponent(component_type, entityID));
-            std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
 
             self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_type.Ind);
@@ -114,7 +114,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
         pub fn RemoveComponent(self: *Self, comptime component_type: type, entityID: entity_t) !void {
             std.debug.assert(@hasDecl(component_type, "Ind"));
-            std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(self.HasComponent(component_type, entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
 
@@ -125,14 +125,14 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {
             std.debug.assert(@hasDecl(component_type, "Ind"));
-            std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
             return @as(*InternalComponentArray(entity_t, component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) *component_type {
             std.debug.assert(@hasDecl(component_type, "Ind"));
-            std.debug.assert(self.mEntitySkipField.hasSparse(entityID));
+            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(self.HasComponent(component_type, entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
             return @as(*InternalComponentArray(entity_t, component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);

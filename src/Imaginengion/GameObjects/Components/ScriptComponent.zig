@@ -9,14 +9,15 @@ const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
+const Entity = @import("../../GameObjects/Entity.zig");
 const EntityType = @import("../../Scene/SceneManager.zig").EntityType;
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
-mFirst: EntityType = std.math.maxInt(EntityType),
-mPrev: EntityType = std.math.maxInt(EntityType),
-mNext: EntityType = std.math.maxInt(EntityType),
-mParent: EntityType = std.math.maxInt(EntityType),
-mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
+mFirst: EntityType = Entity.NullEntity,
+mPrev: EntityType = Entity.NullEntity,
+mNext: EntityType = Entity.NullEntity,
+mParent: EntityType = Entity.NullEntity,
+mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *ScriptComponent) !void {}
 

@@ -9,6 +9,7 @@ const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
+const SceneLayer = @import("../SceneLayer.zig");
 const SceneType = @import("../../Scene/SceneManager.zig").SceneType;
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
@@ -20,17 +21,13 @@ pub const Ind: usize = blk: {
     }
 };
 
-mFirst: SceneType = std.math.maxInt(SceneType),
-mPrev: SceneType = std.math.maxInt(SceneType),
-mNext: SceneType = std.math.maxInt(SceneType),
-mParent: SceneType = std.math.maxInt(SceneType),
-mScriptAssetHandle: AssetHandle = .{ .mID = std.math.maxInt(AssetType) },
+mFirst: SceneType = SceneLayer.NullScene,
+mPrev: SceneType = SceneLayer.NullScene,
+mNext: SceneType = SceneLayer.NullScene,
+mParent: SceneType = SceneLayer.NullScene,
+mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *ScriptComponent) !void {}
-
-pub fn GetEditorWindow(self: *ScriptComponent) EditorWindow {
-    return EditorWindow.Init(self);
-}
 
 pub fn GetName(self: ScriptComponent) []const u8 {
     _ = self;
@@ -40,9 +37,4 @@ pub fn GetName(self: ScriptComponent) []const u8 {
 pub fn GetInd(self: ScriptComponent) u32 {
     _ = self;
     return @intCast(Ind);
-}
-
-pub fn EditorRender(self: *ScriptComponent) !void {
-    const script = try self.mScriptHandle.GetAsset(ScriptAsset);
-    try script.EditorRender();
 }

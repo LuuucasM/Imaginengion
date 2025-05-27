@@ -39,11 +39,11 @@ pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
 }
 
 pub fn Deinit(self: *ContentBrowserPanel) void {
-    AssetManager.ReleaseAssetHandleRef(self.mDirTextureHandle.mID);
-    AssetManager.ReleaseAssetHandleRef(self.mPngTextureHandle.mID);
-    AssetManager.ReleaseAssetHandleRef(self.mBackArrowTextureHandle.mID);
-    AssetManager.ReleaseAssetHandleRef(self.mSceneTextureHandle.mID);
-    AssetManager.ReleaseAssetHandleRef(self.mScriptTextureHandle.mID);
+    AssetManager.ReleaseAssetHandleRef(&self.mDirTextureHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mPngTextureHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mBackArrowTextureHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mSceneTextureHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
     self.mProjectDirectory.deinit();
     self.mCurrentDirectory.deinit();
     if (self.mProjectFile != null) {

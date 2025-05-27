@@ -11,7 +11,9 @@ const Renderer3D = @import("Renderer3D.zig");
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
-const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const Assets = @import("../Assets/Assets.zig");
+const Texture2D = Assets.Texture2D;
+const ShaderAsset = Assets.ShaderAsset;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
@@ -201,7 +203,8 @@ pub fn RenderFinalImage(scene_manager: *SceneManager) !void {
     defer scene_manager.mFrameBuffer.Unbind();
     scene_manager.mFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
     scene_manager.mNumTexturesUniformBuffer.Bind(0);
-    scene_manager.mCompositeShader.Bind();
+    const shader_asset = try scene_manager.mCompositeShaderHandle.GetAsset(ShaderAsset);
+    shader_asset.mShader.Bind();
     for (scene_stack_entities.items, 0..) |scene_id, i| {
         const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
         const scene_component = scene_layer.GetComponent(SceneComponent);

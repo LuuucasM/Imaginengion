@@ -198,7 +198,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         component_string.clearAndFree();
 
         try write_stream.objectField("AssetFileData");
-        if (component.mTexture.mID != std.math.maxInt(AssetType)) {
+        if (component.mTexture.mID != AssetHandle.NullHandle) {
             const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
             try std.json.stringify(asset_file_data, .{}, component_string.writer());
             try write_stream.write(component_string.items);
@@ -218,7 +218,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
         const ecs = entity.mECSManagerRef;
         var current_id = entity.mEntityID;
         var component: *ScriptComponent = undefined;
-        while (current_id != std.math.maxInt(EntityType)) {
+        while (current_id != Entity.NullEntity) {
             try write_stream.objectField("Component");
 
             component = ecs.GetComponent(ScriptComponent, current_id);
@@ -227,7 +227,7 @@ fn Stringify(write_stream: *std.json.WriteStream(std.ArrayList(u8).Writer, .{ .c
             component_string.clearAndFree();
 
             try write_stream.objectField("AssetFileData");
-            if (component.mScriptAssetHandle.mID != std.math.maxInt(EntityType)) {
+            if (component.mScriptAssetHandle.mID != Entity.NullEntity) {
                 const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
                 try std.json.stringify(asset_file_data, .{}, component_string.writer());
                 try write_stream.write(component_string.items);
@@ -370,7 +370,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
         };
 
         //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
-        if (sprite_render_component.mTexture.mID != std.math.maxInt(AssetType)) {
+        if (sprite_render_component.mTexture.mID != AssetHandle.NullHandle) {
             const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
             defer file_data_component.deinit();
             const file_data = file_data_component.value;
@@ -408,7 +408,7 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
                 else => @panic("should be a string!!\n"),
             };
 
-            if (parsed_script_component.mScriptAssetHandle.mID != std.math.maxInt(AssetType)) {
+            if (parsed_script_component.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
                 const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
                 defer file_data_component.deinit();
                 const file_data = file_data_component.value;

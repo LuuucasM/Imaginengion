@@ -87,16 +87,17 @@ pub fn Init(width: usize, height: usize) !SceneManager {
         .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
         .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
         .mCompositeIndexBuffer = undefined,
-        .mCompositeShaderHandle = AssetManager.GetAssetHandleRef("assets/shaders/Composite.glsl", .Eng),
+        .mCompositeShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/Composite.glsl", .Eng),
         .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
     };
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
     new_scene_manager.mCompositeIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
 
-    new_scene_manager.mCompositeShaderHandle.GetAsset(ShaderAsset);
-    try new_scene_manager.mCompositeVertexBuffer.SetLayout(new_scene_manager.mCompositeShader.GetLayout());
-    new_scene_manager.mCompositeVertexBuffer.SetStride(new_scene_manager.mCompositeShader.GetStride());
+    const shader_asset = try new_scene_manager.mCompositeShaderHandle.GetAsset(ShaderAsset);
+
+    try new_scene_manager.mCompositeVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+    new_scene_manager.mCompositeVertexBuffer.SetStride(shader_asset.mShader.GetStride());
 
     var data_vertex_buffer = [4]Vec2f32{ Vec2f32{ -1.0, -1.0 }, Vec2f32{ 1.0, -1.0 }, Vec2f32{ 1.0, 1.0 }, Vec2f32{ -1.0, 1.0 } };
     new_scene_manager.mCompositeVertexBuffer.SetData(&data_vertex_buffer[0], 4 * @sizeOf(Vec2f32));
@@ -109,7 +110,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
 }
 
 pub fn Deinit(self: *SceneManager) !void {
-    AssetManager.ReleaseAssetHandleRef(self.mCompositeShader);
+    AssetManager.ReleaseAssetHandleRef(&self.mCompositeShaderHandle);
     self.mCompositeVertexBuffer.Deinit();
     self.mCompositeIndexBuffer.Deinit();
     self.mCompositeVertexArray.Deinit();
