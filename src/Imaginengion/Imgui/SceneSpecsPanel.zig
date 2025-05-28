@@ -5,13 +5,20 @@ const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
+const RenderFeatureComponent = SceneComponents.RenderFeatureComponent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
-const FileMetaData = @import("../Assets/Assets.zig").FileMetaData;
+const Assets = @import("../Assets/Assets.zig");
+const FileMetaData = Assets.FileMetaData;
+const ShaderAsset = Assets.ShaderAsset;
+const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const SceneUtils = @import("../Scene/SceneUtils.zig");
+const ImguiUtils = @import("../Imgui/ImguiUtils.zig");
 const SceneSpecsPanel = @This();
 
-mScenelayer: *SceneLayer,
+mSceneLayer: SceneLayer,
 
-pub fn Init(scene_layer: *SceneLayer) !SceneSpecsPanel {
+pub fn Init(scene_layer: SceneLayer) !SceneSpecsPanel {
     return SceneSpecsPanel{
         .mSceneLayer = scene_layer,
     };
@@ -22,42 +29,73 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const name_component = self.mScenelayer.GetComponent(SceneNameComponent);
+    const name_component = self.mSceneLayer.GetComponent(SceneNameComponent);
 
     const scene_name = try allocator.dupeZ(u8, name_component.Name.items);
     imgui.igSetNextWindowSize(.{ .x = 800, .y = 600 }, imgui.ImGuiCond_Once);
     _ = imgui.igBegin(scene_name, null, 0);
+    defer imgui.igEnd();
 
-    //const scene_component = self.mScenelayer.GetComponent(SceneComponent);
+    var available_region: imgui.ImVec2 = undefined;
+    imgui.igGetContentRegionAvail(&available_region);
 
-    //scene layer type
-    if (imgui.igBeginCombo("Scene Type", @tagName(self.mProjectionType), imgui.ImGuiComboFlags_None) == true) {
-        defer imgui.igEndCombo();
-        if (imgui.igSelectable_Bool("Game Layer", if (self.mProjectionType == .Perspective) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
-            //scene_component.mLayerType = .GameLayer;
-            //TODO: add a way to move the layer to the section where it belongs. maybe need some imgui event?
-            //maybe instead of setting the layer type here i will make an imgui event where the event will hold "NewLayerType"
-            //and then the scene manager can handle
-        }
-        if (imgui.igSelectable_Bool("Overlay Layer", if (self.mProjectionType == .Orthographic) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
-            //scene_component.mLayerType = .OverlayLayer;
-            //TODO: add a way to move the layer to the section where it belongs. maybe need some imgui event?
-        }
+    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
+        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
     }
+    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
+        defer imgui.igEndPopup();
+        try ImguiUtils.SceneScriptPopupMenu();
+    }
+    //scene layer type
+    imgui.igText(@tagName(self.mProjectionType));
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
-    if (self.mScenelayer.HasComponent(SceneScriptComponent) == true) {
-        var curr_id = self.mScenelayer.mSceneID;
-        while (curr_id != AssetHandle.NullHandle) {
-            const script_component = self.mScenelayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
-            const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
-            const script_name = std.fs.path.basename(file_meta_data.mRelPath);
-            imgui.igText(script_name);
-            curr_id = script_component.mNext;
+    if (self.mSceneLayer.HasComponent(SceneScriptComponent) == true) {
+        const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
+        const is_tree_open = imgui.igTreeNodeEx_Str("Scripts", tree_flags);
+        if (is_tree_open == true) {
+            defer imgui.igTreePop();
+            var curr_id = self.mSceneLayer.mSceneID;
+            while (curr_id != AssetHandle.NullHandle) {
+                const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
+                const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
+                const script_name = try allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath));
+                imgui.igText(script_name);
+                curr_id = script_component.mNext;
+            }
+        }
+    }
+    if (imgui.igBeginDragDropTarget() == true) {
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload("SceneScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+            const path_len = payload.*.DataSize;
+            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            SceneUtils.AddScriptToScene(self.mSceneLayer, path, .Prj);
         }
     }
     //TODO: print all the render layers. i suppose render layers will just just be 1 render layer per 1 shader program. same as scripts,
     //it is just external shader code so therefore i just need to print that it exists and thats it
-
-    defer imgui.igEnd();
+    if (self.mSceneLayer.HasComponent(RenderFeatureComponent) == true) {
+        const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
+        const is_tree_open = imgui.igTreeNodeEx_Str("Render Features", tree_flags);
+        if (is_tree_open == true) {
+            defer imgui.igTreePop();
+            var curr_id = self.mSceneLayer.mSceneID;
+            while (curr_id != AssetHandle.NullHandle) {
+                const render_feature_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(RenderFeatureComponent, curr_id);
+                const file_meta_data = try render_feature_component.mRenderPassAssetHandle.GetAsset(ShaderAsset);
+                const render_feature_name = try allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath));
+                imgui.igText(render_feature_name);
+                curr_id = render_feature_component.mNext;
+            }
+        }
+    }
+    if (imgui.igBeginDragDropTarget() == true) {
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload("RenderFeatureLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+            const path_len = payload.*.DataSize;
+            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            SceneUtils.AddRenderFeature(self.mSceneLayer, path, .Prj);
+        }
+    }
 }

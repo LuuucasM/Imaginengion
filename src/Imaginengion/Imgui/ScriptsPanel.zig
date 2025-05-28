@@ -39,7 +39,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-        try ImguiUtils.ScriptPopupMenu();
+        try ImguiUtils.EntityScriptPopupMenu();
     }
 
     //making a child so that drag drop target will tae the entire available region

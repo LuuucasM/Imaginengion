@@ -14,6 +14,9 @@ pub const Entity = @import("GameObjects/Entity.zig");
 const Components = @import("GameObjects/Components.zig");
 pub const TransformComponent = Components.TransformComponent;
 
+//Scene Stuff -----------------------------------------
+pub const SceneLayer = @import("Scene/SceneLayer.zig");
+
 //Script Stuff ----------------------------------------------
 pub const ScriptType = @import("Assets/Assets/ScriptAsset.zig").ScriptType;
 

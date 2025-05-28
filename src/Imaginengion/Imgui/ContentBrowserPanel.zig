@@ -211,13 +211,18 @@ pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptE
     const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
     switch (new_script_event.mScriptType) {
         .OnInputPressed => {
-            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/OnInputPressedTemplate.zig" });
+            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnInputPressedTemplate.zig" });
             const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnInputPressedScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
         .OnUpdateInput => {
-            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/OnUpdateInputTemplate.zig" });
+            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
             const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnUpdateInputScript.zig" });
+            try std.fs.copyFileAbsolute(source_path, dest_path, .{});
+        },
+        .OnSceneStart => {
+            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
+            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnSceneStartScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
     }
