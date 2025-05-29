@@ -38,6 +38,7 @@ const StatsPanel = @import("../Imgui/StatsPanel.zig");
 const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
+const SceneSpecPanel = @import("../Imgui/SceneSpecsPanel.zig");
 
 const EditorSceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
@@ -63,6 +64,7 @@ _SceneLayer: SceneLayer,
 mWindow: *Window,
 _EditorState: EditorState,
 _UsePlayPanel: bool,
+_SceneSpecList: std.ArrayList(SceneSpecPanel),
 
 const EditorProgram = @This();
 
@@ -84,6 +86,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._EditorState = .Stop,
         ._PlayPanel = PlayPanel.Init(),
         ._UsePlayPanel = false,
+        ._SceneSpecList = std.ArrayList(SceneSpecPanel).init(engine_allocator),
     };
 }
 
@@ -144,6 +147,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try self._AssetHandlePanel.OnImguiRender();
 
     try self._ScenePanel.OnImguiRender(&self.mSceneManager);
+    for (self._SceneSpecList.items) |scene_spec_panel| {
+        scene_spec_panel.OnImguiRender();
+    }
 
     try self._ComponentsPanel.OnImguiRender();
     try self._ScriptsPanel.OnImguiRender();
@@ -208,10 +214,12 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //-----------------Start End of Frame-----------------
     //swap buffers
     Renderer.SwapBuffers();
-    //play a sound?
 
     //Process window events
     try SystemEventManager.ProcessEvents(.EC_Window);
+
+    //handle any closed scene spec panels
+    self.CleanSceneSpecs();
 
     //handle deleted objects this frame
     try self.mSceneManager.mECSManagerGO.ProcessDestroyedEntities();
@@ -322,6 +330,10 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_ChangeEditorStateEvent => |e| {
             self.OnChangeEditorStateEvent(e);
         },
+        .ET_OpenSceneSpecEvent => |e| {
+            const new_scene_spec_panel = try SceneSpecPanel.Init(e.mSceneLayer);
+            try self._SceneSpecList.append(new_scene_spec_panel);
+        },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
 }
@@ -347,4 +359,19 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
         //close imgui window that plays the scene from the pov of the primary camera
         //self._EditorState = .Stop;
     }
+}
+
+fn CleanSceneSpecs(self: *EditorProgram) void {
+    var end_index: usize = self._SceneSpecList.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        if (self._SceneSpecList.items[i].mPOpen == false) {
+            self._SceneSpecList.items[i] = self._SceneSpecList.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+    self._SceneSpecList.shrinkAndFree(end_index);
 }

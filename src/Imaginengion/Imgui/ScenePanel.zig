@@ -34,7 +34,6 @@ pub fn Init() ScenePanel {
 
 pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     if (self.mIsVisible == false) return;
-
     _ = imgui.igBegin("Scenes", null, 0);
     defer imgui.igEnd();
 
@@ -68,8 +67,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
             const io = imgui.igGetIO();
             const bold_font = io.*.Fonts.*.Fonts.Data[0];
-
-            _ = imgui.igPushID_Str(scene_name.ptr);
+            imgui.igPushID_Str(scene_name.ptr);
             defer imgui.igPopID();
 
             if (self.mSelectedScene != null and self.mSelectedScene.?.mSceneID == scene_id) {
@@ -81,6 +79,12 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
             const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
             const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
+            const id = imgui.igGetID_Str(scene_name.ptr);
+
+            if (imgui.igIsMouseDoubleClicked_ID(imgui.ImGuiMouseButton_Left, id) == true) {
+                const new_event = ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mScriptLayer = scene_layer } };
+                try ImguiEventManager.Insert(new_event);
+            }
             if (self.mSelectedScene != null and self.mSelectedScene.?.mSceneID == scene_id) {
                 imgui.igPopFont();
             }

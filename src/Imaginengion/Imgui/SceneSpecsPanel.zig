@@ -16,10 +16,12 @@ const ImguiUtils = @import("../Imgui/ImguiUtils.zig");
 const SceneSpecsPanel = @This();
 
 mSceneLayer: SceneLayer,
+mPOpen: bool,
 
 pub fn Init(scene_layer: SceneLayer) !SceneSpecsPanel {
     return SceneSpecsPanel{
         .mSceneLayer = scene_layer,
+        .mPOpen = true,
     };
 }
 
@@ -32,7 +34,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
 
     const scene_name = try allocator.dupeZ(u8, name_component.Name.items);
     imgui.igSetNextWindowSize(.{ .x = 800, .y = 600 }, imgui.ImGuiCond_Once);
-    _ = imgui.igBegin(scene_name, null, 0);
+    _ = imgui.igBegin(scene_name, &self.mPOpen, 0);
     defer imgui.igEnd();
 
     var available_region: imgui.ImVec2 = undefined;

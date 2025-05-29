@@ -37,6 +37,7 @@ pub const ImguiEvent = union(enum) {
     ET_ViewportResizeEvent: ViewportResizeEvent,
     ET_NewScriptEvent: NewScriptEvent,
     ET_ChangeEditorStateEvent: ChangeEditorStateEvent,
+    ET_OpenSceneSpecEvent: OpenSceneSpecEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -103,4 +104,8 @@ pub const NewScriptEvent = struct {
 
 pub const ChangeEditorStateEvent = struct {
     mEditorState: EditorState,
+};
+
+pub const OpenSceneSpecEvent = struct {
+    mSceneLayer: SceneLayer,
 };
