@@ -6,8 +6,8 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 pub fn AllScriptPopupMenu() !void {
     if (imgui.igBeginMenu("All Scripts", true) == true) {
         defer imgui.igEndMenu();
-        EntityScriptPopupMenu();
-        SceneScriptPopupMenu();
+        try EntityScriptPopupMenu();
+        try SceneScriptPopupMenu();
     }
 }
 

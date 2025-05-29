@@ -62,7 +62,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-        try ImguiUtils.ScriptPopupMenu();
+        try ImguiUtils.AllScriptPopupMenu();
     }
 
     //if we dont have a project directory yet dont try to print stuff

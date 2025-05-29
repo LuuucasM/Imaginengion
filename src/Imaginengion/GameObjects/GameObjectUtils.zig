@@ -38,6 +38,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
         _ = switch (script_asset.mScriptType) {
             .OnInputPressed => try ecs.AddComponent(OnInputPressedScript, new_script_entity, null),
             .OnUpdateInput => try ecs.AddComponent(OnUpdateInputScript, new_script_entity, null),
+            else => {},
         };
     } else {
         //add new script component to entity
@@ -54,6 +55,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
         _ = switch (script_asset.mScriptType) {
             .OnInputPressed => try entity.AddComponent(OnInputPressedScript, null),
             .OnUpdateInput => try entity.AddComponent(OnUpdateInputScript, null),
+            else => {},
         };
     }
 }

@@ -42,7 +42,7 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
-const Shader = @import("../Shaders/Shaders.zig");
+const Shader = @import("../Shaders/Shader.zig");
 
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 

@@ -1,6 +1,6 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
-const Shader = @import("../../Shaders/Shaders.zig");
+const Shader = @import("../../Shaders/Shader.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
 const ShaderAsset = @This();
 

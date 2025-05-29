@@ -3,7 +3,7 @@ const glad = @import("../Core/CImports.zig").glad;
 
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
-const ShaderDataType = @import("../Shaders/Shaders.zig").ShaderDataType;
+const ShaderDataType = @import("../Shaders/Shader.zig").ShaderDataType;
 
 const OpenGLVertexArray = @This();
 

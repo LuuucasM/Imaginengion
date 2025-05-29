@@ -5,7 +5,6 @@ const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
-const RenderFeatureComponent = SceneComponents.RenderFeatureComponent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
@@ -71,31 +70,6 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             SceneUtils.AddScriptToScene(self.mSceneLayer, path, .Prj);
-        }
-    }
-    //TODO: print all the render layers. i suppose render layers will just just be 1 render layer per 1 shader program. same as scripts,
-    //it is just external shader code so therefore i just need to print that it exists and thats it
-    if (self.mSceneLayer.HasComponent(RenderFeatureComponent) == true) {
-        const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
-        const is_tree_open = imgui.igTreeNodeEx_Str("Render Features", tree_flags);
-        if (is_tree_open == true) {
-            defer imgui.igTreePop();
-            var curr_id = self.mSceneLayer.mSceneID;
-            while (curr_id != AssetHandle.NullHandle) {
-                const render_feature_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(RenderFeatureComponent, curr_id);
-                const file_meta_data = try render_feature_component.mRenderPassAssetHandle.GetAsset(ShaderAsset);
-                const render_feature_name = try allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath));
-                imgui.igText(render_feature_name);
-                curr_id = render_feature_component.mNext;
-            }
-        }
-    }
-    if (imgui.igBeginDragDropTarget() == true) {
-        defer imgui.igEndDragDropTarget();
-        if (imgui.igAcceptDragDropPayload("RenderFeatureLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-            const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            SceneUtils.AddRenderFeature(self.mSceneLayer, path, .Prj);
         }
     }
 }

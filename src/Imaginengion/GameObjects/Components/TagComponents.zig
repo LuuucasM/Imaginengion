@@ -7,7 +7,7 @@ const InputPressedEvent = @import("../../Events/SystemEvent.zig").InputPressedEv
 
 //scripts
 pub const OnInputPressedScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *Entity, *const InputPressedEvent) callconv(.C) bool;
+    pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *const Entity, *const InputPressedEvent) callconv(.C) bool;
     bit: u1 = 0,
     pub fn Deinit(_: *OnInputPressedScript) !void {}
     pub const Ind: usize = blk: {
@@ -20,7 +20,7 @@ pub const OnInputPressedScript = struct {
 };
 
 pub const OnUpdateInputScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *Entity) callconv(.C) bool;
+    pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *const Entity) callconv(.C) bool;
     bit: u1 = 0,
     pub fn Deinit(_: *OnUpdateInputScript) !void {}
     pub const Ind: usize = blk: {

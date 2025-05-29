@@ -7,7 +7,7 @@ const OnUpdateInputScript = @This();
 /// Function that gets executed every frame after polling inputs and input events
 /// if this function returns true it allows the event to be propegated to other layers/systems
 /// if it returns false it will stop at this layer
-pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.C) bool {
+pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *const Entity) callconv(.C) bool {
     _ = engine_context;
     _ = allocator;
     _ = self;
