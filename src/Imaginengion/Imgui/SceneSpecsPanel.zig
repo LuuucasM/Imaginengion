@@ -48,14 +48,23 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
         try ImguiUtils.SceneScriptPopupMenu();
     }
     //scene layer type
-    imgui.igText(@tagName(self.mProjectionType));
+    const scene_component = self.mSceneLayer.GetComponent(SceneComponent);
+    imgui.igText(@tagName(scene_component.mLayerType));
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
-    if (self.mSceneLayer.HasComponent(SceneScriptComponent) == true) {
-        const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
-        const is_tree_open = imgui.igTreeNodeEx_Str("Scripts", tree_flags);
-        if (is_tree_open == true) {
-            defer imgui.igTreePop();
+    const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
+    const is_tree_open = imgui.igTreeNodeEx_Str("Scripts", tree_flags);
+    if (imgui.igBeginDragDropTarget() == true) {
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload("SceneScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+            const path_len = payload.*.DataSize;
+            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            try SceneUtils.AddScriptToScene(self.mSceneLayer, path, .Prj);
+        }
+    }
+    if (is_tree_open == true) {
+        defer imgui.igTreePop();
+        if (self.mSceneLayer.HasComponent(SceneScriptComponent) == true) {
             var curr_id = self.mSceneLayer.mSceneID;
             while (curr_id != AssetHandle.NullHandle) {
                 const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
@@ -64,14 +73,6 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
                 imgui.igText(script_name);
                 curr_id = script_component.mNext;
             }
-        }
-    }
-    if (imgui.igBeginDragDropTarget() == true) {
-        defer imgui.igEndDragDropTarget();
-        if (imgui.igAcceptDragDropPayload("SceneScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-            const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            SceneUtils.AddScriptToScene(self.mSceneLayer, path, .Prj);
         }
     }
 }

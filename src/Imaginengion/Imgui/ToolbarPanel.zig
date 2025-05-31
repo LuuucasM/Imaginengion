@@ -1,6 +1,7 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const ImguiManager = @import("Imgui.zig");
@@ -64,7 +65,13 @@ pub fn OnImguiRender(self: *ToolbarPanel) !void {
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        self.mState = if (self.mState == .Play) .Stop else .Play;
+        var new_event = ImguiEvent{ .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop } };
+        if (self.mState == .Play) {
+            new_event.ET_ChangeEditorStateEvent.mEditorState = .Stop;
+        } else {
+            new_event.ET_ChangeEditorStateEvent.mEditorState = .Play;
+        }
+        try ImguiEventManager.Insert(new_event);
     }
 }
 

@@ -180,7 +180,7 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     const entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, SceneManagerGPA.allocator());
     defer entity_scene_entities.deinit();
 
-    self.FilterByScene(entity_scene_entities, scene_id);
+    self.FilterEntityByScene(entity_scene_entities, scene_id);
 
     for (entity_scene_entities.mEntityList.items) |entity_id| {
         self.mECSManagerGO.DestroyEntity(entity_id);
@@ -291,23 +291,43 @@ pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !
     stack_pos_component.mPosition = new_pos;
 }
 
-pub fn FilterByScene(self: *SceneManager, result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
-    if (result_list.items.len == 0) return;
+pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+    if (entity_result_list.items.len == 0) return;
 
-    var end_index: usize = result_list.items.len;
+    var end_index: usize = entity_result_list.items.len;
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, result_list.items[i]);
+        const entity_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, entity_result_list.items[i]);
         if (entity_scene_component.SceneID != scene_id) {
-            result_list.items[i] = result_list.items[end_index - 1];
+            entity_result_list.items[i] = entity_result_list.items[end_index - 1];
             end_index -= 1;
         } else {
             i += 1;
         }
     }
 
-    result_list.shrinkAndFree(end_index);
+    entity_result_list.shrinkAndFree(end_index);
+}
+
+pub fn FilterScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+    if (scripts_result_list.items.len == 0) return;
+
+    var end_index: usize = scripts_result_list.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const entity_script_component = self.mECSManagerGO.GetComponent(ScriptComponent, scripts_result_list.items[i]);
+        const parent_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, entity_script_component.mParent);
+        if (parent_scene_component.SceneID != scene_id) {
+            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    scripts_result_list.shrinkAndFree(end_index);
 }
 
 pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {

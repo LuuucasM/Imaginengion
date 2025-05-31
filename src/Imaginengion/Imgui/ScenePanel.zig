@@ -82,7 +82,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             const id = imgui.igGetID_Str(scene_name.ptr);
 
             if (imgui.igIsMouseDoubleClicked_ID(imgui.ImGuiMouseButton_Left, id) == true) {
-                const new_event = ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mScriptLayer = scene_layer } };
+                const new_event = ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer } };
                 try ImguiEventManager.Insert(new_event);
             }
             if (self.mSelectedScene != null and self.mSelectedScene.?.mSceneID == scene_id) {

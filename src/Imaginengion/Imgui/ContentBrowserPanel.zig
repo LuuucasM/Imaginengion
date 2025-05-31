@@ -9,6 +9,7 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
+const ScriptAsset = Assets.ScriptAsset;
 const ImguiUtils = @import("ImguiUtils.zig");
 const NewScriptEvent = @import("../Events/ImguiEvent.zig").NewScriptEvent;
 
@@ -154,13 +155,22 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const allocator = fba.allocator();
                 const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
+                const rel_path = full_path[self.mProjectDirectory.items.len..];
 
                 if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-                    _ = imgui.igSetDragDropPayload("IMSCLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                    _ = imgui.igSetDragDropPayload("IMSCLoad", rel_path.ptr, rel_path.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-                    _ = imgui.igSetDragDropPayload("PNGLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                    _ = imgui.igSetDragDropPayload("PNGLoad", rel_path.ptr, rel_path.len, 0);
                 } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-                    _ = imgui.igSetDragDropPayload("ScriptPayload", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                    var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
+                    defer AssetManager.ReleaseAssetHandleRef(&script_handle);
+
+                    const script_asset = try script_handle.GetAsset(ScriptAsset);
+                    if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
+                        _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                    } else if (script_asset.mScriptType == .OnSceneStart) {
+                        _ = imgui.igSetDragDropPayload("SceneScriptLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                    }
                 }
             }
             if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {

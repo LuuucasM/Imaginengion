@@ -27,18 +27,3 @@ pub const ComponentsList = [_]type{
     PrimaryCameraTag,
     EditorCameraTag,
 };
-
-pub const EComponents = enum(usize) {
-    CameraComponent = CameraComponent.Ind,
-    CircleRenderComponent = CircleRenderComponent.Ind,
-    IDComponent = IDComponent.Ind,
-    NameComponent = NameComponent.Ind,
-    SceneIDComponent = SceneIDComponent.Ind,
-    SpriteRenderComponent = SpriteRenderComponent.Ind,
-    TransformComponent = TransformComponent.Ind,
-    ScriptComponent = ScriptComponent.Ind,
-    OnInputPressed = OnInputPressedScript.Ind,
-    OnUpdateInput = OnUpdateInputScript.Ind,
-    PrimaryCameraTag = PrimaryCameraTag.Ind,
-    EditorCameraTag = EditorCameraTag.Ind,
-};

@@ -26,7 +26,7 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
 
         const new_script_component = SceneScriptComponent{
             .mFirst = iter.mFirst,
-            .mNext = SceneLayer.NullEntity,
+            .mNext = SceneLayer.NullScene,
             .mParent = iter.mParent,
             .mPrev = iter_id,
             .mScriptAssetHandle = new_script_handle,
@@ -36,6 +36,7 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
 
         _ = switch (script_asset.mScriptType) {
             .OnSceneStart => try ecs.AddComponent(OnSceneStartScript, new_script_entity, null),
+            else => {},
         };
     } else {
         //add new script component to entity
@@ -51,6 +52,7 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
 
         _ = switch (script_asset.mScriptType) {
             .OnSceneStart => try scene_layer.AddComponent(OnSceneStartScript, null),
+            else => {},
         };
     }
 }

@@ -54,7 +54,7 @@ pub fn SerializeText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !
 
     var entity_list = try scene_layer.mECSManagerGORef.GetGroup(.{ .Component = EntitySceneComponent }, allocator);
 
-    FilterByScene(scene_layer.mECSManagerGORef, &entity_list, scene_layer.mSceneID);
+    FilterEntityByScene(scene_layer.mECSManagerGORef, &entity_list, scene_layer.mSceneID);
 
     for (entity_list.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerGORef };
@@ -420,21 +420,21 @@ fn Destringify(allocator: std.mem.Allocator, value: []const u8, scanner: *std.js
     }
 }
 
-pub fn FilterByScene(ecs_manager_ref: *ECSManagerGameObj, result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
-    if (result_list.items.len == 0) return;
+pub fn FilterEntityByScene(ecs_manager_ref: *ECSManagerGameObj, entity_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+    if (entity_result_list.items.len == 0) return;
 
-    var end_index: usize = result_list.items.len;
+    var end_index: usize = entity_result_list.items.len;
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_scene_component = ecs_manager_ref.GetComponent(EntitySceneComponent, result_list.items[i]);
+        const entity_scene_component = ecs_manager_ref.GetComponent(EntitySceneComponent, entity_result_list.items[i]);
         if (entity_scene_component.SceneID != scene_id) {
-            result_list.items[i] = result_list.items[end_index - 1];
+            entity_result_list.items[i] = entity_result_list.items[end_index - 1];
             end_index -= 1;
         } else {
             i += 1;
         }
     }
 
-    result_list.shrinkAndFree(end_index);
+    entity_result_list.shrinkAndFree(end_index);
 }

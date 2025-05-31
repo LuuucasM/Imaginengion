@@ -62,7 +62,7 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     //drag drop target for scripts
     if (imgui.igBeginDragDropTarget() == true) {
         defer imgui.igEndDragDropTarget();
-        if (imgui.igAcceptDragDropPayload("ScriptPayload", imgui.ImGuiDragDropFlags_None)) |payload| {
+        if (imgui.igAcceptDragDropPayload("GameObjectScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {

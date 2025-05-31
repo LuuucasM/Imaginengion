@@ -137,10 +137,10 @@ pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
         defer scene_component.mFrameBuffer.Unbind();
 
         var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
-        scene_manager.FilterByScene(&sprite_entities, scene_id);
+        scene_manager.FilterEntityByScene(&sprite_entities, scene_id);
 
         var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
-        scene_manager.FilterByScene(&circle_entities, scene_id);
+        scene_manager.FilterEntityByScene(&circle_entities, scene_id);
 
         //cull entities that shouldnt be rendered
         CullEntities(SpriteRenderComponent, &sprite_entities, scene_manager);
