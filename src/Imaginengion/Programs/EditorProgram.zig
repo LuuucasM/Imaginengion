@@ -291,6 +291,10 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_SaveSceneAsEvent => |e| {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.Path.len > 0) {
+                    const scene_component = scene_layer.GetComponent(SceneComponent);
+                    const rel_path = AssetManager.GetRelPath(e.Path);
+                    _ = try std.fs.createFileAbsolute(e.Path, .{});
+                    scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
                     try self.mSceneManager.SaveSceneAs(scene_layer.mSceneID, e.Path);
                 }
             }

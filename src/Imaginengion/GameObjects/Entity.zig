@@ -3,7 +3,7 @@ const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj
 const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
-const EntityType = @import("../Scene/SceneManager.zig").EntityType;
+pub const EntityType = @import("../Scene/SceneManager.zig").EntityType;
 
 pub const NullEntity: EntityType = std.math.maxInt(EntityType);
 const Entity = @This();

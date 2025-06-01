@@ -229,9 +229,11 @@ pub fn SaveScene(self: *SceneManager, scene_id: SceneType) !void {
     } else {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
-        try self.SaveSceneAs(scene_id, path);
-        scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(path, .Abs);
+        const abs_path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
+        const rel_path = AssetManager.GetRelPath(abs_path);
+        _ = try std.fs.createFileAbsolute(abs_path, .{});
+        scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
+        try self.SaveSceneAs(scene_id, abs_path);
     }
 }
 pub fn SaveSceneAs(self: *SceneManager, scene_id: SceneType, path: []const u8) !void {

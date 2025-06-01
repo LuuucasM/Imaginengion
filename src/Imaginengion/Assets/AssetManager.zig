@@ -156,6 +156,10 @@ pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.
     }
 }
 
+pub fn GetRelPath(abs_path: []const u8) []const u8 {
+    return abs_path[AssetM.mProjectDirectory.items.len..];
+}
+
 pub fn ProcessDestroyedAssets() !void {
     try AssetM.mAssetECS.ProcessDestroyedEntities();
 }

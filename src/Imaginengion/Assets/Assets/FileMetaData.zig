@@ -5,7 +5,6 @@ const FileMetaData = @This();
 pub const PathType = enum(u2) {
     Eng = 0,
     Prj = 1,
-    Abs = 2,
 };
 
 mRelPath: []const u8 = undefined,

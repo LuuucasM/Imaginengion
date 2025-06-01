@@ -9,6 +9,7 @@ const ComponentsPanel = @This();
 const Components = @import("../GameObjects/Components.zig");
 const CameraComponent = Components.CameraComponent;
 const CircleRenderComponent = Components.CircleRenderComponent;
+const ControllerComponent = Components.ControllerComponent;
 const NameComponent = Components.NameComponent;
 const SpriteRenderComponent = Components.SpriteRenderComponent;
 const TransformComponent = Components.TransformComponent;
@@ -136,6 +137,12 @@ fn AddComponentPopupMenu(entity: Entity) !void {
     if (entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {
         if (imgui.igMenuItem_Bool("CircleRenderComponent", "", false, true) == true) {
             _ = try entity.AddComponent(CircleRenderComponent, null);
+            imgui.igCloseCurrentPopup();
+        }
+    }
+    if (entity.HasComponent(ControllerComponent) == false) {
+        if (imgui.igMenuItem_Bool("ControllerComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(ControllerComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }
