@@ -1,3 +1,4 @@
+const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
 const PathType = @import("../Assets/Assets/FileMetaData.zig").PathType;
 const StaticAssetContext = @import("../Assets/AssetManager.zig");
@@ -11,10 +12,13 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
     var ecs = scene_layer.mECSManagerSCRef;
     var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(ScriptAsset);
-    const new_script_entity = try ecs.CreateEntity();
 
     if (scene_layer.HasComponent(SceneScriptComponent) == true) {
         //entity already has a script so iterate until the end of the linked list
+
+        const new_scene_id = try ecs.CreateEntity();
+        const new_scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = scene_layer.mECSManagerGORef, .mECSManagerSCRef = scene_layer.mECSManagerSCRef };
+
         var iter_id = scene_layer.mSceneID;
         var iter = ecs.GetComponent(SceneScriptComponent, iter_id);
         while (iter.mNext != SceneLayer.NullScene) {
@@ -22,7 +26,7 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
             iter = ecs.GetComponent(SceneScriptComponent, iter.mNext);
         }
 
-        iter.mNext = new_script_entity;
+        iter.mNext = new_scene_layer.mSceneID;
 
         const new_script_component = SceneScriptComponent{
             .mFirst = iter.mFirst,
@@ -31,15 +35,15 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
             .mPrev = iter_id,
             .mScriptAssetHandle = new_script_handle,
         };
-
-        _ = try ecs.AddComponent(SceneScriptComponent, new_script_entity, new_script_component);
-
-        _ = switch (script_asset.mScriptType) {
-            .OnSceneStart => try ecs.AddComponent(OnSceneStartScript, new_script_entity, null),
+        switch (script_asset.mScriptType) {
+            .OnSceneStart => {
+                _ = try new_scene_layer.AddComponent(SceneScriptComponent, new_script_component);
+                _ = try new_scene_layer.AddComponent(OnSceneStartScript, null);
+            },
             else => {},
-        };
+        }
     } else {
-        //add new script component to entity
+        //scene does not have any scripts yet so add it directly to the scene_layer
         const entity_new_script_component = SceneScriptComponent{
             .mFirst = scene_layer.mSceneID,
             .mNext = SceneLayer.NullScene,
@@ -47,12 +51,13 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
             .mPrev = SceneLayer.NullScene,
             .mScriptAssetHandle = new_script_handle,
         };
-
-        _ = try scene_layer.AddComponent(SceneScriptComponent, entity_new_script_component);
-
-        _ = switch (script_asset.mScriptType) {
-            .OnSceneStart => try scene_layer.AddComponent(OnSceneStartScript, null),
+        std.debug.print("script type: {s}\n", .{@tagName(script_asset.mScriptType)});
+        switch (script_asset.mScriptType) {
+            .OnSceneStart => {
+                _ = try scene_layer.AddComponent(SceneScriptComponent, entity_new_script_component);
+                _ = try scene_layer.AddComponent(OnSceneStartScript, null);
+            },
             else => {},
-        };
+        }
     }
 }

@@ -167,9 +167,9 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
                     const script_asset = try script_handle.GetAsset(ScriptAsset);
                     if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
-                        _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                        _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
                     } else if (script_asset.mScriptType == .OnSceneStart) {
-                        _ = imgui.igSetDragDropPayload("SceneScriptLoad", full_path[self.mProjectDirectory.items.len..].ptr, full_path.len - self.mProjectDirectory.items.len, 0);
+                        _ = imgui.igSetDragDropPayload("SceneScriptLoad", rel_path.ptr, rel_path.len, 0);
                     }
                 }
             }

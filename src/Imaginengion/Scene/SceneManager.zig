@@ -12,13 +12,14 @@ const GenUUID = @import("../Core/UUID.zig").GenUUID;
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const Entity = @import("../GameObjects/Entity.zig");
-const Components = @import("../GameObjects/Components.zig");
-const TransformComponent = Components.TransformComponent;
-const CameraComponent = Components.CameraComponent;
-const OnInputPressedScript = Components.OnInputPressedScript;
-const ScriptComponent = Components.ScriptComponent;
-const EntitySceneComponent = Components.SceneIDComponent;
-const EntityComponentsArray = Components.ComponentsList;
+
+const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityComponentsArray = EntityComponents.ComponentsList;
+const TransformComponent = EntityComponents.TransformComponent;
+const CameraComponent = EntityComponents.CameraComponent;
+const OnInputPressedScript = EntityComponents.OnInputPressedScript;
+const EntityScriptComponent = EntityComponents.ScriptComponent;
+const EntitySceneComponent = EntityComponents.SceneIDComponent;
 
 const SceneComponents = @import("SceneComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
@@ -26,6 +27,7 @@ const SceneComponent = SceneComponents.SceneComponent;
 const SceneIDComponent = SceneComponents.IDComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneStackPos = SceneComponents.StackPosComponent;
+const SceneScriptComponent = SceneComponents.ScriptComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const Assets = @import("../Assets/Assets.zig");
@@ -310,16 +312,35 @@ pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayLi
     entity_result_list.shrinkAndFree(end_index);
 }
 
-pub fn FilterScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
     if (scripts_result_list.items.len == 0) return;
 
     var end_index: usize = scripts_result_list.items.len;
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_script_component = self.mECSManagerGO.GetComponent(ScriptComponent, scripts_result_list.items[i]);
+        const entity_script_component = self.mECSManagerGO.GetComponent(EntityScriptComponent, scripts_result_list.items[i]);
         const parent_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, entity_script_component.mParent);
         if (parent_scene_component.SceneID != scene_id) {
+            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    scripts_result_list.shrinkAndFree(end_index);
+}
+
+pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+    if (scripts_result_list.items.len == 0) return;
+
+    var end_index: usize = scripts_result_list.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const scene_script_component = self.mECSManagerSC.GetComponent(SceneScriptComponent, scripts_result_list.items[i]);
+        if (scene_script_component.mParent != scene_id) {
             scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
             end_index -= 1;
         } else {

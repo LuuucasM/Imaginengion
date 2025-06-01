@@ -12,8 +12,12 @@ const CameraComponent = EntityComponents.CameraComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EditorCameraTag = EntityComponents.EditorCameraTag;
 const PrimaryCameraTag = EntityComponents.PrimaryCameraTag;
+const OnInputPressedScript = EntityComponents.OnInputPressedScript;
+const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
+
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
+const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
@@ -45,9 +49,6 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
-
-const OnInputPressedScript = @import("../GameObjects/Components.zig").OnInputPressedScript;
-const OnUpdateInputScript = @import("../GameObjects/Components.zig").OnUpdateInputScript;
 
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -120,10 +121,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
     if (self._EditorState == .Play) {
-        _ = try ScriptsProcessor.RunScript(&self.mSceneManager, OnUpdateInputScript, .{});
+        _ = try ScriptsProcessor.RunEntityScript(&self.mSceneManager, OnUpdateInputScript, .{});
     }
     //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
-    _ = try ScriptsProcessor.RunScriptEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused, OnUpdateInputScript, .{});
+    _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnUpdateInputScript, .{}, &self._SceneLayer);
     //-------------Inputs End--------------------
 
     //-------------AI Begin--------------
@@ -248,7 +249,7 @@ pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
 
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
 
-    _ = try ScriptsProcessor.RunScriptEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused, OnInputPressedScript, .{&e});
+    _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnInputPressedScript, .{&e}, &self._SceneLayer);
     return cont_bool;
 }
 
@@ -327,7 +328,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
         },
         .ET_ChangeEditorStateEvent => |e| {
-            self.OnChangeEditorStateEvent(e);
+            try self.OnChangeEditorStateEvent(e);
         },
         .ET_OpenSceneSpecEvent => |e| {
             const new_scene_spec_panel = try SceneSpecPanel.Init(e.mSceneLayer);
@@ -345,13 +346,13 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
     }
 }
 
-pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) void {
+pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play and self._EditorState == .Stop) {
         //TODO:
         //self.mSceneManager.SaveAllScenes();
         //open up a new imgui window which plays the scene from the pov of the primary camera
         self._EditorState = .Play;
-        //ScriptsProcessor
+        _ = try ScriptsProcessor.RunSceneScript(&self.mSceneManager, OnSceneStartScript, .{});
     }
     if (event.mEditorState == .Stop and self._EditorState == .Play) {
         //TODO

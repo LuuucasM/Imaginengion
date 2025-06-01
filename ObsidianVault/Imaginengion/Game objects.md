@@ -1,0 +1,2 @@
+- change name component so it uses a dynamic array that way user can name however big or small they want. note: this is for editor purpose. for compiling the game to an executable, i dont think a name is even needed, but also if it really is then it can be made using array using meta programming
+- 

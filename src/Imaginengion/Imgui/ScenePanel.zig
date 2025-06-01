@@ -136,7 +136,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
                 var scene_name_entities = try name_entities.clone();
                 defer scene_name_entities.deinit();
 
-                scene_manager.FilterByScene(&scene_name_entities, scene_id);
+                scene_manager.FilterEntityByScene(&scene_name_entities, scene_id);
 
                 for (scene_name_entities.items) |entity_id| {
                     const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };

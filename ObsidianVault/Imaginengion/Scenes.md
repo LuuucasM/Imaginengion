@@ -1,0 +1,2 @@
+- change scenes so that the user can modify the render pipline. since scenes can be very different (from simple UI to a full game with particels and shadows) it is important that the user can include the render passes that actually matter to the scene
+- 

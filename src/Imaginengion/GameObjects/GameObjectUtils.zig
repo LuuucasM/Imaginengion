@@ -12,10 +12,13 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
     var ecs = entity.mECSManagerRef;
     var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(ScriptAsset);
-    const new_script_entity = try ecs.CreateEntity();
 
     if (entity.HasComponent(ScriptComponent) == true) {
         //entity already has a script so iterate until the end of the linked list
+
+        const new_script_entity_id = try ecs.CreateEntity();
+        const new_script_entity = Entity{ .mEntityID = new_script_entity_id, .mECSManagerRef = entity.mECSManagerRef };
+
         var iter_id = entity.mEntityID;
         var iter = ecs.GetComponent(ScriptComponent, iter_id);
         while (iter.mNext != Entity.NullEntity) {
@@ -23,7 +26,7 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
             iter = ecs.GetComponent(ScriptComponent, iter.mNext);
         }
 
-        iter.mNext = new_script_entity;
+        iter.mNext = new_script_entity.mEntityID;
 
         const new_script_component = ScriptComponent{
             .mFirst = iter.mFirst,
@@ -33,15 +36,19 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
             .mScriptAssetHandle = new_script_handle,
         };
 
-        _ = try ecs.AddComponent(ScriptComponent, new_script_entity, new_script_component);
-
-        _ = switch (script_asset.mScriptType) {
-            .OnInputPressed => try ecs.AddComponent(OnInputPressedScript, new_script_entity, null),
-            .OnUpdateInput => try ecs.AddComponent(OnUpdateInputScript, new_script_entity, null),
+        switch (script_asset.mScriptType) {
+            .OnInputPressed => {
+                _ = try new_script_entity.AddComponent(ScriptComponent, new_script_component);
+                _ = try new_script_entity.AddComponent(OnInputPressedScript, null);
+            },
+            .OnUpdateInput => {
+                _ = try new_script_entity.AddComponent(ScriptComponent, new_script_component);
+                _ = try new_script_entity.AddComponent(OnUpdateInputScript, null);
+            },
             else => {},
-        };
+        }
     } else {
-        //add new script component to entity
+        //entity does not have any scripts yet so add it directly to the entity
         const entity_new_script_component = ScriptComponent{
             .mFirst = entity.mEntityID,
             .mNext = Entity.NullEntity,
@@ -50,12 +57,16 @@ pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_typ
             .mScriptAssetHandle = new_script_handle,
         };
 
-        _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
-
-        _ = switch (script_asset.mScriptType) {
-            .OnInputPressed => try entity.AddComponent(OnInputPressedScript, null),
-            .OnUpdateInput => try entity.AddComponent(OnUpdateInputScript, null),
+        switch (script_asset.mScriptType) {
+            .OnInputPressed => {
+                _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
+                _ = try entity.AddComponent(OnInputPressedScript, null);
+            },
+            .OnUpdateInput => {
+                _ = try entity.AddComponent(ScriptComponent, entity_new_script_component);
+                _ = try entity.AddComponent(OnUpdateInputScript, null);
+            },
             else => {},
-        };
+        }
     }
 }
