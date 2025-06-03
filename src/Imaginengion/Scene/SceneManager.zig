@@ -50,8 +50,7 @@ const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent
 
 const SceneManager = @This();
 
-pub const EntityType = u32;
-pub const ECSManagerGameObj = ECSManager(EntityType, EntityComponentsArray.len);
+pub const ECSManagerGameObj = ECSManager(Entity.Type, EntityComponentsArray.len);
 
 pub const SceneType = u32;
 pub const ECSManagerScenes = ECSManager(SceneType, EntityComponentsArray.len);
@@ -295,7 +294,7 @@ pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !
     stack_pos_component.mPosition = new_pos;
 }
 
-pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
     if (entity_result_list.items.len == 0) return;
 
     var end_index: usize = entity_result_list.items.len;
@@ -314,7 +313,7 @@ pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayLi
     entity_result_list.shrinkAndFree(end_index);
 }
 
-pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
     if (scripts_result_list.items.len == 0) return;
 
     var end_index: usize = scripts_result_list.items.len;
@@ -334,7 +333,7 @@ pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std
     scripts_result_list.shrinkAndFree(end_index);
 }
 
-pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(EntityType), scene_id: SceneType) void {
+pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
     if (scripts_result_list.items.len == 0) return;
 
     var end_index: usize = scripts_result_list.items.len;

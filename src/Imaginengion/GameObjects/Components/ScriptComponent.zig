@@ -10,13 +10,12 @@ const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Entity = @import("../../GameObjects/Entity.zig");
-const EntityType = @import("../../Scene/SceneManager.zig").EntityType;
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
-mFirst: EntityType = Entity.NullEntity,
-mPrev: EntityType = Entity.NullEntity,
-mNext: EntityType = Entity.NullEntity,
-mParent: EntityType = Entity.NullEntity,
+mFirst: Entity.Type = Entity.NullEntity,
+mPrev: Entity.Type = Entity.NullEntity,
+mNext: Entity.Type = Entity.NullEntity,
+mParent: Entity.Type = Entity.NullEntity,
 mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *ScriptComponent) !void {}

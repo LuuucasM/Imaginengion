@@ -12,8 +12,6 @@ const OnUpdateInputScript = Components.OnUpdateInputScript;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
-const EntityType = @import("../Scene/SceneManager.zig").EntityType;
-
 const ScriptsPanel = @This();
 
 _P_Open: bool,

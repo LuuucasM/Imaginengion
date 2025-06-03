@@ -22,12 +22,12 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneManager = @import("../Scene/SceneManager.zig");
-const EntityType = SceneManager.EntityType;
 const SceneType = SceneManager.SceneType;
 const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentManager = @import("../ECS/ComponentManager.zig");
 
+const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
@@ -218,7 +218,7 @@ pub fn GetRenderStats() RenderStats {
     return RenderM.mStats;
 }
 
-fn CullEntities(comptime component_type: type, result: *std.ArrayList(EntityType), scene_manager: *SceneManager) void {
+fn CullEntities(comptime component_type: type, result: *std.ArrayList(Entity.Type), scene_manager: *SceneManager) void {
     std.debug.assert(@hasField(component_type, "mShouldRender"));
     if (result.items.len == 0) return;
 
@@ -239,7 +239,7 @@ fn CullEntities(comptime component_type: type, result: *std.ArrayList(EntityType
     result.shrinkAndFree(end_index);
 }
 
-fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(EntityType), scene_manager: *SceneManager) !void {
+fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
     std.debug.assert(@hasField(component_type, "mTexture"));
 
     RenderM.mTexturesMap.clearRetainingCapacity();
@@ -256,7 +256,7 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(EntityT
     }
 }
 
-fn DrawSprites(sprite_entities: std.ArrayList(EntityType), scene_manager: *SceneManager) !void {
+fn DrawSprites(sprite_entities: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
     var i: usize = 0;
     while (i < sprite_entities.items.len) : (i += 1) {
         const entity_id = sprite_entities.items[i];
@@ -278,7 +278,7 @@ fn DrawSprites(sprite_entities: std.ArrayList(EntityType), scene_manager: *Scene
     }
 }
 
-fn DrawCircles(circle_entities: std.ArrayList(EntityType), scene_manager: *SceneManager) void {
+fn DrawCircles(circle_entities: std.ArrayList(Entity.Type), scene_manager: *SceneManager) void {
     var i: usize = 0;
     while (i < circle_entities.items.len) : (i += 1) {
         const entity_id = circle_entities.items[i];

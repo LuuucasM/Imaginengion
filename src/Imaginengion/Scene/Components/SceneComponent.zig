@@ -1,6 +1,5 @@
 const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
-const EntityType = @import("../SceneManager.zig").EntityType;
 const Entity = @import("../../GameObjects/Entity.zig");
 const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
 const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");

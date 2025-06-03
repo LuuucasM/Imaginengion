@@ -1,4 +1,4 @@
-const EntityType = @import("../Scene/SceneManager.zig").EntityType;
+const EntityType = @import("../GameObjects/Entity.zig").Type;
 
 pub const GameEventCategory = enum(u8) {
     EC_Default,

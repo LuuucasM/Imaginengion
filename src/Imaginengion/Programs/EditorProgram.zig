@@ -312,6 +312,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_SelectSceneEvent => |e| {
             self._ScenePanel.OnSelectSceneEvent(e.SelectedScene);
+            self._ComponentsPanel.OnSelectSceneEvent(e.SelectedScene);
         },
         .ET_SelectEntityEvent => |e| {
             self._ScenePanel.OnSelectEntityEvent(e.SelectedEntity);

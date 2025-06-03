@@ -1,6 +1,6 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const EntityType = @import("../Entity.zig").EntityType;
+const EntityType = @import("../Entity.zig").Type;
 const PlayerComponent = @This();
 
 mToControlEntity: EntityType,

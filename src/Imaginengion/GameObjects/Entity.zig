@@ -3,12 +3,12 @@ const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj
 const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
-pub const EntityType = @import("../Scene/SceneManager.zig").EntityType;
 
-pub const NullEntity: EntityType = std.math.maxInt(EntityType);
+pub const Type = u32;
+pub const NullEntity: Type = std.math.maxInt(Type);
 const Entity = @This();
 
-mEntityID: EntityType,
+mEntityID: Type,
 mECSManagerRef: *ECSManagerGameObj,
 
 pub fn AddComponent(self: Entity, comptime component_type: type, component: ?component_type) !*component_type {

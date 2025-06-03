@@ -7,7 +7,6 @@ const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneType = SceneManager.SceneType;
 const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const ECSManagerGameObj = SceneManager.ECSManagerGameObj;
-const EntityType = SceneManager.EntityType;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 

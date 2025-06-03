@@ -1,11 +1,10 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
-const EntityType = @import("../../Scene/SceneManager.zig").EntityType;
 
 const ControllerComponent = @This();
 
-mControllingEntity: EntityType = Entity.NullEntity,
+mControllingEntity: Entity.Type = Entity.NullEntity,
 
 pub fn Deinit(_: *ControllerComponent) !void {}
 

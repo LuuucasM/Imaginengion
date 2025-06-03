@@ -1,3 +1,4 @@
+- make it possible for entities to have entities like an entity heiarchy. i need this so i can add a camera to an entity, so that when a player posses the entity 
 - add a function to scene_layer to "spawn player" which is an entity which has a component like PlayerComponent which contains the data related to the player. 
 - then create a component for other entities like ControllerComponent, which will allow the entity to be controlled by either player or AI
 - then i can for example on scene_layer.OnSceneStart I can spawn a player -> then somehow take control of an entity with a controller component, and then 

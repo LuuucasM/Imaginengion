@@ -6,7 +6,6 @@ const ScriptComponent = @import("Components.zig").ScriptComponent;
 const OnInputPressedScript = @import("Components.zig").OnInputPressedScript;
 const OnUpdateInputScript = @import("Components.zig").OnUpdateInputScript;
 const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
-const EntityType = @import("../Scene/SceneManager.zig").EntityType;
 
 pub fn AddScriptToEntity(entity: Entity, script_asset_path: []const u8, path_type: PathType) !void {
     var ecs = entity.mECSManagerRef;

@@ -4,20 +4,22 @@ const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentsPanel = @This();
 
-const Components = @import("../GameObjects/Components.zig");
-const CameraComponent = Components.CameraComponent;
-const CircleRenderComponent = Components.CircleRenderComponent;
-const ControllerComponent = Components.ControllerComponent;
-const NameComponent = Components.NameComponent;
-const SpriteRenderComponent = Components.SpriteRenderComponent;
-const TransformComponent = Components.TransformComponent;
+const EntityComponents = @import("../GameObjects/Components.zig");
+const CameraComponent = EntityComponents.CameraComponent;
+const CircleRenderComponent = EntityComponents.CircleRenderComponent;
+const ControllerComponent = EntityComponents.ControllerComponent;
+const EntityNameComponent = EntityComponents.NameComponent;
+const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
+const TransformComponent = EntityComponents.TransformComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 _P_Open: bool,
+mSelectedScene: ?SceneLayer,
 mSelectedEntity: ?Entity,
 
 pub fn Init() ComponentsPanel {
@@ -36,7 +38,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
         const entity_name = entity.GetName();
         const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len;
         const trimmed_name = entity_name[0..name_len];
-        const name = try std.fmt.allocPrint(fba.allocator(), "Components - {s}###Components\x00", .{trimmed_name});
+        const name = try std.fmt.allocPrintZ(fba.allocator(), "Components - {s}###Components\x00", .{trimmed_name});
 
         _ = imgui.igBegin(name.ptr, null, 0);
     } else {
@@ -52,7 +54,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
         }
         if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            try AddComponentPopupMenu(entity);
+            try AddComponentPopupMenu(entity, self.mSelectedScene.?);
         }
         try EntityImguiRender(entity);
     }
@@ -73,12 +75,16 @@ pub fn OnSelectEntityEvent(self: *ComponentsPanel, new_selected_entity: ?Entity)
     self.mSelectedEntity = new_selected_entity;
 }
 
+pub fn OnSelectSceneEvent(self: *ComponentsPanel, new_selected_scene: ?SceneLayer) void {
+    self.mSelectedScene = new_selected_scene;
+}
+
 fn EntityImguiRender(entity: Entity) !void {
-    if (entity.HasComponent(NameComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(NameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+    if (entity.HasComponent(EntityNameComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(EntityNameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(NameComponent), entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityNameComponent), entity),
                 },
             };
             try ImguiEventManager.Insert(new_event);
