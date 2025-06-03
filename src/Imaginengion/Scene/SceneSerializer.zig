@@ -165,7 +165,7 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, a
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
-        try SerializeEntity(&write_stream, entity, allocator);
+        try SerializeEntity(write_stream, entity, allocator);
         try write_stream.endObject();
     }
 }
@@ -183,7 +183,7 @@ fn SerializeEntity(write_stream: *WriteStream, entity: Entity, allocator: std.me
 
     try SerializeSpriteRenderComponent(write_stream, entity, allocator);
 
-    try SerializeParentComponent(write_stream, entity);
+    try SerializeParentComponent(write_stream, entity, allocator);
 }
 
 fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8, allocator: std.mem.Allocator) !void {
@@ -261,7 +261,7 @@ fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, al
     try write_stream.endObject();
 }
 
-fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity) !void {
+fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) anyerror!void {
     if (!entity.HasComponent(EntityParentComponent)) return;
 
     try write_stream.objectField("ParentComponent");
@@ -270,7 +270,7 @@ fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity) !void {
     const child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = entity.mECSManagerRef };
 
     try write_stream.beginObject();
-    SerializeEntity(write_stream, child_entity);
+    try SerializeEntity(write_stream, child_entity, allocator);
     try write_stream.endObject();
 }
 
@@ -330,7 +330,7 @@ fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, all
     const layer_type_value = switch (layer_type_token) {
         .string => |layer_type_value| layer_type_value,
         .allocated_string => |layer_type_value| layer_type_value,
-        else => error.ExpectedString,
+        else => return error.ExpectedString,
     };
     scene_layer.GetComponent(SceneComponent).mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
 }
@@ -506,7 +506,7 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocato
             defer file_data_component.deinit();
             const file_data = file_data_component.value;
 
-            try GameObjectUtils.AddScriptToEntity(entity.*, file_data.mRelPath, .Prj);
+            try GameObjectUtils.AddScriptToEntity(entity, file_data.mRelPath, .Prj);
         }
         current_id = parsed_script_component.mNext;
     }
@@ -515,9 +515,9 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocato
     _ = try SkipToken(scanner, allocator);
 }
 
-fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) anyerror!void {
     const child_entity = try scene_layer.CreateBlankEntity();
-    entity.AddComponent(EntityParentComponent, EntityParentComponent{ .mFirstChild = child_entity.mEntityID });
+    _ = try entity.AddComponent(EntityParentComponent, EntityParentComponent{ .mFirstChild = child_entity.mEntityID });
     try DeSerializeEntity(scanner, child_entity, scene_layer, allocator);
 
     //skip end of object token

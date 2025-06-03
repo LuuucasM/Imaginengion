@@ -26,6 +26,7 @@ pub fn Init() ComponentsPanel {
     return ComponentsPanel{
         ._P_Open = true,
         .mSelectedEntity = null,
+        .mSelectedScene = null,
     };
 }
 
@@ -54,7 +55,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
         }
         if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            try AddComponentPopupMenu(entity, self.mSelectedScene.?);
+            try AddComponentPopupMenu(entity);
         }
         try EntityImguiRender(entity);
     }

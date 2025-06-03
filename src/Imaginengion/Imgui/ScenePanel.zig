@@ -41,6 +41,8 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     var available_region: imgui.ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&available_region);
 
+    var already_popup = false;
+
     //child that is the width of the entire available region is needed so we can drag scenes from the content browser to load the scene
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
@@ -67,7 +69,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{scene_name_component.Name.items});
 
             const selected_text_col = imgui.ImVec4{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 };
-            const other_text_col = imgui.ImVec4{ .x = 0.7, .y = 0.7, .z = 0.7, .w = 1.0 };
+            const other_text_col = imgui.ImVec4{ .x = 0.65, .y = 0.65, .z = 0.65, .w = 1.0 };
 
             const io = imgui.igGetIO();
             const bold_font = io.*.Fonts.*.Fonts.Data[0];
@@ -78,15 +80,12 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
             defer imgui.igPopID();
 
             //highlight the text of the selected scene to make it more clear which scene is selected visually
-            if (self.mSelectedScene) |selected_scene| {
-                if (selected_scene.mSceneID == scene_id) {
-                    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
-                    imgui.igPushFont(bold_font);
-                } else {
-                    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
-                }
+            if (self.mSelectedScene != null and self.mSelectedScene.?.mSceneID == scene_id) {
+                imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
+                imgui.igPushFont(bold_font);
+            } else {
+                imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
             }
-
             //the node
             const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
             const is_tree_open = imgui.igTreeNodeEx_Str(scene_name.ptr, tree_flags);
@@ -100,6 +99,16 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
 
             //pop the color for for the tree node
             imgui.igPopStyleColor(1);
+
+            //if item is right clicked open up menu that will allow you to add an entity to the scene
+            if (imgui.igBeginPopupContextItem("scene_context", imgui.ImGuiPopupFlags_MouseButtonRight) == true) {
+                defer imgui.igEndPopup();
+                already_popup = true;
+
+                if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true) {
+                    _ = try scene_layer.CreateEntity();
+                }
+            }
 
             //if the tree node gets clicked it it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
             if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left) == true) {
@@ -117,18 +126,6 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
                             },
                         });
                     }
-                }
-            }
-
-            //if item is right clicked open up menu that will allow you to add an entity to the scene
-            if (imgui.igIsItemHovered(0) == true and imgui.igIsItemClicked(imgui.ImGuiMouseButton_Right) == true) {
-                imgui.igOpenPopup_Str("scene_context", imgui.ImGuiPopupFlags_None);
-            }
-            if (imgui.igBeginPopup("scene_context", imgui.ImGuiWindowFlags_None) == true) {
-                defer imgui.igEndPopup();
-
-                if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true) {
-                    _ = try scene_layer.CreateEntity();
                 }
             }
 
@@ -179,12 +176,10 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
                     const entity_name = entity.GetName();
 
                     //color the selected entity a different color to make it more visual clear what is selected
-                    if (self.mSelectedEntity) |selected_entity| {
-                        if (selected_entity.mEntityID == entity.mEntityID) {
-                            imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
-                        } else {
-                            imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
-                        }
+                    if (self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID) {
+                        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, selected_text_col);
+                    } else {
+                        imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Text, other_text_col);
                     }
 
                     imgui.igPushID_Int(@intCast(entity_id));
@@ -207,11 +202,9 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
                     imgui.igPopStyleColor(1);
 
                     //if item is right clicked open up menu that will allow you to add an entity to the entity (hierarchy)
-                    if (imgui.igIsItemHovered(0) == true and imgui.igIsItemClicked(imgui.ImGuiMouseButton_Right) == true) {
-                        imgui.igOpenPopup_Str("entity_context", imgui.ImGuiPopupFlags_None);
-                    }
-                    if (imgui.igBeginPopup("entity_context", imgui.ImGuiWindowFlags_None) == true) {
+                    if (imgui.igBeginPopupContextItem("entity_context", imgui.ImGuiPopupFlags_MouseButtonRight) == true) {
                         defer imgui.igEndPopup();
+                        already_popup = true;
 
                         if (imgui.igMenuItem_Bool("New Entity", "", false, true) == true) {
                             const new_entity = try scene_layer.CreateEntity();
@@ -234,18 +227,18 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
                                     .mPrev = child_entity.mEntityID,
                                 };
 
-                                new_entity.AddComponent(EntityChildComponent, new_child_component);
+                                _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
                             } else {
                                 //this is this entities first child so make this entity a parent
                                 const new_parent_component = EntityParentComponent{ .mFirstChild = new_entity.mEntityID };
-                                entity.AddComponent(EntityParentComponent, new_parent_component);
+                                _ = try entity.AddComponent(EntityParentComponent, new_parent_component);
                                 const new_child_component = EntityChildComponent{
                                     .mFirst = new_entity.mEntityID,
                                     .mNext = Entity.NullEntity,
                                     .mParent = entity.mEntityID,
                                     .mPrev = Entity.NullEntity,
                                 };
-                                new_entity.AddComponent(EntityChildComponent, new_child_component);
+                                _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
                             }
                         }
                     }
@@ -276,10 +269,7 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     }
 
     //if right clicking the child window then open up a menu that lets you create a new scene
-    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsItemClicked(imgui.ImGuiMouseButton_Right) == true) {
-        imgui.igOpenPopup_Str("panel_context", imgui.ImGuiPopupFlags_None);
-    }
-    if (imgui.igBeginPopup("panel_context", imgui.ImGuiWindowFlags_None) == true) {
+    if (already_popup == false and imgui.igBeginPopupContextItem("panel_context", imgui.ImGuiPopupFlags_MouseButtonRight) == true) {
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("New Game Scene", "", false, true) == true) {
