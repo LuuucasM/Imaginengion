@@ -51,7 +51,6 @@ pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, 
             .mPrev = SceneLayer.NullScene,
             .mScriptAssetHandle = new_script_handle,
         };
-        std.debug.print("script type: {s}\n", .{@tagName(script_asset.mScriptType)});
         switch (script_asset.mScriptType) {
             .OnSceneStart => {
                 _ = try scene_layer.AddComponent(SceneScriptComponent, entity_new_script_component);

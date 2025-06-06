@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Adding new components to engine.md",
+                "file": "General TODO.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Adding new components to engine"
+              "title": "General TODO"
             }
           }
         ]
@@ -170,8 +170,8 @@
   },
   "active": "bde037471b4e09c0",
   "lastOpenFiles": [
-    "General TODO.md",
     "Adding new components to engine.md",
+    "General TODO.md",
     "Game objects.md",
     "ECS Manager.md",
     "Scenes.md",

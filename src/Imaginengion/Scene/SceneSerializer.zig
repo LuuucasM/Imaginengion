@@ -162,6 +162,7 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, a
 
     for (entity_list.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerGORef };
+        if (entity.HasComponent(EntityChildComponent)) continue;
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
@@ -172,22 +173,21 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, a
 
 fn SerializeEntity(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
     try SerializeBasicComponent(write_stream, entity, CameraComponent, "CameraComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, EntityChildComponent, "EntityChildComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, ControllerComponent, "ControllerComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, CircleRenderComponent, "CircleRenderComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, EntityIDComponent, "EntityIDComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, TransformComponent, "TransformComponent", allocator);
 
-    try SerializeScriptComponents(write_stream, entity, allocator);
-
     try SerializeSpriteRenderComponent(write_stream, entity, allocator);
+
+    try SerializeScriptComponents(write_stream, entity, allocator);
 
     try SerializeParentComponent(write_stream, entity, allocator);
 }
 
 fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8, allocator: std.mem.Allocator) !void {
-    if (!entity.HasComponent(component_type) == false) return;
+    if (entity.HasComponent(component_type) == false) return;
 
     var component_string = ComponentString.init(allocator);
     defer component_string.deinit();
@@ -199,7 +199,7 @@ fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime 
 }
 
 fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
-    if (!entity.HasComponent(EntityScriptComponent)) return;
+    if (entity.HasComponent(EntityScriptComponent) == false) return;
 
     var component_string = ComponentString.init(allocator);
     defer component_string.deinit();
@@ -234,7 +234,7 @@ fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, allocat
 }
 
 fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
-    if (!entity.HasComponent(SpriteRenderComponent)) return;
+    if (entity.HasComponent(SpriteRenderComponent) == false) return;
 
     var component_string = ComponentString.init(allocator);
     defer component_string.deinit();
@@ -262,16 +262,23 @@ fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, al
 }
 
 fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) anyerror!void {
-    if (!entity.HasComponent(EntityParentComponent)) return;
+    if (entity.HasComponent(EntityParentComponent) == false) return;
 
-    try write_stream.objectField("ParentComponent");
     const parent_component = entity.GetComponent(EntityParentComponent);
+    var curr_id = parent_component.mFirstChild;
 
-    const child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = entity.mECSManagerRef };
+    while (curr_id != Entity.NullEntity) {
+        const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-    try write_stream.beginObject();
-    try SerializeEntity(write_stream, child_entity, allocator);
-    try write_stream.endObject();
+        try write_stream.objectField("Entity");
+
+        try write_stream.beginObject();
+        try SerializeEntity(write_stream, child_entity, allocator);
+        try write_stream.endObject();
+
+        const child_component = child_entity.GetComponent(EntityChildComponent);
+        curr_id = child_component.mNext;
+    }
 }
 
 fn WriteToFile(scene_asset_handle: AssetHandle, data: []const u8, allocator: std.mem.Allocator) !void {
@@ -296,8 +303,8 @@ fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, all
             .number => |value| value,
             .allocated_number => |value| value,
             .object_begin => continue,
-            .object_end => break,
-            .end_of_document => @panic("This shouldnt happen!"),
+            .object_end => continue,
+            .end_of_document => break,
             else => @panic("This shouldnt happen!"),
         };
         const actual_value = try allocator.dupe(u8, token_value);
@@ -378,6 +385,7 @@ fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, 
 }
 
 fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+    std.debug.print("deserializing entity: {d}\n", .{entity.mEntityID});
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const token_value = switch (token) {
@@ -392,8 +400,8 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
         };
         const actual_value = try allocator.dupe(u8, token_value);
 
-        if (std.mem.eql(u8, actual_value, "EntityChildComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, EntityChildComponent, allocator);
+        if (std.mem.eql(u8, actual_value, "CameraComponent")) {
+            try DeSerializeBasicComponent(scanner, entity, CameraComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "CircleRenderComponent")) {
             try DeSerializeBasicComponent(scanner, entity, CircleRenderComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "ControllerComponent")) {
@@ -402,15 +410,13 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
             try DeSerializeBasicComponent(scanner, entity, EntityIDComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityNameComponent")) {
             try DeSerializeBasicComponent(scanner, entity, EntityNameComponent, allocator);
-        } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, TransformComponent, allocator);
-        } else if (std.mem.eql(u8, actual_value, "CameraComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, CameraComponent, allocator);
-        } else if (std.mem.eql(u8, actual_value, "SpriteRenderComponent")) {
-            try DeSerializeSpriteRenderComponent(scanner, entity, allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityScripts")) {
             try DeSerializeEntityScripts(scanner, entity, allocator);
-        } else if (std.mem.eql(u8, actual_value, "ParentComponent")) {
+        } else if (std.mem.eql(u8, actual_value, "SpriteRenderComponent")) {
+            try DeSerializeSpriteRenderComponent(scanner, entity, allocator);
+        } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
+            try DeSerializeBasicComponent(scanner, entity, TransformComponent, allocator);
+        } else if (std.mem.eql(u8, actual_value, "Entity")) {
             try DeSerializeParentComponent(scanner, entity, scene_layer, allocator);
         }
     }
@@ -516,10 +522,55 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocato
 }
 
 fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) anyerror!void {
-    const child_entity = try scene_layer.CreateBlankEntity();
-    _ = try entity.AddComponent(EntityParentComponent, EntityParentComponent{ .mFirstChild = child_entity.mEntityID });
-    try DeSerializeEntity(scanner, child_entity, scene_layer, allocator);
+    if (entity.HasComponent(EntityParentComponent)) {
+        try AddToExistingChildren(scanner, entity, scene_layer, allocator);
+    } else {
+        try MakeEntityParent(scanner, entity, scene_layer, allocator);
+    }
+}
 
-    //skip end of object token
-    _ = try SkipToken(scanner, allocator);
+fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+    const new_entity = try scene_layer.CreateBlankEntity();
+
+    const parent_component = parent_entity.GetComponent(EntityParentComponent);
+    var child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = parent_entity.mECSManagerRef };
+
+    // Find the last child in the list
+    var child_component = child_entity.GetComponent(EntityChildComponent);
+    while (child_component.mNext != Entity.NullEntity) {
+        child_entity.mEntityID = child_component.mNext;
+        child_component = child_entity.GetComponent(EntityChildComponent);
+    }
+
+    // Add new entity to end of list
+    const new_child_component = EntityChildComponent{
+        .mFirst = child_component.mFirst,
+        .mNext = Entity.NullEntity,
+        .mParent = child_component.mParent,
+        .mPrev = child_entity.mEntityID,
+    };
+
+    _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
+
+    //set the new child component.mNext to be the new child
+    child_component.mNext = new_entity.mEntityID;
+
+    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator);
+}
+
+fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+    const new_entity = try scene_layer.CreateBlankEntity();
+
+    const new_parent_component = EntityParentComponent{ .mFirstChild = new_entity.mEntityID };
+    _ = try parent_entity.AddComponent(EntityParentComponent, new_parent_component);
+
+    const new_child_component = EntityChildComponent{
+        .mFirst = new_entity.mEntityID,
+        .mNext = Entity.NullEntity,
+        .mParent = parent_entity.mEntityID,
+        .mPrev = Entity.NullEntity,
+    };
+    _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
+
+    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator);
 }
