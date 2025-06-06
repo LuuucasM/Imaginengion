@@ -214,17 +214,16 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
 
     _ = try scene_layer.AddComponent(SceneNameComponent, new_scene_name_component);
 
-    try SceneSerializer.DeSerializeText(scene_layer, scene_asset);
+    try SceneSerializer.DeSerializeSceneText(scene_layer, scene_asset);
 
     try self.InsertScene(scene_layer);
 
     return new_scene_id;
 }
-pub fn SaveScene(self: *SceneManager, scene_id: SceneType) !void {
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent);
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        try SceneSerializer.SerializeText(scene_layer, scene_component.mSceneAssetHandle);
+        try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle);
     } else {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -232,13 +231,12 @@ pub fn SaveScene(self: *SceneManager, scene_id: SceneType) !void {
         const rel_path = AssetManager.GetRelPath(abs_path);
         _ = try std.fs.createFileAbsolute(abs_path, .{});
         scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-        try self.SaveSceneAs(scene_id, abs_path);
+        try self.SaveSceneAs(scene_layer, abs_path);
     }
 }
-pub fn SaveSceneAs(self: *SceneManager, scene_id: SceneType, path: []const u8) !void {
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent);
-    const scene_basename = std.fs.path.basename(path);
+    const scene_basename = std.fs.path.basename(abs_path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
@@ -246,7 +244,7 @@ pub fn SaveSceneAs(self: *SceneManager, scene_id: SceneType, path: []const u8) !
     scene_name_component.Name.clearAndFree();
     _ = try scene_name_component.Name.writer().write(scene_name);
 
-    try SceneSerializer.SerializeText(scene_layer, scene_component.mSceneAssetHandle);
+    try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle);
 }
 
 pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !void {
@@ -292,6 +290,17 @@ pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !
     }
 
     stack_pos_component.mPosition = new_pos;
+}
+
+pub fn SaveEntity(self: *SceneManager, entity: Entity) !void {
+    var buffer: [260]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const abs_path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
+    try self.SaveEntityAs(entity, abs_path);
+}
+
+pub fn SaveEntityAs(_: *SceneManager, entity: Entity, abs_path: []const u8) !void {
+    try SceneSerializer.SerializeEntityText(entity, abs_path);
 }
 
 pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {

@@ -1,6 +1,7 @@
 const std = @import("std");
 const ECSManagerScenes = @import("SceneManager.zig").ECSManagerScenes;
 const ECSManagerGameObj = @import("SceneManager.zig").ECSManagerGameObj;
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const SceneComponents = @import("SceneComponents.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const SceneIDComponent = SceneComponents.IDComponent;
@@ -31,6 +32,11 @@ pub fn GetComponent(self: SceneLayer, comptime component_type: type) *component_
 }
 pub fn HasComponent(self: SceneLayer, comptime component_type: type) bool {
     return self.mECSManagerSCRef.HasComponent(component_type, self.mSceneID);
+}
+pub fn GetEntityGroup(self: SceneLayer, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {
+    var entity_list = try self.mECSManagerGORef.GetGroup(query, allocator);
+    self.FilterEntityByScene(&entity_list);
+    return entity_list;
 }
 pub fn GetUUID(self: SceneLayer) u128 {
     return self.mECSManagerSCRef.GetComponent(SceneIDComponent, self.mSceneID).*.ID;
@@ -70,4 +76,23 @@ pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
 pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerGORef.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = self.mECSManagerGORef };
     return new_entity;
+}
+
+pub fn FilterEntityByScene(self: SceneLayer, entity_result_list: *std.ArrayList(Entity.Type)) void {
+    if (entity_result_list.items.len == 0) return;
+
+    var end_index: usize = entity_result_list.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const entity_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_result_list.items[i]);
+        if (entity_scene_component.SceneID != self.mSceneID) {
+            entity_result_list.items[i] = entity_result_list.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    entity_result_list.shrinkAndFree(end_index);
 }

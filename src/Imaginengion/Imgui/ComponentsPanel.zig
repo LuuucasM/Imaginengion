@@ -8,6 +8,7 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentsPanel = @This();
 
 const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityIDComponent = EntityComponents.IDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const ControllerComponent = EntityComponents.ControllerComponent;
@@ -81,6 +82,16 @@ pub fn OnSelectSceneEvent(self: *ComponentsPanel, new_selected_scene: ?SceneLaye
 }
 
 fn EntityImguiRender(entity: Entity) !void {
+    if (entity.HasComponent(EntityIDComponent)) {
+        if (imgui.igSelectable_Bool(@typeName(EntityIDComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityIDComponent), entity),
+                },
+            };
+            try ImguiEventManager.Insert(new_event);
+        }
+    }
     if (entity.HasComponent(EntityNameComponent) == true) {
         if (imgui.igSelectable_Bool(@typeName(EntityNameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{

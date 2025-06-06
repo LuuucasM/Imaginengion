@@ -10,8 +10,6 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const CameraComponent = EntityComponents.CameraComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const EditorCameraTag = EntityComponents.EditorCameraTag;
-const PrimaryCameraTag = EntityComponents.PrimaryCameraTag;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
 
@@ -157,11 +155,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try self._CSEditorPanel.OnImguiRender();
 
     try self._ToolbarPanel.OnImguiRender();
-
-    var buffer: [300]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
-
     //if (self._UsePlayPanel == true) {
     //    const editor_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = EditorCameraTag }, allocator);
     //    const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
@@ -189,7 +182,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //        }
     //    } else {}
     //}
-    const editor_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = EditorCameraTag }, allocator);
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const editor_camera_group = try self._SceneLayer.GetEntityGroup(.{ .Component = CameraComponent }, allocator);
     const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
     const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, editor_camera_group.items[0]);
     try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
@@ -285,7 +282,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_SaveSceneEvent => {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                try self.mSceneManager.SaveScene(scene_layer.mSceneID);
+                try self.mSceneManager.SaveScene(scene_layer);
             }
         },
         .ET_SaveSceneAsEvent => |e| {
@@ -295,7 +292,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
                     const rel_path = AssetManager.GetRelPath(e.Path);
                     _ = try std.fs.createFileAbsolute(e.Path, .{});
                     scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-                    try self.mSceneManager.SaveSceneAs(scene_layer.mSceneID, e.Path);
+                    try self.mSceneManager.SaveSceneAs(scene_layer, e.Path);
                 }
             }
         },
@@ -338,6 +335,18 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_OpenSceneSpecEvent => |e| {
             const new_scene_spec_panel = try SceneSpecPanel.Init(e.mSceneLayer);
             try self._SceneSpecList.append(new_scene_spec_panel);
+        },
+        .ET_SaveEntityEvent => {
+            if (self._ScenePanel.mSelectedEntity) |selected_entity| {
+                try self.mSceneManager.SaveEntity(selected_entity);
+            }
+        },
+        .ET_SaveEntityAsEvent => |e| {
+            if (self._ScenePanel.mSelectedEntity) |selected_entity| {
+                if (e.Path.len > 0) {
+                    try self.mSceneManager.SaveEntityAs(selected_entity, e.Path);
+                }
+            }
         },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }

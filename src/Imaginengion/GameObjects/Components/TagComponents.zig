@@ -31,27 +31,3 @@ pub const OnUpdateInputScript = struct {
         }
     };
 };
-
-pub const PrimaryCameraTag = struct {
-    bit: u1 = 0,
-    pub fn Deinit(_: *PrimaryCameraTag) !void {}
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == PrimaryCameraTag) {
-                break :blk i;
-            }
-        }
-    };
-};
-
-pub const EditorCameraTag = struct {
-    bit: u1 = 0,
-    pub fn Deinit(_: *EditorCameraTag) !void {}
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == EditorCameraTag) {
-                break :blk i;
-            }
-        }
-    };
-};

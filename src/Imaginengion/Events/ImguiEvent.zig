@@ -38,6 +38,8 @@ pub const ImguiEvent = union(enum) {
     ET_NewScriptEvent: NewScriptEvent,
     ET_ChangeEditorStateEvent: ChangeEditorStateEvent,
     ET_OpenSceneSpecEvent: OpenSceneSpecEvent,
+    ET_SaveEntityEvent: SaveEntityEvent,
+    ET_SaveEntityAsEvent: SaveEntityAsEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -108,4 +110,10 @@ pub const ChangeEditorStateEvent = struct {
 
 pub const OpenSceneSpecEvent = struct {
     mSceneLayer: SceneLayer,
+};
+
+pub const SaveEntityEvent = struct {};
+
+pub const SaveEntityAsEvent = struct {
+    Path: []const u8,
 };

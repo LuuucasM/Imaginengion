@@ -36,7 +36,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !ScriptAsset {
 
     try child.spawn();
     const result = try child.wait();
-    std.log.debug("child exited with code {}", .{result});
+    std.log.debug("child [{s}] exited with code {}", .{ abs_path, result });
 
     //get the path of the newly create dyn lib and open it
     const dyn_path = try std.fmt.allocPrint(allocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});

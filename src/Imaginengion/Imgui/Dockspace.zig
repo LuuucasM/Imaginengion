@@ -85,6 +85,20 @@ pub fn OnImguiRender() !void {
                 try ImguiEventManager.Insert(new_event);
             }
             imgui.igSeparator();
+            if (imgui.igMenuItem_Bool("Save Entity", "", false, true)) {
+                try ImguiEventManager.Insert(ImguiEvent{
+                    .ET_SaveEntityEvent = .{},
+                });
+            }
+            if (imgui.igMenuItem_Bool("Save Entity As...", "", false, true)) {
+                const path = try PlatformUtils.SaveFile(ImguiEventManager.EventAllocator(), ".imfab");
+                try ImguiEventManager.Insert(ImguiEvent{
+                    .ET_SaveEntityAsEvent = .{
+                        .Path = path,
+                    },
+                });
+            }
+            imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const path = try PlatformUtils.OpenFolder(ImguiEventManager.EventAllocator());
                 const new_event = ImguiEvent{

@@ -38,7 +38,7 @@ const SceneUtils = @import("../Scene/SceneUtils.zig");
 const WriteStream = std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 });
 const ComponentString = std.ArrayList(u8);
 
-pub fn SerializeText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
+pub fn SerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -53,7 +53,7 @@ pub fn SerializeText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !
     try WriteToFile(scene_asset_handle, out.items, allocator);
 }
 
-pub fn DeSerializeText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !void {
+pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -64,36 +64,57 @@ pub fn DeSerializeText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !void 
     try DeSerializeSceneData(&scanner, scene_layer, allocator);
 }
 
-pub fn SerializeBinary(scene_layer: SceneLayer, scene_manager: SceneManager) void {
+pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager) void {
     //TODO
     _ = scene_layer;
     _ = scene_manager;
 }
 
-pub fn DeserializeBinary(path: []const u8, scene_manager: SceneManager, allocator: std.mem.Allocator) SceneLayer {
+pub fn DeserializeSceneBinary(path: []const u8, scene_manager: SceneManager, allocator: std.mem.Allocator) SceneLayer {
     //TODO
     _ = path;
     _ = scene_manager;
     _ = allocator;
 }
 
-fn FilterEntityByScene(ecs_manager_ref: *ECSManagerGameObj, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    if (entity_result_list.items.len == 0) return;
+pub fn SerializeEntityText(entity: Entity, abs_path: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
 
-    var end_index: usize = entity_result_list.items.len;
-    var i: usize = 0;
+    var out = std.ArrayList(u8).init(allocator);
+    defer out.deinit();
 
-    while (i < end_index) {
-        const entity_scene_component = ecs_manager_ref.GetComponent(EntitySceneComponent, entity_result_list.items[i]);
-        if (entity_scene_component.SceneID != scene_id) {
-            entity_result_list.items[i] = entity_result_list.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
+    var write_stream = std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }).init(undefined, out.writer(), .{ .whitespace = .indent_2 });
+    defer write_stream.deinit();
 
-    entity_result_list.shrinkAndFree(end_index);
+    try write_stream.beginObject();
+    try SerializeEntity(&write_stream, entity, allocator);
+    try write_stream.endObject();
+
+    const file = try std.fs.createFileAbsolute(abs_path, .{ .read = false, .truncate = true });
+    defer file.close();
+    try file.writeAll(out.items);
+}
+
+pub fn DeSerializeEntityText(scene_layer: SceneLayer, abs_path: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const file = try std.fs.openFileAbsolute(abs_path, .{});
+    defer file.close();
+
+    const file_size = try file.getEndPos();
+
+    const file_contents = try std.ArrayList(u8).initCapacity(allocator, file_size);
+    file.readAll(file_contents.items);
+
+    var scanner = std.json.Scanner.initCompleteInput(allocator, file_contents.items);
+    defer scanner.deinit();
+
+    const new_entity = try scene_layer.CreateBlankEntity();
+    try DeSerializeEntity(&scanner, new_entity, scene_layer, allocator);
 }
 
 fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
@@ -155,10 +176,8 @@ fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer, al
 }
 
 fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
-    var entity_list = try scene_layer.mECSManagerGORef.GetGroup(.{ .Component = EntitySceneComponent }, allocator);
+    const entity_list = try scene_layer.GetEntityGroup(.{ .Component = EntitySceneComponent }, allocator);
     defer entity_list.deinit();
-
-    FilterEntityByScene(scene_layer.mECSManagerGORef, &entity_list, scene_layer.mSceneID);
 
     for (entity_list.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerGORef };
@@ -385,7 +404,6 @@ fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, 
 }
 
 fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
-    std.debug.print("deserializing entity: {d}\n", .{entity.mEntityID});
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const token_value = switch (token) {
@@ -415,7 +433,7 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
         } else if (std.mem.eql(u8, actual_value, "SpriteRenderComponent")) {
             try DeSerializeSpriteRenderComponent(scanner, entity, allocator);
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, TransformComponent, allocator);
+            try DeSerializeTransformComponent(scanner, entity, allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             try DeSerializeParentComponent(scanner, entity, scene_layer, allocator);
         }
@@ -433,6 +451,20 @@ fn DeSerializeBasicComponent(scanner: *std.json.Scanner, entity: Entity, comptim
     const new_component_parsed = try std.json.parseFromSlice(component_type, allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
     _ = try entity.AddComponent(component_type, new_component_parsed.value);
+}
+
+fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
+    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const component_data_string = switch (component_data_token) {
+        .string => |v| v,
+        .allocated_string => |v| v,
+        else => return error.ExpectedString,
+    };
+
+    var new_component_parsed = try std.json.parseFromSlice(TransformComponent, allocator, component_data_string, .{});
+    defer new_component_parsed.deinit();
+    new_component_parsed.value.Dirty = true;
+    _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
 }
 
 fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {

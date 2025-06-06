@@ -88,7 +88,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushFont(bold_font);
     if (imgui.igButton("X", button_size)) {
         values.*[0] = reset_value;
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopFont();
 
@@ -96,7 +96,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igSameLine(0.0, 0.0);
     if (imgui.igDragFloat("##X", &values[0], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -108,7 +108,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Y", button_size)) {
         values.*[1] = reset_value;
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopFont();
 
@@ -116,7 +116,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igSameLine(0.0, 0.0);
     if (imgui.igDragFloat("##Y", &values[1], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -128,7 +128,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Z", button_size)) {
         values.*[2] = reset_value;
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopFont();
 
@@ -136,7 +136,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igSameLine(0.0, 0.0);
     if (imgui.igDragFloat("##Z", &values[2], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopItemWidth();
 }
@@ -167,7 +167,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPushFont(bold_font);
     if (imgui.igButton("X", button_size)) {
         rotation.* = reset_value;
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopFont();
 
@@ -180,7 +180,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
         const delta_theta = x_ang_saved - x_ang;
         const new_quat = LinAlg.QuatAngleAxis(delta_theta, Vec3f32{ 1.0, 0.0, 0.0 });
         rotation.* = LinAlg.QuatMulQuat(rotation.*, new_quat);
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -192,7 +192,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Y", button_size)) {
         rotation.* = reset_value;
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopFont();
 
@@ -206,7 +206,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
         const delta_theta = y_ang_saved - y_ang;
         const new_quat = LinAlg.QuatAngleAxis(delta_theta, Vec3f32{ 0.0, 1.0, 0.0 });
         rotation.* = LinAlg.QuatMulQuat(rotation.*, new_quat);
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -218,7 +218,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPushFont(bold_font);
     if (imgui.igButton("Z", button_size)) {
         rotation.* = reset_value;
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopFont();
 
@@ -231,7 +231,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
         const delta_theta = z_ang_saved - z_ang;
         const new_quat = LinAlg.QuatAngleAxis(delta_theta, Vec3f32{ 0.0, 0.0, 1.0 });
         rotation.* = LinAlg.QuatMulQuat(rotation.*, new_quat);
-        is_dirty.* = is_dirty.* or true;
+        is_dirty.* = true;
     }
     imgui.igPopItemWidth();
 }

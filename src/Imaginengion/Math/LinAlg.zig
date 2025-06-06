@@ -111,7 +111,38 @@ pub fn OrthographicRHNO(left: f32, right: f32, bottom: f32, top: f32, near: f32,
         Vec4f32{ 0.0, 0.0, 0.0, 1.0 },
     };
 }
+pub fn IsValidFloat(f: f32) bool {
+    return !std.math.isNan(f) and !std.math.isInf(f);
+}
 
+pub fn IsValid4x4Array(m: [4][4]f32) bool {
+    for (m) |row| {
+        for (row) |col| {
+            if (!IsValidFloat(col)) return false;
+        }
+    }
+    return true;
+}
+
+pub fn IsValidMat4f32(m: Mat4f32) bool {
+    for (m) |row| {
+        var i: usize = 0;
+        while (i < 4) : (i += 1) {
+            if (!IsValidFloat(row[i])) return false;
+        }
+    }
+
+    return true;
+}
+
+pub fn IsValidVec4f32(v: Vec4f32) bool {
+    var i: usize = 0;
+    while (i < 4) : (i += 1) {
+        if (!IsValidFloat(v[i])) return false;
+    }
+
+    return true;
+}
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const len = @sqrt(@reduce(.Add, q * q));
     if (len <= 0) {
