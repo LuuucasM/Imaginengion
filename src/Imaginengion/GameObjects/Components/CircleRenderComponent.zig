@@ -8,9 +8,11 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 mShouldRender: bool = true,
-mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
-mThickness: f32 = 1.0,
-mFade: f32 = 0.005,
+//TODO: need a position
+//TODO: need a rotation
+mThickness: f32 = 1.0, //TODO: change to radius
+mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 }, //TODO: need
+mFade: f32 = 0.005, //TODO: dont n eed
 
 pub fn Deinit(_: *CircleRenderComponent) !void {}
 

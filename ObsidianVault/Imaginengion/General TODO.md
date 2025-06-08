@@ -9,14 +9,13 @@
 - fix bug where if you minimize it crashes because imgui begin/end children dont match
 - change the like initialization of the engine. I think for things that dont need allocations or run time setup like opengl, glfw, etc they can be initialized straight from the beginning. Like most of the imgui panels just have a bool that can easily be set with a default value which means that the panel in EditorProgram can also be set with a default value, which means that Program in application can also be set with a default value. Maybe this can solve some of the issues where like something needs reference of something else but its not initialized yet.. maybe not tho idk
 - change engine to more explicitly define different allocators. right now i have engine_allocator, and then other allocators. I dont mind the idea of singletons having their own allocators but i feel like inside the heiarchy of my engine i could do a better job of explicitly defining more allocators like "this is the engine allocator, this is the temporary data  per frame allocator, etc." I only got thinking of this because i realized that in a lot of places I am initializing arena alloators to use as a way to do small dynamic allocatotions at smaller scopes but initing and deiniting allocators all the time does take time, and it would be better to define one and pass it around like ur suppose to do in zig so i want to try changing it to that
-- extend scenes to also utilize the script system where scripts will be called on scene start. this means changing the scenes into entities with its own ECS and then changing everything to follow suit. Additionally I want to add a new SceneInfoPanel where the user can double click on a scene in the ScenePanel and it will open up another panel where you can add scripts and stuff to the scene. This will make scenes fully extendable and give devs full control over their game
-- have scenes generate at least 1 player on game startup
+- 
 - using the new scene-script system now devs can write game logic where they can tell the scene where to assign 
-- finish up adding the primary camera by filling in the editor render function for camera and then implementing the event function the SetPrimaryCameraEvent and camera component imgui render.
 - does alt + f4 work natively with every program or does it need to be implemented?
 - make a new window when they hit the play button that shows the game from the primary camera POV 
 - at this point i should be able to give things textures and scripts and have them move around when hitting the play button (with no animations or anything just moving around)
 - get the newest updated versions of zig set and zig sparse set from git
+- figure out an alternative to imguizmo. im thinking of hand rolling something but then that would require ray casting, and 3d models which i need to do / figure out
 - nothing gets released ever for assethandlerefs lol
 - go over all the files looking for places to optimize. make sure to minimizes things like hashes, jumps (if statement loops etc), make sure things look clean and logical
 - make animation system

@@ -30,8 +30,8 @@ pub fn Unbind(self: VertexBuffer) void {
     self.mImpl.Unbind();
 }
 
-pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize) void {
-    self.mImpl.SetData(data, size);
+pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize, offset: u32) void {
+    self.mImpl.SetData(data, size, offset);
 }
 
 pub fn SetLayout(self: *VertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {

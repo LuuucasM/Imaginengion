@@ -2,6 +2,7 @@ const glad = @import("../Core/CImports.zig").glad;
 const OpenGLUniformBuffer = @This();
 
 mBufferID: c_uint,
+mBindIndex: c_uint,
 
 pub fn Init(size: u32) OpenGLUniformBuffer {
     var new_ub = OpenGLUniformBuffer{
@@ -13,12 +14,17 @@ pub fn Init(size: u32) OpenGLUniformBuffer {
     return new_ub;
 }
 
-pub fn Bind(self: OpenGLUniformBuffer, binding: usize) void {
-    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, @intCast(binding), self.mBufferID);
-}
-
 pub fn Deinit(self: OpenGLUniformBuffer) void {
     glad.glDeleteBuffers(1, &self.mBufferID);
+}
+
+pub fn Bind(self: OpenGLUniformBuffer, binding: usize) void {
+    self.mBindIndex = @intCast(binding);
+    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, self.mBindIndex, self.mBufferID);
+}
+
+pub fn Unbind(self: OpenGLUniformBuffer) void {
+    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, self.mBindIndex, 0);
 }
 
 pub fn SetData(self: OpenGLUniformBuffer, data: *anyopaque, size: u32, offset: u32) void {

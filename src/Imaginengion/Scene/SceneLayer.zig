@@ -5,10 +5,12 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const SceneComponents = @import("SceneComponents.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const SceneIDComponent = SceneComponents.IDComponent;
+const SceneScriptComponent = SceneComponents.ScriptComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const TransformComponent = EntityComponents.TransformComponent;
+const EntityScriptComponent = EntityComponents.ScriptComponent;
 const SceneType = @import("../Scene/SceneManager.zig").SceneType;
 const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
@@ -95,4 +97,43 @@ pub fn FilterEntityByScene(self: SceneLayer, entity_result_list: *std.ArrayList(
     }
 
     entity_result_list.shrinkAndFree(end_index);
+}
+
+pub fn FilterEntityScriptsByScene(self: SceneLayer, scripts_result_list: *std.ArrayList(Entity.Type)) void {
+    if (scripts_result_list.items.len == 0) return;
+
+    var end_index: usize = scripts_result_list.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const entity_script_component = self.mECSManagerGO.GetComponent(EntityScriptComponent, scripts_result_list.items[i]);
+        const parent_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, entity_script_component.mParent);
+        if (parent_scene_component.SceneID != self.mSceneID) {
+            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    scripts_result_list.shrinkAndFree(end_index);
+}
+
+pub fn FilterSceneScriptsByScene(self: *SceneLayer, scripts_result_list: *std.ArrayList(Entity.Type)) void {
+    if (scripts_result_list.items.len == 0) return;
+
+    var end_index: usize = scripts_result_list.items.len;
+    var i: usize = 0;
+
+    while (i < end_index) {
+        const scene_script_component = self.mECSManagerSC.GetComponent(SceneScriptComponent, scripts_result_list.items[i]);
+        if (scene_script_component.mParent != self.mSceneID) {
+            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
+            end_index -= 1;
+        } else {
+            i += 1;
+        }
+    }
+
+    scripts_result_list.shrinkAndFree(end_index);
 }

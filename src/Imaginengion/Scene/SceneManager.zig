@@ -101,7 +101,7 @@ pub fn Init(width: usize, height: usize) !SceneManager {
     new_scene_manager.mCompositeVertexBuffer.SetStride(shader_asset.mShader.GetStride());
 
     var data_vertex_buffer = [4]Vec2f32{ Vec2f32{ -1.0, -1.0 }, Vec2f32{ 1.0, -1.0 }, Vec2f32{ 1.0, 1.0 }, Vec2f32{ -1.0, 1.0 } };
-    new_scene_manager.mCompositeVertexBuffer.SetData(&data_vertex_buffer[0], 4 * @sizeOf(Vec2f32));
+    new_scene_manager.mCompositeVertexBuffer.SetData(&data_vertex_buffer[0], 4 * @sizeOf(Vec2f32), 0);
 
     try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
 
@@ -304,61 +304,18 @@ pub fn SaveEntityAs(_: *SceneManager, entity: Entity, abs_path: []const u8) !voi
 }
 
 pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    if (entity_result_list.items.len == 0) return;
-
-    var end_index: usize = entity_result_list.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const entity_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, entity_result_list.items[i]);
-        if (entity_scene_component.SceneID != scene_id) {
-            entity_result_list.items[i] = entity_result_list.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    entity_result_list.shrinkAndFree(end_index);
+    const scene_layer = SceneLayer(.{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC });
+    scene_layer.FilterEntityByScene(entity_result_list);
 }
 
 pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    if (scripts_result_list.items.len == 0) return;
-
-    var end_index: usize = scripts_result_list.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const entity_script_component = self.mECSManagerGO.GetComponent(EntityScriptComponent, scripts_result_list.items[i]);
-        const parent_scene_component = self.mECSManagerGO.GetComponent(EntitySceneComponent, entity_script_component.mParent);
-        if (parent_scene_component.SceneID != scene_id) {
-            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    scripts_result_list.shrinkAndFree(end_index);
+    const scene_layer = SceneLayer(.{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC });
+    scene_layer.FilterEntityScriptsByScene(scripts_result_list);
 }
 
 pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    if (scripts_result_list.items.len == 0) return;
-
-    var end_index: usize = scripts_result_list.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const scene_script_component = self.mECSManagerSC.GetComponent(SceneScriptComponent, scripts_result_list.items[i]);
-        if (scene_script_component.mParent != scene_id) {
-            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    scripts_result_list.shrinkAndFree(end_index);
+    const scene_layer = SceneLayer(.{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC });
+    scene_layer.FilterSceneScriptsByScene(scripts_result_list);
 }
 
 pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {

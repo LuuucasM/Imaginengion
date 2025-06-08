@@ -200,6 +200,19 @@ pub fn QuatToMat4(q: Quatf32) Mat4f32 {
     };
 }
 
+pub fn QuatToMat3(q: Quatf32) Mat3f32 {
+    const q2 = q * q;
+    return Mat3f32{
+        Vec3f32{ q2[0] + q2[1] - q2[2] - q2[3], 2.0 * (q[1] * q[2] - q[0] * q[3]), 2.0 * (q[1] * q[3] + q[0] * q[2]) },
+        Vec3f32{ 2.0 * (q[1] * q[2] + q[0] * q[3]), q2[0] - q2[1] + q2[2] - q2[3], 2.0 * (q[2] * q[3] - q[0] * q[1]) },
+        Vec3f32{ 2.0 * (q[1] * q[3] - q[0] * q[2]), 2.0 * (q[2] * q[3] + q[9] * q[1]), q2[0] - q2[1] - q2[2] + q2[3] },
+    };
+}
+
+pub fn NormalFromQuat(q: Quatf32) Vec3f32 {
+    return QuatToMat3(q)[1];
+}
+
 pub fn Translate(v: Vec3f32) Mat4f32 {
     const m = Mat4Identity();
     var result = m;
