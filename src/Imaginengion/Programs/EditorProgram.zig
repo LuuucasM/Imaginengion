@@ -115,6 +115,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try AssetManager.OnUpdate();
 
     //-------------Inputs Begin------------------
+    //=============Human Inputs=============
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
@@ -123,13 +124,13 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     }
     //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
     _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnUpdateInputScript, .{}, &self._SceneLayer);
-    //-------------Inputs End--------------------
 
-    //-------------AI Begin--------------
-    //-------------AI End----------------
+    //=============AI Inputs=============
 
     //-------------Physics Begin-----------------
     //-------------Physics End-------------------
+
+    self.mSceneManager.CalculateTransforms();
 
     //-------------Game Logic Begin--------------
     //-------------Game Logic End----------------

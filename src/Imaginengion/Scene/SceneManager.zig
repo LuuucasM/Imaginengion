@@ -11,6 +11,7 @@ const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const Entity = @import("../GameObjects/Entity.zig");
 
 const EntityComponents = @import("../GameObjects/Components.zig");
@@ -20,6 +21,8 @@ const CameraComponent = EntityComponents.CameraComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const EntityParentComponent = EntityComponents.ParentComponent;
+const EntityChildComponent = EntityComponents.ChildComponent;
 
 const SceneComponents = @import("SceneComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
@@ -151,6 +154,24 @@ pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void 
         if (camera_component.mIsFixedAspectRatio == false) {
             camera_component.SetViewportSize(width, height);
         }
+    }
+}
+
+pub fn CalculateTransforms(self: *SceneManager) void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const transform_group = try self.mECSManagerGO.GetGroup(.{
+        .Not = .{
+            .mFirst = GroupQuery{ .Component = TransformComponent },
+            .mSecond = GroupQuery{ .Component = EntityChildComponent },
+        },
+    }, allocator);
+
+    for (transform_group.items) |entity_id| {
+        const entity = self.GetEntity(entity_id);
+        self.CalculateEntityTransform(entity, LinAlg.Mat4Identity());
     }
 }
 
@@ -318,11 +339,23 @@ pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.
     scene_layer.FilterSceneScriptsByScene(scripts_result_list);
 }
 
+pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {
+    return try self.mECSManagerGO.GetGroup(query, allocator);
+}
+
 pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
     const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a);
     const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b);
 
     return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
+}
+
+pub fn GetEntity(self: *SceneManager, entity_id: Entity.Type) Entity {
+    return Entity{ .mEntityID = entity_id, .mECSManagerRef = &self.mECSManagerGO };
+}
+
+pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneType) SceneLayer {
+    return SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 }
 
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
@@ -344,4 +377,24 @@ fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
         _ = try scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mNumofLayers });
     }
     self.mNumofLayers += 1;
+}
+
+fn CalculateEntityTransform(entity: Entity, parent_transform: Mat4f32, parent_dirty: bool) void {
+    const transform_component = entity.GetComponent(TransformComponent);
+    defer transform_component.Dirty = false;
+    if (transform_component.Dirty or parent_dirty) {
+        transform_component.WorldTransform = LinAlg.Mat4MulMat4(parent_transform, transform_component.GetLocalTransform());
+    }
+    if (entity.HasComponent(EntityParentComponent)) {
+        const parent_component = entity.GetComponent(EntityParentComponent);
+
+        var curr_id = parent_component.mFirstChild;
+        while (curr_id != Entity.NullEntity) {
+            const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
+            CalculateEntityTransform(child_entity, transform_component.WorldTransform, transform_component.Dirty);
+
+            const child_component = child_entity.GetComponent(EntityChildComponent);
+            curr_id = child_component.mNext;
+        }
+    }
 }

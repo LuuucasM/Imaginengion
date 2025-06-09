@@ -13,6 +13,7 @@ const CameraComponent = EntityComponents.CameraComponent;
 const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const ControllerComponent = EntityComponents.ControllerComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
+const QuadComponent = EntityComponents.QuadComponent;
 const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
@@ -133,6 +134,16 @@ fn EntityImguiRender(entity: Entity) !void {
             try ImguiEventManager.Insert(new_event);
         }
     }
+    if (entity.HasComponent(QuadComponent) == true) {
+        if (imgui.igSelectable_Bool(@typeName(QuadComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+            const new_event = ImguiEvent{
+                .ET_SelectComponentEvent = .{
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(QuadComponent), entity),
+                },
+            };
+            try ImguiEventManager.Insert(new_event);
+        }
+    }
     if (entity.HasComponent(SpriteRenderComponent) == true) {
         if (imgui.igSelectable_Bool(@typeName(SpriteRenderComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
@@ -161,6 +172,13 @@ fn AddComponentPopupMenu(entity: Entity) !void {
     if (entity.HasComponent(ControllerComponent) == false) {
         if (imgui.igMenuItem_Bool("ControllerComponent", "", false, true) == true) {
             _ = try entity.AddComponent(ControllerComponent, null);
+            imgui.igCloseCurrentPopup();
+        }
+    }
+    if (entity.HasComponent(QuadComponent) == false and entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {
+        if (imgui.igMenuItem_Bool("QuadComponent", "", false, true) == true) {
+            const new_sprite_component = try entity.AddComponent(QuadComponent, null);
+            new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
             imgui.igCloseCurrentPopup();
         }
     }

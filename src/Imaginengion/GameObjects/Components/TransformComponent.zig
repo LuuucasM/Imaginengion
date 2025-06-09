@@ -16,7 +16,7 @@ Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
 Scale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
 
-Transform: Mat4f32 = LinAlg.Mat4Identity(),
+WorldTransform: Mat4f32 = LinAlg.Mat4Identity(),
 Dirty: bool = true,
 
 pub fn Deinit(_: *TransformComponent) !void {}
@@ -33,13 +33,15 @@ pub fn SetScale(self: *TransformComponent, new_scale: Vec3f32) void {
     self.Scale = new_scale;
     self.Dirty = true;
 }
-pub fn GetTransformMatrix(self: *TransformComponent) Mat4f32 {
+pub fn GetLocalTransform(self: *TransformComponent) Mat4f32 {
+    return LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.Mat4MulMat4(LinAlg.QuatToMat4(self.Rotation), LinAlg.Scale(self.Scale)));
+}
+pub fn RecalculateWorldTransform(self: *TransformComponent, parent_transform: Mat4f32) void {
     if (self.Dirty == true) {
         defer self.Dirty = false;
-
-        self.Transform = LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.Mat4MulMat4(LinAlg.QuatToMat4(self.Rotation), LinAlg.Scale(self.Scale)));
+        self.LocalTransform = LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.Mat4MulMat4(LinAlg.QuatToMat4(self.Rotation), LinAlg.Scale(self.Scale)));
     }
-    return self.Transform;
+    self.WorldTransform = LinAlg.Mat4MulMat4(parent_transform, self.LocalTransform);
 }
 
 pub fn GetEditorWindow(self: *TransformComponent) EditorWindow {

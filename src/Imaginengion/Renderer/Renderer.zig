@@ -31,9 +31,11 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const QuadComponent = EntityComponents.QuadComponent;
 const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
 const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const CameraComponent = EntityComponents.CameraComponent;
+const EntityChildComponent = EntityComponents.ChildComponent;
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const StackPosComponent = SceneComponents.StackPosComponent;
@@ -96,19 +98,47 @@ pub fn SwapBuffers() void {
 }
 
 pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
-    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
-    BeginRendering(camera_view_projection);
-
-    //TODO: we have to add all the shapes we want to render to the renderers buffers
-
-    //TODO: then we just call the shader
-}
-
-pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
+    BeginRendering(camera_view_projection);
+    //I can probably put the new SDF shader inside the renderer since its going to take ALL the shapes from the entire scene so i dont need individual like quad shader
+    //circle shader, sphere shader, etc.
+
+    //get all the shapes
+    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{.Component = QuadComponent}, allocator);
+    //TODO: cull
+
+    //TODO: FINISH DOING THIS
+    //TODO: I just changed the way transforms are calculated to take into account the new
+    //entity hierarchy so change rendering to fit this system
+    //aka all the world transform matrixes should already be calculated so dont need to worry about parents or stuff
+    //just pass the entities transform in raw
+    for (shapes_ids.items) |shape_entity_id| {
+        const entity = scene_manager.GetEntity(shape_entity_id);
+        const transform_component = entity.GetComponent(TransformComponent);
+        
+        var transform = transform_component.GetTransformMatrix();
+
+        if (entity.HasComponent(EntityChildComponent)){
+            const child_component = entity.GetComponent(EntityChildComponent);
+            const parent_id = child_component.mParent;
+            const parent_entity = scene_manager.GetEntity(parent_id);
+            
+            const parent_transform_component = entity.GetComponent(TransformComponent);
+            transform = LinAlg.Mat4MulMat4(parent_transform_component.GetTransformMatrix(), transform);
+
+        }
+        if (entity.HasComponent(QuadComponent)){
+            const quad_component = 
+            RenderM.mR2D.DrawQuad(, color: Vec4f32, tex_coords: [4]Vec2f32, tex_index: f32, tiling_factor: f32)
+        }
+    }
+}
+
+pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
     const ecs_manager = scene_manager.mECSManagerGO;
 
     const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = StackPosComponent }, allocator);
@@ -135,7 +165,7 @@ pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
 
         //draw sprites
         //first sort and bind textures
-        try TextureSort(SpriteRenderComponent, sprite_entities, scene_manager);
+
         try DrawSprites(sprite_entities, scene_manager);
 
         //draw circles
@@ -240,6 +270,22 @@ fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(Entity.
             try RenderM.mTexturesMap.put(render_component.mTexture.mID, RenderM.mTextures.items.len);
             try RenderM.mTextures.append(render_component.mTexture);
         }
+    }
+}
+
+fn DrawQuads(quad_entities: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
+    for (quad_entities.items) |quad_entity_id| {
+        const entity = scene_manager.GetEntity(quad_entity_id);
+        const quad_component = entity.GetComponent(QuadComponent);
+        const transform_component = entity.GetComponent(TransformComponent);
+
+        RenderM.mR2D.DrawQuad(
+            transform_component.GetTransformMatrix(),
+            quad_component.mColor,
+            quad_component.mTexCoords,
+            @floatFromInt(RenderM.mTexturesMap.get(quad_component.mTexture.mID).?),
+            quad_component.mTilingFactor,
+        );
     }
 }
 

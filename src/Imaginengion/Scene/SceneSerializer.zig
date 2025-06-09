@@ -10,6 +10,7 @@ const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const ControllerComponent = EntityComponents.ControllerComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
+const QuadComponent = EntityComponents.QuadComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
@@ -200,6 +201,8 @@ fn SerializeEntity(write_stream: *WriteStream, entity: Entity, allocator: std.me
 
     try SerializeSpriteRenderComponent(write_stream, entity, allocator);
 
+    try SerializeQuadComponent(write_stream, entity, allocator);
+
     try SerializeScriptComponents(write_stream, entity, allocator);
 
     try SerializeParentComponent(write_stream, entity, allocator);
@@ -263,6 +266,34 @@ fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, al
 
     try write_stream.objectField("Component");
     const component = entity.GetComponent(SpriteRenderComponent);
+    try std.json.stringify(component, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("AssetFileData");
+    if (component.mTexture.mID != AssetHandle.NullHandle) {
+        const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
+        try std.json.stringify(asset_file_data, .{}, component_string.writer());
+        try write_stream.write(component_string.items);
+        component_string.clearAndFree();
+    } else {
+        try write_stream.write("No Texture");
+    }
+
+    try write_stream.endObject();
+}
+
+fn SerializeQuadComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
+    if (entity.HasComponent(QuadComponent) == false) return;
+
+    var component_string = ComponentString.init(allocator);
+    defer component_string.deinit();
+
+    try write_stream.objectField("QuadComponent");
+    try write_stream.beginObject();
+
+    try write_stream.objectField("Component");
+    const component = entity.GetComponent(QuadComponent);
     try std.json.stringify(component, .{}, component_string.writer());
     try write_stream.write(component_string.items);
     component_string.clearAndFree();
@@ -430,6 +461,8 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
             try DeSerializeBasicComponent(scanner, entity, EntityNameComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityScripts")) {
             try DeSerializeEntityScripts(scanner, entity, allocator);
+        } else if (std.mem.eql(u8, actual_value, "QuadComponent")) {
+            try DeSerializeQuadComponent(scanner, entity, allocator);
         } else if (std.mem.eql(u8, actual_value, "SpriteRenderComponent")) {
             try DeSerializeSpriteRenderComponent(scanner, entity, allocator);
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
@@ -502,6 +535,47 @@ fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, 
         const file_data = file_data_component.value;
 
         sprite_render_component.mTexture = try AssetManager.GetAssetHandleRef(file_data.mRelPath, file_data.mPathType);
+    }
+
+    //skip past the end object token
+    _ = try SkipToken(scanner, allocator);
+}
+
+fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
+    //skip past begin object token
+    _ = try SkipToken(scanner, allocator);
+    //skip past the object field token "Component"
+    _ = try SkipToken(scanner, allocator);
+
+    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const component_data_string = switch (component_data_token) {
+        .string => |component_data| component_data,
+        .allocated_string => |component_data| component_data,
+        else => @panic("should be a string!!\n"),
+    };
+    const new_component_parsed = try std.json.parseFromSlice(QuadComponent, allocator, component_data_string, .{});
+    defer new_component_parsed.deinit();
+
+    const quad_component = try entity.AddComponent(QuadComponent, new_component_parsed.value);
+
+    //skip past the object field token "FileMetaData"
+    _ = try SkipToken(scanner, allocator);
+
+    //read the next token which will be the potential path of the asset
+    const file_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const file_data_string = switch (file_data_token) {
+        .string => |component_data| component_data,
+        .allocated_string => |component_data| component_data,
+        else => @panic("should be a string!!\n"),
+    };
+
+    //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
+    if (quad_component.mTexture.mID != AssetHandle.NullHandle) {
+        const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
+        defer file_data_component.deinit();
+        const file_data = file_data_component.value;
+
+        quad_component.mTexture = try AssetManager.GetAssetHandleRef(file_data.mRelPath, file_data.mPathType);
     }
 
     //skip past the end object token

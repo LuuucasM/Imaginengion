@@ -6,6 +6,7 @@ pub const IDComponent = @import("Components/IDComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
 pub const ParentComponent = @import("Components/ParentComponent.zig");
 pub const PlayerComponent = @import("Components/PlayerComponent.zig");
+pub const QuadComponent = @import("Components/QuadComponent.zig");
 pub const SceneIDComponent = @import("Components/SceneIDComponent.zig");
 pub const SpriteRenderComponent = @import("Components/SpriteRenderComponent.zig");
 pub const TransformComponent = @import("Components/TransformComponent.zig");
