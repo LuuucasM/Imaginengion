@@ -12,6 +12,7 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
+const Quatf32 = LinAlg.Quatf32;
 const Mat4f32 = LinAlg.Mat4f32;
 const MAX_PATH_LEN = 256;
 
@@ -73,11 +74,11 @@ pub fn Init(allocator: std.mem.Allocator) !Renderer2D {
     return Renderer2D{
         .mAllocator = allocator,
         .mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100),
-        .mQuadBufferBase = std.ArrayList(QuadData).init(allocator),
+        .mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(allocator, 100),
         .mCircleBuffer = SSBO.Init(@sizeOf(CircleData) * 100),
-        .mCircleBufferBase = std.ArrayList(CircleData).init(allocator),
+        .mCircleBufferBase = try std.ArrayList(CircleData).initCapacity(allocator, 100),
         .mLineBuffer = SSBO.Init(@sizeOf(LineData) * 100),
-        .mLineBufferBase = std.ArrayList(LineData).init(allocator),
+        .mLineBufferBase = try std.ArrayList(LineData).initCapacity(allocator, 100),
     };
 }
 
@@ -117,52 +118,21 @@ pub fn DrawCircle(self: *Renderer2D, position: Vec3f32, rotation: Quatf32, radiu
 }
 
 //TODO: FINISH DRAWING LINE
+pub fn DrawLine(self: *Renderer2D, p1: Vec3f32, p2: Vec3f32, rotation: Quatf32, thickness: f32, color: Vec4f32) !void {
+    const rot_norm = LinAlg.NormalFromQuat(rotation);
+    const axis = LinAlg.NormalizeVec3(p1 - p2);
 
-pub fn DrawELine(self: *Renderer2D, p0: Vec3f32, p1: Vec3f32, color: Vec4f32) void {
-    self.mELineVertexBufferPtr.Position = [3]f32{ p0[0], p0[1], p0[2] };
-    self.mELineVertexBufferPtr.Color = [4]f32{ color[0], color[1], color[2], color[3] };
-    self.mELineVertexBufferPtr += 1;
-
-    self.mELineVertexBufferPtr.Position = [3]f32{ p1[0], p1[1], p1[2] };
-    self.mELineVertexBufferPtr.Color = [4]f32{ color[0], color[1], color[2], color[3] };
-    self.mELineVertexBufferPtr += 1;
-
-    self.mELineVertexCount += 2;
+    try self.mLineBufferBase.append(.{
+        .P1 = p1,
+        .P2 = p2,
+        .Normal = LinAlg.NormalizeVec3(rot_norm - @as(Vec3f32, @splat(LinAlg.Vec3DotVec3(rot_norm, axis))) * axis),
+        .Thickness = thickness,
+        .Color = color,
+    });
 }
 
 pub fn BeginScene(self: *Renderer2D) void {
-    self.mSpriteVertexCount = 0;
-    self.mSpriteIndexCount = 0;
-    self.mSpriteVertexBufferPtr = &self.mSpriteVertexBufferBase[0];
-
-    self.mCircleVertexCount = 0;
-    self.mCircleIndexCount = 0;
-    self.mCircleVertexBufferPtr = &self.mCircleVertexBufferBase[0];
-
-    self.mELineVertexCount = 0;
-    self.mELineVertexBufferPtr = &self.mELineVertexBufferBase[0];
-}
-
-pub fn FlushSprite(self: *Renderer2D) !void {
-    const data_size: usize = @sizeOf(SpriteVertex) * self.mSpriteVertexCount;
-    self.mSpriteVertexBuffer.SetData(self.mSpriteVertexBufferBase.ptr, data_size, 0);
-    const sprite_shader_asset = try self.mSpriteShaderAsset.GetAsset(ShaderAsset);
-    sprite_shader_asset.mShader.Bind();
-    self.mSpriteVertexArray.Bind();
-}
-
-pub fn FlushCircle(self: *Renderer2D) !void {
-    const data_size: usize = @sizeOf(CircleVertex) * self.mSpriteVertexCount;
-    self.mCircleVertexBuffer.SetData(self.mCircleVertexBufferBase.ptr, data_size, 0);
-    const circle_shader_asset = try self.mCircleShaderAsset.GetAsset(ShaderAsset);
-    circle_shader_asset.mShader.Bind();
-    self.mCircleVertexArray.Bind();
-}
-
-pub fn FlushELine(self: *Renderer2D) !void {
-    const data_size: usize = @sizeOf(ELineVertex) * self.mSpriteVertexCount;
-    self.mELineVertexBuffer.SetData(self.mELineVertexBufferBase.ptr, data_size, 0);
-    const line_shader_asset = try self.mELineShaderAsset.GetAsset(ShaderAsset);
-    line_shader_asset.mShader.Bind();
-    self.mELineVertexArray.Bind();
+    self.mQuadBufferBase.clearRetainingCapacity();
+    self.mCircleBufferBase.clearRetainingCapacity();
+    self.mLineBufferBase.clearRetainingCapacity();
 }

@@ -46,23 +46,14 @@ const Renderer = @This();
 var RenderM: Renderer = .{};
 
 pub const RenderStats = struct {
-    mDrawCalls: usize = 0,
-    mTriCount: usize = 0,
-    mVertexCount: usize = 0,
-    mIndicesCount: usize = 0,
-
-    mSpriteNum: usize = 0,
+    mQuadNum: usize = 0,
     mCircleNum: usize = 0,
-    mELineNum: usize = 0,
+    mLineNum: usize = 0,
 };
 
 const CameraBuffer = extern struct {
     mBuffer: [4][4]f32,
 };
-
-const MaxTri: usize = 10_000;
-const MaxVerticies: usize = MaxTri * 3;
-const MaxIndices: usize = MaxTri * 3;
 
 mRenderContext: RenderContext = undefined,
 mStats: RenderStats = .{},
@@ -83,11 +74,7 @@ pub fn Init(window: *Window) !void {
     RenderM = Renderer{
         .mRenderContext = new_render_context,
 
-        .mR2D = try Renderer2D.Init(
-            MaxVerticies,
-            MaxIndices,
-            RenderAllocator.allocator(),
-        ),
+        .mR2D = try Renderer2D.Init(RenderAllocator.allocator()),
         .mR3D = Renderer3D.Init(),
 
         .mTexturesMap = std.AutoHashMap(usize, usize).init(RenderAllocator.allocator()),
@@ -112,9 +99,9 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
     BeginRendering(camera_view_projection);
 
-    try RenderSceneLayers(scene_manager);
+    //TODO: we have to add all the shapes we want to render to the renderers buffers
 
-    try RenderFinalImage(scene_manager);
+    //TODO: then we just call the shader
 }
 
 pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {

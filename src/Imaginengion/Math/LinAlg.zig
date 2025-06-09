@@ -145,10 +145,14 @@ pub fn IsValidVec4f32(v: Vec4f32) bool {
 }
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const len = @sqrt(@reduce(.Add, q * q));
-    if (len <= 0) {
-        return Quatf32{ 1.0, 0.0, 0.0, 0.0 };
-    }
+    if (len <= 0) return Quatf32{ 1.0, 0.0, 0.0, 0.0 };
     return q / @as(Quatf32, @splat(len));
+}
+
+pub fn NormalizeVec3(v: Vec3f32) Vec3f32 {
+    const len = @sqrt(@reduce(.Add, v * v));
+    if (len <= 0) return Vec3f32{ 0.0, 0.0, 0.0 };
+    return v / @as(Vec3f32, @splat(len));
 }
 
 pub fn QuatAngleAxis(angle_degrees: f32, axis: Vec3f32) Quatf32 {
@@ -373,6 +377,10 @@ pub fn RotationMatrixToQuat(row: Mat3f32, rotation: *Quatf32) void {
 }
 
 pub fn Vec4DotVec4(v1: Vec4f32, v2: Vec4f32) f32 {
+    return @reduce(.Add, v1 * v2);
+}
+
+pub fn Vec3DotVec3(v1: Vec3f32, v2: Vec3f32) f32 {
     return @reduce(.Add, v1 * v2);
 }
 
