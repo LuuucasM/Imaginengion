@@ -108,7 +108,7 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     //circle shader, sphere shader, etc.
 
     //get all the shapes
-    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{.Component = QuadComponent}, allocator);
+    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
     //TODO: cull
 
     //TODO: FINISH DOING THIS
@@ -119,22 +119,18 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     for (shapes_ids.items) |shape_entity_id| {
         const entity = scene_manager.GetEntity(shape_entity_id);
         const transform_component = entity.GetComponent(TransformComponent);
-        
-        var transform = transform_component.GetTransformMatrix();
 
-        if (entity.HasComponent(EntityChildComponent)){
-            const child_component = entity.GetComponent(EntityChildComponent);
-            const parent_id = child_component.mParent;
-            const parent_entity = scene_manager.GetEntity(parent_id);
-            
-            const parent_transform_component = entity.GetComponent(TransformComponent);
-            transform = LinAlg.Mat4MulMat4(parent_transform_component.GetTransformMatrix(), transform);
-
+        if (entity.HasComponent(QuadComponent)) {
+            const quad_component = entity.GetComponent(QuadComponent);
+            RenderM.mR2D.DrawQuad(
+                transform_component.WorldTransform,
+                quad_component.mColor,
+                quad_component.mTexCoords,
+                0,
+                quad_component.mTilingFactor,
+            );
         }
-        if (entity.HasComponent(QuadComponent)){
-            const quad_component = 
-            RenderM.mR2D.DrawQuad(, color: Vec4f32, tex_coords: [4]Vec2f32, tex_index: f32, tiling_factor: f32)
-        }
+        //else if has circle, line, other shapes
     }
 }
 
