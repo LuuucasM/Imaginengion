@@ -38,21 +38,7 @@ mSelectedEntity: ?Entity,
 mGizmoType: GizmoType,
 mIsFocused: bool = false,
 
-pub fn Init(scene_layer_ref: *SceneLayer, viewport_width: usize, viewport_height: usize) !ViewportPanel {
-
-    //setup camera for viewport editing
-    const camera_entity = try scene_layer_ref.CreateEntity();
-
-    const transform_component = camera_entity.GetComponent(TransformComponent);
-    transform_component.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
-    transform_component.Dirty = true;
-
-    var new_camera = CameraComponent{};
-    new_camera.SetViewportSize(viewport_width, viewport_height);
-    _ = try camera_entity.AddComponent(CameraComponent, new_camera);
-
-    try GameObjectUtils.AddScriptToEntity(camera_entity, "assets/scripts/EditorCameraInput.zig", .Eng);
-
+pub fn Init(viewport_width: usize, viewport_height: usize) !ViewportPanel {
     return ViewportPanel{
         .mP_Open = true,
         .mViewportWidth = viewport_width,
@@ -74,6 +60,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, cam
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
     imgui.igGetContentRegionAvail(&viewport_size);
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
+        //TODO: CHANGE sot hat when viewport resize event happens the editor program changes the editor camera while handling the event
         //viewport resize event
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;

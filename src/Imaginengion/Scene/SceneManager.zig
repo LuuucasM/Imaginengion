@@ -65,60 +65,21 @@ mECSManagerGO: ECSManagerGameObj,
 mECSManagerSC: ECSManagerScenes,
 mGameLayerInsertIndex: usize,
 mNumofLayers: usize,
-
-//render stuff
-mFrameBuffer: FrameBuffer,
 mViewportWidth: usize,
 mViewportHeight: usize,
-mCompositeVertexArray: VertexArray,
-mCompositeVertexBuffer: VertexBuffer,
-mCompositeIndexBuffer: IndexBuffer,
-mCompositeShaderHandle: AssetHandle,
-mNumTexturesUniformBuffer: UniformBuffer,
 
 pub fn Init(width: usize, height: usize) !SceneManager {
-    var new_scene_manager = SceneManager{
-        //scene stuff
+    return SceneManager{
         .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &EntityComponentsArray),
         .mECSManagerSC = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &SceneComponentsList),
         .mGameLayerInsertIndex = 0,
         .mNumofLayers = 0,
-
-        //render stuff
         .mViewportWidth = width,
         .mViewportHeight = height,
-        .mFrameBuffer = try FrameBuffer.Init(SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, width, height),
-        .mCompositeVertexArray = VertexArray.Init(SceneManagerGPA.allocator()),
-        .mCompositeVertexBuffer = VertexBuffer.Init(SceneManagerGPA.allocator(), 4 * @sizeOf(Vec2f32)),
-        .mCompositeIndexBuffer = undefined,
-        .mCompositeShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/Composite.glsl", .Eng),
-        .mNumTexturesUniformBuffer = UniformBuffer.Init(@sizeOf(usize)),
     };
-
-    var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_scene_manager.mCompositeIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
-
-    const shader_asset = try new_scene_manager.mCompositeShaderHandle.GetAsset(ShaderAsset);
-
-    try new_scene_manager.mCompositeVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
-    new_scene_manager.mCompositeVertexBuffer.SetStride(shader_asset.mShader.GetStride());
-
-    var data_vertex_buffer = [4]Vec2f32{ Vec2f32{ -1.0, -1.0 }, Vec2f32{ 1.0, -1.0 }, Vec2f32{ 1.0, 1.0 }, Vec2f32{ -1.0, 1.0 } };
-    new_scene_manager.mCompositeVertexBuffer.SetData(&data_vertex_buffer[0], 4 * @sizeOf(Vec2f32), 0);
-
-    try new_scene_manager.mCompositeVertexArray.AddVertexBuffer(new_scene_manager.mCompositeVertexBuffer);
-
-    new_scene_manager.mCompositeVertexArray.SetIndexBuffer(new_scene_manager.mCompositeIndexBuffer);
-
-    return new_scene_manager;
 }
 
 pub fn Deinit(self: *SceneManager) !void {
-    AssetManager.ReleaseAssetHandleRef(&self.mCompositeShaderHandle);
-    self.mCompositeVertexBuffer.Deinit();
-    self.mCompositeIndexBuffer.Deinit();
-    self.mCompositeVertexArray.Deinit();
-    self.mFrameBuffer.Deinit();
     self.mECSManagerGO.Deinit();
     self.mECSManagerSC.Deinit();
     _ = SceneManagerGPA.deinit();
@@ -175,7 +136,7 @@ pub fn CalculateTransforms(self: *SceneManager) void {
     }
 }
 
-pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
+pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 
@@ -193,7 +154,7 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneType {
 
     try self.InsertScene(scene_layer);
 
-    return new_scene_id;
+    return scene_layer;
 }
 
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {

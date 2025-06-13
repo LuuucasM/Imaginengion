@@ -3,6 +3,9 @@ const builtin = @import("builtin");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
+const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const Window = @import("../Windows/Window.zig");
 
 const RenderContext = @import("RenderContext.zig");
@@ -43,9 +46,9 @@ const SceneComponent = SceneComponents.SceneComponent;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
-const Renderer = @This();
+const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
-var RenderM: Renderer = .{};
+const Renderer = @This();
 
 pub const RenderStats = struct {
     mQuadNum: usize = 0,
@@ -69,60 +72,110 @@ mTextures: std.ArrayList(AssetHandle) = undefined,
 mCameraBuffer: CameraBuffer = std.mem.zeroes(CameraBuffer),
 mCameraUniformBuffer: UniformBuffer = undefined,
 
+mViewportFrameBuffer: FrameBuffer,
+mViewportWidth: usize,
+mViewportHeight: usize,
+mViewportVertexArray: VertexArray,
+mViewportVertexBuffer: VertexBuffer,
+mViewportIndexBuffer: IndexBuffer,
+mViewportShaderHandle: AssetHandle,
+
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
-pub fn Init(window: *Window) !void {
+pub fn Init(window: *Window) !Renderer {
     const new_render_context = RenderContext.Init(window);
-    RenderM = Renderer{
-        .mRenderContext = new_render_context,
 
+    var new_renderer = Renderer{
+        .mRenderContext = new_render_context,
         .mR2D = try Renderer2D.Init(RenderAllocator.allocator()),
         .mR3D = Renderer3D.Init(),
-
         .mTexturesMap = std.AutoHashMap(usize, usize).init(RenderAllocator.allocator()),
-        .mTextures = try std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), RenderM.mRenderContext.GetMaxTextureImageSlots()),
-
+        .mTextures = try std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), new_render_context.GetMaxTextureImageSlots()),
         .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
+        .mViewportFrameBuffer = try FrameBuffer.Init(RenderAllocator.allocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, window.GetWidth(), window.GetHeight()),
+        .mViewportHeight = window.GetHeight(),
+        .mViewportWidth = window.GetWidth(),
+        .mViewportVertexArray = VertexArray.Init(RenderAllocator.allocator()),
+        .mViewportVertexBuffer = VertexBuffer.Init(RenderAllocator.allocator(), 4 * @sizeOf(Vec2f32)),
+        .mViewportIndexBuffer = undefined,
+        .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
     };
-    try RenderM.mTexturesMap.ensureTotalCapacity(@intCast(RenderM.mRenderContext.GetMaxTextureImageSlots()));
+
+    //TODO: FINISH SETTING UP THE NEW SHADER STUFF INTRODUCED INTO THE RENDERER
+    try new_renderer.mTexturesMap.ensureTotalCapacity(@intCast(new_renderer.mRenderContext.GetMaxTextureImageSlots()));
+
+    var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    new_renderer.mViewportIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
+
+    const shader_asset = try new_renderer.mViewportShaderHandle.GetAsset(ShaderAsset);
+    new_renderer.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+    new_renderer.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
+
+    var data_vertex_buffer = [4][2]f32{ f32{ -1.0, -1.0 }, f32{ 1.0, -1.0 }, f32{ 1.0, 1.0 }, f32{ -1.0, 1.0 } };
+    new_renderer.mViewportVertexBuffer.SetData(&data_vertex_buffer[0], @sizeOf([4][2]f32));
+
+    new_renderer.mViewportVertexArray.AddVertexBuffer(new_renderer.mViewportVertexBuffer);
+
+    new_renderer.mViewportVertexArray.SetIndexBuffer(new_renderer.mViewportIndexBuffer);
+
+    return new_renderer;
 }
 
-pub fn Deinit() !void {
-    try RenderM.mR2D.Deinit();
-    RenderM.mTexturesMap.deinit();
-    RenderM.mTextures.deinit();
+pub fn Deinit(self: *Renderer) !void {
+    AssetManager.ReleaseAssetHandleRef(&self.mViewportShaderHandle);
+    self.mViewportVertexBuffer.Deinit();
+    self.mViewportIndexBuffer.Deinit();
+    self.mViewportVertexArray.Deinit();
+    self.mViewportFrameBuffer.Deinit();
+
+    try self.mR2D.Deinit();
+    self.mTexturesMap.deinit();
+    self.mTextures.deinit();
 }
 
-pub fn SwapBuffers() void {
-    RenderM.mRenderContext.SwapBuffers();
+pub fn SwapBuffers(self: Renderer) void {
+    self.mRenderContext.SwapBuffers();
 }
 
-pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
+pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
     const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
-    BeginRendering(camera_view_projection);
-    //I can probably put the new SDF shader inside the renderer since its going to take ALL the shapes from the entire scene so i dont need individual like quad shader
-    //circle shader, sphere shader, etc.
+
+    self.BeginRendering(camera_view_projection);
 
     //get all the shapes
     const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
-    //TODO: cull
 
-    //TODO: FINISH DOING THIS
-    //TODO: I just changed the way transforms are calculated to take into account the new
-    //entity hierarchy so change rendering to fit this system
-    //aka all the world transform matrixes should already be calculated so dont need to worry about parents or stuff
-    //just pass the entities transform in raw
-    for (shapes_ids.items) |shape_entity_id| {
+    //TODO: culling with bvh
+
+    try self.DrawShapes(shapes_ids, scene_manager);
+
+    self.TextureSort(QuadComponent, self.mR2D.mQuadBufferBase, scene_manager);
+
+    try self.FinishRendering();
+}
+
+pub fn GetRenderStats(self: Renderer) RenderStats {
+    return self.mStats;
+}
+
+fn BeginRendering(self: *Renderer, camera_viewprojection: Mat4f32) void {
+    self.mCameraBuffer.mBuffer = LinAlg.Mat4ToArray(camera_viewprojection);
+    self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraBuffer), 0);
+    self.mStats = std.mem.zeroes(RenderStats);
+}
+
+fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
+    for (shapes.items) |shape_entity_id| {
         const entity = scene_manager.GetEntity(shape_entity_id);
         const transform_component = entity.GetComponent(TransformComponent);
 
         if (entity.HasComponent(QuadComponent)) {
             const quad_component = entity.GetComponent(QuadComponent);
-            RenderM.mR2D.DrawQuad(
+            try self.mR2D.DrawQuad(
                 transform_component.WorldTransform,
                 quad_component.mColor,
                 quad_component.mTexCoords,
@@ -134,197 +187,33 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     }
 }
 
-pub fn RenderSceneLayers(scene_manager: *SceneManager) !void {
-    const ecs_manager = scene_manager.mECSManagerGO;
-
-    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = StackPosComponent }, allocator);
-    std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
-
-    for (stack_pos_scenes.items) |scene_id| {
-        const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
-        BeginScene();
-
-        const scene_component = scene_layer.GetComponent(SceneComponent);
-        scene_component.mFrameBuffer.Bind();
-        scene_component.mFrameBuffer.ClearFrameBuffer(.{ 0.0, 0.0, 0.0, 1.0 });
-        defer scene_component.mFrameBuffer.Unbind();
-
-        var sprite_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = SpriteRenderComponent }, allocator);
-        scene_manager.FilterEntityByScene(&sprite_entities, scene_id);
-
-        var circle_entities = try ecs_manager.GetGroup(GroupQuery{ .Component = CircleRenderComponent }, allocator);
-        scene_manager.FilterEntityByScene(&circle_entities, scene_id);
-
-        //cull entities that shouldnt be rendered
-        CullEntities(SpriteRenderComponent, &sprite_entities, scene_manager);
-        CullEntities(CircleRenderComponent, &circle_entities, scene_manager);
-
-        //draw sprites
-        //first sort and bind textures
-
-        try DrawSprites(sprite_entities, scene_manager);
-
-        //draw circles
-        DrawCircles(circle_entities, scene_manager);
-
-        try EndScene();
-    }
-}
-
-pub fn BeginRendering(camera_viewprojection: Mat4f32) void {
-    RenderM.mCameraBuffer.mBuffer = LinAlg.Mat4ToArray(camera_viewprojection);
-    RenderM.mCameraUniformBuffer.SetData(&RenderM.mCameraBuffer, @sizeOf(CameraBuffer), 0);
-    RenderM.mStats = std.mem.zeroes(RenderStats);
-}
-
-pub fn BeginScene() void {
-    RenderM.mR2D.BeginScene();
-}
-
-pub fn EndScene() !void {
-    RenderM.mCameraUniformBuffer.Bind(0);
-    if (RenderM.mR2D.mSpriteVertexCount > 0) {
-        try RenderM.mR2D.FlushSprite();
-        for (RenderM.mTextures.items, 0..) |asset_handle, i| {
-            const texture = try AssetManager.GetAsset(Texture2D, asset_handle.mID);
-            texture.Bind(i);
-        }
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mSpriteVertexArray, RenderM.mR2D.mSpriteIndexCount);
-        RenderM.mStats.mDrawCalls += 1;
-    }
-    if (RenderM.mR2D.mCircleVertexCount > 0) {
-        try RenderM.mR2D.FlushCircle();
-        RenderM.mRenderContext.DrawIndexed(RenderM.mR2D.mCircleVertexArray, RenderM.mR2D.mCircleIndexCount);
-        RenderM.mStats.mDrawCalls += 1;
-    }
-    if (RenderM.mR2D.mELineVertexCount > 0) {
-        try RenderM.mR2D.FlushELine();
-        RenderM.mRenderContext.DrawELines(RenderM.mR2D.mELineVertexArray, RenderM.mR2D.mELineVertexCount);
-        RenderM.mStats.mDrawCalls += 1;
-    }
-}
-
-pub fn RenderFinalImage(scene_manager: *SceneManager) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    const scene_stack_entities = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, allocator);
-    std.sort.insertion(SceneType, scene_stack_entities.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
-    var num_of_scenes = scene_stack_entities.items.len;
-    scene_manager.mNumTexturesUniformBuffer.SetData(@ptrCast(&num_of_scenes), @sizeOf(usize), 0);
-    scene_manager.mFrameBuffer.Bind();
-    defer scene_manager.mFrameBuffer.Unbind();
-    scene_manager.mFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
-    scene_manager.mNumTexturesUniformBuffer.Bind(0);
-    const shader_asset = try scene_manager.mCompositeShaderHandle.GetAsset(ShaderAsset);
-    shader_asset.mShader.Bind();
-    for (scene_stack_entities.items, 0..) |scene_id, i| {
-        const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
-        const scene_component = scene_layer.GetComponent(SceneComponent);
-        scene_component.mFrameBuffer.BindColorAttachment(0, i);
-        scene_component.mFrameBuffer.BindDepthAttachment(i + num_of_scenes);
-    }
-    RenderM.mRenderContext.DrawIndexed(scene_manager.mCompositeVertexArray, 6);
-}
-
-pub fn GetRenderStats() RenderStats {
-    return RenderM.mStats;
-}
-
-fn CullEntities(comptime component_type: type, result: *std.ArrayList(Entity.Type), scene_manager: *SceneManager) void {
-    std.debug.assert(@hasField(component_type, "mShouldRender"));
-    if (result.items.len == 0) return;
-
-    var end_index: usize = result.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const entity_id = result.items[i];
-        const render_component = scene_manager.mECSManagerGO.GetComponent(component_type, entity_id);
-        if (render_component.mShouldRender == true) {
-            i += 1;
-        } else {
-            result.items[i] = result.items[end_index - 1];
-            end_index -= 1;
-        }
-    }
-
-    result.shrinkAndFree(end_index);
-}
-
-fn TextureSort(comptime component_type: type, entity_list: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
+fn TextureSort(self: *Renderer, comptime component_type: type, entity_list: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
     std.debug.assert(@hasField(component_type, "mTexture"));
 
-    RenderM.mTexturesMap.clearRetainingCapacity();
-    RenderM.mTextures.clearRetainingCapacity();
+    self.mTexturesMap.clearRetainingCapacity();
+    self.mTextures.clearRetainingCapacity();
 
     var i: usize = 0;
     while (i < entity_list.items.len) : (i += 1) {
         const entity_id = entity_list.items[i];
         const render_component = scene_manager.mECSManagerGO.GetComponent(component_type, entity_id);
-        if (RenderM.mTexturesMap.contains(render_component.mTexture.mID) == false) {
-            try RenderM.mTexturesMap.put(render_component.mTexture.mID, RenderM.mTextures.items.len);
-            try RenderM.mTextures.append(render_component.mTexture);
+        if (self.mTexturesMap.contains(render_component.mTexture.mID) == false) {
+            try self.mTexturesMap.put(render_component.mTexture.mID, self.mTextures.items.len);
+            try self.mTextures.append(render_component.mTexture);
         }
     }
 }
 
-fn DrawQuads(quad_entities: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
-    for (quad_entities.items) |quad_entity_id| {
-        const entity = scene_manager.GetEntity(quad_entity_id);
-        const quad_component = entity.GetComponent(QuadComponent);
-        const transform_component = entity.GetComponent(TransformComponent);
+fn FinishRendering(self: *Renderer) !void {
+    self.mViewportFrameBuffer.Bind();
+    defer self.mViewportFrameBuffer.Unbind();
+    self.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
 
-        RenderM.mR2D.DrawQuad(
-            transform_component.GetTransformMatrix(),
-            quad_component.mColor,
-            quad_component.mTexCoords,
-            @floatFromInt(RenderM.mTexturesMap.get(quad_component.mTexture.mID).?),
-            quad_component.mTilingFactor,
-        );
-    }
-}
+    const shader_asset = try self.mViewportShaderHandle.GetAsset(ShaderAsset);
+    shader_asset.mShader.Bind();
 
-fn DrawSprites(sprite_entities: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
-    var i: usize = 0;
-    while (i < sprite_entities.items.len) : (i += 1) {
-        const entity_id = sprite_entities.items[i];
-        const transform_component = scene_manager.mECSManagerGO.GetComponent(TransformComponent, entity_id);
-        const sprite_component = scene_manager.mECSManagerGO.GetComponent(SpriteRenderComponent, entity_id);
+    self.mR2D.SetBuffers();
+    self.mR2D.BindBuffers();
 
-        RenderM.mR2D.DrawSprite(
-            transform_component.GetTransformMatrix(),
-            sprite_component.mColor,
-            @floatFromInt(RenderM.mTexturesMap.get(sprite_component.mTexture.mID).?),
-            sprite_component.mTilingFactor,
-            sprite_component.mTexCoords,
-        );
-
-        RenderM.mStats.mTriCount += 2;
-        RenderM.mStats.mVertexCount += 4;
-        RenderM.mStats.mIndicesCount += 6;
-        RenderM.mStats.mSpriteNum += 1;
-    }
-}
-
-fn DrawCircles(circle_entities: std.ArrayList(Entity.Type), scene_manager: *SceneManager) void {
-    var i: usize = 0;
-    while (i < circle_entities.items.len) : (i += 1) {
-        const entity_id = circle_entities.items[i];
-        const transform_component = scene_manager.mECSManagerGO.GetComponent(TransformComponent, entity_id);
-        const circle_component = scene_manager.mECSManagerGO.GetComponent(CircleRenderComponent, entity_id);
-        RenderM.mR2D.DrawCircle(transform_component.GetTransformMatrix(), circle_component.mColor, circle_component.mThickness, circle_component.mFade);
-
-        RenderM.mStats.mTriCount += 2;
-        RenderM.mStats.mVertexCount += 4;
-        RenderM.mStats.mIndicesCount += 6;
-        RenderM.mStats.mSpriteNum += 1;
-    }
-}
-
-fn DrawELine(p0: Vec3f32, p1: Vec3f32, color: Vec4f32, thickness: f32) void {
-    RenderM.mR2D.DrawELine(p0, p1, color, thickness);
-
-    RenderM.mStats.mVertexCount += 2;
-    RenderM.mStats.mELineNum += 1;
+    self.mRenderContext.DrawIndexed(self.mViewportVertexArray, self.mViewportIndexBuffer.GetCount());
 }

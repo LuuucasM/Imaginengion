@@ -35,7 +35,7 @@
 
 ### Optimize Number of Shapes
 - Frustum culling
-	- use a spatial data structure like BVH or an alternative
+	- use a spatial data structure like BVH
 	- these data structures can, effectively split themselves down 
 	- so that the runtime of finding which objects to include in the scene is reduced to an O(logn) time search rather than O(n) because its a tree data structure and we can cut or include entire  parts of the tree saving lots of time
 	- construction strategy: use Linear BVH(LBVH) as the construction strategy. 
@@ -44,4 +44,5 @@
 		- infact i would even guess that sorting shapes by morton curve and constructing a bvh probably have something in common
 - occlusion culling
 - something pruning...? i forget what its called
-- 
+
+### physics

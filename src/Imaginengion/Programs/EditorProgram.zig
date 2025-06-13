@@ -1,17 +1,20 @@
 const std = @import("std");
 
 const Window = @import("../Windows/Window.zig");
-const Renderer = @import("../Renderer/Renderer.zig");
 const StaticInputContext = @import("../Inputs/Input.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
+const Renderer = @import("../Renderer/Renderer.zig");
+const Entity = @import("../GameObjects/Entity.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
+const Vec3f32 = LinAlg.Vec3f32;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const CameraComponent = EntityComponents.CameraComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
+const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
@@ -42,12 +45,13 @@ const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const SceneSpecPanel = @import("../Imgui/SceneSpecsPanel.zig");
 
-const EditorSceneManager = @import("../Scene/SceneManager.zig");
+const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
+//editor imgui stuff
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
 _ContentBrowserPanel: ContentBrowserPanel,
@@ -58,20 +62,31 @@ _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
-mSceneManager: EditorSceneManager,
-_SceneLayer: SceneLayer,
-mWindow: *Window,
 _EditorState: EditorState,
 _UsePlayPanel: bool,
 _SceneSpecList: std.ArrayList(SceneSpecPanel),
+
+//editor stuff
+mEditorSceneManager: SceneManager,
+mOverlayScene: SceneLayer,
+mGameScene: SceneLayer,
+mEditorCameraEntity: Entity,
+
+//not editor stuff
+mWindow: *Window,
+mGameSceneManager: SceneManager,
 
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
     try ImGui.Init(window);
     return EditorProgram{
-        .mSceneManager = try EditorSceneManager.Init(window.GetWidth(), window.GetHeight()),
+        .mGameSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight()),
+        .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight()),
+        .mOverlayScene = undefined,
+        .mGameScene = undefined,
         .mWindow = window,
+
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
@@ -80,8 +95,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._ScriptsPanel = ScriptsPanel.Init(),
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
-        ._ViewportPanel = undefined,
-        ._SceneLayer = undefined,
+        ._ViewportPanel = ViewportPanel.Init(window.GetWidth(), window.GetHeight()),
         ._EditorState = .Stop,
         ._PlayPanel = PlayPanel.Init(),
         ._UsePlayPanel = false,
@@ -90,13 +104,20 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
 }
 
 pub fn Setup(self: *EditorProgram) !void {
-    self._SceneLayer = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.CreateEntity(), .mECSManagerGORef = &self.mSceneManager.mECSManagerGO, .mECSManagerSCRef = &self.mSceneManager.mECSManagerSC };
-    _ = try self._SceneLayer.AddComponent(SceneComponent, SceneComponent{
-        .mLayerType = .GameLayer,
-        .mFrameBuffer = try FrameBuffer.Init(EditorSceneManager.SceneManagerGPA.allocator(), &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
-    });
+    self.mOverlayScene = self.mEditorSceneManager.NewScene(.OverlayLayer);
+    self.mGameScene = self.mEditorSceneManager.NewScene(.GameLayer);
 
-    self._ViewportPanel = try ViewportPanel.Init(&self._SceneLayer, self.mWindow.GetHeight(), self.mWindow.GetWidth());
+    self.mEditorCameraEntity = try self.mGameScene.CreateEntity();
+
+    const transform_component = self.mEditorCameraEntity.GetComponent(TransformComponent);
+    transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
+
+    var new_camera_component = CameraComponent{};
+    new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+    _ = try self.mEditorCameraEntity.AddComponent(CameraComponent, new_camera_component);
+
+    //TODO: finish the setup for the camera entity
+    try GameObjectUtils.AddScriptToEntity(self.mEditorCameraEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
 }
 
 pub fn Deinit(self: *EditorProgram) !void {

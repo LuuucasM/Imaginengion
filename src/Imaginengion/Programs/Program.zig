@@ -4,7 +4,6 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
-const Renderer = @import("../Renderer/Renderer.zig");
 const Window = @import("../Windows/Window.zig");
 const Program = @This();
 
@@ -12,7 +11,6 @@ const Impl = @import("EditorProgram.zig");
 _Impl: Impl,
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !Program {
-    try Renderer.Init(window);
     return Program{
         ._Impl = try Impl.Init(engine_allocator, window),
     };
@@ -24,7 +22,6 @@ pub fn Setup(self: *Program) !void {
 
 pub fn Deinit(self: *Program) !void {
     try self._Impl.Deinit();
-    try Renderer.Deinit();
 }
 
 pub fn OnUpdate(self: *Program, dt: f32) !void {
