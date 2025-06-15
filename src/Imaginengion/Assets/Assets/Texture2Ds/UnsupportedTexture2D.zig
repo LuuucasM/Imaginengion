@@ -17,6 +17,10 @@ pub fn GetID(self: UnsupportedTexture2D) usize {
     _ = self;
     Unsupported();
 }
+
+pub fn GetBindlessID(_: UnsupportedTexture2D) u64 {
+    Unsupported();
+}
 pub fn UpdateData(self: UnsupportedTexture2D, width: u32, height: u32, data: *anyopaque, size: usize) void {
     _ = self;
     _ = width;

@@ -29,6 +29,9 @@ pub fn GetHeight(self: Texture2D) usize {
 pub fn GetID(self: Texture2D) c_uint {
     return self._Impl.GetID();
 }
+pub fn GetBindlessID(self: Texture2D) u64 {
+    return self._Impl.GetBindlessID();
+}
 pub fn UpdateData(self: *Texture2D, data: *anyopaque, size: usize) void {
     self._Impl.UpdateData(data, size);
 }

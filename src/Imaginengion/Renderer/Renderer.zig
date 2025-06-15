@@ -146,16 +146,17 @@ pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component:
 
     self.BeginRendering(camera_view_projection);
 
+    self.StartBatch();
+
     //get all the shapes
     const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
 
-    //TODO: culling with bvh
+    //TODO: sorting
+    //TODO: culling
 
     try self.DrawShapes(shapes_ids, scene_manager);
 
-    self.TextureSort(QuadComponent, self.mR2D.mQuadBufferBase, scene_manager);
-
-    try self.FinishRendering();
+    try self.FinishBatch();
 }
 
 pub fn GetRenderStats(self: Renderer) RenderStats {
@@ -165,7 +166,10 @@ pub fn GetRenderStats(self: Renderer) RenderStats {
 fn BeginRendering(self: *Renderer, camera_viewprojection: Mat4f32) void {
     self.mCameraBuffer.mBuffer = LinAlg.Mat4ToArray(camera_viewprojection);
     self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraBuffer), 0);
+
     self.mStats = std.mem.zeroes(RenderStats);
+
+    self.mR2D.StartBatch();
 }
 
 fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
@@ -175,36 +179,17 @@ fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager
 
         if (entity.HasComponent(QuadComponent)) {
             const quad_component = entity.GetComponent(QuadComponent);
+
             try self.mR2D.DrawQuad(
                 transform_component.WorldTransform,
-                quad_component.mColor,
-                quad_component.mTexCoords,
-                0,
-                quad_component.mTilingFactor,
+                quad_component,
             );
         }
         //else if has circle, line, other shapes
     }
 }
 
-fn TextureSort(self: *Renderer, comptime component_type: type, entity_list: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
-    std.debug.assert(@hasField(component_type, "mTexture"));
-
-    self.mTexturesMap.clearRetainingCapacity();
-    self.mTextures.clearRetainingCapacity();
-
-    var i: usize = 0;
-    while (i < entity_list.items.len) : (i += 1) {
-        const entity_id = entity_list.items[i];
-        const render_component = scene_manager.mECSManagerGO.GetComponent(component_type, entity_id);
-        if (self.mTexturesMap.contains(render_component.mTexture.mID) == false) {
-            try self.mTexturesMap.put(render_component.mTexture.mID, self.mTextures.items.len);
-            try self.mTextures.append(render_component.mTexture);
-        }
-    }
-}
-
-fn FinishRendering(self: *Renderer) !void {
+fn FinishBatch(self: *Renderer) !void {
     self.mViewportFrameBuffer.Bind();
     defer self.mViewportFrameBuffer.Unbind();
     self.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });

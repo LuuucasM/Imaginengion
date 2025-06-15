@@ -1,24 +1,141 @@
-#define MAX_STEPS 100
+#type vertex
+#version 460 core
+
+layout(location = 0) in vec2 aPosition;
+
+out vec2 texCoord;
+
+void main() {
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+    texCoord = aPosition * 0.5 + 0.5;
+}
+
+
+#type fragment
+#define MAX_STEPS 180
 #define MAX_DIST 100.
-#define SURF_DIST .0001
+#define SURF_DIST .00009
 
-float udQuad( in vec3 v1, in vec3 v2, in vec3 v3, in vec3 v4, in vec3 p )
+//===========================SHAPE DATA===========================
+#define SHAPE_QUAD 1.
+
+struct QuadData {
+    vec3 Position;
+    vec4 Rotation;
+    vec3 Scale;
+    vec4 Color;
+    uint64_t TexIndex;
+    vec2 TexCoordTop;
+    vec2 TexCoordBottom;
+    float TilingFactor;
+};
+
+layout (std430, binding = 0) buffer Quads {
+     QuadData data[];
+};
+layout(std140, binding = 0) uniform QuadsCount {
+    uint count;
+};
+//===========================END SHAPE DATA===========================
+
+//===========================Helper Functions===========================
+// Quaternion rotation for (w, x, y, z) format
+vec3 QuadRotate(vec3 v, vec4 q) {
+    vec3 qvec = q.yzw;
+    vec3 uv = cross(qvec, v);
+    vec3 uuv = cross(qvec, uv);
+    return v + 2.0 * (q.x * uv + uuv);
+}
+
+//inverse rotation for (w, x, y, z) format
+vec3 QuadRotateInv(vec3 v, vec4 q) {
+    return quatRotate(v, vec4(q.x, -q.yzw));
+}
+
+vec2 GetTexUVQuad(vec3 hit_point, vec3 translation, vec4 rotation, vec3 scale) {
+    vec3 local_p = quatRotateInv(hitPoint - translation, rotation);
+    vec3 half_extents = vec3(scale.xy * 0.5, 0.001);
+    
+    // Check if we're on the front face (+Z)
+    if (abs(local_p.z - half_extents.z) < 0.001) {
+        vec2 uv = (local_p.xy + half_extents.xy) / (2.0 * half_extents.xy);
+        // Return UV only if within bounds
+        if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)))) {
+            return uv;
+        }
+    }
+    return vec2(-1.0); // Invalid UV
+}
+
+vec4 GetSurfaceColor(vec3 hit_point, float shape_type, int shape_index) {
+    vec4 out_color = vec4(0.0, 0.0, 0.0, 0.0);
+    if (shape_type == SHAPE_QUAD){
+        QuadData quad = Quads.data[shape_index];
+        //Get texture UV
+        //if valid UV then get the texture, if not valid do nothing
+            //sample the texture we got
+            //multiply quad.Color and the texture sample together and assign to out_color
+    }
+    return out_color
+}
+//===========================End Helper Functions===========================
+
+//===========================Primitive SDF Functions===========================
+float sdBox( vec3 p, vec3 b )
 {
-    vec3 v21 = v2 - v1; vec3 p1 = p - v1;
-    vec3 v32 = v3 - v2; vec3 p2 = p - v2;
-    vec3 v43 = v4 - v3; vec3 p3 = p - v3;
-    vec3 v14 = v1 - v4; vec3 p4 = p - v4;
-    vec3 nor = cross( v21, v14 );
+    vec3 q = abs(p) - b;
+    return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+//===========================End Primitive SDF Functions===========================
 
-    return sqrt( (sign(dot(cross(v21,nor),p1)) + 
-                  sign(dot(cross(v32,nor),p2)) + 
-                  sign(dot(cross(v43,nor),p3)) + 
-                  sign(dot(cross(v14,nor),p4))<3.0) 
-                  ?
-                  min( min( dot2(v21*clamp(dot(v21,p1)/dot2(v21),0.0,1.0)-p1), 
-                            dot2(v32*clamp(dot(v32,p2)/dot2(v32),0.0,1.0)-p2) ), 
-                       min( dot2(v43*clamp(dot(v43,p3)/dot2(v43),0.0,1.0)-p3),
-                            dot2(v14*clamp(dot(v14,p4)/dot2(v14),0.0,1.0)-p4) ))
-                  :
-                  dot(nor,p1)*dot(nor,p1)/dot2(nor) );
+//===========================IM SDF Functions===========================
+float IMQuad( vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
+    vec3 local_p = quatRotateInv(p - translation, rotation);
+    vec3 half_extents = vec3(scale.xy * 0.5, 0.001);
+    return sdBox(local_p, half_extents);
+}
+//===========================End IM SDF Functions===========================
+
+vec3 ShortestDistance(vec3 p){
+     vec3 result = (3.402823466e+38, 0.0, 0.0);
+     for(int i = 0; i < QuadsCount.count; i++){
+          QuadData data = Quads.data[i];
+          float dist = IMQuad(p, data.Position, data.Rotation, data.Scale);
+          if (dist < result[0]) result = vec3(dist, SHAPE_QUAD, i);
+     }
+     return result;
+}
+
+vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
+    vec4 out_color = vec4(0.3);
+    float dist_origin = 0.0;
+    
+    for (int i = 0; i < MAX_STEPS; i++){
+        vec3 p = ray_origin + dist_origin * ray_dir;
+        
+        //note shortest_step.x = the actual shortest distance
+        //shortest_step.y = what shape it using the #define SHAPE_X
+        //shortest_step.z = the index in the specific array
+        vec3 shortest_step = ShortestDistance(p);
+        dist_origin += shortest_step[0];
+
+        //we reached the end without seeing anything so we can discard this pixel
+        if (dist_origin > MAX_DIST) discard;
+        if (shortest_step[0] < SURF_DIST) {
+            vec3 hit_point = ray_origin + dist_origin * ray_dir;
+            //we have hit a surface so we need to check if this objects alpha is 1.0 or less
+            //if its less we need to keep iterating, minus this object, until we reach a combined alpha of 1.0
+            vec4 color = GetSurfaceColor(hit_point, shortest_step[1], (int)shortest_step[2]);
+            if (color.a != 0.0){
+                //only multiply it in if it actually has seeable color else we can skip it
+                out_color = out_color * 
+            }
+            //if surface color.a < 1.0 keep going except do shortestDistance of the scene minus this object somehow
+        }
+    }
+    return dist_origin;
+}
+
+void main() {
+    
 }

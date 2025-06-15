@@ -199,9 +199,9 @@
   },
   "active": "a2b6d9e1a8ad1a88",
   "lastOpenFiles": [
-    "Optimizations to consider.md",
-    "SDF Rendering.md",
     "General TODO.md",
+    "SDF Rendering.md",
+    "Optimizations to consider.md",
     "Adding new components to engine.md",
     "Game objects.md",
     "ECS Manager.md",

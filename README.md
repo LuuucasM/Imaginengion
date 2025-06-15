@@ -5,6 +5,7 @@
 1. [Introduction](#introduction)
 2. [Compatability and Instillation](#CandI)
 3. [How To Use](#howtouse)
+4. [System Requirements](#systemrequirements)
 
 ## Introduction <a name="introduction"></a>
 I havnt written a proper introduction yet ^_^
@@ -23,3 +24,8 @@ to warrent additional compatability
 
 ## How To Use <a name="howtouse"></a>
 I havnt written anything for this yet because its still in development ^_^
+
+## System Requirements <a name="systemrequirements"></a>
+NVIDIA: GTX 700 series (2013) and newer
+AMD: R9 200 series (2013) and newer
+Intel: Arc series (2022) - avoid older Intel GPUs

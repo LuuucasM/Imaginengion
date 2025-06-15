@@ -16,11 +16,9 @@ mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
 mTexture: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 mTilingFactor: f32 = 1.0,
-mTexCoords: [4]Vec2f32 = [4]Vec2f32{
+mTexCoords: [2]Vec2f32 = [2]Vec2f32{
     Vec2f32{ 0, 0 },
-    Vec2f32{ 1, 0 },
     Vec2f32{ 1, 1 },
-    Vec2f32{ 0, 1 },
 },
 
 pub fn Deinit(_: *SpriteRenderComponent) !void {}

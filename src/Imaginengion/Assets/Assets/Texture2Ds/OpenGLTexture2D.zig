@@ -8,7 +8,7 @@ _Height: c_int,
 _TextureID: c_uint,
 _InternalFormat: c_uint,
 _DataFormat: c_uint,
-mSlot: usize,
+mARBHandle: u64,
 
 pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D {
     _ = allocator;
@@ -55,13 +55,20 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D
 
     glad.glTextureSubImage2D(new_texture_id, 0, 0, 0, width, height, data_format, glad.GL_UNSIGNED_BYTE, data);
 
+    const arb_handle = glad.glGetTextureHandleARB(new_texture_id);
+    if (arb_handle == 0) {
+        @panic("could not get handle!");
+    }
+
+    glad.glMakeTextureHandleResidentARB(arb_handle);
+
     return OpenGLTexture2D{
         ._Width = width,
         ._Height = height,
         ._TextureID = new_texture_id,
         ._InternalFormat = internal_format,
         ._DataFormat = data_format,
-        .mSlot = std.math.maxInt(usize),
+        .mARBHandle = arb_handle,
     };
 }
 
@@ -76,6 +83,10 @@ pub fn GetHeight(self: OpenGLTexture2D) usize {
 }
 pub fn GetID(self: OpenGLTexture2D) c_uint {
     return self._TextureID;
+}
+
+pub fn GetBindlessID(self: OpenGLTexture2D) u64 {
+    return self.mARBHandle;
 }
 
 pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {

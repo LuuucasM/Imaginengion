@@ -1,4 +1,4 @@
-
+- in the sdf shader, i think i want to add a couple of functions that will change the parameters of certain things. god words lmao. like minimum surface distance is .00009 which is ok for close distances but as the distances gets further from the camera we can tolerate less quality 
 - In rendering change it so entities that are children of another entity use the parent transform and the childs transform is relative to the parent
 - add a function to scene_layer to "spawn player" which is an entity which has a component like PlayerComponent which contains the data related to the player. 
 - then create a component for other entities like ControllerComponent, which will allow the entity to be controlled by either player or AI
