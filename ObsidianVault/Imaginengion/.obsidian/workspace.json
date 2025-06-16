@@ -41,12 +41,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "SDF Rendering.md",
+                "file": "General TODO.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "SDF Rendering"
+              "title": "General TODO"
             }
           }
         ],
@@ -199,8 +199,8 @@
   },
   "active": "a2b6d9e1a8ad1a88",
   "lastOpenFiles": [
-    "General TODO.md",
     "SDF Rendering.md",
+    "General TODO.md",
     "Optimizations to consider.md",
     "Adding new components to engine.md",
     "Game objects.md",

@@ -56,8 +56,10 @@ pub const RenderStats = struct {
     mLineNum: usize = 0,
 };
 
-const CameraBuffer = extern struct {
-    mBuffer: [4][4]f32,
+const CameraData = extern struct {
+    mPosition: [3]f32,
+    mRotation: [4]f32,
+    mPerspectiveFar: f32,
 };
 
 mRenderContext: RenderContext = undefined,
@@ -69,16 +71,16 @@ mR3D: Renderer3D = undefined,
 mTexturesMap: std.AutoHashMap(usize, usize) = undefined,
 mTextures: std.ArrayList(AssetHandle) = undefined,
 
-mCameraBuffer: CameraBuffer = std.mem.zeroes(CameraBuffer),
+mCameraBuffer: CameraData = std.mem.zeroes(CameraData),
 mCameraUniformBuffer: UniformBuffer = undefined,
 
 mViewportFrameBuffer: FrameBuffer,
-mViewportWidth: usize,
-mViewportHeight: usize,
+mViewportSize: [3]f32,
 mViewportVertexArray: VertexArray,
 mViewportVertexBuffer: VertexBuffer,
 mViewportIndexBuffer: IndexBuffer,
 mViewportShaderHandle: AssetHandle,
+mViewportResolutionUB: UniformBuffer,
 
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
@@ -91,7 +93,7 @@ pub fn Init(window: *Window) !Renderer {
         .mR3D = Renderer3D.Init(),
         .mTexturesMap = std.AutoHashMap(usize, usize).init(RenderAllocator.allocator()),
         .mTextures = try std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), new_render_context.GetMaxTextureImageSlots()),
-        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraBuffer)),
+        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData)),
         .mViewportFrameBuffer = try FrameBuffer.Init(RenderAllocator.allocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, window.GetWidth(), window.GetHeight()),
         .mViewportHeight = window.GetHeight(),
         .mViewportWidth = window.GetWidth(),
@@ -99,6 +101,7 @@ pub fn Init(window: *Window) !Renderer {
         .mViewportVertexBuffer = VertexBuffer.Init(RenderAllocator.allocator(), 4 * @sizeOf(Vec2f32)),
         .mViewportIndexBuffer = undefined,
         .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
+        .mViewportResolutionUB = UniformBuffer.Init(@sizeOf([3]f32)),
     };
 
     //TODO: FINISH SETTING UP THE NEW SHADER STUFF INTRODUCED INTO THE RENDERER
@@ -117,6 +120,8 @@ pub fn Init(window: *Window) !Renderer {
     new_renderer.mViewportVertexArray.AddVertexBuffer(new_renderer.mViewportVertexBuffer);
 
     new_renderer.mViewportVertexArray.SetIndexBuffer(new_renderer.mViewportIndexBuffer);
+
+    new_renderer.mViewportResolutionUB.SetData(new_renderer.mViewportSize, @sizeOf([3]f32), 0);
 
     return new_renderer;
 }
@@ -142,9 +147,7 @@ pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component:
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const camera_view_projection = LinAlg.Mat4MulMat4(camera_component.mProjection, LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
-
-    self.BeginRendering(camera_view_projection);
+    self.BeginRendering(camera_component.mPerspectiveFar, camera_transform);
 
     self.StartBatch();
 
@@ -163,9 +166,11 @@ pub fn GetRenderStats(self: Renderer) RenderStats {
     return self.mStats;
 }
 
-fn BeginRendering(self: *Renderer, camera_viewprojection: Mat4f32) void {
-    self.mCameraBuffer.mBuffer = LinAlg.Mat4ToArray(camera_viewprojection);
-    self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraBuffer), 0);
+fn BeginRendering(self: *Renderer, perspective_far: f32, camera_transform: *TransformComponent) void {
+    self.mCameraBuffer.mPosition = camera_transform.Translation;
+    self.mCameraBuffer.mRotation = camera_transform.Rotation;
+    self.mCameraBuffer.mPerspectiveFar = perspective_far;
+    self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraData), 0);
 
     self.mStats = std.mem.zeroes(RenderStats);
 
@@ -198,6 +203,9 @@ fn FinishBatch(self: *Renderer) !void {
     shader_asset.mShader.Bind();
 
     self.mR2D.SetBuffers();
+
+    self.mCameraUniformBuffer.Bind(0);
+    self.mViewportResolutionUB.Bind(1);
     self.mR2D.BindBuffers();
 
     self.mRenderContext.DrawIndexed(self.mViewportVertexArray, self.mViewportIndexBuffer.GetCount());

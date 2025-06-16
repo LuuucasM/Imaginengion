@@ -111,8 +111,8 @@ pub fn SetBuffers(self: *Renderer2D) void {
 }
 
 pub fn BindBuffers(self: *Renderer2D) void {
-    self.mQuadBuffer.Bind(0);
-    self.mQuadCountUB.Bind(0);
+    self.mQuadBuffer.Bind(2); //start at 2 cuz 0 is camera and 1 is resolution
+    self.mQuadCountUB.Bind(3);
 }
 
 pub fn DrawQuad(self: *Renderer2D, transform_component: EntityTransformComponent, quad_component: QuadComponent) !void {
