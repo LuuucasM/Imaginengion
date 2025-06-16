@@ -71,10 +71,12 @@ vec4 GetSurfaceColor(vec3 hit_point, float shape_type, int shape_index) {
     vec4 out_color = vec4(0.0, 0.0, 0.0, 0.0);
     if (shape_type == SHAPE_QUAD){
         QuadData quad = Quads.data[shape_index];
-        //Get texture UV
-        //if valid UV then get the texture, if not valid do nothing
-            //sample the texture we got
-            //multiply quad.Color and the texture sample together and assign to out_color
+        vec2 texture_uv = GetTexUVQuad(hit_point, quad.Position, quad.Rotation, quad.Scale);
+        if (texture_uv[0] >= 0.0){
+            sampler2D tex = sampler2D(quad.TexIndex);
+            vec4 texture_color = texture(tex, texture_uv);
+            out_color = quad.Color * texture_color;
+        }
     }
     return out_color
 }
@@ -107,8 +109,10 @@ vec3 ShortestDistance(vec3 p){
 }
 
 vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
-    vec4 out_color = vec4(0.3);
+    vec3 out_color = vec3(0.0);
+    float out_alpha = 0.0;
     float dist_origin = 0.0;
+
     
     for (int i = 0; i < MAX_STEPS; i++){
         vec3 p = ray_origin + dist_origin * ray_dir;
@@ -121,19 +125,26 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
 
         //we reached the end without seeing anything so we can discard this pixel
         if (dist_origin > MAX_DIST) discard;
+
         if (shortest_step[0] < SURF_DIST) {
             vec3 hit_point = ray_origin + dist_origin * ray_dir;
+
             //we have hit a surface so we need to check if this objects alpha is 1.0 or less
             //if its less we need to keep iterating, minus this object, until we reach a combined alpha of 1.0
-            vec4 color = GetSurfaceColor(hit_point, shortest_step[1], (int)shortest_step[2]);
-            if (color.a != 0.0){
-                //only multiply it in if it actually has seeable color else we can skip it
-                out_color = out_color * 
+            vec4 current_color = GetSurfaceColor(hit_point, shortest_step[1], (int)shortest_step[2]);
+
+            float blend_factor = current_color.a * (1.0 - out_alpha);
+            out_color += current_color.rgb * blend_factor;
+            out_alpha += blend_factor;
+            
+            if (out_alpha >= 1.0){
+                break;
             }
-            //if surface color.a < 1.0 keep going except do shortestDistance of the scene minus this object somehow
+
+            //add this current object to a list of objects to ignore in shortest distance calculation somehow?
         }
     }
-    return dist_origin;
+    return out_color;
 }
 
 void main() {
