@@ -79,6 +79,7 @@ mGameSceneManager: SceneManager,
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
+    Renderer.Init(window);
     try ImGui.Init(window);
     return EditorProgram{
         .mGameSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight()),
@@ -100,12 +101,13 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._PlayPanel = PlayPanel.Init(),
         ._UsePlayPanel = false,
         ._SceneSpecList = std.ArrayList(SceneSpecPanel).init(engine_allocator),
+        .mEditorCameraEntity = undefined,
     };
 }
 
 pub fn Setup(self: *EditorProgram) !void {
-    self.mOverlayScene = self.mEditorSceneManager.NewScene(.OverlayLayer);
-    self.mGameScene = self.mEditorSceneManager.NewScene(.GameLayer);
+    self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
+    self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
 
     self.mEditorCameraEntity = try self.mGameScene.CreateEntity();
 
@@ -167,7 +169,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try self._ContentBrowserPanel.OnImguiRender();
     try self._AssetHandlePanel.OnImguiRender();
 
-    try self._ScenePanel.OnImguiRender(&self.mSceneManager);
+    try self._ScenePanel.OnImguiRender(&self.mGameSceneManager);
     for (self._SceneSpecList.items) |*scene_spec_panel| {
         try scene_spec_panel.OnImguiRender();
     }
@@ -208,7 +210,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const editor_camera_group = try self._SceneLayer.GetEntityGroup(.{ .Component = CameraComponent }, allocator);
+    const editor_camera_group = try self.mEditorSceneManager.GetEntityGroup(.{ .Component = CameraComponent }, allocator);
     const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
     const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, editor_camera_group.items[0]);
     try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);

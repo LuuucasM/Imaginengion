@@ -13,8 +13,9 @@ void main() {
 #extension GL_ARB_bindless_texture : require
 #extension GL_ARB_gpu_shader_int64 : require
 
-#define MAX_STEPS 180
+#define MAX_STEPS 128
 #define SURF_DIST .000099
+#define QUAD_THICKNESS 0.001
 
 out vec4 oFragColor;
 
@@ -62,7 +63,7 @@ layout(std140, binding = 3) uniform QuadsCount {
 //===========================Helper Functions/Data===========================
 struct ExcludeObject {
     int ShapeType;
-    int ShapeIndex;
+    uint ShapeIndex;
 };
 
 // Ring buffer for recent exclusions
@@ -70,59 +71,55 @@ ExcludeObject gExclusions[3];
 int gExclusionInd = 0;
 int gExclusionCount = 0;
 
-// Quaternion rotation for (w, x, y, z) format
 vec3 QuadRotate(vec3 v, vec4 q) {
     vec3 qvec = q.yzw;
     vec3 uv = cross(qvec, v);
-    vec3 uuv = cross(qvec, uv);
-    return v + 2.0 * (q.x * uv + uuv);
+    return v + 2.0 * q.x * uv + 2.0 * cross(qvec, uv);
 }
 
 //inverse rotation for (w, x, y, z) format
 vec3 QuadRotateInv(vec3 v, vec4 q) {
-    return QuadRotate(v, vec4(q.x, -q.yzw));
+    return QuadRotate(v, vec4(q.x, -q.y, -q.z, -q.w));
 }
 
 vec2 GetTexUVQuad(vec3 hit_point, vec3 translation, vec4 rotation, vec3 scale) {
     vec3 local_p = QuadRotateInv(hit_point - translation, rotation);
-    vec3 half_extents = vec3(scale.xy * 0.5, 0.001);
+    vec2 half_extents_xy = scale.xy * 0.5;
     
-    // Check if we're on the front face (+Z)
-    if (abs(local_p.z - half_extents.z) < 0.001) {
-        vec2 uv = (local_p.xy + half_extents.xy) / (2.0 * half_extents.xy);
-        // Return UV only if within bounds
-        if (all(greaterThanEqual(uv, vec2(0.0))) && all(lessThanEqual(uv, vec2(1.0)))) {
+    // Check if we're on the front face (+Z) - using constant instead of calculating
+    if (abs(local_p.z - QUAD_THICKNESS) < QUAD_THICKNESS) {
+        vec2 uv = (local_p.xy + half_extents_xy) / (2.0 * half_extents_xy);
+        // Combined bounds check
+        if (all(bvec4(greaterThanEqual(uv, vec2(0.0)), lessThanEqual(uv, vec2(1.0))))) {
             return uv;
         }
     }
     return vec2(-1.0); // Invalid UV
 }
 
-vec4 GetSurfaceColor(vec3 hit_point, int shape_type, int shape_index) {
-    vec4 out_color = vec4(0.0, 0.0, 0.0, 0.0);
+vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
     if (shape_type == SHAPE_QUAD){
         QuadData quad = Quads.data[shape_index];
         vec2 texture_uv = GetTexUVQuad(hit_point, quad.Position, quad.Rotation, quad.Scale);
+
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
             sampler2D tex = sampler2D(quad.TexIndex);
             vec4 texture_color = texture(tex, texture_uv);
-            out_color = quad.Color * texture_color;
+            return (quad.Color * texture_color);
         }
     }
-    return out_color;
+    return vec4(0.0);
 }
 
-bool IsExcluded(int shape_type, int shape_index) {
+bool IsExcluded(int shape_type, uint shape_index) {
     if (gExclusionCount == 0) return false;
 
-    if (gExclusions[0].ShapeType == shape_type && gExclusions[0].ShapeIndex == shape_index) return true;
-    if (gExclusionCount > 1 && gExclusions[1].ShapeType == shape_type && gExclusions[1].ShapeIndex == shape_index) return true;
-    if (gExclusionCount > 2 && gExclusions[2].ShapeType == shape_type && gExclusions[2].ShapeIndex == shape_index) return true;
-    
-    return false;
+    return (gExclusions[0].ShapeType == shape_type && gExclusions[0].ShapeIndex == shape_index) ||
+           (gExclusionCount > 1 && gExclusions[1].ShapeType == shape_type && gExclusions[1].ShapeIndex == shape_index) ||
+           (gExclusionCount > 2 && gExclusions[2].ShapeType == shape_type && gExclusions[2].ShapeIndex == shape_index);
 }
 
-void ExcludeShape(int shape_type, int shape_index) {
+void ExcludeShape(int shape_type, uint shape_index) {
     gExclusions[gExclusionInd].ShapeType = shape_type;
     gExclusions[gExclusionInd].ShapeIndex = shape_index;
 
@@ -142,7 +139,7 @@ float sdBox( vec3 p, vec3 b )
 //===========================IM SDF Functions===========================
 float IMQuad( vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
     vec3 local_p = QuadRotateInv(p - translation, rotation);
-    vec3 half_extents = vec3(scale.xy * 0.5, 0.001);
+    vec3 half_extents = vec3(scale.xy * 0.5, QUAD_THICKNESS);
     return sdBox(local_p, half_extents);
 }
 //===========================End IM SDF Functions===========================
@@ -150,16 +147,16 @@ float IMQuad( vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
 struct DistData {
     float min_dist;
     int shape_type;
-    int shape_index;
+    uint shape_index;
 };
 
 DistData ShortestDistance(vec3 p){
     float min_dist = 3.402823466e+38;
     int shape_type = SHAPE_NONE;
-    int shape_index = 0;
+    uint shape_index = 0;
 
     //for quads
-    for(int i = 0; i < QuadsCount.count; i++){
+    for(uint i = 0u; i < QuadsCount.count; i++){
         if (IsExcluded(SHAPE_QUAD, i)) continue;
 
             QuadData data = Quads.data[i];
@@ -183,7 +180,6 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
     float out_alpha = 0.0;
     float dist_origin = 0.0;
 
-    
     for (int i = 0; i < MAX_STEPS; i++){
         vec3 p = ray_origin + dist_origin * ray_dir;
         

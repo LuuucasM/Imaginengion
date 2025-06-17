@@ -38,7 +38,7 @@ mSelectedEntity: ?Entity,
 mGizmoType: GizmoType,
 mIsFocused: bool = false,
 
-pub fn Init(viewport_width: usize, viewport_height: usize) !ViewportPanel {
+pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
     return ViewportPanel{
         .mP_Open = true,
         .mViewportWidth = viewport_width,

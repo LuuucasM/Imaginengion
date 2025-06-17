@@ -50,6 +50,8 @@ const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").Texture
 
 const Renderer = @This();
 
+var RenderManager: Renderer = .{};
+
 pub const RenderStats = struct {
     mQuadNum: usize = 0,
     mCircleNum: usize = 0,
@@ -62,80 +64,43 @@ const CameraData = extern struct {
     mPerspectiveFar: f32,
 };
 
+const ResolutionData = extern struct {
+    mWidth: f32,
+    mHeight: f32,
+};
+
 mRenderContext: RenderContext = undefined,
 mStats: RenderStats = .{},
 
 mR2D: Renderer2D = undefined,
 mR3D: Renderer3D = undefined,
 
-mTexturesMap: std.AutoHashMap(usize, usize) = undefined,
-mTextures: std.ArrayList(AssetHandle) = undefined,
-
 mCameraBuffer: CameraData = std.mem.zeroes(CameraData),
 mCameraUniformBuffer: UniformBuffer = undefined,
 
-mViewportFrameBuffer: FrameBuffer,
-mViewportSize: [3]f32,
-mViewportVertexArray: VertexArray,
-mViewportVertexBuffer: VertexBuffer,
-mViewportIndexBuffer: IndexBuffer,
-mViewportShaderHandle: AssetHandle,
-mViewportResolutionUB: UniformBuffer,
+mResolutionBuffer: ResolutionData = std.mem.zeroes(ResolutionData),
+mViewportResolutionUB: UniformBuffer = undefined,
 
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(window: *Window) !Renderer {
-    const new_render_context = RenderContext.Init(window);
+    RenderManager.mRenderContext = RenderContext.Init(window);
 
-    var new_renderer = Renderer{
-        .mRenderContext = new_render_context,
-        .mR2D = try Renderer2D.Init(RenderAllocator.allocator()),
-        .mR3D = Renderer3D.Init(),
-        .mTexturesMap = std.AutoHashMap(usize, usize).init(RenderAllocator.allocator()),
-        .mTextures = try std.ArrayList(AssetHandle).initCapacity(RenderAllocator.allocator(), new_render_context.GetMaxTextureImageSlots()),
-        .mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData)),
-        .mViewportFrameBuffer = try FrameBuffer.Init(RenderAllocator.allocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, window.GetWidth(), window.GetHeight()),
-        .mViewportHeight = window.GetHeight(),
-        .mViewportWidth = window.GetWidth(),
-        .mViewportVertexArray = VertexArray.Init(RenderAllocator.allocator()),
-        .mViewportVertexBuffer = VertexBuffer.Init(RenderAllocator.allocator(), 4 * @sizeOf(Vec2f32)),
-        .mViewportIndexBuffer = undefined,
-        .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
-        .mViewportResolutionUB = UniformBuffer.Init(@sizeOf([3]f32)),
-    };
+    RenderManager.mR2D = Renderer2D.Init(RenderAllocator.allocator());
+    RenderManager.mR3d = Renderer3D.Init();
 
-    //TODO: FINISH SETTING UP THE NEW SHADER STUFF INTRODUCED INTO THE RENDERER
-    try new_renderer.mTexturesMap.ensureTotalCapacity(@intCast(new_renderer.mRenderContext.GetMaxTextureImageSlots()));
+    RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
 
-    var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_renderer.mViewportIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
-
-    const shader_asset = try new_renderer.mViewportShaderHandle.GetAsset(ShaderAsset);
-    new_renderer.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
-    new_renderer.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
-
-    var data_vertex_buffer = [4][2]f32{ f32{ -1.0, -1.0 }, f32{ 1.0, -1.0 }, f32{ 1.0, 1.0 }, f32{ -1.0, 1.0 } };
-    new_renderer.mViewportVertexBuffer.SetData(&data_vertex_buffer[0], @sizeOf([4][2]f32));
-
-    new_renderer.mViewportVertexArray.AddVertexBuffer(new_renderer.mViewportVertexBuffer);
-
-    new_renderer.mViewportVertexArray.SetIndexBuffer(new_renderer.mViewportIndexBuffer);
-
-    new_renderer.mViewportResolutionUB.SetData(new_renderer.mViewportSize, @sizeOf([3]f32), 0);
-
-    return new_renderer;
+    RenderManager.mViewportResolutionUB = UniformBuffer.Init(@sizeOf([2]f32));
 }
 
-pub fn Deinit(self: *Renderer) !void {
-    AssetManager.ReleaseAssetHandleRef(&self.mViewportShaderHandle);
-    self.mViewportVertexBuffer.Deinit();
-    self.mViewportIndexBuffer.Deinit();
-    self.mViewportVertexArray.Deinit();
-    self.mViewportFrameBuffer.Deinit();
+pub fn Deinit() !void {
+    try RenderManager.mR2D.Deinit();
+    AssetManager.ReleaseAssetHandleRef(&RenderManager.mViewportShaderHandle);
+    RenderManager.mCameraUniformBuffer.Deinit();
+    RenderManager.mViewportResolutionUB.Deinit();
 
-    try self.mR2D.Deinit();
-    self.mTexturesMap.deinit();
-    self.mTextures.deinit();
+    RenderAllocator.deinit();
 }
 
 pub fn SwapBuffers(self: Renderer) void {
@@ -149,8 +114,6 @@ pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component:
 
     self.BeginRendering(camera_component.mPerspectiveFar, camera_transform);
 
-    self.StartBatch();
-
     //get all the shapes
     const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
 
@@ -159,7 +122,7 @@ pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component:
 
     try self.DrawShapes(shapes_ids, scene_manager);
 
-    try self.FinishBatch();
+    try self.EndRendering();
 }
 
 pub fn GetRenderStats(self: Renderer) RenderStats {
@@ -194,7 +157,7 @@ fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager
     }
 }
 
-fn FinishBatch(self: *Renderer) !void {
+fn EndRendering(self: *Renderer) !void {
     self.mViewportFrameBuffer.Bind();
     defer self.mViewportFrameBuffer.Unbind();
     self.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });

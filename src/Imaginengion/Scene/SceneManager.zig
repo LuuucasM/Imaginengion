@@ -65,18 +65,43 @@ mECSManagerGO: ECSManagerGameObj,
 mECSManagerSC: ECSManagerScenes,
 mGameLayerInsertIndex: usize,
 mNumofLayers: usize,
+
 mViewportWidth: usize,
 mViewportHeight: usize,
+mViewportFrameBuffer: FrameBuffer,
+mViewportVertexArray: VertexArray,
+mViewportVertexBuffer: VertexBuffer,
+mViewportIndexBuffer: IndexBuffer,
+mViewportShaderHandle: AssetHandle,
 
-pub fn Init(width: usize, height: usize) !SceneManager {
-    return SceneManager{
+pub fn Init(width: usize, height: usize, allocator: std.mem.Allocator) !SceneManager {
+    const new_scene_manager = SceneManager{
         .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &EntityComponentsArray),
         .mECSManagerSC = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &SceneComponentsList),
         .mGameLayerInsertIndex = 0,
         .mNumofLayers = 0,
         .mViewportWidth = width,
         .mViewportHeight = height,
+        .mViewportFrameBuffer = try FrameBuffer.Init(allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, width, height),
+        .mViewportVertexArray = VertexArray.Init(allocator),
+        .mViewportVertexBuffer = VertexBuffer.Init(allocator, 4 * @sizeOf(Vec2f32)),
+        .mViewportIndexBuffer = undefined,
+        .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
     };
+
+    const shader_asset = try new_scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
+    new_scene_manager.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+    new_scene_manager.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
+
+    var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    new_scene_manager.mViewportIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
+
+    var data_vertex_buffer = [4][2]f32{ f32{ -1.0, -1.0 }, f32{ 1.0, -1.0 }, f32{ 1.0, 1.0 }, f32{ -1.0, 1.0 } };
+    new_scene_manager.mViewportVertexBuffer.SetData(&data_vertex_buffer[0], @sizeOf([4][2]f32));
+    new_scene_manager.mViewportVertexArray.AddVertexBuffer(new_scene_manager.mViewportVertexBuffer);
+    new_scene_manager.mViewportVertexArray.SetIndexBuffer(new_scene_manager.mViewportIndexBuffer);
+
+    return new_scene_manager;
 }
 
 pub fn Deinit(self: *SceneManager) !void {
