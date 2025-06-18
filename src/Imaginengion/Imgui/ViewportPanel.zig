@@ -102,68 +102,9 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, cam
             try ImguiEventManager.Insert(new_event);
         }
     }
-    //entity picking for selected entity
 
-    //gizmos
-    //if (self.mSelectedEntity) |entity| {
-    //    if (self.mGizmoType != .None) {
-    //        var window_pos: imgui.struct_ImVec2 = undefined;
-    //        var window_size: imgui.struct_ImVec2 = undefined;
-    //        imgui.igGetWindowPos(&window_pos);
-    //        imgui.igGetWindowSize(&window_size);
-    //
-    //        var viewport_bounds: [2]imgui.struct_ImVec2 = undefined;
-    //        viewport_bounds[0] = imgui.struct_ImVec2{ .x = window_pos.x, .y = window_pos.y };
-    //        viewport_bounds[1] = imgui.struct_ImVec2{ .x = window_pos.x + window_size.x, .y = window_pos.y + window_size.y };
-    //
-    //        imgui.ImGuizmo_SetOrthographic(false);
-    //        imgui.ImGuizmo_SetDrawlist(imgui.igGetWindowDrawList());
-    //        imgui.ImGuizmo_SetRect(viewport_bounds[0].x, viewport_bounds[0].y, viewport_bounds[1].x - viewport_bounds[0].x, viewport_bounds[1].y - viewport_bounds[0].y);
-    //
-    //        imgui.ImGuizmo_SetOrthographic(if (camera_component.mProjectionType == .Orthographic) true else false);
-    //        var camera_proj = LinAlg.Mat4ToArray(camera_component.mProjection);
-    //        camera_proj[1][1] *= -1;
-    //        var camera_view = LinAlg.Mat4ToArray(LinAlg.Mat4Inverse(camera_transform.GetTransformMatrix()));
-    //
-    //        const entity_transform_component = entity.GetComponent(TransformComponent);
-    //
-    //        var entity_transform = LinAlg.Mat4ToArray(entity_transform_component.GetTransformMatrix());
-    //
-    //        const snap_value: f32 = if (self.mGizmoType != .Rotation) 0.5 else 30.0;
-    //        const snap_values: [3]f32 = [3]f32{ snap_value, snap_value, snap_value };
-    //        std.debug.print("Translate component is valid: {}\n", .{entity_transform_component.Translation});
-    //        std.debug.print("entity_transform_mat4f32 is valid: {}\n", .{LinAlg.IsValidMat4f32(entity_transform_component.GetTransformMatrix())});
-    //        std.debug.print("camera_view is valid: {}, camera_proj is valid: {}, entity_transform is valid: {}\n", .{ LinAlg.IsValid4x4Array(camera_view), LinAlg.IsValid4x4Array(camera_proj), LinAlg.IsValid4x4Array(entity_transform) });
-    //
-    //        _ = imgui.ImGuizmo_Manipulate(
-    //            &camera_view[0][0],
-    //            &camera_proj[0][0],
-    //            @intCast(@intFromEnum(self.mGizmoType)),
-    //            imgui.LOCAL,
-    //            &entity_transform[0][0],
-    //            null,
-    //            if (StaticInputContext.IsInputPressed(.LeftControl) == true) &snap_values else null,
-    //            null,
-    //            null,
-    //        );
-    //
-    //        std.debug.print("AFTER entity_transform_mat4f32 is valid: {}\n", .{LinAlg.IsValidMat4f32(entity_transform_component.GetTransformMatrix())});
-    //        std.debug.print("AFTER camera_view is valid: {}, camera_proj is valid: {}, entity_transform is valid: {}\n", .{ LinAlg.IsValid4x4Array(camera_view), LinAlg.IsValid4x4Array(camera_proj), LinAlg.IsValid4x4Array(entity_transform) });
-    //
-    //        if (imgui.ImGuizmo_IsUsing() and LinAlg.IsValid4x4Array(entity_transform)) {
-    //            var translation: Vec3f32 = undefined;
-    //            var rotation: Quatf32 = undefined;
-    //            var scale: Vec3f32 = undefined;
-    //
-    //            LinAlg.Decompose(entity_transform, &translation, &rotation, &scale);
-    //
-    //            entity_transform_component.Translation = translation;
-    //            entity_transform_component.Rotation = rotation;
-    //            entity_transform_component.Scale = scale;
-    //            entity_transform_component.Dirty = true;
-    //        }
-    //    }
-    //}
+    //TODO: entity picking for selected entity
+    //TODO: gizmos to drag around entities in the viewport
 }
 
 pub fn OnImguiRenderPlay(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer) !void {

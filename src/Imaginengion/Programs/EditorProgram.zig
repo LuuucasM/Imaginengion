@@ -124,7 +124,8 @@ pub fn Setup(self: *EditorProgram) !void {
 
 pub fn Deinit(self: *EditorProgram) !void {
     self._ContentBrowserPanel.Deinit();
-    try self.mSceneManager.Deinit();
+    try self.mGameSceneManager.Deinit();
+    try self.mEditorSceneManager.Deinit();
     ImGui.Deinit();
 }
 
@@ -179,42 +180,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try self._CSEditorPanel.OnImguiRender();
 
     try self._ToolbarPanel.OnImguiRender();
-    //if (self._UsePlayPanel == true) {
-    //    const editor_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = EditorCameraTag }, allocator);
-    //    const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
-    //    const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, editor_camera_group.items[0]);
-    //    try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
-    //    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component, camera_transform);
-    //
-    //    if (self._EditorState == .Play) {
-    //        const primary_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
-    //        if (primary_camera_group.items.len > 0) {
-    //            const play_camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, primary_camera_group.items[0]);
-    //            const play_camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, primary_camera_group.items[0]);
-    //            try Renderer.OnUpdate(&self.mSceneManager, play_camera_component, play_camera_transform);
-    //            try self._PlayPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer);
-    //        }
-    //    }
-    //} else {
-    //    if (self._EditorState == .Play) {
-    //        const primary_camera_group = try self.mSceneManager.mECSManagerGO.GetGroup(.{ .Component = PrimaryCameraTag }, allocator);
-    //        if (primary_camera_group.items.len > 0) {
-    //            const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, primary_camera_group.items[0]);
-    //            const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, primary_camera_group.items[0]);
-    //            try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
-    //            try self._ViewportPanel.OnImguiRenderPlay(&self.mSceneManager.mFrameBuffer);
-    //        }
-    //    } else {}
-    //}
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
 
-    const editor_camera_group = try self.mEditorSceneManager.GetEntityGroup(.{ .Component = CameraComponent }, allocator);
-    const camera_component = self.mSceneManager.mECSManagerGO.GetComponent(CameraComponent, editor_camera_group.items[0]);
-    const camera_transform = self.mSceneManager.mECSManagerGO.GetComponent(TransformComponent, editor_camera_group.items[0]);
-    try Renderer.OnUpdate(&self.mSceneManager, camera_component, camera_transform);
-    try self._ViewportPanel.OnImguiRender(&self.mSceneManager.mFrameBuffer, camera_component, camera_transform);
+    const camera_component = self.mEditorCameraEntity.GetComponent(CameraComponent);
+    const camera_transform = self.mEditorCameraEntity.GetComponent(TransformComponent);
+    try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform);
+    try self._ViewportPanel.OnImguiRender(&self.mGameSceneManager.mFrameBuffer, camera_component, camera_transform);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
