@@ -79,11 +79,11 @@ mGameSceneManager: SceneManager,
 const EditorProgram = @This();
 
 pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
-    Renderer.Init(window);
+    try Renderer.Init(window);
     try ImGui.Init(window);
     return EditorProgram{
-        .mGameSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight()),
-        .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight()),
+        .mGameSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
+        .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
         .mOverlayScene = undefined,
         .mGameScene = undefined,
         .mWindow = window,
@@ -213,8 +213,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     self.CleanSceneSpecs();
 
     //handle deleted objects this frame
-    try self.mSceneManager.mECSManagerGO.ProcessDestroyedEntities();
-    try self.mSceneManager.mECSManagerSC.ProcessDestroyedEntities();
+    try self.mGameSceneManager.mECSManagerGO.ProcessDestroyedEntities();
+    try self.mGameSceneManager.mECSManagerSC.ProcessDestroyedEntities();
+    try self.mEditorSceneManager.mECSManagerGO.ProcessDestroyedEntities();
+    try self.mEditorSceneManager.mECSManagerSC.ProcessDestroyedEntities();
     try AssetManager.ProcessDestroyedAssets();
 
     //end of frame resets
@@ -222,26 +224,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     GameEventManager.EventsReset();
     ImguiEventManager.EventsReset();
     //-----------------End End of Frame-------------------
-}
-
-pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize) !bool {
-    const editor_scene_component = self._SceneLayer.GetComponent(SceneComponent);
-    editor_scene_component.mFrameBuffer.Resize(width, height);
-
-    _ = try self._ViewportPanel.OnWindowResize(width, height);
-    return true;
-}
-
-pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
-    var cont_bool = true;
-    if (self._EditorState == .Play) {
-        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mSceneManager, OnInputPressedScript, .{&e});
-    }
-
-    cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
-
-    _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnInputPressedScript, .{&e}, &self._SceneLayer);
-    return cont_bool;
 }
 
 pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
@@ -318,7 +300,8 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            try self.mSceneManager.OnViewportResize(e.mWidth, e.mHeight);
+            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight);
+            try self.mEditorSceneManager.OnViewportResize(e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
@@ -368,6 +351,18 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
         //close imgui window that plays the scene from the pov of the primary camera
         self._EditorState = .Stop;
     }
+}
+
+pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
+    var cont_bool = true;
+    if (self._EditorState == .Play) {
+        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mSceneManager, OnInputPressedScript, .{&e});
+    }
+
+    cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
+
+    _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnInputPressedScript, .{&e}, &self._SceneLayer);
+    return cont_bool;
 }
 
 fn CleanSceneSpecs(self: *EditorProgram) void {

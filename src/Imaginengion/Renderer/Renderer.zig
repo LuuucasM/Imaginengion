@@ -83,11 +83,11 @@ mViewportResolutionUB: UniformBuffer = undefined,
 
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
-pub fn Init(window: *Window) !Renderer {
+pub fn Init(window: *Window) !void {
     RenderManager.mRenderContext = RenderContext.Init(window);
 
-    RenderManager.mR2D = Renderer2D.Init(RenderAllocator.allocator());
-    RenderManager.mR3d = Renderer3D.Init();
+    RenderManager.mR2D = try Renderer2D.Init(RenderAllocator.allocator());
+    RenderManager.mR3D = Renderer3D.Init();
 
     RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
 

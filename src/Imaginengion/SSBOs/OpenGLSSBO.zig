@@ -6,12 +6,13 @@ mBindIndex: c_uint,
 mBufferID: c_uint,
 
 pub fn Init(size: usize) OpenGLSSBO {
-    const new_ssbo = OpenGLSSBO{
+    var new_ssbo = OpenGLSSBO{
         .mSize = size,
         .mBufferID = undefined,
+        .mBindIndex = 0,
     };
-    glad.glCreateBuffers(1, &new_ssbo.mBufferID);
-    glad.glNamedBufferData(new_ssbo.mBufferID, size, null, glad.GL_DYNAMIC_DRAW);
+    glad.glCreateBuffers(1, @ptrCast(&new_ssbo.mBufferID));
+    glad.glNamedBufferData(new_ssbo.mBufferID, @intCast(size), null, glad.GL_DYNAMIC_DRAW);
 }
 
 pub fn Deinit(self: OpenGLSSBO) void {

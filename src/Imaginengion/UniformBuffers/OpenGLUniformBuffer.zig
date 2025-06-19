@@ -7,6 +7,7 @@ mBindIndex: c_uint,
 pub fn Init(size: u32) OpenGLUniformBuffer {
     var new_ub = OpenGLUniformBuffer{
         .mBufferID = undefined,
+        .mBindIndex = 0,
     };
     glad.glCreateBuffers(1, &new_ub.mBufferID);
     glad.glNamedBufferData(new_ub.mBufferID, size, null, glad.GL_DYNAMIC_DRAW);

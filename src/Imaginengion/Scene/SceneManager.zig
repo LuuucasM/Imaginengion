@@ -141,6 +141,8 @@ pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void 
             camera_component.SetViewportSize(width, height);
         }
     }
+
+    self.mViewportFrameBuffer.Resize(width, height);
 }
 
 pub fn CalculateTransforms(self: *SceneManager) void {
