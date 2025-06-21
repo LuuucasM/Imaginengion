@@ -25,6 +25,7 @@ pub const ComponentsList = [_]type{
     NameComponent,
     ParentComponent,
     PlayerComponent,
+    QuadComponent,
     SceneIDComponent,
     SpriteRenderComponent,
     TransformComponent,

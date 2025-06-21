@@ -106,8 +106,8 @@ pub fn StartBatch(self: *Renderer2D) void {
 
 pub fn SetBuffers(self: *Renderer2D) void {
     self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, self.mQuadBufferBase.items.len * @sizeOf(QuadData), 0);
-    const quad_count: c_int = @intCast(self.mQuadBufferBase.items.len);
-    self.mQuadCountUB.SetData(&quad_count, @sizeOf(c_uint), 0);
+    var quad_count: c_int = @intCast(self.mQuadBufferBase.items.len);
+    self.mQuadCountUB.SetData(@ptrCast(&quad_count), @sizeOf(c_uint), 0);
 }
 
 pub fn BindBuffers(self: *Renderer2D) void {
@@ -115,15 +115,15 @@ pub fn BindBuffers(self: *Renderer2D) void {
     self.mQuadCountUB.Bind(3);
 }
 
-pub fn DrawQuad(self: *Renderer2D, transform_component: EntityTransformComponent, quad_component: QuadComponent) !void {
-    const texture_asset = quad_component.mTexture.GetAsset(Texture2D);
+pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponent, quad_component: *QuadComponent) !void {
+    const texture_asset = try quad_component.mTexture.GetAsset(Texture2D);
 
     try self.mQuadBufferBase.append(.{
         .Position = [3]f32{ transform_component.Translation[0], transform_component.Translation[1], transform_component.Translation[2] },
         .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
         .Scale = [3]f32{ transform_component.Scale[0], transform_component.Scale[1], transform_component.Scale[2] },
         .Color = [4]f32{ quad_component.mColor[0], quad_component.mColor[1], quad_component.mColor[2], quad_component.mColor[3] },
-        .TexIndex = texture_asset.GetBindlessID,
+        .TexIndex = texture_asset.GetBindlessID(),
         .TexCoordTop = [2]f32{ quad_component.mTexCoords[0][0], quad_component.mTexCoords[0][1] },
         .TexCoordBottom = [2]f32{ quad_component.mTexCoords[1][0], quad_component.mTexCoords[1][1] },
         .TilingFactor = quad_component.mTilingFactor,

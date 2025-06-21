@@ -13,13 +13,15 @@ pub fn Init(size: usize) OpenGLSSBO {
     };
     glad.glCreateBuffers(1, @ptrCast(&new_ssbo.mBufferID));
     glad.glNamedBufferData(new_ssbo.mBufferID, @intCast(size), null, glad.GL_DYNAMIC_DRAW);
+
+    return new_ssbo;
 }
 
 pub fn Deinit(self: OpenGLSSBO) void {
     glad.glDeleteBuffers(1, &self.mBufferID);
 }
 
-pub fn Bind(self: OpenGLSSBO, binding: usize) void {
+pub fn Bind(self: *OpenGLSSBO, binding: usize) void {
     self.mBindIndex = @intCast(binding);
     glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, self.mBindIndex, self.mBufferID);
 }
@@ -30,8 +32,8 @@ pub fn Unbind(self: OpenGLSSBO) void {
 
 pub fn SetData(self: OpenGLSSBO, data: *anyopaque, size: usize, offset: u32) void {
     if (size > self.mSize) {
-        glad.glNamedBufferData(self.mBufferID, size, data, glad.GL_DYNAMIC_COPY);
+        glad.glNamedBufferData(self.mBufferID, @intCast(size), data, glad.GL_DYNAMIC_COPY);
     } else {
-        glad.glNamedBufferSubData(self.mBufferID, offset, size, data);
+        glad.glNamedBufferSubData(self.mBufferID, offset, @intCast(size), data);
     }
 }

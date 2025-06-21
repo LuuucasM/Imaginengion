@@ -15,7 +15,7 @@ pub fn Init(size: u32) UniformBuffer {
     };
 }
 
-pub fn Bind(self: UniformBuffer, binding: usize) void {
+pub fn Bind(self: *UniformBuffer, binding: usize) void {
     self.mImpl.Bind(binding);
 }
 

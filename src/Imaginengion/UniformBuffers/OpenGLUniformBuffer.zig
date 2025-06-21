@@ -19,7 +19,7 @@ pub fn Deinit(self: OpenGLUniformBuffer) void {
     glad.glDeleteBuffers(1, &self.mBufferID);
 }
 
-pub fn Bind(self: OpenGLUniformBuffer, binding: usize) void {
+pub fn Bind(self: *OpenGLUniformBuffer, binding: usize) void {
     self.mBindIndex = @intCast(binding);
     glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, self.mBindIndex, self.mBufferID);
 }

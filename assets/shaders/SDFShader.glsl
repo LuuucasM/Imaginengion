@@ -10,6 +10,7 @@ void main() {
 
 
 #type fragment
+#version 460
 #extension GL_ARB_bindless_texture : require
 #extension GL_ARB_gpu_shader_int64 : require
 
@@ -17,7 +18,7 @@ void main() {
 #define SURF_DIST .000099
 #define QUAD_THICKNESS 0.001
 
-out vec4 oFragColor;
+layout(location = 0) out vec4 oFragColor;
 
 //===========================Camera===========================
 struct CameraData {
@@ -26,13 +27,13 @@ struct CameraData {
     float PerspectiveFar;
 };
 
-layout(std140, binding = 0) uniform Camera {
+layout(std140, binding = 0) uniform CameraUBO {
     CameraData data;
-};
+} Camera;
 
-layout(std140, binding = 1) uniform Resolution {
+layout(std140, binding = 1) uniform ResolutionUBO {
     vec3 data;
-};
+} Resolution;
 
 //===========================End Camera===========================
 
@@ -51,13 +52,13 @@ struct QuadData {
     float TilingFactor;
 };
 
-layout (std430, binding = 2) buffer Quads {
+layout (std430, binding = 2) buffer QuadsSSBO {
      QuadData data[];
-};
+} Quads;
 
-layout(std140, binding = 3) uniform QuadsCount {
+layout(std140, binding = 3) uniform QuadsCountUBO {
     uint count;
-};
+} QuadsCount;
 //===========================End Shape Data===========================
 
 //===========================Helper Functions/Data===========================

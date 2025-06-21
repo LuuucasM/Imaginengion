@@ -37,23 +37,8 @@ pub fn OnImguiRender(self: StatsPanel, dt: f64, render_stats: RenderStats) !void
     const render_text = try std.fmt.allocPrint(allocator, "Render Data: \n", .{});
     imgui.igTextUnformatted(render_text.ptr, render_text.ptr + render_text.len);
 
-    const render_tri_text = try std.fmt.allocPrint(allocator, "\tTotal Triangles: {d} \n", .{render_stats.mTriCount});
-    imgui.igTextUnformatted(render_tri_text.ptr, render_tri_text.ptr + render_tri_text.len);
-
-    const render_vert_text = try std.fmt.allocPrint(allocator, "\tTotal Verticies: {d} \n", .{render_stats.mVertexCount});
-    imgui.igTextUnformatted(render_vert_text.ptr, render_vert_text.ptr + render_vert_text.len);
-
-    const render_ind_text = try std.fmt.allocPrint(allocator, "\tTotal Indices: {d} \n", .{render_stats.mIndicesCount});
-    imgui.igTextUnformatted(render_ind_text.ptr, render_ind_text.ptr + render_ind_text.len);
-
-    const render_sprite_text = try std.fmt.allocPrint(allocator, "\tTotal Sprites: {d} \n", .{render_stats.mSpriteNum});
-    imgui.igTextUnformatted(render_sprite_text.ptr, render_sprite_text.ptr + render_sprite_text.len);
-
-    const render_circle_text = try std.fmt.allocPrint(allocator, "\tTotal Circles: {d} \n", .{render_stats.mCircleNum});
-    imgui.igTextUnformatted(render_circle_text.ptr, render_circle_text.ptr + render_circle_text.len);
-
-    const render_eline_text = try std.fmt.allocPrint(allocator, "\tTotal Editor Lines: {d} \n", .{render_stats.mELineNum});
-    imgui.igTextUnformatted(render_eline_text.ptr, render_eline_text.ptr + render_eline_text.len);
+    const render_quad_text = try std.fmt.allocPrint(allocator, "\tTotal Triangles: {d} \n", .{render_stats.mQuadNum});
+    imgui.igTextUnformatted(render_quad_text.ptr, render_quad_text.ptr + render_quad_text.len);
 }
 
 pub fn OnImguiEvent(self: *StatsPanel, event: *ImguiEvent) void {

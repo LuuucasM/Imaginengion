@@ -32,7 +32,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const shader_sources = try ReadFile(abs_path, arena.allocator());
-    if (try new_shader.Compile(shader_sources) == true) {
+    if (try new_shader.Compile(shader_sources, abs_path) == true) {
         try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
         try new_shader.DiscoverUniforms();
     }
@@ -267,10 +267,10 @@ fn ReadFile(abs_path: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHa
     return shaders;
 }
 
-fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8)) !bool {
+fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8), abs_path: []const u8) !bool {
     const shader_id: glad.GLuint = glad.glCreateProgram();
 
-    var buffer: [40 + 1024]u8 = undefined;
+    var buffer: [2000]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     var gl_shader_ids = std.ArrayList(glad.GLenum).init(fba.allocator());
     defer gl_shader_ids.deinit();
@@ -291,13 +291,14 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
             var max_length: glad.GLint = 0;
             glad.glGetShaderiv(shader, glad.GL_INFO_LOG_LENGTH, &max_length);
 
-            const info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
+            var info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
             defer info_log.deinit();
+            try info_log.resize(@intCast(max_length));
             glad.glGetShaderInfoLog(shader, max_length, &max_length, info_log.items.ptr);
 
             glad.glDeleteShader(shader);
 
-            std.log.err("Shader Compilation Failure! {s}\n", .{info_log.items});
+            std.log.err("Shader Compilation Failure! {s} for shader: {s}\n", .{ info_log.items, abs_path });
 
             return false;
         }
@@ -315,8 +316,9 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
         var max_length: glad.GLint = 0;
         glad.glGetProgramiv(shader_id, glad.GL_INFO_LOG_LENGTH, &max_length);
 
-        const info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
+        var info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
         defer info_log.deinit();
+        try info_log.resize(@intCast(max_length));
         glad.glGetProgramInfoLog(shader_id, max_length, &max_length, info_log.items.ptr);
 
         glad.glDeleteProgram(shader_id);
@@ -325,7 +327,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
             glad.glDeleteShader(id);
         }
 
-        std.log.err("Program failed to link! {s}\n", .{info_log.items});
+        std.log.err("Program failed to link! {s} for shader: {s}\n", .{ info_log.items, abs_path });
 
         return false;
     }

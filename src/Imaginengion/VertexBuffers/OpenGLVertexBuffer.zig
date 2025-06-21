@@ -18,7 +18,7 @@ pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
     };
     glad.glCreateBuffers(1, &new_vb.mBufferID);
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_vb.mBufferID);
-    glad.glNamedBufferStorage(new_vb.buffer_id, @intCast(size), null, glad.GL_DYNAMIC_STORAGE_BIT);
+    glad.glNamedBufferStorage(new_vb.mBufferID, @intCast(size), null, glad.GL_DYNAMIC_STORAGE_BIT);
     return new_vb;
 }
 
@@ -37,9 +37,9 @@ pub fn Unbind() void {
 
 pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize, offset: u32) void {
     if (size > self.mSize) {
-        glad.glNamedBufferData(self.mBufferID, size, data, glad.GL_DYNAMIC_COPY);
+        glad.glNamedBufferData(self.mBufferID, @intCast(size), data, glad.GL_DYNAMIC_COPY);
     } else {
-        glad.glNamedBufferSubData(self.mBufferID, offset, size, data);
+        glad.glNamedBufferSubData(self.mBufferID, offset, @intCast(size), data);
     }
 }
 

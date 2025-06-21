@@ -19,7 +19,7 @@ pub fn Deinit(self: SSBO) void {
     self.mImpl.Deinit();
 }
 
-pub fn Bind(self: SSBO, binding: usize) void {
+pub fn Bind(self: *SSBO, binding: usize) void {
     self.mImpl.Bind(binding);
 }
 

@@ -139,22 +139,26 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     try AssetManager.OnUpdate();
 
     //-------------Inputs Begin------------------
-    //=============Human Inputs=============
+    std.log.debug("Starting inputs\n", .{});
+    //Human Inputs
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
     if (self._EditorState == .Play) {
-        _ = try ScriptsProcessor.RunEntityScript(&self.mSceneManager, OnUpdateInputScript, .{});
+        _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{});
     }
     //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
-    _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnUpdateInputScript, .{}, &self._SceneLayer);
+    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{});
 
-    //=============AI Inputs=============
+    //AI Inputs
 
     //-------------Physics Begin-----------------
+    std.log.debug("Starting Physics\n", .{});
     //-------------Physics End-------------------
 
-    self.mSceneManager.CalculateTransforms();
+    std.log.debug("Calculating transforms\n", .{});
+    try self.mGameSceneManager.CalculateTransforms();
+    try self.mEditorSceneManager.CalculateTransforms();
 
     //-------------Game Logic Begin--------------
     //-------------Game Logic End----------------
@@ -163,33 +167,49 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //-------------Animation End----------------
 
     //---------Render Begin-------------
+    std.log.debug("Render Being\n", .{});
     try GameEventManager.ProcessEvents(.EC_PreRender);
 
+    std.log.debug("Imgui begin\n", .{});
     ImGui.Begin();
     Dockspace.Begin();
+
+    std.log.debug("content browser panel\n", .{});
     try self._ContentBrowserPanel.OnImguiRender();
+    std.log.debug("asset panel\n", .{});
     try self._AssetHandlePanel.OnImguiRender();
 
+    std.log.debug("scene panel\n", .{});
     try self._ScenePanel.OnImguiRender(&self.mGameSceneManager);
+    std.log.debug("scene spec list\n", .{});
     for (self._SceneSpecList.items) |*scene_spec_panel| {
         try scene_spec_panel.OnImguiRender();
     }
-
+    std.log.debug("components panel\n", .{});
     try self._ComponentsPanel.OnImguiRender();
+    std.log.debug("scripts panel\n", .{});
     try self._ScriptsPanel.OnImguiRender();
+    std.log.debug("cs editor panel\n", .{});
     try self._CSEditorPanel.OnImguiRender();
 
+    std.log.debug("toolbar panel\n", .{});
     try self._ToolbarPanel.OnImguiRender();
 
+    std.log.debug("renderer on update\n", .{});
     const camera_component = self.mEditorCameraEntity.GetComponent(CameraComponent);
     const camera_transform = self.mEditorCameraEntity.GetComponent(TransformComponent);
     try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform);
-    try self._ViewportPanel.OnImguiRender(&self.mGameSceneManager.mFrameBuffer, camera_component, camera_transform);
 
+    std.log.debug("viewport panel\n", .{});
+    try self._ViewportPanel.OnImguiRender(&self.mGameSceneManager.mViewportFrameBuffer, camera_component, camera_transform);
+
+    std.log.debug("stats panel\n", .{});
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
+    std.log.debug("dockspace imgui render\n", .{});
     try Dockspace.OnImguiRender();
 
+    std.log.debug("imgui process events\n", .{});
     try ImguiEventManager.ProcessEvents();
 
     Dockspace.End();
@@ -203,6 +223,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------Networking End---------------
 
     //-----------------Start End of Frame-----------------
+    std.log.debug("Start end frame\n", .{});
     //swap buffers
     Renderer.SwapBuffers();
 
@@ -254,11 +275,11 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             }
         },
         .ET_NewSceneEvent => |e| {
-            _ = try self.mSceneManager.NewScene(e.mLayerType);
+            _ = try self.mGameSceneManager.NewScene(e.mLayerType);
         },
         .ET_SaveSceneEvent => {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                try self.mSceneManager.SaveScene(scene_layer);
+                try self.mGameSceneManager.SaveScene(scene_layer);
             }
         },
         .ET_SaveSceneAsEvent => |e| {
@@ -268,20 +289,20 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
                     const rel_path = AssetManager.GetRelPath(e.Path);
                     _ = try std.fs.createFileAbsolute(e.Path, .{});
                     scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-                    try self.mSceneManager.SaveSceneAs(scene_layer, e.Path);
+                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.Path);
                 }
             }
         },
         .ET_OpenSceneEvent => |e| {
             if (e.Path.len > 0) {
-                _ = try self.mSceneManager.LoadScene(e.Path);
+                _ = try self.mGameSceneManager.LoadScene(e.Path);
             }
         },
         .ET_MoveSceneEvent => |e| {
-            try self.mSceneManager.MoveScene(e.SceneID, e.NewPos);
+            try self.mGameSceneManager.MoveScene(e.SceneID, e.NewPos);
         },
         .ET_NewEntityEvent => |e| {
-            _ = try self.mSceneManager.CreateEntity(e.SceneID);
+            _ = try self.mGameSceneManager.CreateEntity(e.SceneID);
         },
         .ET_SelectSceneEvent => |e| {
             self._ScenePanel.OnSelectSceneEvent(e.SelectedScene);
@@ -315,13 +336,13 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_SaveEntityEvent => {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
-                try self.mSceneManager.SaveEntity(selected_entity);
+                try self.mGameSceneManager.SaveEntity(selected_entity);
             }
         },
         .ET_SaveEntityAsEvent => |e| {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
                 if (e.Path.len > 0) {
-                    try self.mSceneManager.SaveEntityAs(selected_entity, e.Path);
+                    try self.mGameSceneManager.SaveEntityAs(selected_entity, e.Path);
                 }
             }
         },
@@ -343,7 +364,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
         //self.mSceneManager.SaveAllScenes();
         //open up a new imgui window which plays the scene from the pov of the primary camera
         self._EditorState = .Play;
-        _ = try ScriptsProcessor.RunSceneScript(&self.mSceneManager, OnSceneStartScript, .{});
+        _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{});
     }
     if (event.mEditorState == .Stop and self._EditorState == .Play) {
         //TODO
@@ -356,13 +377,20 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
     var cont_bool = true;
     if (self._EditorState == .Play) {
-        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mSceneManager, OnInputPressedScript, .{&e});
+        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnInputPressedScript, .{&e});
     }
 
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
 
-    _ = try ScriptsProcessor.RunEntityScriptEditor(&self.mSceneManager, OnInputPressedScript, .{&e}, &self._SceneLayer);
+    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnInputPressedScript, .{&e});
     return cont_bool;
+}
+
+pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize) !bool {
+    _ = self;
+    _ = width;
+    _ = height;
+    return true;
 }
 
 fn CleanSceneSpecs(self: *EditorProgram) void {

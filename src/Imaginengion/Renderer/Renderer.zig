@@ -103,44 +103,46 @@ pub fn Deinit() !void {
     RenderAllocator.deinit();
 }
 
-pub fn SwapBuffers(self: Renderer) void {
-    self.mRenderContext.SwapBuffers();
+pub fn SwapBuffers() void {
+    RenderManager.mRenderContext.SwapBuffers();
 }
 
-pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
+pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
-    self.BeginRendering(camera_component.mPerspectiveFar, camera_transform);
+    std.log.debug("begin rendering\n", .{});
+    BeginRendering(camera_component.mPerspectiveFar, camera_transform);
 
     //get all the shapes
     const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
 
     //TODO: sorting
     //TODO: culling
+    std.log.debug("draw shapes\n", .{});
+    try DrawShapes(shapes_ids, scene_manager);
 
-    try self.DrawShapes(shapes_ids, scene_manager);
-
-    try self.EndRendering();
+    std.log.debug("end rendering\n", .{});
+    try EndRendering(scene_manager);
+    std.log.debug("end on update\n", .{});
 }
 
-pub fn GetRenderStats(self: Renderer) RenderStats {
-    return self.mStats;
+pub fn GetRenderStats() RenderStats {
+    return RenderManager.mStats;
 }
 
-fn BeginRendering(self: *Renderer, perspective_far: f32, camera_transform: *TransformComponent) void {
-    self.mCameraBuffer.mPosition = camera_transform.Translation;
-    self.mCameraBuffer.mRotation = camera_transform.Rotation;
-    self.mCameraBuffer.mPerspectiveFar = perspective_far;
-    self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraData), 0);
+fn BeginRendering(perspective_far: f32, camera_transform: *TransformComponent) void {
+    RenderManager.mCameraBuffer.mPosition = camera_transform.Translation;
+    RenderManager.mCameraBuffer.mRotation = camera_transform.Rotation;
+    RenderManager.mCameraBuffer.mPerspectiveFar = perspective_far;
+    RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
 
-    self.mStats = std.mem.zeroes(RenderStats);
+    RenderManager.mStats = std.mem.zeroes(RenderStats);
 
-    self.mR2D.StartBatch();
+    RenderManager.mR2D.StartBatch();
 }
 
-fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
+fn DrawShapes(shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
     for (shapes.items) |shape_entity_id| {
         const entity = scene_manager.GetEntity(shape_entity_id);
         const transform_component = entity.GetComponent(TransformComponent);
@@ -148,8 +150,8 @@ fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager
         if (entity.HasComponent(QuadComponent)) {
             const quad_component = entity.GetComponent(QuadComponent);
 
-            try self.mR2D.DrawQuad(
-                transform_component.WorldTransform,
+            try RenderManager.mR2D.DrawQuad(
+                transform_component,
                 quad_component,
             );
         }
@@ -157,19 +159,35 @@ fn DrawShapes(self: *Renderer, shapes: std.ArrayList(Entity.Type), scene_manager
     }
 }
 
-fn EndRendering(self: *Renderer) !void {
-    self.mViewportFrameBuffer.Bind();
-    defer self.mViewportFrameBuffer.Unbind();
-    self.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
+fn EndRendering(scene_manager: *SceneManager) !void {
+    std.log.debug("scene spec list\n", .{});
+    scene_manager.mViewportFrameBuffer.Bind();
+    defer scene_manager.mViewportFrameBuffer.Unbind();
+    scene_manager.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
 
-    const shader_asset = try self.mViewportShaderHandle.GetAsset(ShaderAsset);
+    std.log.debug("shader asset\n", .{});
+    const shader_asset = try scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
     shader_asset.mShader.Bind();
 
-    self.mR2D.SetBuffers();
+    std.log.debug("set buffers\n", .{});
+    RenderManager.mR2D.SetBuffers();
 
-    self.mCameraUniformBuffer.Bind(0);
-    self.mViewportResolutionUB.Bind(1);
-    self.mR2D.BindBuffers();
+    std.log.debug("canmera uniform\n", .{});
+    RenderManager.mCameraUniformBuffer.Bind(0);
+    std.log.debug("ivewport resolution\n", .{});
+    RenderManager.mViewportResolutionUB.Bind(1);
 
-    self.mRenderContext.DrawIndexed(self.mViewportVertexArray, self.mViewportIndexBuffer.GetCount());
+    std.log.debug("bind buffers\n", .{});
+    RenderManager.mR2D.BindBuffers();
+
+    std.log.debug("va\n", .{});
+    const va = scene_manager.mViewportVertexArray;
+    std.log.debug("ib\n", .{});
+    const ib = scene_manager.mViewportIndexBuffer;
+    std.log.debug("count\n", .{});
+    const count = ib.GetCount();
+
+    std.log.debug("draw indexed\n", .{});
+    RenderManager.mRenderContext.DrawIndexed(va, count);
+    std.log.debug("after draw indexed\n", .{});
 }

@@ -75,7 +75,7 @@ mViewportIndexBuffer: IndexBuffer,
 mViewportShaderHandle: AssetHandle,
 
 pub fn Init(width: usize, height: usize, allocator: std.mem.Allocator) !SceneManager {
-    const new_scene_manager = SceneManager{
+    var new_scene_manager = SceneManager{
         .mECSManagerGO = try ECSManagerGameObj.Init(SceneManagerGPA.allocator(), &EntityComponentsArray),
         .mECSManagerSC = try ECSManagerScenes.Init(SceneManagerGPA.allocator(), &SceneComponentsList),
         .mGameLayerInsertIndex = 0,
@@ -90,15 +90,15 @@ pub fn Init(width: usize, height: usize, allocator: std.mem.Allocator) !SceneMan
     };
 
     const shader_asset = try new_scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
-    new_scene_manager.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+    try new_scene_manager.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
     new_scene_manager.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
 
     var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_scene_manager.mViewportIndexBuffer = IndexBuffer.Init(&data_index_buffer, 6 * @sizeOf(u32));
+    new_scene_manager.mViewportIndexBuffer = IndexBuffer.Init(data_index_buffer[0..], 6);
 
-    var data_vertex_buffer = [4][2]f32{ f32{ -1.0, -1.0 }, f32{ 1.0, -1.0 }, f32{ 1.0, 1.0 }, f32{ -1.0, 1.0 } };
-    new_scene_manager.mViewportVertexBuffer.SetData(&data_vertex_buffer[0], @sizeOf([4][2]f32));
-    new_scene_manager.mViewportVertexArray.AddVertexBuffer(new_scene_manager.mViewportVertexBuffer);
+    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
+    new_scene_manager.mViewportVertexBuffer.SetData(&data_vertex_buffer[0], @sizeOf([4][2]f32), 0);
+    try new_scene_manager.mViewportVertexArray.AddVertexBuffer(new_scene_manager.mViewportVertexBuffer);
     new_scene_manager.mViewportVertexArray.SetIndexBuffer(new_scene_manager.mViewportIndexBuffer);
 
     return new_scene_manager;
@@ -145,7 +145,7 @@ pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize) !void 
     self.mViewportFrameBuffer.Resize(width, height);
 }
 
-pub fn CalculateTransforms(self: *SceneManager) void {
+pub fn CalculateTransforms(self: *SceneManager) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -159,7 +159,7 @@ pub fn CalculateTransforms(self: *SceneManager) void {
 
     for (transform_group.items) |entity_id| {
         const entity = self.GetEntity(entity_id);
-        self.CalculateEntityTransform(entity, LinAlg.Mat4Identity());
+        CalculateEntityTransform(entity, LinAlg.Mat4Identity(), false);
     }
 }
 
@@ -313,17 +313,17 @@ pub fn SaveEntityAs(_: *SceneManager, entity: Entity, abs_path: []const u8) !voi
 }
 
 pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    const scene_layer = SceneLayer(.{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC });
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterEntityByScene(entity_result_list);
 }
 
 pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    const scene_layer = SceneLayer(.{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC });
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterEntityScriptsByScene(scripts_result_list);
 }
 
 pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
-    const scene_layer = SceneLayer(.{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC });
+    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterSceneScriptsByScene(scripts_result_list);
 }
 
