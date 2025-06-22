@@ -31,7 +31,7 @@ const ScriptAsset = Assets.ScriptAsset;
 
 const Entity = @import("../GameObjects/Entity.zig");
 
-pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type, args: anytype) !bool {
+pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type, args: anytype, frame_allocator: std.mem.Allocator) !bool {
     comptime {
         if (script_type != OnInputPressedScript and
             script_type != OnUpdateInputScript)
@@ -39,21 +39,16 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
             @compileError("Cannot use this type as a Entity Script type!");
         }
     }
-    //TODO: change to new scene system
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
     const ecs_manager_go = scene_manager.mECSManagerGO;
 
-    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, allocator);
+    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, frame_allocator);
     std.sort.insertion(SceneType, scene_stack_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
 
     var cont_bool = true;
     for (scene_stack_scenes.items) |scene_id| {
         if (cont_bool == false) break;
 
-        var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, allocator);
+        var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
         scene_manager.FilterEntityScriptsByScene(&scene_scripts, scene_id);
 
         for (scene_scripts.items) |script_id| {
@@ -63,7 +58,7 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
 
             var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
 
-            const combined_args = .{ StaticEngineContext.GetInstance(), &allocator, &entity } ++ args;
+            const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &entity } ++ args;
 
             cont_bool = cont_bool and @call(.auto, run_func, combined_args);
         }

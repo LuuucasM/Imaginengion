@@ -25,14 +25,10 @@ pub fn Init(scene_layer: SceneLayer) !SceneSpecsPanel {
     };
 }
 
-pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
+pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator) !void {
     const name_component = self.mSceneLayer.GetComponent(SceneNameComponent);
 
-    const scene_name = try allocator.dupeZ(u8, name_component.Name.items);
+    const scene_name = try frame_allocator.dupeZ(u8, name_component.Name.items);
     imgui.igSetNextWindowSize(.{ .x = 800, .y = 600 }, imgui.ImGuiCond_Once);
     _ = imgui.igBegin(scene_name, &self.mPOpen, 0);
     defer imgui.igEnd();
@@ -69,7 +65,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel) !void {
             while (curr_id != AssetHandle.NullHandle) {
                 const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
                 const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
-                const script_name = try allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath));
+                const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath));
                 imgui.igText(script_name);
                 curr_id = script_component.mNext;
             }

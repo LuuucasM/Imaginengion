@@ -1,6 +1,6 @@
 /// Open Source Initiative OSI - The MIT License (MIT):Licensing
 /// The MIT License (MIT)
-/// Copyright (c) 2024 Ralph Caraveo (deckarep@gmail.com)
+/// Copyright (c) 2025 Ralph Caraveo (deckarep@gmail.com)
 /// Permission is hereby granted, free of charge, to any person obtaining a copy of
 /// this software and associated documentation files (the "Software"), to deal in
 /// the Software without restriction, including without limitation the rights to
@@ -106,8 +106,7 @@ pub fn ArraySetUnmanaged(comptime E: type) type {
 
         /// Returns the number of total elements which may be present before
         /// it is no longer guaranteed that no allocations will be performed.
-        pub fn capacity(self: *Self) Size {
-            // Note: map.capacity() requires mutable access, probably an oversight.
+        pub fn capacity(self: Self) Size {
             return self.unmanaged.capacity();
         }
 
@@ -146,7 +145,7 @@ pub fn ArraySetUnmanaged(comptime E: type) type {
         pub fn containsAll(self: Self, other: Self) bool {
             var iter = other.iterator();
             while (iter.next()) |el| {
-                if (!self.unmanaged.contains(el.*)) {
+                if (!self.unmanaged.contains(el.key_ptr.*)) {
                     return false;
                 }
             }
@@ -299,6 +298,23 @@ pub fn ArraySetUnmanaged(comptime E: type) type {
             self.unmanaged = interSet.unmanaged;
         }
 
+        /// isDisjoint returns true if the intersection between two sets is the null set.
+        /// Otherwise returns false.
+        pub fn isDisjoint(self: Self, other: Self) bool {
+            // Optimization: Find the smaller of the two, and iterate over the smaller set
+            const smaller = if (self.cardinality() <= other.cardinality()) self else other;
+            const larger = if (self.cardinality() <= other.cardinality()) other else self;
+
+            var iter = smaller.iterator();
+            while (iter.next()) |el| {
+                if (larger.contains(el.key_ptr.*)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// Returns true if this Set is empty otherwise false.
         pub fn isEmpty(self: Self) bool {
             return self.unmanaged.count() == 0;
         }
@@ -613,6 +629,28 @@ test "comprehensive usage" {
     // subsetOf
 
     // supersetOf
+}
+
+test "isDisjoint" {
+    var a = ArraySetUnmanaged(u32).init();
+    defer a.deinit(testing.allocator);
+    _ = try a.appendSlice(testing.allocator, &.{ 20, 30, 40 });
+
+    var b = ArraySetUnmanaged(u32).init();
+    defer b.deinit(testing.allocator);
+    _ = try b.appendSlice(testing.allocator, &.{ 202, 303, 403 });
+
+    // Test the true case.
+    try expect(a.isDisjoint(b));
+    try expect(b.isDisjoint(a));
+
+    // Test the false case.
+    var c = ArraySetUnmanaged(u32).init();
+    defer c.deinit(testing.allocator);
+    _ = try c.appendSlice(testing.allocator, &.{ 20, 30, 400 });
+
+    try expect(!a.isDisjoint(c));
+    try expect(!c.isDisjoint(a));
 }
 
 test "clone" {

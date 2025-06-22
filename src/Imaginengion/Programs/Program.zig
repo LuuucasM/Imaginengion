@@ -10,9 +10,9 @@ const Program = @This();
 const Impl = @import("EditorProgram.zig");
 _Impl: Impl,
 
-pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !Program {
+pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !Program {
     return Program{
-        ._Impl = try Impl.Init(engine_allocator, window),
+        ._Impl = try Impl.Init(engine_allocator, window, frame_allocator),
     };
 }
 
@@ -24,16 +24,16 @@ pub fn Deinit(self: *Program) !void {
     try self._Impl.Deinit();
 }
 
-pub fn OnUpdate(self: *Program, dt: f32) !void {
-    try self._Impl.OnUpdate(dt);
+pub fn OnUpdate(self: *Program, dt: f32, frame_allocator: std.mem.Allocator) !void {
+    try self._Impl.OnUpdate(dt, frame_allocator);
 }
 
-pub fn OnWindowResize(self: *Program, width: usize, height: usize) !bool {
-    return try self._Impl.OnWindowResize(width, height);
+pub fn OnWindowResize(self: *Program, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
+    return try self._Impl.OnWindowResize(width, height, frame_allocator);
 }
 
-pub fn OnInputPressedEvent(self: *Program, e: InputPressedEvent) !bool {
-    return self._Impl.OnInputPressedEvent(e);
+pub fn OnInputPressedEvent(self: *Program, e: InputPressedEvent, frame_allocator: std.mem.Allocator) !bool {
+    return self._Impl.OnInputPressedEvent(e, frame_allocator);
 }
 
 pub fn OnImguiEvent(self: *Program, event: *ImguiEvent) !void {

@@ -111,7 +111,6 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    std.log.debug("begin rendering\n", .{});
     BeginRendering(camera_component.mPerspectiveFar, camera_transform);
 
     //get all the shapes
@@ -119,12 +118,9 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
 
     //TODO: sorting
     //TODO: culling
-    std.log.debug("draw shapes\n", .{});
     try DrawShapes(shapes_ids, scene_manager);
 
-    std.log.debug("end rendering\n", .{});
     try EndRendering(scene_manager);
-    std.log.debug("end on update\n", .{});
 }
 
 pub fn GetRenderStats() RenderStats {
@@ -160,34 +156,19 @@ fn DrawShapes(shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) 
 }
 
 fn EndRendering(scene_manager: *SceneManager) !void {
-    std.log.debug("scene spec list\n", .{});
     scene_manager.mViewportFrameBuffer.Bind();
     defer scene_manager.mViewportFrameBuffer.Unbind();
     scene_manager.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
 
-    std.log.debug("shader asset\n", .{});
     const shader_asset = try scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
     shader_asset.mShader.Bind();
 
-    std.log.debug("set buffers\n", .{});
     RenderManager.mR2D.SetBuffers();
 
-    std.log.debug("canmera uniform\n", .{});
     RenderManager.mCameraUniformBuffer.Bind(0);
-    std.log.debug("ivewport resolution\n", .{});
     RenderManager.mViewportResolutionUB.Bind(1);
 
-    std.log.debug("bind buffers\n", .{});
     RenderManager.mR2D.BindBuffers();
 
-    std.log.debug("va\n", .{});
-    const va = scene_manager.mViewportVertexArray;
-    std.log.debug("ib\n", .{});
-    const ib = scene_manager.mViewportIndexBuffer;
-    std.log.debug("count\n", .{});
-    const count = ib.GetCount();
-
-    std.log.debug("draw indexed\n", .{});
-    RenderManager.mRenderContext.DrawIndexed(va, count);
-    std.log.debug("after draw indexed\n", .{});
+    RenderManager.mRenderContext.DrawIndexed(scene_manager.mViewportVertexArray, scene_manager.mViewportIndexBuffer.GetCount());
 }

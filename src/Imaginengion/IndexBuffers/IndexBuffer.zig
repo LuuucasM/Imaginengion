@@ -28,5 +28,5 @@ pub fn Unbind(self: IndexBuffer) void {
 }
 
 pub fn GetCount(self: IndexBuffer) usize {
-    return self.GetCount();
+    return self.mImpl.GetCount();
 }

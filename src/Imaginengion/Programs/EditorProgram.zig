@@ -75,10 +75,11 @@ mEditorCameraEntity: Entity,
 //not editor stuff
 mWindow: *Window,
 mGameSceneManager: SceneManager,
+mFrameAllocator: std.mem.Allocator,
 
 const EditorProgram = @This();
 
-pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram {
+pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !EditorProgram {
     try Renderer.Init(window);
     try ImGui.Init(window);
     return EditorProgram{
@@ -86,7 +87,9 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
         .mOverlayScene = undefined,
         .mGameScene = undefined,
+        .mEditorCameraEntity = undefined,
         .mWindow = window,
+        .mFrameAllocator = frame_allocator,
 
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(),
@@ -101,7 +104,6 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window) !EditorProgram
         ._PlayPanel = PlayPanel.Init(),
         ._UsePlayPanel = false,
         ._SceneSpecList = std.ArrayList(SceneSpecPanel).init(engine_allocator),
-        .mEditorCameraEntity = undefined,
     };
 }
 
@@ -123,9 +125,10 @@ pub fn Setup(self: *EditorProgram) !void {
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
-    self._ContentBrowserPanel.Deinit();
     try self.mGameSceneManager.Deinit();
     try self.mEditorSceneManager.Deinit();
+    self._ContentBrowserPanel.Deinit();
+
     ImGui.Deinit();
 }
 
@@ -134,31 +137,28 @@ pub fn Deinit(self: *EditorProgram) !void {
 //particles
 //handling the loading and unloading of assets and scene transitions
 //debug/profiling
-pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
+pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocator) !void {
     //update asset manager
     try AssetManager.OnUpdate();
 
     //-------------Inputs Begin------------------
-    std.log.debug("Starting inputs\n", .{});
     //Human Inputs
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
     if (self._EditorState == .Play) {
-        _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{});
+        _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{}, frame_allocator);
     }
     //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
-    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{});
+    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, frame_allocator);
 
     //AI Inputs
 
     //-------------Physics Begin-----------------
-    std.log.debug("Starting Physics\n", .{});
     //-------------Physics End-------------------
 
-    std.log.debug("Calculating transforms\n", .{});
-    try self.mGameSceneManager.CalculateTransforms();
-    try self.mEditorSceneManager.CalculateTransforms();
+    try self.mGameSceneManager.CalculateTransforms(frame_allocator);
+    try self.mEditorSceneManager.CalculateTransforms(frame_allocator);
 
     //-------------Game Logic Begin--------------
     //-------------Game Logic End----------------
@@ -167,49 +167,34 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //-------------Animation End----------------
 
     //---------Render Begin-------------
-    std.log.debug("Render Being\n", .{});
     try GameEventManager.ProcessEvents(.EC_PreRender);
 
-    std.log.debug("Imgui begin\n", .{});
     ImGui.Begin();
     Dockspace.Begin();
 
-    std.log.debug("content browser panel\n", .{});
     try self._ContentBrowserPanel.OnImguiRender();
-    std.log.debug("asset panel\n", .{});
-    try self._AssetHandlePanel.OnImguiRender();
+    try self._AssetHandlePanel.OnImguiRender(frame_allocator);
 
-    std.log.debug("scene panel\n", .{});
     try self._ScenePanel.OnImguiRender(&self.mGameSceneManager);
-    std.log.debug("scene spec list\n", .{});
     for (self._SceneSpecList.items) |*scene_spec_panel| {
-        try scene_spec_panel.OnImguiRender();
+        try scene_spec_panel.OnImguiRender(frame_allocator);
     }
-    std.log.debug("components panel\n", .{});
     try self._ComponentsPanel.OnImguiRender();
-    std.log.debug("scripts panel\n", .{});
     try self._ScriptsPanel.OnImguiRender();
-    std.log.debug("cs editor panel\n", .{});
     try self._CSEditorPanel.OnImguiRender();
 
-    std.log.debug("toolbar panel\n", .{});
     try self._ToolbarPanel.OnImguiRender();
 
-    std.log.debug("renderer on update\n", .{});
     const camera_component = self.mEditorCameraEntity.GetComponent(CameraComponent);
     const camera_transform = self.mEditorCameraEntity.GetComponent(TransformComponent);
     try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform);
 
-    std.log.debug("viewport panel\n", .{});
     try self._ViewportPanel.OnImguiRender(&self.mGameSceneManager.mViewportFrameBuffer, camera_component, camera_transform);
 
-    std.log.debug("stats panel\n", .{});
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
-    std.log.debug("dockspace imgui render\n", .{});
     try Dockspace.OnImguiRender();
 
-    std.log.debug("imgui process events\n", .{});
     try ImguiEventManager.ProcessEvents();
 
     Dockspace.End();
@@ -223,7 +208,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------Networking End---------------
 
     //-----------------Start End of Frame-----------------
-    std.log.debug("Start end frame\n", .{});
     //swap buffers
     Renderer.SwapBuffers();
 
@@ -321,8 +305,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight);
-            try self.mEditorSceneManager.OnViewportResize(e.mWidth, e.mHeight);
+            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
@@ -374,22 +357,20 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
     }
 }
 
-pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent) !bool {
+pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, frame_allocator: std.mem.Allocator) !bool {
     var cont_bool = true;
     if (self._EditorState == .Play) {
-        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnInputPressedScript, .{&e});
+        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnInputPressedScript, .{&e}, frame_allocator);
     }
 
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
 
-    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnInputPressedScript, .{&e});
+    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnInputPressedScript, .{&e}, frame_allocator);
     return cont_bool;
 }
 
-pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize) !bool {
-    _ = self;
-    _ = width;
-    _ = height;
+pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
+    try self.mEditorSceneManager.OnViewportResize(width, height, frame_allocator);
     return true;
 }
 

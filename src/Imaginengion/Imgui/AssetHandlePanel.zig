@@ -13,22 +13,15 @@ pub fn Init() AssetHandlePanel {
     };
 }
 
-pub fn OnImguiRender(self: AssetHandlePanel) !void {
+pub fn OnImguiRender(self: AssetHandlePanel, frame_allocator: std.mem.Allocator) !void {
     if (self._P_Open == false) return;
     _ = imgui.igBegin("AssetHandles", null, 0);
     defer imgui.igEnd();
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    const file_data_set = try AssetManager.GetGroup(.{ .Component = FileMetaData }, allocator);
+    const file_data_set = try AssetManager.GetGroup(.{ .Component = FileMetaData }, frame_allocator);
     for (file_data_set.items) |asset_id| {
         const file_data = try AssetManager.GetAsset(FileMetaData, asset_id);
-        const text = try std.fmt.allocPrint(fba.allocator(), "Handle # {d}: \n\tPath: {s}\n", .{ asset_id, file_data.mRelPath });
-        defer fba.allocator().free(text);
+        const text = try std.fmt.allocPrint(frame_allocator, "Handle # {d}: \n\tPath: {s}\n", .{ asset_id, file_data.mRelPath });
         imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
     }
 }

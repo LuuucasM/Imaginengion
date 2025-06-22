@@ -5,7 +5,6 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 pub fn EntityManager(entity_t: type) type {
     return struct {
         const Self = @This();
-        pub const NullEntity: entity_t = ~0;
 
         var NextID: entity_t = 0;
 

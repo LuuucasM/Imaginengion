@@ -10,12 +10,12 @@
 //! via the appropriate `Run` method for the editor or game.
 
 const std = @import("std");
-const EventManager = @import("../Events/SystemEventManager.zig");
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const Window = @import("../Windows/Window.zig");
 const Input = @import("../Inputs/Input.zig");
 const Program = @import("../Programs/Program.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
+const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
 const StaticEngineContext = @import("EngineContext.zig");
@@ -26,6 +26,8 @@ mIsRunning: bool = true,
 mIsMinimized: bool = false,
 mWindow: Window = undefined,
 mProgram: Program = undefined,
+mEngineAllocator: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
+mFrameAllocator: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 
 /// Initializes the engine application.
 ///
@@ -35,13 +37,13 @@ mProgram: Program = undefined,
 ///
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
-pub fn Init(self: *Application, engine_allocator: std.mem.Allocator) !void {
+pub fn Init(self: *Application) !void {
     try AssetManager.Init();
     try Input.Init();
-    try EventManager.Init(self);
+    try SystemEventManager.Init(self);
 
     self.mWindow = Window.Init();
-    self.mProgram = try Program.Init(engine_allocator, &self.mWindow);
+    self.mProgram = try Program.Init(self.mEngineAllocator.allocator(), &self.mWindow, self.mFrameAllocator.allocator());
     try self.mProgram.Setup();
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
@@ -61,7 +63,9 @@ pub fn Deinit(self: *Application) !void {
     try self.mProgram.Deinit();
     self.mWindow.Deinit();
     try AssetManager.Deinit();
-    EventManager.Deinit();
+    SystemEventManager.Deinit();
+    GameEventManager.Deinit();
+    ImguiEventManager.Deinit();
     Input.Deinit();
 }
 
@@ -78,7 +82,8 @@ pub fn Run(self: *Application) !void {
 
     while (self.mIsRunning) : (delta_time = @as(f32, @floatFromInt(timer.lap())) / std.time.ns_per_s) {
         StaticEngineContext.SetDT(delta_time);
-        try self.mProgram.OnUpdate(delta_time);
+        try self.mProgram.OnUpdate(delta_time, self.mFrameAllocator.allocator());
+        _ = self.mFrameAllocator.reset(.free_all);
     }
 }
 
@@ -96,7 +101,7 @@ pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
     cont_bool = cont_bool and switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| try self.OnWindowResize(e._Width, e._Height),
-        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e),
+        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e, self.mFrameAllocator.allocator()),
         else => true,
     };
 }
@@ -130,6 +135,6 @@ fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
     }
 
     self.mWindow.OnWindowResize(width, height);
-    _ = try self.mProgram.OnWindowResize(width, height);
+    _ = try self.mProgram.OnWindowResize(width, height, self.mFrameAllocator.allocator());
     return true;
 }

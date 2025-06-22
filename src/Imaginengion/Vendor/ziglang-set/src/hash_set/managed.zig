@@ -1,6 +1,6 @@
 /// Open Source Initiative OSI - The MIT License (MIT):Licensing
 /// The MIT License (MIT)
-/// Copyright (c) 2024 Ralph Caraveo (deckarep@gmail.com)
+/// Copyright (c) 2025 Ralph Caraveo (deckarep@gmail.com)
 /// Permission is hereby granted, free of charge, to any person obtaining a copy of
 /// this software and associated documentation files (the "Software"), to deal in
 /// the Software without restriction, including without limitation the rights to
@@ -23,6 +23,7 @@ const std = @import("std");
 const mem = std.mem;
 const Allocator = mem.Allocator;
 const SetUnmanaged = @import("unmanaged.zig").HashSetUnmanaged;
+const SetUnmanagedWithContext = @import("unmanaged.zig").HashSetUnmanagedWithContext;
 
 /// fn HashSetManaged(E) creates a set based on element type E.
 /// This implementation is backed by the std.AutoHashMap implementation
@@ -30,16 +31,31 @@ const SetUnmanaged = @import("unmanaged.zig").HashSetUnmanaged;
 /// a Key is considered to be a Set element of type E.
 /// The Set comes complete with the common set operations expected
 /// in a comprehensive set-based data-structure.
+/// Note that max_load_percentage is passed as undefined, because the underlying
+/// std.AutoHashMap/std.StringHashMap defaults are used.
 pub fn HashSetManaged(comptime E: type) type {
+    return HashSetManagedWithContext(E, void, undefined);
+}
+
+/// HashSetManagedWithContext creates a set based on element type E with custom hashing behavior.
+/// This variant allows specifying:
+/// - A Context type that implements hash() and eql() functions for custom element hashing
+/// - A max_load_percentage (1-100) that controls hash table resizing
+/// If Context is undefined, then max_load_percentage is ignored.
+///
+/// The Context type must provide:
+///   fn hash(self: Context, key: K) u64
+///   fn eql(self: Context, a: K, b: K) bool
+pub fn HashSetManagedWithContext(comptime E: type, comptime Context: type, comptime max_load_percentage: u8) type {
     return struct {
         allocator: std.mem.Allocator,
 
         map: Map,
+        context: if (Context == void) void else Context = if (Context == void) {} else undefined,
+        max_load_percentage: if (Context == void) void else u8 = if (Context == void) {} else max_load_percentage,
 
         /// The type of the internal hash map
-        pub const Map = SetUnmanaged(E); //selectMap(E);
-        //pub const Map = std.AutoHashMap(E, void);
-        /// The integer type used to store the size of the map, borrowed from map
+        pub const Map = SetUnmanagedWithContext(E, Context, max_load_percentage);
         pub const Size = Map.Size;
         /// The iterator type returned by iterator(), key-only for sets
         pub const Iterator = Map.Iterator;
@@ -51,6 +67,17 @@ pub fn HashSetManaged(comptime E: type) type {
             return .{
                 .allocator = allocator,
                 .map = Map.init(),
+                .context = if (Context == void) {} else undefined,
+                .max_load_percentage = if (Context == void) {} else max_load_percentage,
+            };
+        }
+
+        pub fn initContext(allocator: std.mem.Allocator, context: Context) Self {
+            return .{
+                .allocator = allocator,
+                .map = Map.initContext(context),
+                .context = context,
+                .max_load_percentage = max_load_percentage,
             };
         }
 
@@ -107,8 +134,7 @@ pub fn HashSetManaged(comptime E: type) type {
 
         /// Returns the number of total elements which may be present before
         /// it is no longer guaranteed that no allocations will be performed.
-        pub fn capacity(self: *Self) Size {
-            // Note: map.capacity() requires mutable access, probably an oversight.
+        pub fn capacity(self: Self) Size {
             return self.map.capacity();
         }
 
@@ -230,26 +256,6 @@ pub fn HashSetManaged(comptime E: type) type {
             self.map = diffSet.map;
         }
 
-        pub fn Filter(self: Self, function: *const fn (E) bool) Allocator.Error!Self {
-            var filtered_set = Self.init(self.allocator);
-
-            var iter = self.map.iterator();
-            while (iter.next()) |pVal| {
-                if (function(pVal.*) == true) {
-                    _ = try filtered_set.add(pVal.*);
-                }
-            }
-            return filtered_set;
-        }
-
-        pub fn FilterUpdate(self: *Self, function: *const fn (E) bool) Allocator.Error!void {
-            const filtered_set = try self.Filter(function);
-
-            self.map.deinit(self.allocator);
-
-            self.map = filtered_set.map;
-        }
-
         fn dump(self: Self) void {
             std.log.err("\ncardinality: {d}\n", .{self.cardinality()});
             var iter = self.iterator();
@@ -339,6 +345,12 @@ pub fn HashSetManaged(comptime E: type) type {
 
             // Swap it out with the new set.
             self.map = interSet.map;
+        }
+
+        /// isDisjoint returns true if the intersection between two sets is the null set.
+        /// Otherwise returns false.
+        pub fn isDisjoint(self: Self, other: Self) bool {
+            return self.map.isDisjoint(other.map);
         }
 
         /// In place style:
@@ -653,6 +665,28 @@ test "comprehensive usage" {
     // supersetOf
 }
 
+test "isDisjoint" {
+    var a = HashSetManaged(u32).init(std.testing.allocator);
+    defer a.deinit();
+    _ = try a.appendSlice(&.{ 20, 30, 40 });
+
+    var b = HashSetManaged(u32).init(std.testing.allocator);
+    defer b.deinit();
+    _ = try b.appendSlice(&.{ 202, 303, 403 });
+
+    // Test the true case.
+    try expect(a.isDisjoint(b));
+    try expect(b.isDisjoint(a));
+
+    // Test the false case.
+    var c = HashSetManaged(u32).init(std.testing.allocator);
+    defer c.deinit();
+    _ = try c.appendSlice(&.{ 20, 30, 400 });
+
+    try expect(!a.isDisjoint(c));
+    try expect(!c.isDisjoint(a));
+}
+
 test "clear/capacity" {
     var a = HashSetManaged(u32).init(std.testing.allocator);
     defer a.deinit();
@@ -705,7 +739,7 @@ test "clone" {
         _ = try a.appendSlice(&.{ 20, 30, 40 });
 
         // Use a different allocator than the test one.
-        var gpa = std.heap.DebugAllocator(.{}).init;
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
         const tmpAlloc = gpa.allocator();
         defer {
             const deinit_status = gpa.deinit();
@@ -855,9 +889,37 @@ test "in-place methods" {
 test "sizeOf" {
     const unmanagedSize = @sizeOf(SetUnmanaged(u32));
     const managedSize = @sizeOf(HashSetManaged(u32));
+    const managedWithVoidContextSize = @sizeOf(HashSetManagedWithContext(u32, void, undefined));
+    const managedWithContextSize = @sizeOf(HashSetManagedWithContext(u32, TestContext, 75));
 
     // The managed must be only 16 bytes larger, the cost of the internal allocator
     // otherwise we've added some CRAP!
     const expectedDiff = 16;
     try expectEqual(expectedDiff, managedSize - unmanagedSize);
+
+    // The managed with void context must be the same size as the managed.
+    // The managed with context must be larger by the size of the Context type,
+    // due to the added Context + allocator and alignment padding.
+    const expectedContextDiff = 16;
+    try expectEqual(expectedDiff, managedWithVoidContextSize - unmanagedSize);
+    try expectEqual(expectedContextDiff, managedWithContextSize - managedSize);
+}
+
+const TestContext = struct {
+    const Self = @This();
+    pub fn hash(_: Self, key: u32) u64 {
+        return @as(u64, key) *% 0x517cc1b727220a95;
+    }
+    pub fn eql(_: Self, a: u32, b: u32) bool {
+        return a == b;
+    }
+};
+
+test "custom hash function" {
+    const context = TestContext{};
+    var set = HashSetManagedWithContext(u32, TestContext, 75).initContext(testing.allocator, context);
+    defer set.deinit();
+
+    _ = try set.add(123);
+    try expect(set.contains(123));
 }

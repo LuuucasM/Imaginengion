@@ -37,6 +37,9 @@ pub fn ProcessEvents() !void {
             .ET_NewProjectEvent => |e| {
                 EventGPA.allocator().free(e.Path);
             },
+            .ET_OpenProjectEvent => |e| {
+                EventGPA.allocator().free(e.Path);
+            },
             else => {},
         }
     }

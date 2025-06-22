@@ -57,15 +57,11 @@ pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
 
 pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: usize) void {
     _ = self;
-    std.log.debug("vertex array bind\n", .{});
     vertex_array.Bind();
 
-    std.log.debug("count\n", .{});
     const count = if (index_count > 0) index_count else vertex_array.GetIndexBuffer().GetCount();
 
-    std.log.debug("draw elements\n", .{});
     glad.glDrawElements(glad.GL_TRIANGLES, @intCast(count), glad.GL_UNSIGNED_INT, null);
-    std.log.debug("end draw elements\n", .{});
 }
 
 pub fn DrawELines(self: OpenGLContext, vertex_array: VertexArray, vertex_count: usize) void {
