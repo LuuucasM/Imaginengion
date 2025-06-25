@@ -15,7 +15,7 @@ void main() {
 #extension GL_ARB_gpu_shader_int64 : require
 
 #define MAX_STEPS 128
-#define SURF_DIST 0.000099
+#define SURF_DIST 0.00099
 #define QUAD_THICKNESS 0.001
 
 layout(location = 0) out vec4 oFragColor;
@@ -213,6 +213,7 @@ void main() {
     vec3 camera_pos = Camera.data.Position;
     vec4 camera_rot = Camera.data.Rotation;
     vec2 uv = (gl_FragCoord.xy - Resolution.data.xy * 0.5) / Resolution.data.y;
+    uv.y = -uv.y; // Flip y axis so positive y is up
     vec3 base_ray_dir = normalize(vec3(uv, -1.0));
     vec3 ray_dir = QuadRotate(base_ray_dir, camera_rot);
 

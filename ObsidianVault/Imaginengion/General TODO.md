@@ -1,4 +1,4 @@
-- add functionality so that when the viewport is changed that the renderer gets the message so it can update its frame buffer
+- split these mega shaders into smaller shaders so like a .vert and .frag instead of one big .glsl that we parse through
 - in the sdf shader, i think i want to add a couple of functions that will change the parameters of certain things. god words lmao. like minimum surface distance is .00009 which is ok for close distances but as the distances gets further from the camera we can tolerate less quality 
 - In rendering change it so entities that are children of another entity use the parent transform and the childs transform is relative to the parent
 - add a function to scene_layer to "spawn player" which is an entity which has a component like PlayerComponent which contains the data related to the player. 
