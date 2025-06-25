@@ -8,6 +8,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
+const Quatf32 = LinAlg.Quatf32;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const CameraComponent = EntityComponents.CameraComponent;

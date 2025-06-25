@@ -60,8 +60,10 @@ pub const RenderStats = struct {
 
 const CameraData = extern struct {
     mPosition: [3]f32,
+    _padding0: f32 = 0.0, // pad to 16 bytes
     mRotation: [4]f32,
     mPerspectiveFar: f32,
+    _padding1: [3]f32 = .{ 0, 0, 0 }, // pad to 16 bytes (std140 rule)
 };
 
 const ResolutionData = extern struct {
@@ -91,7 +93,7 @@ pub fn Init(window: *Window) !void {
 
     RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
 
-    RenderManager.mViewportResolutionUB = UniformBuffer.Init(@sizeOf([2]f32));
+    RenderManager.mViewportResolutionUB = UniformBuffer.Init(@sizeOf(ResolutionData));
 }
 
 pub fn Deinit() !void {
@@ -111,7 +113,7 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-    BeginRendering(camera_component.mPerspectiveFar, camera_transform);
+    BeginRendering(camera_component.mPerspectiveFar, camera_transform, scene_manager);
 
     //get all the shapes
     const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
@@ -127,11 +129,15 @@ pub fn GetRenderStats() RenderStats {
     return RenderManager.mStats;
 }
 
-fn BeginRendering(perspective_far: f32, camera_transform: *TransformComponent) void {
-    RenderManager.mCameraBuffer.mPosition = camera_transform.Translation;
-    RenderManager.mCameraBuffer.mRotation = camera_transform.Rotation;
+fn BeginRendering(perspective_far: f32, camera_transform: *TransformComponent, scene_manager: *SceneManager) void {
+    RenderManager.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
+    RenderManager.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
     RenderManager.mCameraBuffer.mPerspectiveFar = perspective_far;
     RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
+
+    RenderManager.mResolutionBuffer.mWidth = @floatFromInt(scene_manager.mViewportWidth);
+    RenderManager.mResolutionBuffer.mHeight = @floatFromInt(scene_manager.mViewportHeight);
+    RenderManager.mViewportResolutionUB.SetData(&RenderManager.mResolutionBuffer, @sizeOf(ResolutionData), 0);
 
     RenderManager.mStats = std.mem.zeroes(RenderStats);
 
@@ -163,7 +169,7 @@ fn EndRendering(scene_manager: *SceneManager) !void {
     const shader_asset = try scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
     shader_asset.mShader.Bind();
 
-    RenderManager.mR2D.SetBuffers();
+    try RenderManager.mR2D.SetBuffers();
 
     RenderManager.mCameraUniformBuffer.Bind(0);
     RenderManager.mViewportResolutionUB.Bind(1);

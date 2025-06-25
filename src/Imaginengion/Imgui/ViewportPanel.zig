@@ -60,8 +60,6 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, cam
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
     imgui.igGetContentRegionAvail(&viewport_size);
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
-        //TODO: CHANGE sot hat when viewport resize event happens the editor program changes the editor camera while handling the event
-        //viewport resize event
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
         const new_imgui_event = ImguiEvent{

@@ -15,7 +15,7 @@ void main() {
 #extension GL_ARB_gpu_shader_int64 : require
 
 #define MAX_STEPS 128
-#define SURF_DIST .000099
+#define SURF_DIST 0.000099
 #define QUAD_THICKNESS 0.001
 
 layout(location = 0) out vec4 oFragColor;
@@ -32,7 +32,7 @@ layout(std140, binding = 0) uniform CameraUBO {
 } Camera;
 
 layout(std140, binding = 1) uniform ResolutionUBO {
-    vec3 data;
+    vec2 data;
 } Resolution;
 
 //===========================End Camera===========================
@@ -46,10 +46,10 @@ struct QuadData {
     vec4 Rotation;
     vec3 Scale;
     vec4 Color;
-    uint64_t TexIndex;
     vec2 TexCoordTop;
     vec2 TexCoordBottom;
     float TilingFactor;
+    uint64_t TexIndex;
 };
 
 layout (std430, binding = 2) buffer QuadsSSBO {
@@ -63,7 +63,7 @@ layout(std140, binding = 3) uniform QuadsCountUBO {
 
 //===========================Helper Functions/Data===========================
 struct ExcludeObject {
-    int ShapeType;
+    uint ShapeType;
     uint ShapeIndex;
 };
 
@@ -112,15 +112,15 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
     return vec4(0.0);
 }
 
-bool IsExcluded(int shape_type, uint shape_index) {
-    if (gExclusionCount == 0) return false;
+bool IsExcluded(uint shape_type, uint shape_index) {
+    if (gExclusionCount == 0u) return false;
 
     return (gExclusions[0].ShapeType == shape_type && gExclusions[0].ShapeIndex == shape_index) ||
            (gExclusionCount > 1 && gExclusions[1].ShapeType == shape_type && gExclusions[1].ShapeIndex == shape_index) ||
            (gExclusionCount > 2 && gExclusions[2].ShapeType == shape_type && gExclusions[2].ShapeIndex == shape_index);
 }
 
-void ExcludeShape(int shape_type, uint shape_index) {
+void ExcludeShape(uint shape_type, uint shape_index) {
     gExclusions[gExclusionInd].ShapeType = shape_type;
     gExclusions[gExclusionInd].ShapeIndex = shape_index;
 
@@ -181,23 +181,20 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
     float out_alpha = 0.0;
     float dist_origin = 0.0;
 
-    for (int i = 0; i < MAX_STEPS; i++){
+    for (uint i = 0u; i < MAX_STEPS; i++){
         vec3 p = ray_origin + dist_origin * ray_dir;
-        
-        //note shortest_step.x = the actual shortest distance
-        //shortest_step.y = what shape it using the #define SHAPE_X
-        //shortest_step.z = the index in the specific array
         DistData next_step = ShortestDistance(p);
         dist_origin += next_step.min_dist;
 
-        //we reached the end without seeing anything so we can discard this pixel
-        if (dist_origin > Camera.data.PerspectiveFar) break;
+        if (dist_origin > Camera.data.PerspectiveFar){
+            float blend_factor = 1.0 * (1.0 - out_alpha); //1.0 is the background alpha 
+            out_color += vec3(0.3, 0.3, 0.3) * blend_factor; //vec3(0.3, 0.3, 0.3) is the background color
+            out_alpha += blend_factor;
+            break;
+        }
 
         if (next_step.min_dist < SURF_DIST) {
             vec3 hit_point = ray_origin + dist_origin * ray_dir;
-
-            //we have hit a surface so we need to check if this objects alpha is 1.0 or less
-            //if its less we need to keep iterating, minus this object, until we reach a combined alpha of 1.0
             vec4 current_color = GetSurfaceColor(hit_point, next_step.shape_type, next_step.shape_index);
 
             float blend_factor = current_color.a * (1.0 - out_alpha);
@@ -205,7 +202,7 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
             out_alpha += blend_factor;
             
             if (out_alpha >= 1.0) break;
-            
+
             ExcludeShape(next_step.shape_type, next_step.shape_index);
         }
     }
@@ -213,12 +210,9 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
 }
 
 void main() {
-    //calculate ray direction using camera rotation
     vec3 camera_pos = Camera.data.Position;
     vec4 camera_rot = Camera.data.Rotation;
-
     vec2 uv = (gl_FragCoord.xy - Resolution.data.xy * 0.5) / Resolution.data.y;
-
     vec3 base_ray_dir = normalize(vec3(uv, -1.0));
     vec3 ray_dir = QuadRotate(base_ray_dir, camera_rot);
 

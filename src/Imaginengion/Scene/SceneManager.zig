@@ -136,6 +136,9 @@ pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: S
 }
 
 pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize, frame_allocator: std.mem.Allocator) !void {
+    self.mViewportWidth = width;
+    self.mViewportHeight = height;
+
     const camera_group = try self.mECSManagerGO.GetGroup(.{ .Component = CameraComponent }, frame_allocator);
     for (camera_group.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &self.mECSManagerGO };

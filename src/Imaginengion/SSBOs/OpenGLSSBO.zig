@@ -23,11 +23,11 @@ pub fn Deinit(self: OpenGLSSBO) void {
 
 pub fn Bind(self: *OpenGLSSBO, binding: usize) void {
     self.mBindIndex = @intCast(binding);
-    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, self.mBindIndex, self.mBufferID);
+    glad.glBindBufferBase(glad.GL_SHADER_STORAGE_BUFFER, self.mBindIndex, self.mBufferID);
 }
 
 pub fn Unbind(self: OpenGLSSBO) void {
-    glad.glBindBufferBase(glad.GL_UNIFORM_BUFFER, self.mBindIndex, 0);
+    glad.glBindBufferBase(glad.GL_SHADER_STORAGE_BUFFER, self.mBindIndex, 0);
 }
 
 pub fn SetData(self: OpenGLSSBO, data: *anyopaque, size: usize, offset: u32) void {
