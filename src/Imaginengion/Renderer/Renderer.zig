@@ -113,6 +113,7 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+    //Get all the players. then do the rendering for each player.
     BeginRendering(camera_component.mPerspectiveFar, camera_transform, scene_manager);
 
     //get all the shapes

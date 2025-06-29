@@ -16,13 +16,3 @@ pub const AssetsList = [_]type{
     ShaderAsset,
     SceneAsset,
 };
-
-pub const EAssets = enum(usize) {
-    AssetMetaData = AssetMetaData.Ind,
-    FileMetaData = FileMetaData.Ind,
-    IDComponent = IDComponent.Ind,
-    Texture2D = Texture2D.Ind,
-    Script = ScriptAsset.Ind,
-    ShaderAsset = ShaderAsset.Ind,
-    SceneAsset = SceneAsset.Ind,
-};
