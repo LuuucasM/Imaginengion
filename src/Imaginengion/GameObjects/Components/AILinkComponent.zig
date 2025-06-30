@@ -2,15 +2,15 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
 
-const ControllerComponent = @This();
+const AILinkComponent = @This();
 
-mControllingEntity: Entity.Type = Entity.NullEntity,
+mAIEntity: Entity.Type = Entity.NullEntity,
 
-pub fn Deinit(_: *ControllerComponent) !void {}
+pub fn Deinit(_: *AILinkComponent) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == ControllerComponent) {
+        if (component_type == AILinkComponent) {
             break :blk i;
         }
     }

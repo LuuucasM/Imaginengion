@@ -8,11 +8,12 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentsPanel = @This();
 
 const EntityComponents = @import("../GameObjects/Components.zig");
+const AILinkComponent = EntityComponents.AILinkComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const CircleRenderComponent = EntityComponents.CircleRenderComponent;
-const ControllerComponent = EntityComponents.ControllerComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
+const PlayerLinkComponent = EntityComponents.PlayerLinkComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
@@ -154,6 +155,12 @@ fn EntityImguiRender(entity: Entity) !void {
             try ImguiEventManager.Insert(new_event);
         }
     }
+    if (entity.HasComponent(AILinkComponent) == true) {
+        imgui.igText("AILinkComponent");
+    }
+    if (entity.HasComponent(PlayerLinkComponent) == true) {
+        imgui.igText("PlayerLinkComponent");
+    }
 }
 
 fn AddComponentPopupMenu(entity: Entity) !void {
@@ -169,9 +176,15 @@ fn AddComponentPopupMenu(entity: Entity) !void {
             imgui.igCloseCurrentPopup();
         }
     }
-    if (entity.HasComponent(ControllerComponent) == false) {
-        if (imgui.igMenuItem_Bool("ControllerComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(ControllerComponent, null);
+    if (entity.HasComponent(AILinkComponent) == false) {
+        if (imgui.igMenuItem_Bool("AILinkComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(AILinkComponent, null);
+            imgui.igCloseCurrentPopup();
+        }
+    }
+    if (entity.HasComponent(PlayerLinkComponent) == false) {
+        if (imgui.igMenuItem_Bool("PlayerLinkComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(PlayerLinkComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }
