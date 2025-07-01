@@ -5,12 +5,12 @@ const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj
 const Entity = @import("../GameObjects/Entity.zig");
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const AILinkComponent = EntityComponents.AILinkComponent;
+const AISlotComponent = EntityComponents.AISlotComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
-const PlayerLinkComponent = EntityComponents.PlayerLinkComponent;
+const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
@@ -193,8 +193,8 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, a
 
 fn SerializeEntity(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
     try SerializeBasicComponent(write_stream, entity, CameraComponent, "CameraComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, AILinkComponent, "AILinkComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, PlayerLinkComponent, "PlayerLinkComponent", allocator);
+    try SerializeBasicComponent(write_stream, entity, AISlotComponent, "AISlotComponent", allocator);
+    try SerializeBasicComponent(write_stream, entity, PlayerSlotComponent, "PlayerSlotComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, CircleRenderComponent, "CircleRenderComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, EntityIDComponent, "EntityIDComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent", allocator);
@@ -454,10 +454,10 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
             try DeSerializeBasicComponent(scanner, entity, CameraComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "CircleRenderComponent")) {
             try DeSerializeBasicComponent(scanner, entity, CircleRenderComponent, allocator);
-        } else if (std.mem.eql(u8, actual_value, "AILinkComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, AILinkComponent, allocator);
-        } else if (std.mem.eql(u8, actual_value, "PlayerLinkComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, PlayerLinkComponent, allocator);
+        } else if (std.mem.eql(u8, actual_value, "AISlotComponent")) {
+            try DeSerializeBasicComponent(scanner, entity, AISlotComponent, allocator);
+        } else if (std.mem.eql(u8, actual_value, "PlayerSlotComponent")) {
+            try DeSerializeBasicComponent(scanner, entity, PlayerSlotComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityIDComponent")) {
             try DeSerializeBasicComponent(scanner, entity, EntityIDComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityNameComponent")) {

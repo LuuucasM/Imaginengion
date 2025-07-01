@@ -8,12 +8,12 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ComponentsPanel = @This();
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const AILinkComponent = EntityComponents.AILinkComponent;
+const AISlotComponent = EntityComponents.AISlotComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
-const PlayerLinkComponent = EntityComponents.PlayerLinkComponent;
+const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
@@ -155,11 +155,11 @@ fn EntityImguiRender(entity: Entity) !void {
             try ImguiEventManager.Insert(new_event);
         }
     }
-    if (entity.HasComponent(AILinkComponent) == true) {
-        imgui.igText("AILinkComponent");
+    if (entity.HasComponent(AISlotComponent) == true) {
+        imgui.igText("AISlotComponent");
     }
-    if (entity.HasComponent(PlayerLinkComponent) == true) {
-        imgui.igText("PlayerLinkComponent");
+    if (entity.HasComponent(PlayerSlotComponent) == true) {
+        imgui.igText("PlayerSlotComponent");
     }
 }
 
@@ -176,15 +176,15 @@ fn AddComponentPopupMenu(entity: Entity) !void {
             imgui.igCloseCurrentPopup();
         }
     }
-    if (entity.HasComponent(AILinkComponent) == false) {
-        if (imgui.igMenuItem_Bool("AILinkComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(AILinkComponent, null);
+    if (entity.HasComponent(AISlotComponent) == false) {
+        if (imgui.igMenuItem_Bool("AISlotComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(AISlotComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }
-    if (entity.HasComponent(PlayerLinkComponent) == false) {
-        if (imgui.igMenuItem_Bool("PlayerLinkComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(PlayerLinkComponent, null);
+    if (entity.HasComponent(PlayerSlotComponent) == false) {
+        if (imgui.igMenuItem_Bool("PlayerSlotComponent", "", false, true) == true) {
+            _ = try entity.AddComponent(PlayerSlotComponent, null);
             imgui.igCloseCurrentPopup();
         }
     }

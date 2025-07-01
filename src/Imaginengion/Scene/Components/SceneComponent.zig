@@ -31,10 +31,8 @@ pub const Ind: usize = blk: {
 
 mSceneAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 mLayerType: LayerType = undefined,
-mFrameBuffer: FrameBuffer = undefined,
 
 pub fn Deinit(self: *SceneComponent) !void {
-    self.mFrameBuffer.Deinit();
     if (self.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
         AssetManager.ReleaseAssetHandleRef(&self.mSceneAssetHandle);
     }

@@ -8,7 +8,7 @@ const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetManager = @import("../../Assets/AssetManager.zig");
 
-const PlayerLinkComponent = @This();
+const PlayerSlotComponent = @This();
 
 mPlayerEntity: Player.Type = Player.NullPlayer,
 
@@ -21,7 +21,7 @@ mViewportVertexBuffer: VertexBuffer,
 mViewportIndexBuffer: IndexBuffer,
 mViewportShaderHandle: AssetHandle,
 
-pub fn Deinit(self: *PlayerLinkComponent) !void {
+pub fn Deinit(self: *PlayerSlotComponent) !void {
     self.mViewportFrameBuffer.Deinit();
     self.mViewportVertexArray.Deinit();
     self.mViewportVertexBuffer.Deinit();
@@ -31,7 +31,7 @@ pub fn Deinit(self: *PlayerLinkComponent) !void {
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == PlayerLinkComponent) {
+        if (component_type == PlayerSlotComponent) {
             break :blk i;
         }
     }

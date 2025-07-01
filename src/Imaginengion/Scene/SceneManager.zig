@@ -170,7 +170,6 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 
     const new_scene_component = SceneComponent{
-        .mFrameBuffer = try FrameBuffer.Init(self.mEngineAllocator, &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mViewportWidth, self.mViewportHeight),
         .mLayerType = layer_type,
     };
     _ = try scene_layer.AddComponent(SceneComponent, new_scene_component);
@@ -209,7 +208,6 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
 
     const new_scene_component = SceneComponent{
         .mSceneAssetHandle = scene_asset_handle,
-        .mFrameBuffer = try FrameBuffer.Init(self.mEngineAllocator, &[_]TextureFormat{.RGBA8}, .DEPTH24STENCIL8, 1, false, self.mViewportWidth, self.mViewportHeight),
         .mLayerType = undefined,
     };
 

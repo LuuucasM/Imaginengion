@@ -6,6 +6,12 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const ImguiManager = @import("Imgui.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const SceneManager = @import("../Scene/SceneManager.zig");
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const EntityComponents = @import("../GameObjects/Components.zig");
+const CameraComponent = EntityComponents.CameraComponent;
+const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const Entity = @import("../GameObjects/Entity.zig");
 const ToolbarPanel = @This();
 
 pub const EditorState = enum(u2) {
@@ -17,6 +23,7 @@ mP_Open: bool,
 mState: EditorState,
 mPlayIcon: AssetHandle,
 mStopIcon: AssetHandle,
+mComboEntity: Entity,
 
 pub fn Init() !ToolbarPanel {
     return ToolbarPanel{
@@ -27,7 +34,7 @@ pub fn Init() !ToolbarPanel {
     };
 }
 
-pub fn OnImguiRender(self: *ToolbarPanel) !void {
+pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {
     if (self.mP_Open == false) return;
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowPadding, .{ .x = 0.0, .y = 2.0 });
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemInnerSpacing, .{ .x = 0.0, .y = 0.0 });
@@ -48,7 +55,6 @@ pub fn OnImguiRender(self: *ToolbarPanel) !void {
     const size = imgui.igGetWindowHeight();
     const texture: *Texture2D = if (self.mState == .Play) try self.mStopIcon.GetAsset(Texture2D) else try self.mPlayIcon.GetAsset(Texture2D);
 
-    //ImGui::SameLine((ImGui::GetWindowContentRegionMax().x * 0.5f) - (size * 0.5f));
     var window_size: imgui.struct_ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&window_size);
     imgui.igSameLine((window_size.x * 0.5) - (size * 0.5), 0.0);
@@ -65,13 +71,43 @@ pub fn OnImguiRender(self: *ToolbarPanel) !void {
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        var new_event = ImguiEvent{ .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop } };
-        if (self.mState == .Play) {
-            new_event.ET_ChangeEditorStateEvent.mEditorState = .Stop;
-        } else {
-            new_event.ET_ChangeEditorStateEvent.mEditorState = .Play;
+        if (self.mState == .Stop and self.mComboEntity.mEntityID == Entity.NullEntity) {
+            try ImguiEventManager.Insert(ImguiEvent{
+                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
+            });
+            self.mState = .Play;
         }
-        try ImguiEventManager.Insert(new_event);
+        if (self.mState == .Play) {
+            try ImguiEventManager.Insert(ImguiEvent{
+                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop },
+            });
+            self.mState = .Stop;
+        }
+    }
+
+    imgui.igSameLine((window_size.x * 0.5) - (size * 0.5), 0.0);
+    var combo_text: []const u8 = "None";
+    if (self.mComboEntity.mEntityID != Entity.NullEntity) {
+        combo_text = self.mComboEntity.GetName();
+    }
+    if (imgui.igBeginCombo("##PlayLocation", combo_text, imgui.ImGuiComboFlags_None)) {
+        defer imgui.igEndCombo();
+
+        if (imgui.igSelectable_Bool("None", self.mComboEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 10, .y = 10 })) {
+            self.mComboEntity.mEntityID = Entity.NullEntity;
+        }
+        const entities = game_scene_manager.GetEntityGroup(GroupQuery{
+            .And = &[_]GroupQuery{
+                GroupQuery{ .Component = CameraComponent },
+                GroupQuery{ .Component = PlayerSlotComponent },
+            },
+        }, frame_allocator);
+        for (entities) |entity_id| {
+            const entity = game_scene_manager.GetEntity(entity_id);
+            if (imgui.igSelectable_Bool(entity.GetName(), self.mComboEntity.mEntityID == entity.mEntityID, 0, .{ .x = 10, .y = 10 })) {
+                self.mComboEntity = entity;
+            }
+        }
     }
 }
 

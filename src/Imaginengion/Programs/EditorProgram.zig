@@ -5,6 +5,8 @@ const StaticInputContext = @import("../Inputs/Input.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
+const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -15,6 +17,7 @@ const CameraComponent = EntityComponents.CameraComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
+const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
@@ -108,7 +111,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
     };
 }
 
-pub fn Setup(self: *EditorProgram) !void {
+pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
     self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
 
@@ -121,8 +124,19 @@ pub fn Setup(self: *EditorProgram) !void {
     new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorCameraEntity.AddComponent(CameraComponent, new_camera_component);
 
-    //TODO: finish the setup for the camera entity
     try GameObjectUtils.AddScriptToEntity(self.mEditorCameraEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
+
+    const new_player_slot_component = PlayerSlotComponent{
+        .mViewportWidth = self.mWindow.GetWidth(),
+        .mViewportHeight = self.mWindow.GetHeight(),
+
+        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
+        .mViewportVertexArray = VertexArray.Init(engine_allocator),
+        .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
+        .mViewportIndexBuffer = undefined,
+        .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
+    };
+    self.mEditorCameraEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
