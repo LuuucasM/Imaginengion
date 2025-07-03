@@ -7,6 +7,11 @@ const Renderer = @import("../Renderer/Renderer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
+const PlayerManager = @import("../Players/PlayerManager.zig");
+const Player = @import("../Players/Player.zig");
+
+const Assets = @import("../Assets/Assets.zig");
+const ShaderAsset = Assets.ShaderAsset;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -23,6 +28,9 @@ const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
+
+const PlayerComponents = @import("../Players/Components.zig");
+const ControllerComponent = PlayerComponents.ControllerComponent;
 
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
@@ -54,6 +62,7 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
+const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 
 //editor imgui stuff
 _AssetHandlePanel: AssetHandlePanel,
@@ -74,7 +83,8 @@ _SceneSpecList: std.ArrayList(SceneSpecPanel),
 mEditorSceneManager: SceneManager,
 mOverlayScene: SceneLayer,
 mGameScene: SceneLayer,
-mEditorCameraEntity: Entity,
+mEditorViewportEntity: Entity,
+mEditorViewportPlayer: Player,
 
 //not editor stuff
 mWindow: *Window,
@@ -115,28 +125,43 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
     self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
 
-    self.mEditorCameraEntity = try self.mGameScene.CreateEntity();
+    self.mEditorViewportEntity = try self.mGameScene.CreateEntity();
 
-    const transform_component = self.mEditorCameraEntity.GetComponent(TransformComponent);
+    const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent);
     transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
 
-    var new_camera_component = CameraComponent{};
-    new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
-    _ = try self.mEditorCameraEntity.AddComponent(CameraComponent, new_camera_component);
-
-    try GameObjectUtils.AddScriptToEntity(self.mEditorCameraEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
-
-    const new_player_slot_component = PlayerSlotComponent{
-        .mViewportWidth = self.mWindow.GetWidth(),
-        .mViewportHeight = self.mWindow.GetHeight(),
-
-        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
+    var new_camera_component = CameraComponent{
+        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
         .mViewportVertexArray = VertexArray.Init(engine_allocator),
         .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
         .mViewportIndexBuffer = undefined,
         .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
     };
-    self.mEditorCameraEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
+
+    const shader_asset = try new_camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
+    try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+    new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
+
+    new_camera_component.mViewportIndexBuffer = try IndexBuffer.Init(&[_]u32{ 0, 1, 2, 2, 3, 0 }, 6);
+
+    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
+    new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
+    try new_camera_component.mViewportVertexArray.AddVertexBuffer(new_camera_component.mViewportVertexBuffer);
+    new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
+
+    new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+    _ = try self.mEditorViewportEntity.AddComponent(CameraComponent, new_camera_component);
+
+    try GameObjectUtils.AddScriptToEntity(self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
+
+    self.mEditorViewportPlayer = try PlayerManager.CreatePlayer();
+
+    const new_player_slot_component = PlayerSlotComponent{
+        .mPlayerEntity = self.mEditorViewportPlayer.mEntityID,
+    };
+
+    self.mEditorViewportEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
+    self.mEditorViewportPlayer.AddComponent(ControllerComponent, ControllerComponent{ .mControlledEntityID = self.mEditorViewportEntity.mEntityID });
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -200,9 +225,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
     try self._ToolbarPanel.OnImguiRender();
 
-    const camera_component = self.mEditorCameraEntity.GetComponent(CameraComponent);
-    const camera_transform = self.mEditorCameraEntity.GetComponent(TransformComponent);
-    try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform);
+    const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+    const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+    try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
 
     try self._ViewportPanel.OnImguiRender(&self.mGameSceneManager.mViewportFrameBuffer, camera_component, camera_transform);
 
@@ -320,7 +345,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
+            self.mEditorViewportEntity.GetComponent(CameraComponent).SetViewportSize(e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);

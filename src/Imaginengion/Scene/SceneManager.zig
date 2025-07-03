@@ -40,14 +40,6 @@ const SceneAsset = Assets.SceneAsset;
 const ShaderAsset = Assets.ShaderAsset;
 
 const RenderManager = @import("../Renderer/Renderer.zig");
-const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
-
-const VertexArray = @import("../VertexArrays/VertexArray.zig");
-const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
-const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
-const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
-const Shader = @import("../Shaders/Shader.zig");
 
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 
@@ -67,54 +59,24 @@ mNumofLayers: usize,
 //viewport stuff
 mViewportWidth: usize,
 mViewportHeight: usize,
-mViewportFrameBuffer: FrameBuffer,
-mViewportVertexArray: VertexArray,
-mViewportVertexBuffer: VertexBuffer,
-mViewportIndexBuffer: IndexBuffer,
-mViewportShaderHandle: AssetHandle,
 
 mEngineAllocator: std.mem.Allocator,
 
 pub fn Init(width: usize, height: usize, engine_allocator: std.mem.Allocator) !SceneManager {
-    var new_scene_manager = SceneManager{
+    return SceneManager{
         .mECSManagerGO = try ECSManagerGameObj.Init(engine_allocator, &EntityComponentsArray),
         .mECSManagerSC = try ECSManagerScenes.Init(engine_allocator, &SceneComponentsList),
         .mGameLayerInsertIndex = 0,
         .mNumofLayers = 0,
         .mViewportWidth = width,
         .mViewportHeight = height,
-        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, width, height),
-        .mViewportVertexArray = VertexArray.Init(engine_allocator),
-        .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
-        .mViewportIndexBuffer = undefined,
-        .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
         .mEngineAllocator = engine_allocator,
     };
-
-    const shader_asset = try new_scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
-    try new_scene_manager.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
-    new_scene_manager.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
-
-    var data_index_buffer = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_scene_manager.mViewportIndexBuffer = IndexBuffer.Init(data_index_buffer[0..], 6);
-
-    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
-    new_scene_manager.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_scene_manager.mViewportVertexArray.AddVertexBuffer(new_scene_manager.mViewportVertexBuffer);
-    new_scene_manager.mViewportVertexArray.SetIndexBuffer(new_scene_manager.mViewportIndexBuffer);
-
-    return new_scene_manager;
 }
 
 pub fn Deinit(self: *SceneManager) !void {
     self.mECSManagerGO.Deinit();
     self.mECSManagerSC.Deinit();
-
-    self.mViewportFrameBuffer.Deinit();
-    self.mViewportVertexArray.Deinit();
-    self.mViewportVertexBuffer.Deinit();
-    self.mViewportIndexBuffer.Deinit();
-    AssetManager.ReleaseAssetHandleRef(&self.mViewportShaderHandle);
 }
 
 pub fn CreateEntity(self: *SceneManager, scene_id: SceneType) !Entity {
@@ -135,20 +97,18 @@ pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: S
     scene_layer.DuplicateEntity(original_entity);
 }
 
-pub fn OnViewportResize(self: *SceneManager, width: usize, height: usize, frame_allocator: std.mem.Allocator) !void {
-    self.mViewportWidth = width;
-    self.mViewportHeight = height;
+pub fn OnViewportResize(self: *SceneManager, viewport_width: usize, viewport_height: usize, frame_allocator: std.mem.Allocator) !void {
+    self.mViewportWidth = viewport_width;
+    self.mViewportHeight = viewport_height;
 
     const camera_group = try self.mECSManagerGO.GetGroup(.{ .Component = CameraComponent }, frame_allocator);
     for (camera_group.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &self.mECSManagerGO };
         const camera_component = entity.GetComponent(CameraComponent);
         if (camera_component.mIsFixedAspectRatio == false) {
-            camera_component.SetViewportSize(width, height);
+            camera_component.SetViewportSize(viewport_width, viewport_height);
         }
     }
-
-    self.mViewportFrameBuffer.Resize(width, height);
 }
 
 pub fn CalculateTransforms(self: *SceneManager, frame_allocator: std.mem.Allocator) !void {

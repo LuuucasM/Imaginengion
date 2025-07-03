@@ -1,6 +1,13 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
+const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");
+const VertexArray = @import("../../VertexArrays/VertexArray.zig");
+const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
+const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
+const AssetHandle = @import("../../Assets/AssetManager.zig").AssetHandle;
+const AssetManager = @import("../../Assets/AssetManager.zig");
+
 const CameraComponent = @This();
 
 const LinAlg = @import("../../Math/LinAlg.zig");
@@ -14,6 +21,16 @@ pub const ProjectionType = enum(u1) {
     Perspective = 0,
     Orthographic = 1,
 };
+
+//viewport stuff
+//TODO: finish changing this to use the new framebuffer system
+mViewportWidth: usize,
+mViewportHeight: usize,
+mViewportFrameBuffer: FrameBuffer,
+mViewportVertexArray: VertexArray,
+mViewportVertexBuffer: VertexBuffer,
+mViewportIndexBuffer: IndexBuffer,
+mViewportShaderHandle: AssetHandle,
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 mProjectionType: ProjectionType = .Perspective,
@@ -29,7 +46,13 @@ mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(45.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 
-pub fn Deinit(_: *CameraComponent) !void {}
+pub fn Deinit(self: *CameraComponent) !void {
+    self.mViewportFrameBuffer.Deinit();
+    self.mViewportVertexArray.Deinit();
+    self.mViewportVertexBuffer.Deinit();
+    self.mViewportIndexBuffer.Deinit();
+    AssetManager.ReleaseAssetHandleRef(self.mViewportShaderHandle);
+}
 
 pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {
     self.mOrthographicSize = size;

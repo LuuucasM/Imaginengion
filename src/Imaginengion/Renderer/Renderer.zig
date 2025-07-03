@@ -1,11 +1,5 @@
 const std = @import("std");
-const builtin = @import("builtin");
-const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
-const VertexArray = @import("../VertexArrays/VertexArray.zig");
-const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
-const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const Window = @import("../Windows/Window.zig");
 
 const RenderContext = @import("RenderContext.zig");
@@ -13,40 +7,17 @@ const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
 
 const AssetManager = @import("../Assets/AssetManager.zig");
-const AssetHandle = @import("../Assets/AssetHandle.zig");
-const Assets = @import("../Assets/Assets.zig");
-const Texture2D = Assets.Texture2D;
-const ShaderAsset = Assets.ShaderAsset;
-
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec2f32 = LinAlg.Vec2f32;
-const Vec3f32 = LinAlg.Vec3f32;
-const Vec4f32 = LinAlg.Vec4f32;
-const Mat4f32 = LinAlg.Mat4f32;
+const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 
 const SceneManager = @import("../Scene/SceneManager.zig");
-const SceneType = SceneManager.SceneType;
-const ECSManagerScenes = SceneManager.ECSManagerScenes;
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const ComponentManager = @import("../ECS/ComponentManager.zig");
 
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const QuadComponent = EntityComponents.QuadComponent;
-const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
-const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const CameraComponent = EntityComponents.CameraComponent;
-const EntityChildComponent = EntityComponents.ChildComponent;
-
-const SceneComponents = @import("../Scene/SceneComponents.zig");
-const StackPosComponent = SceneComponents.StackPosComponent;
-const SceneComponent = SceneComponents.SceneComponent;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-
-const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
 const Renderer = @This();
 
@@ -109,15 +80,11 @@ pub fn SwapBuffers() void {
     RenderManager.mRenderContext.SwapBuffers();
 }
 
-pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-    //Get all the players. then do the rendering for each player.
-    BeginRendering(camera_component.mPerspectiveFar, camera_transform, scene_manager);
+pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator) !void {
+    BeginRendering(camera_component, camera_transform);
 
     //get all the shapes
-    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, allocator);
+    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, frame_allocator);
 
     //TODO: sorting
     //TODO: culling
@@ -130,14 +97,14 @@ pub fn GetRenderStats() RenderStats {
     return RenderManager.mStats;
 }
 
-fn BeginRendering(perspective_far: f32, camera_transform: *TransformComponent, scene_manager: *SceneManager) void {
+fn BeginRendering(camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
     RenderManager.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
     RenderManager.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
-    RenderManager.mCameraBuffer.mPerspectiveFar = perspective_far;
+    RenderManager.mCameraBuffer.mPerspectiveFar = camera_component.mPerspectiveFar;
     RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
 
-    RenderManager.mResolutionBuffer.mWidth = @floatFromInt(scene_manager.mViewportWidth);
-    RenderManager.mResolutionBuffer.mHeight = @floatFromInt(scene_manager.mViewportHeight);
+    RenderManager.mResolutionBuffer.mWidth = @floatFromInt(camera_component.mViewportWidth);
+    RenderManager.mResolutionBuffer.mHeight = @floatFromInt(camera_component.mViewportHeight);
     RenderManager.mViewportResolutionUB.SetData(&RenderManager.mResolutionBuffer, @sizeOf(ResolutionData), 0);
 
     RenderManager.mStats = std.mem.zeroes(RenderStats);
@@ -162,12 +129,11 @@ fn DrawShapes(shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) 
     }
 }
 
-fn EndRendering(scene_manager: *SceneManager) !void {
-    scene_manager.mViewportFrameBuffer.Bind();
-    defer scene_manager.mViewportFrameBuffer.Unbind();
-    scene_manager.mViewportFrameBuffer.ClearFrameBuffer(.{ 0.3, 0.3, 0.3, 1.0 });
+fn EndRendering(camera_component: *CameraComponent) !void {
+    camera_component.mViewportFrameBuffer.Bind();
+    defer camera_component.mViewportFrameBuffer.Unbind();
 
-    const shader_asset = try scene_manager.mViewportShaderHandle.GetAsset(ShaderAsset);
+    const shader_asset = try camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
     shader_asset.mShader.Bind();
 
     try RenderManager.mR2D.SetBuffers();
@@ -177,5 +143,5 @@ fn EndRendering(scene_manager: *SceneManager) !void {
 
     RenderManager.mR2D.BindBuffers();
 
-    RenderManager.mRenderContext.DrawIndexed(scene_manager.mViewportVertexArray, scene_manager.mViewportIndexBuffer.GetCount());
+    RenderManager.mRenderContext.DrawIndexed(camera_component.mViewportVertexArray, camera_component.mViewportIndexBuffer.GetCount());
 }

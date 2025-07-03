@@ -18,6 +18,7 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
+const PlayerManager = @import("../Players/PlayerManager.zig");
 const StaticEngineContext = @import("EngineContext.zig");
 
 const Application: type = @This();
@@ -41,6 +42,7 @@ pub fn Init(self: *Application) !void {
     try AssetManager.Init();
     try Input.Init();
     try SystemEventManager.Init(self);
+    try PlayerManager.Init(self.mEngineAllocator.allocator());
 
     self.mWindow = Window.Init();
     self.mProgram = try Program.Init(self.mEngineAllocator.allocator(), &self.mWindow, self.mFrameAllocator.allocator());
@@ -83,7 +85,7 @@ pub fn Run(self: *Application) !void {
     while (self.mIsRunning) : (delta_time = @as(f32, @floatFromInt(timer.lap())) / std.time.ns_per_s) {
         StaticEngineContext.SetDT(delta_time);
         try self.mProgram.OnUpdate(delta_time, self.mFrameAllocator.allocator());
-        _ = self.mFrameAllocator.reset(.free_all);
+        _ = self.mFrameAllocator.reset(.retain_capacity);
     }
 }
 
