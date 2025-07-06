@@ -90,7 +90,7 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     //TODO: culling
     try DrawShapes(shapes_ids, scene_manager);
 
-    try EndRendering(scene_manager);
+    try EndRendering(camera_component);
 }
 
 pub fn GetRenderStats() RenderStats {

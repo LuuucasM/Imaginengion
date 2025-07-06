@@ -160,7 +160,7 @@ pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
     self.mECSManagerSC.DestroyEntity(scene_id);
 }
 
-pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
+pub fn LoadScene(self: *SceneManager, path: []const u8, engine_allocator: std.mem.Allocator) !SceneType {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     const scene_asset_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
@@ -183,7 +183,7 @@ pub fn LoadScene(self: *SceneManager, path: []const u8) !SceneType {
 
     _ = try scene_layer.AddComponent(SceneNameComponent, new_scene_name_component);
 
-    try SceneSerializer.DeSerializeSceneText(scene_layer, scene_asset);
+    try SceneSerializer.DeSerializeSceneText(scene_layer, scene_asset, engine_allocator);
 
     try self.InsertScene(scene_layer);
 

@@ -83,7 +83,10 @@ pub fn StaticSkipField(size: usize) type {
         /// - Nothing
         pub fn ChangeToSkipped(self: *Self, index: SkipFieldType) void {
             std.debug.assert(self.mSkipField.len > index);
-
+            if (size < 2) {
+                self.mSkipField[0] = 1;
+                return;
+            }
             //alreday a skipped index
             if (self.mSkipField[index] != 0) return;
 
@@ -134,7 +137,10 @@ pub fn StaticSkipField(size: usize) type {
         /// - Nothing
         pub fn ChangeToUnskipped(self: *Self, index: SkipFieldType) void {
             std.debug.assert(self.mSkipField.len > index);
-
+            if (size < 2) {
+                self.mSkipField[0] = 0;
+                return;
+            }
             //alreday a skipped index
             if (self.mSkipField[index] == 0) return;
 
@@ -156,6 +162,7 @@ pub fn StaticSkipField(size: usize) type {
                 const current_value = self.mSkipField[index];
                 self.mSkipField[index] = 0;
                 self.mSkipField[index + 1] = current_value - 1;
+
                 var i: SkipFieldType = 2;
                 while (i < current_value and index + i < size) : (i += 1) {
                     self.mSkipField[index + i] = i;

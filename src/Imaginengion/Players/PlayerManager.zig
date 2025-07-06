@@ -18,7 +18,7 @@ pub fn Init(engine_allocator: std.mem.Allocator) !void {
 
 pub fn CreatePlayer() !Player {
     return Player{
-        .mEntityID = StaticPlayerManager.mECSManager.CreateEntity(),
+        .mEntityID = try StaticPlayerManager.mECSManager.CreateEntity(),
         .mECSManagerRef = &StaticPlayerManager.mECSManager,
     };
 }

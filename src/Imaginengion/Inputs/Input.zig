@@ -26,6 +26,12 @@ pub const InputContext = struct {
     pub fn IsInputPressed(self: *InputContext, key: InputCodes) bool {
         return self._InputPressedSet.contains(key);
     }
+    pub fn IsInputRepeated(self: *InputContext, key: InputCodes) bool {
+        if (self._InputPressedSet.get(key)) |value| {
+            return value == 1;
+        }
+        return false;
+    }
     pub fn GetMousePosition(self: *InputContext) Vec2f32 {
         return self._MousePositionNew;
     }

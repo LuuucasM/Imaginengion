@@ -49,8 +49,7 @@ pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
     };
 }
 
-pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
-    _ = camera_component;
+pub fn OnImguiRender(self: *ViewportPanel, camera_component: *CameraComponent, camera_transform: *TransformComponent) !void {
     _ = camera_transform;
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
@@ -77,7 +76,7 @@ pub fn OnImguiRender(self: *ViewportPanel, scene_frame_buffer: *FrameBuffer, cam
     self.mIsFocused = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
     //render framebuffer
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, scene_frame_buffer.GetColorAttachmentID(0))));
+    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, camera_component.mViewportFrameBuffer.GetColorAttachmentID(0))));
     imgui.igImage(
         texture_id,
         imgui.struct_ImVec2{ .x = @floatFromInt(self.mViewportWidth), .y = @floatFromInt(self.mViewportHeight) },

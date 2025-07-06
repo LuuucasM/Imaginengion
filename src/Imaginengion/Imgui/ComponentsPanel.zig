@@ -5,6 +5,13 @@ const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
+
+const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
+const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
+const TextureFormat = FrameBuffer.TextureFormat;
+
 const ComponentsPanel = @This();
 
 const EntityComponents = @import("../GameObjects/Components.zig");
@@ -20,16 +27,20 @@ const TransformComponent = EntityComponents.TransformComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
+const Assets = @import("../Assets/Assets.zig");
+const ShaderAsset = Assets.ShaderAsset;
 
 _P_Open: bool,
 mSelectedScene: ?SceneLayer,
 mSelectedEntity: ?Entity,
+mEngineAllocator: std.mem.Allocator,
 
-pub fn Init() ComponentsPanel {
+pub fn Init(engine_allocator: std.mem.Allocator) ComponentsPanel {
     return ComponentsPanel{
         ._P_Open = true,
         .mSelectedEntity = null,
         .mSelectedScene = null,
+        .mEngineAllocator = engine_allocator,
     };
 }
 
@@ -49,7 +60,6 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
         _ = imgui.igBegin("Components - No Entity###Components\x00", null, 0);
     }
     defer imgui.igEnd();
-
     if (self.mSelectedEntity) |entity| {
         var region_size: imgui.ImVec2 = .{ .x = 0, .y = 0 };
         imgui.igGetContentRegionAvail(&region_size);
@@ -58,7 +68,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
         }
         if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            try AddComponentPopupMenu(entity);
+            try self.AddComponentPopupMenu(entity);
         }
         try EntityImguiRender(entity);
     }
@@ -67,7 +77,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
 pub fn OnImguiEvent(self: *ComponentsPanel, event: *ImguiEvent) void {
     switch (event.*) {
         .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
-        else => @panic("Response to that event has not bee implemented yet in ComponentsPanel!\n"),
+        else => @panic("Response to that event has not been implemented yet in ComponentsPanel!\n"),
     }
 }
 
@@ -163,11 +173,33 @@ fn EntityImguiRender(entity: Entity) !void {
     }
 }
 
-fn AddComponentPopupMenu(entity: Entity) !void {
+fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
     if (entity.HasComponent(CameraComponent) == false) {
         if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(CameraComponent, null);
-            imgui.igCloseCurrentPopup();
+            defer imgui.igCloseCurrentPopup();
+
+            var new_camera_component = CameraComponent{
+                .mViewportFrameBuffer = try FrameBuffer.Init(self.mEngineAllocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
+                .mViewportVertexArray = VertexArray.Init(self.mEngineAllocator),
+                .mViewportVertexBuffer = VertexBuffer.Init(self.mEngineAllocator, @sizeOf([4][2]f32)),
+                .mViewportIndexBuffer = undefined,
+                .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
+            };
+
+            const shader_asset = try new_camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
+            try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+            new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
+
+            var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
+            new_camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
+
+            var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
+            new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
+            try new_camera_component.mViewportVertexArray.AddVertexBuffer(new_camera_component.mViewportVertexBuffer);
+            new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
+
+            new_camera_component.SetViewportSize(1600, 900);
+            _ = try entity.AddComponent(CameraComponent, new_camera_component);
         }
     }
     if (entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {

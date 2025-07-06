@@ -90,6 +90,7 @@ mEditorViewportPlayer: Player,
 mWindow: *Window,
 mGameSceneManager: SceneManager,
 mFrameAllocator: std.mem.Allocator,
+mEngineAllocator: std.mem.Allocator,
 
 const EditorProgram = @This();
 
@@ -101,12 +102,13 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
         .mOverlayScene = undefined,
         .mGameScene = undefined,
-        .mEditorCameraEntity = undefined,
+        .mEditorViewportEntity = undefined,
+        .mEditorViewportPlayer = undefined,
         .mWindow = window,
         .mFrameAllocator = frame_allocator,
-
+        .mEngineAllocator = engine_allocator,
         ._AssetHandlePanel = AssetHandlePanel.Init(),
-        ._ComponentsPanel = ComponentsPanel.Init(),
+        ._ComponentsPanel = ComponentsPanel.Init(engine_allocator),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
         ._CSEditorPanel = CSEditorPanel.Init(engine_allocator),
         ._ScenePanel = ScenePanel.Init(),
@@ -142,7 +144,8 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
     new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
 
-    new_camera_component.mViewportIndexBuffer = try IndexBuffer.Init(&[_]u32{ 0, 1, 2, 2, 3, 0 }, 6);
+    var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    new_camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
 
     var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
     new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
@@ -160,8 +163,8 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
         .mPlayerEntity = self.mEditorViewportPlayer.mEntityID,
     };
 
-    self.mEditorViewportEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
-    self.mEditorViewportPlayer.AddComponent(ControllerComponent, ControllerComponent{ .mControlledEntityID = self.mEditorViewportEntity.mEntityID });
+    _ = try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
+    _ = try self.mEditorViewportPlayer.AddComponent(ControllerComponent, ControllerComponent{ .mControlledEntityID = self.mEditorViewportEntity.mEntityID });
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -223,13 +226,13 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     try self._ScriptsPanel.OnImguiRender();
     try self._CSEditorPanel.OnImguiRender();
 
-    try self._ToolbarPanel.OnImguiRender();
+    try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, self.mFrameAllocator);
 
     const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
     const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
     try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
 
-    try self._ViewportPanel.OnImguiRender(&self.mGameSceneManager.mViewportFrameBuffer, camera_component, camera_transform);
+    try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -319,7 +322,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_OpenSceneEvent => |e| {
             if (e.Path.len > 0) {
-                _ = try self.mGameSceneManager.LoadScene(e.Path);
+                _ = try self.mGameSceneManager.LoadScene(e.Path, self.mEngineAllocator);
             }
         },
         .ET_MoveSceneEvent => |e| {

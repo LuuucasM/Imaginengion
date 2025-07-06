@@ -2,7 +2,7 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const ControllerComponent = @This();
 
-mControlledEntityID: Entity.Type,
+mControlledEntityID: Entity.Type = Entity.NullEntity,
 
 pub fn Deinit(_: *ControllerComponent) !void {}
 

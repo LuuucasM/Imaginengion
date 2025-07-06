@@ -46,7 +46,7 @@ pub fn Init(self: *Application) !void {
 
     self.mWindow = Window.Init();
     self.mProgram = try Program.Init(self.mEngineAllocator.allocator(), &self.mWindow, self.mFrameAllocator.allocator());
-    try self.mProgram.Setup();
+    try self.mProgram.Setup(self.mEngineAllocator.allocator());
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);

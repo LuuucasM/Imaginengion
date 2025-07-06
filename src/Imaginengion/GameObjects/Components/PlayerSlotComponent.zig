@@ -1,6 +1,6 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const Player = @import("../../Player/Player.zig");
+const Player = @import("../../Players/Player.zig");
 
 const PlayerSlotComponent = @This();
 

@@ -3,6 +3,8 @@ const SceneLayer = @import("SceneLayer.zig");
 const LayerType = @import("Components/SceneComponent.zig").LayerType;
 const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj;
 const Entity = @import("../GameObjects/Entity.zig");
+const LinAlg = @import("../Math/LinAlg.zig");
+const Mat4f32 = LinAlg.Mat4f32;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const AISlotComponent = EntityComponents.AISlotComponent;
@@ -18,6 +20,12 @@ const TransformComponent = EntityComponents.TransformComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityParentComponent = EntityComponents.ParentComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
+const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const VertexArray = @import("../VertexArrays/VertexArray.zig");
+const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
+const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
+const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
+const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneIDComponent = SceneComponents.IDComponent;
@@ -54,7 +62,7 @@ pub fn SerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHand
     try WriteToFile(scene_asset_handle, out.items, allocator);
 }
 
-pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !void {
+pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset: *SceneAsset, engine_allocator: std.mem.Allocator) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -62,7 +70,7 @@ pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset: *SceneAsset) !
     var scanner = std.json.Scanner.initCompleteInput(allocator, scene_asset.mSceneContents.items);
     defer scanner.deinit();
 
-    try DeSerializeSceneData(&scanner, scene_layer, allocator);
+    try DeSerializeSceneData(&scanner, scene_layer, allocator, engine_allocator);
 }
 
 pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager) void {
@@ -192,7 +200,7 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, a
 }
 
 fn SerializeEntity(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
-    try SerializeBasicComponent(write_stream, entity, CameraComponent, "CameraComponent", allocator);
+    try SerializeCameraComponent(write_stream, entity, allocator);
     try SerializeBasicComponent(write_stream, entity, AISlotComponent, "AISlotComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, PlayerSlotComponent, "PlayerSlotComponent", allocator);
     try SerializeBasicComponent(write_stream, entity, CircleRenderComponent, "CircleRenderComponent", allocator);
@@ -219,6 +227,82 @@ fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime 
     const component = entity.GetComponent(component_type);
     try std.json.stringify(component, .{}, component_string.writer());
     try write_stream.write(component_string.items);
+}
+
+fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
+    if (entity.HasComponent(CameraComponent) == false) return;
+
+    var component_string = ComponentString.init(allocator);
+    defer component_string.deinit();
+
+    const ecs = entity.mECSManagerRef;
+
+    const component = ecs.GetComponent(CameraComponent, entity.mEntityID);
+
+    try write_stream.objectField("CameraComponent");
+    try write_stream.beginObject();
+
+    try write_stream.objectField("ViewportWidth");
+    try std.json.stringify(component.mViewportWidth, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("ViewportHeight");
+    try std.json.stringify(component.mViewportHeight, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("Projection");
+    try std.json.stringify(component.mProjection, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("ProjectionType");
+    try std.json.stringify(component.mProjectionType, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("AspectRatio");
+    try std.json.stringify(component.mAspectRatio, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("IsFixedAspectRatio");
+    try std.json.stringify(component.mIsFixedAspectRatio, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("OrthographicSize");
+    try std.json.stringify(component.mOrthographicSize, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("OrthographicNear");
+    try std.json.stringify(component.mOrthographicNear, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("OrthographicFar");
+    try std.json.stringify(component.mOrthographicFar, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("PerspectiveFOVRad");
+    try std.json.stringify(component.mPerspectiveFOVRad, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("PerspectiveNear");
+    try std.json.stringify(component.mPerspectiveNear, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.objectField("PerspectiveFar");
+    try std.json.stringify(component.mPerspectiveFar, .{}, component_string.writer());
+    try write_stream.write(component_string.items);
+    component_string.clearAndFree();
+
+    try write_stream.endObject();
 }
 
 fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
@@ -345,7 +429,7 @@ fn SkipToken(scanner: *std.json.Scanner, allocator: std.mem.Allocator) !void {
     _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
 }
 
-fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const token_value = switch (token) {
@@ -368,7 +452,7 @@ fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, all
             try DeSerializeSceneScripts(scanner, scene_layer, allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             const new_entity = try scene_layer.CreateBlankEntity();
-            try DeSerializeEntity(scanner, new_entity, scene_layer, allocator);
+            try DeSerializeEntity(scanner, new_entity, scene_layer, allocator, engine_allocator);
         }
     }
 }
@@ -435,7 +519,7 @@ fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, 
     }
 }
 
-fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     while (true) {
         const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
         const token_value = switch (token) {
@@ -451,7 +535,7 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
         const actual_value = try allocator.dupe(u8, token_value);
 
         if (std.mem.eql(u8, actual_value, "CameraComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, CameraComponent, allocator);
+            try DeSerializeCameraComponent(scanner, entity, allocator, engine_allocator);
         } else if (std.mem.eql(u8, actual_value, "CircleRenderComponent")) {
             try DeSerializeBasicComponent(scanner, entity, CircleRenderComponent, allocator);
         } else if (std.mem.eql(u8, actual_value, "AISlotComponent")) {
@@ -471,7 +555,7 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
             try DeSerializeTransformComponent(scanner, entity, allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
-            try DeSerializeParentComponent(scanner, entity, scene_layer, allocator);
+            try DeSerializeParentComponent(scanner, entity, scene_layer, allocator, engine_allocator);
         }
     }
 }
@@ -487,6 +571,145 @@ fn DeSerializeBasicComponent(scanner: *std.json.Scanner, entity: Entity, comptim
     const new_component_parsed = try std.json.parseFromSlice(component_type, allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
     _ = try entity.AddComponent(component_type, new_component_parsed.value);
+}
+
+fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+    // Skip past begin object token
+    _ = try SkipToken(scanner, allocator);
+
+    var camera_component = CameraComponent{};
+
+    while (true) {
+        const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const token_value = switch (token) {
+            .string => |value| value,
+            .allocated_string => |value| value,
+            .object_end => break,
+            else => @panic("Unexpected token in CameraComponent deserialization"),
+        };
+
+        if (std.mem.eql(u8, token_value, "Projection")) {
+            const projection_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const projection_string = switch (projection_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            const projection_parsed = try std.json.parseFromSlice(Mat4f32, allocator, projection_string, .{});
+            defer projection_parsed.deinit();
+            camera_component.mProjection = projection_parsed.value;
+        } else if (std.mem.eql(u8, token_value, "ViewportWidth")) {
+            const viewport_width_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const viewport_width_string = switch (viewport_width_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mViewportWidth = try std.fmt.parseUnsigned(usize, viewport_width_string, 10);
+        } else if (std.mem.eql(u8, token_value, "ViewportHeight")) {
+            const viewport_height_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const viewport_height_string = switch (viewport_height_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mViewportHeight = try std.fmt.parseUnsigned(usize, viewport_height_string, 10);
+        } else if (std.mem.eql(u8, token_value, "ProjectionType")) {
+            const projection_type_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const projection_type_string = switch (projection_type_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mProjectionType = std.meta.stringToEnum(CameraComponent.ProjectionType, projection_type_string).?;
+        } else if (std.mem.eql(u8, token_value, "AspectRatio")) {
+            const aspect_ratio_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const aspect_ratio_string = switch (aspect_ratio_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mAspectRatio = try std.fmt.parseFloat(f32, aspect_ratio_string);
+        } else if (std.mem.eql(u8, token_value, "IsFixedAspectRatio")) {
+            const is_fixed_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const is_fixed_string = switch (is_fixed_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mIsFixedAspectRatio = std.mem.eql(u8, is_fixed_string, "true");
+        } else if (std.mem.eql(u8, token_value, "OrthographicSize")) {
+            const ortho_size_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const ortho_size_string = switch (ortho_size_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mOrthographicSize = try std.fmt.parseFloat(f32, ortho_size_string);
+        } else if (std.mem.eql(u8, token_value, "OrthographicNear")) {
+            const ortho_near_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const ortho_near_string = switch (ortho_near_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mOrthographicNear = try std.fmt.parseFloat(f32, ortho_near_string);
+        } else if (std.mem.eql(u8, token_value, "OrthographicFar")) {
+            const ortho_far_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const ortho_far_string = switch (ortho_far_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mOrthographicFar = try std.fmt.parseFloat(f32, ortho_far_string);
+        } else if (std.mem.eql(u8, token_value, "PerspectiveFOVRad")) {
+            const fov_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const fov_string = switch (fov_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mPerspectiveFOVRad = try std.fmt.parseFloat(f32, fov_string);
+        } else if (std.mem.eql(u8, token_value, "PerspectiveNear")) {
+            const persp_near_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const persp_near_string = switch (persp_near_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mPerspectiveNear = try std.fmt.parseFloat(f32, persp_near_string);
+        } else if (std.mem.eql(u8, token_value, "PerspectiveFar")) {
+            const persp_far_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const persp_far_string = switch (persp_far_token) {
+                .string => |v| v,
+                .allocated_string => |v| v,
+                else => return error.ExpectedString,
+            };
+            camera_component.mPerspectiveFar = try std.fmt.parseFloat(f32, persp_far_string);
+        }
+    }
+
+    camera_component.mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, camera_component.mViewportWidth, camera_component.mViewportHeight);
+    camera_component.mViewportVertexArray = VertexArray.Init(engine_allocator);
+    camera_component.mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32));
+    camera_component.mViewportIndexBuffer = undefined;
+    camera_component.mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng);
+
+    const shader_asset = try camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
+    try camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
+    camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
+
+    var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
+
+    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
+    camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
+    try camera_component.mViewportVertexArray.AddVertexBuffer(camera_component.mViewportVertexBuffer);
+    camera_component.mViewportVertexArray.SetIndexBuffer(camera_component.mViewportIndexBuffer);
+
+    camera_component.SetViewportSize(camera_component.mViewportWidth, camera_component.mViewportHeight);
+
+    _ = try entity.AddComponent(CameraComponent, camera_component);
 }
 
 fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
@@ -630,15 +853,15 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocato
     _ = try SkipToken(scanner, allocator);
 }
 
-fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) anyerror!void {
+fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) anyerror!void {
     if (entity.HasComponent(EntityParentComponent)) {
-        try AddToExistingChildren(scanner, entity, scene_layer, allocator);
+        try AddToExistingChildren(scanner, entity, scene_layer, allocator, engine_allocator);
     } else {
-        try MakeEntityParent(scanner, entity, scene_layer, allocator);
+        try MakeEntityParent(scanner, entity, scene_layer, allocator, engine_allocator);
     }
 }
 
-fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     const new_entity = try scene_layer.CreateBlankEntity();
 
     const parent_component = parent_entity.GetComponent(EntityParentComponent);
@@ -664,10 +887,10 @@ fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scen
     //set the new child component.mNext to be the new child
     child_component.mNext = new_entity.mEntityID;
 
-    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator);
+    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator, engine_allocator);
 }
 
-fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     const new_entity = try scene_layer.CreateBlankEntity();
 
     const new_parent_component = EntityParentComponent{ .mFirstChild = new_entity.mEntityID };
@@ -681,5 +904,5 @@ fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_lay
     };
     _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
 
-    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator);
+    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator, engine_allocator);
 }

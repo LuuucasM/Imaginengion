@@ -23,7 +23,7 @@ mP_Open: bool,
 mState: EditorState,
 mPlayIcon: AssetHandle,
 mStopIcon: AssetHandle,
-mComboEntity: Entity,
+mStartEntity: Entity,
 
 pub fn Init() !ToolbarPanel {
     return ToolbarPanel{
@@ -31,6 +31,7 @@ pub fn Init() !ToolbarPanel {
         .mState = .Stop,
         .mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng),
         .mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng),
+        .mStartEntity = Entity{ .mEntityID = Entity.NullEntity, .mECSManagerRef = undefined },
     };
 }
 
@@ -71,7 +72,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        if (self.mState == .Stop and self.mComboEntity.mEntityID == Entity.NullEntity) {
+        if (self.mState == .Stop and self.mStartEntity.mEntityID == Entity.NullEntity) {
             try ImguiEventManager.Insert(ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
             });
@@ -86,26 +87,27 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
     }
 
     imgui.igSameLine((window_size.x * 0.5) - (size * 0.5), 0.0);
+
     var combo_text: []const u8 = "None";
-    if (self.mComboEntity.mEntityID != Entity.NullEntity) {
-        combo_text = self.mComboEntity.GetName();
+    if (self.mStartEntity.mEntityID != Entity.NullEntity) {
+        combo_text = self.mStartEntity.GetName();
     }
-    if (imgui.igBeginCombo("##PlayLocation", combo_text, imgui.ImGuiComboFlags_None)) {
+    if (imgui.igBeginCombo("PlayLocation", @ptrCast(&combo_text), imgui.ImGuiComboFlags_None)) {
         defer imgui.igEndCombo();
 
-        if (imgui.igSelectable_Bool("None", self.mComboEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 10, .y = 10 })) {
-            self.mComboEntity.mEntityID = Entity.NullEntity;
+        if (imgui.igSelectable_Bool("None", self.mStartEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 10, .y = 10 })) {
+            self.mStartEntity.mEntityID = Entity.NullEntity;
         }
-        const entities = game_scene_manager.GetEntityGroup(GroupQuery{
+        const entities = try game_scene_manager.GetEntityGroup(GroupQuery{
             .And = &[_]GroupQuery{
                 GroupQuery{ .Component = CameraComponent },
                 GroupQuery{ .Component = PlayerSlotComponent },
             },
         }, frame_allocator);
-        for (entities) |entity_id| {
+        for (entities.items) |entity_id| {
             const entity = game_scene_manager.GetEntity(entity_id);
-            if (imgui.igSelectable_Bool(entity.GetName(), self.mComboEntity.mEntityID == entity.mEntityID, 0, .{ .x = 10, .y = 10 })) {
-                self.mComboEntity = entity;
+            if (imgui.igSelectable_Bool(@ptrCast(&entity.GetName()), self.mStartEntity.mEntityID == entity.mEntityID, 0, .{ .x = 10, .y = 10 })) {
+                self.mStartEntity = entity;
             }
         }
     }

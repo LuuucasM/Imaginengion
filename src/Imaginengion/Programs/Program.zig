@@ -16,8 +16,8 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
     };
 }
 
-pub fn Setup(self: *Program) !void {
-    try self._Impl.Setup();
+pub fn Setup(self: *Program, engine_allocator: std.mem.Allocator) !void {
+    try self._Impl.Setup(engine_allocator);
 }
 
 pub fn Deinit(self: *Program) !void {

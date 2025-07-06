@@ -5,7 +5,7 @@ const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");
 const VertexArray = @import("../../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
-const AssetHandle = @import("../../Assets/AssetManager.zig").AssetHandle;
+const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetManager = @import("../../Assets/AssetManager.zig");
 
 const CameraComponent = @This();
@@ -24,13 +24,13 @@ pub const ProjectionType = enum(u1) {
 
 //viewport stuff
 //TODO: finish changing this to use the new framebuffer system
-mViewportWidth: usize,
-mViewportHeight: usize,
-mViewportFrameBuffer: FrameBuffer,
-mViewportVertexArray: VertexArray,
-mViewportVertexBuffer: VertexBuffer,
-mViewportIndexBuffer: IndexBuffer,
-mViewportShaderHandle: AssetHandle,
+mViewportWidth: usize = 0,
+mViewportHeight: usize = 0,
+mViewportFrameBuffer: FrameBuffer = undefined,
+mViewportVertexArray: VertexArray = undefined,
+mViewportVertexBuffer: VertexBuffer = undefined,
+mViewportIndexBuffer: IndexBuffer = undefined,
+mViewportShaderHandle: AssetHandle = AssetHandle{ .mID = AssetHandle.NullHandle },
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 mProjectionType: ProjectionType = .Perspective,
@@ -51,7 +51,7 @@ pub fn Deinit(self: *CameraComponent) !void {
     self.mViewportVertexArray.Deinit();
     self.mViewportVertexBuffer.Deinit();
     self.mViewportIndexBuffer.Deinit();
-    AssetManager.ReleaseAssetHandleRef(self.mViewportShaderHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mViewportShaderHandle);
 }
 
 pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {
