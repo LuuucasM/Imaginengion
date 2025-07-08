@@ -83,6 +83,7 @@ _SceneSpecList: std.ArrayList(SceneSpecPanel),
 mEditorSceneManager: SceneManager,
 mOverlayScene: SceneLayer,
 mGameScene: SceneLayer,
+mEditorCameraEntity: Entity,
 mEditorViewportEntity: Entity,
 mEditorViewportPlayer: Player,
 
@@ -102,6 +103,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
         .mOverlayScene = undefined,
         .mGameScene = undefined,
+        .mEditorCameraEntity = undefined,
         .mEditorViewportEntity = undefined,
         .mEditorViewportPlayer = undefined,
         .mWindow = window,
@@ -127,11 +129,16 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
     self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
 
+    self.mEditorCameraEntity = try self.mGameScene.CreateEntity();
     self.mEditorViewportEntity = try self.mGameScene.CreateEntity();
 
-    const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent);
-    transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
+    const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent);
+    viewport_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
 
+    const camera_transform_component = self.mEditorCameraEntity.GetComponent(TransformComponent);
+    camera_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
+
+    //setup the viewport camera
     var new_camera_component = CameraComponent{
         .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
         .mViewportVertexArray = VertexArray.Init(engine_allocator),
@@ -155,16 +162,36 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(CameraComponent, new_camera_component);
 
-    try GameObjectUtils.AddScriptToEntity(self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
-
-    self.mEditorViewportPlayer = try PlayerManager.CreatePlayer();
-
     const new_player_slot_component = PlayerSlotComponent{
         .mPlayerEntity = self.mEditorViewportPlayer.mEntityID,
     };
 
     _ = try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
     _ = try self.mEditorViewportPlayer.AddComponent(ControllerComponent, ControllerComponent{ .mControlledEntityID = self.mEditorViewportEntity.mEntityID });
+
+    //setup the full screen editor camera
+    var new_camera_component_camera = CameraComponent{
+        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+        .mViewportVertexArray = VertexArray.Init(engine_allocator),
+        .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
+        .mViewportIndexBuffer = undefined,
+        .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
+    };
+
+    const shader_asset_camera = try new_camera_component_camera.mViewportShaderHandle.GetAsset(ShaderAsset);
+    try new_camera_component_camera.mViewportVertexBuffer.SetLayout(shader_asset_camera.mShader.GetLayout());
+    new_camera_component_camera.mViewportVertexBuffer.SetStride(shader_asset_camera.mShader.GetStride());
+
+    var index_buffer_data_camera = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    new_camera_component_camera.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data_camera[0..], 6);
+
+    var data_vertex_buffer_camera = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
+    new_camera_component_camera.mViewportVertexBuffer.SetData(&data_vertex_buffer_camera[0][0], @sizeOf([4][2]f32), 0);
+    try new_camera_component_camera.mViewportVertexArray.AddVertexBuffer(new_camera_component_camera.mViewportVertexBuffer);
+    new_camera_component_camera.mViewportVertexArray.SetIndexBuffer(new_camera_component_camera.mViewportIndexBuffer);
+
+    new_camera_component_camera.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+    _ = try self.mEditorCameraEntity.AddComponent(CameraComponent, new_camera_component_camera);
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -199,9 +226,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
     //-------------Physics Begin-----------------
     //-------------Physics End-------------------
-
-    try self.mGameSceneManager.CalculateTransforms(frame_allocator);
-    try self.mEditorSceneManager.CalculateTransforms(frame_allocator);
 
     //-------------Game Logic Begin--------------
     //-------------Game Logic End----------------
@@ -348,7 +372,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            self.mEditorViewportEntity.GetComponent(CameraComponent).SetViewportSize(e.mWidth, e.mHeight);
+            try self.mEditorViewportEntity.GetComponent(CameraComponent).SetViewportSize(e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
@@ -413,7 +437,8 @@ pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, frame_all
 }
 
 pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
-    try self.mEditorSceneManager.OnViewportResize(width, height, frame_allocator);
+    _ = frame_allocator;
+    self.mEditorCameraEntity.GetComponent(CameraComponent).SetViewportSize(width, height);
     return true;
 }
 

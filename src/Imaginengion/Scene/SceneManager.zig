@@ -111,20 +111,6 @@ pub fn OnViewportResize(self: *SceneManager, viewport_width: usize, viewport_hei
     }
 }
 
-pub fn CalculateTransforms(self: *SceneManager, frame_allocator: std.mem.Allocator) !void {
-    const transform_group = try self.mECSManagerGO.GetGroup(.{
-        .Not = .{
-            .mFirst = GroupQuery{ .Component = TransformComponent },
-            .mSecond = GroupQuery{ .Component = EntityChildComponent },
-        },
-    }, frame_allocator);
-
-    for (transform_group.items) |entity_id| {
-        const entity = self.GetEntity(entity_id);
-        CalculateEntityTransform(entity, LinAlg.Mat4Identity(), false);
-    }
-}
-
 pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };

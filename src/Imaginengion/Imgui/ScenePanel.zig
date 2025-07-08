@@ -8,6 +8,7 @@ const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const ScenePanel = @This();
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
@@ -83,7 +84,12 @@ pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
 
 fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, allocator: std.mem.Allocator, already_popup: *bool) !void {
     //getting all the scenes and entities ahead of time to use later
-    const name_entities = try scene_manager.mECSManagerGO.GetGroup(.{ .Component = EntityNameComponent }, allocator);
+    const name_entities = try scene_manager.mECSManagerGO.GetGroup(GroupQuery{
+        .Not = .{
+            .mFirst = GroupQuery{ .Component = EntityNameComponent },
+            .mSecond = GroupQuery{ .Component = EntityChildComponent },
+        },
+    }, allocator);
     const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
     //sort the scenes so we can display them in the correct order which matters for handling events and stuff
@@ -223,14 +229,8 @@ fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_ent
 
     for (scene_name_entities.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };
-        try self.RenderSceneEntitiy(entity, scene_layer, already_popup);
+        try self.RenderEntity(entity, scene_layer, already_popup);
     }
-}
-
-fn RenderSceneEntitiy(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, already_popup: *bool) !void {
-    // Skip child entities (they're rendered as part of their parent's hierarchy)
-    if (entity.HasComponent(EntityChildComponent)) return;
-    try self.RenderEntity(entity, scene_layer, already_popup);
 }
 
 fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, already_popup: *bool) !void {

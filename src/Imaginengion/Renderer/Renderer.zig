@@ -16,6 +16,8 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const CameraComponent = EntityComponents.CameraComponent;
+const EntityChildComponent = EntityComponents.ChildComponent;
+const EntityParentComponent = EntityComponents.ParentComponent;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
@@ -83,8 +85,13 @@ pub fn SwapBuffers() void {
 pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator) !void {
     BeginRendering(camera_component, camera_transform);
 
-    //get all the shapes
-    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{ .Component = QuadComponent }, frame_allocator);
+    //get all the shapes minus the children because we will render them with the parents
+    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{
+        .Not = .{
+            .mFirst = GroupQuery{ .Component = QuadComponent },
+            .mSecond = GroupQuery{ .Component = EntityChildComponent },
+        },
+    }, frame_allocator);
 
     //TODO: sorting
     //TODO: culling
@@ -115,17 +122,26 @@ fn BeginRendering(camera_component: *CameraComponent, camera_transform: *Transfo
 fn DrawShapes(shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
     for (shapes.items) |shape_entity_id| {
         const entity = scene_manager.GetEntity(shape_entity_id);
-        const transform_component = entity.GetComponent(TransformComponent);
 
-        if (entity.HasComponent(QuadComponent)) {
-            const quad_component = entity.GetComponent(QuadComponent);
+        DrawShape(entity);
 
-            try RenderManager.mR2D.DrawQuad(
-                transform_component,
-                quad_component,
-            );
+        if (entity.HasComponent(EntityParentComponent)) {
+            DrawChildren(entity);
         }
-        //else if has circle, line, other shapes
+    }
+}
+
+fn DrawChildren(entity: Entity) void {}
+
+fn DrawShape(entity: Entity) void {
+    const transform_component = entity.GetComponent(TransformComponent);
+    if (entity.HasComponent(QuadComponent)) {
+        const quad_component = entity.GetComponent(QuadComponent);
+
+        try RenderManager.mR2D.DrawQuad(
+            transform_component,
+            quad_component,
+        );
     }
 }
 
