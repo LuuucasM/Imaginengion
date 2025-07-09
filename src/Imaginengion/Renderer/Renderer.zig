@@ -19,6 +19,10 @@ const CameraComponent = EntityComponents.CameraComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
 const EntityParentComponent = EntityComponents.ParentComponent;
 
+const LinAlg = @import("../Math/LinAlg.zig");
+const Vec3f32 = LinAlg.Vec3f32;
+const Quatf32 = LinAlg.Quatf32;
+
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Renderer = @This();
@@ -95,7 +99,18 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
 
     //TODO: sorting
     //TODO: culling
-    try DrawShapes(shapes_ids, scene_manager);
+
+    //draw the shapes
+    var base_transform_component = TransformComponent{};
+
+    for (shapes_ids.items) |shape_id| {
+        base_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 0.0 });
+        base_transform_component.SetRotation(Quatf32{ 1.0, 0.0, 0.0, 0.0 });
+        base_transform_component.SetScale(Vec3f32{ 0.0, 0.0, 0.0 });
+
+        const shape_entity = scene_manager.GetEntity(shape_id);
+        DrawShape(shape_entity, &base_transform_component);
+    }
 
     try EndRendering(camera_component);
 }
@@ -119,29 +134,39 @@ fn BeginRendering(camera_component: *CameraComponent, camera_transform: *Transfo
     RenderManager.mR2D.StartBatch();
 }
 
-fn DrawShapes(shapes: std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
-    for (shapes.items) |shape_entity_id| {
-        const entity = scene_manager.GetEntity(shape_entity_id);
+fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) void {
+    const parent_component = entity.GetComponent(EntityParentComponent);
+    var curr_id = parent_component.mFirstChild;
 
-        DrawShape(entity);
+    while (curr_id != Entity.NullEntity) {
+        const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-        if (entity.HasComponent(EntityParentComponent)) {
-            DrawChildren(entity);
-        }
+        DrawShape(entity, parent_transform);
+
+        const child_component = child_entity.GetComponent(EntityChildComponent);
+        curr_id = child_component.mNext;
     }
 }
 
-fn DrawChildren(entity: Entity) void {}
-
-fn DrawShape(entity: Entity) void {
+fn DrawShape(entity: Entity, parent_transform: *TransformComponent) void {
     const transform_component = entity.GetComponent(TransformComponent);
+    parent_transform.Translation += transform_component.Translation;
+    parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
+    parent_transform.Scale += transform_component.Scale;
+
+    //draw the shape
     if (entity.HasComponent(QuadComponent)) {
         const quad_component = entity.GetComponent(QuadComponent);
 
         try RenderManager.mR2D.DrawQuad(
-            transform_component,
+            parent_transform,
             quad_component,
         );
+    }
+
+    //check is if parent, if so draw children else nothing
+    if (entity.HasComponent(EntityParentComponent)) {
+        DrawChildren(entity, parent_transform);
     }
 }
 
