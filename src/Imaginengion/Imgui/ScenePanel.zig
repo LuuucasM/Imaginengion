@@ -44,7 +44,7 @@ pub fn Init() ScenePanel {
     };
 }
 
-pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
+pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {
     if (!self.mIsVisible) return;
 
     _ = imgui.igBegin("Scenes", null, 0);
@@ -59,13 +59,8 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager) !void {
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
 
-        var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        defer arena.deinit();
-        const allocator = arena.allocator();
-
-        try self.RenderScenes(scene_manager, allocator, &already_popup);
+        try self.RenderScenes(scene_manager, &already_popup, frame_allocator);
     }
-
     try self.HandlePanelContextMenu(already_popup);
     try self.HandlePanelDragDrop();
 }
@@ -82,15 +77,15 @@ pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
 }
 
-fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, allocator: std.mem.Allocator, already_popup: *bool) !void {
+fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
     //getting all the scenes and entities ahead of time to use later
     const name_entities = try scene_manager.mECSManagerGO.GetGroup(GroupQuery{
         .Not = .{
             .mFirst = GroupQuery{ .Component = EntityNameComponent },
             .mSecond = GroupQuery{ .Component = EntityChildComponent },
         },
-    }, allocator);
-    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
+    }, frame_allocator);
+    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, frame_allocator);
 
     //sort the scenes so we can display them in the correct order which matters for handling events and stuff
     std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
@@ -99,17 +94,16 @@ fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, allocator: std.
         //setting up variables to be used later
         const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
 
-        try self.RenderScene(scene_layer, scene_manager, name_entities, already_popup);
+        try self.RenderScene(scene_layer, scene_manager, name_entities, already_popup, frame_allocator);
     }
 }
 
-fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), already_popup: *bool) !void {
+fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
     const scene_id = scene_layer.mSceneID;
     const scene_component = scene_layer.GetComponent(SceneComponent);
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
 
-    var name_buf: [200]u8 = undefined;
-    const scene_name = try std.fmt.bufPrintZ(&name_buf, "{s}###{d}", .{ scene_name_component.Name.items, scene_id });
+    const scene_name = try std.fmt.allocPrintZ(frame_allocator, "{s}###{d}", .{ scene_name_component.Name.items, scene_id });
 
     //push ID so that each scene can have their unique display
     imgui.igPushID_Str(scene_name.ptr);
@@ -149,7 +143,7 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
 
     if (is_tree_open) {
         defer imgui.igTreePop();
-        try self.RenderSceneEntities(scene_manager, name_entities, scene_layer, already_popup);
+        try self.RenderSceneEntities(scene_manager, name_entities, scene_layer, already_popup, frame_allocator);
     }
 }
 
@@ -221,7 +215,7 @@ fn HandleSceneDragDrop(_: *ScenePanel, scene_layer: SceneLayer) !void {
     }
 }
 
-fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), scene_layer: SceneLayer, already_popup: *bool) !void {
+fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
     var scene_name_entities = try name_entities.clone();
     defer scene_name_entities.deinit();
 
@@ -229,13 +223,12 @@ fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_ent
 
     for (scene_name_entities.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };
-        try self.RenderEntity(entity, scene_layer, already_popup);
+        try self.RenderEntity(entity, scene_layer, already_popup, frame_allocator);
     }
 }
 
-fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, already_popup: *bool) !void {
-    var name_buf: [ENTITY_NAME_BUFFER_SIZE]u8 = undefined;
-    const entity_name = try std.fmt.bufPrintZ(&name_buf, "{s}###{d}", .{ entity.GetName(), entity.mEntityID });
+fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
+    const entity_name = try std.fmt.allocPrintZ(frame_allocator, "{s}###{d}", .{ entity.GetName(), entity.mEntityID });
 
     // Set text color based on selection
     const is_selected = self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID;
@@ -247,13 +240,13 @@ fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, alre
     defer imgui.igPopID();
 
     if (entity.HasComponent(EntityParentComponent)) {
-        try self.RenderParentEntity(entity, entity_name, scene_layer, already_popup);
+        try self.RenderParentEntity(entity, entity_name, scene_layer, already_popup, frame_allocator);
     } else {
         try self.RenderLeafEntity(entity, entity_name, scene_layer, already_popup);
     }
 }
 
-fn RenderParentEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
+fn RenderParentEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
     const is_entity_tree_open = imgui.igTreeNodeEx_Str(entity_name, TREE_FLAGS);
 
     //if the tree node gets left clicked it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
@@ -265,7 +258,7 @@ fn RenderParentEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
-        try self.RenderChildEntities(entity, scene_layer, already_popup);
+        try self.RenderChildEntities(entity, scene_layer, already_popup, frame_allocator);
     }
 }
 
@@ -342,13 +335,13 @@ fn MakeEntityParent(_: *ScenePanel, parent_entity: Entity, new_entity: Entity) !
     _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
 }
 
-fn RenderChildEntities(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool) anyerror!void {
+fn RenderChildEntities(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) anyerror!void {
     const entity_parent_component = parent_entity.GetComponent(EntityParentComponent);
     var curr_id = entity_parent_component.mFirstChild;
 
     while (curr_id != Entity.NullEntity) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
-        try self.RenderEntity(child_entity, scene_layer, already_popup);
+        try self.RenderEntity(child_entity, scene_layer, already_popup, frame_allocator);
 
         const child_component = child_entity.GetComponent(EntityChildComponent);
         curr_id = child_component.mNext;

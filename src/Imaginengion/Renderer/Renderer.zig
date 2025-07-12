@@ -41,7 +41,8 @@ const CameraData = extern struct {
     mPerspectiveFar: f32, // 4 bytes  ← 16-byte boundary
     mResolutionWidth: f32, // 4 bytes
     mResolutionHeight: f32, // 4 bytes
-    mAspectRatio: f32, // 4 bytes ← 16-byte boundary
+    mAspectRatio: f32, // 4 bytes
+    mFOV: f32, // 4 bytes ← 16-byte boundary
 };
 
 mRenderContext: RenderContext = undefined,
@@ -115,6 +116,7 @@ fn BeginRendering(camera_component: *CameraComponent, camera_transform: *Transfo
     RenderManager.mCameraBuffer.mResolutionWidth = @floatFromInt(camera_component.mViewportWidth);
     RenderManager.mCameraBuffer.mResolutionHeight = @floatFromInt(camera_component.mViewportHeight);
     RenderManager.mCameraBuffer.mAspectRatio = camera_component.mAspectRatio;
+    RenderManager.mCameraBuffer.mFOV = camera_component.mPerspectiveFOVRad;
     RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
 
     RenderManager.mStats = std.mem.zeroes(RenderStats);
@@ -129,7 +131,7 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
     while (curr_id != Entity.NullEntity) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-        try DrawShape(entity, parent_transform);
+        try DrawShape(child_entity, parent_transform);
 
         const child_component = child_entity.GetComponent(EntityChildComponent);
         curr_id = child_component.mNext;

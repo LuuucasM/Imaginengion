@@ -235,7 +235,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     try self._ContentBrowserPanel.OnImguiRender();
     try self._AssetHandlePanel.OnImguiRender(frame_allocator);
 
-    try self._ScenePanel.OnImguiRender(&self.mGameSceneManager);
+    try self._ScenePanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
+
     for (self._SceneSpecList.items) |*scene_spec_panel| {
         try scene_spec_panel.OnImguiRender(frame_allocator);
     }
@@ -243,11 +244,12 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     try self._ScriptsPanel.OnImguiRender();
     try self._CSEditorPanel.OnImguiRender();
 
-    try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, self.mFrameAllocator);
+    try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
 
     const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
     const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
     try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+
     try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
@@ -258,6 +260,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
     Dockspace.End();
     ImGui.End();
+
     //--------------Render End-------------------
 
     //--------------Audio Begin------------------
@@ -288,6 +291,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     GameEventManager.EventsReset();
     ImguiEventManager.EventsReset();
     //-----------------End End of Frame-------------------
+
 }
 
 pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {

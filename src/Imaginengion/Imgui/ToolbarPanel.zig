@@ -11,6 +11,7 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const CameraComponent = EntityComponents.CameraComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const EntityChildComponent = EntityComponents.ChildComponent;
 const Entity = @import("../GameObjects/Entity.zig");
 const ToolbarPanel = @This();
 
@@ -58,10 +59,18 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
 
     var window_size: imgui.struct_ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&window_size);
-    imgui.igSameLine((window_size.x * 0.5) - (size * 0.5), 0.0);
 
+    // Center the group: calculate total width of button + combo + spacing
+    const button_width = size;
+    const combo_width: f32 = 120.0; // Estimate or measure your combo width
+    const spacing: f32 = 8.0; // Default ImGui spacing
+    const total_width = button_width + spacing + combo_width;
+    const start_x = (window_size.x * 0.5) - (total_width * 0.5);
+
+    imgui.igSetCursorPosX(start_x);
+
+    // Button
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, texture.GetID())));
-
     if (imgui.igImageButtonEx(
         texture.GetID(),
         texture_id,
@@ -72,7 +81,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        if (self.mState == .Stop and self.mStartEntity.mEntityID == Entity.NullEntity) {
+        if (self.mState == .Stop and self.mStartEntity.mEntityID != Entity.NullEntity) {
             try ImguiEventManager.Insert(ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
             });
@@ -86,31 +95,45 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
         }
     }
 
-    imgui.igSameLine((window_size.x * 0.5) - (size * 0.5), 0.0);
+    // Place combo box on the same line, with spacing
+    imgui.igSameLine(0.0, spacing);
+
+    // Combo box
+    imgui.igPushItemWidth(combo_width); // combo_width should be wide enough, e.g., 120.0 or more
 
     var combo_text: []const u8 = "None\x00";
     if (self.mStartEntity.mEntityID != Entity.NullEntity) {
-        combo_text = self.mStartEntity.GetName();
+        // Ensure null-terminated string for ImGui
+        var name_buf: [128]u8 = undefined;
+        combo_text = try std.fmt.bufPrintZ(&name_buf, "{s}", .{self.mStartEntity.GetName()});
     }
-    if (imgui.igBeginCombo("PlayLocation", @ptrCast(combo_text.ptr), imgui.ImGuiComboFlags_None)) {
+    if (imgui.igBeginCombo("##PlayLocation", @ptrCast(combo_text.ptr), imgui.ImGuiComboFlags_None)) {
         defer imgui.igEndCombo();
 
-        if (imgui.igSelectable_Bool("None\x00", self.mStartEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 10, .y = 10 })) {
+        if (imgui.igSelectable_Bool("None\x00", self.mStartEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 0, .y = 0 })) {
             self.mStartEntity.mEntityID = Entity.NullEntity;
         }
-        const entities = try game_scene_manager.GetEntityGroup(GroupQuery{
-            .And = &[_]GroupQuery{
-                GroupQuery{ .Component = CameraComponent },
-                GroupQuery{ .Component = PlayerSlotComponent },
-            },
-        }, frame_allocator);
-        for (entities.items) |entity_id| {
+
+        const camera_entities = try game_scene_manager.GetEntityGroup(GroupQuery{ .Component = CameraComponent }, frame_allocator);
+
+        for (camera_entities.items) |entity_id| {
             const entity = game_scene_manager.GetEntity(entity_id);
-            if (imgui.igSelectable_Bool(@ptrCast(&entity.GetName()), self.mStartEntity.mEntityID == entity.mEntityID, 0, .{ .x = 10, .y = 10 })) {
-                self.mStartEntity = entity;
+            if (entity.HasComponent(EntityChildComponent)) {
+                const child_component = entity.GetComponent(EntityChildComponent);
+
+                const parent_entity = game_scene_manager.GetEntity(child_component.mParent);
+
+                if (parent_entity.HasComponent(PlayerSlotComponent)) {
+                    var name_buf: [128]u8 = undefined;
+                    const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{parent_entity.GetName()});
+                    if (imgui.igSelectable_Bool(name_cstr, self.mStartEntity.mEntityID == entity.mEntityID, 0, .{ .x = 0, .y = 0 })) {
+                        self.mStartEntity = entity;
+                    }
+                }
             }
         }
     }
+    imgui.igPopItemWidth();
 }
 
 pub fn OnTogglePanelEvent(self: *ToolbarPanel) void {

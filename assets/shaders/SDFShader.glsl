@@ -27,7 +27,8 @@ struct CameraData {
     float PerspectiveFar; // 4 bytes  ← 16-byte boundary
     float ResolutionWidth;  // 4 bytes
     float ResolutionHeight; // 4 bytes
-    float AspectRatio;      // 4 bytes ← 16-byte boundary
+    float AspectRatio;      // 4 bytes
+    float FOV; // 4 bytes  ← 16-byte boundary
 };
 
 layout(std140, binding = 0) uniform CameraUBO {
@@ -218,7 +219,9 @@ void main() {
     uv.x *= Camera.data.AspectRatio; // <-- Aspect ratio correction
     uv.y = -uv.y; // Flip y axis if needed
 
-    vec3 base_ray_dir = normalize(vec3(uv, -1.0));
+    float tan_half_fov = tan(Camera.data.FOV * 0.5);
+
+    vec3 base_ray_dir = normalize(vec3(uv * tan_half_fov, -1.0));
     vec3 ray_dir = QuadRotate(base_ray_dir, Camera.data.Rotation);
 
     oFragColor = RayMarch(Camera.data.Position, ray_dir);

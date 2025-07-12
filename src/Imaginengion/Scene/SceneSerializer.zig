@@ -257,11 +257,6 @@ fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity, allocato
     try write_stream.write(component_string.items);
     component_string.clearAndFree();
 
-    try write_stream.objectField("ProjectionType");
-    try std.json.stringify(component.mProjectionType, .{}, component_string.writer());
-    try write_stream.write(component_string.items);
-    component_string.clearAndFree();
-
     try write_stream.objectField("AspectRatio");
     try std.json.stringify(component.mAspectRatio, .{}, component_string.writer());
     try write_stream.write(component_string.items);
@@ -269,21 +264,6 @@ fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity, allocato
 
     try write_stream.objectField("IsFixedAspectRatio");
     try std.json.stringify(component.mIsFixedAspectRatio, .{}, component_string.writer());
-    try write_stream.write(component_string.items);
-    component_string.clearAndFree();
-
-    try write_stream.objectField("OrthographicSize");
-    try std.json.stringify(component.mOrthographicSize, .{}, component_string.writer());
-    try write_stream.write(component_string.items);
-    component_string.clearAndFree();
-
-    try write_stream.objectField("OrthographicNear");
-    try std.json.stringify(component.mOrthographicNear, .{}, component_string.writer());
-    try write_stream.write(component_string.items);
-    component_string.clearAndFree();
-
-    try write_stream.objectField("OrthographicFar");
-    try std.json.stringify(component.mOrthographicFar, .{}, component_string.writer());
     try write_stream.write(component_string.items);
     component_string.clearAndFree();
 
@@ -614,14 +594,6 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
                 else => return error.ExpectedString,
             };
             camera_component.mViewportHeight = try std.fmt.parseUnsigned(usize, viewport_height_string, 10);
-        } else if (std.mem.eql(u8, token_value, "ProjectionType")) {
-            const projection_type_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
-            const projection_type_string = switch (projection_type_token) {
-                .string => |v| v,
-                .allocated_string => |v| v,
-                else => return error.ExpectedString,
-            };
-            camera_component.mProjectionType = std.meta.stringToEnum(CameraComponent.ProjectionType, projection_type_string).?;
         } else if (std.mem.eql(u8, token_value, "AspectRatio")) {
             const aspect_ratio_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
             const aspect_ratio_string = switch (aspect_ratio_token) {
@@ -638,30 +610,6 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
                 else => return error.ExpectedString,
             };
             camera_component.mIsFixedAspectRatio = std.mem.eql(u8, is_fixed_string, "true");
-        } else if (std.mem.eql(u8, token_value, "OrthographicSize")) {
-            const ortho_size_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
-            const ortho_size_string = switch (ortho_size_token) {
-                .string => |v| v,
-                .allocated_string => |v| v,
-                else => return error.ExpectedString,
-            };
-            camera_component.mOrthographicSize = try std.fmt.parseFloat(f32, ortho_size_string);
-        } else if (std.mem.eql(u8, token_value, "OrthographicNear")) {
-            const ortho_near_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
-            const ortho_near_string = switch (ortho_near_token) {
-                .string => |v| v,
-                .allocated_string => |v| v,
-                else => return error.ExpectedString,
-            };
-            camera_component.mOrthographicNear = try std.fmt.parseFloat(f32, ortho_near_string);
-        } else if (std.mem.eql(u8, token_value, "OrthographicFar")) {
-            const ortho_far_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
-            const ortho_far_string = switch (ortho_far_token) {
-                .string => |v| v,
-                .allocated_string => |v| v,
-                else => return error.ExpectedString,
-            };
-            camera_component.mOrthographicFar = try std.fmt.parseFloat(f32, ortho_far_string);
         } else if (std.mem.eql(u8, token_value, "PerspectiveFOVRad")) {
             const fov_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
             const fov_string = switch (fov_token) {

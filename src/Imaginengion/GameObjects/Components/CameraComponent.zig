@@ -33,16 +33,11 @@ mViewportIndexBuffer: IndexBuffer = undefined,
 mViewportShaderHandle: AssetHandle = AssetHandle{ .mID = AssetHandle.NullHandle },
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
-mProjectionType: ProjectionType = .Perspective,
 
 mAspectRatio: f32 = 0.0,
 mIsFixedAspectRatio: bool = false,
 
-mOrthographicSize: f32 = 10.0,
-mOrthographicNear: f32 = -1.0,
-mOrthographicFar: f32 = 1.0,
-
-mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(45.0),
+mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(60.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 
@@ -88,16 +83,7 @@ pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void
 }
 
 fn RecalculateProjection(self: *CameraComponent) void {
-    if (self.mProjectionType == .Perspective) {
-        self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
-    } else {
-        const ortho_left = -1.0 * self.mOrthographicSize * self.mAspectRatio * 0.5;
-        const ortho_right = self.mOrthographicSize * self.mAspectRatio * 0.5;
-        const ortho_bottom = 1.0 * self.mOrthographicSize * 0.5;
-        const ortho_top = self.mOrthographicSize * 0.5;
-
-        self.mProjection = LinAlg.OrthographicRHNO(ortho_left, ortho_right, ortho_bottom, ortho_top, self.mOrthographicNear, self.mOrthographicFar);
-    }
+    self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
 }
 
 pub const Ind: usize = blk: {
@@ -127,45 +113,18 @@ pub fn EditorRender(self: *CameraComponent) !void {
     //aspect ratio
     _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
 
-    //projection type
-    if (imgui.igBeginCombo("Projection type", @tagName(self.mProjectionType), imgui.ImGuiComboFlags_None) == true) {
-        defer imgui.igEndCombo();
-        if (imgui.igSelectable_Bool("Perspective", if (self.mProjectionType == .Perspective) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
-            self.mProjectionType = .Perspective;
-            self.RecalculateProjection();
-        }
-        if (imgui.igSelectable_Bool("Orthographic", if (self.mProjectionType == .Orthographic) true else false, imgui.ImGuiSelectableFlags_None, imgui.ImVec2{ .x = 50, .y = 50 })) {
-            self.mProjectionType = .Orthographic;
-            self.RecalculateProjection();
-        }
+    //print the size/far/near variables depending on projection type
+    var perspective_degrees = LinAlg.RadiansToDegrees(self.mPerspectiveFOVRad);
+    if (imgui.igDragFloat("FOV", &perspective_degrees, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+        self.mPerspectiveFOVRad = LinAlg.DegreesToRadians(perspective_degrees);
+        self.RecalculateProjection();
     }
 
-    //print the size/far/near variables depending on projection type
-    if (self.mProjectionType == .Perspective) {
-        var perspective_degrees = LinAlg.RadiansToDegrees(self.mPerspectiveFOVRad);
-        if (imgui.igDragFloat("FOV", &perspective_degrees, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-            self.mPerspectiveFOVRad = LinAlg.DegreesToRadians(perspective_degrees);
-            self.RecalculateProjection();
-        }
+    if (imgui.igDragFloat("Near", &self.mPerspectiveNear, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+        self.RecalculateProjection();
+    }
 
-        if (imgui.igDragFloat("Near", &self.mPerspectiveNear, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-            self.RecalculateProjection();
-        }
-
-        if (imgui.igDragFloat("Far", &self.mPerspectiveFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-            self.RecalculateProjection();
-        }
-    } else {
-        if (imgui.igDragFloat("Size", &self.mOrthographicSize, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-            self.RecalculateProjection();
-        }
-
-        if (imgui.igDragFloat("Near", &self.mOrthographicNear, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-            self.RecalculateProjection();
-        }
-
-        if (imgui.igDragFloat("Far", &self.mOrthographicFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-            self.RecalculateProjection();
-        }
+    if (imgui.igDragFloat("Far", &self.mPerspectiveFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+        self.RecalculateProjection();
     }
 }
