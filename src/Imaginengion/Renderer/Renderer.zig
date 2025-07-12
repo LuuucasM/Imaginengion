@@ -36,16 +36,12 @@ pub const RenderStats = struct {
 };
 
 const CameraData = extern struct {
-    mPosition: [3]f32,
-    _padding0: f32 = 0.0, // pad to 16 bytes
-    mRotation: [4]f32,
-    mPerspectiveFar: f32,
-    _padding1: [3]f32 = .{ 0, 0, 0 }, // pad to 16 bytes (std140 rule)
-};
-
-const ResolutionData = extern struct {
-    mWidth: f32,
-    mHeight: f32,
+    mRotation: [4]f32, // 16 bytes ← 16-byte boundary
+    mPosition: [3]f32, // 12 bytes
+    mPerspectiveFar: f32, // 4 bytes  ← 16-byte boundary
+    mResolutionWidth: f32, // 4 bytes
+    mResolutionHeight: f32, // 4 bytes
+    mAspectRatio: f32, // 4 bytes ← 16-byte boundary
 };
 
 mRenderContext: RenderContext = undefined,
@@ -57,9 +53,6 @@ mR3D: Renderer3D = undefined,
 mCameraBuffer: CameraData = std.mem.zeroes(CameraData),
 mCameraUniformBuffer: UniformBuffer = undefined,
 
-mResolutionBuffer: ResolutionData = std.mem.zeroes(ResolutionData),
-mViewportResolutionUB: UniformBuffer = undefined,
-
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(window: *Window) !void {
@@ -69,15 +62,11 @@ pub fn Init(window: *Window) !void {
     RenderManager.mR3D = Renderer3D.Init();
 
     RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
-
-    RenderManager.mViewportResolutionUB = UniformBuffer.Init(@sizeOf(ResolutionData));
 }
 
 pub fn Deinit() !void {
     try RenderManager.mR2D.Deinit();
-    AssetManager.ReleaseAssetHandleRef(&RenderManager.mViewportShaderHandle);
     RenderManager.mCameraUniformBuffer.Deinit();
-    RenderManager.mViewportResolutionUB.Deinit();
 
     RenderAllocator.deinit();
 }
@@ -109,7 +98,7 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
         base_transform_component.SetScale(Vec3f32{ 0.0, 0.0, 0.0 });
 
         const shape_entity = scene_manager.GetEntity(shape_id);
-        DrawShape(shape_entity, &base_transform_component);
+        try DrawShape(shape_entity, &base_transform_component);
     }
 
     try EndRendering(camera_component);
@@ -120,35 +109,34 @@ pub fn GetRenderStats() RenderStats {
 }
 
 fn BeginRendering(camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
-    RenderManager.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
     RenderManager.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
+    RenderManager.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
     RenderManager.mCameraBuffer.mPerspectiveFar = camera_component.mPerspectiveFar;
+    RenderManager.mCameraBuffer.mResolutionWidth = @floatFromInt(camera_component.mViewportWidth);
+    RenderManager.mCameraBuffer.mResolutionHeight = @floatFromInt(camera_component.mViewportHeight);
+    RenderManager.mCameraBuffer.mAspectRatio = camera_component.mAspectRatio;
     RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
-
-    RenderManager.mResolutionBuffer.mWidth = @floatFromInt(camera_component.mViewportWidth);
-    RenderManager.mResolutionBuffer.mHeight = @floatFromInt(camera_component.mViewportHeight);
-    RenderManager.mViewportResolutionUB.SetData(&RenderManager.mResolutionBuffer, @sizeOf(ResolutionData), 0);
 
     RenderManager.mStats = std.mem.zeroes(RenderStats);
 
     RenderManager.mR2D.StartBatch();
 }
 
-fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) void {
+fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
     const parent_component = entity.GetComponent(EntityParentComponent);
     var curr_id = parent_component.mFirstChild;
 
     while (curr_id != Entity.NullEntity) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-        DrawShape(entity, parent_transform);
+        try DrawShape(entity, parent_transform);
 
         const child_component = child_entity.GetComponent(EntityChildComponent);
         curr_id = child_component.mNext;
     }
 }
 
-fn DrawShape(entity: Entity, parent_transform: *TransformComponent) void {
+fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!void {
     const transform_component = entity.GetComponent(TransformComponent);
     parent_transform.Translation += transform_component.Translation;
     parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
@@ -166,7 +154,7 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) void {
 
     //check is if parent, if so draw children else nothing
     if (entity.HasComponent(EntityParentComponent)) {
-        DrawChildren(entity, parent_transform);
+        try DrawChildren(entity, parent_transform);
     }
 }
 
@@ -180,7 +168,6 @@ fn EndRendering(camera_component: *CameraComponent) !void {
     try RenderManager.mR2D.SetBuffers();
 
     RenderManager.mCameraUniformBuffer.Bind(0);
-    RenderManager.mViewportResolutionUB.Bind(1);
 
     RenderManager.mR2D.BindBuffers();
 

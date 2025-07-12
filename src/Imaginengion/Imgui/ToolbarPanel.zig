@@ -88,14 +88,14 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
 
     imgui.igSameLine((window_size.x * 0.5) - (size * 0.5), 0.0);
 
-    var combo_text: []const u8 = "None";
+    var combo_text: []const u8 = "None\x00";
     if (self.mStartEntity.mEntityID != Entity.NullEntity) {
         combo_text = self.mStartEntity.GetName();
     }
-    if (imgui.igBeginCombo("PlayLocation", @ptrCast(&combo_text), imgui.ImGuiComboFlags_None)) {
+    if (imgui.igBeginCombo("PlayLocation", @ptrCast(combo_text.ptr), imgui.ImGuiComboFlags_None)) {
         defer imgui.igEndCombo();
 
-        if (imgui.igSelectable_Bool("None", self.mStartEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 10, .y = 10 })) {
+        if (imgui.igSelectable_Bool("None\x00", self.mStartEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 10, .y = 10 })) {
             self.mStartEntity.mEntityID = Entity.NullEntity;
         }
         const entities = try game_scene_manager.GetEntityGroup(GroupQuery{

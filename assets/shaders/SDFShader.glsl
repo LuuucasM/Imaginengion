@@ -22,18 +22,17 @@ layout(location = 0) out vec4 oFragColor;
 
 //===========================Camera===========================
 struct CameraData {
-    vec3 Position;
-    vec4 Rotation;
-    float PerspectiveFar;
+    vec4 Rotation;        // 16 bytes ← 16-byte boundary
+    vec3 Position;        // 12 bytes
+    float PerspectiveFar; // 4 bytes  ← 16-byte boundary
+    float ResolutionWidth;  // 4 bytes
+    float ResolutionHeight; // 4 bytes
+    float AspectRatio;      // 4 bytes ← 16-byte boundary
 };
 
 layout(std140, binding = 0) uniform CameraUBO {
     CameraData data;
 } Camera;
-
-layout(std140, binding = 1) uniform ResolutionUBO {
-    vec2 data;
-} Resolution;
 
 //===========================End Camera===========================
 
@@ -210,12 +209,17 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
 }
 
 void main() {
-    vec3 camera_pos = Camera.data.Position;
-    vec4 camera_rot = Camera.data.Rotation;
-    vec2 uv = (gl_FragCoord.xy - Resolution.data.xy * 0.5) / Resolution.data.y;
-    uv.y = -uv.y; // Flip y axis so positive y is up
-    vec3 base_ray_dir = normalize(vec3(uv, -1.0));
-    vec3 ray_dir = QuadRotate(base_ray_dir, camera_rot);
+    // Center gl_FragCoord.xy so that (0,0) is the center of the screen
+    vec2 centered = gl_FragCoord.xy - 0.5 * vec2(Camera.data.ResolutionWidth, Camera.data.ResolutionHeight);
 
-    oFragColor = RayMarch(camera_pos, ray_dir);
+    // Normalize to [-1, 1] range
+    vec2 uv = centered / (0.5 * vec2(Camera.data.ResolutionWidth, Camera.data.ResolutionHeight));
+
+    uv.x *= Camera.data.AspectRatio; // <-- Aspect ratio correction
+    uv.y = -uv.y; // Flip y axis if needed
+
+    vec3 base_ray_dir = normalize(vec3(uv, -1.0));
+    vec3 ray_dir = QuadRotate(base_ray_dir, Camera.data.Rotation);
+
+    oFragColor = RayMarch(Camera.data.Position, ray_dir);
 }

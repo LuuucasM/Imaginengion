@@ -74,6 +74,11 @@ pub fn SetProjectionType(self: *CameraComponent, new_projection_type: Projection
 }
 
 pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void {
+    self.mViewportWidth = width;
+    self.mViewportHeight = height;
+
+    self.mViewportFrameBuffer.Resize(width, height);
+
     if (height > 0) {
         self.mAspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
     } else {

@@ -83,9 +83,8 @@ _SceneSpecList: std.ArrayList(SceneSpecPanel),
 mEditorSceneManager: SceneManager,
 mOverlayScene: SceneLayer,
 mGameScene: SceneLayer,
-mEditorCameraEntity: Entity,
+mEditorEditorEntity: Entity,
 mEditorViewportEntity: Entity,
-mEditorViewportPlayer: Player,
 
 //not editor stuff
 mWindow: *Window,
@@ -103,9 +102,8 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
         .mOverlayScene = undefined,
         .mGameScene = undefined,
-        .mEditorCameraEntity = undefined,
+        .mEditorEditorEntity = undefined,
         .mEditorViewportEntity = undefined,
-        .mEditorViewportPlayer = undefined,
         .mWindow = window,
         .mFrameAllocator = frame_allocator,
         .mEngineAllocator = engine_allocator,
@@ -129,13 +127,13 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
     self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
 
-    self.mEditorCameraEntity = try self.mGameScene.CreateEntity();
+    self.mEditorEditorEntity = try self.mGameScene.CreateEntity();
     self.mEditorViewportEntity = try self.mGameScene.CreateEntity();
 
     const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent);
     viewport_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
 
-    const camera_transform_component = self.mEditorCameraEntity.GetComponent(TransformComponent);
+    const camera_transform_component = self.mEditorEditorEntity.GetComponent(TransformComponent);
     camera_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
 
     //setup the viewport camera
@@ -145,6 +143,8 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
         .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
         .mViewportIndexBuffer = undefined,
         .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
+        .mViewportWidth = self._ViewportPanel.mViewportWidth,
+        .mViewportHeight = self._ViewportPanel.mViewportHeight,
     };
 
     const shader_asset = try new_camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
@@ -162,16 +162,9 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(CameraComponent, new_camera_component);
 
-    const new_player_slot_component = PlayerSlotComponent{
-        .mPlayerEntity = self.mEditorViewportPlayer.mEntityID,
-    };
-
-    _ = try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent, new_player_slot_component);
-    _ = try self.mEditorViewportPlayer.AddComponent(ControllerComponent, ControllerComponent{ .mControlledEntityID = self.mEditorViewportEntity.mEntityID });
-
     //setup the full screen editor camera
     var new_camera_component_camera = CameraComponent{
-        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+        .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
         .mViewportVertexArray = VertexArray.Init(engine_allocator),
         .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
         .mViewportIndexBuffer = undefined,
@@ -190,8 +183,8 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     try new_camera_component_camera.mViewportVertexArray.AddVertexBuffer(new_camera_component_camera.mViewportVertexBuffer);
     new_camera_component_camera.mViewportVertexArray.SetIndexBuffer(new_camera_component_camera.mViewportIndexBuffer);
 
-    new_camera_component_camera.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
-    _ = try self.mEditorCameraEntity.AddComponent(CameraComponent, new_camera_component_camera);
+    new_camera_component_camera.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
+    _ = try self.mEditorEditorEntity.AddComponent(CameraComponent, new_camera_component_camera);
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -255,7 +248,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
     const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
     try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
-
     try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
@@ -372,7 +364,8 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            try self.mEditorViewportEntity.GetComponent(CameraComponent).SetViewportSize(e.mWidth, e.mHeight);
+            const viewport_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+            viewport_camera_component.SetViewportSize(e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
@@ -438,7 +431,7 @@ pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, frame_all
 
 pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
     _ = frame_allocator;
-    self.mEditorCameraEntity.GetComponent(CameraComponent).SetViewportSize(width, height);
+    self.mEditorEditorEntity.GetComponent(CameraComponent).SetViewportSize(width, height);
     return true;
 }
 
