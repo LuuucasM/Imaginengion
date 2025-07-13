@@ -69,6 +69,8 @@ pub fn Deinit(self: *Application) !void {
     GameEventManager.Deinit();
     ImguiEventManager.Deinit();
     Input.Deinit();
+    _ = self.mEngineAllocator.deinit();
+    self.mFrameAllocator.deinit();
 }
 
 /// Starts the main loop of the engine.
