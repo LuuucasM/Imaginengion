@@ -175,10 +175,36 @@ pub fn LoadScene(self: *SceneManager, path: []const u8, engine_allocator: std.me
 
     return new_scene_id;
 }
-pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer) !void {
+
+pub fn SaveAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) !void {
+    const all_scenes = try self.mECSManagerSC.GetGroup(GroupQuery{ .Component = SceneStackPos }, frame_allocator);
+
+    for (all_scenes.items) |scene_id| {
+        const scene = self.GetSceneLayer(scene_id);
+
+        try self.SaveScene(scene, frame_allocator);
+    }
+}
+
+pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) !void {
+    self.mECSManagerGO.clearAndFree();
+
+    const all_scenes = try self.mECSManagerSC.GetGroup(GroupQuery{ .Component = SceneStackPos }, frame_allocator);
+
+    for (all_scenes.items) |scene_id| {
+        const scene = self.GetSceneLayer(scene_id);
+        const scene_component = scene.GetComponent(SceneComponent);
+        if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
+            const scene_asset = scene_component.mSceneAssetHandle.GetAsset(SceneAsset);
+
+            SceneSerializer.DeSerializeSceneText(scene, scene_asset, frame_allocator, self.mEngineAllocator);
+        }
+    }
+}
+pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent);
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle);
+        try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle, frame_allocator);
     } else {
         var buffer: [260]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -186,10 +212,10 @@ pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer) !void {
         const rel_path = AssetManager.GetRelPath(abs_path);
         _ = try std.fs.createFileAbsolute(abs_path, .{});
         scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-        try self.SaveSceneAs(scene_layer, abs_path);
+        try self.SaveSceneAs(scene_layer, abs_path, frame_allocator);
     }
 }
-pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8) !void {
+pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent);
     const scene_basename = std.fs.path.basename(abs_path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
@@ -199,7 +225,7 @@ pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const 
     scene_name_component.Name.clearAndFree();
     _ = try scene_name_component.Name.writer().write(scene_name);
 
-    try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle);
+    try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle, frame_allocator);
 }
 
 pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !void {
@@ -273,8 +299,8 @@ pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.
     scene_layer.FilterSceneScriptsByScene(scripts_result_list);
 }
 
-pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {
-    return try self.mECSManagerGO.GetGroup(query, allocator);
+pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {
+    return try self.mECSManagerGO.GetGroup(query, frame_allocator);
 }
 
 pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {

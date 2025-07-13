@@ -47,58 +47,47 @@ const SceneUtils = @import("../Scene/SceneUtils.zig");
 const WriteStream = std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 });
 const ComponentString = std.ArrayList(u8);
 
-pub fn SerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var out = std.ArrayList(u8).init(allocator);
+pub fn SerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle, frame_allocator: std.mem.Allocator) !void {
+    var out = std.ArrayList(u8).init(frame_allocator);
     defer out.deinit();
 
     var write_stream = std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }).init(undefined, out.writer(), .{ .whitespace = .indent_2 });
     defer write_stream.deinit();
 
-    try SerializeSceneData(&write_stream, scene_layer, allocator);
-    try WriteToFile(scene_asset_handle, out.items, allocator);
+    try SerializeSceneData(&write_stream, scene_layer, frame_allocator);
+    try WriteToFile(scene_asset_handle, out.items, frame_allocator);
 }
 
-pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset: *SceneAsset, engine_allocator: std.mem.Allocator) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var scanner = std.json.Scanner.initCompleteInput(allocator, scene_asset.mSceneContents.items);
+pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset: *SceneAsset, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+    var scanner = std.json.Scanner.initCompleteInput(frame_allocator, scene_asset.mSceneContents.items);
     defer scanner.deinit();
 
-    try DeSerializeSceneData(&scanner, scene_layer, allocator, engine_allocator);
+    try DeSerializeSceneData(&scanner, scene_layer, frame_allocator, engine_allocator);
 }
 
-pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager) void {
+pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager, frame_allocator: std.mem.Allocator) void {
     //TODO
     _ = scene_layer;
     _ = scene_manager;
+    _ = frame_allocator;
 }
 
-pub fn DeserializeSceneBinary(path: []const u8, scene_manager: SceneManager, allocator: std.mem.Allocator) SceneLayer {
+pub fn DeserializeSceneBinary(path: []const u8, scene_manager: SceneManager, frame_allocator: std.mem.Allocator) SceneLayer {
     //TODO
     _ = path;
     _ = scene_manager;
-    _ = allocator;
+    _ = frame_allocator;
 }
 
-pub fn SerializeEntityText(entity: Entity, abs_path: []const u8) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    var out = std.ArrayList(u8).init(allocator);
+pub fn SerializeEntityText(entity: Entity, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
+    var out = std.ArrayList(u8).init(frame_allocator);
     defer out.deinit();
 
     var write_stream = std.json.WriteStream(std.ArrayList(u8).Writer, .{ .checked_to_fixed_depth = 256 }).init(undefined, out.writer(), .{ .whitespace = .indent_2 });
     defer write_stream.deinit();
 
     try write_stream.beginObject();
-    try SerializeEntity(&write_stream, entity, allocator);
+    try SerializeEntity(&write_stream, entity, frame_allocator);
     try write_stream.endObject();
 
     const file = try std.fs.createFileAbsolute(abs_path, .{ .read = false, .truncate = true });
@@ -106,34 +95,30 @@ pub fn SerializeEntityText(entity: Entity, abs_path: []const u8) !void {
     try file.writeAll(out.items);
 }
 
-pub fn DeSerializeEntityText(scene_layer: SceneLayer, abs_path: []const u8) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
+pub fn DeSerializeEntityText(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
     const file = try std.fs.openFileAbsolute(abs_path, .{});
     defer file.close();
 
     const file_size = try file.getEndPos();
 
-    const file_contents = try std.ArrayList(u8).initCapacity(allocator, file_size);
+    const file_contents = try std.ArrayList(u8).initCapacity(frame_allocator, file_size);
     file.readAll(file_contents.items);
 
-    var scanner = std.json.Scanner.initCompleteInput(allocator, file_contents.items);
+    var scanner = std.json.Scanner.initCompleteInput(frame_allocator, file_contents.items);
     defer scanner.deinit();
 
     const new_entity = try scene_layer.CreateBlankEntity();
-    try DeSerializeEntity(&scanner, new_entity, scene_layer, allocator);
+    try DeSerializeEntity(&scanner, new_entity, scene_layer, frame_allocator);
 }
 
-fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     try write_stream.beginObject();
 
     try SerializeSceneMetaData(write_stream, scene_layer);
 
-    try SerializeSceneScripts(write_stream, scene_layer, allocator);
+    try SerializeSceneScripts(write_stream, scene_layer, frame_allocator);
 
-    try SerializeSceneEntities(write_stream, scene_layer, allocator);
+    try SerializeSceneEntities(write_stream, scene_layer, frame_allocator);
 
     try write_stream.endObject();
 }
@@ -148,10 +133,10 @@ fn SerializeSceneMetaData(write_stream: *WriteStream, scene_layer: SceneLayer) !
     try write_stream.write(scene_component.mLayerType);
 }
 
-fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     if (scene_layer.HasComponent(SceneScriptComponent) == false) return;
 
-    var component_string = ComponentString.init(allocator);
+    var component_string = ComponentString.init(frame_allocator);
     defer component_string.deinit();
 
     try write_stream.objectField("SceneScripts");
@@ -184,8 +169,8 @@ fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer, al
     try write_stream.endObject();
 }
 
-fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
-    const entity_list = try scene_layer.GetEntityGroup(.{ .Component = EntitySceneComponent }, allocator);
+fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+    const entity_list = try scene_layer.GetEntityGroup(.{ .Component = EntitySceneComponent }, frame_allocator);
     defer entity_list.deinit();
 
     for (entity_list.items) |entity_id| {
@@ -194,33 +179,33 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, a
 
         try write_stream.objectField("Entity");
         try write_stream.beginObject();
-        try SerializeEntity(write_stream, entity, allocator);
+        try SerializeEntity(write_stream, entity, frame_allocator);
         try write_stream.endObject();
     }
 }
 
-fn SerializeEntity(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
-    try SerializeCameraComponent(write_stream, entity, allocator);
-    try SerializeBasicComponent(write_stream, entity, AISlotComponent, "AISlotComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, PlayerSlotComponent, "PlayerSlotComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, CircleRenderComponent, "CircleRenderComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, EntityIDComponent, "EntityIDComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent", allocator);
-    try SerializeBasicComponent(write_stream, entity, TransformComponent, "TransformComponent", allocator);
+fn SerializeEntity(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) !void {
+    try SerializeCameraComponent(write_stream, entity, frame_allocator);
+    try SerializeBasicComponent(write_stream, entity, AISlotComponent, "AISlotComponent", frame_allocator);
+    try SerializeBasicComponent(write_stream, entity, PlayerSlotComponent, "PlayerSlotComponent", frame_allocator);
+    try SerializeBasicComponent(write_stream, entity, CircleRenderComponent, "CircleRenderComponent", frame_allocator);
+    try SerializeBasicComponent(write_stream, entity, EntityIDComponent, "EntityIDComponent", frame_allocator);
+    try SerializeBasicComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent", frame_allocator);
+    try SerializeBasicComponent(write_stream, entity, TransformComponent, "TransformComponent", frame_allocator);
 
-    try SerializeSpriteRenderComponent(write_stream, entity, allocator);
+    try SerializeSpriteRenderComponent(write_stream, entity, frame_allocator);
 
-    try SerializeQuadComponent(write_stream, entity, allocator);
+    try SerializeQuadComponent(write_stream, entity, frame_allocator);
 
-    try SerializeScriptComponents(write_stream, entity, allocator);
+    try SerializeScriptComponents(write_stream, entity, frame_allocator);
 
-    try SerializeParentComponent(write_stream, entity, allocator);
+    try SerializeParentComponent(write_stream, entity, frame_allocator);
 }
 
-fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8, allocator: std.mem.Allocator) !void {
+fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8, frame_allocator: std.mem.Allocator) !void {
     if (entity.HasComponent(component_type) == false) return;
 
-    var component_string = ComponentString.init(allocator);
+    var component_string = ComponentString.init(frame_allocator);
     defer component_string.deinit();
 
     try write_stream.objectField(field_name);
@@ -229,10 +214,10 @@ fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime 
     try write_stream.write(component_string.items);
 }
 
-fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
+fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     if (entity.HasComponent(CameraComponent) == false) return;
 
-    var component_string = ComponentString.init(allocator);
+    var component_string = ComponentString.init(frame_allocator);
     defer component_string.deinit();
 
     const ecs = entity.mECSManagerRef;
@@ -285,10 +270,10 @@ fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity, allocato
     try write_stream.endObject();
 }
 
-fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
+fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     if (entity.HasComponent(EntityScriptComponent) == false) return;
 
-    var component_string = ComponentString.init(allocator);
+    var component_string = ComponentString.init(frame_allocator);
     defer component_string.deinit();
 
     try write_stream.objectField("EntityScripts");
@@ -320,10 +305,10 @@ fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, allocat
     try write_stream.endObject();
 }
 
-fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
+fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     if (entity.HasComponent(SpriteRenderComponent) == false) return;
 
-    var component_string = ComponentString.init(allocator);
+    var component_string = ComponentString.init(frame_allocator);
     defer component_string.deinit();
 
     try write_stream.objectField("SpriteRenderComponent");
@@ -348,10 +333,10 @@ fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, al
     try write_stream.endObject();
 }
 
-fn SerializeQuadComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) !void {
+fn SerializeQuadComponent(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     if (entity.HasComponent(QuadComponent) == false) return;
 
-    var component_string = ComponentString.init(allocator);
+    var component_string = ComponentString.init(frame_allocator);
     defer component_string.deinit();
 
     try write_stream.objectField("QuadComponent");
@@ -376,7 +361,7 @@ fn SerializeQuadComponent(write_stream: *WriteStream, entity: Entity, allocator:
     try write_stream.endObject();
 }
 
-fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, allocator: std.mem.Allocator) anyerror!void {
+fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) anyerror!void {
     if (entity.HasComponent(EntityParentComponent) == false) return;
 
     const parent_component = entity.GetComponent(EntityParentComponent);
@@ -388,7 +373,7 @@ fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, allocato
         try write_stream.objectField("Entity");
 
         try write_stream.beginObject();
-        try SerializeEntity(write_stream, child_entity, allocator);
+        try SerializeEntity(write_stream, child_entity, frame_allocator);
         try write_stream.endObject();
 
         const child_component = child_entity.GetComponent(EntityChildComponent);
@@ -396,22 +381,22 @@ fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, allocato
     }
 }
 
-fn WriteToFile(scene_asset_handle: AssetHandle, data: []const u8, allocator: std.mem.Allocator) !void {
+fn WriteToFile(scene_asset_handle: AssetHandle, data: []const u8, frame_allocator: std.mem.Allocator) !void {
     const file_meta_data = try scene_asset_handle.GetAsset(FileMetaData);
-    const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath, file_meta_data.mPathType, allocator);
+    const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath, file_meta_data.mPathType, frame_allocator);
 
     const file = try std.fs.createFileAbsolute(file_abs_path, .{ .read = false, .truncate = true });
     defer file.close();
     try file.writeAll(data);
 }
 
-fn SkipToken(scanner: *std.json.Scanner, allocator: std.mem.Allocator) !void {
-    _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+fn SkipToken(scanner: *std.json.Scanner, frame_allocator: std.mem.Allocator) !void {
+    _ = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
 }
 
-fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     while (true) {
-        const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const token_value = switch (token) {
             .string => |value| value,
             .allocated_string => |value| value,
@@ -422,23 +407,23 @@ fn DeSerializeSceneData(scanner: *std.json.Scanner, scene_layer: SceneLayer, all
             .end_of_document => break,
             else => @panic("This shouldnt happen!"),
         };
-        const actual_value = try allocator.dupe(u8, token_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
 
         if (std.mem.eql(u8, actual_value, "UUID")) {
-            try DeSerializeUUID(scanner, scene_layer, allocator);
+            try DeSerializeUUID(scanner, scene_layer, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "LayerType")) {
-            try DeSerializeLayerType(scanner, scene_layer, allocator);
+            try DeSerializeLayerType(scanner, scene_layer, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "SceneScripts")) {
-            try DeSerializeSceneScripts(scanner, scene_layer, allocator);
+            try DeSerializeSceneScripts(scanner, scene_layer, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             const new_entity = try scene_layer.CreateBlankEntity();
-            try DeSerializeEntity(scanner, new_entity, scene_layer, allocator, engine_allocator);
+            try DeSerializeEntity(scanner, new_entity, scene_layer, frame_allocator, engine_allocator);
         }
     }
 }
 
-fn DeSerializeUUID(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
-    const uuid_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+fn DeSerializeUUID(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+    const uuid_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const uuid_value = switch (uuid_token) {
         .number => |uuid_value| uuid_value,
         .allocated_number => |uuid_value| uuid_value,
@@ -447,8 +432,8 @@ fn DeSerializeUUID(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocato
     scene_layer.GetComponent(SceneIDComponent).ID = try std.fmt.parseUnsigned(u128, uuid_value, 10);
 }
 
-fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
-    const layer_type_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+    const layer_type_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const layer_type_value = switch (layer_type_token) {
         .string => |layer_type_value| layer_type_value,
         .allocated_string => |layer_type_value| layer_type_value,
@@ -457,31 +442,31 @@ fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, all
     scene_layer.GetComponent(SceneComponent).mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
 }
 
-fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, allocator: std.mem.Allocator) !void {
+fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     //skip past begin object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
     var current_id = scene_layer.mSceneID;
     while (current_id != SceneLayer.NullScene) {
         //skip past object field called "component"
-        _ = try SkipToken(scanner, allocator);
+        _ = try SkipToken(scanner, frame_allocator);
 
-        const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const component_data_string = switch (component_data_token) {
             .string => |component_data| component_data,
             .allocated_string => |component_data| component_data,
             else => @panic("should be a string!!\n"),
         };
 
-        const new_component_parsed = try std.json.parseFromSlice(SceneScriptComponent, allocator, component_data_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(SceneScriptComponent, frame_allocator, component_data_string, .{});
         defer new_component_parsed.deinit();
         const parsed_script_component = new_component_parsed.value;
 
         //skip past the object field called "AssetFileData"
-        _ = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        _ = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
 
         //read the next token which will be the potential path of the asset
-        const file_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const file_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const file_data_string = switch (file_data_token) {
             .string => |component_data| component_data,
             .allocated_string => |component_data| component_data,
@@ -489,7 +474,7 @@ fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, 
         };
 
         if (parsed_script_component.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-            const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
+            const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
             defer file_data_component.deinit();
             const file_data = file_data_component.value;
 
@@ -499,9 +484,9 @@ fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, 
     }
 }
 
-fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     while (true) {
-        const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const token_value = switch (token) {
             .string => |value| value,
             .allocated_string => |value| value,
@@ -512,55 +497,55 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
             .end_of_document => @panic("This shouldnt happen!"),
             else => @panic("This shouldnt happen!"),
         };
-        const actual_value = try allocator.dupe(u8, token_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
 
         if (std.mem.eql(u8, actual_value, "CameraComponent")) {
-            try DeSerializeCameraComponent(scanner, entity, allocator, engine_allocator);
+            try DeSerializeCameraComponent(scanner, entity, frame_allocator, engine_allocator);
         } else if (std.mem.eql(u8, actual_value, "CircleRenderComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, CircleRenderComponent, allocator);
+            try DeSerializeBasicComponent(scanner, entity, CircleRenderComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "AISlotComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, AISlotComponent, allocator);
+            try DeSerializeBasicComponent(scanner, entity, AISlotComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "PlayerSlotComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, PlayerSlotComponent, allocator);
+            try DeSerializeBasicComponent(scanner, entity, PlayerSlotComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityIDComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, EntityIDComponent, allocator);
+            try DeSerializeBasicComponent(scanner, entity, EntityIDComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityNameComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, EntityNameComponent, allocator);
+            try DeSerializeBasicComponent(scanner, entity, EntityNameComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityScripts")) {
-            try DeSerializeEntityScripts(scanner, entity, allocator);
+            try DeSerializeEntityScripts(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "QuadComponent")) {
-            try DeSerializeQuadComponent(scanner, entity, allocator);
+            try DeSerializeQuadComponent(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "SpriteRenderComponent")) {
-            try DeSerializeSpriteRenderComponent(scanner, entity, allocator);
+            try DeSerializeSpriteRenderComponent(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
-            try DeSerializeTransformComponent(scanner, entity, allocator);
+            try DeSerializeTransformComponent(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
-            try DeSerializeParentComponent(scanner, entity, scene_layer, allocator, engine_allocator);
+            try DeSerializeParentComponent(scanner, entity, scene_layer, frame_allocator, engine_allocator);
         }
     }
 }
 
-fn DeSerializeBasicComponent(scanner: *std.json.Scanner, entity: Entity, comptime component_type: type, allocator: std.mem.Allocator) !void {
-    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+fn DeSerializeBasicComponent(scanner: *std.json.Scanner, entity: Entity, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
+    const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const component_data_string = switch (component_data_token) {
         .string => |v| v,
         .allocated_string => |v| v,
         else => return error.ExpectedString,
     };
 
-    const new_component_parsed = try std.json.parseFromSlice(component_type, allocator, component_data_string, .{});
+    const new_component_parsed = try std.json.parseFromSlice(component_type, frame_allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
     _ = try entity.AddComponent(component_type, new_component_parsed.value);
 }
 
-fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     // Skip past begin object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
     var camera_component = CameraComponent{};
 
     while (true) {
-        const token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const token_value = switch (token) {
             .string => |value| value,
             .allocated_string => |value| value,
@@ -569,17 +554,17 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
         };
 
         if (std.mem.eql(u8, token_value, "Projection")) {
-            const projection_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const projection_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const projection_string = switch (projection_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
                 else => return error.ExpectedString,
             };
-            const projection_parsed = try std.json.parseFromSlice(Mat4f32, allocator, projection_string, .{});
+            const projection_parsed = try std.json.parseFromSlice(Mat4f32, frame_allocator, projection_string, .{});
             defer projection_parsed.deinit();
             camera_component.mProjection = projection_parsed.value;
         } else if (std.mem.eql(u8, token_value, "ViewportWidth")) {
-            const viewport_width_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const viewport_width_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const viewport_width_string = switch (viewport_width_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -587,7 +572,7 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
             };
             camera_component.mViewportWidth = try std.fmt.parseUnsigned(usize, viewport_width_string, 10);
         } else if (std.mem.eql(u8, token_value, "ViewportHeight")) {
-            const viewport_height_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const viewport_height_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const viewport_height_string = switch (viewport_height_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -595,7 +580,7 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
             };
             camera_component.mViewportHeight = try std.fmt.parseUnsigned(usize, viewport_height_string, 10);
         } else if (std.mem.eql(u8, token_value, "AspectRatio")) {
-            const aspect_ratio_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const aspect_ratio_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const aspect_ratio_string = switch (aspect_ratio_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -603,7 +588,7 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
             };
             camera_component.mAspectRatio = try std.fmt.parseFloat(f32, aspect_ratio_string);
         } else if (std.mem.eql(u8, token_value, "IsFixedAspectRatio")) {
-            const is_fixed_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const is_fixed_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const is_fixed_string = switch (is_fixed_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -611,7 +596,7 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
             };
             camera_component.mIsFixedAspectRatio = std.mem.eql(u8, is_fixed_string, "true");
         } else if (std.mem.eql(u8, token_value, "PerspectiveFOVRad")) {
-            const fov_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const fov_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const fov_string = switch (fov_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -619,7 +604,7 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
             };
             camera_component.mPerspectiveFOVRad = try std.fmt.parseFloat(f32, fov_string);
         } else if (std.mem.eql(u8, token_value, "PerspectiveNear")) {
-            const persp_near_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const persp_near_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const persp_near_string = switch (persp_near_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -627,7 +612,7 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
             };
             camera_component.mPerspectiveNear = try std.fmt.parseFloat(f32, persp_near_string);
         } else if (std.mem.eql(u8, token_value, "PerspectiveFar")) {
-            const persp_far_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+            const persp_far_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
             const persp_far_string = switch (persp_far_token) {
                 .string => |v| v,
                 .allocated_string => |v| v,
@@ -660,42 +645,42 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, alloca
     _ = try entity.AddComponent(CameraComponent, camera_component);
 }
 
-fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
-    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator) !void {
+    const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const component_data_string = switch (component_data_token) {
         .string => |v| v,
         .allocated_string => |v| v,
         else => return error.ExpectedString,
     };
 
-    var new_component_parsed = try std.json.parseFromSlice(TransformComponent, allocator, component_data_string, .{});
+    var new_component_parsed = try std.json.parseFromSlice(TransformComponent, frame_allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
     new_component_parsed.value.Dirty = true;
     _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
 }
 
-fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
+fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     //skip past begin object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
     //skip past the object field token "Component"
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
-    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const component_data_string = switch (component_data_token) {
         .string => |component_data| component_data,
         .allocated_string => |component_data| component_data,
         else => @panic("should be a string!!\n"),
     };
-    const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, allocator, component_data_string, .{});
+    const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, frame_allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
 
     const sprite_render_component = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
 
     //skip past the object field token "FileMetaData"
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
     //read the next token which will be the potential path of the asset
-    const file_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const file_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const file_data_string = switch (file_data_token) {
         .string => |component_data| component_data,
         .allocated_string => |component_data| component_data,
@@ -704,7 +689,7 @@ fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, 
 
     //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
     if (sprite_render_component.mTexture.mID != AssetHandle.NullHandle) {
-        const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
+        const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
         defer file_data_component.deinit();
         const file_data = file_data_component.value;
 
@@ -712,31 +697,31 @@ fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, 
     }
 
     //skip past the end object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 }
 
-fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
+fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     //skip past begin object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
     //skip past the object field token "Component"
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
-    const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const component_data_string = switch (component_data_token) {
         .string => |component_data| component_data,
         .allocated_string => |component_data| component_data,
         else => @panic("should be a string!!\n"),
     };
-    const new_component_parsed = try std.json.parseFromSlice(QuadComponent, allocator, component_data_string, .{});
+    const new_component_parsed = try std.json.parseFromSlice(QuadComponent, frame_allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
 
     const quad_component = try entity.AddComponent(QuadComponent, new_component_parsed.value);
 
     //skip past the object field token "FileMetaData"
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
     //read the next token which will be the potential path of the asset
-    const file_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+    const file_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
     const file_data_string = switch (file_data_token) {
         .string => |component_data| component_data,
         .allocated_string => |component_data| component_data,
@@ -745,7 +730,7 @@ fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, allocato
 
     //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
     if (quad_component.mTexture.mID != AssetHandle.NullHandle) {
-        const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
+        const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
         defer file_data_component.deinit();
         const file_data = file_data_component.value;
 
@@ -753,34 +738,34 @@ fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, allocato
     }
 
     //skip past the end object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 }
 
-fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocator: std.mem.Allocator) !void {
+fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     //skip past begin object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 
     var current_id = entity.mEntityID;
     while (current_id != Entity.NullEntity) {
         //skip past object field called "component"
-        _ = try SkipToken(scanner, allocator);
+        _ = try SkipToken(scanner, frame_allocator);
 
-        const component_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const component_data_string = switch (component_data_token) {
             .string => |component_data| component_data,
             .allocated_string => |component_data| component_data,
             else => @panic("should be a string!!\n"),
         };
 
-        const new_component_parsed = try std.json.parseFromSlice(EntityScriptComponent, allocator, component_data_string, .{});
+        const new_component_parsed = try std.json.parseFromSlice(EntityScriptComponent, frame_allocator, component_data_string, .{});
         defer new_component_parsed.deinit();
         const parsed_script_component = new_component_parsed.value;
 
         //skip past the object field called "AssetFileData"
-        _ = try SkipToken(scanner, allocator);
+        _ = try SkipToken(scanner, frame_allocator);
 
         //read the next token which will be the potential path of the asset
-        const file_data_token = try scanner.nextAlloc(allocator, .alloc_if_needed);
+        const file_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
         const file_data_string = switch (file_data_token) {
             .string => |component_data| component_data,
             .allocated_string => |component_data| component_data,
@@ -788,7 +773,7 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocato
         };
 
         if (parsed_script_component.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-            const file_data_component = try std.json.parseFromSlice(FileMetaData, allocator, file_data_string, .{});
+            const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
             defer file_data_component.deinit();
             const file_data = file_data_component.value;
 
@@ -798,18 +783,18 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, allocato
     }
 
     //skip end of object token
-    _ = try SkipToken(scanner, allocator);
+    _ = try SkipToken(scanner, frame_allocator);
 }
 
-fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) anyerror!void {
+fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) anyerror!void {
     if (entity.HasComponent(EntityParentComponent)) {
-        try AddToExistingChildren(scanner, entity, scene_layer, allocator, engine_allocator);
+        try AddToExistingChildren(scanner, entity, scene_layer, frame_allocator, engine_allocator);
     } else {
-        try MakeEntityParent(scanner, entity, scene_layer, allocator, engine_allocator);
+        try MakeEntityParent(scanner, entity, scene_layer, frame_allocator, engine_allocator);
     }
 }
 
-fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     const new_entity = try scene_layer.CreateBlankEntity();
 
     const parent_component = parent_entity.GetComponent(EntityParentComponent);
@@ -835,10 +820,10 @@ fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scen
     //set the new child component.mNext to be the new child
     child_component.mNext = new_entity.mEntityID;
 
-    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator, engine_allocator);
+    try DeSerializeEntity(scanner, new_entity, scene_layer, frame_allocator, engine_allocator);
 }
 
-fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     const new_entity = try scene_layer.CreateBlankEntity();
 
     const new_parent_component = EntityParentComponent{ .mFirstChild = new_entity.mEntityID };
@@ -852,5 +837,5 @@ fn MakeEntityParent(scanner: *std.json.Scanner, parent_entity: Entity, scene_lay
     };
     _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
 
-    try DeSerializeEntity(scanner, new_entity, scene_layer, allocator, engine_allocator);
+    try DeSerializeEntity(scanner, new_entity, scene_layer, frame_allocator, engine_allocator);
 }

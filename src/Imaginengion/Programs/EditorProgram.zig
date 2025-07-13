@@ -9,6 +9,7 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const PlayerManager = @import("../Players/PlayerManager.zig");
 const Player = @import("../Players/Player.zig");
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Assets = @import("../Assets/Assets.zig");
 const ShaderAsset = Assets.ShaderAsset;
@@ -75,7 +76,6 @@ _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
-_EditorState: EditorState,
 _UsePlayPanel: bool,
 _SceneSpecList: std.ArrayList(SceneSpecPanel),
 
@@ -116,7 +116,6 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(window.GetWidth(), window.GetHeight()),
-        ._EditorState = .Stop,
         ._PlayPanel = PlayPanel.Init(),
         ._UsePlayPanel = false,
         ._SceneSpecList = std.ArrayList(SceneSpecPanel).init(engine_allocator),
@@ -209,7 +208,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     self.mWindow.PollInputEvents();
     StaticInputContext.OnUpdate();
     try SystemEventManager.ProcessEvents(.EC_Input);
-    if (self._EditorState == .Play) {
+    if (self._ToolbarPanel.mState == .Play) {
         _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{}, frame_allocator);
     }
     //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
@@ -246,11 +245,46 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
     try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
 
-    const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
-    const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
-    try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+    //----------------rendering game world to screen-------------
+    if (self._ToolbarPanel.mState == .Stop) {
+        const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+        const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+        try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
 
-    try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
+        try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
+    } else { //it is playing
+        const players = try PlayerManager.GetGroup(GroupQuery{ .Component = ControllerComponent });
+        for (players.items) |player_id| {
+            const player = PlayerManager.GetPlayer(player_id);
+            const controller_component = player.GetComponent(ControllerComponent);
+            if (controller_component.mControlledEntityID != Entity.NullEntity) {
+                const controlled_object = self.mGameSceneManager.GetEntity(controller_component.mControlledEntityID);
+
+                if (controlled_object.GetCamera()) |camera_entity| {
+                    const camera_component = camera_entity.GetComponent(CameraComponent);
+                    const camera_transform = camera_entity.GetComponent(TransformComponent);
+                    try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+
+                    if (self._UsePlayPanel == true) {
+                        try self._PlayPanel.OnImguiRender(camera_component.mViewportFrameBuffer);
+                        break; //TODO: fix this because right now it doesnt allow for multiple frame buffers at once
+                        //so something like split screen wont work but i need to change camera and rendering first before this
+                    } else { //its false so we use the viewport panel as the main screen
+                        try self._ViewportPanel.OnImguiRender(camera_component.mViewportFrameBuffer, camera_transform);
+                        break; //TODO: fix this because right now it doesnt allow for multiple frame buffers at once
+                        //so something like split screen wont work but i need to change camera and rendering first before this
+                    }
+                }
+            }
+        }
+        if (self._UsePlayPanel == true) {
+            const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+            const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+            try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+
+            try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
+        }
+    }
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -285,6 +319,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     try self.mEditorSceneManager.mECSManagerGO.ProcessDestroyedEntities();
     try self.mEditorSceneManager.mECSManagerSC.ProcessDestroyedEntities();
     try AssetManager.ProcessDestroyedAssets();
+    try PlayerManager.ProcessDestroyedPlayers();
 
     //end of frame resets
     SystemEventManager.EventsReset();
@@ -406,18 +441,11 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
 }
 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) !void {
-    if (event.mEditorState == .Play and self._EditorState == .Stop) {
-        //TODO:
-        //self.mSceneManager.SaveAllScenes();
-        //open up a new imgui window which plays the scene from the pov of the primary camera
-        self._EditorState = .Play;
+    if (event.mEditorState == .Play) {
+        self.mGameSceneManager.SaveAllScenes(self.mFrameAllocator);
         _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{});
-    }
-    if (event.mEditorState == .Stop and self._EditorState == .Play) {
-        //TODO
-        //self.mSceneManager.ReloadAllScenes();
-        //close imgui window that plays the scene from the pov of the primary camera
-        self._EditorState = .Stop;
+    } else { //stop
+        self.mGameSceneManager.ReloadAllScenes(self.mFrameAllocator);
     }
 }
 

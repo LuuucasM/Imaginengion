@@ -83,13 +83,13 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
     ) == true) {
         if (self.mState == .Stop and self.mStartEntity.mEntityID != Entity.NullEntity) {
             try ImguiEventManager.Insert(ImguiEvent{
-                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
+                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = self.mStartEntity },
             });
             self.mState = .Play;
         }
         if (self.mState == .Play) {
             try ImguiEventManager.Insert(ImguiEvent{
-                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop },
+                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = self.mStartEntity },
             });
             self.mState = .Stop;
         }

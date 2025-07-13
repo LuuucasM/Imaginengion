@@ -3,6 +3,9 @@ const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj
 const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
+const CameraComponent = Components.CameraComponent;
+const EntityParentComponent = Components.ParentComponent;
+const EntityChildComponent = Components.ChildComponent;
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -28,6 +31,25 @@ pub fn GetUUID(self: Entity) u128 {
 }
 pub fn GetName(self: Entity) []const u8 {
     return &self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).*.Name;
+}
+pub fn GetCamera(self: Entity) ?Entity {
+    if (self.HasComponent(EntityParentComponent)) {
+        const parent_component = self.GetComponent(EntityParentComponent);
+
+        var curr_id = parent_component.mFirstChild;
+
+        while (curr_id != Entity.NullEntity) {
+            const child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = self.mECSManagerRef };
+
+            if (child_entity.HasComponent(CameraComponent)) {
+                return child_entity;
+            }
+
+            const child_component = child_entity.GetComponent(EntityChildComponent);
+            curr_id = child_component.mNext;
+        }
+    }
+    return null;
 }
 pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
