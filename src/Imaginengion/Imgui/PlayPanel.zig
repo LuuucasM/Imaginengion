@@ -4,6 +4,9 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const RenderStats = @import("../Renderer/Renderer.zig").RenderStats;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityCameraComponent = EntityComponents.CameraComponent;
+const EntityTransformComponent = EntityComponents.TransformComponent;
 const PlayPanel = @This();
 
 mViewportWidth: usize,
@@ -18,19 +21,20 @@ pub fn Init() PlayPanel {
     };
 }
 
-pub fn OnImguiRender(self: *PlayPanel, scene_frame_buffer: *FrameBuffer) !void {
-    _ = imgui.igBegin("Viewport", null, 0);
+pub fn OnImguiRender(self: *PlayPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
+    _ = camera_transforms;
+    _ = imgui.igBegin("Play", null, 0);
     defer imgui.igEnd();
 
     //update viewport size if needed
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
     imgui.igGetContentRegionAvail(&viewport_size);
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
-        //viewport resize event
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
+        //TODO: change to its own PlayViewportRewizeEvent so that the main program can distinguish between play and viewport panel
         const new_imgui_event = ImguiEvent{
-            .ET_ViewportResizeEvent = .{
+            .ET_PlayPanelResizeEvent = .{
                 .mWidth = @intFromFloat(viewport_size.x),
                 .mHeight = @intFromFloat(viewport_size.y),
             },
@@ -44,13 +48,30 @@ pub fn OnImguiRender(self: *PlayPanel, scene_frame_buffer: *FrameBuffer) !void {
     self.mIsFocused = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
     //render framebuffer
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, scene_frame_buffer.GetColorAttachmentID(0))));
-    imgui.igImage(
-        texture_id,
-        imgui.struct_ImVec2{ .x = @floatFromInt(self.mViewportWidth), .y = @floatFromInt(self.mViewportHeight) },
-        imgui.struct_ImVec2{ .x = 0.0, .y = 0.0 },
-        imgui.struct_ImVec2{ .x = 1.0, .y = 1.0 },
-        imgui.struct_ImVec4{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-        imgui.struct_ImVec4{ .x = 1.0, .y = 1.0, .z = 0.0, .w = 0.0 },
-    );
+    const draw_list = imgui.igGetWindowDrawList();
+
+    var viewport_pos: imgui.ImVec2 = std.mem.zeroes(imgui.ImVec2);
+    imgui.igGetCursorScreenPos(&viewport_pos);
+
+    for (camera_components.items, 0..) |camera_component, i| {
+        _ = i;
+        const rect = camera_component.mAreaRect;
+        const fb = camera_component.mViewportFrameBuffer;
+        const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, fb.GetColorAttachmentID(0))));
+
+        const x = viewport_pos.x + rect[0] * viewport_size.x;
+        const y = viewport_pos.y + rect[1] * viewport_size.y;
+        const w = rect[2] * viewport_size.x;
+        const h = rect[3] * viewport_size.y;
+
+        imgui.ImDrawList_AddImage(
+            draw_list,
+            texture_id,
+            .{ .x = x, .y = y },
+            .{ .x = x + w, .y = y + h },
+            .{ .x = 0, .y = 0 },
+            .{ .x = 1, .y = 1 },
+            0xFFFFFFFF,
+        );
+    }
 }

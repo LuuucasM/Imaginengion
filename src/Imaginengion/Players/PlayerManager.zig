@@ -36,8 +36,8 @@ pub fn GetPlayer(player_id: Player.Type) Player {
     return Player{ .mEntityID = player_id, .mECSManagerRef = &StaticPlayerManager.mECSManager };
 }
 
-pub fn ProcessDestroyedPlayers() void {
-    StaticPlayerManager.mECSManager.ProcessDestroyedEntities();
+pub fn ProcessDestroyedPlayers() !void {
+    try StaticPlayerManager.mECSManager.ProcessDestroyedEntities();
 }
 
 pub fn GetGroup(query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Player.Type) {

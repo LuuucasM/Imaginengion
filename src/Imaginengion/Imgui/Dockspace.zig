@@ -190,6 +190,17 @@ pub fn OnImguiRender() !void {
                 try ImguiEventManager.Insert(new_event);
             }
         }
+        if (imgui.igBeginMenu("Editor", true) == true) {
+            defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("Use Play Panel", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .PlayPanel,
+                    },
+                };
+                try ImguiEventManager.Insert(new_event);
+            }
+        }
     }
 }
 

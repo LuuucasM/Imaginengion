@@ -35,6 +35,7 @@ pub const ImguiEvent = union(enum) {
     ET_SelectComponentEvent: SelectComponentEvent,
     ET_SelectScriptEvent: SelectScriptEvent,
     ET_ViewportResizeEvent: ViewportResizeEvent,
+    ET_PlayPanelResizeEvent: PlayPanelResizeEvent,
     ET_NewScriptEvent: NewScriptEvent,
     ET_ChangeEditorStateEvent: ChangeEditorStateEvent,
     ET_OpenSceneSpecEvent: OpenSceneSpecEvent,
@@ -96,6 +97,11 @@ pub const SelectScriptEvent = struct {
 };
 
 pub const ViewportResizeEvent = struct {
+    mWidth: usize,
+    mHeight: usize,
+};
+
+pub const PlayPanelResizeEvent = struct {
     mWidth: usize,
     mHeight: usize,
 };

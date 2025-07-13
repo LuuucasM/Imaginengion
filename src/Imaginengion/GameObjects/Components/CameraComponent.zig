@@ -40,6 +40,7 @@ mIsFixedAspectRatio: bool = false,
 mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(60.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
+mAreaRect: Vec4f32 = Vec4f32{ 0.0, 0.0, 1.0, 1.0 },
 
 pub fn Deinit(self: *CameraComponent) !void {
     self.mViewportFrameBuffer.Deinit();
@@ -68,11 +69,16 @@ pub fn SetProjectionType(self: *CameraComponent, new_projection_type: Projection
     self.RecalculateProjection();
 }
 
+pub fn SetAreaRect(self: *CameraComponent, new_area: Vec4f32) void {
+    self.mAreaRect = new_area;
+    self.mViewportFrameBuffer.Resize(@intFromFloat(@as(f32, @floatFromInt(self.mViewportWidth)) * self.mAreaRect[2]), @intFromFloat(@as(f32, @floatFromInt(self.mViewportHeight)) * self.mAreaRect[3]));
+}
+
 pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void {
     self.mViewportWidth = width;
     self.mViewportHeight = height;
 
-    self.mViewportFrameBuffer.Resize(width, height);
+    self.mViewportFrameBuffer.Resize(@intFromFloat(@as(f32, @floatFromInt(self.mViewportWidth)) * self.mAreaRect[2]), @intFromFloat(@as(f32, @floatFromInt(self.mViewportHeight)) * self.mAreaRect[3]));
 
     if (height > 0) {
         self.mAspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));

@@ -243,17 +243,23 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     try self._ScriptsPanel.OnImguiRender();
     try self._CSEditorPanel.OnImguiRender();
 
-    try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
-
     //----------------rendering game world to screen-------------
+
+    var camera_components = try std.ArrayList(*CameraComponent).initCapacity(frame_allocator, 1);
+    var transform_components = try std.ArrayList(*TransformComponent).initCapacity(frame_allocator, 1);
+
     if (self._ToolbarPanel.mState == .Stop) {
         const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
         const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+
         try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
 
-        try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
+        try camera_components.append(camera_component);
+        try transform_components.append(camera_transform);
+
+        try self._ViewportPanel.OnImguiRender(camera_components, transform_components);
     } else { //it is playing
-        const players = try PlayerManager.GetGroup(GroupQuery{ .Component = ControllerComponent });
+        const players = try PlayerManager.GetGroup(GroupQuery{ .Component = ControllerComponent }, frame_allocator);
         for (players.items) |player_id| {
             const player = PlayerManager.GetPlayer(player_id);
             const controller_component = player.GetComponent(ControllerComponent);
@@ -265,28 +271,34 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
                     const camera_transform = camera_entity.GetComponent(TransformComponent);
                     try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
 
-                    if (self._UsePlayPanel == true) {
-                        try self._PlayPanel.OnImguiRender(camera_component.mViewportFrameBuffer);
-                        break; //TODO: fix this because right now it doesnt allow for multiple frame buffers at once
-                        //so something like split screen wont work but i need to change camera and rendering first before this
-                    } else { //its false so we use the viewport panel as the main screen
-                        try self._ViewportPanel.OnImguiRender(camera_component.mViewportFrameBuffer, camera_transform);
-                        break; //TODO: fix this because right now it doesnt allow for multiple frame buffers at once
-                        //so something like split screen wont work but i need to change camera and rendering first before this
-                    }
+                    try camera_components.append(camera_component);
+                    try transform_components.append(camera_transform);
                 }
             }
         }
         if (self._UsePlayPanel == true) {
+            try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+
+            camera_components.clearRetainingCapacity();
+            transform_components.clearRetainingCapacity();
+
             const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
             const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+
             try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
 
-            try self._ViewportPanel.OnImguiRender(camera_component, camera_transform);
+            try camera_components.append(camera_component);
+            try transform_components.append(camera_transform);
+
+            try self._ViewportPanel.OnImguiRenderPlay(camera_components, transform_components);
+        } else {
+            try self._PlayPanel.OnImguiRender(camera_components, transform_components);
         }
     }
 
     try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
+
+    try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
 
     try Dockspace.OnImguiRender();
 
@@ -341,6 +353,14 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
                 .Scripts => self._ScriptsPanel.OnTogglePanelEvent(),
                 .Stats => self._StatsPanel.OnTogglePanelEvent(),
                 .Viewport => self._ViewportPanel.OnTogglePanelEvent(),
+                .PlayPanel => {
+                    self._UsePlayPanel = !self._UsePlayPanel;
+                    if (self._UsePlayPanel) {
+                        try self.mGameSceneManager.OnViewportResize(self._PlayPanel.mViewportWidth, self._PlayPanel.mViewportHeight, self.mFrameAllocator);
+                    } else {
+                        try self.mGameSceneManager.OnViewportResize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight, self.mFrameAllocator);
+                    }
+                },
                 else => @panic("This event has not been handled by this type of panel yet!\n"),
             }
         },
@@ -361,7 +381,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_SaveSceneEvent => {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                try self.mGameSceneManager.SaveScene(scene_layer);
+                try self.mGameSceneManager.SaveScene(scene_layer, self.mFrameAllocator);
             }
         },
         .ET_SaveSceneAsEvent => |e| {
@@ -371,13 +391,13 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
                     const rel_path = AssetManager.GetRelPath(e.Path);
                     _ = try std.fs.createFileAbsolute(e.Path, .{});
                     scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.Path);
+                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.Path, self.mFrameAllocator);
                 }
             }
         },
         .ET_OpenSceneEvent => |e| {
             if (e.Path.len > 0) {
-                _ = try self.mGameSceneManager.LoadScene(e.Path, self.mEngineAllocator);
+                _ = try self.mGameSceneManager.LoadScene(e.Path, self.mEngineAllocator, self.mFrameAllocator);
             }
         },
         .ET_MoveSceneEvent => |e| {
@@ -405,6 +425,15 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_ViewportResizeEvent => |e| {
             const viewport_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
             viewport_camera_component.SetViewportSize(e.mWidth, e.mHeight);
+
+            if (self._UsePlayPanel == false) {
+                try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
+            }
+        },
+        .ET_PlayPanelResizeEvent => |e| {
+            if (self._UsePlayPanel == true) {
+                try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
+            }
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);
@@ -418,13 +447,13 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_SaveEntityEvent => {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
-                try self.mGameSceneManager.SaveEntity(selected_entity);
+                try self.mGameSceneManager.SaveEntity(selected_entity, self.mFrameAllocator);
             }
         },
         .ET_SaveEntityAsEvent => |e| {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
                 if (e.Path.len > 0) {
-                    try self.mGameSceneManager.SaveEntityAs(selected_entity, e.Path);
+                    try self.mGameSceneManager.SaveEntityAs(selected_entity, e.Path, self.mFrameAllocator);
                 }
             }
         },
@@ -442,16 +471,16 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play) {
-        self.mGameSceneManager.SaveAllScenes(self.mFrameAllocator);
+        try self.mGameSceneManager.SaveAllScenes(self.mFrameAllocator);
         _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{});
     } else { //stop
-        self.mGameSceneManager.ReloadAllScenes(self.mFrameAllocator);
+        try self.mGameSceneManager.ReloadAllScenes(self.mFrameAllocator);
     }
 }
 
 pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, frame_allocator: std.mem.Allocator) !bool {
     var cont_bool = true;
-    if (self._EditorState == .Play) {
+    if (self._ToolbarPanel.mState == .Play) {
         cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnInputPressedScript, .{&e}, frame_allocator);
     }
 
