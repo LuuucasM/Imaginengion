@@ -13,6 +13,7 @@ const CameraComponent = EntityComponents.CameraComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
 const Entity = @import("../GameObjects/Entity.zig");
+const Tracy = @import("../Core/Tracy.zig");
 const ToolbarPanel = @This();
 
 pub const EditorState = enum(u2) {
@@ -37,6 +38,9 @@ pub fn Init() !ToolbarPanel {
 }
 
 pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("ToolbarPanel OIR", @src());
+    defer zone.Deinit();
+
     if (self.mP_Open == false) return;
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_WindowPadding, .{ .x = 0.0, .y = 2.0 });
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemInnerSpacing, .{ .x = 0.0, .y = 0.0 });

@@ -3,6 +3,7 @@ const Application = @import("../Core/Application.zig");
 const Window = @import("../Windows/Window.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const glfw = @import("../Core/CImports.zig").glfw;
+const Tracy = @import("../Core/Tracy.zig");
 const Imgui = @This();
 
 var ImguiManager: Imgui = .{};
@@ -38,12 +39,17 @@ pub fn Deinit() void {
     imgui.igDestroyContext(null);
 }
 pub fn Begin() void {
+    const zone = Tracy.ZoneInit("Imgui Begin", @src());
+    defer zone.Deinit();
     imgui.ImGui_ImplOpenGL3_NewFrame();
     imgui.ImGui_ImplGlfw_NewFrame();
     imgui.igNewFrame();
     imgui.ImGuizmo_BeginFrame();
 }
 pub fn End() void {
+    const zone = Tracy.ZoneInit("ImguiEnd ", @src());
+    defer zone.Deinit();
+
     const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
     const window: *Window = ImguiManager.mWindow;

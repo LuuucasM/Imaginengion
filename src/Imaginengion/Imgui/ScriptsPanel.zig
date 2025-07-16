@@ -12,6 +12,8 @@ const OnUpdateInputScript = Components.OnUpdateInputScript;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const ScriptsPanel = @This();
 
 _P_Open: bool,
@@ -25,6 +27,9 @@ pub fn Init() ScriptsPanel {
 }
 
 pub fn OnImguiRender(self: ScriptsPanel) !void {
+    const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
+    defer zone.Deinit();
+
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Scripts", null, 0);
     defer imgui.igEnd();

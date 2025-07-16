@@ -22,6 +22,8 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const ProjectionType = @import("../GameObjects/Components.zig").CameraComponent.ProjectionType;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const ViewportPanel = @This();
 
 const GizmoType = enum(c_int) {
@@ -51,6 +53,10 @@ pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
 
 pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
     _ = camera_transforms;
+
+    const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
+    defer zone.Deinit();
+
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
@@ -77,6 +83,10 @@ pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*Ent
 }
 pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
     _ = camera_transforms;
+
+    const zone = Tracy.ZoneInit("ViewportPanelPlay OIR", @src());
+    defer zone.Deinit();
+
     if (self.mP_Open == false) return;
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
@@ -85,6 +95,9 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(
 }
 
 fn ImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
+    const zone = Tracy.ZoneInit("ImguiRender", @src());
+    defer zone.Deinit();
+
     //update viewport size if needed
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
     imgui.igGetContentRegionAvail(&viewport_size);

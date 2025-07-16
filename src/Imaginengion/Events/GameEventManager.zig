@@ -3,6 +3,7 @@ const assert = std.debug.assert;
 const Program = @import("../Programs/Program.zig");
 const GameEvent = @import("GameEvent.zig").GameEvent;
 const GameEventCategory = @import("GameEvent.zig").GameEventCategory;
+const Tracy = @import("../Core/Tracy.zig");
 const Self = @This();
 
 var EventManager: Self = .{};
@@ -30,6 +31,8 @@ pub fn Insert(event: GameEvent) !void {
 }
 
 pub fn ProcessEvents(eventCategory: GameEventCategory) !void {
+    const zone = Tracy.ZoneInit("Game ProcessEvents", @src());
+    defer zone.Deinit();
     const array = switch (eventCategory) {
         .EC_PreRender => EventManager.mPreRenderEventPool,
         else => @panic("Default Events are not allowed!\n"),
@@ -41,5 +44,7 @@ pub fn ProcessEvents(eventCategory: GameEventCategory) !void {
 }
 
 pub fn EventsReset() void {
+    const zone = Tracy.ZoneInit("Game Event Reset", @src());
+    defer zone.Deinit();
     _ = EventManager.mPreRenderEventPool.clearAndFree();
 }

@@ -31,7 +31,12 @@ const ScriptAsset = Assets.ScriptAsset;
 
 const Entity = @import("../GameObjects/Entity.zig");
 
+const Tracy = @import("../Core/Tracy.zig");
+
 pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type, args: anytype, frame_allocator: std.mem.Allocator) !bool {
+    const zone = Tracy.ZoneInit("RunEntityScript", @src());
+    defer zone.Deinit();
+
     comptime {
         if (script_type != OnInputPressedScript and
             script_type != OnUpdateInputScript)

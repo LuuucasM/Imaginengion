@@ -23,6 +23,8 @@ const EntityNameComponent = EntityComponents.NameComponent;
 const EntityParentComponent = EntityComponents.ParentComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const SCENE_NAME_BUFFER_SIZE = 200;
 const ENTITY_NAME_BUFFER_SIZE = 100;
 
@@ -45,6 +47,9 @@ pub fn Init() ScenePanel {
 }
 
 pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("ScenePanel OIR", @src());
+    defer zone.Deinit();
+
     if (!self.mIsVisible) return;
 
     _ = imgui.igBegin("Scenes", null, 0);

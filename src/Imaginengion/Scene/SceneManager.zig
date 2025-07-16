@@ -43,6 +43,8 @@ const RenderManager = @import("../Renderer/Renderer.zig");
 
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const SceneManager = @This();
 
 pub const ECSManagerGameObj = ECSManager(Entity.Type, EntityComponentsArray.len);
@@ -300,6 +302,8 @@ pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.
 }
 
 pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {
+    const zone = Tracy.ZoneInit("SceneManager GetEntityGroup", @src());
+    defer zone.Deinit();
     return try self.mECSManagerGO.GetGroup(query, frame_allocator);
 }
 

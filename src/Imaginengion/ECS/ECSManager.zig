@@ -3,6 +3,7 @@ const EntityManager = @import("EntityManager.zig").EntityManager;
 const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 const GroupQuery = @import("ComponentManager.zig").GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const Tracy = @import("../Core/Tracy.zig");
 
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
@@ -41,6 +42,8 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn ProcessDestroyedEntities(self: *Self) !void {
+            const zone = Tracy.ZoneInit("ECSM ProcessDestroyedEntities", @src());
+            defer zone.Deinit();
             for (self.mEntityManager.mIDsToRemove.items) |entity_id| {
                 try self.mEntityManager.DestroyEntity(entity_id);
                 try self.mComponentManager.DestroyEntity(entity_id);
@@ -86,10 +89,14 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entityID: entity_t) bool {
+            const zone = Tracy.ZoneInit("ECSM HasComponent", @src());
+            defer zone.Deinit();
             return self.mComponentManager.HasComponent(ComponentType, entityID);
         }
 
         pub fn GetComponent(self: Self, comptime ComponentType: type, entityID: entity_t) *ComponentType {
+            const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
+            defer zone.Deinit();
             return self.mComponentManager.GetComponent(ComponentType, entityID);
         }
     };

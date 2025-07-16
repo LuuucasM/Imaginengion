@@ -5,10 +5,14 @@ const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
+const Tracy = @import("../Core/Tracy.zig");
 const Dockspace = @This();
 const Application = @import("../Core/Application.zig");
 
 pub fn Begin() void {
+    const zone = Tracy.ZoneInit("Dockspace Begin", @src());
+    defer zone.Deinit();
+
     const p_open = true;
     const my_null_ptr: ?*anyopaque = null;
     const dockspace_flags = imgui.ImGuiDockNodeFlags_None;
@@ -36,6 +40,9 @@ pub fn Begin() void {
 }
 
 pub fn OnImguiRender() !void {
+    const zone = Tracy.ZoneInit("Dockspace OIR", @src());
+    defer zone.Deinit();
+
     const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
         defer imgui.igEndMenuBar();
@@ -205,5 +212,7 @@ pub fn OnImguiRender() !void {
 }
 
 pub fn End() void {
+    const zone = Tracy.ZoneInit("Dockspace End", @src());
+    defer zone.Deinit();
     imgui.igEnd();
 }

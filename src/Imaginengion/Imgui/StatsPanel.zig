@@ -2,6 +2,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const RenderStats = @import("../Renderer/Renderer.zig").RenderStats;
+const Tracy = @import("../Core/Tracy.zig");
 const StatsPanel = @This();
 
 _P_Open: bool,
@@ -13,6 +14,9 @@ pub fn Init() StatsPanel {
 }
 
 pub fn OnImguiRender(self: StatsPanel, dt: f64, render_stats: RenderStats) !void {
+    const zone = Tracy.ZoneInit("StatsPanel OIR", @src());
+    defer zone.Deinit();
+
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Stats", null, 0);
     defer imgui.igEnd();

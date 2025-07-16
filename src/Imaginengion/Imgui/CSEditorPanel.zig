@@ -5,6 +5,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
+const Tracy = @import("../Core/Tracy.zig");
 const CSEditorPanel = @This();
 
 mP_Open: bool,
@@ -18,11 +19,13 @@ pub fn Init(engine_allocator: std.mem.Allocator) CSEditorPanel {
 }
 
 pub fn Deinit(self: *CSEditorPanel) void {
-    //TODO: deallocate all of the keys in mEditorWindow
     self.mEditorWindows.deinit();
 }
 
 pub fn OnImguiRender(self: *CSEditorPanel) !void {
+    const zone = Tracy.ZoneInit("CSEditor OIR", @src());
+    defer zone.Deinit();
+
     if (self.mP_Open == false) return;
 
     const my_null_ptr: ?*anyopaque = null;
@@ -54,8 +57,6 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
 
         const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}###{d}\x00", .{ trimmed_name, component_name, id_name });
         defer fba.allocator().free(name);
-
-        //try dumpString(name);
 
         imgui.igSetNextWindowDockID(dockspace_id, imgui.ImGuiCond_Once);
 
@@ -104,45 +105,5 @@ pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow
 
     if (self.mEditorWindows.contains(key) == false) {
         try self.mEditorWindows.put(key, new_editor_window);
-    }
-}
-
-fn dumpString(str: []const u8) !void {
-    const stdout = std.io.getStdOut().writer();
-
-    // Print the string length
-    try stdout.print("String length: {d}\n", .{str.len});
-
-    // Print each byte in multiple formats
-    try stdout.print("Raw bytes: [", .{});
-    for (str, 0..) |byte, i| {
-        if (i > 0) try stdout.print(", ", .{});
-        try stdout.print("{d}", .{byte});
-    }
-    try stdout.print("]\n", .{});
-
-    // Print hexadecimal representation
-    try stdout.print("Hex dump: [", .{});
-    for (str, 0..) |byte, i| {
-        if (i > 0) try stdout.print(" ", .{});
-        try stdout.print("{X:0>2}", .{byte});
-    }
-    try stdout.print("]\n", .{});
-
-    // Print ASCII representation with non-printable characters as dots
-    try stdout.print("ASCII: \"", .{});
-    for (str) |byte| {
-        if (std.ascii.isPrint(byte)) {
-            try stdout.print("{c}", .{byte});
-        } else {
-            try stdout.print(".", .{});
-        }
-    }
-    try stdout.print("\"\n", .{});
-
-    // Print detailed character analysis
-    try stdout.print("\nDetailed analysis:\n", .{});
-    for (str, 0..) |byte, i| {
-        try stdout.print("Position {d}: Decimal={d}, Hex=0x{X:0>2}, ASCII={c}\n", .{ i, byte, byte, if (std.ascii.isPrint(byte)) byte else '.' });
     }
 }

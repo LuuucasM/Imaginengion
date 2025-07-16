@@ -3,6 +3,7 @@ const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
+const Tracy = @import("../Core/Tracy.zig");
 const AssetHandlePanel = @This();
 
 _P_Open: bool,
@@ -14,6 +15,9 @@ pub fn Init() AssetHandlePanel {
 }
 
 pub fn OnImguiRender(self: AssetHandlePanel, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("AssetHandle OIR", @src());
+    defer zone.Deinit();
+
     if (self._P_Open == false) return;
     _ = imgui.igBegin("AssetHandles", null, 0);
     defer imgui.igEnd();

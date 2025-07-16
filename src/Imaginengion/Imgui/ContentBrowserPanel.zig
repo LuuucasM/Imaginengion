@@ -12,6 +12,7 @@ const Texture2D = Assets.Texture2D;
 const ScriptAsset = Assets.ScriptAsset;
 const ImguiUtils = @import("ImguiUtils.zig");
 const NewScriptEvent = @import("../Events/ImguiEvent.zig").NewScriptEvent;
+const Tracy = @import("../Core/Tracy.zig");
 
 const MAX_PATH_LEN = 260;
 
@@ -53,6 +54,9 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
 }
 
 pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
+    const zone = Tracy.ZoneInit("ContentBrowser OIR", @src());
+    defer zone.Deinit();
+
     if (self.mIsVisible == false) return;
 
     _ = imgui.igBegin("ContentBrowser", null, 0);

@@ -1,6 +1,7 @@
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const Window = @import("../Windows/Window.zig");
 const builtin = @import("builtin");
+const Tracy = @import("../Core/Tracy.zig");
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("OpenGLContext.zig"),
@@ -18,6 +19,8 @@ pub fn Init(window: *Window) RenderContext {
 }
 
 pub fn SwapBuffers(self: RenderContext) void {
+    const zone = Tracy.ZoneInit("SwapBuffers", @src());
+    defer zone.Deinit();
     self.mImpl.SwapBuffers();
 }
 

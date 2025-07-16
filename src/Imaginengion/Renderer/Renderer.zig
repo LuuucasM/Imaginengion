@@ -25,6 +25,8 @@ const Quatf32 = LinAlg.Quatf32;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const Renderer = @This();
 
 var RenderManager: Renderer = .{};
@@ -77,6 +79,9 @@ pub fn SwapBuffers() void {
 }
 
 pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
+    defer zone.Deinit();
+
     BeginRendering(camera_component, camera_transform);
 
     //get all the shapes minus the children because we will render them with the parents
@@ -110,6 +115,9 @@ pub fn GetRenderStats() RenderStats {
 }
 
 fn BeginRendering(camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
+    const zone = Tracy.ZoneInit("BeginRendering", @src());
+    defer zone.Deinit();
+
     RenderManager.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
     RenderManager.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
     RenderManager.mCameraBuffer.mPerspectiveFar = camera_component.mPerspectiveFar;
@@ -125,6 +133,9 @@ fn BeginRendering(camera_component: *CameraComponent, camera_transform: *Transfo
 }
 
 fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
+    const zone = Tracy.ZoneInit("Renderer DrawChildren", @src());
+    defer zone.Deinit();
+
     const parent_component = entity.GetComponent(EntityParentComponent);
     var curr_id = parent_component.mFirstChild;
 
@@ -139,6 +150,8 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
 }
 
 fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!void {
+    const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
+    defer zone.Deinit();
     const transform_component = entity.GetComponent(TransformComponent);
     parent_transform.Translation += transform_component.Translation;
     parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
@@ -161,6 +174,9 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
 }
 
 fn EndRendering(camera_component: *CameraComponent) !void {
+    const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
+    defer zone.Deinit();
+
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 

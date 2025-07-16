@@ -6,6 +6,7 @@ const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetMan
 const HashMap = std.AutoHashMap;
 const InputCodes = @import("InputCodes.zig").InputCodes;
 const CircularBuffer = @import("../Core/CircularBuffer.zig").CircularBuffer;
+const Tracy = @import("../Core/Tracy.zig");
 
 pub const InputPress = struct {
     mInputCode: InputCodes,
@@ -61,6 +62,8 @@ pub fn GetInstance() *InputContext {
 }
 
 pub fn OnUpdate() void {
+    const zone = Tracy.ZoneInit("Input OnUpdate", @src());
+    defer zone.Deinit();
     StaticInputContext._MousePositionDelta = StaticInputContext._MousePositionNew - StaticInputContext._MousePositionOld;
     StaticInputContext._MouseScrolledDelta = StaticInputContext._MouseScrolledNew - StaticInputContext._MouseScrolledOld;
     StaticInputContext._MousePositionOld = StaticInputContext._MousePositionNew;

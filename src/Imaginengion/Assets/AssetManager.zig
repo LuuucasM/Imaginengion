@@ -11,6 +11,8 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const AssetManager = @This();
 
 const PathType = FileMetaData.PathType;
@@ -100,12 +102,11 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
     }
 }
 
-pub fn OnUpdate() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
+pub fn OnUpdate(frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("AssetManager OnUpdate", @src());
+    defer zone.Deinit();
 
-    const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, allocator);
+    const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, frame_allocator);
     for (group.items) |entity_id| {
         const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
         if (file_data.mSize == 0) {

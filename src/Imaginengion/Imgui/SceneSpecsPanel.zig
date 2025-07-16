@@ -13,6 +13,7 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const SceneUtils = @import("../Scene/SceneUtils.zig");
 const ImguiUtils = @import("../Imgui/ImguiUtils.zig");
+const Tracy = @import("../Core/Tracy.zig");
 const SceneSpecsPanel = @This();
 
 mSceneLayer: SceneLayer,
@@ -26,6 +27,9 @@ pub fn Init(scene_layer: SceneLayer) !SceneSpecsPanel {
 }
 
 pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("Scene Specs Panel OIR", @src());
+    defer zone.Deinit();
+
     const name_component = self.mSceneLayer.GetComponent(SceneNameComponent);
 
     const scene_name = try frame_allocator.dupeZ(u8, name_component.Name.items);

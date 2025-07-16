@@ -20,6 +20,7 @@ const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
 const PlayerManager = @import("../Players/PlayerManager.zig");
 const StaticEngineContext = @import("EngineContext.zig");
+const Tracy = @import("Tracy.zig");
 
 const Application: type = @This();
 
@@ -68,6 +69,7 @@ pub fn Deinit(self: *Application) !void {
     SystemEventManager.Deinit();
     GameEventManager.Deinit();
     ImguiEventManager.Deinit();
+    PlayerManager.Deinit();
     Input.Deinit();
     _ = self.mEngineAllocator.deinit();
     self.mFrameAllocator.deinit();
@@ -86,8 +88,14 @@ pub fn Run(self: *Application) !void {
 
     while (self.mIsRunning) : (delta_time = @as(f32, @floatFromInt(timer.lap())) / std.time.ns_per_s) {
         StaticEngineContext.SetDT(delta_time);
+
+        const zone = Tracy.ZoneInit("Main Loop", @src());
+        defer zone.Deinit();
+
         try self.mProgram.OnUpdate(delta_time, self.mFrameAllocator.allocator());
         _ = self.mFrameAllocator.reset(.retain_capacity);
+
+        Tracy.FrameMark();
     }
 }
 

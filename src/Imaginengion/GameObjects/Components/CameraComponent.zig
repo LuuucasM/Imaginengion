@@ -133,4 +133,10 @@ pub fn EditorRender(self: *CameraComponent) !void {
     if (imgui.igDragFloat("Far", &self.mPerspectiveFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
         self.RecalculateProjection();
     }
+
+    var rect_area: [4]f32 = [4]f32{ self.mAreaRect[0], self.mAreaRect[1], self.mAreaRect[2], self.mAreaRect[3] };
+
+    if (imgui.igDragFloat4("Area Rect", &rect_area[0], 0.01, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_None)) {
+        self.SetAreaRect(Vec4f32{ rect_area[0], rect_area[1], rect_area[2], rect_area[3] });
+    }
 }

@@ -7,6 +7,8 @@ const StaticInputContext = @import("../Inputs/Input.zig");
 
 const glfw = @import("../Core/CImports.zig").glfw;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const WindowsWindow = @This();
 
 _Title: [*:0]const u8 = "Imaginengion",
@@ -88,6 +90,8 @@ pub fn OnWindowResize(self: *WindowsWindow, width: usize, height: usize) void {
 }
 
 pub fn PollInputEvents(self: WindowsWindow) void {
+    const zone = Tracy.ZoneInit("PollInputEvents", @src());
+    defer zone.Deinit();
     _ = self;
     glfw.glfwPollEvents();
 }

@@ -21,6 +21,9 @@ const Mat4f32 = LinAlg.Mat4f32;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
+
+const Tracy = @import("../Core/Tracy.zig");
+
 const Renderer2D = @This();
 
 const MAX_PATH_LEN = 256;
@@ -141,6 +144,9 @@ pub fn BindBuffers(self: *Renderer2D) void {
 }
 
 pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponent, quad_component: *QuadComponent) !void {
+    const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
+    defer zone.Deinit();
+
     const texture_asset = try quad_component.mTexture.GetAsset(Texture2D);
 
     try self.mQuadBufferBase.append(.{

@@ -8,3 +8,5 @@ pub const stb = @cImport({
 });
 
 pub const nfd = @import("NFD");
+
+pub const tracy = @import("Tracy");

@@ -30,6 +30,8 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const ShaderAsset = Assets.ShaderAsset;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 _P_Open: bool,
 mSelectedScene: ?SceneLayer,
 mSelectedEntity: ?Entity,
@@ -45,6 +47,9 @@ pub fn Init(engine_allocator: std.mem.Allocator) ComponentsPanel {
 }
 
 pub fn OnImguiRender(self: ComponentsPanel) !void {
+    const zone = Tracy.ZoneInit("Components Panel OIR", @src());
+    defer zone.Deinit();
+
     if (self._P_Open == false) return;
 
     if (self.mSelectedEntity) |entity| {

@@ -16,8 +16,7 @@ mBufferElements: std.ArrayList(VertexBufferElement),
 mUniforms: std.AutoHashMap(usize, i32),
 mBufferStride: usize,
 mShaderID: u32,
-mName: []const u8,
-mAllocator: std.mem.Allocator,
+mName: std.ArrayList(u8),
 
 pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
     var new_shader = OpenGLShader{
@@ -25,19 +24,21 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
         .mUniforms = std.AutoHashMap(usize, i32).init(allocator),
         .mBufferStride = 0,
         .mShaderID = 0,
-        .mName = undefined,
-        .mAllocator = allocator,
+        .mName = std.ArrayList(u8).init(allocator),
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
-    const shader_sources = try ReadFile(abs_path, arena.allocator());
+    const arena_allocator = arena.allocator();
+
+    const shader_sources = try ReadFile(abs_path, arena_allocator);
+
     if (try new_shader.Compile(shader_sources, abs_path) == true) {
         try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
         try new_shader.DiscoverUniforms();
     }
 
-    new_shader.mName = try new_shader.mAllocator.dupe(u8, std.fs.path.basename(abs_path));
+    _ = try new_shader.mName.writer().write(std.fs.path.basename(abs_path));
 
     return new_shader;
 }
@@ -47,7 +48,7 @@ pub fn Deinit(self: *OpenGLShader) void {
 
     self.mBufferElements.deinit();
     self.mUniforms.deinit();
-    self.mAllocator.free(self.mName);
+    self.mName.deinit();
 }
 
 pub fn Bind(self: OpenGLShader) void {

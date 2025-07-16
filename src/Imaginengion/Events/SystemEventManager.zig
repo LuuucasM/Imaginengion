@@ -3,6 +3,7 @@ const assert = std.debug.assert;
 const Application = @import("../Core/Application.zig");
 const SystemEvent = @import("SystemEvent.zig").SystemEvent;
 const SystemEventCategory = @import("SystemEvent.zig").SystemEventCategory;
+const Tracy = @import("../Core/Tracy.zig");
 const Self = @This();
 
 var EventManager: Self = .{};
@@ -34,6 +35,8 @@ pub fn Insert(event: SystemEvent) !void {
 }
 
 pub fn ProcessEvents(eventCategory: SystemEventCategory) !void {
+    const zone = Tracy.ZoneInit("ProcessEvents", @src());
+    defer zone.Deinit();
     const array = switch (eventCategory) {
         .EC_Input => EventManager._InputEventPool,
         .EC_Window => EventManager._WindowEventPool,
@@ -46,6 +49,8 @@ pub fn ProcessEvents(eventCategory: SystemEventCategory) !void {
 }
 
 pub fn EventsReset() void {
+    const zone = Tracy.ZoneInit("System Event Reset", @src());
+    defer zone.Deinit();
     _ = EventManager._InputEventPool.clearAndFree();
     _ = EventManager._WindowEventPool.clearAndFree();
 }

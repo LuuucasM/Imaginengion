@@ -6,6 +6,7 @@ const NameComponent = Components.NameComponent;
 const CameraComponent = Components.CameraComponent;
 const EntityParentComponent = Components.ParentComponent;
 const EntityChildComponent = Components.ChildComponent;
+const Tracy = @import("../Core/Tracy.zig");
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -33,6 +34,8 @@ pub fn GetName(self: Entity) []const u8 {
     return &self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).*.Name;
 }
 pub fn GetCamera(self: Entity) ?Entity {
+    const zone = Tracy.ZoneInit("Entity GetCamera", @src());
+    defer zone.Deinit();
     if (self.HasComponent(EntityParentComponent)) {
         const parent_component = self.GetComponent(EntityParentComponent);
 

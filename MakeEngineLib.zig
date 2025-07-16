@@ -225,6 +225,43 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     }
     //---------------------------------------------------END NFD-------------------------------------------------------------------
 
+    //---------------------------------------------------TRACY-------------------------------------------------------------
+    //make library
+    const tracy_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "Tracy",
+        .root_module = b.addModule("Tracy", .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .link_libcpp = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Tracy/tracy.zig" } },
+        }),
+    });
+
+    //add include paths
+    tracy_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Tracy/public/" } });
+
+    //add c source files
+    {
+        const options = std.Build.Module.AddCSourceFilesOptions{
+            .files = &[_][]const u8{
+                "src/Imaginengion/Vendor/Tracy/public/TracyClient.cpp",
+            },
+            .flags = &[_][]const u8{
+                "-DTRACY_ENABLE",
+                "-fno-sanitize=all",
+            },
+        };
+        tracy_lib.addCSourceFiles(options);
+    }
+
+    if (builtin.os.tag == .windows) {
+        tracy_lib.linkSystemLibrary("ws2_32");
+        tracy_lib.linkSystemLibrary("dbghelp");
+    }
+    //--------------------------------------------------END TRACY-------------------------------------------------------------
+
     //------------------------------------------------------IMAGINENGION-------------------------------------------------------
     //make library
     const engine_lib = b.addLibrary(.{
@@ -254,6 +291,10 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                     std.Build.Module.Import{
                         .name = "NFD",
                         .module = nfd_lib.root_module,
+                    },
+                    std.Build.Module.Import{
+                        .name = "Tracy",
+                        .module = tracy_lib.root_module,
                     },
                 },
             },

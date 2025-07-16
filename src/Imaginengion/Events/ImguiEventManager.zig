@@ -1,6 +1,7 @@
 const std = @import("std");
 const Program = @import("../Programs/Program.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
+const Tracy = @import("../Core/Tracy.zig");
 const Self = @This();
 
 var EventManager: Self = .{};
@@ -25,6 +26,8 @@ pub fn Insert(event: ImguiEvent) !void {
 }
 
 pub fn ProcessEvents() !void {
+    const zone = Tracy.ZoneInit("ImguiEventManager ProcessEvents", @src());
+    defer zone.Deinit();
     for (EventManager.mEventPool.items) |*event| {
         try EventManager.mProgram.OnImguiEvent(event);
         switch (event.*) {
@@ -46,6 +49,8 @@ pub fn ProcessEvents() !void {
 }
 
 pub fn EventsReset() void {
+    const zone = Tracy.ZoneInit("Imgui Event Reset", @src());
+    defer zone.Deinit();
     EventManager.mEventPool.clearAndFree();
 }
 

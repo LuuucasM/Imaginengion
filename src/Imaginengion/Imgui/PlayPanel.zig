@@ -7,6 +7,7 @@ const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityCameraComponent = EntityComponents.CameraComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
+const Tracy = @import("../Core/Tracy.zig");
 const PlayPanel = @This();
 
 mViewportWidth: usize,
@@ -23,6 +24,10 @@ pub fn Init() PlayPanel {
 
 pub fn OnImguiRender(self: *PlayPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
     _ = camera_transforms;
+
+    const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
+    defer zone.Deinit();
+
     _ = imgui.igBegin("Play", null, 0);
     defer imgui.igEnd();
 

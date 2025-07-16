@@ -65,6 +65,8 @@ const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 
+const Tracy = @import("../Core/Tracy.zig");
+
 //editor imgui stuff
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -161,6 +163,8 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(CameraComponent, new_camera_component);
 
+    try GameObjectUtils.AddScriptToEntity(self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
+
     //setup the full screen editor camera
     var new_camera_component_camera = CameraComponent{
         .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
@@ -190,6 +194,7 @@ pub fn Deinit(self: *EditorProgram) !void {
     try self.mGameSceneManager.Deinit();
     try self.mEditorSceneManager.Deinit();
     self._ContentBrowserPanel.Deinit();
+    self._CSEditorPanel.Deinit();
 
     ImGui.Deinit();
 }
@@ -200,21 +205,32 @@ pub fn Deinit(self: *EditorProgram) !void {
 //handling the loading and unloading of assets and scene transitions
 //debug/profiling
 pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("Program OnUpdate", @src());
+    defer zone.Deinit();
+
     //update asset manager
-    try AssetManager.OnUpdate();
+    try AssetManager.OnUpdate(frame_allocator);
 
     //-------------Inputs Begin------------------
-    //Human Inputs
-    self.mWindow.PollInputEvents();
-    StaticInputContext.OnUpdate();
-    try SystemEventManager.ProcessEvents(.EC_Input);
-    if (self._ToolbarPanel.mState == .Play) {
-        _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{}, frame_allocator);
-    }
-    //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
-    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, frame_allocator);
+    {
+        const input_zone = Tracy.ZoneInit("Inputs Section", @src());
+        defer input_zone.Deinit();
 
-    //AI Inputs
+        //Human Inputs
+        self.mWindow.PollInputEvents();
+        StaticInputContext.OnUpdate();
+        try SystemEventManager.ProcessEvents(.EC_Input);
+        if (self._ToolbarPanel.mState == .Play) {
+            _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{}, frame_allocator);
+        }
+        //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
+
+        _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, frame_allocator);
+
+        //AI Inputs
+    }
+
+    //---------------Inputs End-------------------
 
     //-------------Physics Begin-----------------
     //-------------Physics End-------------------
@@ -226,62 +242,32 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     //-------------Animation End----------------
 
     //---------Render Begin-------------
-    try GameEventManager.ProcessEvents(.EC_PreRender);
+    {
+        const render_zone = Tracy.ZoneInit("Render Section", @src());
+        defer render_zone.Deinit();
 
-    ImGui.Begin();
-    Dockspace.Begin();
+        try GameEventManager.ProcessEvents(.EC_PreRender);
 
-    try self._ContentBrowserPanel.OnImguiRender();
-    try self._AssetHandlePanel.OnImguiRender(frame_allocator);
+        ImGui.Begin();
+        Dockspace.Begin();
 
-    try self._ScenePanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
+        try self._ContentBrowserPanel.OnImguiRender();
+        try self._AssetHandlePanel.OnImguiRender(frame_allocator);
 
-    for (self._SceneSpecList.items) |*scene_spec_panel| {
-        try scene_spec_panel.OnImguiRender(frame_allocator);
-    }
-    try self._ComponentsPanel.OnImguiRender();
-    try self._ScriptsPanel.OnImguiRender();
-    try self._CSEditorPanel.OnImguiRender();
+        try self._ScenePanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
 
-    //----------------rendering game world to screen-------------
-
-    var camera_components = try std.ArrayList(*CameraComponent).initCapacity(frame_allocator, 1);
-    var transform_components = try std.ArrayList(*TransformComponent).initCapacity(frame_allocator, 1);
-
-    if (self._ToolbarPanel.mState == .Stop) {
-        const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
-        const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
-
-        try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
-
-        try camera_components.append(camera_component);
-        try transform_components.append(camera_transform);
-
-        try self._ViewportPanel.OnImguiRender(camera_components, transform_components);
-    } else { //it is playing
-        const players = try PlayerManager.GetGroup(GroupQuery{ .Component = ControllerComponent }, frame_allocator);
-        for (players.items) |player_id| {
-            const player = PlayerManager.GetPlayer(player_id);
-            const controller_component = player.GetComponent(ControllerComponent);
-            if (controller_component.mControlledEntityID != Entity.NullEntity) {
-                const controlled_object = self.mGameSceneManager.GetEntity(controller_component.mControlledEntityID);
-
-                if (controlled_object.GetCamera()) |camera_entity| {
-                    const camera_component = camera_entity.GetComponent(CameraComponent);
-                    const camera_transform = camera_entity.GetComponent(TransformComponent);
-                    try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
-
-                    try camera_components.append(camera_component);
-                    try transform_components.append(camera_transform);
-                }
-            }
+        for (self._SceneSpecList.items) |*scene_spec_panel| {
+            try scene_spec_panel.OnImguiRender(frame_allocator);
         }
-        if (self._UsePlayPanel == true) {
-            try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+        try self._ComponentsPanel.OnImguiRender();
+        try self._ScriptsPanel.OnImguiRender();
+        try self._CSEditorPanel.OnImguiRender();
 
-            camera_components.clearRetainingCapacity();
-            transform_components.clearRetainingCapacity();
+        //----------------rendering game world to screen-------------
+        var camera_components = try std.ArrayList(*CameraComponent).initCapacity(frame_allocator, 1);
+        var transform_components = try std.ArrayList(*TransformComponent).initCapacity(frame_allocator, 1);
 
+        if (self._ToolbarPanel.mState == .Stop) {
             const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
             const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
 
@@ -290,23 +276,56 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
             try camera_components.append(camera_component);
             try transform_components.append(camera_transform);
 
-            try self._ViewportPanel.OnImguiRenderPlay(camera_components, transform_components);
-        } else {
-            try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+            try self._ViewportPanel.OnImguiRender(camera_components, transform_components);
+        } else { //it is playing
+            const players = try PlayerManager.GetGroup(GroupQuery{ .Component = ControllerComponent }, frame_allocator);
+            for (players.items) |player_id| {
+                const player = PlayerManager.GetPlayer(player_id);
+                const controller_component = player.GetComponent(ControllerComponent);
+                if (controller_component.mControlledEntityID != Entity.NullEntity) {
+                    const controlled_object = self.mGameSceneManager.GetEntity(controller_component.mControlledEntityID);
+
+                    if (controlled_object.GetCamera()) |camera_entity| {
+                        const camera_component = camera_entity.GetComponent(CameraComponent);
+                        const camera_transform = camera_entity.GetComponent(TransformComponent);
+                        try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+
+                        try camera_components.append(camera_component);
+                        try transform_components.append(camera_transform);
+                    }
+                }
+            }
+            if (self._UsePlayPanel == true) {
+                try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+
+                camera_components.clearRetainingCapacity();
+                transform_components.clearRetainingCapacity();
+
+                const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+                const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+
+                try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+
+                try camera_components.append(camera_component);
+                try transform_components.append(camera_transform);
+
+                try self._ViewportPanel.OnImguiRenderPlay(camera_components, transform_components);
+            } else {
+                try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+            }
         }
+
+        try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
+
+        try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
+
+        try Dockspace.OnImguiRender();
+
+        try ImguiEventManager.ProcessEvents();
+
+        Dockspace.End();
+        ImGui.End();
     }
-
-    try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
-
-    try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
-
-    try Dockspace.OnImguiRender();
-
-    try ImguiEventManager.ProcessEvents();
-
-    Dockspace.End();
-    ImGui.End();
-
     //--------------Render End-------------------
 
     //--------------Audio Begin------------------
@@ -316,27 +335,32 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
     //--------------Networking End---------------
 
     //-----------------Start End of Frame-----------------
-    //swap buffers
-    Renderer.SwapBuffers();
+    {
+        const end_frame_zone = Tracy.ZoneInit("End Frame Section", @src());
+        defer end_frame_zone.Deinit();
 
-    //Process window events
-    try SystemEventManager.ProcessEvents(.EC_Window);
+        //swap buffers
+        Renderer.SwapBuffers();
 
-    //handle any closed scene spec panels
-    self.CleanSceneSpecs();
+        //Process window events
+        try SystemEventManager.ProcessEvents(.EC_Window);
 
-    //handle deleted objects this frame
-    try self.mGameSceneManager.mECSManagerGO.ProcessDestroyedEntities();
-    try self.mGameSceneManager.mECSManagerSC.ProcessDestroyedEntities();
-    try self.mEditorSceneManager.mECSManagerGO.ProcessDestroyedEntities();
-    try self.mEditorSceneManager.mECSManagerSC.ProcessDestroyedEntities();
-    try AssetManager.ProcessDestroyedAssets();
-    try PlayerManager.ProcessDestroyedPlayers();
+        //handle any closed scene spec panels
+        self.CleanSceneSpecs();
 
-    //end of frame resets
-    SystemEventManager.EventsReset();
-    GameEventManager.EventsReset();
-    ImguiEventManager.EventsReset();
+        //handle deleted objects this frame
+        try self.mGameSceneManager.mECSManagerGO.ProcessDestroyedEntities();
+        try self.mGameSceneManager.mECSManagerSC.ProcessDestroyedEntities();
+        try self.mEditorSceneManager.mECSManagerGO.ProcessDestroyedEntities();
+        try self.mEditorSceneManager.mECSManagerSC.ProcessDestroyedEntities();
+        try AssetManager.ProcessDestroyedAssets();
+        try PlayerManager.ProcessDestroyedPlayers();
+
+        //end of frame resets
+        SystemEventManager.EventsReset();
+        GameEventManager.EventsReset();
+        ImguiEventManager.EventsReset();
+    }
     //-----------------End End of Frame-------------------
 
 }
@@ -497,6 +521,8 @@ pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize, frame_a
 }
 
 fn CleanSceneSpecs(self: *EditorProgram) void {
+    const zone = Tracy.ZoneInit("Clean Scene Specs", @src());
+    defer zone.Deinit();
     var end_index: usize = self._SceneSpecList.items.len;
     var i: usize = 0;
 
