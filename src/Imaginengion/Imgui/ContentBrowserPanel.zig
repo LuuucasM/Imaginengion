@@ -123,67 +123,49 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
 fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     const dir = try std.fs.openDirAbsolute(self.mCurrentDirectory.items, .{ .iterate = true });
 
+    var name_buf: [260]u8 = undefined;
+
     var iter = dir.iterate();
     while (try iter.next()) |entry| {
-        var icon_ptr: ?*Texture2D = null;
         if (entry.kind == .directory) {
-            icon_ptr = try self.mDirTextureHandle.GetAsset(Texture2D);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-            icon_ptr = try self.mPngTextureHandle.GetAsset(Texture2D);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-            icon_ptr = try self.mSceneTextureHandle.GetAsset(Texture2D);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-            icon_ptr = try self.mScriptTextureHandle.GetAsset(Texture2D);
-        }
-        if (icon_ptr) |texture| {
-            var name_buf: [260]u8 = undefined;
+            const texture_asset = try self.mDirTextureHandle.GetAsset(Texture2D);
+
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            _ = imgui.igPushID_Str(entry_name);
-            defer imgui.igPopID();
+            try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
-            const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, texture.GetID())));
-
-            _ = imgui.igImageButton(
-                entry_name,
-                texture_id,
-                .{ .x = thumbnail_size, .y = thumbnail_size },
-                .{ .x = 0.0, .y = 0.0 },
-                .{ .x = 1.0, .y = 1.0 },
-                .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
-                .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-            );
-            if (entry.kind == .file and imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
-                defer imgui.igEndDragDropSource();
-                var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const allocator = fba.allocator();
-                const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
-                const rel_path = full_path[self.mProjectDirectory.items.len..];
-
-                if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-                    _ = imgui.igSetDragDropPayload("IMSCLoad", rel_path.ptr, rel_path.len, 0);
-                } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-                    _ = imgui.igSetDragDropPayload("PNGLoad", rel_path.ptr, rel_path.len, 0);
-                } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-                    var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-                    defer AssetManager.ReleaseAssetHandleRef(&script_handle);
-
-                    const script_asset = try script_handle.GetAsset(ScriptAsset);
-                    if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
-                        _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
-                    } else if (script_asset.mScriptType == .OnSceneStart) {
-                        _ = imgui.igSetDragDropPayload("SceneScriptLoad", rel_path.ptr, rel_path.len, 0);
-                    }
-                }
-            }
-            if (entry.kind == .directory and imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
+            if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
                 _ = try self.mCurrentDirectory.writer().write("/");
                 _ = try self.mCurrentDirectory.writer().write(entry.name);
             }
+            NextColumn(entry_name);
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
+            const texture_asset = try self.mPngTextureHandle.GetAsset(Texture2D);
 
-            imgui.igTextWrapped(@ptrCast(entry_name));
-            imgui.igNextColumn();
+            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+
+            try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
+
+            try self.DragDropPayloadBase(entry_name, "PNGLoad\x00");
+            NextColumn(entry_name);
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
+            const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
+
+            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+
+            try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
+
+            try self.DragDropPayloadBase(entry_name, "IMSCLoad\x00");
+            NextColumn(entry_name);
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
+            const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
+
+            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+
+            try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
+
+            try self.DragDropPayloadScript(entry_name);
+            NextColumn(entry_name);
         }
     }
 }
@@ -240,4 +222,60 @@ pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptE
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
     }
+}
+
+fn RenderImageButton(entry_name: []const u8, id: c_uint, thumbnail_size: f32) !void {
+    _ = imgui.igPushID_Str(entry_name.ptr);
+    defer imgui.igPopID();
+
+    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, id)));
+
+    _ = imgui.igImageButton(
+        entry_name.ptr,
+        texture_id,
+        .{ .x = thumbnail_size, .y = thumbnail_size },
+        .{ .x = 0.0, .y = 0.0 },
+        .{ .x = 1.0, .y = 1.0 },
+        .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
+        .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
+    );
+}
+
+fn DragDropPayloadBase(self: ContentBrowserPanel, entry_name: []const u8, payload_type: []const u8) !void {
+    if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
+        defer imgui.igEndDragDropSource();
+        var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const allocator = fba.allocator();
+        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
+        const rel_path = full_path[self.mProjectDirectory.items.len..];
+
+        _ = imgui.igSetDragDropPayload(payload_type.ptr, rel_path.ptr, rel_path.len, 0);
+    }
+}
+
+fn DragDropPayloadScript(self: ContentBrowserPanel, entry_name: []const u8) !void {
+    if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
+        defer imgui.igEndDragDropSource();
+        var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const allocator = fba.allocator();
+        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
+        const rel_path = full_path[self.mProjectDirectory.items.len..];
+
+        var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
+        defer AssetManager.ReleaseAssetHandleRef(&script_handle);
+
+        const script_asset = try script_handle.GetAsset(ScriptAsset);
+        if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
+            _ = imgui.igSetDragDropPayload("GameObjectScriptLoad\x00", rel_path.ptr, rel_path.len, 0);
+        } else if (script_asset.mScriptType == .OnSceneStart) {
+            _ = imgui.igSetDragDropPayload("SceneScriptLoad\x00", rel_path.ptr, rel_path.len, 0);
+        }
+    }
+}
+
+fn NextColumn(entry_name: []const u8) void {
+    imgui.igTextWrapped(@ptrCast(entry_name));
+    imgui.igNextColumn();
 }
