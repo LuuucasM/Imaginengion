@@ -29,51 +29,67 @@ pub const AssetType = u32;
 pub const ECSManagerAssets = ECSManager(AssetType, AssetsList.len);
 
 mAssetECS: ECSManagerAssets = undefined,
-mAssetPathToID: std.AutoHashMap(u64, AssetType) = undefined,
+mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
+mPathToIDPrj: std.AutoHashMap(u64, AssetType) = undefined,
+mPathToIDAbs: std.AutoHashMap(u64, AssetType) = undefined,
+mCWD: std.ArrayList(u8) = undefined,
 mProjectDirectory: std.ArrayList(u8) = undefined,
 
 pub fn Init() !void {
     AssetM = AssetManager{
         .mAssetECS = try ECSManagerAssets.Init(AssetGPA.allocator(), &AssetsList),
-        .mAssetPathToID = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
+        .mPathToIDEng = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
+        .mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
+        .mPathToIDAbs = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
         .mProjectDirectory = std.ArrayList(u8).init(AssetGPA.allocator()),
+        .mCWD = std.ArrayList(u8).init(AssetGPA.allocator()),
     };
+
+    var buffer: [260]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+
+    const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
+
+    _ = try AssetM.mCWD.writer().write(cwd);
 }
 
 pub fn Deinit() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, allocator);
-
-    for (group.items) |entity_id| {
-        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
-        AssetGPA.allocator().free(file_data.mRelPath);
-    }
-
     AssetM.mAssetECS.Deinit();
-    AssetM.mAssetPathToID.deinit();
+    AssetM.mPathToIDEng.deinit();
+    AssetM.mPathToIDPrj.deinit();
+    AssetM.mPathToIDAbs.deinit();
 }
 
 pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle {
     std.debug.assert(rel_path.len != 0);
-    var buffer: [260 * 2]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
 
-    const abs_path = try GetAbsPath(rel_path, path_type, allocator);
-    const path_hash = ComputePathHash(abs_path);
+    const path_hash = ComputePathHash(rel_path);
 
-    if (AssetM.mAssetPathToID.get(path_hash)) |entity_id| {
-        AssetM.mAssetECS.GetComponent(AssetMetaData, entity_id).mRefs += 1;
+    const entity_id = switch (path_type) {
+        .Eng => AssetM.mPathToIDEng.get(path_hash),
+        .Prj => AssetM.mPathToIDPrj.get(path_hash),
+        .Abs => AssetM.mPathToIDAbs.get(path_hash),
+    };
+
+    if (entity_id) |id| {
+        AssetM.mAssetECS.GetComponent(AssetMetaData, id).mRefs += 1;
         return AssetHandle{
-            .mID = entity_id,
+            .mID = id,
         };
     } else {
+        var buffer: [260 * 2]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const allocator = fba.allocator();
+
+        const abs_path = try GetAbsPath(rel_path, path_type, allocator);
         const asset_handle = try CreateAsset(abs_path, rel_path, path_type);
         AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).mRefs += 1;
-        try AssetM.mAssetPathToID.put(path_hash, asset_handle.mID);
+        _ = try switch (path_type) {
+            .Eng => AssetM.mPathToIDEng.put(path_hash, asset_handle.mID),
+            .Prj => AssetM.mPathToIDAbs.put(path_hash, asset_handle.mID),
+            .Abs => AssetM.mPathToIDAbs.put(path_hash, asset_handle.mID),
+        };
         return asset_handle;
     }
 }
@@ -85,20 +101,25 @@ pub fn ReleaseAssetHandleRef(asset_handle: *AssetHandle) void {
 }
 
 pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
-    const is_meta_component = asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent;
-    if (is_meta_component) {
-        return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
-    } else if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
+    //checking the asset type will be evaluated at comptime which will determine which branch
+    //the function body will contain so it doesnt get processed in runtime
+    //and it is needed because the "meta" asset types dont have an Init(because they are not being)
+    //loaded from disk just meta data) so this lets it compile correct
+    if (asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent) {
         return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
     } else {
-        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const allocator = fba.allocator();
+        if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
+            return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
+        } else {
+            const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+            var buffer: [260]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+            const allocator = fba.allocator();
 
-        const abs_path = try GetAbsPath(file_data.mRelPath, file_data.mPathType, allocator);
-        const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), abs_path);
-        return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
+            const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, allocator);
+            const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), abs_path);
+            return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
+        }
     }
 }
 
@@ -114,7 +135,7 @@ pub fn OnUpdate(frame_allocator: std.mem.Allocator) !void {
             continue;
         }
         //then check if the asset path is still valid
-        if (try GetFileIfExists(file_data.mRelPath, file_data.mPathType, entity_id)) |file| {
+        if (try GetFileIfExists(file_data.mRelPath.items, file_data.mPathType, entity_id)) |file| {
             defer file.close();
 
             //check to see if the file needs to be updated
@@ -147,9 +168,10 @@ pub fn OnOpenProjectEvent(path: []const u8) !void {
 }
 
 pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.Allocator) ![]const u8 {
+    const zone = Tracy.ZoneInit("AssetManager GetAbsPath", @src());
+    defer zone.Deinit();
     if (path_type == .Eng) {
-        const cwd = try std.fs.cwd().realpathAlloc(allocator, ".");
-        return try std.fs.path.join(allocator, &[_][]const u8{ cwd, rel_path });
+        return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mCWD.items, rel_path });
     } else if (path_type == .Prj) {
         return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, rel_path });
     } else { //path is abs
@@ -158,6 +180,8 @@ pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.
 }
 
 pub fn GetRelPath(abs_path: []const u8) []const u8 {
+    const zone = Tracy.ZoneInit("AssetManager CheckLast", @src());
+    defer zone.Deinit();
     return abs_path[AssetM.mProjectDirectory.items.len..];
 }
 
@@ -166,12 +190,17 @@ pub fn ProcessDestroyedAssets() !void {
 }
 
 fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File {
+    const zone = Tracy.ZoneInit("AssetManager GetFileIfExists", @src());
+    defer zone.Deinit();
+
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
 
     const abs_path = try GetAbsPath(rel_path, path_type, allocator);
 
+    const open_file_zone = Tracy.ZoneInit("zigopenFile", @src());
+    defer open_file_zone.Deinit();
     return std.fs.cwd().openFile(abs_path, .{}) catch |err| {
         if (err == error.FileNotFound) {
             MarkAssetToDelete(entity_id);
@@ -183,6 +212,8 @@ fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetTy
 }
 
 fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: AssetType) !void {
+    const zone = Tracy.ZoneInit("AssetManager CheckLast", @src());
+    defer zone.Deinit();
     const fstats = try file.stat();
     if (last_modified != fstats.mtime) {
         try UpdateAsset(entity_id, file, fstats);
@@ -190,25 +221,32 @@ fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: AssetTyp
 }
 
 fn ComputePathHash(path: []const u8) u64 {
+    const zone = Tracy.ZoneInit("AssetManager ComputePathHas", @src());
+    defer zone.Deinit();
     var hasher = std.hash.Fnv1a_64.init();
     hasher.update(path);
     return hasher.final();
 }
 
 fn CreateAsset(abs_path: []const u8, rel_path: []const u8, path_type: PathType) !AssetHandle {
+    const zone = Tracy.ZoneInit("AssetManager CreateAsset", @src());
+    defer zone.Deinit();
+
     const new_handle = AssetHandle{
         .mID = try AssetM.mAssetECS.CreateEntity(),
     };
     _ = try AssetM.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
         .mRefs = 0,
     });
-    _ = try AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
-        .mRelPath = try AssetGPA.allocator().dupe(u8, rel_path),
+    const file_meta_data = try AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
+        .mRelPath = std.ArrayList(u8).init(AssetGPA.allocator()),
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,
         .mPathType = path_type,
     });
+
+    _ = try file_meta_data.mRelPath.writer().write(rel_path);
 
     _ = try AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
         .ID = try GenUUID(),
@@ -223,27 +261,35 @@ fn CreateAsset(abs_path: []const u8, rel_path: []const u8, path_type: PathType) 
 }
 
 fn DeleteAsset(asset_id: AssetType) !void {
+    const zone = Tracy.ZoneInit("AssetManager DeleteAsset", @src());
+    defer zone.Deinit();
+
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
 
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
+    const path_hash = ComputePathHash(file_data.mRelPath.items);
 
-    const abs_path = try GetAbsPath(file_data.mRelPath, file_data.mPathType, allocator);
+    _ = switch (file_data.mPathType) {
+        .Eng => AssetM.mPathToIDEng.remove(path_hash),
+        .Prj => AssetM.mPathToIDPrj.remove(path_hash),
+        .Abs => AssetM.mPathToIDAbs.remove(path_hash),
+    };
 
-    const path_hash = ComputePathHash(abs_path);
-    _ = AssetM.mAssetPathToID.remove(path_hash);
-    AssetGPA.allocator().free(file_data.mRelPath);
     try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 
 fn MarkAssetToDelete(asset_id: AssetType) void {
+    const zone = Tracy.ZoneInit("AssetManager MarkAssetToDelete", @src());
+    defer zone.Deinit();
+
     const file_meta_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
     file_meta_data.mLastModified = std.time.nanoTimestamp();
     file_meta_data.mSize = 0;
 }
 
 fn UpdateAsset(asset_id: AssetType, file: std.fs.File, fstats: std.fs.File.Stat) !void {
+    const zone = Tracy.ZoneInit("AssetManager UpdateAsset", @src());
+    defer zone.Deinit();
+
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
 
     var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -259,6 +305,9 @@ fn UpdateAsset(asset_id: AssetType, file: std.fs.File, fstats: std.fs.File.Stat)
 }
 
 fn CheckAssetForDeletion(asset_id: AssetType) !void {
+    const zone = Tracy.ZoneInit("AssetManager CheckAssetForDelete", @src());
+    defer zone.Deinit();
+
     //check to see if we can recover the asset
     if (try RetryAssetExists(asset_id)) return;
 
@@ -272,13 +321,15 @@ fn CheckAssetForDeletion(asset_id: AssetType) !void {
 //This function checks again to see if we can open the file maybe there was
 //some weird issue last frame but this frame the file is ok so we can recover it
 fn RetryAssetExists(asset_id: AssetType) !bool {
+    const zone = Tracy.ZoneInit("AssetManager RetryAssetExists", @src());
+    defer zone.Deinit();
     const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
 
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const allocator = fba.allocator();
 
-    const abs_path = try GetAbsPath(file_data.mRelPath, file_data.mPathType, allocator);
+    const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, allocator);
 
     const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
         if (err == error.FileNotFound) {

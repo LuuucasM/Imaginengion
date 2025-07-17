@@ -156,7 +156,7 @@ fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer, fr
         try write_stream.objectField("AssetFileData");
         if (component.mScriptAssetHandle.mID != SceneLayer.NullScene) {
             const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
-            try std.json.stringify(asset_file_data, .{}, component_string.writer());
+            try std.json.stringify(asset_file_data.mRelPath.items, .{}, component_string.writer());
             try write_stream.write(component_string.items);
             component_string.clearAndFree();
         } else {
@@ -188,12 +188,9 @@ fn SerializeEntity(write_stream: *WriteStream, entity: Entity, frame_allocator: 
     try SerializeCameraComponent(write_stream, entity, frame_allocator);
     try SerializeBasicComponent(write_stream, entity, AISlotComponent, "AISlotComponent", frame_allocator);
     try SerializeBasicComponent(write_stream, entity, PlayerSlotComponent, "PlayerSlotComponent", frame_allocator);
-    try SerializeBasicComponent(write_stream, entity, CircleRenderComponent, "CircleRenderComponent", frame_allocator);
     try SerializeBasicComponent(write_stream, entity, EntityIDComponent, "EntityIDComponent", frame_allocator);
     try SerializeBasicComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent", frame_allocator);
     try SerializeBasicComponent(write_stream, entity, TransformComponent, "TransformComponent", frame_allocator);
-
-    try SerializeSpriteRenderComponent(write_stream, entity, frame_allocator);
 
     try SerializeQuadComponent(write_stream, entity, frame_allocator);
 
@@ -292,7 +289,7 @@ fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity, frame_a
         try write_stream.objectField("AssetFileData");
         if (component.mScriptAssetHandle.mID != Entity.NullEntity) {
             const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
-            try std.json.stringify(asset_file_data, .{}, component_string.writer());
+            try std.json.stringify(asset_file_data.mRelPath.items, .{}, component_string.writer());
             try write_stream.write(component_string.items);
             component_string.clearAndFree();
         } else {
@@ -351,7 +348,7 @@ fn SerializeQuadComponent(write_stream: *WriteStream, entity: Entity, frame_allo
     try write_stream.objectField("AssetFileData");
     if (component.mTexture.mID != AssetHandle.NullHandle) {
         const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
-        try std.json.stringify(asset_file_data, .{}, component_string.writer());
+        try std.json.stringify(asset_file_data.mRelPath.items, .{}, component_string.writer());
         try write_stream.write(component_string.items);
         component_string.clearAndFree();
     } else {
@@ -383,7 +380,7 @@ fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity, frame_al
 
 fn WriteToFile(scene_asset_handle: AssetHandle, data: []const u8, frame_allocator: std.mem.Allocator) !void {
     const file_meta_data = try scene_asset_handle.GetAsset(FileMetaData);
-    const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath, file_meta_data.mPathType, frame_allocator);
+    const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath.items, file_meta_data.mPathType, frame_allocator);
 
     const file = try std.fs.createFileAbsolute(file_abs_path, .{ .read = false, .truncate = true });
     defer file.close();
@@ -474,11 +471,11 @@ fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, 
         };
 
         if (parsed_script_component.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-            const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
+            const file_data_component = try std.json.parseFromSlice([]const u8, frame_allocator, file_data_string, .{});
             defer file_data_component.deinit();
-            const file_data = file_data_component.value;
+            const file_rel_path = file_data_component.value;
 
-            try SceneUtils.AddScriptToScene(scene_layer, file_data.mRelPath, .Prj);
+            try SceneUtils.AddScriptToScene(scene_layer, file_rel_path, .Prj);
         }
         current_id = parsed_script_component.mNext;
     }
@@ -515,8 +512,6 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
             try DeSerializeEntityScripts(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "QuadComponent")) {
             try DeSerializeQuadComponent(scanner, entity, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "SpriteRenderComponent")) {
-            try DeSerializeSpriteRenderComponent(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
             try DeSerializeTransformComponent(scanner, entity, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
@@ -659,47 +654,6 @@ fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, fra
     _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
 }
 
-fn DeSerializeSpriteRenderComponent(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator) !void {
-    //skip past begin object token
-    _ = try SkipToken(scanner, frame_allocator);
-    //skip past the object field token "Component"
-    _ = try SkipToken(scanner, frame_allocator);
-
-    const component_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
-    const component_data_string = switch (component_data_token) {
-        .string => |component_data| component_data,
-        .allocated_string => |component_data| component_data,
-        else => @panic("should be a string!!\n"),
-    };
-    const new_component_parsed = try std.json.parseFromSlice(SpriteRenderComponent, frame_allocator, component_data_string, .{});
-    defer new_component_parsed.deinit();
-
-    const sprite_render_component = try entity.AddComponent(SpriteRenderComponent, new_component_parsed.value);
-
-    //skip past the object field token "FileMetaData"
-    _ = try SkipToken(scanner, frame_allocator);
-
-    //read the next token which will be the potential path of the asset
-    const file_data_token = try scanner.nextAlloc(frame_allocator, .alloc_if_needed);
-    const file_data_string = switch (file_data_token) {
-        .string => |component_data| component_data,
-        .allocated_string => |component_data| component_data,
-        else => @panic("should be a string!!\n"),
-    };
-
-    //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
-    if (sprite_render_component.mTexture.mID != AssetHandle.NullHandle) {
-        const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
-        defer file_data_component.deinit();
-        const file_data = file_data_component.value;
-
-        sprite_render_component.mTexture = try AssetManager.GetAssetHandleRef(file_data.mRelPath, file_data.mPathType);
-    }
-
-    //skip past the end object token
-    _ = try SkipToken(scanner, frame_allocator);
-}
-
 fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, frame_allocator: std.mem.Allocator) !void {
     //skip past begin object token
     _ = try SkipToken(scanner, frame_allocator);
@@ -730,11 +684,11 @@ fn DeSerializeQuadComponent(scanner: *std.json.Scanner, entity: Entity, frame_al
 
     //if the spriterendercomponents asset handle id is not empty asset then request from asset manager the asset
     if (quad_component.mTexture.mID != AssetHandle.NullHandle) {
-        const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
+        const file_data_component = try std.json.parseFromSlice([]const u8, frame_allocator, file_data_string, .{});
         defer file_data_component.deinit();
-        const file_data = file_data_component.value;
+        const file_rel_path = file_data_component.value;
 
-        quad_component.mTexture = try AssetManager.GetAssetHandleRef(file_data.mRelPath, file_data.mPathType);
+        quad_component.mTexture = try AssetManager.GetAssetHandleRef(file_rel_path, .Prj);
     }
 
     //skip past the end object token
@@ -773,11 +727,11 @@ fn DeSerializeEntityScripts(scanner: *std.json.Scanner, entity: Entity, frame_al
         };
 
         if (parsed_script_component.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-            const file_data_component = try std.json.parseFromSlice(FileMetaData, frame_allocator, file_data_string, .{});
+            const file_data_component = try std.json.parseFromSlice([]const u8, frame_allocator, file_data_string, .{});
             defer file_data_component.deinit();
-            const file_data = file_data_component.value;
+            const file_rel_path = file_data_component.value;
 
-            try GameObjectUtils.AddScriptToEntity(entity, file_data.mRelPath, .Prj);
+            try GameObjectUtils.AddScriptToEntity(entity, file_rel_path, .Prj);
         }
         current_id = parsed_script_component.mNext;
     }

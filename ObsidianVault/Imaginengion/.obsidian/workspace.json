@@ -55,12 +55,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "ECS Manager.md",
+                "file": "General TODO.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ECS Manager"
+              "title": "General TODO"
             }
           }
         ],
@@ -213,13 +213,13 @@
   },
   "active": "9741819cc52c6d3c",
   "lastOpenFiles": [
+    "ECS Manager.md",
     "General TODO.md",
     "Adding new components to engine.md",
     "Player control.md",
     "SDF Rendering.md",
     "Optimizations to consider.md",
     "Game objects.md",
-    "ECS Manager.md",
     "Scenes.md",
     "Scene Manager.md",
     "Renderer.md",

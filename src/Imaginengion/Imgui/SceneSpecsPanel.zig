@@ -69,7 +69,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
             while (curr_id != AssetHandle.NullHandle) {
                 const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
                 const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
-                const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath));
+                const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath.items));
                 imgui.igText(script_name);
                 curr_id = script_component.mNext;
             }
