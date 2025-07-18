@@ -54,9 +54,9 @@ pub fn StrToDataType(name: []const u8) ShaderDataType {
 
 mImpl: Impl,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !Shader {
+pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !Shader {
     return Shader{
-        .mImpl = try Impl.Init(allocator, abs_path),
+        .mImpl = try Impl.Init(allocator, asset_file, rel_path),
     };
 }
 

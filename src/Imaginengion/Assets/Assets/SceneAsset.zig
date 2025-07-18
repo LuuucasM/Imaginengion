@@ -6,17 +6,15 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 
 mSceneContents: std.ArrayList(u8) = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !SceneAsset {
-    const file = try std.fs.openFileAbsolute(abs_path, .{});
-    defer file.close();
-
-    const file_size = try file.getEndPos();
+pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !SceneAsset {
+    _ = rel_path;
+    const file_size = try asset_file.getEndPos();
 
     var new_scene_asset = SceneAsset{
         .mSceneContents = try std.ArrayList(u8).initCapacity(allocator, file_size),
     };
     try new_scene_asset.mSceneContents.resize(file_size);
-    _ = try file.readAll(new_scene_asset.mSceneContents.items);
+    _ = try asset_file.readAll(new_scene_asset.mSceneContents.items);
     return new_scene_asset;
 }
 

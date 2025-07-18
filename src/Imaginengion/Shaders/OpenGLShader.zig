@@ -16,29 +16,25 @@ mBufferElements: std.ArrayList(VertexBufferElement),
 mUniforms: std.AutoHashMap(usize, i32),
 mBufferStride: usize,
 mShaderID: u32,
-mName: std.ArrayList(u8),
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLShader {
+pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !OpenGLShader {
     var new_shader = OpenGLShader{
         .mBufferElements = std.ArrayList(VertexBufferElement).init(allocator),
         .mUniforms = std.AutoHashMap(usize, i32).init(allocator),
         .mBufferStride = 0,
         .mShaderID = 0,
-        .mName = std.ArrayList(u8).init(allocator),
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    const shader_sources = try ReadFile(abs_path, arena_allocator);
+    const shader_sources = try ReadFile(asset_file, arena_allocator);
 
-    if (try new_shader.Compile(shader_sources, abs_path) == true) {
+    if (try new_shader.Compile(shader_sources, rel_path) == true) {
         try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
         try new_shader.DiscoverUniforms();
     }
-
-    _ = try new_shader.mName.writer().write(std.fs.path.basename(abs_path));
 
     return new_shader;
 }
@@ -48,7 +44,6 @@ pub fn Deinit(self: *OpenGLShader) void {
 
     self.mBufferElements.deinit();
     self.mUniforms.deinit();
-    self.mName.deinit();
 }
 
 pub fn Bind(self: OpenGLShader) void {
@@ -213,18 +208,15 @@ fn CalculateStride(self: *OpenGLShader) void {
     }
 }
 
-fn ReadFile(abs_path: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
+fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
     var source = std.ArrayList(u8).init(allocator);
     defer source.deinit();
 
-    const file = try std.fs.cwd().openFile(abs_path, .{});
-    defer file.close();
-
-    const file_size = try file.getEndPos();
+    const file_size = try asset_file.getEndPos();
     try source.ensureTotalCapacity(@intCast(file_size));
     try source.resize(@intCast(file_size));
 
-    _ = try file.readAll(source.items);
+    _ = try asset_file.readAll(source.items);
 
     var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(allocator);
 
@@ -268,7 +260,7 @@ fn ReadFile(abs_path: []const u8, allocator: std.mem.Allocator) !std.AutoArrayHa
     return shaders;
 }
 
-fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8), abs_path: []const u8) !bool {
+fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8), rel_path: []const u8) !bool {
     const shader_id: glad.GLuint = glad.glCreateProgram();
 
     var buffer: [2000]u8 = undefined;
@@ -299,7 +291,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
             glad.glDeleteShader(shader);
 
-            std.log.err("Shader Compilation Failure! {s} for shader: {s}\n", .{ info_log.items, abs_path });
+            std.log.err("Shader Compilation Failure! {s}\n for file: {s}", .{ info_log.items, rel_path });
 
             return false;
         }
@@ -328,7 +320,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
             glad.glDeleteShader(id);
         }
 
-        std.log.err("Program failed to link! {s} for shader: {s}\n", .{ info_log.items, abs_path });
+        std.log.err("Program failed to link! {s}\n for file {s}", .{ info_log.items, rel_path });
 
         return false;
     }

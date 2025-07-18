@@ -10,9 +10,9 @@ const Impl = switch (builtin.os.tag) {
 
 _Impl: Impl = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !Texture2D {
+pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !Texture2D {
     return Texture2D{
-        ._Impl = try Impl.Init(allocator, abs_path),
+        ._Impl = try Impl.Init(allocator, asset_file, rel_path),
     };
 }
 

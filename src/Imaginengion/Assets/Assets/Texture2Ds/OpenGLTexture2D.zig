@@ -10,7 +10,7 @@ _InternalFormat: c_uint,
 _DataFormat: c_uint,
 mARBHandle: u64,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D {
+pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !OpenGLTexture2D {
     _ = allocator;
     var width: c_int = 0;
     var height: c_int = 0;
@@ -18,11 +18,9 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D
     var data: ?*stb.stbi_uc = null;
     stb.stbi_set_flip_vertically_on_load(1);
 
-    var file = try std.fs.cwd().openFile(abs_path, .{});
-    defer file.close();
-    const fstats = try file.stat();
+    const fstats = try asset_file.stat();
 
-    const contents = try file.readToEndAlloc(std.heap.page_allocator, @intCast(fstats.size));
+    const contents = try asset_file.readToEndAlloc(std.heap.page_allocator, @intCast(fstats.size));
     defer std.heap.page_allocator.free(contents);
 
     data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
@@ -38,7 +36,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !OpenGLTexture2D
         internal_format = glad.GL_RGB8;
         data_format = glad.GL_RGB;
     } else {
-        std.log.err("Textureformat not supported in OpenGLTexture2D when loading file: {s}", .{abs_path});
+        std.log.err("Textureformat not supported in OpenGLTexture2D when loading file: {s}", .{rel_path});
         @panic("");
     }
 

@@ -6,9 +6,9 @@ const ShaderAsset = @This();
 
 mShader: Shader = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !ShaderAsset {
+pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !ShaderAsset {
     return ShaderAsset{
-        .mShader = try Shader.Init(allocator, abs_path),
+        .mShader = try Shader.Init(allocator, asset_file, rel_path),
     };
 }
 
