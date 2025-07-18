@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const VertexBufferElement = @import("../VertexBuffers/VertexBufferElement.zig");
+const Tracy = @import("../Core/Tracy.zig");
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("OpenGLShader.zig"),
@@ -65,6 +66,8 @@ pub fn Deinit(self: *Shader) void {
 }
 
 pub fn Bind(self: Shader) void {
+    const zone = Tracy.ZoneInit("Shader Bind", @src());
+    defer zone.Deinit();
     self.mImpl.Bind();
 }
 

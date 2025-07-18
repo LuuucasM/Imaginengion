@@ -128,6 +128,8 @@ pub fn StartBatch(self: *Renderer2D) void {
 }
 
 pub fn SetBuffers(self: *Renderer2D) !void {
+    const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
+    defer zone.Deinit();
     //quads
     if (self.mQuadBufferBase.items.len > 0) {
         self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, self.mQuadBufferBase.items.len * @sizeOf(QuadData), 0);
@@ -139,6 +141,8 @@ pub fn SetBuffers(self: *Renderer2D) !void {
 }
 
 pub fn BindBuffers(self: *Renderer2D) void {
+    const zone = Tracy.ZoneInit("R2D BindBuffers", @src());
+    defer zone.Deinit();
     self.mQuadBuffer.Bind(2); //start at 2 cuz 0 is camera and 1 is resolution
     self.mQuadCountUB.Bind(3);
 }

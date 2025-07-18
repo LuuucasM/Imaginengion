@@ -33,6 +33,8 @@ pub fn GetMaxTextureImageSlots(self: RenderContext) usize {
 }
 
 pub fn DrawIndexed(self: RenderContext, vertex_array: VertexArray, index_count: usize) void {
+    const zone = Tracy.ZoneInit("RenderContext DrawIndexed", @src());
+    defer zone.Deinit();
     self.mImpl.DrawIndexed(vertex_array, index_count);
 }
 

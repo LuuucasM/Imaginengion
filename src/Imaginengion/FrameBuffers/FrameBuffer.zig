@@ -2,6 +2,7 @@ const std = @import("std");
 const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 pub const TextureFormat = @import("InternalFrameBuffer.zig").TextureFormat;
 const InternalFrameBuffer = @import("InternalFrameBuffer.zig").FrameBuffer;
+const Tracy = @import("../Core/Tracy.zig");
 const FrameBuffer = @This();
 
 mPtr: *anyopaque,
@@ -96,9 +97,13 @@ pub fn Invalidate(self: FrameBuffer) void {
     self.mVTable.Invalidate(self.mPtr);
 }
 pub fn Bind(self: FrameBuffer) void {
+    const zone = Tracy.ZoneInit("FrameBuffer Bind", @src());
+    defer zone.Deinit();
     self.mVTable.Bind(self.mPtr);
 }
 pub fn Unbind(self: FrameBuffer) void {
+    const zone = Tracy.ZoneInit("FrameBuffer UnBind", @src());
+    defer zone.Deinit();
     self.mVTable.Unbind(self.mPtr);
 }
 pub fn Resize(self: FrameBuffer, width: usize, height: usize) void {

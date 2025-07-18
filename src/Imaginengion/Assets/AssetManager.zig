@@ -34,7 +34,9 @@ mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
 mPathToIDPrj: std.AutoHashMap(u64, AssetType) = undefined,
 mPathToIDAbs: std.AutoHashMap(u64, AssetType) = undefined,
 mCWD: std.fs.Dir = undefined,
-mProjectDirectory: std.fs.Dir = undefined,
+mCWDPath: std.ArrayList(u8) = undefined,
+mProjectDirectory: ?std.fs.Dir = undefined,
+mProjectPath: std.ArrayList(u8) = undefined,
 
 pub fn Init() !void {
     AssetM = AssetManager{
@@ -43,7 +45,16 @@ pub fn Init() !void {
         .mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
         .mPathToIDAbs = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
         .mCWD = std.fs.cwd(),
+        .mCWDPath = std.ArrayList(u8).init(AssetGPA.allocator()),
+        .mProjectPath = std.ArrayList(u8).init(AssetGPA.allocator()),
     };
+
+    var buffer: [260]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+
+    const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
+    _ = try AssetM.mCWDPath.writer().write(cwd_path);
 }
 
 pub fn Deinit() !void {
@@ -52,7 +63,9 @@ pub fn Deinit() !void {
     AssetM.mPathToIDPrj.deinit();
     AssetM.mPathToIDAbs.deinit();
     AssetM.mCWD.close();
-    AssetM.mProjectDirectory.close();
+    if (AssetM.mProjectDirectory) |*dir| {
+        dir.close();
+    }
 }
 
 pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle {
@@ -90,6 +103,8 @@ pub fn ReleaseAssetHandleRef(asset_handle: *AssetHandle) void {
 }
 
 pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
+    const zone = Tracy.ZoneInit("AssetManager GetAsset", @src());
+    defer zone.Deinit();
     //checking the asset type will be evaluated at comptime which will determine which branch
     //the function body will contain so it doesnt get processed in runtime
     //and it is needed because the "meta" asset types dont have an Init(because they are not being)
@@ -111,12 +126,15 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
                 var fba = std.heap.FixedBufferAllocator.init(&buffer);
                 const allocator = fba.allocator();
 
-                const abs_path = GetAbsPath(file_data.mRelPath, file_data.mPathType, allocator);
+                const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, allocator);
+
+                const new_asset = try ScriptAsset.Init(AssetGPA.allocator(), abs_path);
+                return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
             } else {
-                const asset_file = try OpenFile(file_data.mRelPath, file_data.mPathType);
+                const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
                 defer asset_file.close();
 
-                const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), asset_file, file_data.mRelPath);
+                const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), asset_file, file_data.mRelPath.items);
                 return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
             }
         }
@@ -142,8 +160,6 @@ pub fn OnUpdate(frame_allocator: std.mem.Allocator) !void {
             try CheckLastModified(file, file_data.mLastModified, entity_id);
         }
     }
-
-    try AssetM.mAssetECS.ProcessDestroyedEntities();
 }
 
 pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(AssetType) {
@@ -151,11 +167,29 @@ pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.A
 }
 
 pub fn OnNewProjectEvent(abs_path: []const u8) !void {
-    AssetM.mProjectDirectory = std.fs.openDirAbsolute(abs_path, .{});
+    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+
+    AssetM.mProjectPath.clearAndFree();
+
+    var buffer: [260]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+
+    const project_path = try AssetM.mProjectDirectory.?.realpathAlloc(allocator, ".");
+    _ = try AssetM.mProjectPath.writer().write(project_path);
 }
 
 pub fn OnOpenProjectEvent(abs_path: []const u8) !void {
-    AssetM.mProjectDirectory = std.fs.openDirAbsolute(abs_path, .{});
+    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+
+    AssetM.mProjectPath.clearAndFree();
+
+    var buffer: [260]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+
+    const project_path = try AssetM.mProjectDirectory.?.realpathAlloc(allocator, ".");
+    _ = try AssetM.mProjectPath.writer().write(project_path);
 }
 
 pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
@@ -163,7 +197,7 @@ pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
     defer zone.Deinit();
     switch (path_type) {
         .Eng => return try AssetM.mCWD.openFile(rel_path, .{}),
-        .Prj => return try AssetM.mProjectDirectory.openFile(rel_path, .{}),
+        .Prj => return try AssetM.mProjectDirectory.?.openFile(rel_path, .{}),
         .Abs => return try std.fs.openFileAbsolute(rel_path, .{}),
     }
 }
@@ -171,20 +205,24 @@ pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
 pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.Allocator) ![]const u8 {
     const zone = Tracy.ZoneInit("AssetManager GetAbsPath", @src());
     defer zone.Deinit();
-    //TODO: fix this so it uses the new system of AssetM containing Dir's instead of paths to dirs
-    if (path_type == .Eng) {
-        return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mCWD.items, rel_path });
-    } else if (path_type == .Prj) {
-        return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectDirectory.items, rel_path });
-    } else { //path is abs
-        return rel_path;
+
+    switch (path_type) {
+        .Eng => {
+            return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mCWDPath.items, rel_path });
+        },
+        .Prj => {
+            return try std.fs.path.join(allocator, &[_][]const u8{ AssetM.mProjectPath.items, rel_path });
+        },
+        .Abs => {
+            return rel_path;
+        },
     }
 }
 
 pub fn GetRelPath(abs_path: []const u8) []const u8 {
-    const zone = Tracy.ZoneInit("AssetManager CheckLast", @src());
+    const zone = Tracy.ZoneInit("AssetManager GetRelPath", @src());
     defer zone.Deinit();
-    return abs_path[AssetM.mProjectDirectory.items.len..];
+    return abs_path[AssetM.mProjectPath.items.len..];
 }
 
 pub fn ProcessDestroyedAssets() !void {
@@ -206,7 +244,7 @@ fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetTy
 }
 
 fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: AssetType) !void {
-    const zone = Tracy.ZoneInit("AssetManager CheckLast", @src());
+    const zone = Tracy.ZoneInit("AssetManager CheckLastModified", @src());
     defer zone.Deinit();
     const fstats = try file.stat();
     if (last_modified != fstats.mtime) {

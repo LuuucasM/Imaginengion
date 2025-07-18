@@ -1,4 +1,5 @@
 const builtin = @import("builtin");
+const Tracy = @import("../Core/Tracy.zig");
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("OpenGLUniformBuffer.zig"),
@@ -16,6 +17,8 @@ pub fn Init(size: u32) UniformBuffer {
 }
 
 pub fn Bind(self: *UniformBuffer, binding: usize) void {
+    const zone = Tracy.ZoneInit("UniformBuffer Bind", @src());
+    defer zone.Deinit();
     self.mImpl.Bind(binding);
 }
 
