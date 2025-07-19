@@ -9,10 +9,12 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const enable_prof = b.option(bool, "enable_profiler", "Enable the profiler");
+
     const script_abs_path = b.option([]const u8, "script_abs_path", "Abs path to script file") orelse @panic("need to pass the abs path for the script!\n");
     const name = std.fs.path.basename(script_abs_path);
 
-    const engine_lib = MakeEngineLib(b, target, optimize);
+    const engine_lib = MakeEngineLib(b, target, optimize, enable_prof);
 
     const script_dll = b.addLibrary(.{
         .linkage = .dynamic,

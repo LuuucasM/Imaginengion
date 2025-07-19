@@ -1,7 +1,9 @@
 const std = @import("std");
-const tracy = @import("CImports.zig").tracy;
+const build_options = @import("build_options");
 
-pub const Zone = struct {
+const tracy = if (build_options.enable_profiler) @import("CImports.zig").tracy else void;
+
+pub const Zone = if (build_options.enable_profiler) struct {
     mContext: tracy.TracyCZoneCtx,
 
     pub fn begin(
@@ -28,21 +30,36 @@ pub const Zone = struct {
     pub fn Deinit(self: Zone) void {
         tracy.___tracy_emit_zone_end(self.mContext);
     }
+} else struct {
+    pub fn begin(
+        comptime _: [*:0]const u8,
+        comptime _: ?[*:0]const u8,
+        comptime _: [*:0]const u8,
+        comptime _: u32,
+        comptime _: u32,
+    ) Zone {
+        return Zone{};
+    }
+
+    pub fn Deinit(_: Zone) void {}
 };
 
-/// Macro-like helper for easy zone usage. Example:
-///   const zone = Tracy.zoneScoped("Main Loop");
-///   defer zone.end();
-pub inline fn ZoneInit(comptime name: [*:0]const u8, comptime src: std.builtin.SourceLocation) Zone {
-    return Zone.begin(
-        name,
-        src.fn_name, // Optionally use @src().fn_name if available
-        src.file.ptr,
-        src.line,
-        0,
-    );
+pub fn ZoneInit(comptime name: [*:0]const u8, comptime src: std.builtin.SourceLocation) Zone {
+    if (build_options.enable_profiler) {
+        return Zone.begin(
+            name,
+            src.fn_name, // Optionally use @src().fn_name if available
+            src.file.ptr,
+            src.line,
+            0,
+        );
+    } else {
+        return Zone{};
+    }
 }
 
 pub fn FrameMark() void {
-    tracy.___tracy_emit_frame_mark(null);
+    if (build_options.enable_profiler) {
+        tracy.___tracy_emit_frame_mark(null);
+    }
 }

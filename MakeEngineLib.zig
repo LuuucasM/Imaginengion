@@ -1,7 +1,21 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+const RendererBackend = enum {
+    OpenGL,
+    Vulkan,
+};
+
+pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, enable_prof: ?bool) *std.Build.Step.Compile {
+    //---------------------------BUILD OPTIONS--------------------------
+    var build_options = b.addOptions();
+    if (enable_prof != null and enable_prof.? == true) {
+        build_options.addOption(bool, "enable_profiler", true);
+    } else {
+        build_options.addOption(bool, "enable_profiler", false);
+    }
+    //--------------------------END BUILD OPTIONS------------------------
+
     //--------------------------------------------------GLFW---------------------------------------------------------------------------
     //make library
     const glfw_lib = b.addLibrary(.{
@@ -250,6 +264,8 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             },
             .flags = &[_][]const u8{
                 "-DTRACY_ENABLE",
+                "-DTRACY_ENABLE_GPU",
+                "-DTRACY_ENABLE_OPENGL",
                 "-fno-sanitize=all",
             },
         };
@@ -300,6 +316,8 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             },
         ),
     });
+
+    engine_lib.root_module.addOptions("build_options", build_options);
 
     //add include paths
     engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });

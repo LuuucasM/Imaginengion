@@ -22,8 +22,10 @@ mPngTextureHandle: AssetHandle,
 mBackArrowTextureHandle: AssetHandle,
 mSceneTextureHandle: AssetHandle,
 mScriptTextureHandle: AssetHandle,
-mProjectDirectory: std.ArrayList(u8),
-mCurrentDirectory: std.ArrayList(u8),
+mProjectDirectory: ?std.fs.Dir,
+mProjectPath: std.ArrayList(u8),
+mCurrentDirectory: ?std.fs.Dir,
+mCurrentPath: std.ArrayList(u8),
 mProjectFile: ?std.fs.File = null,
 
 pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
@@ -34,8 +36,10 @@ pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
         .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Eng),
         .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng),
         .mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng),
-        .mProjectDirectory = std.ArrayList(u8).init(engine_allocator),
-        .mCurrentDirectory = std.ArrayList(u8).init(engine_allocator),
+        .mProjectDirectory = null,
+        .mProjectPath = std.ArrayList(u8).init(engine_allocator),
+        .mCurrentDirectory = null,
+        .mCurrentPath = std.ArrayList(u8).init(engine_allocator),
         .mProjectFile = null,
     };
 }
@@ -46,10 +50,19 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
     AssetManager.ReleaseAssetHandleRef(&self.mBackArrowTextureHandle);
     AssetManager.ReleaseAssetHandleRef(&self.mSceneTextureHandle);
     AssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
-    self.mProjectDirectory.deinit();
-    self.mCurrentDirectory.deinit();
-    if (self.mProjectFile != null) {
-        self.mProjectFile.?.close();
+    if (self.mProjectDirectory) |*dir| {
+        dir.close();
+        self.mProjectDirectory = null;
+    }
+    self.mProjectPath.deinit();
+    if (self.mCurrentDirectory) |*dir| {
+        dir.close();
+        self.mProjectDirectory = null;
+    }
+    self.mCurrentPath.deinit();
+    if (self.mProjectFile) |*file| {
+        file.close();
+        self.mProjectDirectory = null;
     }
 }
 
@@ -71,7 +84,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     }
 
     //if we dont have a project directory yet dont try to print stuff
-    if (self.mCurrentDirectory.items.len == 0) return;
+    if (self.mProjectDirectory == null) return;
 
     //calculate column stuff
     const padding: f32 = 8.0;
@@ -103,7 +116,9 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
 }
 
 fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
-    if (std.mem.eql(u8, self.mCurrentDirectory.items, self.mProjectDirectory.items) == true) return;
+    const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
+    defer zone.Deinit();
+    if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
     const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
@@ -112,8 +127,11 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     imgui.igPopStyleColor(1);
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-        const last_slash = std.mem.lastIndexOf(u8, self.mCurrentDirectory.items, "/").?;
-        self.mCurrentDirectory.shrinkAndFree(last_slash);
+        const last_slash = std.mem.lastIndexOf(u8, self.mCurrentPath.items, "/").?;
+        self.mCurrentPath.shrinkAndFree(last_slash);
+
+        self.mCurrentDirectory.?.close();
+        self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
     }
 
     imgui.igTextWrapped("Back");
@@ -121,11 +139,14 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
 }
 
 fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
-    const dir = try std.fs.openDirAbsolute(self.mCurrentDirectory.items, .{ .iterate = true });
+    const zone = Tracy.ZoneInit("ContentBrowser Render Dir Contents", @src());
+    defer zone.Deinit();
 
     var name_buf: [260]u8 = undefined;
 
-    var iter = dir.iterate();
+    var new_curr_dir: bool = false;
+
+    var iter = self.mCurrentDirectory.?.iterate();
     while (try iter.next()) |entry| {
         if (entry.kind == .directory) {
             const texture_asset = try self.mDirTextureHandle.GetAsset(Texture2D);
@@ -135,8 +156,10 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
             if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-                _ = try self.mCurrentDirectory.writer().write("/");
-                _ = try self.mCurrentDirectory.writer().write(entry.name);
+                _ = try self.mCurrentPath.writer().write("/");
+                _ = try self.mCurrentPath.writer().write(entry.name);
+
+                new_curr_dir = true;
             }
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
@@ -146,7 +169,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
-            try self.DragDropPayloadBase(entry_name, "PNGLoad\x00");
+            try self.DragDropSourceBase(entry_name, "PNGLoad\x00");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
@@ -155,7 +178,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
-            try self.DragDropPayloadBase(entry_name, "IMSCLoad\x00");
+            try self.DragDropSourceBase(entry_name, "IMSCLoad\x00");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
             const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
@@ -164,9 +187,13 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
-            try self.DragDropPayloadScript(entry_name);
+            try self.DragDropSourceScript(entry_name);
             NextColumn(entry_name);
         }
+    }
+    if (new_curr_dir) {
+        self.mCurrentDirectory.?.close();
+        self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
     }
 }
 
@@ -174,31 +201,52 @@ pub fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
     self.mIsVisible = !self.mIsVisible;
 }
 
-pub fn OnNewProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
-    if (self.mProjectDirectory.items.len != 0) {
-        self.mProjectDirectory.clearAndFree();
-        self.mCurrentDirectory.clearAndFree();
+pub fn OnNewProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !void {
+    if (self.mProjectDirectory) |*dir| {
+        dir.close();
+        self.mProjectDirectory = null;
     }
-    _ = try self.mProjectDirectory.writer().write(path);
-    _ = try self.mCurrentDirectory.writer().write(path);
 
-    var buffer: [MAX_PATH_LEN]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const file_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mProjectDirectory.items, "NewGame.imprj" });
-    self.mProjectFile = try std.fs.createFileAbsolute(file_path, .{});
+    if (self.mCurrentDirectory) |*dir| {
+        dir.close();
+        self.mCurrentDirectory = null;
+    }
+
+    self.mProjectPath.clearAndFree();
+    self.mCurrentPath.clearAndFree();
+
+    self.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+    self.mCurrentDirectory = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
+
+    _ = try self.mProjectPath.writer().write(abs_path);
+    _ = try self.mCurrentPath.writer().write(abs_path);
+
+    self.mProjectFile = try self.mProjectDirectory.?.createFile("NewGame.imprj", .{});
 }
 
-pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, path: []const u8) !void {
-    if (self.mProjectDirectory.items.len != 0) {
-        self.mProjectDirectory.clearAndFree();
-        self.mCurrentDirectory.clearAndFree();
+pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !void {
+    const dir_name = std.fs.path.dirname(abs_path).?;
+
+    if (self.mProjectDirectory) |*dir| {
+        dir.close();
+        self.mProjectDirectory = null;
     }
 
-    const dir = std.fs.path.dirname(path).?;
-    _ = try self.mProjectDirectory.writer().write(dir);
-    _ = try self.mCurrentDirectory.writer().write(dir);
+    if (self.mCurrentDirectory) |*dir| {
+        dir.close();
+        self.mCurrentDirectory = null;
+    }
 
-    self.mProjectFile = try std.fs.openFileAbsolute(path, .{});
+    self.mProjectPath.clearAndFree();
+    self.mCurrentPath.clearAndFree();
+
+    self.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
+    self.mCurrentDirectory = try std.fs.openDirAbsolute(dir_name, .{ .iterate = true });
+
+    _ = try self.mProjectPath.writer().write(dir_name);
+    _ = try self.mCurrentPath.writer().write(dir_name);
+
+    self.mProjectFile = try self.mProjectDirectory.?.openFile("NewGame.imprj", .{});
 }
 
 pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptEvent) !void {
@@ -208,23 +256,25 @@ pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptE
     switch (new_script_event.mScriptType) {
         .OnInputPressed => {
             const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnInputPressedTemplate.zig" });
-            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnInputPressedScript.zig" });
+            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentPath.items, "NewOnInputPressedScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
         .OnUpdateInput => {
             const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
-            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnUpdateInputScript.zig" });
+            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentPath.items, "NewOnUpdateInputScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
         .OnSceneStart => {
             const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
-            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentDirectory.items, "NewOnSceneStartScript.zig" });
+            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentPath.items, "NewOnSceneStartScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
     }
 }
 
 fn RenderImageButton(entry_name: []const u8, id: c_uint, thumbnail_size: f32) !void {
+    const zone = Tracy.ZoneInit("ContentBrowser Render Image Button", @src());
+    defer zone.Deinit();
     _ = imgui.igPushID_Str(entry_name.ptr);
     defer imgui.igPopID();
 
@@ -241,27 +291,31 @@ fn RenderImageButton(entry_name: []const u8, id: c_uint, thumbnail_size: f32) !v
     );
 }
 
-fn DragDropPayloadBase(self: ContentBrowserPanel, entry_name: []const u8, payload_type: []const u8) !void {
+fn DragDropSourceBase(self: ContentBrowserPanel, entry_name: []const u8, payload_type: []const u8) !void {
+    const zone = Tracy.ZoneInit("ContentBrowser DragDrop Base", @src());
+    defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
         defer imgui.igEndDragDropSource();
         var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
-        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
-        const rel_path = full_path[self.mProjectDirectory.items.len..];
+        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
+        const rel_path = full_path[self.mProjectPath.items.len..];
 
         _ = imgui.igSetDragDropPayload(payload_type.ptr, rel_path.ptr, rel_path.len, 0);
     }
 }
 
-fn DragDropPayloadScript(self: ContentBrowserPanel, entry_name: []const u8) !void {
+fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void {
+    const zone = Tracy.ZoneInit("ContentBrowser DragDrop Script", @src());
+    defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
         defer imgui.igEndDragDropSource();
         var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
-        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentDirectory.items, entry_name });
-        const rel_path = full_path[self.mProjectDirectory.items.len..];
+        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
+        const rel_path = full_path[self.mProjectPath.items.len..];
 
         var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
         defer AssetManager.ReleaseAssetHandleRef(&script_handle);

@@ -132,7 +132,7 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
                 return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
             } else {
                 const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
-                defer asset_file.close();
+                defer CloseFile(asset_file);
 
                 const new_asset: asset_type = try asset_type.Init(AssetGPA.allocator(), asset_file, file_data.mRelPath.items);
                 return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
@@ -154,7 +154,7 @@ pub fn OnUpdate(frame_allocator: std.mem.Allocator) !void {
         }
         //then check if the asset path is still valid
         if (try GetFileIfExists(file_data.mRelPath.items, file_data.mPathType, entity_id)) |file| {
-            defer file.close();
+            defer CloseFile(file);
 
             //check to see if the file needs to be updated
             try CheckLastModified(file, file_data.mLastModified, entity_id);
@@ -170,26 +170,15 @@ pub fn OnNewProjectEvent(abs_path: []const u8) !void {
     AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
 
     AssetM.mProjectPath.clearAndFree();
-
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
-
-    const project_path = try AssetM.mProjectDirectory.?.realpathAlloc(allocator, ".");
-    _ = try AssetM.mProjectPath.writer().write(project_path);
+    _ = try AssetM.mProjectPath.writer().write(abs_path);
 }
 
 pub fn OnOpenProjectEvent(abs_path: []const u8) !void {
-    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+    const dir_name = std.fs.path.dirname(abs_path);
+    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(dir_name.?, .{});
 
     AssetM.mProjectPath.clearAndFree();
-
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const allocator = fba.allocator();
-
-    const project_path = try AssetM.mProjectDirectory.?.realpathAlloc(allocator, ".");
-    _ = try AssetM.mProjectPath.writer().write(project_path);
+    _ = try AssetM.mProjectPath.writer().write(dir_name.?);
 }
 
 pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
@@ -200,6 +189,18 @@ pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
         .Prj => return try AssetM.mProjectDirectory.?.openFile(rel_path, .{}),
         .Abs => return try std.fs.openFileAbsolute(rel_path, .{}),
     }
+}
+
+pub fn CloseFile(file: std.fs.File) void {
+    const zone = Tracy.ZoneInit("AssetManager CloseFile", @src());
+    defer zone.Deinit();
+    file.close();
+}
+
+pub fn GetFileStats(file: std.fs.File) !std.fs.File.Stat {
+    const zone = Tracy.ZoneInit("AssetManager GetFileStats", @src());
+    defer zone.Deinit();
+    return file.stat();
 }
 
 pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.Allocator) ![]const u8 {
@@ -246,7 +247,9 @@ fn GetFileIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetTy
 fn CheckLastModified(file: std.fs.File, last_modified: i128, entity_id: AssetType) !void {
     const zone = Tracy.ZoneInit("AssetManager CheckLastModified", @src());
     defer zone.Deinit();
-    const fstats = try file.stat();
+
+    const fstats = try GetFileStats(file);
+
     if (last_modified != fstats.mtime) {
         try UpdateAsset(entity_id, file, fstats);
     }
@@ -285,7 +288,7 @@ fn CreateAsset(rel_path: []const u8, path_type: PathType) !AssetHandle {
     });
 
     const file = try OpenFile(rel_path, path_type);
-    defer file.close();
+    defer CloseFile(file);
     const fstats = try file.stat();
 
     try UpdateAsset(new_handle.mID, file, fstats);
@@ -371,7 +374,7 @@ fn RetryAssetExists(asset_id: AssetType) !bool {
             return err;
         }
     };
-    defer file.close();
+    defer CloseFile(file);
 
     const fstats = try file.stat();
 

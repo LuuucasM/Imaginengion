@@ -9,8 +9,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const enable_prof = b.option(bool, "enable_profiler", "Enable the profiler");
     //function builds the entire engine lib including the dependencies and all
-    const engine_lib = MakeEngineLib(b, target, optimize);
+    const engine_lib = MakeEngineLib(b, target, optimize, enable_prof);
 
     //make exe
     const editor_exe = b.addExecutable(.{
@@ -28,6 +29,10 @@ pub fn build(b: *std.Build) void {
             },
         }),
     });
+
+    //var options = b.addOptions();
+    //options.addOption(bool, "enable_profiler", false);
+    //editor_exe.root_module.addOptions("build_options", options);
 
     b.installArtifact(editor_exe);
     const run_cmd = b.addRunArtifact(editor_exe);
