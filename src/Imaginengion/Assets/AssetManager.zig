@@ -22,7 +22,7 @@ const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
 var AssetM: AssetManager = AssetManager{};
-var AssetGPA = std.heap.DebugAllocator(.{}).init;
+var AssetGPA = if (Tracy.enable_profiler) Tracy.TracyAllocator{} else std.heap.DebugAllocator(.{}).init;
 var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 pub const AssetType = u32;

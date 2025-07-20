@@ -20,6 +20,8 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) !ScriptAsset {
 
     //spawn a child to handle compiling the zig file into a dll
     const file_arg = try std.fmt.allocPrint(allocator, "-Dscript_abs_path={s}", .{abs_path});
+    //defer allocator.free(file_arg);
+
     var child = std.process.Child.init(
         &[_][]const u8{
             "zig",
