@@ -60,14 +60,6 @@ pub fn ZoneInit(comptime name: [*:0]const u8, comptime src: std.builtin.SourceLo
     }
 }
 
-pub fn TracyAlloc(ptr: *anyopaque, size: usize) void {
-    tracy.TracyCAlloc(ptr, size);
-}
-
-pub fn TracyFree(ptr: *anyopaque) void {
-    tracy.TracyCFree(ptr);
-}
-
 pub fn FrameMark() void {
     if (enable_profiler) {
         tracy.___tracy_emit_frame_mark(null);

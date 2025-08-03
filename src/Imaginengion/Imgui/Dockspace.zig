@@ -83,10 +83,10 @@ pub fn OnImguiRender() !void {
                 try ImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
-                const path = try PlatformUtils.SaveFile(ImguiEventManager.EventAllocator(), ".imsc");
+                const abs_path = try PlatformUtils.SaveFile(ImguiEventManager.EventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
                     .ET_SaveSceneAsEvent = .{
-                        .Path = path,
+                        .AbsPath = abs_path,
                     },
                 };
                 try ImguiEventManager.Insert(new_event);

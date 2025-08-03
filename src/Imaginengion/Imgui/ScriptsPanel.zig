@@ -67,9 +67,9 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
         defer imgui.igEndDragDropTarget();
         if (imgui.igAcceptDragDropPayload("GameObjectScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            const rel_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                try GameObjectUtils.AddScriptToEntity(entity, path, .Prj);
+                try GameObjectUtils.AddScriptToEntity(entity, rel_path, .Prj);
             }
         }
     }

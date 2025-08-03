@@ -22,7 +22,7 @@ const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
 var AssetM: AssetManager = AssetManager{};
-var AssetGPA = if (Tracy.enable_profiler) Tracy.TracyAllocator{} else std.heap.DebugAllocator(.{}).init;
+var AssetGPA = std.heap.DebugAllocator(.{}).init;
 var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 pub const AssetType = u32;
@@ -167,23 +167,37 @@ pub fn GetGroup(comptime query: GroupQuery, allocator: std.mem.Allocator) !std.A
 }
 
 pub fn OnNewProjectEvent(abs_path: []const u8) !void {
-    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+    if (AssetM.mProjectDirectory) |*dir| {
+        dir.close();
+        AssetM.mProjectDirectory = null;
+    }
 
     AssetM.mProjectPath.clearAndFree();
+
+    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+
     _ = try AssetM.mProjectPath.writer().write(abs_path);
 }
 
 pub fn OnOpenProjectEvent(abs_path: []const u8) !void {
-    const dir_name = std.fs.path.dirname(abs_path);
-    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(dir_name.?, .{});
+    if (AssetM.mProjectDirectory) |*dir| {
+        dir.close();
+        AssetM.mProjectDirectory = null;
+    }
 
     AssetM.mProjectPath.clearAndFree();
-    _ = try AssetM.mProjectPath.writer().write(dir_name.?);
+
+    const dir_name = std.fs.path.dirname(abs_path).?;
+
+    AssetM.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
+
+    _ = try AssetM.mProjectPath.writer().write(dir_name);
 }
 
 pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
     const zone = Tracy.ZoneInit("AssetManager OpenFile", @src());
     defer zone.Deinit();
+
     switch (path_type) {
         .Eng => return try AssetM.mCWD.openFile(rel_path, .{}),
         .Prj => return try AssetM.mProjectDirectory.?.openFile(rel_path, .{}),
@@ -223,7 +237,7 @@ pub fn GetAbsPath(rel_path: []const u8, path_type: PathType, allocator: std.mem.
 pub fn GetRelPath(abs_path: []const u8) []const u8 {
     const zone = Tracy.ZoneInit("AssetManager GetRelPath", @src());
     defer zone.Deinit();
-    return abs_path[AssetM.mProjectPath.items.len..];
+    return abs_path[AssetM.mProjectPath.items.len + 1 ..];
 }
 
 pub fn ProcessDestroyedAssets() !void {

@@ -169,7 +169,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
-            try self.DragDropSourceBase(entry_name, "PNGLoad\x00");
+            try self.DragDropSourceBase(entry_name, "PNGLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
@@ -178,7 +178,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
-            try self.DragDropSourceBase(entry_name, "IMSCLoad\x00");
+            try self.DragDropSourceBase(entry_name, "IMSCLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
             const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
@@ -299,8 +299,8 @@ fn DragDropSourceBase(self: ContentBrowserPanel, entry_name: []const u8, payload
         var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
-        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
-        const rel_path = full_path[self.mProjectPath.items.len..];
+
+        const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
         _ = imgui.igSetDragDropPayload(payload_type.ptr, rel_path.ptr, rel_path.len, 0);
     }
@@ -314,17 +314,17 @@ fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void
         var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
-        const full_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
-        const rel_path = full_path[self.mProjectPath.items.len..];
+
+        const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
         var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
         defer AssetManager.ReleaseAssetHandleRef(&script_handle);
 
         const script_asset = try script_handle.GetAsset(ScriptAsset);
         if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
-            _ = imgui.igSetDragDropPayload("GameObjectScriptLoad\x00", rel_path.ptr, rel_path.len, 0);
+            _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
         } else if (script_asset.mScriptType == .OnSceneStart) {
-            _ = imgui.igSetDragDropPayload("SceneScriptLoad\x00", rel_path.ptr, rel_path.len, 0);
+            _ = imgui.igSetDragDropPayload("SceneScriptLoad", rel_path.ptr, rel_path.len, 0);
         }
     }
 }

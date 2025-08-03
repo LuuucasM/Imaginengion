@@ -11,7 +11,7 @@ var EventManager: Self = .{};
 mPreRenderEventPool: std.ArrayList(GameEvent) = undefined,
 mProgram: *Program = undefined,
 
-var EventGPA = if (Tracy.enable_profiler) Tracy.TracyAllocator{} else std.heap.DebugAllocator(.{}).init;
+var EventGPA = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(program: *Program) !void {
     EventManager.mPreRenderEventPool = std.ArrayList(GameEvent).init(EventGPA.allocator());

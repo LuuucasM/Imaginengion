@@ -410,12 +410,12 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_SaveSceneAsEvent => |e| {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                if (e.Path.len > 0) {
+                if (e.AbsPath.len > 0) {
                     const scene_component = scene_layer.GetComponent(SceneComponent);
-                    const rel_path = AssetManager.GetRelPath(e.Path);
-                    _ = try std.fs.createFileAbsolute(e.Path, .{});
+                    const rel_path = AssetManager.GetRelPath(e.AbsPath);
+                    _ = try std.fs.createFileAbsolute(e.AbsPath, .{});
                     scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.Path, self.mFrameAllocator);
+                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.AbsPath, self.mFrameAllocator);
                 }
             }
         },

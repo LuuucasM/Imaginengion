@@ -64,7 +64,7 @@ pub const NewSceneEvent = struct {
 pub const SaveSceneEvent = struct {};
 
 pub const SaveSceneAsEvent = struct {
-    Path: []const u8,
+    AbsPath: []const u8,
 };
 
 pub const OpenSceneEvent = struct {

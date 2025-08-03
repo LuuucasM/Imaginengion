@@ -35,7 +35,7 @@ pub fn ProcessEvents() !void {
                 EventGPA.allocator().free(e.Path);
             },
             .ET_SaveSceneAsEvent => |e| {
-                EventGPA.allocator().free(e.Path);
+                EventGPA.allocator().free(e.AbsPath);
             },
             .ET_NewProjectEvent => |e| {
                 EventGPA.allocator().free(e.Path);
