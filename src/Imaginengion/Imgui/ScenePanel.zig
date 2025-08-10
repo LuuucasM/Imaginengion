@@ -128,7 +128,7 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
     }
 
     //if this scene is double clicked open up its scene specs window
-    if (imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
+    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
         try ImguiEventManager.Insert(ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer } });
     }
 

@@ -122,9 +122,17 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
 
     const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
-    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
-    _ = imgui.igImageButton("back", texture_id, .{ .x = thumbnail_size, .y = thumbnail_size }, .{ .x = 0, .y = 0 }, .{ .x = 1, .y = 1 }, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .{ .x = 1, .y = 1, .z = 1, .w = 1 });
-    imgui.igPopStyleColor(1);
+    //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
+    _ = imgui.igImageButton(
+        "back",
+        texture_id,
+        .{ .x = thumbnail_size, .y = thumbnail_size },
+        .{ .x = 0, .y = 0 },
+        .{ .x = 1, .y = 1 },
+        .{ .x = 0, .y = 0, .z = 0, .w = 0 },
+        .{ .x = 1, .y = 1, .z = 1, .w = 1 },
+    );
+    //imgui.igPopStyleColor(1);
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
         const last_slash = std.mem.lastIndexOf(u8, self.mCurrentPath.items, "/").?;
@@ -300,7 +308,9 @@ fn DragDropSourceBase(self: ContentBrowserPanel, entry_name: []const u8, payload
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
 
-        const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
+        const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
+
+        const rel_path = AssetManager.GetRelPath(abs_path);
 
         _ = imgui.igSetDragDropPayload(payload_type.ptr, rel_path.ptr, rel_path.len, 0);
     }

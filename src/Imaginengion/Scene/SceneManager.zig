@@ -196,11 +196,9 @@ pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) 
     for (all_scenes.items) |scene_id| {
         const scene = self.GetSceneLayer(scene_id);
         const scene_component = scene.GetComponent(SceneComponent);
-        if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-            const scene_asset = try scene_component.mSceneAssetHandle.GetAsset(SceneAsset);
+        const scene_asset = try scene_component.mSceneAssetHandle.GetAsset(SceneAsset);
 
-            try SceneSerializer.DeSerializeSceneText(scene, scene_asset, frame_allocator, self.mEngineAllocator);
-        }
+        try SceneSerializer.DeSerializeSceneText(scene, scene_asset, frame_allocator, self.mEngineAllocator);
     }
 }
 pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {

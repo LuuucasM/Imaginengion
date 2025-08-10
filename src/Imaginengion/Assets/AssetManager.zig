@@ -300,7 +300,6 @@ fn CreateAsset(rel_path: []const u8, path_type: PathType) !AssetHandle {
     _ = try AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
         .ID = try GenUUID(),
     });
-
     const file = try OpenFile(rel_path, path_type);
     defer CloseFile(file);
     const fstats = try file.stat();

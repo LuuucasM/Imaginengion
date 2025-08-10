@@ -6,8 +6,7 @@ pub fn EntityManager(entity_t: type) type {
     return struct {
         const Self = @This();
 
-        var NextID: entity_t = 0;
-
+        _NextID: entity_t = 0,
         _IDsInUse: ArraySet(entity_t),
         _IDsRemoved: std.ArrayList(entity_t),
         mIDsToRemove: std.ArrayList(entity_t),
@@ -30,6 +29,7 @@ pub fn EntityManager(entity_t: type) type {
             self._IDsInUse.clearAndFree();
             self._IDsRemoved.clearAndFree();
             self.mIDsToRemove.clearAndFree();
+            self._NextID = 0;
         }
 
         pub fn CreateEntity(self: *Self) !entity_t {
@@ -38,14 +38,18 @@ pub fn EntityManager(entity_t: type) type {
                 _ = try self._IDsInUse.add(new_id);
                 return new_id;
             } else {
-                const new_id = NextID;
-                NextID += 1;
+                const new_id = self._NextID;
+
+                std.debug.assert(!self._IDsInUse.contains(new_id));
+
+                self._NextID += 1;
                 _ = try self._IDsInUse.add(new_id);
                 return new_id;
             }
         }
 
         pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
+            std.debug.assert(self._IDsInUse.contains(entityID));
             _ = self._IDsInUse.remove(entityID);
             try self._IDsRemoved.append(entityID);
         }

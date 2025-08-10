@@ -53,8 +53,8 @@ pub fn EditorRender(self: *QuadComponent) !void {
     imgui.igImage(
         texture_id,
         .{ .x = 50.0, .y = 50.0 },
-        .{ .x = 0.0, .y = 0.0 },
-        .{ .x = 1.0, .y = 1.0 },
+        .{ .x = 0.0, .y = 1.0 },
+        .{ .x = 1.0, .y = 0.0 },
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
     );

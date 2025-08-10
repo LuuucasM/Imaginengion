@@ -90,8 +90,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = self.mStartEntity },
             });
             self.mState = .Play;
-        }
-        if (self.mState == .Play) {
+        } else if (self.mState == .Play) {
             try ImguiEventManager.Insert(ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = self.mStartEntity },
             });
@@ -131,7 +130,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
                     var name_buf: [128]u8 = undefined;
                     const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{parent_entity.GetName()});
                     if (imgui.igSelectable_Bool(name_cstr, self.mStartEntity.mEntityID == entity.mEntityID, 0, .{ .x = 0, .y = 0 })) {
-                        self.mStartEntity = entity;
+                        self.mStartEntity = parent_entity;
                     }
                 }
             }

@@ -499,6 +499,13 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
         _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{});
     } else { //stop
         try self.mGameSceneManager.ReloadAllScenes(self.mFrameAllocator);
+
+        self._ScenePanel.OnSelectEntityEvent(null);
+        self._ComponentsPanel.OnSelectEntityEvent(null);
+        self._ScriptsPanel.OnSelectEntityEvent(null);
+        self._ViewportPanel.OnSelectEntityEvent(null);
+
+        self._ToolbarPanel.mStartEntity.mEntityID = Entity.NullEntity;
     }
 }
 

@@ -76,6 +76,10 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
             return entity_set;
         }
         pub fn clearAndFree(self: *Self) void {
+            var i: usize = 0;
+            while (i < self.mComponents.dense_count) : (i += 1) {
+                try self.mComponents.values[i].Deinit();
+            }
             self.mComponents.clear();
         }
     };

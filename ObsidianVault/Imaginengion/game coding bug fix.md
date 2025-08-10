@@ -1,0 +1,3 @@
+- in the play panel for when ur hitting play on the in game nothing actually appears in the panel
+- for the editor option "use play panel" have a check mark (or no check mark) appear next to the option so you know whether you are using it or not
+- 

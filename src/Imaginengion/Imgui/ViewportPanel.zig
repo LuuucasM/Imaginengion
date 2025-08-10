@@ -61,21 +61,6 @@ pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*Ent
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
 
-    //drag drop target for scenes
-    if (imgui.igBeginDragDropTarget() == true) {
-        defer imgui.igEndDragDropTarget();
-        if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-            const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            const new_event = ImguiEvent{
-                .ET_OpenSceneEvent = .{
-                    .Path = try ImguiEventManager.EventAllocator().dupe(u8, path),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-    }
-
     try self.ImguiRender(camera_components);
 
     //TODO: entity picking for selected entity
@@ -118,32 +103,38 @@ fn ImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCam
     //get if the window is focused or not
     self.mIsFocused = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
-    //render framebuffer
-    const draw_list = imgui.igGetWindowDrawList();
-
-    var viewport_pos: imgui.ImVec2 = std.mem.zeroes(imgui.ImVec2);
-    imgui.igGetCursorScreenPos(&viewport_pos);
-
     for (camera_components.items, 0..) |camera_component, i| {
         _ = i;
         const rect = camera_component.mAreaRect;
         const fb = camera_component.mViewportFrameBuffer;
         const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, fb.GetColorAttachmentID(0))));
 
-        const x = viewport_pos.x + rect[0] * viewport_size.x;
-        const y = viewport_pos.y + rect[1] * viewport_size.y;
         const w = rect[2] * viewport_size.x;
         const h = rect[3] * viewport_size.y;
 
-        imgui.ImDrawList_AddImage(
-            draw_list,
+        imgui.igImage(
             texture_id,
-            .{ .x = x, .y = y },
-            .{ .x = x + w, .y = y + h },
+            .{ .x = w, .y = h },
             .{ .x = 0, .y = 0 },
             .{ .x = 1, .y = 1 },
-            0xFFFFFFFF,
+            .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
+            .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
         );
+
+        //drag drop target for scenes
+        if (imgui.igBeginDragDropTarget() == true) {
+            defer imgui.igEndDragDropTarget();
+            if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
+                const path_len = payload.*.DataSize;
+                const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+                const new_event = ImguiEvent{
+                    .ET_OpenSceneEvent = .{
+                        .Path = try ImguiEventManager.EventAllocator().dupe(u8, path),
+                    },
+                };
+                try ImguiEventManager.Insert(new_event);
+            }
+        }
     }
 }
 
