@@ -39,7 +39,7 @@ pub fn Begin() void {
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 }
 
-pub fn OnImguiRender() !void {
+pub fn OnImguiRender(use_play_panel: bool) !void {
     const zone = Tracy.ZoneInit("Dockspace OIR", @src());
     defer zone.Deinit();
 
@@ -199,7 +199,7 @@ pub fn OnImguiRender() !void {
         }
         if (imgui.igBeginMenu("Editor", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("Use Play Panel", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Use Play Panel", @ptrCast(@alignCast(my_null_ptr)), use_play_panel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .PlayPanel,

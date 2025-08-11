@@ -33,25 +33,37 @@ const GizmoType = enum(c_int) {
     Scale = imgui.SCALE,
 };
 
-mP_Open: bool,
+//for viewport window
+mP_OpenViewport: bool,
+mIsFocusedViewport: bool,
 mViewportWidth: usize,
 mViewportHeight: usize,
 mSelectedEntity: ?Entity,
 mGizmoType: GizmoType,
-mIsFocused: bool = false,
+
+//for play window
+mP_OpenPlay: bool,
+mIsFocusedPlay: bool,
+mPlayWidth: usize,
+mPlayHeight: usize,
 
 pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
     return ViewportPanel{
-        .mP_Open = true,
+        .mP_OpenViewport = true,
+        .mIsFocusedViewport = false,
         .mViewportWidth = viewport_width,
         .mViewportHeight = viewport_height,
         .mSelectedEntity = null,
         .mGizmoType = .None,
-        .mIsFocused = false,
+
+        .mP_OpenPlay = true,
+        .mPlayWidth = viewport_width,
+        .mPlayHeight = viewport_height,
+        .mIsFocusedPlay = false,
     };
 }
 
-pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
     _ = camera_transforms;
 
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
@@ -61,25 +73,13 @@ pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*Ent
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
 
-    try self.ImguiRender(camera_components);
+    try self.OnImguiRender(camera_components);
 
     //TODO: entity picking for selected entity
     //TODO: gizmos to drag around entities in the viewport
 }
-pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
-    _ = camera_transforms;
 
-    const zone = Tracy.ZoneInit("ViewportPanelPlay OIR", @src());
-    defer zone.Deinit();
-
-    if (self.mP_Open == false) return;
-    _ = imgui.igBegin("Viewport", null, 0);
-    defer imgui.igEnd();
-
-    try self.ImguiRender(camera_components);
-}
-
-fn ImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
+pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 

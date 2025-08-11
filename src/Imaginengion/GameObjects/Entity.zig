@@ -33,8 +33,8 @@ pub fn GetUUID(self: Entity) u128 {
 pub fn GetName(self: Entity) []const u8 {
     return &self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).*.Name;
 }
-pub fn GetCamera(self: Entity) ?Entity {
-    const zone = Tracy.ZoneInit("Entity GetCamera", @src());
+pub fn GetCameraEntity(self: Entity) ?Entity {
+    const zone = Tracy.ZoneInit("Entity GetCameraEntity", @src());
     defer zone.Deinit();
     if (self.HasComponent(EntityParentComponent)) {
         const parent_component = self.GetComponent(EntityParentComponent);
@@ -51,6 +51,8 @@ pub fn GetCamera(self: Entity) ?Entity {
             const child_component = child_entity.GetComponent(EntityChildComponent);
             curr_id = child_component.mNext;
         }
+    } else if (self.HasComponent(CameraComponent)) {
+        return self;
     }
     return null;
 }

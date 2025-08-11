@@ -78,7 +78,6 @@ _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
-_UsePlayPanel: bool,
 _SceneSpecList: std.ArrayList(SceneSpecPanel),
 
 //editor stuff
@@ -119,7 +118,6 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(window.GetWidth(), window.GetHeight()),
         ._PlayPanel = PlayPanel.Init(),
-        ._UsePlayPanel = false,
         ._SceneSpecList = std.ArrayList(SceneSpecPanel).init(engine_allocator),
     };
 }
@@ -267,51 +265,74 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
         var camera_components = try std.ArrayList(*CameraComponent).initCapacity(frame_allocator, 1);
         var transform_components = try std.ArrayList(*TransformComponent).initCapacity(frame_allocator, 1);
 
-        if (self._ToolbarPanel.mState == .Stop) {
-            const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
-            const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+        if (self._PlayPanel.mP_Open) {
+            //always render from editors POV
+            const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+            const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
 
-            try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+            try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, frame_allocator);
 
-            try camera_components.append(camera_component);
-            try transform_components.append(camera_transform);
+            try camera_components.append(editor_camera_component);
+            try transform_components.append(editor_camera_transform);
 
             try self._ViewportPanel.OnImguiRender(camera_components, transform_components);
-        } else { //it is playing
-            const players = try PlayerManager.GetGroup(GroupQuery{ .Component = ControllerComponent }, frame_allocator);
-            for (players.items) |player_id| {
-                const player = PlayerManager.GetPlayer(player_id);
-                const controller_component = player.GetComponent(ControllerComponent);
-                if (controller_component.mControlledEntityID != Entity.NullEntity) {
-                    const controlled_object = self.mGameSceneManager.GetEntity(controller_component.mControlledEntityID);
 
-                    if (controlled_object.GetCamera()) |camera_entity| {
-                        const camera_component = camera_entity.GetComponent(CameraComponent);
-                        const camera_transform = camera_entity.GetComponent(TransformComponent);
-                        try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+            camera_components.clearRetainingCapacity();
+            transform_components.clearRetainingCapacity();
 
-                        try camera_components.append(camera_component);
-                        try transform_components.append(camera_transform);
-                    }
+            //always render from start entity POV
+            if (self._ToolbarPanel.mStartEntity.mEntityID != Entity.NullEntity) {
+                const start_entity = self._ToolbarPanel.mStartEntity;
+
+                const camera_entity = start_entity.GetCameraEntity();
+                if (camera_entity) |entity| {
+                    const start_camera_component = entity.GetComponent(CameraComponent);
+                    const start_transform_component = entity.GetComponent(TransformComponent);
+
+                    try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, frame_allocator);
+
+                    try camera_components.append(start_camera_component);
+                    try transform_components.append(start_transform_component);
+
+                    try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+
+                    camera_components.clearRetainingCapacity();
+                    transform_components.clearRetainingCapacity();
                 }
             }
-            if (self._UsePlayPanel == true) {
-                try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+        } else {
+            //we have to decide if we are rendering from the editor pov or in game pov
+            if (self._ToolbarPanel.mState == .Stop) {
+                const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+                const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+
+                try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, frame_allocator);
+
+                try camera_components.append(editor_camera_component);
+                try transform_components.append(editor_camera_transform);
+
+                try self._ViewportPanel.OnImguiRender(camera_components, transform_components);
 
                 camera_components.clearRetainingCapacity();
                 transform_components.clearRetainingCapacity();
+            } else if (self._ToolbarPanel.mState == .Play) {
+                const start_entity = self._ToolbarPanel.mStartEntity;
 
-                const camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
-                const camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+                const camera_entity = start_entity.GetCameraEntity();
+                if (camera_entity) |entity| {
+                    const start_camera_component = entity.GetComponent(CameraComponent);
+                    const start_transform_component = entity.GetComponent(TransformComponent);
 
-                try Renderer.OnUpdate(&self.mGameSceneManager, camera_component, camera_transform, frame_allocator);
+                    try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, frame_allocator);
 
-                try camera_components.append(camera_component);
-                try transform_components.append(camera_transform);
+                    try camera_components.append(start_camera_component);
+                    try transform_components.append(start_transform_component);
 
-                try self._ViewportPanel.OnImguiRenderPlay(camera_components, transform_components);
-            } else {
-                try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+                    try self._PlayPanel.OnImguiRender(camera_components, transform_components);
+
+                    camera_components.clearRetainingCapacity();
+                    transform_components.clearRetainingCapacity();
+                }
             }
         }
 
@@ -319,7 +340,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
         try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
 
-        try Dockspace.OnImguiRender();
+        try Dockspace.OnImguiRender(self._PlayPanel.mP_Open);
 
         try ImguiEventManager.ProcessEvents();
 
@@ -377,14 +398,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
                 .Scripts => self._ScriptsPanel.OnTogglePanelEvent(),
                 .Stats => self._StatsPanel.OnTogglePanelEvent(),
                 .Viewport => self._ViewportPanel.OnTogglePanelEvent(),
-                .PlayPanel => {
-                    self._UsePlayPanel = !self._UsePlayPanel;
-                    if (self._UsePlayPanel) {
-                        try self.mGameSceneManager.OnViewportResize(self._PlayPanel.mViewportWidth, self._PlayPanel.mViewportHeight, self.mFrameAllocator);
-                    } else {
-                        try self.mGameSceneManager.OnViewportResize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight, self.mFrameAllocator);
-                    }
-                },
+                .PlayPanel => self._PlayPanel.OnTogglePanelEvent(),
                 else => @panic("This event has not been handled by this type of panel yet!\n"),
             }
         },
@@ -450,14 +464,14 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             const viewport_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
             viewport_camera_component.SetViewportSize(e.mWidth, e.mHeight);
 
-            if (self._UsePlayPanel == false) {
+            //we must also resize the in game cameras to match the viewport since we are not using the play panel
+            if (!self._PlayPanel.mP_Open) {
                 try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
             }
         },
         .ET_PlayPanelResizeEvent => |e| {
-            if (self._UsePlayPanel == true) {
-                try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
-            }
+            //we dont need to check if play panel is being used or not because if the panel was resized its has to be open i think?
+            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(e);

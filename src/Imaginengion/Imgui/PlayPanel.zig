@@ -10,12 +10,14 @@ const EntityTransformComponent = EntityComponents.TransformComponent;
 const Tracy = @import("../Core/Tracy.zig");
 const PlayPanel = @This();
 
+mP_Open: bool,
 mViewportWidth: usize,
 mViewportHeight: usize,
-mIsFocused: bool,
+mIsFocused: bool = false,
 
 pub fn Init() PlayPanel {
     return PlayPanel{
+        .mP_Open = true,
         .mViewportWidth = 1280,
         .mViewportHeight = 720,
         .mIsFocused = false,
@@ -24,11 +26,12 @@ pub fn Init() PlayPanel {
 
 pub fn OnImguiRender(self: *PlayPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
     _ = camera_transforms;
+    if (self.mP_Open == false) return;
 
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
-    _ = imgui.igBegin("Play", null, 0);
+    _ = imgui.igBegin("PlayPanel", null, 0);
     defer imgui.igEnd();
 
     //update viewport size if needed
@@ -79,4 +82,8 @@ pub fn OnImguiRender(self: *PlayPanel, camera_components: std.ArrayList(*EntityC
             0xFFFFFFFF,
         );
     }
+}
+
+pub fn OnTogglePanelEvent(self: *PlayPanel) void {
+    self.mP_Open = !self.mP_Open;
 }
