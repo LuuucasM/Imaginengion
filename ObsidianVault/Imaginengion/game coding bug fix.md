@@ -1,3 +1,2 @@
-- change all the window dockspace menu items to display the check mark for whether that window is open or not, like i did for the use preview panel option
-	- note: i think it would be easier to create a struct with said options and then pass just the single struct into the dockspace rather than trying to do each one individually lol
 - tiling factor is not considered in the shader at all it has no effect
+- fix the fact that game layer and UI layer does has no effect on the shader either

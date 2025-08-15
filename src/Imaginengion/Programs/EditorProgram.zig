@@ -66,6 +66,18 @@ const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
+pub const PanelOpen = struct {
+    mAssetHandlePanel: bool,
+    mCSEditorPanel: bool,
+    mComponentsPanel: bool,
+    mContentBrowserPanel: bool,
+    mScenePanel: bool,
+    mScriptsPanel: bool,
+    mStatsPanel: bool,
+    mViewportPanel: bool,
+    mPreviewPanel: bool,
+};
+
 //editor imgui stuff
 _AssetHandlePanel: AssetHandlePanel,
 _ComponentsPanel: ComponentsPanel,
@@ -332,7 +344,19 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
         try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, frame_allocator);
 
-        try Dockspace.OnImguiRender(self._ViewportPanel.mP_OpenPlay);
+        const opens = PanelOpen{
+            .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
+            .mCSEditorPanel = self._CSEditorPanel.mP_Open,
+            .mComponentsPanel = self._ComponentsPanel._P_Open,
+            .mContentBrowserPanel = self._ContentBrowserPanel.mIsVisible,
+            .mPreviewPanel = self._ViewportPanel.mP_OpenPlay,
+            .mScenePanel = self._ScenePanel.mIsVisible,
+            .mScriptsPanel = self._ScriptsPanel._P_Open,
+            .mStatsPanel = self._StatsPanel._P_Open,
+            .mViewportPanel = self._ViewportPanel.mP_OpenViewport,
+        };
+
+        try Dockspace.OnImguiRender(opens);
 
         try ImguiEventManager.ProcessEvents();
 

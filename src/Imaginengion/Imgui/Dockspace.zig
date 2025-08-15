@@ -6,6 +6,7 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const Tracy = @import("../Core/Tracy.zig");
+const PanelOpen = @import("../Programs/EditorProgram.zig").PanelOpen;
 const Dockspace = @This();
 const Application = @import("../Core/Application.zig");
 
@@ -39,7 +40,7 @@ pub fn Begin() void {
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 }
 
-pub fn OnImguiRender(use_play_panel: bool) !void {
+pub fn OnImguiRender(panel_opens: PanelOpen) !void {
     const zone = Tracy.ZoneInit("Dockspace OIR", @src());
     defer zone.Deinit();
 
@@ -132,7 +133,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
         }
         if (imgui.igBeginMenu("Window", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("Asset Handles", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Asset Handles", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mAssetHandlePanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .AssetHandles,
@@ -140,7 +141,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mComponentsPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .Components,
@@ -148,7 +149,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Content Browser", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Content Browser", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mContentBrowserPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .ContentBrowser,
@@ -156,7 +157,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Component/Script Editor", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Component/Script Editor", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mCSEditorPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .CSEditor,
@@ -164,7 +165,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Scene", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Scene", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mScenePanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .Scene,
@@ -172,7 +173,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Scripts", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Scripts", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mScriptsPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .Scripts,
@@ -180,7 +181,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Stats", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Stats", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mStatsPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .Stats,
@@ -188,7 +189,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
                 };
                 try ImguiEventManager.Insert(new_event);
             }
-            if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+            if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mViewportPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .Viewport,
@@ -199,7 +200,7 @@ pub fn OnImguiRender(use_play_panel: bool) !void {
         }
         if (imgui.igBeginMenu("Editor", true) == true) {
             defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("Use Play Panel", @ptrCast(@alignCast(my_null_ptr)), use_play_panel, true) == true) {
+            if (imgui.igMenuItem_Bool("Use Preview Panel", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mPreviewPanel, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_TogglePanelEvent = .{
                         ._PanelType = .PlayPanel,
