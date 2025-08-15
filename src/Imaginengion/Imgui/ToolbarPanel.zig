@@ -25,7 +25,7 @@ mP_Open: bool,
 mState: EditorState,
 mPlayIcon: AssetHandle,
 mStopIcon: AssetHandle,
-mStartEntity: Entity,
+mStartEntity: ?Entity,
 
 pub fn Init() !ToolbarPanel {
     return ToolbarPanel{
@@ -33,7 +33,7 @@ pub fn Init() !ToolbarPanel {
         .mState = .Stop,
         .mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng),
         .mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng),
-        .mStartEntity = Entity{ .mEntityID = Entity.NullEntity, .mECSManagerRef = undefined },
+        .mStartEntity = null,
     };
 }
 
@@ -85,14 +85,18 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        if (self.mState == .Stop and self.mStartEntity.mEntityID != Entity.NullEntity) {
+        if (self.mStartEntity) |entity| {
+            if (self.mState == .Stop) {
+                try ImguiEventManager.Insert(ImguiEvent{
+                    .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = entity },
+                });
+                self.mState = .Play;
+            }
+        }
+        if (self.mState == .Play) {
+            std.debug.assert(self.mStartEntity != null);
             try ImguiEventManager.Insert(ImguiEvent{
-                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = self.mStartEntity },
-            });
-            self.mState = .Play;
-        } else if (self.mState == .Play) {
-            try ImguiEventManager.Insert(ImguiEvent{
-                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = self.mStartEntity },
+                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = null },
             });
             self.mState = .Stop;
         }
@@ -105,32 +109,33 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
     imgui.igPushItemWidth(combo_width); // combo_width should be wide enough, e.g., 120.0 or more
 
     var combo_text: []const u8 = "None\x00";
-    if (self.mStartEntity.mEntityID != Entity.NullEntity) {
+    if (self.mStartEntity) |entity| {
         // Ensure null-terminated string for ImGui
         var name_buf: [128]u8 = undefined;
-        combo_text = try std.fmt.bufPrintZ(&name_buf, "{s}", .{self.mStartEntity.GetName()});
+        combo_text = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entity.GetName()});
     }
     if (imgui.igBeginCombo("##PlayLocation", @ptrCast(combo_text.ptr), imgui.ImGuiComboFlags_None)) {
         defer imgui.igEndCombo();
 
-        if (imgui.igSelectable_Bool("None\x00", self.mStartEntity.mEntityID == Entity.NullEntity, 0, .{ .x = 0, .y = 0 })) {
-            self.mStartEntity.mEntityID = Entity.NullEntity;
+        if (imgui.igSelectable_Bool("None\x00", self.mStartEntity == null, 0, .{ .x = 0, .y = 0 })) {
+            self.mStartEntity = null;
         }
 
         const camera_entities = try game_scene_manager.GetEntityGroup(GroupQuery{ .Component = CameraComponent }, frame_allocator);
 
         for (camera_entities.items) |entity_id| {
             const entity = game_scene_manager.GetEntity(entity_id);
-            if (entity.HasComponent(EntityChildComponent)) {
-                const child_component = entity.GetComponent(EntityChildComponent);
 
-                const parent_entity = game_scene_manager.GetEntity(child_component.mParent);
-
-                if (parent_entity.HasComponent(PlayerSlotComponent)) {
-                    var name_buf: [128]u8 = undefined;
-                    const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{parent_entity.GetName()});
-                    if (imgui.igSelectable_Bool(name_cstr, self.mStartEntity.mEntityID == entity.mEntityID, 0, .{ .x = 0, .y = 0 })) {
-                        self.mStartEntity = parent_entity;
+            if (entity.Possessable()) |possess_entity| {
+                var name_buf: [128]u8 = undefined;
+                const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{possess_entity.GetName()});
+                if (self.mStartEntity) |start_entity| {
+                    if (imgui.igSelectable_Bool(name_cstr, start_entity.mEntityID == possess_entity.mEntityID, 0, .{ .x = 0, .y = 0 })) {
+                        self.mStartEntity = possess_entity;
+                    }
+                } else {
+                    if (imgui.igSelectable_Bool(name_cstr, false, 0, .{ .x = 0, .y = 0 })) {
+                        self.mStartEntity = possess_entity;
                     }
                 }
             }

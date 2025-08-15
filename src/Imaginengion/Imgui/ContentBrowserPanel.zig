@@ -340,6 +340,8 @@ fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void
 }
 
 fn NextColumn(entry_name: []const u8) void {
+    const zone = Tracy.ZoneInit("ContentBrowser NextColumn", @src());
+    defer zone.Deinit();
     imgui.igTextWrapped(@ptrCast(entry_name));
     imgui.igNextColumn();
 }

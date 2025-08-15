@@ -6,6 +6,8 @@ const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 
+const Renderer = @import("../Renderer/Renderer.zig");
+
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
@@ -188,10 +190,9 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
                 .mViewportVertexArray = VertexArray.Init(self.mEngineAllocator),
                 .mViewportVertexBuffer = VertexBuffer.Init(self.mEngineAllocator, @sizeOf([4][2]f32)),
                 .mViewportIndexBuffer = undefined,
-                .mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng),
             };
 
-            const shader_asset = try new_camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
+            const shader_asset = try Renderer.GetSDFShader();
             try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
             new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
 

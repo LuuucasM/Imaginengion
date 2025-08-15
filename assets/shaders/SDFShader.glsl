@@ -31,9 +31,18 @@ struct CameraData {
     float FOV; // 4 bytes  ← 16-byte boundary
 };
 
+struct ModeData{
+    uint mode;
+};
+
 layout(std140, binding = 0) uniform CameraUBO {
     CameraData data;
 } Camera;
+
+layout(std140, binding = 1) uniform ModeUBO {
+    ModeData data;
+} Mode;
+
 
 //===========================End Camera===========================
 
@@ -216,7 +225,10 @@ void main() {
     // Normalize to [-1, 1] range
     vec2 uv = centered / (0.5 * vec2(Camera.data.ResolutionWidth, Camera.data.ResolutionHeight));
 
-    uv.x *= Camera.data.AspectRatio; // <-- Aspect ratio correction
+    // Conditionally apply aspect ratio correction if bit 0 of Mode.data.mode is set
+    if ((Mode.data.mode & 1u) != 0u) {
+        uv.x *= Camera.data.AspectRatio; // <-- Aspect ratio correction
+    }
     uv.y = -uv.y; // Flip y axis if needed
 
     float tan_half_fov = tan(Camera.data.FOV * 0.5);

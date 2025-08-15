@@ -6,6 +6,7 @@ const NameComponent = Components.NameComponent;
 const CameraComponent = Components.CameraComponent;
 const EntityParentComponent = Components.ParentComponent;
 const EntityChildComponent = Components.ChildComponent;
+const PlayerSlotComponent = Components.PlayerSlotComponent;
 const Tracy = @import("../Core/Tracy.zig");
 
 pub const Type = u32;
@@ -51,7 +52,27 @@ pub fn GetCameraEntity(self: Entity) ?Entity {
             const child_component = child_entity.GetComponent(EntityChildComponent);
             curr_id = child_component.mNext;
         }
-    } else if (self.HasComponent(CameraComponent)) {
+    }
+    if (self.HasComponent(CameraComponent)) {
+        return self;
+    }
+    return null;
+}
+
+pub fn Possessable(self: Entity) ?Entity {
+    const zone = Tracy.ZoneInit("Entity Possessable", @src());
+    defer zone.Deinit();
+
+    if (self.HasComponent(EntityChildComponent)) {
+        const child_component = self.GetComponent(EntityChildComponent);
+
+        const parent_entity = Entity{ .mEntityID = child_component.mParent, .mECSManagerRef = self.mECSManagerRef };
+
+        if (parent_entity.HasComponent(PlayerSlotComponent)) {
+            return parent_entity;
+        }
+    }
+    if (self.HasComponent(PlayerSlotComponent)) {
         return self;
     }
     return null;

@@ -27,6 +27,8 @@ const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 
+const Renderer = @import("../Renderer/Renderer.zig");
+
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneIDComponent = SceneComponents.IDComponent;
 const SceneComponent = SceneComponents.SceneComponent;
@@ -621,9 +623,8 @@ fn DeSerializeCameraComponent(scanner: *std.json.Scanner, entity: Entity, frame_
     camera_component.mViewportVertexArray = VertexArray.Init(engine_allocator);
     camera_component.mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32));
     camera_component.mViewportIndexBuffer = undefined;
-    camera_component.mViewportShaderHandle = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng);
 
-    const shader_asset = try camera_component.mViewportShaderHandle.GetAsset(ShaderAsset);
+    const shader_asset = try Renderer.GetSDFShader();
     try camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
     camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
 

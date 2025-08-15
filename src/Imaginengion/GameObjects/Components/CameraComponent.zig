@@ -30,7 +30,6 @@ mViewportFrameBuffer: FrameBuffer = undefined,
 mViewportVertexArray: VertexArray = undefined,
 mViewportVertexBuffer: VertexBuffer = undefined,
 mViewportIndexBuffer: IndexBuffer = undefined,
-mViewportShaderHandle: AssetHandle = AssetHandle{ .mID = AssetHandle.NullHandle },
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 
@@ -47,7 +46,6 @@ pub fn Deinit(self: *CameraComponent) !void {
     self.mViewportVertexArray.Deinit();
     self.mViewportVertexBuffer.Deinit();
     self.mViewportIndexBuffer.Deinit();
-    AssetManager.ReleaseAssetHandleRef(&self.mViewportShaderHandle);
 }
 
 pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {

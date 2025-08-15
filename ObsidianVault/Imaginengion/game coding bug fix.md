@@ -1,7 +1,3 @@
-- Merge ViewportPanel and PlayPanel into one object, which is going to be ViewportPanel
-	- i am making this change because they practically do the same thing minus a couple of editor viewport specific things like gizmos and entity picking, which means that when i make a change tot he viewport panel, i have to copy it over to play panel, but if i merge them then when i change the rendering code it applies to both panels and sort of normalizes the process so i dont have to keep making sure if i added changes to viewport panel to play panel
-- change start entity in toolbar panel to be a ?Entity instead of checking if the entity ID is null or naw
-- have the play panel render even if there is no StartEntity. 
-	- right now the viewport renders even tho theres nothing because the editor camera and the world still exists, its just empty. but rendering in the play panel relies on an in game camera existing.
-	- so what i think i have to do is for specifically the rendering part, i have to check if there is a startentity and if there is then render to the frame buffer, pass the frame buffer, if not i can leave the camera_components and transform_components arrays empty.
-	- then in the viewport rendering, i have to keep a reference to white_texture thats in the engine, and so then i can check, if the arrays are empty, and if they are the do imgui.igDrawImage with the white_texture but tinted black
+- change all the window dockspace menu items to display the check mark for whether that window is open or not, like i did for the use preview panel option
+	- note: i think it would be easier to create a struct with said options and then pass just the single struct into the dockspace rather than trying to do each one individually lol
+- tiling factor is not considered in the shader at all it has no effect

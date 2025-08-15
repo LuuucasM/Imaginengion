@@ -49,6 +49,7 @@ mPlayHeight: usize,
 
 pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
     return ViewportPanel{
+        //for viewport window
         .mP_OpenViewport = true,
         .mIsFocusedViewport = false,
         .mViewportWidth = viewport_width,
@@ -56,6 +57,7 @@ pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
         .mSelectedEntity = null,
         .mGizmoType = .None,
 
+        //for play window
         .mP_OpenPlay = true,
         .mPlayWidth = viewport_width,
         .mPlayHeight = viewport_height,
@@ -69,19 +71,10 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayL
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
 
-    if (self.mP_Open == false) return;
+    if (self.mP_OpenViewport == false) return;
+
     _ = imgui.igBegin("Viewport", null, 0);
     defer imgui.igEnd();
-
-    try self.OnImguiRender(camera_components);
-
-    //TODO: entity picking for selected entity
-    //TODO: gizmos to drag around entities in the viewport
-}
-
-pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
-    const zone = Tracy.ZoneInit("ImguiRender", @src());
-    defer zone.Deinit();
 
     //update viewport size if needed
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
@@ -101,7 +94,52 @@ pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*Ent
     }
 
     //get if the window is focused or not
-    self.mIsFocused = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
+    self.mIsFocusedViewport = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
+
+    try OnImguiRender(camera_components, viewport_size);
+
+    //TODO: entity picking for selected entity
+    //TODO: gizmos to drag around entities in the viewport
+}
+
+pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
+    const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
+    defer zone.Deinit();
+
+    if (self.mP_OpenPlay == false) return;
+
+    _ = imgui.igBegin("PlayPanel", null, 0);
+    defer imgui.igEnd();
+
+    //update viewport size if needed
+    var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
+    imgui.igGetContentRegionAvail(&viewport_size);
+    if (viewport_size.x != @as(f32, @floatFromInt(self.mPlayWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mPlayHeight))) {
+        if (viewport_size.x < 0) viewport_size.x = 0;
+        if (viewport_size.y < 0) viewport_size.y = 0;
+        const new_imgui_event = ImguiEvent{
+            .ET_PlayPanelResizeEvent = .{
+                .mWidth = @intFromFloat(viewport_size.x),
+                .mHeight = @intFromFloat(viewport_size.y),
+            },
+        };
+        try ImguiEventManager.Insert(new_imgui_event);
+        self.mPlayWidth = @intFromFloat(viewport_size.x);
+        self.mPlayHeight = @intFromFloat(viewport_size.y);
+    }
+
+    //get if the window is focused or not
+    self.mIsFocusedPlay = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
+
+    try OnImguiRender(camera_components, viewport_size);
+}
+
+fn OnImguiRender(camera_components: std.ArrayList(*EntityCameraComponent), viewport_size: imgui.struct_ImVec2) !void {
+    const zone = Tracy.ZoneInit("ImguiRender", @src());
+    defer zone.Deinit();
+
+    var viewport_pos: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
+    imgui.igGetCursorScreenPos(&viewport_pos);
 
     for (camera_components.items, 0..) |camera_component, i| {
         _ = i;
@@ -109,37 +147,30 @@ pub fn OnImguiRender(self: *ViewportPanel, camera_components: std.ArrayList(*Ent
         const fb = camera_component.mViewportFrameBuffer;
         const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, fb.GetColorAttachmentID(0))));
 
+        const x = viewport_pos.x + rect[0] * viewport_size.x;
+        const y = viewport_pos.y + rect[1] * viewport_size.y;
         const w = rect[2] * viewport_size.x;
         const h = rect[3] * viewport_size.y;
 
-        imgui.igImage(
+        const draw_list = imgui.igGetWindowDrawList();
+        imgui.ImDrawList_AddImage(
+            draw_list,
             texture_id,
-            .{ .x = w, .y = h },
+            .{ .x = x, .y = y },
+            .{ .x = x + w, .y = y + h },
             .{ .x = 0, .y = 0 },
             .{ .x = 1, .y = 1 },
-            .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-            .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
+            0xFFFFFFFF,
         );
-
-        //drag drop target for scenes
-        if (imgui.igBeginDragDropTarget() == true) {
-            defer imgui.igEndDragDropTarget();
-            if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-                const path_len = payload.*.DataSize;
-                const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-                const new_event = ImguiEvent{
-                    .ET_OpenSceneEvent = .{
-                        .Path = try ImguiEventManager.EventAllocator().dupe(u8, path),
-                    },
-                };
-                try ImguiEventManager.Insert(new_event);
-            }
-        }
     }
 }
 
-pub fn OnTogglePanelEvent(self: *ViewportPanel) void {
-    self.mP_Open = !self.mP_Open;
+pub fn OnTogglePanelEventViewport(self: *ViewportPanel) void {
+    self.mP_OpenViewport = !self.mP_OpenViewport;
+}
+
+pub fn OnTogglePanelEventPlay(self: *ViewportPanel) void {
+    self.mP_OpenPlay = !self.mP_OpenPlay;
 }
 
 pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
@@ -149,24 +180,16 @@ pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
 pub fn OnInputPressedEvent(self: *ViewportPanel, e: InputPressedEvent) bool {
     switch (e._InputCode) {
         .Q => {
-            if (imgui.ImGuizmo_IsUsing() == false) {
-                self.mGizmoType = .None;
-            }
+            self.mGizmoType = .None;
         },
         .W => {
-            if (imgui.ImGuizmo_IsUsing() == false) {
-                self.mGizmoType = .Translate;
-            }
+            self.mGizmoType = .Translate;
         },
         .E => {
-            if (imgui.ImGuizmo_IsUsing() == false) {
-                self.mGizmoType = .Rotation;
-            }
+            self.mGizmoType = .Rotation;
         },
         .R => {
-            if (imgui.ImGuizmo_IsUsing() == false) {
-                self.mGizmoType = .Scale;
-            }
+            self.mGizmoType = .Scale;
         },
         else => return true,
     }
