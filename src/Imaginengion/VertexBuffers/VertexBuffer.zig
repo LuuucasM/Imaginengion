@@ -18,7 +18,7 @@ pub fn Init(allocator: std.mem.Allocator, size: usize) VertexBuffer {
     };
 }
 
-pub fn Deinit(self: VertexBuffer) void {
+pub fn Deinit(self: *VertexBuffer) void {
     self.mImpl.Deinit();
 }
 

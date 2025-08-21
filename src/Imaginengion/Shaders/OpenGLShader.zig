@@ -12,17 +12,20 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const OpenGLShader = @This();
 
-mBufferElements: std.ArrayList(VertexBufferElement),
+mBufferElements: std.ArrayList(VertexBufferElement) = .{},
 mUniforms: std.AutoHashMap(usize, i32),
 mBufferStride: usize,
 mShaderID: u32,
 
+_Allocator: std.mem.Allocator,
+
 pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !OpenGLShader {
     var new_shader = OpenGLShader{
-        .mBufferElements = std.ArrayList(VertexBufferElement).init(allocator),
         .mUniforms = std.AutoHashMap(usize, i32).init(allocator),
         .mBufferStride = 0,
         .mShaderID = 0,
+
+        ._Allocator = allocator,
     };
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -42,7 +45,7 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
 pub fn Deinit(self: *OpenGLShader) void {
     glad.glDeleteProgram(self.mShaderID);
 
-    self.mBufferElements.deinit();
+    self.mBufferElements.deinit(self._Allocator);
     self.mUniforms.deinit();
 }
 
@@ -156,7 +159,7 @@ fn CreateLayout(self: *OpenGLShader, shader_source: []const u8) !void {
                 if (tokens.next()) |type_str| {
                     // Convert type string to ShaderDataType
                     const data_type = TypeStrToDataType(type_str);
-                    try self.mBufferElements.append(.{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
+                    try self.mBufferElements.append(self._Allocator, .{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
                 }
             }
         }
@@ -209,12 +212,12 @@ fn CalculateStride(self: *OpenGLShader) void {
 }
 
 fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
-    var source = std.ArrayList(u8).init(allocator);
-    defer source.deinit();
+    var source = std.ArrayList(u8){};
+    defer source.deinit(allocator);
 
     const file_size = try asset_file.getEndPos();
-    try source.ensureTotalCapacity(@intCast(file_size));
-    try source.resize(@intCast(file_size));
+    try source.ensureTotalCapacity(allocator, @intCast(file_size));
+    try source.resize(allocator, @intCast(file_size));
 
     _ = try asset_file.readAll(source.items);
 
@@ -223,8 +226,8 @@ fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArra
     var lines = std.mem.splitSequence(u8, source.items, "\n");
     var current_type: c_uint = undefined;
     var has_type = false;
-    var current_source = std.ArrayList(u8).init(allocator);
-    defer current_source.deinit();
+    var current_source = std.ArrayList(u8){};
+    defer current_source.deinit(allocator);
 
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r\n");
@@ -244,8 +247,8 @@ fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArra
             has_type = true;
         } else if (has_type) {
             // Add the current line to the source code
-            try current_source.appendSlice(line);
-            try current_source.append('\n');
+            try current_source.appendSlice(allocator, line);
+            try current_source.append(allocator, '\n');
         }
     }
 
@@ -265,8 +268,10 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
     var buffer: [2000]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    var gl_shader_ids = std.ArrayList(glad.GLenum).init(fba.allocator());
-    defer gl_shader_ids.deinit();
+    const allocator = fba.allocator();
+
+    var gl_shader_ids = std.ArrayList(glad.GLenum){};
+    defer gl_shader_ids.deinit(allocator);
     var iter = shader_sources.iterator();
     while (iter.next()) |entry| {
         const shader_type = entry.key_ptr.*;
@@ -284,9 +289,9 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
             var max_length: glad.GLint = 0;
             glad.glGetShaderiv(shader, glad.GL_INFO_LOG_LENGTH, &max_length);
 
-            var info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
-            defer info_log.deinit();
-            try info_log.resize(@intCast(max_length));
+            var info_log = try std.ArrayList(u8).initCapacity(allocator, @intCast(max_length));
+            defer info_log.deinit(allocator);
+            try info_log.resize(allocator, @intCast(max_length));
             glad.glGetShaderInfoLog(shader, max_length, &max_length, info_log.items.ptr);
 
             glad.glDeleteShader(shader);
@@ -296,7 +301,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
             return false;
         }
         glad.glAttachShader(shader_id, shader);
-        try gl_shader_ids.append(shader);
+        try gl_shader_ids.append(allocator, shader);
     }
 
     self.mShaderID = shader_id;
@@ -309,9 +314,9 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
         var max_length: glad.GLint = 0;
         glad.glGetProgramiv(shader_id, glad.GL_INFO_LOG_LENGTH, &max_length);
 
-        var info_log = try std.ArrayList(u8).initCapacity(fba.allocator(), @intCast(max_length));
-        defer info_log.deinit();
-        try info_log.resize(@intCast(max_length));
+        var info_log = try std.ArrayList(u8).initCapacity(allocator, @intCast(max_length));
+        defer info_log.deinit(allocator);
+        try info_log.resize(allocator, @intCast(max_length));
         glad.glGetProgramInfoLog(shader_id, max_length, &max_length, info_log.items.ptr);
 
         glad.glDeleteProgram(shader_id);

@@ -1,2 +1,9 @@
-- tiling factor is not considered in the shader at all it has no effect
+- with new IO stuff fix AssetManager performance issues with OpenFile by using async/await
+- go over the naming convention and the structure of different allocators in the engine
+	- now that all arraylists are unmanaged its more important to ensure im using the right allocators with the right arraylists and yeah
+- change scene serializer to utilize the new serialization system due to IO changes
+	- the new write_stream allows you to directly write structs without having to convert them into strings first using stringify. 
+	- PLUS as an added bonus, stringify will allow "If the struct declares a method `pub fn jsonStringify(self: *@This(), jw: anytype) !void`, it is called to do the serialization instead of the default behavior. The given `jw` is a pointer to this `Stringify`. See `std.json.Value` for an example."
+	- this means instead of creating unique "serializeXComponent" inside my scene serializer I can just have 1 function which always just calls write_stream.write and inside the specific component types, if i need to do some sort of specific serialization, like for components which reference assets, then i can provide a jsonStringify
+	- I like that this method of stringify is sortof like an override function of sorts which is cool
 - fix the fact that game layer and UI layer does has no effect on the shader either

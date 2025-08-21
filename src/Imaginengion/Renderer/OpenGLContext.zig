@@ -70,7 +70,7 @@ pub fn DrawELines(self: OpenGLContext, vertex_array: VertexArray, vertex_count: 
     glad.glDrawArrays(glad.GL_LINES, 0, @intCast(vertex_count));
 }
 
-fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uint, length: c_int, message: [*c]const u8, userParam: ?*const anyopaque) callconv(.C) void {
+fn glDebugOutput(source: c_uint, debug_type: c_uint, id: c_uint, severity: c_uint, length: c_int, message: [*c]const u8, userParam: ?*const anyopaque) callconv(.c) void {
     _ = length;
     _ = userParam;
     _ = id;

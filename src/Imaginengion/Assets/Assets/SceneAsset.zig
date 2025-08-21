@@ -4,7 +4,9 @@ const SceneAsset = @This();
 
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-mSceneContents: std.ArrayList(u8) = undefined,
+mSceneContents: std.ArrayList(u8) = .{},
+
+_ContentsAllocator: std.mem.Allocator = undefined,
 
 pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !SceneAsset {
     _ = rel_path;
@@ -19,7 +21,7 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
 }
 
 pub fn Deinit(self: *SceneAsset) !void {
-    self.mSceneContents.deinit();
+    self.mSceneContents.deinit(self._ContentsAllocator);
 }
 
 pub const Ind: usize = blk: {

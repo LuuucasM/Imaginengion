@@ -71,8 +71,8 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
             return self.mComponents.dense_count;
         }
         pub fn GetAllEntities(self: *Self, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
-            var entity_set = std.ArrayList(entity_t).init(allocator);
-            try entity_set.appendSlice(self.mComponents.dense_to_sparse[0..self.mComponents.dense_count]);
+            var entity_set = std.ArrayList(entity_t){};
+            try entity_set.appendSlice(allocator, self.mComponents.dense_to_sparse[0..self.mComponents.dense_count]);
             return entity_set;
         }
         pub fn clearAndFree(self: *Self) void {

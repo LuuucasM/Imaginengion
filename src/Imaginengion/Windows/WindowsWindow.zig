@@ -96,11 +96,11 @@ pub fn PollInputEvents(self: WindowsWindow) void {
     glfw.glfwPollEvents();
 }
 
-export fn GLFWErrorCallback(err: c_int, msg: [*c]const u8) callconv(.C) void {
+export fn GLFWErrorCallback(err: c_int, msg: [*c]const u8) callconv(.c) void {
     std.log.err("GLFW Error ({}): {s} in WindowsWindow::GLFWErrorCallback\n", .{ err, msg });
 }
 
-export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.C) void {
+export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode: c_int, action: c_int, mods: c_int) callconv(.c) void {
     _ = window;
     _ = scancode;
     _ = mods;
@@ -145,7 +145,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
     };
 }
 
-export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.C) void {
+export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_int, action: c_int, mods: c_int) callconv(.c) void {
     _ = window;
     _ = mods;
     const new_event = switch (action) {
@@ -178,7 +178,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
     };
 }
 
-export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.C) void {
+export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.c) void {
     _ = window;
     StaticInputContext.SetMousePosition(Vec2f32{ @floatCast(xPos), @floatCast(yPos) });
     const new_event = SystemEvent{
@@ -193,7 +193,7 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
     };
 }
 
-export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.C) void {
+export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.c) void {
     _ = window;
     StaticInputContext.SetMouseScrolled(Vec2f32{ @floatCast(xOffset), @floatCast(yOffset) });
     const new_event = SystemEvent{
@@ -208,7 +208,7 @@ export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f
     };
 }
 
-export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.C) void {
+export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.c) void {
     _ = window;
     const new_event = SystemEvent{
         .ET_WindowClose = .{},
@@ -219,7 +219,7 @@ export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.C)
     };
 }
 
-export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.C) void {
+export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.c) void {
     _ = window;
     const new_event = SystemEvent{
         .ET_WindowResize = .{

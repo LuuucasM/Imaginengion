@@ -30,7 +30,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
         pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !Self {
             var new_component_manager = Self{
-                .mComponentsArrays = std.ArrayList(ComponentArray(entity_t)).init(ECSAllocator),
+                .mComponentsArrays = std.ArrayList(ComponentArray(entity_t)){},
                 .mEntitySkipField = try SparseSet(.{
                     .SparseT = entity_t,
                     .DenseT = entity_t,
@@ -43,7 +43,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             inline for (components_list) |component_type| {
                 const new_component_array = try ComponentArray(entity_t).Init(ECSAllocator, component_type);
-                try new_component_manager.mComponentsArrays.append(new_component_array);
+                try new_component_manager.mComponentsArrays.append(ECSAllocator, new_component_array);
             }
 
             return new_component_manager;
@@ -110,7 +110,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_type.Ind);
 
-            return try @as(*InternalComponentArray(entity_t, component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).AddComponent(entityID, component);
+            return try @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).AddComponent(entityID, component);
         }
 
         pub fn RemoveComponent(self: *Self, comptime component_type: type, entityID: entity_t) !void {
@@ -128,7 +128,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-            return @as(*InternalComponentArray(entity_t, component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
+            return @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) *component_type {
@@ -137,7 +137,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
             std.debug.assert(self.HasComponent(component_type, entityID));
 
-            return @as(*InternalComponentArray(entity_t, component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);
+            return @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);
         }
 
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
@@ -145,12 +145,12 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 .Component => |component_type| {
                     std.debug.assert(@hasDecl(component_type, "Ind"));
                     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-                    return try @as(*InternalComponentArray(entity_t, component_type), @alignCast(@ptrCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetAllEntities(allocator);
+                    return try @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetAllEntities(allocator);
                 },
                 .Not => |not| {
                     var result = try self.GetGroup(not.mFirst, allocator);
-                    const second = try self.GetGroup(not.mSecond, allocator);
-                    defer second.deinit();
+                    var second = try self.GetGroup(not.mSecond, allocator);
+                    defer second.deinit(allocator);
                     try self.EntityListDifference(&result, second, allocator);
                     return result;
                 },
@@ -158,7 +158,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                     var result = try self.GetGroup(ors[0], allocator);
                     inline for (ors[1..]) |or_query| {
                         var intermediate = try self.GetGroup(or_query, allocator);
-                        defer intermediate.deinit();
+                        defer intermediate.deinit(allocator);
                         try self.EntityListUnion(&result, intermediate, allocator);
                     }
                     return result;
@@ -167,7 +167,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                     var result = try self.GetGroup(ands[0], allocator);
                     inline for (ands[1..]) |and_query| {
                         var intermediate = try self.GetGroup(and_query, allocator);
-                        defer intermediate.deinit();
+                        defer intermediate.deinit(allocator);
                         try self.EntityListIntersection(&result, intermediate, allocator);
                     }
                     return result;
@@ -194,7 +194,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 }
             }
 
-            result.shrinkAndFree(end_index);
+            result.shrinkAndFree(allocator, end_index);
         }
 
         pub fn EntityListUnion(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
@@ -206,7 +206,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             for (list2.items) |entity_id| {
                 if (result_set.contains(entity_id) == false) {
-                    result.append(entity_id);
+                    result.append(allocator, entity_id);
                 }
             }
         }
@@ -230,7 +230,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 }
             }
 
-            result.shrinkAndFree(end_index);
+            result.shrinkAndFree(allocator, end_index);
         }
     };
 }

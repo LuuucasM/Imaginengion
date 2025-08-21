@@ -37,7 +37,7 @@ pub fn HasComponent(self: SceneLayer, comptime component_type: type) bool {
 }
 pub fn GetEntityGroup(self: SceneLayer, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {
     var entity_list = try self.mECSManagerGORef.GetGroup(query, allocator);
-    self.FilterEntityByScene(&entity_list);
+    self.FilterEntityByScene(&entity_list, allocator);
     return entity_list;
 }
 pub fn GetUUID(self: SceneLayer) u128 {
@@ -80,7 +80,7 @@ pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
     return new_entity;
 }
 
-pub fn FilterEntityByScene(self: SceneLayer, entity_result_list: *std.ArrayList(Entity.Type)) void {
+pub fn FilterEntityByScene(self: SceneLayer, entity_result_list: *std.ArrayList(Entity.Type), list_allocator: std.mem.Allocator) void {
     if (entity_result_list.items.len == 0) return;
 
     var end_index: usize = entity_result_list.items.len;
@@ -96,10 +96,10 @@ pub fn FilterEntityByScene(self: SceneLayer, entity_result_list: *std.ArrayList(
         }
     }
 
-    entity_result_list.shrinkAndFree(end_index);
+    entity_result_list.shrinkAndFree(list_allocator, end_index);
 }
 
-pub fn FilterEntityScriptsByScene(self: SceneLayer, scripts_result_list: *std.ArrayList(Entity.Type)) void {
+pub fn FilterEntityScriptsByScene(self: SceneLayer, scripts_result_list: *std.ArrayList(Entity.Type), list_allocator: std.mem.Allocator) void {
     if (scripts_result_list.items.len == 0) return;
 
     var end_index: usize = scripts_result_list.items.len;
@@ -116,10 +116,10 @@ pub fn FilterEntityScriptsByScene(self: SceneLayer, scripts_result_list: *std.Ar
         }
     }
 
-    scripts_result_list.shrinkAndFree(end_index);
+    scripts_result_list.shrinkAndFree(list_allocator, end_index);
 }
 
-pub fn FilterSceneScriptsByScene(self: SceneLayer, scripts_result_list: *std.ArrayList(Entity.Type)) void {
+pub fn FilterSceneScriptsByScene(self: SceneLayer, scripts_result_list: *std.ArrayList(Entity.Type), list_allocator: std.mem.Allocator) void {
     if (scripts_result_list.items.len == 0) return;
 
     var end_index: usize = scripts_result_list.items.len;
@@ -135,5 +135,10 @@ pub fn FilterSceneScriptsByScene(self: SceneLayer, scripts_result_list: *std.Arr
         }
     }
 
-    scripts_result_list.shrinkAndFree(end_index);
+    self.mECSManagerGORef
+        .scripts_result_list.shrinkAndFree(list_allocator, end_index);
+}
+
+pub fn EntityListDifference(self: SceneLayer, result: *std.ArrayList(Entity.Type), list2: std.ArrayList(Entity.Type), allocator: std.mem.Allocator) !void {
+    try self.mECSManagerGORef.EntityListDifference(result, list2, allocator);
 }

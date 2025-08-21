@@ -8,14 +8,17 @@ const ShaderDataType = @import("../Shaders/Shader.zig").ShaderDataType;
 const OpenGLVertexArray = @This();
 
 mArrayID: c_uint,
-mVertexBuffers: std.ArrayList(VertexBuffer),
+mVertexBuffers: std.ArrayList(VertexBuffer) = .{},
 mIndexBuffer: IndexBuffer,
+
+_Allocator: std.mem.Allocator,
 
 pub fn Init(allocator: std.mem.Allocator) OpenGLVertexArray {
     var new_va = OpenGLVertexArray{
         .mArrayID = undefined,
-        .mVertexBuffers = std.ArrayList(VertexBuffer).init(allocator),
         .mIndexBuffer = undefined,
+
+        ._Allocator = allocator,
     };
 
     glad.glCreateVertexArrays(1, &new_va.mArrayID);
@@ -23,8 +26,8 @@ pub fn Init(allocator: std.mem.Allocator) OpenGLVertexArray {
     return new_va;
 }
 
-pub fn Deinit(self: OpenGLVertexArray) void {
-    self.mVertexBuffers.deinit();
+pub fn Deinit(self: *OpenGLVertexArray) void {
+    self.mVertexBuffers.deinit(self._Allocator);
     glad.glDeleteVertexArrays(1, &self.mArrayID);
 }
 
@@ -66,7 +69,7 @@ pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer
             );
         }
     }
-    try self.mVertexBuffers.append(new_vertex_buffer);
+    try self.mVertexBuffers.append(self._Allocator, new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: *OpenGLVertexArray, new_index_buffer: IndexBuffer) void {

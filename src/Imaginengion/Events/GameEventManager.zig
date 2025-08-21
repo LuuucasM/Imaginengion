@@ -8,24 +8,24 @@ const Self = @This();
 
 var EventManager: Self = .{};
 
-mPreRenderEventPool: std.ArrayList(GameEvent) = undefined,
+mPreRenderEventPool: std.ArrayList(GameEvent) = .{},
 mProgram: *Program = undefined,
 
 var EventGPA = std.heap.DebugAllocator(.{}).init;
+const EventAllocator = EventGPA.allocator();
 
 pub fn Init(program: *Program) !void {
-    EventManager.mPreRenderEventPool = std.ArrayList(GameEvent).init(EventGPA.allocator());
     EventManager.mProgram = program;
 }
 
 pub fn Deinit() void {
-    EventManager.mPreRenderEventPool.deinit();
+    EventManager.mPreRenderEventPool.deinit(EventAllocator);
     _ = EventGPA.deinit();
 }
 
 pub fn Insert(event: GameEvent) !void {
     switch (event.GetEventCategory()) {
-        .EC_PreRender => try EventManager.mPreRenderEventPool.append(event),
+        .EC_PreRender => try EventManager.mPreRenderEventPool.append(EventAllocator, event),
         else => @panic("Default Events are not allowed!\n"),
     }
 }
@@ -46,5 +46,5 @@ pub fn ProcessEvents(eventCategory: GameEventCategory) !void {
 pub fn EventsReset() void {
     const zone = Tracy.ZoneInit("Game Event Reset", @src());
     defer zone.Deinit();
-    _ = EventManager.mPreRenderEventPool.clearAndFree();
+    _ = EventManager.mPreRenderEventPool.clearAndFree(EventAllocator);
 }

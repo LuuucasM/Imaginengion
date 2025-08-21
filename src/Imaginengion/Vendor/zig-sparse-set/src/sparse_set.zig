@@ -12,54 +12,54 @@ const Allocator = std.mem.Allocator;
 const assert = std.debug.assert;
 
 pub const AllowResize = union(enum) {
-    /// The fields **dense_to_sparse** and **values** will grow on **add()** and **addValue()**.
+    // The fields **dense_to_sparse** and **values** will grow on **add()** and **addValue()**.
     ResizeAllowed,
 
-    /// Errors will be generated when adding more elements than **capacity_dense**.
+    // Errors will be generated when adding more elements than **capacity_dense**.
     NoResize,
 };
 
 pub const ValueLayout = union(enum) {
-    /// AOS style.
+    // AOS style.
     InternalArrayOfStructs,
 
-    /// SOA style.
+    // SOA style.
     ExternalStructOfArraysSupport,
 };
 
 pub const ValueInitialization = union(enum) {
-    /// New values added with add() will contain uninitialized/random memory.
+    // New values added with add() will contain uninitialized/random memory.
     Untouched,
 
-    /// New values added with add() will be memset to zero.
+    // New values added with add() will be memset to zero.
     ZeroInitialized,
 };
 
 pub const SparseSetConfig = struct {
-    /// The type used for the sparse handle.
+    // The type used for the sparse handle.
     SparseT: type,
 
-    /// The type used for dense indices.
+    // The type used for dense indices.
     DenseT: type,
 
-    /// Optional: The type used for values when using **InternalArrayOfStructs**.
+    // Optional: The type used for values when using **InternalArrayOfStructs**.
     ValueT: type = void,
 
-    /// If you only have a single array of structs - AOS - letting SparseSet handle it
-    /// with **InternalArrayOfStructs** is convenient. If you want to manage the data
-    /// yourself or if you're using SOA, use **ExternalStructOfArraysSupport**.
+    // If you only have a single array of structs - AOS - letting SparseSet handle it
+    // with **InternalArrayOfStructs** is convenient. If you want to manage the data
+    // yourself or if you're using SOA, use **ExternalStructOfArraysSupport**.
     value_layout: ValueLayout,
 
-    /// Set to **ZeroInitialized** to make values created with add() be zero initialized.
-    /// Only valid with **value_layout == .InternalArrayOfStructs**.
-    /// Defaults to **Untouched**.
+    // Set to **ZeroInitialized** to make values created with add() be zero initialized.
+    // Only valid with **value_layout == .InternalArrayOfStructs**.
+    // Defaults to **Untouched**.
     value_init: ValueInitialization = .Untouched,
 
-    /// Whether or not the amount of dense indices (and values) can grow.
+    // Whether or not the amount of dense indices (and values) can grow.
     allow_resize: AllowResize = .NoResize,
 };
 
-/// Creates a specific Sparse Set type based on the config.
+// Creates a specific Sparse Set type based on the config.
 pub fn SparseSet(comptime config: SparseSetConfig) type {
     const SparseT = config.SparseT;
     const DenseT = config.DenseT;
@@ -74,29 +74,29 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
         pub const SparseCapacityT = std.math.IntFittingRange(0, std.math.maxInt(SparseT) + 1);
         pub const DenseCapacityT = std.math.IntFittingRange(0, std.math.maxInt(DenseT) + 1);
 
-        /// Allocator used for allocating, growing and freeing **dense_to_sparse**, **sparse_to_dense**, and **values**.
+        // Allocator used for allocating, growing and freeing **dense_to_sparse**, **sparse_to_dense**, and **values**.
         allocator: Allocator,
 
-        /// Mapping from dense indices to sparse handles.
+        // Mapping from dense indices to sparse handles.
         dense_to_sparse: []SparseT,
 
-        /// Mapping from sparse handles to dense indices (and values).
+        // Mapping from sparse handles to dense indices (and values).
         sparse_to_dense: []DenseT,
 
-        /// Optional: A list of **ValueT** that is used with **InternalArrayOfStructs**.
+        // Optional: A list of **ValueT** that is used with **InternalArrayOfStructs**.
         values: if (value_layout == .InternalArrayOfStructs) []ValueT else void,
 
-        /// Current amount of used handles.
+        // Current amount of used handles.
         dense_count: DenseCapacityT,
 
-        /// Amount of dense indices that can be stored.
+        // Amount of dense indices that can be stored.
         capacity_dense: DenseCapacityT,
 
-        /// Amount of sparse handles that can be used for lookups.
+        // Amount of sparse handles that can be used for lookups.
         capacity_sparse: SparseCapacityT,
 
-        /// You can think of **capacity_sparse** as how many entities you want to support, and
-        /// **capacity_dense** as how many components.
+        // You can think of **capacity_sparse** as how many entities you want to support, and
+        // **capacity_dense** as how many components.
         pub fn init(
             allocator: Allocator,
             capacity_sparse: SparseCapacityT,
@@ -141,7 +141,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return self;
         }
 
-        /// Deallocates **dense_to_sparse**, **sparse_to_dense**, and optionally **values**.
+        // Deallocates **dense_to_sparse**, **sparse_to_dense**, and optionally **values**.
         pub fn deinit(self: Self) void {
             self.allocator.free(self.dense_to_sparse);
             self.allocator.free(self.sparse_to_dense);
@@ -150,43 +150,37 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             }
         }
 
-        /// Resets the set cheaply.
+        // Resets the set cheaply.
         pub fn clear(self: *Self) void {
             self.dense_count = 0;
         }
 
-        /// Returns the amount of allocated handles.
+        // Returns the amount of allocated handles.
         pub fn len(self: Self) DenseCapacityT {
             return self.dense_count;
         }
 
-        /// Returns a slice that can be used to loop over the sparse handles.
+        // Returns a slice that can be used to loop over the sparse handles.
         pub fn toSparseSlice(self: Self) []SparseT {
             return self.dense_to_sparse[0..self.dense_count];
         }
 
-        // A bit of a hack to comptime add a function
-        // TODO: Rewrite after https://github.com/ziglang/zig/issues/1717
-        pub usingnamespace switch (value_layout) {
-            .InternalArrayOfStructs => struct {
-                /// Returns a slice that can be used to loop over the values.
-                pub fn toValueSlice(self: Self) []ValueT {
-                    return self.values[0..self.dense_count];
-                }
-            },
-            else => struct {},
-        };
+        // Returns a slice that can be used to loop over the values (AOS only).
+        pub fn toValueSlice(self: Self) []ValueT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("toValueSlice requires value_layout == .InternalArrayOfStructs");
+            return self.values[0..self.dense_count];
+        }
 
-        /// Returns how many dense indices are still available
+        // Returns how many dense indices are still available
         pub fn remainingCapacity(self: Self) DenseCapacityT {
             return self.capacity_dense - self.dense_count;
         }
 
-        /// Registers the sparse value and matches it to a dense index.
-        /// Grows .dense_to_sparse and .values if needed and resizing is allowed.
-        /// Note: If resizing is allowed, you must use an allocator that you are sure
-        /// will never fail for your use cases.
-        /// If that is not an option, use addOrError.
+        // Registers the sparse value and matches it to a dense index.
+        // Grows .dense_to_sparse and .values if needed and resizing is allowed.
+        // Note: If resizing is allowed, you must use an allocator that you are sure
+        // will never fail for your use cases.
+        // If that is not an option, use addOrError.
         pub fn add(self: *Self, sparse: SparseT) DenseT {
             if (allow_resize == .ResizeAllowed) {
                 if (self.dense_count == self.capacity_dense) {
@@ -215,8 +209,8 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return @intCast(self.dense_count - 1);
         }
 
-        /// May return error.OutOfBounds or error.AlreadyRegistered, otherwise calls add.
-        /// Grows .dense_to_sparse and .values if needed and resizing is allowed.
+        // May return error.OutOfBounds or error.AlreadyRegistered, otherwise calls add.
+        // Grows .dense_to_sparse and .values if needed and resizing is allowed.
         pub fn addOrError(self: *Self, sparse: SparseT) !DenseT {
             if (sparse >= self.capacity_sparse) {
                 return error.OutOfBounds;
@@ -245,70 +239,61 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return self.add(sparse);
         }
 
-        // TODO: Rewrite after https://github.com/ziglang/zig/issues/1717
-        pub usingnamespace switch (value_layout) {
-            .InternalArrayOfStructs => struct {
-                /// Registers the sparse value and matches it to a dense index
-                /// Grows .dense_to_sparse and .values if needed and resizing is allowed.
-                /// Note: If resizing is allowed, you must use an allocator that you are sure
-                /// will never fail for your use cases.
-                ///  If that is not an option, use addOrError.
-                pub fn addValue(self: *Self, sparse: SparseT, value: ValueT) DenseT {
-                    if (allow_resize == .ResizeAllowed) {
-                        if (self.dense_count == self.capacity_dense) {
-                            self.capacity_dense = self.capacity_dense * 2;
-                            self.dense_to_sparse = self.allocator.realloc(self.dense_to_sparse, self.capacity_dense) catch unreachable;
-                            if (value_layout == .InternalArrayOfStructs) {
-                                self.values = self.allocator.realloc(self.values, self.capacity_dense) catch unreachable;
-                            }
-                        }
-                        while (sparse >= self.sparse_to_dense.len) {
-                            self.capacity_sparse = self.capacity_sparse * 2;
-                            self.sparse_to_dense = self.allocator.realloc(self.sparse_to_dense, @intCast(self.capacity_sparse)) catch unreachable;
-                        }
+        // Registers the sparse value and matches it to a dense index (AOS only).
+        pub fn addValue(self: *Self, sparse: SparseT, value: ValueT) DenseT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("addValue requires value_layout == .InternalArrayOfStructs");
+            if (allow_resize == .ResizeAllowed) {
+                if (self.dense_count == self.capacity_dense) {
+                    self.capacity_dense = self.capacity_dense * 2;
+                    self.dense_to_sparse = self.allocator.realloc(self.dense_to_sparse, self.capacity_dense) catch unreachable;
+                    if (value_layout == .InternalArrayOfStructs) {
+                        self.values = self.allocator.realloc(self.values, self.capacity_dense) catch unreachable;
                     }
-
-                    assert(sparse < self.capacity_sparse);
-                    assert(self.dense_count < self.capacity_dense);
-                    assert(!self.hasSparse(@intCast(sparse)));
-                    self.dense_to_sparse[self.dense_count] = sparse;
-                    self.sparse_to_dense[@intCast(sparse)] = @intCast(self.dense_count);
-                    self.values[self.dense_count] = value;
-                    self.dense_count += 1;
-                    return @intCast(self.dense_count - 1);
                 }
-
-                /// May return error.OutOfBounds or error.AlreadyRegistered, otherwise calls add.
-                /// Grows .dense_to_sparse and .values if needed and resizing is allowed.
-                pub fn addValueOrError(self: *Self, sparse: SparseT, value: ValueT) !DenseT {
-                    if (sparse >= self.capacity_sparse) {
-                        return error.OutOfBounds;
-                    }
-
-                    if (try self.hasSparseOrError(sparse)) {
-                        return error.AlreadyRegistered;
-                    }
-
-                    if (self.dense_count == self.capacity_dense) {
-                        if (allow_resize == .ResizeAllowed) {
-                            self.capacity_dense = self.capacity_dense * 2;
-                            self.dense_to_sparse = try self.allocator.realloc(self.dense_to_sparse, self.capacity_dense);
-                            if (value_layout == .InternalArrayOfStructs) {
-                                self.values = try self.allocator.realloc(self.values, self.capacity_dense);
-                            }
-                        } else {
-                            return error.OutOfBounds;
-                        }
-                    }
-
-                    return self.addValue(sparse, value);
+                while (sparse >= self.sparse_to_dense.len) {
+                    self.capacity_sparse = self.capacity_sparse * 2;
+                    self.sparse_to_dense = self.allocator.realloc(self.sparse_to_dense, @intCast(self.capacity_sparse)) catch unreachable;
                 }
-            },
-            else => struct {},
-        };
+            }
 
-        /// Removes the sparse/dense index, and replaces it with the last ones.
-        /// dense_old and dense_new is
+            assert(sparse < self.capacity_sparse);
+            assert(self.dense_count < self.capacity_dense);
+            assert(!self.hasSparse(@intCast(sparse)));
+            self.dense_to_sparse[self.dense_count] = sparse;
+            self.sparse_to_dense[@intCast(sparse)] = @intCast(self.dense_count);
+            self.values[self.dense_count] = value;
+            self.dense_count += 1;
+            return @intCast(self.dense_count - 1);
+        }
+
+        // May return error.OutOfBounds or error.AlreadyRegistered, otherwise calls add (AOS only).
+        pub fn addValueOrError(self: *Self, sparse: SparseT, value: ValueT) !DenseT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("addValueOrError requires value_layout == .InternalArrayOfStructs");
+            if (sparse >= self.capacity_sparse) {
+                return error.OutOfBounds;
+            }
+
+            if (try self.hasSparseOrError(sparse)) {
+                return error.AlreadyRegistered;
+            }
+
+            if (self.dense_count == self.capacity_dense) {
+                if (allow_resize == .ResizeAllowed) {
+                    self.capacity_dense = self.capacity_dense * 2;
+                    self.dense_to_sparse = try self.allocator.realloc(self.dense_to_sparse, self.capacity_dense);
+                    if (value_layout == .InternalArrayOfStructs) {
+                        self.values = try self.allocator.realloc(self.values, self.capacity_dense);
+                    }
+                } else {
+                    return error.OutOfBounds;
+                }
+            }
+
+            return self.addValue(sparse, value);
+        }
+
+        // Removes the sparse/dense index, and replaces it with the last ones.
+        // dense_old and dense_new is
         pub fn removeWithInfo(self: *Self, sparse: SparseT, dense_old: *DenseT, dense_new: *DenseT) void {
             assert(self.dense_count > 0);
             assert(self.hasSparse(sparse));
@@ -326,7 +311,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             dense_new.* = dense;
         }
 
-        /// May return error.OutOfBounds, otherwise calls removeWithInfo.
+        // May return error.OutOfBounds, otherwise calls removeWithInfo.
         pub fn removeWithInfoOrError(self: *Self, sparse: SparseT, dense_old: *DenseT, dense_new: *DenseT) !void {
             if (self.dense_count == 0) {
                 return error.OutOfBounds;
@@ -339,7 +324,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return self.removeWithInfo(sparse, dense_old, dense_new);
         }
 
-        /// Like removeWithInfo info, but slightly faster, in case you don't care about the switch.
+        // Like removeWithInfo info, but slightly faster, in case you don't care about the switch.
         pub fn remove(self: *Self, sparse: SparseT) void {
             assert(self.dense_count > 0);
             assert(self.hasSparse(sparse));
@@ -355,7 +340,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             self.dense_count -= 1;
         }
 
-        /// May return error.OutOfBounds or error.NotRegistered, otherwise calls remove.
+        // May return error.OutOfBounds or error.NotRegistered, otherwise calls remove.
         pub fn removeOrError(self: *Self, sparse: SparseT) !void {
             if (self.dense_count == 0) {
                 return error.OutOfBounds;
@@ -408,7 +393,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             self.sparse_to_dense[sparse] = @intCast(new_pos);
         }
 
-        /// Returns true if the sparse is registered to a dense index.
+        // Returns true if the sparse is registered to a dense index.
         pub fn hasSparse(self: Self, sparse: SparseT) bool {
             // Unsure if this call to disable runtime safety is needed - can add later if so.
             // Related: https://github.com/ziglang/zig/issues/978
@@ -418,7 +403,7 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return dense < self.dense_count and self.dense_to_sparse[dense] == sparse;
         }
 
-        /// May return error.OutOfBounds, otherwise calls hasSparse.
+        // May return error.OutOfBounds, otherwise calls hasSparse.
         pub fn hasSparseOrError(self: Self, sparse: SparseT) !bool {
             if (sparse >= self.capacity_sparse) {
                 return error.OutOfBounds;
@@ -427,19 +412,19 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return self.hasSparse(sparse);
         }
 
-        ///Returns true if the sparse is registered to a dense index, but will not have an error if sprase is out of bounds
+        //Returns true if the sparse is registered to a dense index, but will not have an error if sprase is out of bounds
         pub fn HasSparse(self: Self, sparse: SparseT) bool {
             if (sparse >= self.capacity_sparse) return false;
             return self.hasSparse(sparse);
         }
 
-        /// Returns corresponding dense index.
+        // Returns corresponding dense index.
         pub fn getBySparse(self: Self, sparse: SparseT) DenseT {
             assert(self.hasSparse(@intCast(sparse)));
             return self.sparse_to_dense[@intCast(sparse)];
         }
 
-        /// Tries hasSparseOrError, then returns getBySparse.
+        // Tries hasSparseOrError, then returns getBySparse.
         pub fn getBySparseOrError(self: Self, sparse: SparseT) !DenseT {
             if (!try self.hasSparseOrError(sparse)) {
                 return error.NotRegistered;
@@ -448,13 +433,13 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return self.getBySparse(sparse);
         }
 
-        /// Returns corresponding sparse index.
+        // Returns corresponding sparse index.
         pub fn getByDense(self: Self, dense: DenseT) SparseT {
             assert(dense < self.dense_count);
             return self.dense_to_sparse[dense];
         }
 
-        /// Returns OutOfBounds or getByDense.
+        // Returns OutOfBounds or getByDense.
         pub fn getByDenseOrError(self: Self, dense: DenseT) !SparseT {
             if (dense >= self.dense_count) {
                 return error.OutOfBounds;
@@ -462,40 +447,38 @@ pub fn SparseSet(comptime config: SparseSetConfig) type {
             return self.getByDense(dense);
         }
 
-        // TODO: Rewrite after https://github.com/ziglang/zig/issues/1717
-        pub usingnamespace switch (value_layout) {
-            .InternalArrayOfStructs => struct {
-                /// Returns a pointer to the SOA value corresponding to the sparse parameter.
-                pub fn getValueBySparse(self: Self, sparse: SparseT) *ValueT {
-                    assert(self.hasSparse(sparse));
-                    const dense = self.sparse_to_dense[@intCast(sparse)];
-                    return &self.values[dense];
-                }
+        // Returns a pointer to the AOS value corresponding to the sparse parameter (AOS only).
+        pub fn getValueBySparse(self: Self, sparse: SparseT) *ValueT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("getValueBySparse requires value_layout == .InternalArrayOfStructs");
+            assert(self.hasSparse(sparse));
+            const dense = self.sparse_to_dense[@intCast(sparse)];
+            return &self.values[dense];
+        }
 
-                /// First tries hasSparse, then returns getValueBySparse().
-                pub fn getValueBySparseOrError(self: Self, sparse: SparseT) !*ValueT {
-                    if (!try self.hasSparseOrError(sparse)) {
-                        return error.NotRegistered;
-                    }
-                    return self.getValueBySparse(sparse);
-                }
+        // First tries hasSparse, then returns getValueBySparse() (AOS only).
+        pub fn getValueBySparseOrError(self: Self, sparse: SparseT) !*ValueT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("getValueBySparseOrError requires value_layout == .InternalArrayOfStructs");
+            if (!try self.hasSparseOrError(sparse)) {
+                return error.NotRegistered;
+            }
+            return self.getValueBySparse(sparse);
+        }
 
-                /// Returns a pointer to the SOA value corresponding to the sparse parameter.
-                pub fn getValueByDense(self: Self, dense: DenseT) *ValueT {
-                    assert(dense < self.dense_count);
-                    return &self.values[dense];
-                }
+        // Returns a pointer to the AOS value corresponding to the dense parameter (AOS only).
+        pub fn getValueByDense(self: Self, dense: DenseT) *ValueT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("getValueByDense requires value_layout == .InternalArrayOfStructs");
+            assert(dense < self.dense_count);
+            return &self.values[dense];
+        }
 
-                /// Returns error.OutOfBounds or getValueByDense().
-                pub fn getValueByDenseOrError(self: Self, dense: DenseT) !*ValueT {
-                    if (dense >= self.dense_count) {
-                        return error.OutOfBounds;
-                    }
-                    return self.getValueByDense(dense);
-                }
-            },
-            else => struct {},
-        };
+        // Returns error.OutOfBounds or getValueByDense() (AOS only).
+        pub fn getValueByDenseOrError(self: Self, dense: DenseT) !*ValueT {
+            if (value_layout != .InternalArrayOfStructs) @compileError("getValueByDenseOrError requires value_layout == .InternalArrayOfStructs");
+            if (dense >= self.dense_count) {
+                return error.OutOfBounds;
+            }
+            return self.getValueByDense(dense);
+        }
     };
 }
 

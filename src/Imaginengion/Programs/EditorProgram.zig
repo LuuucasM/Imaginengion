@@ -88,7 +88,7 @@ _ScriptsPanel: ScriptsPanel,
 _StatsPanel: StatsPanel,
 _ToolbarPanel: ToolbarPanel,
 _ViewportPanel: ViewportPanel,
-_SceneSpecList: std.ArrayList(SceneSpecPanel),
+_SceneSpecList: std.ArrayList(SceneSpecPanel) = .{},
 
 //editor stuff
 mEditorSceneManager: SceneManager,
@@ -101,7 +101,7 @@ mEditorViewportEntity: Entity,
 mWindow: *Window,
 mGameSceneManager: SceneManager,
 mFrameAllocator: std.mem.Allocator,
-mEngineAllocator: std.mem.Allocator,
+_EngineAllocator: std.mem.Allocator,
 
 const EditorProgram = @This();
 
@@ -117,7 +117,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         .mEditorViewportEntity = undefined,
         .mWindow = window,
         .mFrameAllocator = frame_allocator,
-        .mEngineAllocator = engine_allocator,
+        ._EngineAllocator = engine_allocator,
         ._AssetHandlePanel = AssetHandlePanel.Init(),
         ._ComponentsPanel = ComponentsPanel.Init(engine_allocator),
         ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
@@ -127,7 +127,6 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(window.GetWidth(), window.GetHeight()),
-        ._SceneSpecList = std.ArrayList(SceneSpecPanel).init(engine_allocator),
     };
 }
 
@@ -278,8 +277,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
             try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, frame_allocator, 0b1);
 
-            try camera_components.append(editor_camera_component);
-            try transform_components.append(editor_camera_transform);
+            try camera_components.append(frame_allocator, editor_camera_component);
+            try transform_components.append(frame_allocator, editor_camera_transform);
 
             try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
 
@@ -295,8 +294,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
                         try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, frame_allocator, 0b0);
 
-                        try camera_components.append(start_camera_component);
-                        try transform_components.append(start_transform_component);
+                        try camera_components.append(frame_allocator, start_camera_component);
+                        try transform_components.append(frame_allocator, start_transform_component);
 
                         try self._ViewportPanel.OnImguiRenderPlay(camera_components);
 
@@ -314,8 +313,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
                 try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, frame_allocator, 0b1);
 
-                try camera_components.append(editor_camera_component);
-                try transform_components.append(editor_camera_transform);
+                try camera_components.append(frame_allocator, editor_camera_component);
+                try transform_components.append(frame_allocator, editor_camera_transform);
 
                 try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
 
@@ -329,8 +328,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, frame_allocator: std.mem.Allocato
 
                     try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, frame_allocator, 0b0);
 
-                    try camera_components.append(start_camera_component);
-                    try transform_components.append(start_transform_component);
+                    try camera_components.append(frame_allocator, start_camera_component);
+                    try transform_components.append(frame_allocator, start_transform_component);
 
                     try self._ViewportPanel.OnImguiRenderPlay(camera_components);
 
@@ -451,7 +450,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_OpenSceneEvent => |e| {
             if (e.Path.len > 0) {
-                _ = try self.mGameSceneManager.LoadScene(e.Path, self.mEngineAllocator, self.mFrameAllocator);
+                _ = try self.mGameSceneManager.LoadScene(e.Path, self._EngineAllocator, self.mFrameAllocator);
             }
         },
         .ET_MoveSceneEvent => |e| {
@@ -497,7 +496,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_OpenSceneSpecEvent => |e| {
             const new_scene_spec_panel = try SceneSpecPanel.Init(e.mSceneLayer);
-            try self._SceneSpecList.append(new_scene_spec_panel);
+            try self._SceneSpecList.append(self._EngineAllocator, new_scene_spec_panel);
         },
         .ET_SaveEntityEvent => {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
@@ -571,5 +570,5 @@ fn CleanSceneSpecs(self: *EditorProgram) void {
             i += 1;
         }
     }
-    self._SceneSpecList.shrinkAndFree(end_index);
+    self._SceneSpecList.shrinkAndFree(self._EngineAllocator, end_index);
 }

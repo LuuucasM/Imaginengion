@@ -194,6 +194,7 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
             quad_component,
         );
     }
+    //else if more shapes when more shapes are added
 
     //check is if parent, if so draw children else nothing
     if (entity.HasComponent(EntityParentComponent)) {

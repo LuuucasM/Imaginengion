@@ -23,10 +23,12 @@ mBackArrowTextureHandle: AssetHandle,
 mSceneTextureHandle: AssetHandle,
 mScriptTextureHandle: AssetHandle,
 mProjectDirectory: ?std.fs.Dir,
-mProjectPath: std.ArrayList(u8),
+mProjectPath: std.ArrayList(u8) = .{},
 mCurrentDirectory: ?std.fs.Dir,
-mCurrentPath: std.ArrayList(u8),
+mCurrentPath: std.ArrayList(u8) = .{},
 mProjectFile: ?std.fs.File = null,
+
+_EngineAllocator: std.mem.Allocator,
 
 pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
     return ContentBrowserPanel{
@@ -37,10 +39,10 @@ pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
         .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng),
         .mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng),
         .mProjectDirectory = null,
-        .mProjectPath = std.ArrayList(u8).init(engine_allocator),
         .mCurrentDirectory = null,
-        .mCurrentPath = std.ArrayList(u8).init(engine_allocator),
         .mProjectFile = null,
+
+        ._EngineAllocator = engine_allocator,
     };
 }
 
@@ -54,12 +56,12 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
         dir.close();
         self.mProjectDirectory = null;
     }
-    self.mProjectPath.deinit();
+    self.mProjectPath.deinit(self._EngineAllocator);
     if (self.mCurrentDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
     }
-    self.mCurrentPath.deinit();
+    self.mCurrentPath.deinit(self._EngineAllocator);
     if (self.mProjectFile) |*file| {
         file.close();
         self.mProjectDirectory = null;
@@ -136,7 +138,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
         const last_slash = std.mem.lastIndexOf(u8, self.mCurrentPath.items, "/").?;
-        self.mCurrentPath.shrinkAndFree(last_slash);
+        self.mCurrentPath.shrinkAndFree(self._EngineAllocator, last_slash);
 
         self.mCurrentDirectory.?.close();
         self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
@@ -164,8 +166,8 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
             if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-                _ = try self.mCurrentPath.writer().write("/");
-                _ = try self.mCurrentPath.writer().write(entry.name);
+                _ = try self.mCurrentPath.writer(self._EngineAllocator).write("/");
+                _ = try self.mCurrentPath.writer(self._EngineAllocator).write(entry.name);
 
                 new_curr_dir = true;
             }
@@ -220,14 +222,14 @@ pub fn OnNewProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !void
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree();
-    self.mCurrentPath.clearAndFree();
+    self.mProjectPath.clearAndFree(self._EngineAllocator);
+    self.mCurrentPath.clearAndFree(self._EngineAllocator);
 
     self.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
     self.mCurrentDirectory = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
 
-    _ = try self.mProjectPath.writer().write(abs_path);
-    _ = try self.mCurrentPath.writer().write(abs_path);
+    _ = try self.mProjectPath.writer(self._EngineAllocator).write(abs_path);
+    _ = try self.mCurrentPath.writer(self._EngineAllocator).write(abs_path);
 
     self.mProjectFile = try self.mProjectDirectory.?.createFile("NewGame.imprj", .{});
 }
@@ -245,14 +247,14 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !voi
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree();
-    self.mCurrentPath.clearAndFree();
+    self.mProjectPath.clearAndFree(self._EngineAllocator);
+    self.mCurrentPath.clearAndFree(self._EngineAllocator);
 
     self.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
     self.mCurrentDirectory = try std.fs.openDirAbsolute(dir_name, .{ .iterate = true });
 
-    _ = try self.mProjectPath.writer().write(dir_name);
-    _ = try self.mCurrentPath.writer().write(dir_name);
+    _ = try self.mProjectPath.writer(self._EngineAllocator).write(dir_name);
+    _ = try self.mCurrentPath.writer(self._EngineAllocator).write(dir_name);
 
     self.mProjectFile = try self.mProjectDirectory.?.openFile("NewGame.imprj", .{});
 }

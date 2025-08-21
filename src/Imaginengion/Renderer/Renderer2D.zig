@@ -66,21 +66,6 @@ pub const QuadData = extern struct {
     // Struct size : 96 bytes (multiple of 16)
 };
 
-//pub const CircleData = extern struct {
-//    Position: [3]f32,
-//    Normal: [3]f32,
-//    Radius: f32,
-//    Color: [4]f32,
-//};
-
-//pub const LineData = extern struct {
-//    P1: [3]f32,
-//    P2: [3]f32,
-//    Normal: [3]f32,
-//    Thickness: f32,
-//    Color: [4]f32,
-//};
-
 const RectVertexPositions = Mat4f32{
     Vec4f32{ -0.5, -0.5, 0.0, 1.0 },
     Vec4f32{ 0.5, -0.5, 0.0, 1.0 },
@@ -91,14 +76,10 @@ const RectVertexPositions = Mat4f32{
 mAllocator: std.mem.Allocator,
 
 mQuadBuffer: SSBO,
-mQuadBufferBase: std.ArrayList(QuadData),
+mQuadBufferBase: std.ArrayList(QuadData) = .{},
 mQuadCountUB: UniformBuffer,
 
-//mCircleBuffer: SSBO,
-//mCircleBufferBase: std.ArrayList(CircleData),
-
-//mLineBuffer: SSBO,
-//mLineBufferBase: std.ArrayList(LineData),
+_Allocator: std.mem.Allocator,
 
 pub fn Init(allocator: std.mem.Allocator) !Renderer2D {
     return Renderer2D{
@@ -106,25 +87,19 @@ pub fn Init(allocator: std.mem.Allocator) !Renderer2D {
         .mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100),
         .mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(allocator, 100),
         .mQuadCountUB = UniformBuffer.Init(@sizeOf(c_uint)),
-        //.mCircleBuffer = SSBO.Init(@sizeOf(CircleData) * 100),
-        //.mCircleBufferBase = try std.ArrayList(CircleData).initCapacity(allocator, 100),
-        //.mLineBuffer = SSBO.Init(@sizeOf(LineData) * 100),
-        //.mLineBufferBase = try std.ArrayList(LineData).initCapacity(allocator, 100),
+
+        ._Allocator = allocator,
     };
 }
 
 pub fn Deinit(self: *Renderer2D) !void {
     self.mQuadBuffer.Deinit();
-    self.mQuadBufferBase.deinit();
+    self.mQuadBufferBase.deinit(self._Allocator);
     self.mQuadCountUB.Deinit();
-    //self.mCircleBuffer.Deinit();
-    //self.mCircleBufferBase.deinit();
-    //self.mLineBuffer.Deinit();
-    //self.mLineBufferBase.deinit();
 }
 
 pub fn StartBatch(self: *Renderer2D) void {
-    self.mQuadBufferBase.clearAndFree();
+    self.mQuadBufferBase.clearAndFree(self._Allocator);
 }
 
 pub fn SetBuffers(self: *Renderer2D) !void {
@@ -144,7 +119,7 @@ pub fn BindBuffers(self: *Renderer2D) void {
     const zone = Tracy.ZoneInit("R2D BindBuffers", @src());
     defer zone.Deinit();
 
-    //start at 2 cuz 0 is camera and 1 is resolution
+    //start at 2 cuz 0 is camera and 1 is rendering mode
     self.mQuadBuffer.Bind(2);
     self.mQuadCountUB.Bind(3);
 }
@@ -155,7 +130,7 @@ pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponen
 
     const texture_asset = try quad_component.mTexture.GetAsset(Texture2D);
 
-    try self.mQuadBufferBase.append(.{
+    try self.mQuadBufferBase.append(self._Allocator, .{
         .Position = [3]f32{ transform_component.Translation[0], transform_component.Translation[1], transform_component.Translation[2] },
         .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
         .Scale = [3]f32{ transform_component.Scale[0], transform_component.Scale[1], transform_component.Scale[2] },
@@ -166,26 +141,3 @@ pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponen
         .TexIndex = texture_asset.GetBindlessID(),
     });
 }
-
-//pub fn DrawCircle(self: *Renderer2D, position: Vec3f32, rotation: Quatf32, radius: f32, color: Vec4f32) !void {
-//    try self.mCircleBufferBase.append(.{
-//        .Position = position,
-//        .Normal = LinAlg.NormalFromQuat(rotation),
-//        .Radius = radius,
-//        .Color = [4]f32{ color[0], color[1], color[2], color[3] },
-//    });
-//}
-//
-////TODO: FINISH DRAWING LINE
-//pub fn DrawLine(self: *Renderer2D, p1: Vec3f32, p2: Vec3f32, rotation: Quatf32, thickness: f32, color: Vec4f32) !void {
-//    const rot_norm = LinAlg.NormalFromQuat(rotation);
-//    const axis = LinAlg.NormalizeVec3(p1 - p2);
-//
-//    try self.mLineBufferBase.append(.{
-//        .P1 = p1,
-//        .P2 = p2,
-//        .Normal = LinAlg.NormalizeVec3(rot_norm - @as(Vec3f32, @splat(LinAlg.Vec3DotVec3(rot_norm, axis))) * axis),
-//        .Thickness = thickness,
-//        .Color = color,
-//    });
-//}

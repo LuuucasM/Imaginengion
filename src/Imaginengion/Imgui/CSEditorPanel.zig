@@ -41,8 +41,10 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
 
     var buffer: [300]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    var to_remove = std.ArrayList(u64).init(fba.allocator());
-    defer to_remove.deinit();
+    const fba_allocator = fba.allocator();
+
+    var to_remove = std.ArrayList(u64){};
+    defer to_remove.deinit(fba_allocator);
 
     var iter = self.mEditorWindows.iterator();
     while (iter.next()) |entry| {
@@ -66,7 +68,7 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
         try window.EditorRender();
 
         if (is_open == false) {
-            try to_remove.append(id_name);
+            try to_remove.append(fba_allocator, id_name);
         }
     }
 

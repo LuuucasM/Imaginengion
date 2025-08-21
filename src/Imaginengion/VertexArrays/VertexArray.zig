@@ -19,7 +19,7 @@ pub fn Init(allocator: std.mem.Allocator) VertexArray {
     };
 }
 
-pub fn Deinit(self: VertexArray) void {
+pub fn Deinit(self: *VertexArray) void {
     self.mImpl.Deinit();
 }
 

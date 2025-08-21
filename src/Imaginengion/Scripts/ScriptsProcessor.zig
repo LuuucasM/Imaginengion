@@ -54,7 +54,7 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
         if (cont_bool == false) break;
 
         var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
-        scene_manager.FilterEntityScriptsByScene(&scene_scripts, scene_id);
+        scene_manager.FilterEntityScriptsByScene(&scene_scripts, scene_id, frame_allocator);
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_go.GetComponent(EntityScriptComponent, script_id);

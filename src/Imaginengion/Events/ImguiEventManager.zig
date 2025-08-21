@@ -6,23 +6,23 @@ const Self = @This();
 
 var EventManager: Self = .{};
 
-mEventPool: std.ArrayList(ImguiEvent) = undefined,
+mEventPool: std.ArrayList(ImguiEvent) = .{},
 mProgram: *Program = undefined,
 
 var EventGPA = std.heap.DebugAllocator(.{}).init;
+const EventAllocator = EventGPA.allocator();
 
 pub fn Init(program: *Program) !void {
-    EventManager.mEventPool = std.ArrayList(ImguiEvent).init(EventGPA.allocator());
     EventManager.mProgram = program;
 }
 
 pub fn Deinit() void {
-    EventManager.mEventPool.deinit();
+    EventManager.mEventPool.deinit(EventAllocator);
     _ = EventGPA.deinit();
 }
 
 pub fn Insert(event: ImguiEvent) !void {
-    try EventManager.mEventPool.append(event);
+    try EventManager.mEventPool.append(EventAllocator, event);
 }
 
 pub fn ProcessEvents() !void {
@@ -51,9 +51,9 @@ pub fn ProcessEvents() !void {
 pub fn EventsReset() void {
     const zone = Tracy.ZoneInit("Imgui Event Reset", @src());
     defer zone.Deinit();
-    EventManager.mEventPool.clearAndFree();
+    EventManager.mEventPool.clearAndFree(EventAllocator);
 }
 
-pub fn EventAllocator() std.mem.Allocator {
+pub fn GetEventAllocator() std.mem.Allocator {
     return EventGPA.allocator();
 }

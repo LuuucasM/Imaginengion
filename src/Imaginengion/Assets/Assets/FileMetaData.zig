@@ -8,14 +8,16 @@ pub const PathType = enum(u2) {
     Abs = 2,
 };
 
-mRelPath: std.ArrayList(u8) = undefined,
+mRelPath: std.ArrayList(u8) = .{},
 mLastModified: i128 = 0,
 mSize: u64 = 0,
 mHash: u64 = 0,
 mPathType: PathType = .Eng,
 
+_PathAllocator: std.mem.Allocator = undefined,
+
 pub fn Deinit(self: *FileMetaData) !void {
-    self.mRelPath.deinit();
+    self.mRelPath.deinit(self._PathAllocator);
 }
 
 pub const Ind: usize = blk: {

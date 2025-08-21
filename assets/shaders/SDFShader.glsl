@@ -113,8 +113,11 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
         vec2 texture_uv = GetTexUVQuad(hit_point, quad.Position, quad.Rotation, quad.Scale);
 
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
+            // Apply tiling factor to UV coordinates
+            vec2 tiled_uv = texture_uv * quad.TilingFactor;
+            
             sampler2D tex = sampler2D(quad.TexIndex);
-            vec4 texture_color = texture(tex, texture_uv);
+            vec4 texture_color = texture(tex, tiled_uv);
             return (quad.Color * texture_color);
         }
     }

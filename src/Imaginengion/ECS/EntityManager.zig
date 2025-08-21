@@ -8,27 +8,28 @@ pub fn EntityManager(entity_t: type) type {
 
         _NextID: entity_t = 0,
         _IDsInUse: ArraySet(entity_t),
-        _IDsRemoved: std.ArrayList(entity_t),
-        mIDsToRemove: std.ArrayList(entity_t),
+        _IDsRemoved: std.ArrayList(entity_t) = .{},
+        mIDsToRemove: std.ArrayList(entity_t) = .{},
+
+        _ECSAllocator: std.mem.Allocator,
 
         pub fn Init(ECSAllocator: std.mem.Allocator) Self {
             return Self{
                 ._IDsInUse = ArraySet(entity_t).init(ECSAllocator),
-                ._IDsRemoved = std.ArrayList(entity_t).init(ECSAllocator),
-                .mIDsToRemove = std.ArrayList(entity_t).init(ECSAllocator),
+                ._ECSAllocator = ECSAllocator,
             };
         }
 
         pub fn Deinit(self: *Self) void {
             self._IDsInUse.deinit();
-            self._IDsRemoved.deinit();
-            self.mIDsToRemove.deinit();
+            self._IDsRemoved.deinit(self._ECSAllocator);
+            self.mIDsToRemove.deinit(self._ECSAllocator);
         }
 
         pub fn clearAndFree(self: *Self) void {
             self._IDsInUse.clearAndFree();
-            self._IDsRemoved.clearAndFree();
-            self.mIDsToRemove.clearAndFree();
+            self._IDsRemoved.clearAndFree(self._ECSAllocator);
+            self.mIDsToRemove.clearAndFree(self._ECSAllocator);
             self._NextID = 0;
         }
 
@@ -51,7 +52,7 @@ pub fn EntityManager(entity_t: type) type {
         pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
             std.debug.assert(self._IDsInUse.contains(entityID));
             _ = self._IDsInUse.remove(entityID);
-            try self._IDsRemoved.append(entityID);
+            try self._IDsRemoved.append(self._ECSAllocator, entityID);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
@@ -60,7 +61,7 @@ pub fn EntityManager(entity_t: type) type {
 
         pub fn SetToDestroy(self: *Self, entityID: entity_t) !void {
             std.debug.assert(self._IDsInUse.contains(entityID));
-            try self.mIDsToRemove.append(entityID);
+            try self.mIDsToRemove.append(self._ECSAllocator, entityID);
         }
     };
 }

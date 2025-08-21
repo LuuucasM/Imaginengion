@@ -16,7 +16,6 @@ pub fn build(b: *std.Build) void {
     //make exe
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",
-        .optimize = optimize,
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,

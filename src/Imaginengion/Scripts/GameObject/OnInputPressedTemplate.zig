@@ -8,7 +8,7 @@ const OnInputPressedScript = @This();
 /// Function that gets executed when a key pressed event is triggered
 /// if this function returns true it allows the event to be propegated to other layers/systems
 /// if it returns false it will stop at this layer
-pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *const Entity, e: *const InputPressedEvent) callconv(.C) bool {
+pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *const Entity, e: *const InputPressedEvent) callconv(.c) bool {
     _ = engine_context;
     _ = allocator;
     _ = self;
@@ -17,9 +17,9 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
     return true;
 }
 
-pub export fn EditorRender() callconv(.C) void {}
+pub export fn EditorRender() callconv(.c) void {}
 
 //Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
-pub export fn GetScriptType() callconv(.C) ScriptType {
+pub export fn GetScriptType() callconv(.c) ScriptType {
     return ScriptType.OnInputPressed;
 }

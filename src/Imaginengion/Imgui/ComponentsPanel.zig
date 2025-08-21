@@ -57,10 +57,12 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
     if (self.mSelectedEntity) |entity| {
         var buffer: [300]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const fba_allocator = fba.allocator();
+
         const entity_name = entity.GetName();
         const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len;
         const trimmed_name = entity_name[0..name_len];
-        const name = try std.fmt.allocPrintZ(fba.allocator(), "Components - {s}###Components\x00", .{trimmed_name});
+        const name = try std.fmt.allocPrintSentinel(fba_allocator, "Components - {s}###Components\x00", .{trimmed_name}, 0);
 
         _ = imgui.igBegin(name.ptr, null, 0);
     } else {

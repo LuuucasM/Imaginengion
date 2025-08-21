@@ -6,5 +6,3 @@ pub const c = @cImport({
     @cInclude("generator/output/cimgui_impl.h");
     @cInclude("cimguizmo.h");
 });
-
-pub usingnamespace c;

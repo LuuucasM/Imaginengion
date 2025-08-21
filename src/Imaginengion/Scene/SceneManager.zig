@@ -124,9 +124,8 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
 
     _ = try scene_layer.AddComponent(SceneIDComponent, .{ .ID = try GenUUID() });
 
-    const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .Name = std.ArrayList(u8).init(self.mEngineAllocator) });
-    scene_name_component.Name.clearAndFree();
-    _ = try scene_name_component.Name.writer().write("Unsaved Scene");
+    const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ ._NameAllocator = self.mEngineAllocator });
+    _ = try scene_name_component.Name.writer(scene_name_component._NameAllocator).write("Unsaved Scene");
 
     try self.InsertScene(scene_layer);
 
@@ -166,8 +165,8 @@ pub fn LoadScene(self: *SceneManager, path: []const u8, engine_allocator: std.me
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
-    var new_scene_name_component = SceneNameComponent{ .Name = std.ArrayList(u8).init(self.mEngineAllocator) };
-    _ = try new_scene_name_component.Name.writer().write(scene_name);
+    var new_scene_name_component = SceneNameComponent{ ._NameAllocator = self.mEngineAllocator };
+    _ = try new_scene_name_component.Name.writer(new_scene_name_component._NameAllocator).write(scene_name);
 
     _ = try scene_layer.AddComponent(SceneNameComponent, new_scene_name_component);
 
@@ -215,15 +214,15 @@ pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: 
         try self.SaveSceneAs(scene_layer, abs_path, frame_allocator);
     }
 }
-pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
+pub fn SaveSceneAs(self: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent);
     const scene_basename = std.fs.path.basename(abs_path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
-    scene_name_component.Name.clearAndFree();
-    _ = try scene_name_component.Name.writer().write(scene_name);
+    scene_name_component.Name.clearAndFree(self.mEngineAllocator);
+    _ = try scene_name_component.Name.writer(self.mEngineAllocator).write(scene_name);
 
     try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle, frame_allocator);
 }
@@ -284,19 +283,19 @@ pub fn SaveEntityAs(_: *SceneManager, entity: Entity, abs_path: []const u8, fram
     try SceneSerializer.SerializeEntityText(entity, abs_path, frame_allocator);
 }
 
-pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
+pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType, list_allocator: std.mem.Allocator) void {
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.FilterEntityByScene(entity_result_list);
+    scene_layer.FilterEntityByScene(entity_result_list, list_allocator);
 }
 
-pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
+pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType, list_allocator: std.mem.Allocator) void {
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.FilterEntityScriptsByScene(scripts_result_list);
+    scene_layer.FilterEntityScriptsByScene(scripts_result_list, list_allocator);
 }
 
-pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType) void {
+pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType, list_allocator: std.mem.Allocator) void {
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.FilterSceneScriptsByScene(scripts_result_list);
+    scene_layer.FilterSceneScriptsByScene(scripts_result_list, list_allocator);
 }
 
 pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Entity.Type) {

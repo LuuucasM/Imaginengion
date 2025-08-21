@@ -108,7 +108,7 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
     const scene_component = scene_layer.GetComponent(SceneComponent);
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
 
-    const scene_name = try std.fmt.allocPrintZ(frame_allocator, "{s}###{d}", .{ scene_name_component.Name.items, scene_id });
+    const scene_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ scene_name_component.Name.items, scene_id }, 0);
 
     //push ID so that each scene can have their unique display
     imgui.igPushID_Str(scene_name.ptr);
@@ -221,10 +221,10 @@ fn HandleSceneDragDrop(_: *ScenePanel, scene_layer: SceneLayer) !void {
 }
 
 fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
-    var scene_name_entities = try name_entities.clone();
-    defer scene_name_entities.deinit();
+    var scene_name_entities = try name_entities.clone(frame_allocator);
+    defer scene_name_entities.deinit(frame_allocator);
 
-    scene_manager.FilterEntityByScene(&scene_name_entities, scene_layer.mSceneID);
+    scene_manager.FilterEntityByScene(&scene_name_entities, scene_layer.mSceneID, frame_allocator);
 
     for (scene_name_entities.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };
@@ -233,7 +233,7 @@ fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_ent
 }
 
 fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
-    const entity_name = try std.fmt.allocPrintZ(frame_allocator, "{s}###{d}", .{ entity.GetName(), entity.mEntityID });
+    const entity_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ entity.GetName(), entity.mEntityID }, 0);
 
     // Set text color based on selection
     const is_selected = self.mSelectedEntity != null and self.mSelectedEntity.?.mEntityID == entity.mEntityID;
@@ -361,7 +361,7 @@ fn HandlePanelDragDrop(_: *ScenePanel) !void {
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             try ImguiEventManager.Insert(.{
                 .ET_OpenSceneEvent = .{
-                    .Path = try ImguiEventManager.EventAllocator().dupe(u8, path),
+                    .Path = try ImguiEventManager.GetEventAllocator().dupe(u8, path),
                 },
             });
         }

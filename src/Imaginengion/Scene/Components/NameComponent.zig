@@ -14,10 +14,12 @@ pub const Ind: usize = blk: {
     }
 };
 
-Name: std.ArrayList(u8) = undefined,
+Name: std.ArrayList(u8) = .{},
+
+_NameAllocator: std.mem.Allocator = undefined,
 
 pub fn Deinit(self: *NameComponent) !void {
-    self.Name.deinit();
+    self.Name.deinit(self._NameAllocator);
 }
 
 pub fn GetName(self: NameComponent) []const u8 {

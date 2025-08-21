@@ -23,6 +23,7 @@ const MAX_FILE_SIZE: usize = 4_000_000_000;
 
 var AssetM: AssetManager = AssetManager{};
 var AssetGPA = std.heap.DebugAllocator(.{}).init;
+const AssetAllocator = AssetGPA.allocator();
 var AssetMemoryPool = std.heap.ArenaAllocator.init(std.heap.page_allocator);
 
 pub const AssetType = u32;
@@ -45,8 +46,8 @@ pub fn Init() !void {
         .mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
         .mPathToIDAbs = std.AutoHashMap(u64, AssetType).init(AssetGPA.allocator()),
         .mCWD = std.fs.cwd(),
-        .mCWDPath = std.ArrayList(u8).init(AssetGPA.allocator()),
-        .mProjectPath = std.ArrayList(u8).init(AssetGPA.allocator()),
+        .mCWDPath = std.ArrayList(u8){},
+        .mProjectPath = std.ArrayList(u8){},
     };
 
     var buffer: [260]u8 = undefined;
@@ -54,7 +55,7 @@ pub fn Init() !void {
     const allocator = fba.allocator();
 
     const cwd_path = try std.fs.cwd().realpathAlloc(allocator, ".");
-    _ = try AssetM.mCWDPath.writer().write(cwd_path);
+    _ = try AssetM.mCWDPath.writer(AssetAllocator).write(cwd_path);
 }
 
 pub fn Deinit() !void {
@@ -66,6 +67,8 @@ pub fn Deinit() !void {
     if (AssetM.mProjectDirectory) |*dir| {
         dir.close();
     }
+    AssetM.mCWDPath.deinit(AssetAllocator);
+    AssetM.mProjectPath.deinit(AssetAllocator);
 }
 
 pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle {
@@ -172,11 +175,11 @@ pub fn OnNewProjectEvent(abs_path: []const u8) !void {
         AssetM.mProjectDirectory = null;
     }
 
-    AssetM.mProjectPath.clearAndFree();
+    AssetM.mProjectPath.clearAndFree(AssetAllocator);
 
     AssetM.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
 
-    _ = try AssetM.mProjectPath.writer().write(abs_path);
+    _ = try AssetM.mProjectPath.writer(AssetAllocator).write(abs_path);
 }
 
 pub fn OnOpenProjectEvent(abs_path: []const u8) !void {
@@ -185,13 +188,13 @@ pub fn OnOpenProjectEvent(abs_path: []const u8) !void {
         AssetM.mProjectDirectory = null;
     }
 
-    AssetM.mProjectPath.clearAndFree();
+    AssetM.mProjectPath.clearAndFree(AssetAllocator);
 
     const dir_name = std.fs.path.dirname(abs_path).?;
 
     AssetM.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
 
-    _ = try AssetM.mProjectPath.writer().write(dir_name);
+    _ = try AssetM.mProjectPath.writer(AssetAllocator).write(dir_name);
 }
 
 pub fn OpenFile(rel_path: []const u8, path_type: PathType) !std.fs.File {
@@ -288,14 +291,15 @@ fn CreateAsset(rel_path: []const u8, path_type: PathType) !AssetHandle {
         .mRefs = 0,
     });
     const file_meta_data = try AssetM.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
-        .mRelPath = std.ArrayList(u8).init(AssetGPA.allocator()),
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,
         .mPathType = path_type,
+
+        ._PathAllocator = AssetAllocator,
     });
 
-    _ = try file_meta_data.mRelPath.writer().write(rel_path);
+    _ = try file_meta_data.mRelPath.writer(file_meta_data._PathAllocator).write(rel_path);
 
     _ = try AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
         .ID = try GenUUID(),

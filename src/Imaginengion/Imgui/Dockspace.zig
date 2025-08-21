@@ -69,7 +69,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                 }
             }
             if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(ImguiEventManager.EventAllocator(), ".imsc");
+                const path = try PlatformUtils.OpenFile(ImguiEventManager.GetEventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
                     .ET_OpenSceneEvent = .{
                         .Path = path,
@@ -84,7 +84,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                 try ImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
-                const abs_path = try PlatformUtils.SaveFile(ImguiEventManager.EventAllocator(), ".imsc");
+                const abs_path = try PlatformUtils.SaveFile(ImguiEventManager.GetEventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
                     .ET_SaveSceneAsEvent = .{
                         .AbsPath = abs_path,
@@ -99,7 +99,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                 });
             }
             if (imgui.igMenuItem_Bool("Save Entity As...", "", false, true)) {
-                const path = try PlatformUtils.SaveFile(ImguiEventManager.EventAllocator(), ".imfab");
+                const path = try PlatformUtils.SaveFile(ImguiEventManager.GetEventAllocator(), ".imfab");
                 try ImguiEventManager.Insert(ImguiEvent{
                     .ET_SaveEntityAsEvent = .{
                         .Path = path,
@@ -108,7 +108,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFolder(ImguiEventManager.EventAllocator());
+                const path = try PlatformUtils.OpenFolder(ImguiEventManager.GetEventAllocator());
                 const new_event = ImguiEvent{
                     .ET_NewProjectEvent = .{
                         .Path = path,
@@ -117,7 +117,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                 try ImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(ImguiEventManager.EventAllocator(), ".imprj");
+                const path = try PlatformUtils.OpenFile(ImguiEventManager.GetEventAllocator(), ".imprj");
                 const new_event = ImguiEvent{
                     .ET_OpenProjectEvent = .{ .Path = path },
                 };
