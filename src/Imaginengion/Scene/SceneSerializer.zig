@@ -118,7 +118,7 @@ fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame
 
     try SerializeSceneMetaData(write_stream, scene_layer);
 
-    try SerializeSceneScripts(write_stream, scene_layer, frame_allocator);
+    try SerializeSceneScripts(write_stream, scene_layer);
 
     try SerializeSceneEntities(write_stream, scene_layer, frame_allocator);
 
@@ -135,11 +135,8 @@ fn SerializeSceneMetaData(write_stream: *WriteStream, scene_layer: SceneLayer) !
     try write_stream.write(scene_component.mLayerType);
 }
 
-fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer) !void {
     if (scene_layer.HasComponent(SceneScriptComponent) == false) return;
-
-    var component_string = ComponentString{};
-    defer component_string.deinit(frame_allocator);
 
     try write_stream.objectField("SceneScripts");
     try write_stream.beginObject();
@@ -389,7 +386,7 @@ fn DeSerializeUUID(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_al
         .allocated_number => |uuid_value| uuid_value,
         else => return error.ExpectedNumber,
     };
-    scene_layer.GetComponent(SceneIDComponent).ID = try std.fmt.parseUnsigned(u128, uuid_value, 10);
+    scene_layer.GetComponent(SceneIDComponent).ID = try std.fmt.parseUnsigned(u64, uuid_value, 10);
 }
 
 fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
@@ -461,8 +458,6 @@ fn DeSerializeEntity(scanner: *std.json.Scanner, entity: Entity, scene_layer: Sc
 
         if (std.mem.eql(u8, actual_value, "CameraComponent")) {
             try DeSerializeCameraComponent(scanner, entity, frame_allocator, engine_allocator);
-        } else if (std.mem.eql(u8, actual_value, "CircleRenderComponent")) {
-            try DeSerializeBasicComponent(scanner, entity, CircleRenderComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "AISlotComponent")) {
             try DeSerializeBasicComponent(scanner, entity, AISlotComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "PlayerSlotComponent")) {
@@ -609,7 +604,6 @@ fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, fra
         .allocated_string => |v| v,
         else => return error.ExpectedString,
     };
-
     var new_component_parsed = try std.json.parseFromSlice(TransformComponent, frame_allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
     new_component_parsed.value.Dirty = true;

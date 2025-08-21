@@ -6,7 +6,7 @@ const IDComponent = @This();
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
-ID: u128 = std.math.maxInt(u128),
+ID: u64 = std.math.maxInt(u64),
 
 pub fn Deinit(_: *IDComponent) !void {}
 

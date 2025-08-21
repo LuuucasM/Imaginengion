@@ -59,7 +59,7 @@ pub fn CreateEntity(self: SceneLayer) !Entity {
     return self.CreateEntityWithUUID(try GenUUID());
 }
 
-pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u128) !Entity {
+pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
     const e = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
     _ = try e.AddComponent(EntityIDComponent, .{ .ID = uuid });
     _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
@@ -135,8 +135,7 @@ pub fn FilterSceneScriptsByScene(self: SceneLayer, scripts_result_list: *std.Arr
         }
     }
 
-    self.mECSManagerGORef
-        .scripts_result_list.shrinkAndFree(list_allocator, end_index);
+    scripts_result_list.shrinkAndFree(list_allocator, end_index);
 }
 
 pub fn EntityListDifference(self: SceneLayer, result: *std.ArrayList(Entity.Type), list2: std.ArrayList(Entity.Type), allocator: std.mem.Allocator) !void {

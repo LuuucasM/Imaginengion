@@ -4,7 +4,6 @@ const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetMan
 const Assets = @import("Assets.zig");
 const AssetMetaData = Assets.AssetMetaData;
 const FileMetaData = Assets.FileMetaData;
-const IDComponent = Assets.IDComponent;
 const ScriptAsset = Assets.ScriptAsset;
 const AssetsList = Assets.AssetsList;
 const AssetHandle = @import("AssetHandle.zig");
@@ -112,7 +111,7 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
     //the function body will contain so it doesnt get processed in runtime
     //and it is needed because the "meta" asset types dont have an Init(because they are not being)
     //loaded from disk just meta data) so this lets it compile correct
-    if (asset_type == FileMetaData or asset_type == AssetMetaData or asset_type == IDComponent) {
+    if (asset_type == FileMetaData or asset_type == AssetMetaData) {
         return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
     } else {
         if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
@@ -301,9 +300,6 @@ fn CreateAsset(rel_path: []const u8, path_type: PathType) !AssetHandle {
 
     _ = try file_meta_data.mRelPath.writer(file_meta_data._PathAllocator).write(rel_path);
 
-    _ = try AssetM.mAssetECS.AddComponent(IDComponent, new_handle.mID, .{
-        .ID = try GenUUID(),
-    });
     const file = try OpenFile(rel_path, path_type);
     defer CloseFile(file);
     const fstats = try file.stat();

@@ -12,7 +12,7 @@ const OnUpdateInputTemplate = @This();
 /// Function that gets executed every frame after polling inputs and input events
 /// if this function returns true it allows the event to be propegated to other layers/systems
 /// if it returns false it will stop at this layer
-pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.C) bool {
+pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.c) bool {
     _ = allocator;
     const input_context = engine_context.GetInputContext();
     if (input_context.IsInputPressed(.LeftAlt) == true) {
@@ -60,9 +60,9 @@ fn GetForwardDirection(rotation: Quatf32) Vec3f32 {
     return LinAlg.RotateVec3Quat(rotation, Vec3f32{ 0.0, 0.0, -1.0 });
 }
 
-pub export fn EditorRender() callconv(.C) void {}
+pub export fn EditorRender() callconv(.c) void {}
 
 //Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
-pub export fn GetScriptType() callconv(.C) ScriptType {
+pub export fn GetScriptType() callconv(.c) ScriptType {
     return ScriptType.OnUpdateInput;
 }

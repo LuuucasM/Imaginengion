@@ -55,7 +55,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 component_array.Deinit();
             }
 
-            self.mComponentsArrays.deinit();
+            self.mComponentsArrays.deinit(self.mECSAllocator);
             self.mEntitySkipField.deinit();
         }
 

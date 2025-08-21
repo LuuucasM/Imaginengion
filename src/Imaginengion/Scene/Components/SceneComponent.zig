@@ -2,7 +2,6 @@ const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
 const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
-const GenUUID = @import("../../Core/UUID.zig").GenUUID;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetManager = @import("../../Assets/AssetManager.zig");
 

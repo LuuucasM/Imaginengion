@@ -15,7 +15,7 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
     var new_scene_asset = SceneAsset{
         .mSceneContents = try std.ArrayList(u8).initCapacity(allocator, file_size),
     };
-    try new_scene_asset.mSceneContents.resize(file_size);
+    try new_scene_asset.mSceneContents.resize(allocator, file_size);
     _ = try asset_file.readAll(new_scene_asset.mSceneContents.items);
     return new_scene_asset;
 }

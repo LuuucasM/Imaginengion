@@ -1,5 +1,4 @@
 const std = @import("std");
-const GetUUID = @import("../Core/UUID.zig").GenUUID;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 
 pub fn EntityManager(entity_t: type) type {

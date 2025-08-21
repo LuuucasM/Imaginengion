@@ -2,7 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const IDComponent = @This();
 
-ID: u128 = std.math.maxInt(u128),
+ID: u64 = std.math.maxInt(u64),
 
 pub fn Deinit(_: *IDComponent) !void {}
 

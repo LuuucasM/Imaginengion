@@ -92,7 +92,7 @@ pub fn RunSceneScript(scene_manager: *SceneManager, comptime script_type: type, 
         if (cont_bool == false) break;
 
         var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, allocator);
-        scene_manager.FilterSceneScriptsByScene(&scene_scripts, scene_id);
+        scene_manager.FilterSceneScriptsByScene(&scene_scripts, scene_id, allocator);
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_sc.GetComponent(SceneScriptComponent, script_id);

@@ -48,7 +48,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
                 try self.mEntityManager.DestroyEntity(entity_id);
                 try self.mComponentManager.DestroyEntity(entity_id);
             }
-            self.mEntityManager.mIDsToRemove.clearAndFree();
+            self.mEntityManager.mIDsToRemove.clearAndFree(self.mECSAllocator);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
