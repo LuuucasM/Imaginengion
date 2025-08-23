@@ -4,6 +4,7 @@ const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
+const Tracy = @import("../Core/Tracy.zig");
 
 pub const GroupQuery = union(enum) {
     And: []const GroupQuery,
@@ -175,8 +176,10 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             }
         }
 
-        pub fn EntityListDifference(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
-            _ = self;
+        pub fn EntityListDifference(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
+            const zone = Tracy.ZoneInit("CompMan EntityListDifference", @src());
+            defer zone.Deinit();
+
             if (result.items.len == 0) return;
 
             var list2_set = HashSet(entity_t).init(allocator);
@@ -197,8 +200,9 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             result.shrinkAndFree(allocator, end_index);
         }
 
-        pub fn EntityListUnion(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
-            _ = self;
+        pub fn EntityListUnion(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
+            const zone = Tracy.ZoneInit("CompMan EntityUnion", @src());
+            defer zone.Deinit();
 
             var result_set = HashSet(entity_t).init(allocator);
             defer result_set.deinit();
@@ -211,9 +215,9 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             }
         }
 
-        pub fn EntityListIntersection(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
-            _ = self;
-            if (result.items.len == 0) return;
+        pub fn EntityListIntersection(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
+            const zone = Tracy.ZoneInit("CompMan EntityIntersection", @src());
+            defer zone.Deinit();
 
             var list2_set = HashSet(entity_t).init(allocator);
             defer list2_set.deinit();

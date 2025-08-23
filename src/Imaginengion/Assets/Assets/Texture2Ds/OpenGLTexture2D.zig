@@ -11,7 +11,6 @@ _DataFormat: c_uint,
 mARBHandle: u64,
 
 pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !OpenGLTexture2D {
-    _ = allocator;
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
@@ -20,8 +19,8 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
 
     const fstats = try asset_file.stat();
 
-    const contents = try asset_file.readToEndAlloc(std.heap.page_allocator, @intCast(fstats.size));
-    defer std.heap.page_allocator.free(contents);
+    const contents = try asset_file.readToEndAlloc(allocator, @intCast(fstats.size));
+    defer allocator.free(contents);
 
     data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
     defer stb.stbi_image_free(data);
@@ -87,7 +86,7 @@ pub fn GetBindlessID(self: OpenGLTexture2D) u64 {
     return self.mARBHandle;
 }
 
-pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {
+pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8, allocator: std.mem.Allocator) !void {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
@@ -98,8 +97,8 @@ pub fn UpdateDataPath(self: *OpenGLTexture2D, path: []const u8) !void {
     defer file.close();
     const fstats = try file.stat();
 
-    const contents = try file.readToEndAlloc(std.heap.page_allocator, @intCast(fstats.size));
-    defer std.heap.page_allocator.free(contents);
+    const contents = try file.readToEndAlloc(allocator, @intCast(fstats.size));
+    defer allocator.free(contents);
 
     data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
     defer stb.stbi_image_free(data);

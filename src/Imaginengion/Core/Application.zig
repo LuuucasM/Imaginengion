@@ -28,8 +28,10 @@ mIsRunning: bool = true,
 mIsMinimized: bool = false,
 mWindow: Window = undefined,
 mProgram: Program = undefined,
-mEngineAllocator: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
-mFrameAllocator: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+mEngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
+mEngineAllocator: std.mem.Allocator = undefined,
+mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+mFrameAllocator: std.mem.Allocator = undefined,
 
 /// Initializes the engine application.
 ///
@@ -40,14 +42,17 @@ mFrameAllocator: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
+    self.mEngineAllocator = self.mEngineGPA.allocator();
+    self.mFrameAllocator = self.mFrameArena.allocator();
+
     try AssetManager.Init();
     try Input.Init();
     try SystemEventManager.Init(self);
-    try PlayerManager.Init(self.mEngineAllocator.allocator());
+    try PlayerManager.Init(self.mEngineAllocator);
 
     self.mWindow = Window.Init();
-    self.mProgram = try Program.Init(self.mEngineAllocator.allocator(), &self.mWindow, self.mFrameAllocator.allocator());
-    try self.mProgram.Setup(self.mEngineAllocator.allocator());
+    self.mProgram = try Program.Init(self.mEngineAllocator, &self.mWindow, self.mFrameAllocator);
+    try self.mProgram.Setup(self.mEngineAllocator);
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
     self.mWindow.SetVSync(false);
@@ -71,8 +76,8 @@ pub fn Deinit(self: *Application) !void {
     ImguiEventManager.Deinit();
     PlayerManager.Deinit();
     Input.Deinit();
-    _ = self.mEngineAllocator.deinit();
-    self.mFrameAllocator.deinit();
+    _ = self.mEngineGPA.deinit();
+    self.mFrameArena.deinit();
 }
 
 /// Starts the main loop of the engine.
@@ -92,8 +97,8 @@ pub fn Run(self: *Application) !void {
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
 
-        try self.mProgram.OnUpdate(delta_time, self.mFrameAllocator.allocator());
-        _ = self.mFrameAllocator.reset(.retain_capacity);
+        try self.mProgram.OnUpdate(delta_time);
+        _ = self.mFrameArena.reset(.retain_capacity);
 
         Tracy.FrameMark();
     }
@@ -113,7 +118,7 @@ pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
     cont_bool = cont_bool and switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| try self.OnWindowResize(e._Width, e._Height),
-        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e, self.mFrameAllocator.allocator()),
+        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e, self.mFrameAllocator),
         else => true,
     };
 }
@@ -147,6 +152,6 @@ fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
     }
 
     self.mWindow.OnWindowResize(width, height);
-    _ = try self.mProgram.OnWindowResize(width, height, self.mFrameAllocator.allocator());
+    _ = try self.mProgram.OnWindowResize(width, height, self.mFrameAllocator);
     return true;
 }

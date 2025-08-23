@@ -24,8 +24,8 @@ pub fn Deinit(self: *Program) !void {
     try self._Impl.Deinit();
 }
 
-pub fn OnUpdate(self: *Program, dt: f32, frame_allocator: std.mem.Allocator) !void {
-    try self._Impl.OnUpdate(dt, frame_allocator);
+pub fn OnUpdate(self: *Program, dt: f32) !void {
+    try self._Impl.OnUpdate(dt);
 }
 
 pub fn OnWindowResize(self: *Program, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {

@@ -53,11 +53,12 @@ pub fn EditorRender(self: *QuadComponent) !void {
     imgui.igImage(
         texture_id,
         .{ .x = 50.0, .y = 50.0 },
-        .{ .x = 0.0, .y = 1.0 },
-        .{ .x = 1.0, .y = 0.0 },
+        .{ .x = self.mTexCoords[0][0], .y = 1.0 - self.mTexCoords[0][1] },
+        .{ .x = self.mTexCoords[1][0], .y = 1.0 - self.mTexCoords[1][1] },
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
     );
+
     if (imgui.igBeginDragDropTarget() == true) {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;

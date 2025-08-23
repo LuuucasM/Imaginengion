@@ -211,23 +211,23 @@ fn CalculateStride(self: *OpenGLShader) void {
     }
 }
 
-fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
+fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
     var source = std.ArrayList(u8){};
-    defer source.deinit(allocator);
+    defer source.deinit(arena_allocator);
 
     const file_size = try asset_file.getEndPos();
-    try source.ensureTotalCapacity(allocator, @intCast(file_size));
-    try source.resize(allocator, @intCast(file_size));
+    try source.ensureTotalCapacity(arena_allocator, @intCast(file_size));
+    try source.resize(arena_allocator, @intCast(file_size));
 
     _ = try asset_file.readAll(source.items);
 
-    var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(allocator);
+    var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(arena_allocator);
 
     var lines = std.mem.splitSequence(u8, source.items, "\n");
     var current_type: c_uint = undefined;
     var has_type = false;
     var current_source = std.ArrayList(u8){};
-    defer current_source.deinit(allocator);
+    defer current_source.deinit(arena_allocator);
 
     while (lines.next()) |line| {
         const trimmed = std.mem.trim(u8, line, " \t\r\n");
@@ -236,7 +236,7 @@ fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArra
             if (current_source.items.len > 0 and has_type) {
                 try shaders.put(
                     current_type,
-                    try allocator.dupeZ(u8, current_source.items),
+                    try arena_allocator.dupeZ(u8, current_source.items),
                 );
                 current_source.clearRetainingCapacity();
             }
@@ -247,8 +247,8 @@ fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArra
             has_type = true;
         } else if (has_type) {
             // Add the current line to the source code
-            try current_source.appendSlice(allocator, line);
-            try current_source.append(allocator, '\n');
+            try current_source.appendSlice(arena_allocator, line);
+            try current_source.append(arena_allocator, '\n');
         }
     }
 
@@ -256,7 +256,7 @@ fn ReadFile(asset_file: std.fs.File, allocator: std.mem.Allocator) !std.AutoArra
     if (current_source.items.len > 0 and has_type) {
         try shaders.put(
             current_type,
-            try allocator.dupeZ(u8, current_source.items),
+            try arena_allocator.dupeZ(u8, current_source.items),
         );
     }
 
