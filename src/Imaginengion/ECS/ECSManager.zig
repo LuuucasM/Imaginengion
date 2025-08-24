@@ -4,6 +4,7 @@ const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 const GroupQuery = @import("ComponentManager.zig").GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
+const EditorWindow = @import("../Imgui/EditorWindow.zig");
 
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
@@ -37,18 +38,9 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             return entityID;
         }
 
-        pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
-            try self.mEntityManager.SetToDestroy(entityID);
-        }
-
-        pub fn ProcessDestroyedEntities(self: *Self) !void {
-            const zone = Tracy.ZoneInit("ECSM ProcessDestroyedEntities", @src());
-            defer zone.Deinit();
-            for (self.mEntityManager.mIDsToRemove.items) |entity_id| {
-                try self.mEntityManager.DestroyEntity(entity_id);
-                try self.mComponentManager.DestroyEntity(entity_id);
-            }
-            self.mEntityManager.mIDsToRemove.clearAndFree(self.mECSAllocator);
+        pub fn DestroyEntity(self: *Self, entity_id: entity_t) !void {
+            try self.mEntityManager.DestroyEntity(entity_id);
+            try self.mComponentManager.DestroyEntity(entity_id);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
@@ -96,7 +88,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             return self.mComponentManager.HasComponent(ComponentType, entityID);
         }
 
-        pub fn GetComponent(self: Self, comptime ComponentType: type, entityID: entity_t) *ComponentType {
+        pub fn GetComponent(self: Self, comptime ComponentType: type, entityID: entity_t) ?*ComponentType {
             const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
             defer zone.Deinit();
             return self.mComponentManager.GetComponent(ComponentType, entityID);

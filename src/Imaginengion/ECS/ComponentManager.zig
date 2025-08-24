@@ -76,14 +76,16 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
         pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
 
+            // Remove all components from this entity
             const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
-
             var i: usize = entity_skipfield.mSkipField[0];
             while (i < entity_skipfield.mSkipField.len) {
                 try self.mComponentsArrays.items[i].RemoveComponent(entityID);
                 i += 1;
                 i += entity_skipfield.mSkipField[i];
             }
+
+            // Remove entity from skip field
             _ = self.mEntitySkipField.remove(entityID);
         }
 
@@ -132,7 +134,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             return @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
         }
 
-        pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) *component_type {
+        pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) ?*component_type {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);

@@ -31,10 +31,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetEditorWindow(self: *QuadComponent) EditorWindow {
-    return EditorWindow.Init(self);
-}
-
 pub fn GetName(self: QuadComponent) []const u8 {
     _ = self;
     return "QuadComponent";
@@ -49,7 +45,7 @@ pub fn EditorRender(self: *QuadComponent) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (try self.mTexture.GetAsset(Texture2D)).GetID())));
+    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (try self.mTexture.GetAsset(Texture2D)).?.GetID())));
     imgui.igImage(
         texture_id,
         .{ .x = 50.0, .y = 50.0 },

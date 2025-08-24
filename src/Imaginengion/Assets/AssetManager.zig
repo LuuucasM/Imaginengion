@@ -65,7 +65,7 @@ pub fn Deinit() !void {
     AssetM.mCWDPath.deinit(AssetAllocator);
     AssetM.mProjectPath.deinit(AssetAllocator);
 
-    AssetGPA.deinit();
+    _ = AssetGPA.deinit();
 }
 
 pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle {
@@ -79,13 +79,13 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
     };
 
     if (entity_id) |id| {
-        AssetM.mAssetECS.GetComponent(AssetMetaData, id).mRefs += 1;
+        AssetM.mAssetECS.GetComponent(AssetMetaData, id).?.mRefs += 1;
         return AssetHandle{
             .mID = id,
         };
     } else {
         const asset_handle = try CreateAsset(rel_path, path_type);
-        AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).mRefs += 1;
+        AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs += 1;
         _ = try switch (path_type) {
             .Eng => AssetM.mPathToIDEng.put(path_hash, asset_handle.mID),
             .Prj => AssetM.mPathToIDPrj.put(path_hash, asset_handle.mID),
@@ -95,12 +95,11 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
 }
 
 pub fn ReleaseAssetHandleRef(asset_handle: *AssetHandle) void {
-    const asset_meta_data = AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID);
-    asset_meta_data.mRefs -= 1;
+    AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs -= 1;
     asset_handle.mID = AssetHandle.NullHandle;
 }
 
-pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
+pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !?*asset_type {
     const zone = Tracy.ZoneInit("AssetManager GetAsset", @src());
     defer zone.Deinit();
     //checking the asset type will be evaluated at comptime which will determine which branch
@@ -113,7 +112,7 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
         if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
             return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
         } else {
-            const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+            const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
             //branch off depending on asset type because script asset doesnt require to open the file, rather it requires the path
             //so that the script can be compiled. both opening a file and getting the abs path requires a system call
@@ -145,7 +144,7 @@ pub fn OnUpdate(frame_allocator: std.mem.Allocator) !void {
 
     const group = try AssetM.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, frame_allocator);
     for (group.items) |entity_id| {
-        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id);
+        const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, entity_id).?;
         if (file_data.mSize == 0) {
             try CheckAssetForDeletion(entity_id);
             continue;
@@ -326,7 +325,7 @@ fn DeleteAsset(asset_id: AssetType) !void {
     const zone = Tracy.ZoneInit("AssetManager DeleteAsset", @src());
     defer zone.Deinit();
 
-    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
     const path_hash = ComputePathHash(file_data.mRelPath.items);
 
@@ -342,7 +341,7 @@ fn MarkAssetToDelete(asset_id: AssetType) void {
     const zone = Tracy.ZoneInit("AssetManager MarkAssetToDelete", @src());
     defer zone.Deinit();
 
-    const file_meta_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    const file_meta_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
     file_meta_data.mLastModified = std.time.nanoTimestamp();
     file_meta_data.mSize = 0;
 }
@@ -351,7 +350,7 @@ fn UpdateAsset(asset_id: AssetType, file: std.fs.File, fstats: std.fs.File.Stat)
     const zone = Tracy.ZoneInit("AssetManager UpdateAsset", @src());
     defer zone.Deinit();
 
-    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
     var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer file_arena.deinit();
@@ -373,7 +372,7 @@ fn CheckAssetForDeletion(asset_id: AssetType) !void {
     if (try RetryAssetExists(asset_id)) return;
 
     //if its run out of time then just delete
-    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
     if (std.time.nanoTimestamp() - file_data.mLastModified > ASSET_DELETE_TIMEOUT_NS) {
         try DeleteAsset(asset_id);
     }
@@ -384,7 +383,7 @@ fn CheckAssetForDeletion(asset_id: AssetType) !void {
 fn RetryAssetExists(asset_id: AssetType) !bool {
     const zone = Tracy.ZoneInit("AssetManager RetryAssetExists", @src());
     defer zone.Deinit();
-    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id);
+    const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);

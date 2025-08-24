@@ -7,6 +7,7 @@ const CameraComponent = Components.CameraComponent;
 const EntityParentComponent = Components.ParentComponent;
 const EntityChildComponent = Components.ChildComponent;
 const PlayerSlotComponent = Components.PlayerSlotComponent;
+const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Tracy = @import("../Core/Tracy.zig");
 
 pub const Type = u32;
@@ -22,24 +23,22 @@ pub fn AddComponent(self: Entity, comptime component_type: type, component: ?com
 pub fn RemoveComponent(self: Entity, comptime component_type: type) !void {
     try self.mECSManagerRef.RemoveComponent(component_type, self.mEntityID);
 }
-pub fn GetComponent(self: Entity, comptime component_type: type) *component_type {
+pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_type {
     return self.mECSManagerRef.GetComponent(component_type, self.mEntityID);
 }
 pub fn HasComponent(self: Entity, comptime component_type: type) bool {
     return self.mECSManagerRef.HasComponent(component_type, self.mEntityID);
 }
 pub fn GetUUID(self: Entity) u128 {
-    return self.mECSManagerRef.GetComponent(IDComponent, self.mEntityID).*.ID;
+    return self.mECSManagerRef.GetComponent(IDComponent, self.mEntityID).?.*.ID;
 }
 pub fn GetName(self: Entity) []const u8 {
-    return &self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).*.Name;
+    return &self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).?.*.Name;
 }
 pub fn GetCameraEntity(self: Entity) ?Entity {
     const zone = Tracy.ZoneInit("Entity GetCameraEntity", @src());
     defer zone.Deinit();
-    if (self.HasComponent(EntityParentComponent)) {
-        const parent_component = self.GetComponent(EntityParentComponent);
-
+    if (self.GetComponent(EntityParentComponent)) |parent_component| {
         var curr_id = parent_component.mFirstChild;
 
         while (curr_id != Entity.NullEntity) {
@@ -49,7 +48,7 @@ pub fn GetCameraEntity(self: Entity) ?Entity {
                 return child_entity;
             }
 
-            const child_component = child_entity.GetComponent(EntityChildComponent);
+            const child_component = child_entity.GetComponent(EntityChildComponent).?;
             curr_id = child_component.mNext;
         }
     }
@@ -59,12 +58,12 @@ pub fn GetCameraEntity(self: Entity) ?Entity {
     return null;
 }
 
-pub fn Possessable(self: Entity) ?Entity {
+pub fn GetPossessable(self: Entity) ?Entity {
     const zone = Tracy.ZoneInit("Entity Possessable", @src());
     defer zone.Deinit();
 
     if (self.HasComponent(EntityChildComponent)) {
-        const child_component = self.GetComponent(EntityChildComponent);
+        const child_component = self.GetComponent(EntityChildComponent).?;
 
         const parent_entity = Entity{ .mEntityID = child_component.mParent, .mECSManagerRef = self.mECSManagerRef };
 
@@ -77,6 +76,10 @@ pub fn Possessable(self: Entity) ?Entity {
     }
     return null;
 }
+
 pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
+}
+pub fn Delete(self: Entity) !void {
+    try self.mECSManagerRef.DestroyEntity(self.mEntityID);
 }

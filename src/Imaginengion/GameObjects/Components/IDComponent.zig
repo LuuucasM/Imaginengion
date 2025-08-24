@@ -18,10 +18,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetEditorWindow(self: *IDComponent) EditorWindow {
-    return EditorWindow.Init(self);
-}
-
 pub fn GetName(self: IDComponent) []const u8 {
     _ = self;
     return "IDComponent";

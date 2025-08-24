@@ -105,8 +105,8 @@ fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, already_popup: 
 
 fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
     const scene_id = scene_layer.mSceneID;
-    const scene_component = scene_layer.GetComponent(SceneComponent);
-    const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
+    const scene_name_component = scene_layer.GetComponent(SceneNameComponent).?;
 
     const scene_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ scene_name_component.Name.items, scene_id }, 0);
 
@@ -176,7 +176,7 @@ fn SelectScene(self: *ScenePanel, scene_layer: SceneLayer) !void {
     try ImguiEventManager.Insert(.{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 
     if (self.mSelectedEntity) |selected_entity| {
-        const entity_scene_component = selected_entity.GetComponent(EntitySceneComponent);
+        const entity_scene_component = selected_entity.GetComponent(EntitySceneComponent).?;
         if (entity_scene_component.SceneID != scene_id) {
             try ImguiEventManager.Insert(.{ .ET_SelectEntityEvent = .{ .SelectedEntity = null } });
         }
@@ -209,7 +209,7 @@ fn HandleSceneDragDrop(_: *ScenePanel, scene_layer: SceneLayer) !void {
         defer imgui.igEndDragDropTarget();
         if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
             const payload_scene_id = @as(*SceneType, @ptrCast(@alignCast(payload.*.Data))).*;
-            const new_pos = scene_layer.GetComponent(SceneStackPos).mPosition;
+            const new_pos = scene_layer.GetComponent(SceneStackPos).?.mPosition;
             try ImguiEventManager.Insert(ImguiEvent{
                 .ET_MoveSceneEvent = .{
                     .SceneID = payload_scene_id,
@@ -289,6 +289,10 @@ fn HandleEntityContextMenu(self: *ScenePanel, entity: Entity, entity_name: [*:0]
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
             try self.AddChildEntity(entity, scene_layer);
         }
+
+        if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
+            try entity.Delete();
+        }
     }
 }
 
@@ -303,14 +307,14 @@ fn AddChildEntity(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLa
 }
 
 fn AddToExistingChildren(_: *ScenePanel, parent_entity: Entity, new_entity: Entity) !void {
-    const parent_component = parent_entity.GetComponent(EntityParentComponent);
+    const parent_component = parent_entity.GetComponent(EntityParentComponent).?;
     var child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = parent_entity.mECSManagerRef };
 
     // Find the last child in the list
-    var child_component = child_entity.GetComponent(EntityChildComponent);
+    var child_component = child_entity.GetComponent(EntityChildComponent).?;
     while (child_component.mNext != Entity.NullEntity) {
         child_entity.mEntityID = child_component.mNext;
-        child_component = child_entity.GetComponent(EntityChildComponent);
+        child_component = child_entity.GetComponent(EntityChildComponent).?;
     }
 
     // Add new entity to end of list
@@ -341,14 +345,14 @@ fn MakeEntityParent(_: *ScenePanel, parent_entity: Entity, new_entity: Entity) !
 }
 
 fn RenderChildEntities(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) anyerror!void {
-    const entity_parent_component = parent_entity.GetComponent(EntityParentComponent);
+    const entity_parent_component = parent_entity.GetComponent(EntityParentComponent).?;
     var curr_id = entity_parent_component.mFirstChild;
 
     while (curr_id != Entity.NullEntity) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
         try self.RenderEntity(child_entity, scene_layer, already_popup, frame_allocator);
 
-        const child_component = child_entity.GetComponent(EntityChildComponent);
+        const child_component = child_entity.GetComponent(EntityChildComponent).?;
         curr_id = child_component.mNext;
     }
 }

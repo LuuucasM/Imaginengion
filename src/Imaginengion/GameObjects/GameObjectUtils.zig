@@ -10,19 +10,19 @@ const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
 pub fn AddScriptToEntity(entity: Entity, rel_path_script: []const u8, path_type: PathType) !void {
     var ecs = entity.mECSManagerRef;
     var new_script_handle = try StaticAssetContext.GetAssetHandleRef(rel_path_script, path_type);
-    const script_asset = try new_script_handle.GetAsset(ScriptAsset);
+    const script_asset = (try new_script_handle.GetAsset(ScriptAsset)).?;
 
-    if (entity.HasComponent(ScriptComponent) == true) {
+    if (entity.GetComponent(ScriptComponent)) |script_component| {
         //entity already has a script so iterate until the end of the linked list
 
         const new_script_entity_id = try ecs.CreateEntity();
         const new_script_entity = Entity{ .mEntityID = new_script_entity_id, .mECSManagerRef = entity.mECSManagerRef };
 
         var iter_id = entity.mEntityID;
-        var iter = ecs.GetComponent(ScriptComponent, iter_id);
+        var iter = script_component;
         while (iter.mNext != Entity.NullEntity) {
             iter_id = iter.mNext;
-            iter = ecs.GetComponent(ScriptComponent, iter.mNext);
+            iter = ecs.GetComponent(ScriptComponent, iter.mNext).?;
         }
 
         iter.mNext = new_script_entity.mEntityID;

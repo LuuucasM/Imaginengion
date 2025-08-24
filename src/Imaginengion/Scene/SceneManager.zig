@@ -54,7 +54,9 @@ pub const ECSManagerScenes = ECSManager(SceneType, EntityComponentsArray.len);
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj,
+mEntitiesToDestroy: std.ArrayList(Entity.Type) = .{},
 mECSManagerSC: ECSManagerScenes,
+_ScenesToDestroy: std.ArrayList(SceneType) = .{},
 mGameLayerInsertIndex: usize,
 mNumofLayers: usize,
 
@@ -78,35 +80,46 @@ pub fn Init(width: usize, height: usize, engine_allocator: std.mem.Allocator) !S
 
 pub fn Deinit(self: *SceneManager) !void {
     self.mECSManagerGO.Deinit();
+    self.mEntitiesToDestroy.deinit(self.mEngineAllocator);
+    self._ScenesToDestroy.deinit(self.mEngineAllocator);
     self.mECSManagerSC.Deinit();
 }
 
 pub fn CreateEntity(self: *SceneManager, scene_id: SceneType) !Entity {
+    const zone = Tracy.ZoneInit("SceneManager CreateEntity", @src());
+    defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     return scene_layer.CreateEntity();
 }
 pub fn CreateEntityWithUUID(self: *SceneManager, uuid: u128, scene_id: SceneType) !Entity {
+    const zone = Tracy.ZoneInit("SceneManager CreateEntityWithUUID", @src());
+    defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     return scene_layer.CreateEntityWithUUID(uuid);
 }
 
-pub fn DestroyEntity(self: *SceneManager, e: Entity, scene_id: SceneType) !void {
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.DestroyEntity(e);
+pub fn DestroyEntity(self: *SceneManager, e: Entity, _: SceneType) !void {
+    const zone = Tracy.ZoneInit("SceneManager DestroyEntity", @src());
+    defer zone.Deinit();
+    self.mEntitiesToDestroy.append(self.mEngineAllocator, e.mEntityID);
 }
 pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneType) !Entity {
+    const zone = Tracy.ZoneInit("SceneManager DuplicateEntity", @src());
+    defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.DuplicateEntity(original_entity);
 }
 
 pub fn OnViewportResize(self: *SceneManager, viewport_width: usize, viewport_height: usize, frame_allocator: std.mem.Allocator) !void {
+    const zone = Tracy.ZoneInit("SceneManager OnViewportResize", @src());
+    defer zone.Deinit();
     self.mViewportWidth = viewport_width;
     self.mViewportHeight = viewport_height;
 
     const camera_group = try self.mECSManagerGO.GetGroup(.{ .Component = CameraComponent }, frame_allocator);
     for (camera_group.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &self.mECSManagerGO };
-        const camera_component = entity.GetComponent(CameraComponent);
+        const camera_component = entity.GetComponent(CameraComponent).?;
         if (camera_component.mIsFixedAspectRatio == false) {
             camera_component.SetViewportSize(viewport_width, viewport_height);
         }
@@ -133,25 +146,14 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
 }
 
 pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
-    self.SaveScene(scene_id);
-
-    const entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, self.mEngineAllocator);
-    defer entity_scene_entities.deinit();
-
-    self.FilterEntityByScene(entity_scene_entities, scene_id);
-
-    for (entity_scene_entities.mEntityList.items) |entity_id| {
-        self.mECSManagerGO.DestroyEntity(entity_id);
-    }
-
-    self.mECSManagerSC.DestroyEntity(scene_id);
+    self._ScenesToDestroy.append(self.mEngineAllocator, scene_id);
 }
 
 pub fn LoadScene(self: *SceneManager, path: []const u8, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator) !SceneType {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     const scene_asset_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
-    const scene_asset = try scene_asset_handle.GetAsset(SceneAsset);
+    const scene_asset = (try scene_asset_handle.GetAsset(SceneAsset)).?;
 
     const new_scene_component = SceneComponent{
         .mSceneAssetHandle = scene_asset_handle,
@@ -194,14 +196,14 @@ pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) 
 
     for (all_scenes.items) |scene_id| {
         const scene = self.GetSceneLayer(scene_id);
-        const scene_component = scene.GetComponent(SceneComponent);
-        const scene_asset = try scene_component.mSceneAssetHandle.GetAsset(SceneAsset);
+        const scene_component = scene.GetComponent(SceneComponent).?;
+        const scene_asset = (try scene_component.mSceneAssetHandle.GetAsset(SceneAsset)).?;
 
         try SceneSerializer.DeSerializeSceneText(scene, scene_asset, frame_allocator, self.mEngineAllocator);
     }
 }
 pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
-    const scene_component = scene_layer.GetComponent(SceneComponent);
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
         try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle, frame_allocator);
     } else {
@@ -215,12 +217,12 @@ pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: 
     }
 }
 pub fn SaveSceneAs(self: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
-    const scene_component = scene_layer.GetComponent(SceneComponent);
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
     const scene_basename = std.fs.path.basename(abs_path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
-    const scene_name_component = scene_layer.GetComponent(SceneNameComponent);
+    const scene_name_component = scene_layer.GetComponent(SceneNameComponent).?;
     scene_name_component.Name.clearAndFree(self.mEngineAllocator);
     _ = try scene_name_component.Name.writer(self.mEngineAllocator).write(scene_name);
 
@@ -232,8 +234,8 @@ pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id);
-    const stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id);
+    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id).?;
+    const stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id).?;
     const current_pos = stack_pos_component.mPosition;
 
     var new_pos: usize = 0;
@@ -252,7 +254,7 @@ pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !
         const scene_stack_pos_list = try self.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
         for (scene_stack_pos_list.items) |list_scene_id| {
-            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id);
+            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id).?;
             if (scene_stack_pos_component.mPosition >= new_pos and scene_stack_pos_component.mPosition < current_pos) {
                 scene_stack_pos_component.mPosition += 1;
             }
@@ -262,7 +264,7 @@ pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !
         const scene_stack_pos_list = try self.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
 
         for (scene_stack_pos_list.items) |list_scene_id| {
-            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id);
+            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id).?;
             if (scene_stack_pos_component.mPosition > current_pos and scene_stack_pos_component.mPosition <= new_pos) {
                 scene_stack_pos_component.mPosition -= 1;
             }
@@ -305,8 +307,8 @@ pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, frame_allocator: s
 }
 
 pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
-    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a);
-    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b);
+    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
+    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b).?;
 
     return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }
@@ -319,8 +321,94 @@ pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneType) SceneLayer {
     return SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 }
 
+pub fn ProcessDestroyedEntities(self: *SceneManager) !void {
+    const zone = Tracy.ZoneInit("SceneManager ProcessDestroyedEntities", @src());
+    defer zone.Deinit();
+    for (self.mEntitiesToDestroy) |entity_id| {
+        self.InternalDestroyEntity(entity_id);
+    }
+}
+
+pub fn ProcessDestroyedScenes(self: *SceneManager) !void {
+    const zone = Tracy.ZoneInit("SceneManager ProcessDestroyedScenes", @src());
+    defer zone.Deinit();
+    for (self.mScenesToDestroy) |scene_id| {
+        self.InternalDestroyScene(scene_id);
+    }
+}
+
+fn InternalDestroyEntity(self: *SceneManager, entity_id: Entity.Type) !void {
+    const entity_ecs = self.mECSManagerGO;
+    // Handle parent-child relationships
+    if (entity_ecs.GetComponent(EntityChildComponent, entity_id)) |child_component| {
+        const parent_entity_id = child_component.mParent;
+
+        // Update parent's first child if this entity is the first child
+        if (child_component.mFirst == entity_id) {
+            if (child_component.mNext == Entity.NullEntity) {
+                // No more children, remove parent component entirely
+                try entity_ecs.RemoveComponent(EntityParentComponent, parent_entity_id);
+            } else {
+                // Update parent's first child to point to next sibling
+                const parent_component = entity_ecs.GetComponent(EntityParentComponent, parent_entity_id).?;
+                parent_component.mFirstChild = child_component.mNext;
+
+                // Update the next sibling's prev pointer
+                const next_child_component = entity_ecs.GetComponent(EntityChildComponent, child_component.mNext).?;
+                next_child_component.mPrev = Entity.NullEntity;
+            }
+        } else {
+            // This entity is not the first child, update sibling links
+            const prev_entity_id = child_component.mPrev;
+            const prev_child_component = entity_ecs.GetComponent(EntityChildComponent, prev_entity_id).?;
+
+            if (child_component.mNext != Entity.NullEntity) {
+                // Update next sibling's prev pointer
+                const next_child_component = entity_ecs.GetComponent(EntityChildComponent, child_component.mNext).?;
+                next_child_component.mPrev = prev_entity_id;
+                prev_child_component.mNext = child_component.mNext;
+            } else {
+                // This was the last child
+                prev_child_component.mNext = Entity.NullEntity;
+            }
+        }
+    }
+
+    // Recursively delete all children (not just first child)
+    if (entity_ecs.GetComponent(EntityParentComponent, entity_id)) |parent_component| {
+        // Keep deleting the first child until there are no more children
+        // Each child will remove itself from the parent's linked list when destroyed
+        while (parent_component.mFirstChild != Entity.NullEntity) {
+            try self.InternalDestroyEntity(parent_component.mFirstChild);
+        }
+    }
+
+    //finally destroy the entity from the ECS
+    self.mECSManagerGO.DestroyEntity(entity_id);
+}
+
+fn InternalDestroyScene(self: *SceneManager, scene_id: SceneType) !void {
+    self.SaveScene(scene_id);
+
+    const entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, self.mEngineAllocator);
+    defer entity_scene_entities.deinit();
+
+    self.FilterEntityByScene(entity_scene_entities, scene_id);
+
+    for (entity_scene_entities.mEntityList.items) |entity_id| {
+        self.mECSManagerGO.DestroyEntity(entity_id);
+    }
+
+    //first ensure the scene stack is proper
+    //have all the scene stack components whos value is greather than the current scene stack position -1 go down 1 cuz
+    //this scene is going bye bye
+
+    //finally destroy the scene
+    self.mECSManagerSC.DestroyEntity(scene_id);
+}
+
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
-    const scene_component = scene_layer.GetComponent(SceneComponent);
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mLayerType == .GameLayer) {
         _ = try scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mGameLayerInsertIndex });
         var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -328,7 +416,7 @@ fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
         const allocator = arena.allocator();
         const stack_pos_group = try self.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, allocator);
         for (stack_pos_group.items) |scene_id| {
-            const stack_pos = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id);
+            const stack_pos = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id).?;
             if (stack_pos.mPosition >= self.mGameLayerInsertIndex) {
                 stack_pos.mPosition += 1;
             }

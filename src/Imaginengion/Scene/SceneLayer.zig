@@ -29,7 +29,7 @@ pub fn AddComponent(self: SceneLayer, comptime component_type: type, component: 
 pub fn RemoveComponent(self: SceneLayer, comptime component_type: type) !void {
     try self.mECSManagerSCRef.RemoveComponent(component_type, self.mSceneID);
 }
-pub fn GetComponent(self: SceneLayer, comptime component_type: type) *component_type {
+pub fn GetComponent(self: SceneLayer, comptime component_type: type) ?*component_type {
     return self.mECSManagerSCRef.GetComponent(component_type, self.mSceneID);
 }
 pub fn HasComponent(self: SceneLayer, comptime component_type: type) bool {
@@ -41,7 +41,7 @@ pub fn GetEntityGroup(self: SceneLayer, comptime query: GroupQuery, allocator: s
     return entity_list;
 }
 pub fn GetUUID(self: SceneLayer) u128 {
-    return self.mECSManagerSCRef.GetComponent(SceneIDComponent, self.mSceneID).*.ID;
+    return self.mECSManagerSCRef.GetComponent(SceneIDComponent, self.mSceneID).?.*.ID;
 }
 pub fn Duplicate(self: SceneLayer) !SceneLayer {
     return try self.mECSManagerSCRef.DuplicateEntity(self.mSceneID);
@@ -87,7 +87,7 @@ pub fn FilterEntityByScene(self: SceneLayer, entity_result_list: *std.ArrayList(
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_result_list.items[i]);
+        const entity_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_result_list.items[i]).?;
         if (entity_scene_component.SceneID != self.mSceneID) {
             entity_result_list.items[i] = entity_result_list.items[end_index - 1];
             end_index -= 1;
@@ -106,8 +106,8 @@ pub fn FilterEntityScriptsByScene(self: SceneLayer, scripts_result_list: *std.Ar
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_script_component = self.mECSManagerGORef.GetComponent(EntityScriptComponent, scripts_result_list.items[i]);
-        const parent_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_script_component.mParent);
+        const entity_script_component = self.mECSManagerGORef.GetComponent(EntityScriptComponent, scripts_result_list.items[i]).?;
+        const parent_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_script_component.mParent).?;
         if (parent_scene_component.SceneID != self.mSceneID) {
             scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
             end_index -= 1;
@@ -126,7 +126,7 @@ pub fn FilterSceneScriptsByScene(self: SceneLayer, scripts_result_list: *std.Arr
     var i: usize = 0;
 
     while (i < end_index) {
-        const scene_script_component = self.mECSManagerSCRef.GetComponent(SceneScriptComponent, scripts_result_list.items[i]);
+        const scene_script_component = self.mECSManagerSCRef.GetComponent(SceneScriptComponent, scripts_result_list.items[i]).?;
         if (scene_script_component.mParent != self.mSceneID) {
             scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
             end_index -= 1;

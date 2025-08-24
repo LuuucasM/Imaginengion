@@ -128,7 +128,7 @@ pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponen
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
-    const texture_asset = try quad_component.mTexture.GetAsset(Texture2D);
+    const texture_asset = (try quad_component.mTexture.GetAsset(Texture2D)).?;
 
     try self.mQuadBufferBase.append(self._Allocator, .{
         .Position = [3]f32{ transform_component.Translation[0], transform_component.Translation[1], transform_component.Translation[2] },

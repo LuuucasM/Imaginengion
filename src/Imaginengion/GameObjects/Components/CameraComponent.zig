@@ -7,6 +7,7 @@ const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetManager = @import("../../Assets/AssetManager.zig");
+const Entity = @import("../Entity.zig");
 
 const CameraComponent = @This();
 
@@ -97,10 +98,6 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-pub fn GetEditorWindow(self: *CameraComponent) EditorWindow {
-    return EditorWindow.Init(self);
-}
 
 pub fn GetName(self: CameraComponent) []const u8 {
     _ = self;

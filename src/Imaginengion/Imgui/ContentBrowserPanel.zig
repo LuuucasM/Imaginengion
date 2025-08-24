@@ -122,7 +122,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     defer zone.Deinit();
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
-    const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
+    const back_texture = (try self.mBackArrowTextureHandle.GetAsset(Texture2D)).?;
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(
@@ -159,7 +159,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
     var iter = self.mCurrentDirectory.?.iterate();
     while (try iter.next()) |entry| {
         if (entry.kind == .directory) {
-            const texture_asset = try self.mDirTextureHandle.GetAsset(Texture2D);
+            const texture_asset = (try self.mDirTextureHandle.GetAsset(Texture2D)).?;
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -173,7 +173,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             }
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-            const texture_asset = try self.mPngTextureHandle.GetAsset(Texture2D);
+            const texture_asset = (try self.mPngTextureHandle.GetAsset(Texture2D)).?;
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -182,7 +182,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try self.DragDropSourceBase(entry_name, "PNGLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-            const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
+            const texutre_asset = (try self.mSceneTextureHandle.GetAsset(Texture2D)).?;
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -191,7 +191,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try self.DragDropSourceBase(entry_name, "IMSCLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-            const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
+            const texutre_asset = (try self.mScriptTextureHandle.GetAsset(Texture2D)).?;
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -332,7 +332,7 @@ fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void
         var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
         defer AssetManager.ReleaseAssetHandleRef(&script_handle);
 
-        const script_asset = try script_handle.GetAsset(ScriptAsset);
+        const script_asset = (try script_handle.GetAsset(ScriptAsset)).?;
         if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
             _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
         } else if (script_asset.mScriptType == .OnSceneStart) {

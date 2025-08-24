@@ -137,10 +137,10 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     self.mEditorEditorEntity = try self.mGameScene.CreateEntity();
     self.mEditorViewportEntity = try self.mGameScene.CreateEntity();
 
-    const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent);
+    const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     viewport_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
 
-    const camera_transform_component = self.mEditorEditorEntity.GetComponent(TransformComponent);
+    const camera_transform_component = self.mEditorEditorEntity.GetComponent(TransformComponent).?;
     camera_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
 
     //setup the viewport camera
@@ -272,8 +272,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         var transform_components = try std.ArrayList(*TransformComponent).initCapacity(self.mFrameAllocator, 1);
 
         if (self._ToolbarPanel.mState == .Stop) {
-            const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
-            const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+            const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
+            const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
 
             try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
 
@@ -289,8 +289,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
                 if (self._ToolbarPanel.mStartEntity) |start_entity| {
                     const camera_entity = start_entity.GetCameraEntity();
                     if (camera_entity) |entity| {
-                        const start_camera_component = entity.GetComponent(CameraComponent);
-                        const start_transform_component = entity.GetComponent(TransformComponent);
+                        const start_camera_component = entity.GetComponent(CameraComponent).?;
+                        const start_transform_component = entity.GetComponent(TransformComponent).?;
 
                         try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
 
@@ -308,8 +308,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
             }
         } else { //editor state is play
             if (self._ViewportPanel.mP_OpenPlay) {
-                const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
-                const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent);
+                const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
+                const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
 
                 try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
 
@@ -323,8 +323,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
             } else {
                 const camera_entity = self._ToolbarPanel.mStartEntity.?.GetCameraEntity();
                 if (camera_entity) |entity| {
-                    const start_camera_component = entity.GetComponent(CameraComponent);
-                    const start_transform_component = entity.GetComponent(TransformComponent);
+                    const start_camera_component = entity.GetComponent(CameraComponent).?;
+                    const start_transform_component = entity.GetComponent(TransformComponent).?;
 
                     try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
 
@@ -385,10 +385,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         self.CleanSceneSpecs();
 
         //handle deleted objects this frame
-        try self.mGameSceneManager.mECSManagerGO.ProcessDestroyedEntities();
-        try self.mGameSceneManager.mECSManagerSC.ProcessDestroyedEntities();
-        try self.mEditorSceneManager.mECSManagerGO.ProcessDestroyedEntities();
-        try self.mEditorSceneManager.mECSManagerSC.ProcessDestroyedEntities();
+        try self.mGameSceneManager.ProcessDestroyedEntities();
+        try self.mGameSceneManager.ProcessDestroyedScenes();
+        try self.mEditorSceneManager.ProcessDestroyedEntities();
+        try self.mEditorSceneManager.ProcessDestroyedScenes();
         try AssetManager.ProcessDestroyedAssets();
         try PlayerManager.ProcessDestroyedPlayers();
 
@@ -440,7 +440,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_SaveSceneAsEvent => |e| {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.AbsPath.len > 0) {
-                    const scene_component = scene_layer.GetComponent(SceneComponent);
+                    const scene_component = scene_layer.GetComponent(SceneComponent).?;
                     const rel_path = AssetManager.GetRelPath(e.AbsPath);
                     _ = try std.fs.createFileAbsolute(e.AbsPath, .{});
                     scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
@@ -476,7 +476,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            const viewport_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent);
+            const viewport_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
             viewport_camera_component.SetViewportSize(e.mWidth, e.mHeight);
 
             //we must also resize the in game cameras to match the viewport since we are not using the play panel
@@ -552,7 +552,7 @@ pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, frame_all
 
 pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
     _ = frame_allocator;
-    self.mEditorEditorEntity.GetComponent(CameraComponent).SetViewportSize(width, height);
+    self.mEditorEditorEntity.GetComponent(CameraComponent).?.SetViewportSize(width, height);
     return true;
 }
 

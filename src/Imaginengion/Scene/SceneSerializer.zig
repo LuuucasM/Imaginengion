@@ -127,11 +127,11 @@ fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame
 
 fn SerializeSceneMetaData(write_stream: *WriteStream, scene_layer: SceneLayer) !void {
     try write_stream.objectField("UUID");
-    const scene_id_component = scene_layer.GetComponent(SceneIDComponent);
+    const scene_id_component = scene_layer.GetComponent(SceneIDComponent).?;
     try write_stream.write(scene_id_component.ID);
 
     try write_stream.objectField("LayerType");
-    const scene_component = scene_layer.GetComponent(SceneComponent);
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
     try write_stream.write(scene_component.mLayerType);
 }
 
@@ -145,14 +145,14 @@ fn SerializeSceneScripts(write_stream: *WriteStream, scene_layer: SceneLayer) !v
     var current_id = scene_layer.mSceneID;
 
     while (current_id != SceneLayer.NullScene) {
-        const component = ecs.GetComponent(SceneScriptComponent, current_id);
+        const component = ecs.GetComponent(SceneScriptComponent, current_id).?;
 
         try write_stream.objectField("Component");
         try write_stream.write(component);
 
         try write_stream.objectField("AssetFileData");
         if (component.mScriptAssetHandle.mID != SceneLayer.NullScene) {
-            const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
+            const asset_file_data = (try component.mScriptAssetHandle.GetAsset(FileMetaData)).?;
             try write_stream.write(asset_file_data.mRelPath.items);
         } else {
             try write_stream.write("No Script Asset");
@@ -197,149 +197,115 @@ fn SerializeEntity(write_stream: *WriteStream, entity: Entity) !void {
 }
 
 fn SerializeBasicComponent(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8) !void {
-    if (entity.HasComponent(component_type) == false) return;
-
-    try write_stream.objectField(field_name);
-    const component = entity.GetComponent(component_type);
-    try write_stream.write(component);
+    if (entity.GetComponent(component_type) != null) {
+        try write_stream.objectField(field_name);
+        const component = entity.GetComponent(component_type).?;
+        try write_stream.write(component);
+    }
 }
 
 fn SerializeCameraComponent(write_stream: *WriteStream, entity: Entity) !void {
-    if (entity.HasComponent(CameraComponent) == false) return;
+    if (entity.GetComponent(CameraComponent)) |camera_component| {
+        try write_stream.objectField("CameraComponent");
+        try write_stream.beginObject();
 
-    const ecs = entity.mECSManagerRef;
+        try write_stream.objectField("ViewportWidth");
+        try write_stream.write(camera_component.mViewportWidth);
 
-    const component = ecs.GetComponent(CameraComponent, entity.mEntityID);
+        try write_stream.objectField("ViewportHeight");
+        try write_stream.write(camera_component.mViewportHeight);
 
-    try write_stream.objectField("CameraComponent");
-    try write_stream.beginObject();
+        try write_stream.objectField("Projection");
+        try write_stream.write(camera_component.mProjection);
 
-    try write_stream.objectField("ViewportWidth");
-    try write_stream.write(component.mViewportWidth);
+        try write_stream.objectField("AspectRatio");
+        try write_stream.write(camera_component.mAspectRatio);
 
-    try write_stream.objectField("ViewportHeight");
-    try write_stream.write(component.mViewportHeight);
+        try write_stream.objectField("IsFixedAspectRatio");
+        try write_stream.write(camera_component.mIsFixedAspectRatio);
 
-    try write_stream.objectField("Projection");
-    try write_stream.write(component.mProjection);
+        try write_stream.objectField("PerspectiveFOVRad");
+        try write_stream.write(camera_component.mPerspectiveFOVRad);
 
-    try write_stream.objectField("AspectRatio");
-    try write_stream.write(component.mAspectRatio);
+        try write_stream.objectField("PerspectiveNear");
+        try write_stream.write(camera_component.mPerspectiveNear);
 
-    try write_stream.objectField("IsFixedAspectRatio");
-    try write_stream.write(component.mIsFixedAspectRatio);
+        try write_stream.objectField("PerspectiveFar");
+        try write_stream.write(camera_component.mPerspectiveFar);
 
-    try write_stream.objectField("PerspectiveFOVRad");
-    try write_stream.write(component.mPerspectiveFOVRad);
-
-    try write_stream.objectField("PerspectiveNear");
-    try write_stream.write(component.mPerspectiveNear);
-
-    try write_stream.objectField("PerspectiveFar");
-    try write_stream.write(component.mPerspectiveFar);
-
-    try write_stream.endObject();
+        try write_stream.endObject();
+    }
 }
 
 fn SerializeScriptComponents(write_stream: *WriteStream, entity: Entity) !void {
-    if (entity.HasComponent(EntityScriptComponent) == false) return;
+    if (entity.GetComponent(EntityScriptComponent) != null) {
+        try write_stream.objectField("EntityScripts");
+        try write_stream.beginObject();
 
-    try write_stream.objectField("EntityScripts");
-    try write_stream.beginObject();
+        const ecs = entity.mECSManagerRef;
+        var current_id = entity.mEntityID;
+        while (current_id != Entity.NullEntity) {
+            const component = ecs.GetComponent(EntityScriptComponent, current_id).?;
 
-    const ecs = entity.mECSManagerRef;
-    var current_id = entity.mEntityID;
-    while (current_id != Entity.NullEntity) {
-        const component = ecs.GetComponent(EntityScriptComponent, current_id);
+            try write_stream.objectField("Component");
+            try write_stream.write(component);
 
-        try write_stream.objectField("Component");
-        try write_stream.write(component);
+            try write_stream.objectField("AssetFileData");
+            if (component.mScriptAssetHandle.mID != Entity.NullEntity) {
+                const asset_file_data = (try component.mScriptAssetHandle.GetAsset(FileMetaData)).?;
+                try write_stream.write(asset_file_data.mRelPath.items);
+            } else {
+                try write_stream.write("No Script Asset");
+            }
 
-        try write_stream.objectField("AssetFileData");
-        if (component.mScriptAssetHandle.mID != Entity.NullEntity) {
-            const asset_file_data = try component.mScriptAssetHandle.GetAsset(FileMetaData);
-            try write_stream.write(asset_file_data.mRelPath.items);
-        } else {
-            try write_stream.write("No Script Asset");
+            current_id = component.mNext;
         }
 
-        current_id = component.mNext;
+        try write_stream.endObject();
     }
-
-    try write_stream.endObject();
-}
-
-fn SerializeSpriteRenderComponent(write_stream: *WriteStream, entity: Entity, frame_allocator: std.mem.Allocator) !void {
-    if (entity.HasComponent(SpriteRenderComponent) == false) return;
-
-    var component_string = ComponentString.init(frame_allocator);
-    defer component_string.deinit();
-
-    try write_stream.objectField("SpriteRenderComponent");
-    try write_stream.beginObject();
-
-    try write_stream.objectField("Component");
-    const component = entity.GetComponent(SpriteRenderComponent);
-    try std.json.stringify(component, .{}, component_string.writer());
-    try write_stream.write(component_string.items);
-    component_string.clearAndFree();
-
-    try write_stream.objectField("AssetFileData");
-    if (component.mTexture.mID != AssetHandle.NullHandle) {
-        const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
-        try std.json.stringify(asset_file_data, .{}, component_string.writer());
-        try write_stream.write(component_string.items);
-        component_string.clearAndFree();
-    } else {
-        try write_stream.write("No Texture");
-    }
-
-    try write_stream.endObject();
 }
 
 fn SerializeQuadComponent(write_stream: *WriteStream, entity: Entity) !void {
-    if (entity.HasComponent(QuadComponent) == false) return;
+    if (entity.GetComponent(QuadComponent)) |quad_component| {
+        try write_stream.objectField("QuadComponent");
+        try write_stream.beginObject();
 
-    try write_stream.objectField("QuadComponent");
-    try write_stream.beginObject();
+        try write_stream.objectField("Component");
+        try write_stream.write(quad_component);
 
-    try write_stream.objectField("Component");
-    const component = entity.GetComponent(QuadComponent);
-    try write_stream.write(component);
+        try write_stream.objectField("AssetFileData");
+        if (quad_component.mTexture.mID != AssetHandle.NullHandle) {
+            const asset_file_data = (try quad_component.mTexture.GetAsset(FileMetaData)).?;
+            try write_stream.write(asset_file_data.mRelPath.items);
+        } else {
+            try write_stream.write("No Texture");
+        }
 
-    try write_stream.objectField("AssetFileData");
-    if (component.mTexture.mID != AssetHandle.NullHandle) {
-        const asset_file_data = try component.mTexture.GetAsset(FileMetaData);
-        try write_stream.write(asset_file_data.mRelPath.items);
-    } else {
-        try write_stream.write("No Texture");
+        try write_stream.endObject();
     }
-
-    try write_stream.endObject();
 }
 
 fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity) anyerror!void {
-    if (entity.HasComponent(EntityParentComponent) == false) return;
+    if (entity.GetComponent(EntityParentComponent)) |parent_component| {
+        var curr_id = parent_component.mFirstChild;
 
-    const parent_component = entity.GetComponent(EntityParentComponent);
-    var curr_id = parent_component.mFirstChild;
+        while (curr_id != Entity.NullEntity) {
+            const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-    while (curr_id != Entity.NullEntity) {
-        const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
+            try write_stream.objectField("Entity");
 
-        try write_stream.objectField("Entity");
+            try write_stream.beginObject();
+            try SerializeEntity(write_stream, child_entity);
+            try write_stream.endObject();
 
-        try write_stream.beginObject();
-        try SerializeEntity(write_stream, child_entity);
-        try write_stream.endObject();
-
-        const child_component = child_entity.GetComponent(EntityChildComponent);
-        curr_id = child_component.mNext;
+            const child_component = child_entity.GetComponent(EntityChildComponent).?;
+            curr_id = child_component.mNext;
+        }
     }
 }
 
 fn WriteToFile(scene_asset_handle: AssetHandle, data: []const u8, frame_allocator: std.mem.Allocator) !void {
-    const file_meta_data = try scene_asset_handle.GetAsset(FileMetaData);
+    const file_meta_data = (try scene_asset_handle.GetAsset(FileMetaData)).?;
     const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath.items, file_meta_data.mPathType, frame_allocator);
 
     const file = try std.fs.createFileAbsolute(file_abs_path, .{ .read = false, .truncate = true });
@@ -386,7 +352,7 @@ fn DeSerializeUUID(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_al
         .allocated_number => |uuid_value| uuid_value,
         else => return error.ExpectedNumber,
     };
-    scene_layer.GetComponent(SceneIDComponent).ID = try std.fmt.parseUnsigned(u64, uuid_value, 10);
+    scene_layer.GetComponent(SceneIDComponent).?.ID = try std.fmt.parseUnsigned(u64, uuid_value, 10);
 }
 
 fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
@@ -396,7 +362,7 @@ fn DeSerializeLayerType(scanner: *std.json.Scanner, scene_layer: SceneLayer, fra
         .allocated_string => |layer_type_value| layer_type_value,
         else => return error.ExpectedString,
     };
-    scene_layer.GetComponent(SceneComponent).mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
+    scene_layer.GetComponent(SceneComponent).?.mLayerType = std.meta.stringToEnum(LayerType, layer_type_value).?;
 }
 
 fn DeSerializeSceneScripts(scanner: *std.json.Scanner, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
@@ -606,7 +572,6 @@ fn DeSerializeTransformComponent(scanner: *std.json.Scanner, entity: Entity, fra
     };
     var new_component_parsed = try std.json.parseFromSlice(TransformComponent, frame_allocator, component_data_string, .{});
     defer new_component_parsed.deinit();
-    new_component_parsed.value.Dirty = true;
     _ = try entity.AddComponent(TransformComponent, new_component_parsed.value);
 }
 
@@ -707,14 +672,14 @@ fn DeSerializeParentComponent(scanner: *std.json.Scanner, entity: Entity, scene_
 fn AddToExistingChildren(scanner: *std.json.Scanner, parent_entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     const new_entity = try scene_layer.CreateBlankEntity();
 
-    const parent_component = parent_entity.GetComponent(EntityParentComponent);
+    const parent_component = parent_entity.GetComponent(EntityParentComponent).?;
     var child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = parent_entity.mECSManagerRef };
 
     // Find the last child in the list
-    var child_component = child_entity.GetComponent(EntityChildComponent);
+    var child_component = child_entity.GetComponent(EntityChildComponent).?;
     while (child_component.mNext != Entity.NullEntity) {
         child_entity.mEntityID = child_component.mNext;
-        child_component = child_entity.GetComponent(EntityChildComponent);
+        child_component = child_entity.GetComponent(EntityChildComponent).?;
     }
 
     // Add new entity to end of list

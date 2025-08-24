@@ -131,7 +131,7 @@ pub fn GetRenderStats() RenderStats {
 }
 
 pub fn GetSDFShader() !*ShaderAsset {
-    return try RenderManager.mSDFShader.GetAsset(ShaderAsset);
+    return (try RenderManager.mSDFShader.GetAsset(ShaderAsset)).?;
 }
 
 fn UpdateCameraBuffer(camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
@@ -164,7 +164,7 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
     const zone = Tracy.ZoneInit("Renderer DrawChildren", @src());
     defer zone.Deinit();
 
-    const parent_component = entity.GetComponent(EntityParentComponent);
+    const parent_component = entity.GetComponent(EntityParentComponent).?;
     var curr_id = parent_component.mFirstChild;
 
     while (curr_id != Entity.NullEntity) {
@@ -172,7 +172,7 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
 
         try DrawShape(child_entity, parent_transform);
 
-        const child_component = child_entity.GetComponent(EntityChildComponent);
+        const child_component = child_entity.GetComponent(EntityChildComponent).?;
         curr_id = child_component.mNext;
     }
 }
@@ -180,15 +180,13 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
 fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!void {
     const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
     defer zone.Deinit();
-    const transform_component = entity.GetComponent(TransformComponent);
+    const transform_component = entity.GetComponent(TransformComponent).?;
     parent_transform.Translation += transform_component.Translation;
     parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
     parent_transform.Scale += transform_component.Scale;
 
     //draw the shape
-    if (entity.HasComponent(QuadComponent)) {
-        const quad_component = entity.GetComponent(QuadComponent);
-
+    if (entity.GetComponent(QuadComponent)) |quad_component| {
         try RenderManager.mR2D.DrawQuad(
             parent_transform,
             quad_component,
@@ -197,7 +195,8 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
     //else if more shapes when more shapes are added
 
     //check is if parent, if so draw children else nothing
-    if (entity.HasComponent(EntityParentComponent)) {
+    if (entity.GetComponent(EntityParentComponent)) |parent_component| {
+        _ = parent_component;
         try DrawChildren(entity, parent_transform);
     }
 }
@@ -209,7 +208,7 @@ fn EndRendering(camera_component: *CameraComponent) !void {
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 
-    const sdf_shader_asset = try RenderManager.mSDFShader.GetAsset(ShaderAsset);
+    const sdf_shader_asset = (try RenderManager.mSDFShader.GetAsset(ShaderAsset)).?;
     sdf_shader_asset.mShader.Bind();
 
     try RenderManager.mR2D.SetBuffers();

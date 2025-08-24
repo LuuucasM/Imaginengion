@@ -30,7 +30,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
     const zone = Tracy.ZoneInit("Scene Specs Panel OIR", @src());
     defer zone.Deinit();
 
-    const name_component = self.mSceneLayer.GetComponent(SceneNameComponent);
+    const name_component = self.mSceneLayer.GetComponent(SceneNameComponent).?;
 
     const scene_name = try frame_allocator.dupeZ(u8, name_component.Name.items);
     imgui.igSetNextWindowSize(.{ .x = 800, .y = 600 }, imgui.ImGuiCond_Once);
@@ -48,7 +48,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
         try ImguiUtils.SceneScriptPopupMenu();
     }
     //scene layer type
-    const scene_component = self.mSceneLayer.GetComponent(SceneComponent);
+    const scene_component = self.mSceneLayer.GetComponent(SceneComponent).?;
     imgui.igText(@tagName(scene_component.mLayerType));
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
@@ -67,8 +67,8 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
         if (self.mSceneLayer.HasComponent(SceneScriptComponent) == true) {
             var curr_id = self.mSceneLayer.mSceneID;
             while (curr_id != AssetHandle.NullHandle) {
-                const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id);
-                const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
+                const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id).?;
+                const file_meta_data = (try script_component.mScriptAssetHandle.GetAsset(FileMetaData)).?;
                 const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath.items));
                 imgui.igText(script_name);
                 curr_id = script_component.mNext;

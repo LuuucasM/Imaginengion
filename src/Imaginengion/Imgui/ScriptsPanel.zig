@@ -49,14 +49,15 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
-            if (entity.HasComponent(ScriptComponent)) {
+            if (entity.GetComponent(ScriptComponent)) |script_component| {
                 var ecs = entity.mECSManagerRef;
-                var iter = entity.GetComponent(ScriptComponent);
 
-                iter = ecs.GetComponent(ScriptComponent, iter.mFirst);
+                var iter = ecs.GetComponent(ScriptComponent, script_component.mFirst).?;
+
                 if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
+
                 while (iter.mNext != Entity.NullEntity) {
-                    iter = ecs.GetComponent(ScriptComponent, iter.mNext);
+                    iter = ecs.GetComponent(ScriptComponent, iter.mNext).?;
                     if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
                 }
             }

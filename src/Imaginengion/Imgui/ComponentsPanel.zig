@@ -20,11 +20,9 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const AISlotComponent = EntityComponents.AISlotComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
-const CircleRenderComponent = EntityComponents.CircleRenderComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
-const SpriteRenderComponent = EntityComponents.SpriteRenderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
@@ -107,7 +105,7 @@ fn EntityImguiRender(entity: Entity) !void {
         if (imgui.igSelectable_Bool(@typeName(EntityIDComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityIDComponent), entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityIDComponent).?, entity),
                 },
             };
             try ImguiEventManager.Insert(new_event);
@@ -117,7 +115,7 @@ fn EntityImguiRender(entity: Entity) !void {
         if (imgui.igSelectable_Bool(@typeName(EntityNameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityNameComponent), entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityNameComponent).?, entity),
                 },
             };
             try ImguiEventManager.Insert(new_event);
@@ -125,7 +123,7 @@ fn EntityImguiRender(entity: Entity) !void {
     }
     if (entity.HasComponent(TransformComponent) == true) {
         if (imgui.igSelectable_Bool(@typeName(TransformComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_editor_window = EditorWindow.Init(entity.GetComponent(TransformComponent), entity);
+            const new_editor_window = EditorWindow.Init(entity.GetComponent(TransformComponent).?, entity);
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
                     .mEditorWindow = new_editor_window,
@@ -138,17 +136,7 @@ fn EntityImguiRender(entity: Entity) !void {
         if (imgui.igSelectable_Bool(@typeName(CameraComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(CameraComponent), entity),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-    }
-    if (entity.HasComponent(CircleRenderComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(CircleRenderComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(CircleRenderComponent), entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(CameraComponent).?, entity),
                 },
             };
             try ImguiEventManager.Insert(new_event);
@@ -158,17 +146,7 @@ fn EntityImguiRender(entity: Entity) !void {
         if (imgui.igSelectable_Bool(@typeName(QuadComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(QuadComponent), entity),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-    }
-    if (entity.HasComponent(SpriteRenderComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(SpriteRenderComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(SpriteRenderComponent), entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(QuadComponent).?, entity),
                 },
             };
             try ImguiEventManager.Insert(new_event);
@@ -210,12 +188,6 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
             _ = try entity.AddComponent(CameraComponent, new_camera_component);
         }
     }
-    if (entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {
-        if (imgui.igMenuItem_Bool("CircleRenderComponent", "", false, true) == true) {
-            _ = try entity.AddComponent(CircleRenderComponent, null);
-            imgui.igCloseCurrentPopup();
-        }
-    }
     if (entity.HasComponent(AISlotComponent) == false) {
         if (imgui.igMenuItem_Bool("AISlotComponent", "", false, true) == true) {
             _ = try entity.AddComponent(AISlotComponent, null);
@@ -228,16 +200,9 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
             imgui.igCloseCurrentPopup();
         }
     }
-    if (entity.HasComponent(QuadComponent) == false and entity.HasComponent(CircleRenderComponent) == false and entity.HasComponent(SpriteRenderComponent) == false) {
+    if (entity.HasComponent(QuadComponent) == false) {
         if (imgui.igMenuItem_Bool("QuadComponent", "", false, true) == true) {
             const new_sprite_component = try entity.AddComponent(QuadComponent, null);
-            new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
-            imgui.igCloseCurrentPopup();
-        }
-    }
-    if (entity.HasComponent(SpriteRenderComponent) == false and entity.HasComponent(CircleRenderComponent) == false) {
-        if (imgui.igMenuItem_Bool("SpriteRenderComponent", "", false, true) == true) {
-            const new_sprite_component = try entity.AddComponent(SpriteRenderComponent, null);
             new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
             imgui.igCloseCurrentPopup();
         }

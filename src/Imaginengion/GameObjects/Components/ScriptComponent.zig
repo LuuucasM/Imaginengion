@@ -20,10 +20,6 @@ mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *ScriptComponent) !void {}
 
-pub fn GetEditorWindow(self: *ScriptComponent) EditorWindow {
-    return EditorWindow.Init(self);
-}
-
 pub fn GetName(self: ScriptComponent) []const u8 {
     _ = self;
     return "ScriptComponent";

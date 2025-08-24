@@ -1,6 +1,7 @@
 const std = @import("std");
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
+const EditorWindow = @import("../Imgui/EditorWindow.zig");
 
 pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) type {
     return struct {
@@ -62,10 +63,11 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
             return self.mComponents.HasSparse(entityID);
         }
-        pub fn GetComponent(self: Self, entityID: entity_t) *componentType {
-            std.debug.assert(self.mComponents.HasSparse(entityID));
-
-            return self.mComponents.getValueBySparse(entityID);
+        pub fn GetComponent(self: Self, entityID: entity_t) ?*componentType {
+            if (self.mComponents.HasSparse(entityID)) {
+                return self.mComponents.getValueBySparse(entityID);
+            }
+            return null;
         }
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
