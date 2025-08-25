@@ -137,7 +137,7 @@ pub fn DestroyEntity(self: *SceneManager, destroy_entity: Entity) !void {
         // Each child will remove itself from the parent's linked list when destroyed
         while (parent_component.mFirstChild != Entity.NullEntity) {
             const parent_entity = self.GetEntity(parent_component.mFirstChild);
-            try self.InternalDestroyEntity(parent_entity);
+            try self.DestroyEntity(parent_entity);
         }
     }
 

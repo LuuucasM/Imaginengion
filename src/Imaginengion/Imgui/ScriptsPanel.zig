@@ -83,3 +83,11 @@ pub fn OnTogglePanelEvent(self: *ScriptsPanel) void {
 pub fn OnSelectEntityEvent(self: *ScriptsPanel, new_selected_entity: ?Entity) void {
     self.mSelectedEntity = new_selected_entity;
 }
+
+pub fn OnDeleteEntity(self: *ScriptsPanel, delete_entity: Entity) void {
+    if (self.mSelectedEntity) |selected_entity| {
+        if (selected_entity.mEntityID == delete_entity.mEntityID) {
+            self.mSelectedEntity = null;
+        }
+    }
+}

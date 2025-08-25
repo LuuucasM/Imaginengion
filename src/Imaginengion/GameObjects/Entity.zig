@@ -9,6 +9,7 @@ const EntityChildComponent = Components.ChildComponent;
 const PlayerSlotComponent = Components.PlayerSlotComponent;
 const Tracy = @import("../Core/Tracy.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -81,5 +82,6 @@ pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
 }
 pub fn Delete(self: Entity) !void {
-    GameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntityID = self } });
+    try GameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntity = self.mEntityID } });
+    try ImguiEventManager.Insert(.{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
 }

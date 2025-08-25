@@ -1,7 +1,7 @@
 const LayerType = @import("../Scene/SceneComponents.zig").SceneComponent.LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const SceneType = @import("../Scene/SceneManager.zig").SceneType;
+const SceneType = @import("../Scene/SceneLayer.zig").Type;
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const ScriptType = @import("../Assets/Assets.zig").ScriptAsset.ScriptType;
@@ -41,6 +41,8 @@ pub const ImguiEvent = union(enum) {
     ET_OpenSceneSpecEvent: OpenSceneSpecEvent,
     ET_SaveEntityEvent: SaveEntityEvent,
     ET_SaveEntityAsEvent: SaveEntityAsEvent,
+    ET_DeleteEntityEvent: DeleteEntityEvent,
+    ET_DeleteSceneEvent: DeleteSceneEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -123,4 +125,12 @@ pub const SaveEntityEvent = struct {};
 
 pub const SaveEntityAsEvent = struct {
     Path: []const u8,
+};
+
+pub const DeleteEntityEvent = struct {
+    mEntity: Entity,
+};
+
+pub const DeleteSceneEvent = struct {
+    mScene: SceneLayer,
 };

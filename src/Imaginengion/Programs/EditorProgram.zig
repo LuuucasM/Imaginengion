@@ -245,7 +245,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //-------------Animation Begin--------------
     //-------------Animation End----------------
 
-    try GameEventManager.ProcessEvents(.EC_PreRender);
     //---------Render Begin-------------
     {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
@@ -369,7 +368,6 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------Networking Begin-------------
     //--------------Networking End---------------
 
-    GameEventManager.ProcessEvents(.EC_PreEndOfFrame);
     //-----------------Start End of Frame-----------------
     {
         const end_frame_zone = Tracy.ZoneInit("End Frame Section", @src());
@@ -385,11 +383,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         self.CleanSceneSpecs();
 
         //handle deleted objects this frame
-        GameEventManager.ProcessEvents(.EC_EndOfFrame);
-        try self.mGameSceneManager.ProcessDestroyedEntities();
-        try self.mGameSceneManager.ProcessDestroyedScenes(self.mFrameAllocator);
-        try self.mEditorSceneManager.ProcessDestroyedEntities();
-        try self.mEditorSceneManager.ProcessDestroyedScenes(self.mFrameAllocator);
+        try GameEventManager.ProcessEvents(.EC_EndOfFrame);
         try AssetManager.ProcessDestroyedAssets();
         try PlayerManager.ProcessDestroyedPlayers();
 
@@ -511,6 +505,16 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
                 }
             }
         },
+        .ET_DeleteEntityEvent => |e| {
+            self._ScenePanel.OnDeleteEntity(e.mEntity);
+            self._ComponentsPanel.OnDeleteEntity(e.mEntity);
+            self._ScriptsPanel.OnDeleteEntity(e.mEntity);
+            self._ViewportPanel.OnDeleteEntity(e.mEntity);
+        },
+        .ET_DeleteSceneEvent => |e| {
+            self._ScenePanel.OnDeleteScene(e.mScene);
+            self._ComponentsPanel.OnDeleteScene(e.mScene);
+        },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
 }
@@ -518,9 +522,14 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
 pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
     switch (event.*) {
         .ET_DestroyEntityEvent => |e| {
-            self.mGameSceneManager.DestroyEntity(e.mEntity.mEntityID);
+            const entity = self.mGameSceneManager.GetEntity(e.mEntity);
+            try self.mGameSceneManager.DestroyEntity(entity);
         },
         else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
+        .ET_DestroySceneEvent => |e| {
+            const scene = self.mGameSceneManager.GetSceneLayer(e.mScene);
+            try self.mGameSceneManager.RemoveScene(scene, self.mFrameAllocator);
+        },
     }
 }
 

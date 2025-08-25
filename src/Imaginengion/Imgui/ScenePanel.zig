@@ -3,7 +3,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneManager = @import("../Scene/SceneManager.zig");
-const SceneType = SceneManager.SceneType;
+const SceneType = SceneLayer.Type;
 const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
@@ -82,6 +82,22 @@ pub fn OnSelectEntityEvent(self: *ScenePanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
 }
 
+pub fn OnDeleteEntity(self: *ScenePanel, delete_entity: Entity) void {
+    if (self.mSelectedEntity) |selected_entity| {
+        if (selected_entity.mEntityID == delete_entity.mEntityID) {
+            self.mSelectedEntity = null;
+        }
+    }
+}
+
+pub fn OnDeleteScene(self: *ScenePanel, delete_scene: SceneLayer) void {
+    if (self.mSelectedScene) |selected_scene| {
+        if (selected_scene.mSceneID == delete_scene.mSceneID) {
+            self.mSelectedScene = null;
+        }
+    }
+}
+
 fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
     //getting all the scenes and entities ahead of time to use later
     const name_entities = try scene_manager.mECSManagerGO.GetGroup(GroupQuery{
@@ -132,15 +148,7 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
         try ImguiEventManager.Insert(ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer } });
     }
 
-    //if item is right clicked open up menu that will allow you to add an entity to the scene
-    if (!already_popup.* and imgui.igBeginPopupContextItem(scene_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
-        defer imgui.igEndPopup();
-        already_popup.* = true;
-
-        if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try scene_layer.CreateEntity();
-        }
-    }
+    try self.HandleScenePopupContext(scene_layer, scene_name, already_popup);
 
     self.DrawSceneBorder(scene_component.mLayerType);
 
@@ -196,6 +204,22 @@ fn DrawSceneBorder(_: *ScenePanel, layer_type: LayerType) void {
     };
 
     imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, color, 0.0, imgui.ImDrawFlags_None, 1.0);
+}
+
+fn HandleScenePopupContext(_: *ScenePanel, scene_layer: SceneLayer, scene_name: []const u8, already_popup: *bool) !void {
+    //if item is right clicked open up menu that will allow you to add an entity to the scene
+    if (!already_popup.* and imgui.igBeginPopupContextItem(scene_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+        defer imgui.igEndPopup();
+        already_popup.* = true;
+
+        if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
+            _ = try scene_layer.CreateEntity();
+        }
+
+        if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
+            try scene_layer.Delete();
+        }
+    }
 }
 
 fn HandleSceneDragDrop(_: *ScenePanel, scene_layer: SceneLayer) !void {

@@ -13,6 +13,8 @@ const TransformComponent = EntityComponents.TransformComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
+const GameEventManager = @import("../Events/GameEventManager.zig");
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 
 pub const Type = u32;
 pub const NullScene: Type = std.math.maxInt(Type);
@@ -71,8 +73,9 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
     return e;
 }
 
-pub fn DestroyEntity(self: SceneLayer, e: Entity) !void {
-    try self.mECSManagerGORef.DestroyEntity(e.mEntityID);
+pub fn Delete(self: SceneLayer) !void {
+    try GameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mScene = self.mSceneID } });
+    try ImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }
 
 pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {

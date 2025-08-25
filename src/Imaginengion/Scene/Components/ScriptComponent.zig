@@ -10,7 +10,7 @@ const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const SceneLayer = @import("../SceneLayer.zig");
-const SceneType = @import("../../Scene/SceneManager.zig").SceneType;
+const SceneType = @import("../SceneLayer.zig").Type;
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
 pub const Ind: usize = blk: {

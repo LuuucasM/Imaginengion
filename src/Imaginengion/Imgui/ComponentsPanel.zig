@@ -100,6 +100,22 @@ pub fn OnSelectSceneEvent(self: *ComponentsPanel, new_selected_scene: ?SceneLaye
     self.mSelectedScene = new_selected_scene;
 }
 
+pub fn OnDeleteEntity(self: *ComponentsPanel, delete_entity: Entity) void {
+    if (self.mSelectedEntity) |selected_entity| {
+        if (selected_entity.mEntityID == delete_entity.mEntityID) {
+            self.mSelectedEntity = null;
+        }
+    }
+}
+
+pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
+    if (self.mSelectedScene) |selected_scene| {
+        if (selected_scene.mSceneID == delete_scene.mSceneID) {
+            self.mSelectedScene = null;
+        }
+    }
+}
+
 fn EntityImguiRender(entity: Entity) !void {
     if (entity.HasComponent(EntityIDComponent)) {
         if (imgui.igSelectable_Bool(@typeName(EntityIDComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
