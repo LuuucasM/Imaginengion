@@ -11,15 +11,20 @@ pub const ECSManagerPlayer = ECSManager(Player.Type, ComponentsList.len);
 var StaticPlayerManager: PlayerManager = undefined;
 
 mECSManager: ECSManagerPlayer = undefined,
+_PlayersToDestroy: std.ArrayList(Player.Type) = .{},
+
+mEngineAllocator: std.mem.Allocator = undefined,
 
 pub fn Init(engine_allocator: std.mem.Allocator) !void {
     StaticPlayerManager = PlayerManager{
         .mECSManager = try ECSManager(Player.Type, ComponentsList.len).Init(engine_allocator, ComponentsList),
+        .mEngineAllocator = engine_allocator,
     };
 }
 
 pub fn Deinit() void {
     StaticPlayerManager.mECSManager.Deinit();
+    StaticPlayerManager._PlayersToDestroy.deinit(StaticPlayerManager.mEngineAllocator);
 }
 
 pub fn CreatePlayer() !Player {
@@ -30,7 +35,7 @@ pub fn CreatePlayer() !Player {
 }
 
 pub fn DestroyPlayer(player: Player) void {
-    StaticPlayerManager.mECSManager.DestroyEntity(player.mEntityID);
+    StaticPlayerManager._PlayersToDestroy.append(StaticPlayerManager.mEngineAllocator, player.mEntityID);
 }
 
 pub fn GetPlayer(player_id: Player.Type) Player {
@@ -40,7 +45,10 @@ pub fn GetPlayer(player_id: Player.Type) Player {
 }
 
 pub fn ProcessDestroyedPlayers() !void {
-    try StaticPlayerManager.mECSManager.ProcessDestroyedEntities();
+    for (StaticPlayerManager._PlayersToDestroy.items) |player_id| {
+        try StaticPlayerManager.mECSManager.DestroyEntity(player_id);
+    }
+    StaticPlayerManager._PlayersToDestroy.clearAndFree(StaticPlayerManager.mEngineAllocator);
 }
 
 pub fn GetGroup(query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Player.Type) {

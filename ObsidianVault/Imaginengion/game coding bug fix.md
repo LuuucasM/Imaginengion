@@ -1,6 +1,5 @@
 - finish adding remove entity and remove scene from scene panel.
-	- i need to look over to ensure that I am processing destroyed entities correctly because I had to move the logic into the scene manager
-	- on top of that I have to finish writing the logic to removing a scene that is noted in the code
+	- i have figured out the way now. I am going to use events to destroy rather than keeping lists for later. I realized that this is better because we need to wait until the end of the frame to destroy and these entities go in a list, so might as well make it events instead because its effectively the same thing but using a system ive already build out properly. This means that because its event if I need to do some extra processing (like if the entity being deleted is selected entity, we can unselect it) it is easy to extend
 - add right click to add new scene to content browser panel
 - add a custom jsonStringify and jsonParse to CameraComponent and then move camera component serialize function to be just basic component serialization and can get rid of serialize camera component
 - add transforms to scenes

@@ -11,14 +11,14 @@ const EntityNameComponent = EntityComponents.NameComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
-const SceneType = @import("../Scene/SceneManager.zig").SceneType;
 const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 
-pub const NullScene: SceneType = std.math.maxInt(SceneType);
+pub const Type = u32;
+pub const NullScene: Type = std.math.maxInt(Type);
 const SceneLayer = @This();
 
-mSceneID: SceneType,
+mSceneID: Type,
 mECSManagerGORef: *ECSManagerGameObj,
 mECSManagerSCRef: *ECSManagerScenes,
 

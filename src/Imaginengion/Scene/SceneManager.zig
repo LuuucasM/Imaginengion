@@ -49,14 +49,11 @@ const SceneManager = @This();
 
 pub const ECSManagerGameObj = ECSManager(Entity.Type, EntityComponentsArray.len);
 
-pub const SceneType = u32;
-pub const ECSManagerScenes = ECSManager(SceneType, EntityComponentsArray.len);
+pub const ECSManagerScenes = ECSManager(SceneLayer.Type, EntityComponentsArray.len);
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj,
-mEntitiesToDestroy: std.ArrayList(Entity.Type) = .{},
 mECSManagerSC: ECSManagerScenes,
-_ScenesToDestroy: std.ArrayList(SceneType) = .{},
 mGameLayerInsertIndex: usize,
 mNumofLayers: usize,
 
@@ -80,30 +77,75 @@ pub fn Init(width: usize, height: usize, engine_allocator: std.mem.Allocator) !S
 
 pub fn Deinit(self: *SceneManager) !void {
     self.mECSManagerGO.Deinit();
-    self.mEntitiesToDestroy.deinit(self.mEngineAllocator);
-    self._ScenesToDestroy.deinit(self.mEngineAllocator);
     self.mECSManagerSC.Deinit();
 }
 
-pub fn CreateEntity(self: *SceneManager, scene_id: SceneType) !Entity {
+pub fn CreateEntity(self: *SceneManager, scene_id: SceneLayer.Type) !Entity {
     const zone = Tracy.ZoneInit("SceneManager CreateEntity", @src());
     defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     return scene_layer.CreateEntity();
 }
-pub fn CreateEntityWithUUID(self: *SceneManager, uuid: u128, scene_id: SceneType) !Entity {
+pub fn CreateEntityWithUUID(self: *SceneManager, uuid: u128, scene_id: SceneLayer.Type) !Entity {
     const zone = Tracy.ZoneInit("SceneManager CreateEntityWithUUID", @src());
     defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     return scene_layer.CreateEntityWithUUID(uuid);
 }
 
-pub fn DestroyEntity(self: *SceneManager, e: Entity, _: SceneType) !void {
+pub fn DestroyEntity(self: *SceneManager, destroy_entity: Entity) !void {
     const zone = Tracy.ZoneInit("SceneManager DestroyEntity", @src());
     defer zone.Deinit();
-    self.mEntitiesToDestroy.append(self.mEngineAllocator, e.mEntityID);
+    // Handle parent-child relationships
+    if (destroy_entity.GetComponent(EntityChildComponent)) |child_component| {
+        const parent_entity_id = child_component.mParent;
+
+        // Update parent's first child if this entity is the first child
+        if (child_component.mFirst == destroy_entity.mEntityID) {
+            if (child_component.mNext == Entity.NullEntity) {
+                // No more children, remove parent component entirely
+                try self.mECSManagerGO.RemoveComponent(EntityParentComponent, parent_entity_id);
+            } else {
+                // Update parent's first child to point to next sibling
+                const parent_component = self.mECSManagerGO.GetComponent(EntityParentComponent, parent_entity_id).?;
+                parent_component.mFirstChild = child_component.mNext;
+
+                // Update the next sibling's prev pointer
+                const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
+                next_child_component.mPrev = Entity.NullEntity;
+            }
+        } else {
+            // This entity is not the first child, update sibling links
+            const prev_entity_id = child_component.mPrev;
+            const prev_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, prev_entity_id).?;
+
+            if (child_component.mNext != Entity.NullEntity) {
+                // Update next sibling's prev pointer
+                const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
+                next_child_component.mPrev = prev_entity_id;
+                prev_child_component.mNext = child_component.mNext;
+            } else {
+                // This was the last child
+                prev_child_component.mNext = Entity.NullEntity;
+            }
+        }
+    }
+
+    // Recursively delete all children (not just first child)
+    if (destroy_entity.GetComponent(EntityParentComponent)) |parent_component| {
+        // Keep deleting the first child until there are no more children
+        // Each child will remove itself from the parent's linked list when destroyed
+        while (parent_component.mFirstChild != Entity.NullEntity) {
+            const parent_entity = self.GetEntity(parent_component.mFirstChild);
+            try self.InternalDestroyEntity(parent_entity);
+        }
+    }
+
+    //finally destroy the entity from the ECS
+    try self.mECSManagerGO.DestroyEntity(destroy_entity.mEntityID);
 }
-pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneType) !Entity {
+
+pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneLayer.Type) !Entity {
     const zone = Tracy.ZoneInit("SceneManager DuplicateEntity", @src());
     defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
@@ -145,11 +187,37 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
     return scene_layer;
 }
 
-pub fn RemoveScene(self: *SceneManager, scene_id: usize) !void {
-    self._ScenesToDestroy.append(self.mEngineAllocator, scene_id);
+pub fn RemoveScene(self: *SceneManager, destroy_scene: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+    try self.SaveScene(destroy_scene, self.mEngineAllocator);
+
+    //first destroy all the entities in the scene
+    var entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, frame_allocator);
+    defer entity_scene_entities.deinit(frame_allocator);
+
+    self.FilterEntityByScene(&entity_scene_entities, destroy_scene.mSceneID, frame_allocator);
+
+    for (entity_scene_entities.items) |entity_id| {
+        try self.mECSManagerGO.DestroyEntity(entity_id);
+    }
+
+    //next realign the scene stack so that everything is in the right position after this one is destroyed
+    const destroy_stack_pos = destroy_scene.GetComponent(SceneStackPos).?;
+
+    var stack_pos_group = try self.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, frame_allocator);
+    defer stack_pos_group.deinit(frame_allocator);
+
+    for (stack_pos_group.items) |pos_scene_id| {
+        const stack_pos = self.mECSManagerSC.GetComponent(SceneStackPos, pos_scene_id).?;
+        if (stack_pos.mPosition > destroy_stack_pos.mPosition) {
+            stack_pos.mPosition -= 1;
+        }
+    }
+
+    //finally destroy the scene
+    try self.mECSManagerSC.DestroyEntity(destroy_scene.mSceneID);
 }
 
-pub fn LoadScene(self: *SceneManager, path: []const u8, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator) !SceneType {
+pub fn LoadScene(self: *SceneManager, path: []const u8, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator) !SceneLayer.Type {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     const scene_asset_handle = try AssetManager.GetAssetHandleRef(path, .Prj);
@@ -229,7 +297,7 @@ pub fn SaveSceneAs(self: *SceneManager, scene_layer: SceneLayer, abs_path: []con
     try SceneSerializer.SerializeSceneText(scene_layer, scene_component.mSceneAssetHandle, frame_allocator);
 }
 
-pub fn MoveScene(self: *SceneManager, scene_id: SceneType, move_to_pos: usize) !void {
+pub fn MoveScene(self: *SceneManager, scene_id: SceneLayer.Type, move_to_pos: usize) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -285,17 +353,17 @@ pub fn SaveEntityAs(_: *SceneManager, entity: Entity, abs_path: []const u8, fram
     try SceneSerializer.SerializeEntityText(entity, abs_path, frame_allocator);
 }
 
-pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType, list_allocator: std.mem.Allocator) void {
+pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type, list_allocator: std.mem.Allocator) void {
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterEntityByScene(entity_result_list, list_allocator);
 }
 
-pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType, list_allocator: std.mem.Allocator) void {
+pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type, list_allocator: std.mem.Allocator) void {
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterEntityScriptsByScene(scripts_result_list, list_allocator);
 }
 
-pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneType, list_allocator: std.mem.Allocator) void {
+pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type, list_allocator: std.mem.Allocator) void {
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterSceneScriptsByScene(scripts_result_list, list_allocator);
 }
@@ -306,7 +374,7 @@ pub fn GetEntityGroup(self: *SceneManager, query: GroupQuery, frame_allocator: s
     return try self.mECSManagerGO.GetGroup(query, frame_allocator);
 }
 
-pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneType, b: SceneType) bool {
+pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: SceneLayer.Type) bool {
     const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
     const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b).?;
 
@@ -317,94 +385,8 @@ pub fn GetEntity(self: *SceneManager, entity_id: Entity.Type) Entity {
     return Entity{ .mEntityID = entity_id, .mECSManagerRef = &self.mECSManagerGO };
 }
 
-pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneType) SceneLayer {
+pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneLayer.Type) SceneLayer {
     return SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-}
-
-pub fn ProcessDestroyedEntities(self: *SceneManager) !void {
-    const zone = Tracy.ZoneInit("SceneManager ProcessDestroyedEntities", @src());
-    defer zone.Deinit();
-    for (self.mEntitiesToDestroy) |entity_id| {
-        self.InternalDestroyEntity(entity_id);
-    }
-}
-
-pub fn ProcessDestroyedScenes(self: *SceneManager) !void {
-    const zone = Tracy.ZoneInit("SceneManager ProcessDestroyedScenes", @src());
-    defer zone.Deinit();
-    for (self.mScenesToDestroy) |scene_id| {
-        self.InternalDestroyScene(scene_id);
-    }
-}
-
-fn InternalDestroyEntity(self: *SceneManager, entity_id: Entity.Type) !void {
-    const entity_ecs = self.mECSManagerGO;
-    // Handle parent-child relationships
-    if (entity_ecs.GetComponent(EntityChildComponent, entity_id)) |child_component| {
-        const parent_entity_id = child_component.mParent;
-
-        // Update parent's first child if this entity is the first child
-        if (child_component.mFirst == entity_id) {
-            if (child_component.mNext == Entity.NullEntity) {
-                // No more children, remove parent component entirely
-                try entity_ecs.RemoveComponent(EntityParentComponent, parent_entity_id);
-            } else {
-                // Update parent's first child to point to next sibling
-                const parent_component = entity_ecs.GetComponent(EntityParentComponent, parent_entity_id).?;
-                parent_component.mFirstChild = child_component.mNext;
-
-                // Update the next sibling's prev pointer
-                const next_child_component = entity_ecs.GetComponent(EntityChildComponent, child_component.mNext).?;
-                next_child_component.mPrev = Entity.NullEntity;
-            }
-        } else {
-            // This entity is not the first child, update sibling links
-            const prev_entity_id = child_component.mPrev;
-            const prev_child_component = entity_ecs.GetComponent(EntityChildComponent, prev_entity_id).?;
-
-            if (child_component.mNext != Entity.NullEntity) {
-                // Update next sibling's prev pointer
-                const next_child_component = entity_ecs.GetComponent(EntityChildComponent, child_component.mNext).?;
-                next_child_component.mPrev = prev_entity_id;
-                prev_child_component.mNext = child_component.mNext;
-            } else {
-                // This was the last child
-                prev_child_component.mNext = Entity.NullEntity;
-            }
-        }
-    }
-
-    // Recursively delete all children (not just first child)
-    if (entity_ecs.GetComponent(EntityParentComponent, entity_id)) |parent_component| {
-        // Keep deleting the first child until there are no more children
-        // Each child will remove itself from the parent's linked list when destroyed
-        while (parent_component.mFirstChild != Entity.NullEntity) {
-            try self.InternalDestroyEntity(parent_component.mFirstChild);
-        }
-    }
-
-    //finally destroy the entity from the ECS
-    self.mECSManagerGO.DestroyEntity(entity_id);
-}
-
-fn InternalDestroyScene(self: *SceneManager, scene_id: SceneType) !void {
-    self.SaveScene(scene_id);
-
-    const entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, self.mEngineAllocator);
-    defer entity_scene_entities.deinit();
-
-    self.FilterEntityByScene(entity_scene_entities, scene_id);
-
-    for (entity_scene_entities.mEntityList.items) |entity_id| {
-        self.mECSManagerGO.DestroyEntity(entity_id);
-    }
-
-    //first ensure the scene stack is proper
-    //have all the scene stack components whos value is greather than the current scene stack position -1 go down 1 cuz
-    //this scene is going bye bye
-
-    //finally destroy the scene
-    self.mECSManagerSC.DestroyEntity(scene_id);
 }
 
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {

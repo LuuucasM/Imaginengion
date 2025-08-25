@@ -138,7 +138,6 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-            std.debug.assert(self.HasComponent(component_type, entityID));
 
             return @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);
         }

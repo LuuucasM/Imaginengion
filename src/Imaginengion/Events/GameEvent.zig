@@ -1,13 +1,16 @@
-const EntityType = @import("../GameObjects/Entity.zig").Type;
+const Entity = @import("../GameObjects/Entity.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
 
 pub const GameEventCategory = enum(u8) {
     EC_Default,
-    EC_PreRender,
+    EC_EndOfFrame,
 };
 
 pub const GameEvent = union(enum) {
     ET_DefaultEvent: DefaultEvent,
-    ET_PrimaryCameraChangeEvent: PrimaryCameraChangeEvent,
+    ET_DestroyEntityEvent: DestroyEntityEvent,
+    ET_DestroySceneEvent: DestroySceneEvent,
+
     pub fn GetEventCategory(self: GameEvent) GameEventCategory {
         switch (self) {
             inline else => |event| return event.GetEventCategory(),
@@ -16,16 +19,24 @@ pub const GameEvent = union(enum) {
 };
 
 pub const DefaultEvent = struct {
-    pub fn GetEventCategory(self: PrimaryCameraChangeEvent) GameEventCategory {
+    pub fn GetEventCategory(self: DefaultEvent) GameEventCategory {
         _ = self;
         return .EC_Default;
     }
 };
 
-pub const PrimaryCameraChangeEvent = struct {
-    mEntityID: EntityType,
-    pub fn GetEventCategory(self: PrimaryCameraChangeEvent) GameEventCategory {
+pub const DestroyEntityEvent = struct {
+    mEntity: Entity.Type,
+    pub fn GetEventCategory(self: DestroyEntityEvent) GameEventCategory {
         _ = self;
-        return .EC_PreRender;
+        return .EC_EndOfFrame;
+    }
+};
+
+pub const DestroySceneEvent = struct {
+    mScene: SceneLayer.Type,
+    pub fn GetEventCategory(self: DestroySceneEvent) GameEventCategory {
+        _ = self;
+        return .EC_EndOfFrame;
     }
 };

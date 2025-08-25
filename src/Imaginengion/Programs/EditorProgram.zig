@@ -245,12 +245,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //-------------Animation Begin--------------
     //-------------Animation End----------------
 
+    try GameEventManager.ProcessEvents(.EC_PreRender);
     //---------Render Begin-------------
     {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
-
-        try GameEventManager.ProcessEvents(.EC_PreRender);
 
         ImGui.Begin();
         Dockspace.Begin();
@@ -370,6 +369,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------Networking Begin-------------
     //--------------Networking End---------------
 
+    GameEventManager.ProcessEvents(.EC_PreEndOfFrame);
     //-----------------Start End of Frame-----------------
     {
         const end_frame_zone = Tracy.ZoneInit("End Frame Section", @src());
@@ -385,10 +385,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         self.CleanSceneSpecs();
 
         //handle deleted objects this frame
+        GameEventManager.ProcessEvents(.EC_EndOfFrame);
         try self.mGameSceneManager.ProcessDestroyedEntities();
-        try self.mGameSceneManager.ProcessDestroyedScenes();
+        try self.mGameSceneManager.ProcessDestroyedScenes(self.mFrameAllocator);
         try self.mEditorSceneManager.ProcessDestroyedEntities();
-        try self.mEditorSceneManager.ProcessDestroyedScenes();
+        try self.mEditorSceneManager.ProcessDestroyedScenes(self.mFrameAllocator);
         try AssetManager.ProcessDestroyedAssets();
         try PlayerManager.ProcessDestroyedPlayers();
 
@@ -515,9 +516,10 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
 }
 
 pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
-    _ = self;
     switch (event.*) {
-        .ET_PrimaryCameraChangeEvent => {},
+        .ET_DestroyEntityEvent => |e| {
+            self.mGameSceneManager.DestroyEntity(e.mEntity.mEntityID);
+        },
         else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
     }
 }

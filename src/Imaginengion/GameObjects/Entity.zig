@@ -7,8 +7,8 @@ const CameraComponent = Components.CameraComponent;
 const EntityParentComponent = Components.ParentComponent;
 const EntityChildComponent = Components.ChildComponent;
 const PlayerSlotComponent = Components.PlayerSlotComponent;
-const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const GameEventManager = @import("../Events/GameEventManager.zig");
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -81,5 +81,5 @@ pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
 }
 pub fn Delete(self: Entity) !void {
-    try self.mECSManagerRef.DestroyEntity(self.mEntityID);
+    GameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntityID = self } });
 }
