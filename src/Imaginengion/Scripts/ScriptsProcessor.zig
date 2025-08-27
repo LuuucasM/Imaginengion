@@ -58,7 +58,7 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_go.GetComponent(EntityScriptComponent, script_id).?;
-            const script_asset = (try script_component.mScriptAssetHandle.GetAsset(ScriptAsset)).?;
+            const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
             const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
             var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
@@ -96,7 +96,7 @@ pub fn RunSceneScript(scene_manager: *SceneManager, comptime script_type: type, 
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_sc.GetComponent(SceneScriptComponent, script_id).?;
-            const script_asset = (try script_component.mScriptAssetHandle.GetAsset(ScriptAsset)).?;
+            const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
             const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
             var scene = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };

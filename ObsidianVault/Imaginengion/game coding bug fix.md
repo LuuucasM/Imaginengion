@@ -1,7 +1,4 @@
-- fix bug where if you cancel a SaveAs for scene it will crash with index out of bounds
-	- I dont actually check to see if a path was gotten i just need a simple check and thats it
-- add right click to add new scene to content browser panel
-- add a custom jsonStringify and jsonParse to CameraComponent and then move camera component serialize function to be just basic component serialization and can get rid of serialize camera component
+- add a custom jsonStringify and jsonParse to CameraComponent and then move camera component serialize function to be just basic component serialization and can get rid of serialize camera component function
 - add transforms to scenes
 - change serializer so that it no longer needs to take in a scene asset and when calling save scene as no need to make the asset on disk before serializing so that it works now that it uses all rel paths
 - add the ability to change TexCoord(UV).
@@ -14,5 +11,6 @@
 		- these 3 things gives the user to both set the UV visually ON the actual image, and then also programatically.
 		- the only thing i am considering is if i should allow dragging of the dots on the image as it might be hard and i want to write as little imgui code as possible because id rather just replace imgui with my own UI stuff later
 		- the one good thing is that the more accurate i make the imgui code now the better prepared i will be to make the switch because I will know exactly what i need from my engines own UI system to be able to recreate the engine gui
+- add a custom jsonStringify and jsonParse to SerializeQuadComponent and then move quad component serialize function to be just basic component serialization and get rid of the serialize quad component function
 - add ability to render font
 - add sound

@@ -13,6 +13,8 @@ const ScriptAsset = Assets.ScriptAsset;
 const ImguiUtils = @import("ImguiUtils.zig");
 const NewScriptEvent = @import("../Events/ImguiEvent.zig").NewScriptEvent;
 const Tracy = @import("../Core/Tracy.zig");
+const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
 
 const MAX_PATH_LEN = 260;
 
@@ -77,13 +79,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     _ = imgui.igBegin("ContentBrowser", null, 0);
     defer imgui.igEnd();
 
-    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
-        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
-    }
-    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
-        defer imgui.igEndPopup();
-        try ImguiUtils.AllScriptPopupMenu();
-    }
+    try self.HandlePopupContext();
 
     //if we dont have a project directory yet dont try to print stuff
     if (self.mProjectDirectory == null) return;
@@ -117,12 +113,25 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
     }
 }
 
+fn HandlePopupContext(_: *ContentBrowserPanel) !void {
+    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
+        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
+    }
+    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
+        defer imgui.igEndPopup();
+        if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
+            try ImguiEventManager.Insert(.{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
+        }
+        try ImguiUtils.AllScriptPopupMenu();
+    }
+}
+
 fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
     defer zone.Deinit();
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
-    const back_texture = (try self.mBackArrowTextureHandle.GetAsset(Texture2D)).?;
+    const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(
@@ -159,7 +168,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
     var iter = self.mCurrentDirectory.?.iterate();
     while (try iter.next()) |entry| {
         if (entry.kind == .directory) {
-            const texture_asset = (try self.mDirTextureHandle.GetAsset(Texture2D)).?;
+            const texture_asset = try self.mDirTextureHandle.GetAsset(Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -173,7 +182,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             }
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-            const texture_asset = (try self.mPngTextureHandle.GetAsset(Texture2D)).?;
+            const texture_asset = try self.mPngTextureHandle.GetAsset(Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -182,7 +191,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try self.DragDropSourceBase(entry_name, "PNGLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-            const texutre_asset = (try self.mSceneTextureHandle.GetAsset(Texture2D)).?;
+            const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -191,7 +200,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try self.DragDropSourceBase(entry_name, "IMSCLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-            const texutre_asset = (try self.mScriptTextureHandle.GetAsset(Texture2D)).?;
+            const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -332,7 +341,7 @@ fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void
         var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
         defer AssetManager.ReleaseAssetHandleRef(&script_handle);
 
-        const script_asset = (try script_handle.GetAsset(ScriptAsset)).?;
+        const script_asset = try script_handle.GetAsset(ScriptAsset);
         if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
             _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
         } else if (script_asset.mScriptType == .OnSceneStart) {

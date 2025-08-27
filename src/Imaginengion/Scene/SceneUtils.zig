@@ -11,7 +11,7 @@ const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, path_type: PathType) !void {
     var ecs = scene_layer.mECSManagerSCRef;
     var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, path_type);
-    const script_asset = (try new_script_handle.GetAsset(ScriptAsset)).?;
+    const script_asset = try new_script_handle.GetAsset(ScriptAsset);
 
     if (scene_layer.HasComponent(SceneScriptComponent) == true) {
         //entity already has a script so iterate until the end of the linked list

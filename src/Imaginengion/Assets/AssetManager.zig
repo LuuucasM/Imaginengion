@@ -101,18 +101,20 @@ pub fn ReleaseAssetHandleRef(asset_handle: *AssetHandle) void {
     asset_handle.mID = AssetHandle.NullHandle;
 }
 
-pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !?*asset_type {
+pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
     const zone = Tracy.ZoneInit("AssetManager GetAsset", @src());
     defer zone.Deinit();
+
     //checking the asset type will be evaluated at comptime which will determine which branch
     //the function body will contain so it doesnt get processed in runtime
     //and it is needed because the "meta" asset types dont have an Init(because they are not being)
     //loaded from disk just meta data) so this lets it compile correct
+
     if (asset_type == FileMetaData or asset_type == AssetMetaData) {
-        return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
+        return AssetM.mAssetECS.GetComponent(asset_type, asset_id).?;
     } else {
-        if (AssetM.mAssetECS.HasComponent(asset_type, asset_id)) {
-            return AssetM.mAssetECS.GetComponent(asset_type, asset_id);
+        if (AssetM.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
+            return asset;
         } else {
             const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 

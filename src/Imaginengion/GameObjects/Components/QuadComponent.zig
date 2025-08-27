@@ -3,9 +3,12 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const Vec2f32 = @import("../../Math/LinAlg.zig").Vec2f32;
 const AssetM = @import("../../Assets/AssetManager.zig");
-const Texture2D = @import("../../Assets/Assets/Texture2D.zig");
+const Assets = @import("../../Assets/Assets.zig");
+const Texture2D = Assets.Texture2D;
+const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
+const AssetManager = @import("../../Assets/AssetManager.zig");
 const QuadComponent = @This();
 
 //IMGUI
@@ -14,12 +17,12 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
-mTexture: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 mTilingFactor: f32 = 1.0,
 mTexCoords: [2]Vec2f32 = [2]Vec2f32{
     Vec2f32{ 0, 0 },
     Vec2f32{ 1, 1 },
 },
+mTexture: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *QuadComponent) !void {}
 
@@ -45,7 +48,7 @@ pub fn EditorRender(self: *QuadComponent) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (try self.mTexture.GetAsset(Texture2D)).?.GetID())));
+    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (try self.mTexture.GetAsset(Texture2D)).GetID())));
     imgui.igImage(
         texture_id,
         .{ .x = 50.0, .y = 50.0 },
@@ -65,4 +68,68 @@ pub fn EditorRender(self: *QuadComponent) !void {
             self.mTexture = try AssetM.GetAssetHandleRef(path, .Prj);
         }
     }
+}
+
+pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("ShouldRender");
+    try jw.write(self.mShouldRender);
+
+    try jw.objectField("Color");
+    try jw.write(self.mColor);
+
+    try jw.objectField("TilingFactor");
+    try jw.write(self.mTilingFactor);
+
+    try jw.objectField("TexCoords");
+    try jw.write(self.mTexCoords);
+
+    try jw.objectField("Texture");
+    if (self.mTexture.mID != AssetHandle.NullHandle) {
+        const asset_file_data = try self.mTexture.GetAsset(FileMetaData);
+        try jw.write(asset_file_data.mRelPath.items);
+    } else {
+        try jw.write("No Script Asset");
+    }
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    var result: QuadComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, field_name, "ShouldRender")) {
+            const parsed_should = try std.json.parseFromTokenSource(bool, allocator, reader, options);
+            result.mShouldRender = parsed_should.value;
+        } else if (std.mem.eql(u8, field_name, "Color")) {
+            const parsed_color = try std.json.parseFromTokenSource(Vec4f32, allocator, reader, options);
+            result.mColor = parsed_color.value;
+        } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
+            const parsed_factor = try std.json.parseFromTokenSource(f32, allocator, reader, options);
+            result.mTilingFactor = parsed_factor.value;
+        } else if (std.mem.eql(u8, field_name, "TexCoords")) {
+            const parsed_coord = try std.json.parseFromTokenSource([2]Vec2f32, allocator, reader, options);
+            result.mTexCoords = parsed_coord.value;
+        } else if (std.mem.eql(u8, field_name, "Texture")) {
+            const parsed_path = try std.json.parseFromTokenSource([]const u8, allocator, reader, options);
+            result.mTexture = AssetManager.GetAssetHandleRef(parsed_path.value, .Prj) catch |err| {
+                std.debug.print("error: {}\n", .{err});
+                @panic("");
+            };
+        }
+    }
+
+    return result;
 }

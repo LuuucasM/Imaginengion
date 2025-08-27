@@ -57,7 +57,8 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
         }
         pub fn RemoveComponent(self: *Self, entityID: entity_t) !void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
-
+            const component = self.mComponents.getValueBySparse(entityID);
+            try component.Deinit();
             self.mComponents.remove(entityID);
         }
         pub fn HasComponent(self: Self, entityID: entity_t) bool {

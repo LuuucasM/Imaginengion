@@ -59,7 +59,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
     defer imgui.igEnd();
 
     const size = imgui.igGetWindowHeight();
-    const texture: *Texture2D = if (self.mState == .Play) (try self.mStopIcon.GetAsset(Texture2D)).? else (try self.mPlayIcon.GetAsset(Texture2D)).?;
+    const texture: *Texture2D = if (self.mState == .Play) try self.mStopIcon.GetAsset(Texture2D) else try self.mPlayIcon.GetAsset(Texture2D);
 
     var window_size: imgui.struct_ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&window_size);

@@ -25,8 +25,10 @@ pub const ProjectionType = enum(u1) {
 
 //viewport stuff
 //TODO: finish changing this to use the new framebuffer system
-mViewportWidth: usize = 0,
-mViewportHeight: usize = 0,
+mViewportWidth: usize = 1600,
+mViewportHeight: usize = 900,
+mAspectRatio: f32 = 0.0,
+
 mViewportFrameBuffer: FrameBuffer = undefined,
 mViewportVertexArray: VertexArray = undefined,
 mViewportVertexBuffer: VertexBuffer = undefined,
@@ -34,9 +36,7 @@ mViewportIndexBuffer: IndexBuffer = undefined,
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 
-mAspectRatio: f32 = 0.0,
 mIsFixedAspectRatio: bool = false,
-
 mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(60.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
@@ -134,4 +134,61 @@ pub fn EditorRender(self: *CameraComponent) !void {
     if (imgui.igDragFloat4("Area Rect", &rect_area[0], 0.01, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_None)) {
         self.SetAreaRect(Vec4f32{ rect_area[0], rect_area[1], rect_area[2], rect_area[3] });
     }
+}
+
+pub fn jsonStringify(self: *const CameraComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("IsFixedAspectRatio");
+    try jw.write(self.mIsFixedAspectRatio);
+
+    try jw.objectField("PerspectiveFOVRad");
+    try jw.write(self.mPerspectiveFOVRad);
+
+    try jw.objectField("PerspectiveNear");
+    try jw.write(self.mPerspectiveNear);
+
+    try jw.objectField("PerspectiveFar");
+    try jw.write(self.mPerspectiveFar);
+
+    try jw.objectField("AreaRect");
+    try jw.write(self.mAreaRect);
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!CameraComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    var result: CameraComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, field_name, "IsFixedAspectRatio")) {
+            const parsed_ratio = try std.json.parseFromTokenSource(bool, allocator, reader, options);
+            result.mIsFixedAspectRatio = parsed_ratio.value;
+        } else if (std.mem.eql(u8, field_name, "PerspectiveFOVRad")) {
+            const parsed_fov = try std.json.parseFromTokenSource(f32, allocator, reader, options);
+            result.mPerspectiveFOVRad = parsed_fov.value;
+        } else if (std.mem.eql(u8, field_name, "PerspectiveNear")) {
+            const parsed_near = try std.json.parseFromTokenSource(f32, allocator, reader, options);
+            result.mPerspectiveNear = parsed_near.value;
+        } else if (std.mem.eql(u8, field_name, "PerspectiveFar")) {
+            const parsed_far = try std.json.parseFromTokenSource(f32, allocator, reader, options);
+            result.mPerspectiveFar = parsed_far.value;
+        } else if (std.mem.eql(u8, field_name, "AreaRect")) {
+            const parsed_area = try std.json.parseFromTokenSource(Vec4f32, allocator, reader, options);
+            result.mAreaRect = parsed_area.value;
+        }
+    }
+    result.RecalculateProjection();
+
+    return result;
 }

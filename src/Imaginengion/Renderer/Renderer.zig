@@ -131,7 +131,7 @@ pub fn GetRenderStats() RenderStats {
 }
 
 pub fn GetSDFShader() !*ShaderAsset {
-    return (try RenderManager.mSDFShader.GetAsset(ShaderAsset)).?;
+    return try RenderManager.mSDFShader.GetAsset(ShaderAsset);
 }
 
 fn UpdateCameraBuffer(camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
@@ -208,7 +208,7 @@ fn EndRendering(camera_component: *CameraComponent) !void {
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 
-    const sdf_shader_asset = (try RenderManager.mSDFShader.GetAsset(ShaderAsset)).?;
+    const sdf_shader_asset = try RenderManager.mSDFShader.GetAsset(ShaderAsset);
     sdf_shader_asset.mShader.Bind();
 
     try RenderManager.mR2D.SetBuffers();

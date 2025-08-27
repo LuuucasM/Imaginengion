@@ -5,7 +5,7 @@ pub const NullHandle = std.math.maxInt(AssetManager.AssetType);
 
 mID: AssetManager.AssetType,
 
-pub fn GetAsset(self: AssetHandle, comptime component_type: type) !?*component_type {
+pub fn GetAsset(self: AssetHandle, comptime component_type: type) !*component_type {
     comptime {
         const Assets = @import("Assets.zig");
         const AssetMetaData = Assets.AssetMetaData;

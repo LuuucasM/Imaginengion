@@ -217,3 +217,47 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn jsonStringify(self: *const TransformComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("Translation");
+    try jw.write(self.Translation);
+
+    try jw.objectField("Rotation");
+    try jw.write(self.Rotation);
+
+    try jw.objectField("Scale");
+    try jw.write(self.Scale);
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TransformComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    var result: TransformComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, field_name, "Translation")) {
+            const parsed_trans = try std.json.parseFromTokenSource(Vec3f32, allocator, reader, options);
+            result.Translation = parsed_trans.value;
+        } else if (std.mem.eql(u8, field_name, "Rotation")) {
+            const parsed_rot = try std.json.parseFromTokenSource(Quatf32, allocator, reader, options);
+            result.Rotation = parsed_rot.value;
+        } else if (std.mem.eql(u8, field_name, "Scale")) {
+            const parsed_scale = try std.json.parseFromTokenSource(Vec3f32, allocator, reader, options);
+            result.Scale = parsed_scale.value;
+        }
+    }
+
+    return result;
+}

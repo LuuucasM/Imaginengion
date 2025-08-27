@@ -22,7 +22,7 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
 
         const mouse_delta = input_context.GetMousePositionDelta();
 
-        const transform_component = self.GetComponent(TransformComponent);
+        const transform_component = self.GetComponent(TransformComponent).?;
         var translation = transform_component.Translation;
         var rotation = transform_component.Rotation;
 
