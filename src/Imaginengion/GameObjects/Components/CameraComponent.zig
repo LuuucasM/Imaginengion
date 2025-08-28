@@ -172,20 +172,15 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "IsFixedAspectRatio")) {
-            const parsed_ratio = try std.json.parseFromTokenSource(bool, allocator, reader, options);
-            result.mIsFixedAspectRatio = parsed_ratio.value;
+            result.mIsFixedAspectRatio = try std.json.innerParse(bool, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "PerspectiveFOVRad")) {
-            const parsed_fov = try std.json.parseFromTokenSource(f32, allocator, reader, options);
-            result.mPerspectiveFOVRad = parsed_fov.value;
+            result.mPerspectiveFOVRad = try std.json.innerParse(f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "PerspectiveNear")) {
-            const parsed_near = try std.json.parseFromTokenSource(f32, allocator, reader, options);
-            result.mPerspectiveNear = parsed_near.value;
+            result.mPerspectiveNear = try std.json.innerParse(f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "PerspectiveFar")) {
-            const parsed_far = try std.json.parseFromTokenSource(f32, allocator, reader, options);
-            result.mPerspectiveFar = parsed_far.value;
+            result.mPerspectiveFar = try std.json.innerParse(f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "AreaRect")) {
-            const parsed_area = try std.json.parseFromTokenSource(Vec4f32, allocator, reader, options);
-            result.mAreaRect = parsed_area.value;
+            result.mAreaRect = try std.json.innerParse(Vec4f32, allocator, reader, options);
         }
     }
     result.RecalculateProjection();

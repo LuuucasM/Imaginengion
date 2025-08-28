@@ -111,20 +111,16 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "ShouldRender")) {
-            const parsed_should = try std.json.parseFromTokenSource(bool, allocator, reader, options);
-            result.mShouldRender = parsed_should.value;
+            result.mShouldRender = try std.json.innerParse(bool, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            const parsed_color = try std.json.parseFromTokenSource(Vec4f32, allocator, reader, options);
-            result.mColor = parsed_color.value;
+            result.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
-            const parsed_factor = try std.json.parseFromTokenSource(f32, allocator, reader, options);
-            result.mTilingFactor = parsed_factor.value;
+            result.mTilingFactor = try std.json.innerParse(f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TexCoords")) {
-            const parsed_coord = try std.json.parseFromTokenSource([2]Vec2f32, allocator, reader, options);
-            result.mTexCoords = parsed_coord.value;
+            result.mTexCoords = try std.json.innerParse([2]Vec2f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Texture")) {
-            const parsed_path = try std.json.parseFromTokenSource([]const u8, allocator, reader, options);
-            result.mTexture = AssetManager.GetAssetHandleRef(parsed_path.value, .Prj) catch |err| {
+            const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
+            result.mTexture = AssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

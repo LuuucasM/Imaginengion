@@ -16,7 +16,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityComponentsArray = EntityComponents.ComponentsList;
-const TransformComponent = EntityComponents.TransformComponent;
+const EntityTransformComponent = EntityComponents.TransformComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
@@ -30,6 +30,7 @@ const SceneComponent = SceneComponents.SceneComponent;
 const SceneIDComponent = SceneComponents.IDComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneStackPos = SceneComponents.StackPosComponent;
+const SceneTransformComponent = SceneComponents.TransformComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
@@ -181,6 +182,8 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
 
     const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ ._NameAllocator = self.mEngineAllocator });
     _ = try scene_name_component.Name.writer(scene_name_component._NameAllocator).write("Unsaved Scene");
+
+    _ = try scene_layer.AddComponent(SceneTransformComponent, null);
 
     try self.InsertScene(scene_layer);
 
@@ -405,7 +408,7 @@ fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
 }
 
 fn CalculateEntityTransform(entity: Entity, parent_transform: Mat4f32, parent_dirty: bool) void {
-    const transform_component = entity.GetComponent(TransformComponent);
+    const transform_component = entity.GetComponent(EntityTransformComponent);
     defer transform_component.Dirty = false;
     if (transform_component.Dirty or parent_dirty) {
         transform_component.WorldTransform = LinAlg.Mat4MulMat4(parent_transform, transform_component.GetLocalTransform());

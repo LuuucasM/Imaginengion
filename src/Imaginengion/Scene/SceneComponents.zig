@@ -3,6 +3,7 @@ pub const NameComponent = @import("Components/NameComponent.zig");
 pub const SceneComponent = @import("Components/SceneComponent.zig");
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 pub const StackPosComponent = @import("Components/StackPosComponent.zig");
+pub const TransformComponent = @import("Components/TransformComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
@@ -13,5 +14,6 @@ pub const ComponentsList = [_]type{
     SceneComponent,
     ScriptComponent,
     StackPosComponent,
+    TransformComponent,
     OnSceneStartScript,
 };

@@ -21,7 +21,9 @@ mNext: Entity.Type = Entity.NullEntity,
 mParent: Entity.Type = Entity.NullEntity,
 mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
-pub fn Deinit(_: *ScriptComponent) !void {}
+pub fn Deinit(self: *ScriptComponent) !void {
+    AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
+}
 
 pub fn GetName(self: ScriptComponent) []const u8 {
     _ = self;
@@ -76,9 +78,9 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "FilePath")) {
-            const parsed_path = try std.json.parseFromTokenSource([]const u8, allocator, reader, options);
+            const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
 
-            result.mScriptAssetHandle = AssetManager.GetAssetHandleRef(parsed_path.value, .Prj) catch |err| {
+            result.mScriptAssetHandle = AssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

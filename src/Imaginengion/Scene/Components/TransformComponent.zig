@@ -4,7 +4,6 @@ const LinAlg = @import("../../Math/LinAlg.zig");
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
@@ -14,11 +13,7 @@ const TransformComponent = @This();
 
 Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
-Scale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
-
-WorldTranslation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
-WorldRotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
-WorldScale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
+Scale: Vec3f32 = .{ 1.0, 1.0, 1.0 },
 
 pub fn Deinit(_: *TransformComponent) !void {}
 
@@ -217,44 +212,3 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-pub fn jsonStringify(self: *const TransformComponent, jw: anytype) !void {
-    try jw.beginObject();
-
-    try jw.objectField("Translation");
-    try jw.write(self.Translation);
-
-    try jw.objectField("Rotation");
-    try jw.write(self.Rotation);
-
-    try jw.objectField("Scale");
-    try jw.write(self.Scale);
-
-    try jw.endObject();
-}
-
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TransformComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    var result: TransformComponent = .{};
-
-    while (true) {
-        const token = try reader.next();
-
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-
-        if (std.mem.eql(u8, field_name, "Translation")) {
-            result.Translation = try std.json.innerParse(Vec3f32, allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Rotation")) {
-            result.Rotation = try std.json.innerParse(Quatf32, allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Scale")) {
-            result.Scale = try std.json.innerParse(Vec3f32, allocator, reader, options);
-        }
-    }
-
-    return result;
-}

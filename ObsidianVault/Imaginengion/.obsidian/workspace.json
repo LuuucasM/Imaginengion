@@ -240,8 +240,9 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "0e7c4df487310d1c",
+  "active": "227b09fd17928a22",
   "lastOpenFiles": [
+    "Weekly Notes",
     "QuadComponent.md",
     "game coding bug fix.md",
     "ECS Manager.md",
@@ -269,7 +270,6 @@
     "ECS.canvas",
     "Home.canvas",
     "2025-04-29.md",
-    "Welcome.md",
-    "create a link.md"
+    "Welcome.md"
   ]
 }
