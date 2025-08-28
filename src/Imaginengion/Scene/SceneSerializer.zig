@@ -52,14 +52,14 @@ const WriteStream = std.json.Stringify;
 const StringifyOptions = std.json.Stringify.Options{ .whitespace = .indent_2 };
 const PraseOptions = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
 
-pub fn SerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle, frame_allocator: std.mem.Allocator) !void {
+pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
     var out: std.io.Writer.Allocating = .init(frame_allocator);
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = StringifyOptions };
 
     try SerializeSceneData(&write_stream, scene_layer, frame_allocator);
-    try WriteToFile(scene_asset_handle, out.written(), frame_allocator);
+    try WriteToFile(abs_path, out.written());
 }
 
 pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
@@ -244,11 +244,8 @@ fn SerializeParentComponent(write_stream: *WriteStream, entity: Entity) anyerror
     }
 }
 
-fn WriteToFile(scene_asset_handle: AssetHandle, data: []const u8, frame_allocator: std.mem.Allocator) !void {
-    const file_meta_data = try scene_asset_handle.GetAsset(FileMetaData);
-    const file_abs_path = try AssetManager.GetAbsPath(file_meta_data.mRelPath.items, file_meta_data.mPathType, frame_allocator);
-
-    const file = try std.fs.createFileAbsolute(file_abs_path, .{ .read = false, .truncate = true });
+fn WriteToFile(abs_path: []const u8, data: []const u8) !void {
+    const file = try std.fs.createFileAbsolute(abs_path, .{ .read = false, .truncate = true });
     defer file.close();
     try file.writeAll(data);
 }

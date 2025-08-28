@@ -15,6 +15,7 @@ const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const SceneUtils = @import("../Scene/SceneUtils.zig");
 const ImguiUtils = @import("../Imgui/ImguiUtils.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const GameEventManager = @import("../Events/GameEventManager.zig");
 const SceneSpecsPanel = @This();
 
 mSceneLayer: SceneLayer,
@@ -74,7 +75,13 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
                 const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id).?;
                 const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
                 const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath.items));
-                imgui.igText(script_name);
+                _ = imgui.igSelectable_Bool(script_name, false, imgui.ImguiSelectableFlags_None, .{ .x = 0, .y = 0 });
+                if (imgui.igBeginPopupContextItem(script_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+                    defer imgui.igEndPopup();
+                    if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
+                        try GameEventManager.Insert(.{ .ET_RemoveScCompEvent = .{ .mScene = self.mSceneLayer, .mComponentType = SceneScriptComponent } });
+                    }
+                }
                 curr_id = script_component.mNext;
             }
         }

@@ -1,4 +1,4 @@
-- change serializer so that it no longer needs to take in a scene asset and when calling save scene as no need to make the asset on disk before serializing so that it works now that it uses all rel paths
+- i need to add deleting scripts to both destroying scenes and destroying entities
 - finish scene specs panel printing out all the scripts for a scene.
 	- it can just be selectable bools
 	- the text can be the name of the script so the file name

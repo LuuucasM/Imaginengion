@@ -1,5 +1,5 @@
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
+const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
 
 //imgui stuff

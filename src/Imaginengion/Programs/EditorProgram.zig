@@ -525,11 +525,14 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
             const entity = self.mGameSceneManager.GetEntity(e.mEntity);
             try self.mGameSceneManager.DestroyEntity(entity);
         },
-        else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
         .ET_DestroySceneEvent => |e| {
-            const scene = self.mGameSceneManager.GetSceneLayer(e.mScene);
+            const scene = self.mGameSceneManager.GetSceneLayer(e.mSceneID);
             try self.mGameSceneManager.RemoveScene(scene, self.mFrameAllocator);
         },
+        .ET_RemoveScScript => |e| {
+            e.mScene.RemoveComponent(e.mComponentType);
+        },
+        else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
     }
 }
 

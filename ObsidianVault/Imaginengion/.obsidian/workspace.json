@@ -90,9 +90,23 @@
               "icon": "lucide-file",
               "title": "game coding bug fix"
             }
+          },
+          {
+            "id": "e839352918761b3f",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "game coding bug fix.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "game coding bug fix"
+            }
           }
         ],
-        "currentTab": 5
+        "currentTab": 6
       }
     ],
     "direction": "vertical"
@@ -240,7 +254,7 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "227b09fd17928a22",
+  "active": "e839352918761b3f",
   "lastOpenFiles": [
     "Weekly Notes",
     "QuadComponent.md",

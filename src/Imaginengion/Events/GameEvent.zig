@@ -10,6 +10,7 @@ pub const GameEvent = union(enum) {
     ET_DefaultEvent: DefaultEvent,
     ET_DestroyEntityEvent: DestroyEntityEvent,
     ET_DestroySceneEvent: DestroySceneEvent,
+    ET_RemoveScCompEvent: RemoveScCompEvent,
 
     pub fn GetEventCategory(self: GameEvent) GameEventCategory {
         switch (self) {
@@ -34,8 +35,17 @@ pub const DestroyEntityEvent = struct {
 };
 
 pub const DestroySceneEvent = struct {
-    mScene: SceneLayer.Type,
+    mSceneID: SceneLayer.Type,
     pub fn GetEventCategory(self: DestroySceneEvent) GameEventCategory {
+        _ = self;
+        return .EC_EndOfFrame;
+    }
+};
+
+pub const RemoveScCompEvent = struct {
+    mScene: SceneLayer.Type,
+    mComponentType: type,
+    pub fn GetEventCategory(self: DestroyEntityEvent) GameEventCategory {
         _ = self;
         return .EC_EndOfFrame;
     }
