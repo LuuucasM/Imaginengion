@@ -22,7 +22,9 @@ mParent: Entity.Type = Entity.NullEntity,
 mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(self: *ScriptComponent) !void {
-    AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
+    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
+        AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
+    }
 }
 
 pub fn GetName(self: ScriptComponent) []const u8 {

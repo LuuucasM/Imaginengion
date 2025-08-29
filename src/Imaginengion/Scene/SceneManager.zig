@@ -98,50 +98,13 @@ pub fn CreateEntityWithUUID(self: *SceneManager, uuid: u128, scene_id: SceneLaye
 pub fn DestroyEntity(self: *SceneManager, destroy_entity: Entity) !void {
     const zone = Tracy.ZoneInit("SceneManager DestroyEntity", @src());
     defer zone.Deinit();
-    // Handle parent-child relationships
-    if (destroy_entity.GetComponent(EntityChildComponent)) |child_component| {
-        const parent_entity_id = child_component.mParent;
 
-        // Update parent's first child if this entity is the first child
-        if (child_component.mFirst == destroy_entity.mEntityID) {
-            if (child_component.mNext == Entity.NullEntity) {
-                // No more children, remove parent component entirely
-                try self.mECSManagerGO.RemoveComponent(EntityParentComponent, parent_entity_id);
-            } else {
-                // Update parent's first child to point to next sibling
-                const parent_component = self.mECSManagerGO.GetComponent(EntityParentComponent, parent_entity_id).?;
-                parent_component.mFirstChild = child_component.mNext;
+    //handle scripts
+    self.RemoveAllEntityScripts(destroy_entity);
 
-                // Update the next sibling's prev pointer
-                const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
-                next_child_component.mPrev = Entity.NullEntity;
-            }
-        } else {
-            // This entity is not the first child, update sibling links
-            const prev_entity_id = child_component.mPrev;
-            const prev_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, prev_entity_id).?;
+    try self.DestroyAllChildren(destroy_entity);
 
-            if (child_component.mNext != Entity.NullEntity) {
-                // Update next sibling's prev pointer
-                const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
-                next_child_component.mPrev = prev_entity_id;
-                prev_child_component.mNext = child_component.mNext;
-            } else {
-                // This was the last child
-                prev_child_component.mNext = Entity.NullEntity;
-            }
-        }
-    }
-
-    // Recursively delete all children (not just first child)
-    if (destroy_entity.GetComponent(EntityParentComponent)) |parent_component| {
-        // Keep deleting the first child until there are no more children
-        // Each child will remove itself from the parent's linked list when destroyed
-        while (parent_component.mFirstChild != Entity.NullEntity) {
-            const parent_entity = self.GetEntity(parent_component.mFirstChild);
-            try self.DestroyEntity(parent_entity);
-        }
-    }
+    try self.OrphanEntity(destroy_entity);
 
     //finally destroy the entity from the ECS
     try self.mECSManagerGO.DestroyEntity(destroy_entity.mEntityID);
@@ -192,17 +155,28 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
 }
 
 pub fn RemoveScene(self: *SceneManager, destroy_scene: SceneLayer, frame_allocator: std.mem.Allocator) !void {
-    try self.SaveScene(destroy_scene, self.mEngineAllocator);
+    try self.SaveScene(destroy_scene, frame_allocator);
 
-    //first destroy all the entities in the scene
+    //first remove all scripts from othe scene
+    if (destroy_scene.GetComponent(SceneScriptComponent)) |script_component| {
+        var curr = script_component.mNext;
+        while (curr != SceneLayer.NullScene) {
+            const scene = self.GetSceneLayer(curr);
+            const scene_script_comp = scene.GetComponent(SceneScriptComponent).?;
+
+            curr = scene_script_comp.mNext;
+
+            try self.mECSManagerSC.DestroyEntity(scene.mSceneID);
+        }
+    }
+
+    //next destroy all the entities in the scene
     var entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, frame_allocator);
     defer entity_scene_entities.deinit(frame_allocator);
 
     self.FilterEntityByScene(&entity_scene_entities, destroy_scene.mSceneID, frame_allocator);
 
     for (entity_scene_entities.items) |entity_id| {
-        //TODO: fix using event system
-        //might have to split events by scene and entity so that scene events can be processed before entities can be?
         const entity = self.GetEntity(entity_id);
         try self.DestroyEntity(entity);
     }
@@ -422,6 +396,78 @@ fn CalculateEntityTransform(entity: Entity, parent_transform: Mat4f32, parent_di
 
             const child_component = child_entity.GetComponent(EntityChildComponent);
             curr_id = child_component.mNext;
+        }
+    }
+}
+
+fn RemoveAllEntityScripts(self: *SceneManager, destroy_entity: Entity) !void {
+    const zone = Tracy.ZoneInit("SceneManager RemoveAllScripts", @src());
+    defer zone.Deinit();
+    if (destroy_entity.GetComponent(EntityScriptComponent)) |script_component| {
+        var curr = script_component.mNext;
+        while (curr != Entity.NullEntity) {
+            const entity = self.GetEntity(curr);
+            const entity_script_comp = entity.GetComponent(EntityScriptComponent).?;
+
+            curr = entity_script_comp.mNext;
+
+            self.mECSManagerGO.DestroyEntity(entity.mEntityID);
+        }
+    }
+}
+
+fn DestroyAllChildren(self: *SceneManager, destroy_entity: Entity) !void {
+    const zone = Tracy.ZoneInit("SceneManager DestroyAllChildren", @src());
+    defer zone.Deinit();
+    if (destroy_entity.GetComponent(EntityParentComponent)) |parent_component| {
+        var curr = parent_component.mFirstChild;
+        while (curr != Entity.NullEntity) {
+            const entity = self.GetEntity(curr);
+            const entity_child_comp = entity.GetComponent(EntityChildComponent).?;
+
+            curr = entity_child_comp.mNext;
+
+            try self.DestroyEntity(entity);
+        }
+    }
+}
+
+fn OrphanEntity(self: *SceneManager, destroy_entity: Entity) !void {
+    const zone = Tracy.ZoneInit("SceneManager OrphanEntity", @src());
+    defer zone.Deinit();
+    if (destroy_entity.GetComponent(EntityChildComponent)) |child_component| {
+        const parent_entity_id = child_component.mParent;
+
+        // Update parent's first child if this entity is the first child
+        const parent_entity = self.GetEntity(parent_entity_id);
+        if (parent_entity.GetComponent(EntityParentComponent)) |parent_component| {
+            if (parent_component.mFirstChild == destroy_entity.mEntityID) {
+                if (child_component.mNext == Entity.NullEntity) {
+                    // No more children, remove parent component entirely
+                    try self.mECSManagerGO.RemoveComponent(EntityParentComponent, parent_entity_id);
+                } else {
+                    // Update parent's first child to point to next sibling
+                    parent_component.mFirstChild = child_component.mNext;
+
+                    // Update the next sibling's prev pointer
+                    const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
+                    next_child_component.mPrev = Entity.NullEntity;
+                }
+            } else {
+                // This entity is not the first child, update sibling links
+                const prev_entity_id = child_component.mPrev;
+                const prev_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, prev_entity_id).?;
+
+                if (child_component.mNext != Entity.NullEntity) {
+                    // Update next sibling's prev pointer
+                    const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
+                    next_child_component.mPrev = prev_entity_id;
+                    prev_child_component.mNext = child_component.mNext;
+                } else {
+                    // This was the last child
+                    prev_child_component.mNext = Entity.NullEntity;
+                }
+            }
         }
     }
 }
