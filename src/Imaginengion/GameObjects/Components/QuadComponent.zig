@@ -9,11 +9,14 @@ const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 const AssetManager = @import("../../Assets/AssetManager.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const QuadComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
+
+pub const Category: ComponentCategory = .Unique;
 
 mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },

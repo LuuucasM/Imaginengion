@@ -8,6 +8,7 @@ const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetManager = @import("../../Assets/AssetManager.zig");
 const Entity = @import("../Entity.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const CameraComponent = @This();
 
@@ -22,6 +23,8 @@ pub const ProjectionType = enum(u1) {
     Perspective = 0,
     Orthographic = 1,
 };
+
+pub const Category: ComponentCategory = .Unique;
 
 //viewport stuff
 //TODO: finish changing this to use the new framebuffer system

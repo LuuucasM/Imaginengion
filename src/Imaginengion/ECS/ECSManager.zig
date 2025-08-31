@@ -6,6 +6,11 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 const Tracy = @import("../Core/Tracy.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 
+pub const ComponentCategory = enum {
+    Unique,
+    Multiple,
+};
+
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
         const Self = @This();
@@ -73,9 +78,46 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         //components related functions
-        pub fn AddComponent(self: *Self, comptime ComponentType: type, entityID: entity_t, component: ?ComponentType) !*ComponentType {
-            const new_component = try self.mComponentManager.AddComponent(ComponentType, entityID, component);
-            return new_component;
+        pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
+            var new_script_component = if (new_component) |c| c else component_type{};
+
+            switch (component_type.Category) {
+                .Unique => {
+                    return try self.mComponentManager.AddComponent(component_type, entity_id, new_component);
+                },
+                .Multiple => {
+                    if (self.GetComponent(component_type, entity_id)) |component| {
+                        //entity already has a component_type so iterate until the end of the linked list
+                        const new_script_entity_id = try self.CreateEntity();
+
+                        const first_component = self.GetComponent(component_type, component.mFirst).?;
+
+                        const last_component = self.GetComponent(component_type, first_component.mPrev).?;
+
+                        //update new components linked list
+                        new_script_component.mFirst = component.mFirst;
+                        new_script_component.mNext = component.mFirst;
+                        new_script_component.mParent = component.mParent;
+                        new_script_component.mPrev = first_component.mPrev;
+
+                        //update previous of first one to be this one
+                        first_component.mPrev = new_script_entity_id;
+
+                        //update last components next, which is the new one
+                        last_component.mNext = new_script_entity_id;
+
+                        return try self.mComponentManager.AddComponent(component_type, new_script_entity_id, new_script_component);
+                    } else {
+                        //entity does not have any of this component_type yet so add it directly to the entity
+                        new_script_component.mFirst = entity_id;
+                        new_script_component.mNext = entity_id;
+                        new_script_component.mParent = entity_id;
+                        new_script_component.mPrev = entity_id;
+
+                        return try self.mComponentManager.AddComponent(component_type, entity_id, new_script_component);
+                    }
+                },
+            }
         }
 
         pub fn RemoveComponent(self: *Self, comptime ComponentType: type, entityID: entity_t) !void {

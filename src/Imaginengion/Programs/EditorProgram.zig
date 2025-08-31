@@ -529,8 +529,11 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
             const scene = self.mGameSceneManager.GetSceneLayer(e.mSceneID);
             try self.mGameSceneManager.RemoveScene(scene, self.mFrameAllocator);
         },
-        .ET_RemoveScScript => |e| {
-            e.mScene.RemoveComponent(e.mComponentType);
+        .ET_RmEntityCompEvent => |e| {
+            try self.mGameSceneManager.RmEntityComp(e.mEntity, e.mComponentInd);
+        },
+        .ET_RmSceneCompEvent => |e| {
+            try self.mGameSceneManager.RmSceneComp(e.mScene, e.mComponentInd);
         },
         else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
     }

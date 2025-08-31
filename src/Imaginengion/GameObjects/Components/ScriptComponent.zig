@@ -14,12 +14,15 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
 const AssetManager = @import("../../Assets/AssetManager.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 mFirst: Entity.Type = Entity.NullEntity,
 mPrev: Entity.Type = Entity.NullEntity,
 mNext: Entity.Type = Entity.NullEntity,
 mParent: Entity.Type = Entity.NullEntity,
 mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
+
+pub const Category: ComponentCategory = .Multiple;
 
 pub fn Deinit(self: *ScriptComponent) !void {
     if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {

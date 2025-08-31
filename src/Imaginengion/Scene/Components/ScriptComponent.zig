@@ -14,6 +14,7 @@ const SceneLayer = @import("../SceneLayer.zig");
 const SceneType = @import("../SceneLayer.zig").Type;
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 const AssetManager = @import("../../Assets/AssetManager.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
@@ -28,6 +29,8 @@ mPrev: SceneType = SceneLayer.NullScene,
 mNext: SceneType = SceneLayer.NullScene,
 mParent: SceneType = SceneLayer.NullScene,
 mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
+
+pub const Category: ComponentCategory = .Multiple;
 
 pub fn Deinit(self: *ScriptComponent) !void {
     AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);

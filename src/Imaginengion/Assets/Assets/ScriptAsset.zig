@@ -1,6 +1,7 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const ScriptAsset = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const imgui = @import("../../Core/CImports.zig").imgui;
 
@@ -65,6 +66,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub const Category: ComponentCategory = .Unique;
 
 pub fn EditorRender(self: *ScriptAsset) !void {
     _ = self;

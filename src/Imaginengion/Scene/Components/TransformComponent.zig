@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -39,6 +40,8 @@ pub fn GetInd(self: TransformComponent) u32 {
     _ = self;
     return @intCast(Ind);
 }
+
+pub const Category: ComponentCategory = .Unique;
 
 pub fn EditorRender(self: *TransformComponent) !void {
     DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);

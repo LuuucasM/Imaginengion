@@ -17,3 +17,13 @@ pub const ComponentsList = [_]type{
     TransformComponent,
     OnSceneStartScript,
 };
+
+pub const EComponents = enum(u16) {
+    IDComponent = IDComponent.Ind,
+    NameComponent = NameComponent.Ind,
+    SceneComponent = SceneComponent.Ind,
+    ScriptComponent = ScriptComponent.Ind,
+    StackPosComponent = StackPosComponent.Ind,
+    TransformComponent = TransformComponent.Ind,
+    OnSceneStartScript = OnSceneStartScript.Ind,
+};

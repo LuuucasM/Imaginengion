@@ -1,7 +1,7 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
-
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const AILinkComponent = @This();
 
 mAIEntity: Entity.Type = Entity.NullEntity,
@@ -15,3 +15,5 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub const Category: ComponentCategory = .Unique;

@@ -54,7 +54,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
     imgui.igText(@tagName(scene_component.mLayerType));
 
     const scene_transform = self.mSceneLayer.GetComponent(SceneTransformComponent).?;
-    scene_transform.EditorRender();
+    try scene_transform.EditorRender();
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
     const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
@@ -75,11 +75,11 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
                 const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id).?;
                 const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
                 const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath.items));
-                _ = imgui.igSelectable_Bool(script_name, false, imgui.ImguiSelectableFlags_None, .{ .x = 0, .y = 0 });
+                _ = imgui.igSelectable_Bool(script_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 });
                 if (imgui.igBeginPopupContextItem(script_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                     defer imgui.igEndPopup();
                     if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                        try GameEventManager.Insert(.{ .ET_RemoveScCompEvent = .{ .mScene = self.mSceneLayer, .mComponentType = SceneScriptComponent } });
+                        try GameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mScene = self.mSceneLayer.mSceneID, .mComponentInd = SceneScriptComponent.Ind } });
                     }
                 }
                 curr_id = script_component.mNext;

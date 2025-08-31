@@ -1,10 +1,13 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const IDComponent = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
+
+pub const Category: ComponentCategory = .Unique;
 
 ID: u64 = std.math.maxInt(u64),
 

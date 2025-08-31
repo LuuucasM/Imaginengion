@@ -4,6 +4,7 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetManager = @import("../../Assets/AssetManager.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const GameComponents = @import("../../GameObjects/Components.zig");
 const IDComponent = GameComponents.IDComponent;
@@ -26,6 +27,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub const Category: ComponentCategory = .Unique;
 
 mSceneAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 mLayerType: LayerType = undefined,

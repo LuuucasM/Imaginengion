@@ -2,6 +2,9 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const ParentComponent = @This();
 const Entity = @import("../../GameObjects/Entity.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+
+pub const Category: ComponentCategory = .Unique;
 
 mFirstChild: Entity.Type = Entity.NullEntity,
 

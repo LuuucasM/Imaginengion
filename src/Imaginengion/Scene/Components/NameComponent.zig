@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const NameComponent = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -13,6 +14,8 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub const Category: ComponentCategory = .Unique;
 
 Name: std.ArrayList(u8) = .{},
 

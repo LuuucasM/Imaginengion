@@ -9,6 +9,7 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const ScenePanel = @This();
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
@@ -304,14 +305,14 @@ fn SelectEntity(_: *ScenePanel, entity: Entity, scene_layer: SceneLayer) !void {
     try ImguiEventManager.Insert(.{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 }
 
-fn HandleEntityContextMenu(self: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
+fn HandleEntityContextMenu(_: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
     //if item is right clicked open up menu that will allow you to add an entity to the scene
     if (!already_popup.* and imgui.igBeginPopupContextItem(entity_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            try self.AddChildEntity(entity, scene_layer);
+            try GameObjectUtils.AddChildEntity(entity, scene_layer);
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
@@ -319,55 +320,6 @@ fn HandleEntityContextMenu(self: *ScenePanel, entity: Entity, entity_name: [*:0]
         }
     }
 }
-
-fn AddChildEntity(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer) !void {
-    const new_entity = try scene_layer.CreateEntity();
-
-    if (parent_entity.HasComponent(EntityParentComponent)) {
-        try self.AddToExistingChildren(parent_entity, new_entity);
-    } else {
-        try self.MakeEntityParent(parent_entity, new_entity);
-    }
-}
-
-fn AddToExistingChildren(_: *ScenePanel, parent_entity: Entity, new_entity: Entity) !void {
-    const parent_component = parent_entity.GetComponent(EntityParentComponent).?;
-    var child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = parent_entity.mECSManagerRef };
-
-    // Find the last child in the list
-    var child_component = child_entity.GetComponent(EntityChildComponent).?;
-    while (child_component.mNext != Entity.NullEntity) {
-        child_entity.mEntityID = child_component.mNext;
-        child_component = child_entity.GetComponent(EntityChildComponent).?;
-    }
-
-    // Add new entity to end of list
-    const new_child_component = EntityChildComponent{
-        .mFirst = child_component.mFirst,
-        .mNext = Entity.NullEntity,
-        .mParent = child_component.mParent,
-        .mPrev = child_entity.mEntityID,
-    };
-
-    _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
-
-    //set the new child component.mNext to be the new child
-    child_component.mNext = new_entity.mEntityID;
-}
-
-fn MakeEntityParent(_: *ScenePanel, parent_entity: Entity, new_entity: Entity) !void {
-    const new_parent_component = EntityParentComponent{ .mFirstChild = new_entity.mEntityID };
-    _ = try parent_entity.AddComponent(EntityParentComponent, new_parent_component);
-
-    const new_child_component = EntityChildComponent{
-        .mFirst = new_entity.mEntityID,
-        .mNext = Entity.NullEntity,
-        .mParent = parent_entity.mEntityID,
-        .mPrev = Entity.NullEntity,
-    };
-    _ = try new_entity.AddComponent(EntityChildComponent, new_child_component);
-}
-
 fn RenderChildEntities(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) anyerror!void {
     const entity_parent_component = parent_entity.GetComponent(EntityParentComponent).?;
     var curr_id = entity_parent_component.mFirstChild;

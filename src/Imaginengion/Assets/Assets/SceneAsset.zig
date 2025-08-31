@@ -1,6 +1,7 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const SceneAsset = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const imgui = @import("../../Core/CImports.zig").imgui;
 
@@ -37,3 +38,5 @@ pub fn EditorRender(self: *SceneAsset) !void {
     _ = self;
     imgui.igText("Nothing for now!", "");
 }
+
+pub const Category: ComponentCategory = .Unique;

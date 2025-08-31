@@ -1,10 +1,13 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const NameComponent = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
+
+pub const Category: ComponentCategory = .Unique;
 
 Name: [24]u8 = std.mem.zeroes([24]u8),
 

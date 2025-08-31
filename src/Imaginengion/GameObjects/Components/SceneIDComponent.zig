@@ -1,6 +1,9 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const IDComponent = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+
+pub const Category: ComponentCategory = .Unique;
 
 SceneID: u128 = std.math.maxInt(u128),
 

@@ -3,6 +3,7 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const Shader = @import("../../Shaders/Shader.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
 const ShaderAsset = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 mShader: Shader = undefined,
 
@@ -28,3 +29,5 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub const Category: ComponentCategory = .Unique;

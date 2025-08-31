@@ -74,7 +74,7 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
 }
 
 pub fn Delete(self: SceneLayer) !void {
-    try GameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mScene = self.mSceneID } });
+    try GameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
     try ImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }
 

@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("Texture2Ds/OpenGLTexture2D.zig"),
@@ -52,3 +53,5 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub const Category: ComponentCategory = .Unique;

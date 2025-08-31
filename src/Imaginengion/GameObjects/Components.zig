@@ -29,3 +29,19 @@ pub const ComponentsList = [_]type{
     OnInputPressedScript,
     OnUpdateInputScript,
 };
+
+pub const EComponents = enum(u16) {
+    AISlotComponent = AISlotComponent.Ind,
+    CameraComponent = CameraComponent.Ind,
+    ChildComponent = ChildComponent.Ind,
+    IDComponent = IDComponent.Ind,
+    NameComponent = NameComponent.Ind,
+    ParentComponent = ParentComponent.Ind,
+    PlayerSlotComponent = PlayerSlotComponent.Ind,
+    QuadComponent = QuadComponent.Ind,
+    SceneIDComponent = SceneIDComponent.Ind,
+    TransformComponent = TransformComponent.Ind,
+    ScriptComponent = ScriptComponent.Ind,
+    OnInputPressedScript = OnInputPressedScript.Ind,
+    OnUpdateInputScript = OnUpdateInputScript.Ind,
+};

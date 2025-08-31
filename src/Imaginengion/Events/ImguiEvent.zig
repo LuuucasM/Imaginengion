@@ -134,3 +134,7 @@ pub const DeleteEntityEvent = struct {
 pub const DeleteSceneEvent = struct {
     mScene: SceneLayer,
 };
+
+pub const RmEntityCompEvent = struct {
+    mComponent_ptr: *anyopaque,
+};

@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
+const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -11,6 +12,8 @@ const Quatf32 = LinAlg.Quatf32;
 const Mat4f32 = LinAlg.Mat4f32;
 
 const TransformComponent = @This();
+
+pub const Category: ComponentCategory = .Unique;
 
 Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },

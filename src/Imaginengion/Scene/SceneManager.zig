@@ -243,7 +243,7 @@ pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) 
 pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        const file_data = scene_component.mSceneAssetHandle.GetAsset(FileMetaData).?;
+        const file_data = scene_component.mSceneAssetHandle.GetAsset(FileMetaData);
         const abs_path = AssetManager.GetAbsPath(file_data.mRelPath.items, .Prj, frame_allocator);
         try SceneSerializer.SerializeSceneText(scene_layer, abs_path, frame_allocator);
     } else {

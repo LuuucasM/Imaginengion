@@ -1,3 +1,8 @@
+- since i changed how heiarchy works in adding components to a completely circular list i need to use a do-while loop instead of regular while(curr != sentinal) and the continue statement will be if (curr == first) break instead
+	- once i have this then I need to convert every time i iterate through scripts anywhere in the engine to use the new do-while way. or if im just getting the end of the script linked list (which i think is most of the cases) then i can just do prev with no loop :) O(1)
+	- but for delete entity i need to loop through the scripts to delete them so i need to change that one for sure. but that should be quite easy cuz with deleting i want to actually start ON next so i dont even need a do-while i can just check if next IS first 
+- add a variable to each component that is the ComponentCategory and then have it pub const comptime value so instead of passing it as an argument to AddComponent it will automatically know its self.
+	- this is because if someone is writing cod ein a script to add something to an object (likely) i want to make adding an object as straight forward as possible so they should just need to the component type, the entity id, the component intiailzie if they want,  and thats it
 - i need to add deleting scripts to both destroying scenes and destroying entities
 - finish scene specs panel printing out all the scripts for a scene.
 	- it can just be selectable bools
@@ -14,4 +19,9 @@
 		- the only thing i am considering is if i should allow dragging of the dots on the image as it might be hard and i want to write as little imgui code as possible because id rather just replace imgui with my own UI stuff later
 		- the one good thing is that the more accurate i make the imgui code now the better prepared i will be to make the switch because I will know exactly what i need from my engines own UI system to be able to recreate the engine gui
 - add ability to render font
+- i need to add components at some point:
+	- attribute component
+	- collider component
+	- rigid body component
+	- particle component i suppose but will probably be a while until i can do this one
 - add sound
