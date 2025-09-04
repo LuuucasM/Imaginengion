@@ -79,49 +79,86 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
 
         //components related functions
         pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
-            var new_script_component = if (new_component) |c| c else component_type{};
+            var new_type_component: component_type = if (new_component) |c| c else component_type{};
 
             switch (component_type.Category) {
                 .Unique => {
                     return try self.mComponentManager.AddComponent(component_type, entity_id, new_component);
                 },
                 .Multiple => {
+                    const new_component_entity_id = try self.CreateEntity();
+
                     if (self.GetComponent(component_type, entity_id)) |component| {
-                        //entity already has a component_type so iterate until the end of the linked list
-                        const new_script_entity_id = try self.CreateEntity();
+                        //entity already has a component_type
 
                         const first_component = self.GetComponent(component_type, component.mFirst).?;
 
                         const last_component = self.GetComponent(component_type, first_component.mPrev).?;
 
                         //update new components linked list
-                        new_script_component.mFirst = component.mFirst;
-                        new_script_component.mNext = component.mFirst;
-                        new_script_component.mParent = component.mParent;
-                        new_script_component.mPrev = first_component.mPrev;
+                        new_type_component.mFirst = first_component.mFirst;
+                        new_type_component.mNext = first_component.mFirst;
+                        new_type_component.mParent = first_component.mParent;
+                        new_type_component.mPrev = first_component.mPrev;
 
                         //update previous of first one to be this one
-                        first_component.mPrev = new_script_entity_id;
+                        first_component.mPrev = new_component_entity_id;
 
                         //update last components next, which is the new one
-                        last_component.mNext = new_script_entity_id;
+                        last_component.mNext = new_component_entity_id;
 
-                        return try self.mComponentManager.AddComponent(component_type, new_script_entity_id, new_script_component);
+                        return try self.mComponentManager.AddComponent(component_type, new_component_entity_id, new_type_component);
                     } else {
-                        //entity does not have any of this component_type yet so add it directly to the entity
-                        new_script_component.mFirst = entity_id;
-                        new_script_component.mNext = entity_id;
-                        new_script_component.mParent = entity_id;
-                        new_script_component.mPrev = entity_id;
+                        var parent_component_type = component_type{};
+                        parent_component_type.mFirst = new_component_entity_id;
+                        parent_component_type.mNext = new_component_entity_id;
+                        parent_component_type.mParent = entity_id;
+                        parent_component_type.mPrev = new_component_entity_id;
 
-                        return try self.mComponentManager.AddComponent(component_type, entity_id, new_script_component);
+                        //entity does not have any of this component_type yet so add it directly to the entity
+                        new_type_component.mFirst = new_component_entity_id;
+                        new_type_component.mNext = new_component_entity_id;
+                        new_type_component.mParent = entity_id;
+                        new_type_component.mPrev = new_component_entity_id;
+
+                        try self.mComponentManager.AddComponent(component_type, entity_id, parent_component_type);
+                        return try self.mComponentManager.AddComponent(component_type, new_component_entity_id, new_type_component);
                     }
                 },
             }
         }
 
-        pub fn RemoveComponent(self: *Self, comptime ComponentType: type, entityID: entity_t) !void {
-            try self.mComponentManager.RemoveComponent(ComponentType, entityID);
+        pub fn RemoveComponent(self: *Self, comptime component_type: type, entity_id: entity_t) !void {
+            switch (component_type.Category) {
+                .Unique => {
+                    //in this case the entity ID is just simply the entity we want to remove the component from
+                    try self.mComponentManager.RemoveComponent(component_type, entity_id);
+                },
+                .Multiple => {
+                    //multi components always have their own entity_id so we can just ensure linked list pointers are updated
+                    //and then remove the entity
+                    const remove_component = self.GetComponent(component_type, entity_id).?;
+                    const parent_component = self.GetComponent(component_type, remove_component.mParent).?;
+
+                    if (remove_component.mNext == entity_id and remove_component.mPrev == entity_id) {
+                        //case: this is the only one of this type of component so we can fully remove from parent
+                        try self.mComponentManager.RemoveComponent(component_type, remove_component.mParent);
+                    } else {
+                        //case there are multiples of this component
+                        const next_component = self.GetComponent(component_type, remove_component.mNext).?;
+                        const prev_component = self.GetComponent(component_type, remove_component.mPrev).?;
+
+                        next_component.mPrev = remove_component.mPrev;
+                        prev_component.mNext = remove_component.mNext;
+
+                        if (parent_component.mFirst == entity_id) {
+                            parent_component.mFirst = remove_component.mNext;
+                        }
+                    }
+
+                    try self.DestroyEntity(entity_id);
+                },
+            }
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entityID: entity_t) bool {

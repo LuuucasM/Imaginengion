@@ -1,6 +1,7 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const GameEventManager = @import("../Events/GameEventManager.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
@@ -117,62 +118,33 @@ pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
 }
 
 fn EntityImguiRender(entity: Entity) !void {
-    if (entity.HasComponent(EntityIDComponent)) {
-        if (imgui.igSelectable_Bool(@typeName(EntityIDComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+    ComponentRender(EntityIDComponent, entity);
+    ComponentRender(EntityNameComponent, entity);
+    ComponentRender(TransformComponent, entity);
+    ComponentRender(CameraComponent, entity);
+    ComponentRender(QuadComponent, entity);
+    ComponentRender(AISlotComponent, entity);
+    ComponentRender(PlayerSlotComponent, entity);
+}
+
+fn ComponentRender(comptime component_type: type, entity: Entity) void {
+    if (entity.HasComponent(component_type)) {
+        if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
             const new_event = ImguiEvent{
                 .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityIDComponent).?, entity),
+                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity),
                 },
             };
             try ImguiEventManager.Insert(new_event);
         }
-    }
-    if (entity.HasComponent(EntityNameComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(EntityNameComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(EntityNameComponent).?, entity),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
+        if (imgui.igBeginPopupContextItem(@typeName(component_type), imgui.ImGuiPopupFlags_MouseButtonRight)) {
+            defer imgui.igEndPopup();
+
+            if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
+                try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntity = entity.mEntityID, .mComponentInd = component_type.Ind } });
+                try ImguiEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
+            }
         }
-    }
-    if (entity.HasComponent(TransformComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(TransformComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_editor_window = EditorWindow.Init(entity.GetComponent(TransformComponent).?, entity);
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = new_editor_window,
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-    }
-    if (entity.HasComponent(CameraComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(CameraComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(CameraComponent).?, entity),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-    }
-    if (entity.HasComponent(QuadComponent) == true) {
-        if (imgui.igSelectable_Bool(@typeName(QuadComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(QuadComponent).?, entity),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-    }
-    if (entity.HasComponent(AISlotComponent) == true) {
-        imgui.igText("AISlotComponent");
-    }
-    if (entity.HasComponent(PlayerSlotComponent) == true) {
-        imgui.igText("PlayerSlotComponent");
     }
 }
 

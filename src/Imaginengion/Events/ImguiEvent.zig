@@ -43,6 +43,7 @@ pub const ImguiEvent = union(enum) {
     ET_SaveEntityAsEvent: SaveEntityAsEvent,
     ET_DeleteEntityEvent: DeleteEntityEvent,
     ET_DeleteSceneEvent: DeleteSceneEvent,
+    ET_RmEntityCompEvent: RmEntityCompEvent,
 };
 
 pub const DefaultEvent = struct {};

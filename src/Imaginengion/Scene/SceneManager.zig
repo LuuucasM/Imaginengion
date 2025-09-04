@@ -100,7 +100,7 @@ pub fn DestroyEntity(self: *SceneManager, destroy_entity: Entity) !void {
     defer zone.Deinit();
 
     //handle scripts
-    self.RemoveAllEntityScripts(destroy_entity);
+    try self.RemoveAllEntityScripts(destroy_entity);
 
     try self.DestroyAllChildren(destroy_entity);
 
@@ -243,8 +243,8 @@ pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) 
 pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        const file_data = scene_component.mSceneAssetHandle.GetAsset(FileMetaData);
-        const abs_path = AssetManager.GetAbsPath(file_data.mRelPath.items, .Prj, frame_allocator);
+        const file_data = try scene_component.mSceneAssetHandle.GetAsset(FileMetaData);
+        const abs_path = try AssetManager.GetAbsPath(file_data.mRelPath.items, .Prj, frame_allocator);
         try SceneSerializer.SerializeSceneText(scene_layer, abs_path, frame_allocator);
     } else {
         var buffer: [260]u8 = undefined;
@@ -411,12 +411,12 @@ fn RemoveAllEntityScripts(self: *SceneManager, destroy_entity: Entity) !void {
 
             curr = entity_script_comp.mNext;
 
-            self.mECSManagerGO.DestroyEntity(entity.mEntityID);
+            try self.mECSManagerGO.DestroyEntity(entity.mEntityID);
         }
     }
 }
 
-fn DestroyAllChildren(self: *SceneManager, destroy_entity: Entity) !void {
+fn DestroyAllChildren(self: *SceneManager, destroy_entity: Entity) anyerror!void {
     const zone = Tracy.ZoneInit("SceneManager DestroyAllChildren", @src());
     defer zone.Deinit();
     if (destroy_entity.GetComponent(EntityParentComponent)) |parent_component| {

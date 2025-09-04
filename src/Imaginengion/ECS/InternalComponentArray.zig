@@ -40,7 +40,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
             const new_dense_ind = self.mComponents.add(new_entity_id);
             self.mComponents.getValueByDense(new_dense_ind).* = self.mComponents.getValueBySparse(original_entity_id).*;
         }
-        pub fn AddComponent(self: *Self, entityID: entity_t, component: ?componentType) !*componentType {
+        pub fn AddComponent(self: *Self, entityID: entity_t, component: componentType) !*componentType {
             std.debug.assert(!self.mComponents.HasSparse(entityID));
 
             const dense_ind = self.mComponents.add(entityID);

@@ -105,7 +105,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             }
         }
 
-        pub fn AddComponent(self: *Self, comptime component_type: type, entityID: entity_t, component: ?component_type) !*component_type {
+        pub fn AddComponent(self: *Self, comptime component_type: type, entityID: entity_t, component: component_type) !*component_type {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
