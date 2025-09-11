@@ -135,6 +135,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
                     try self.mComponentManager.RemoveComponent(component_type, entity_id);
                 },
                 .Multiple => {
+                    //entity_id in this case refers to the entity id of the component we want to remove not the parent
                     //multi components always have their own entity_id so we can just ensure linked list pointers are updated
                     //and then remove the entity
                     const remove_component = self.GetComponent(component_type, entity_id).?;
@@ -144,7 +145,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
                         //case: this is the only one of this type of component so we can fully remove from parent
                         try self.mComponentManager.RemoveComponent(component_type, remove_component.mParent);
                     } else {
-                        //case there are multiples of this component
+                        //case: there are multiples of this component
                         const next_component = self.GetComponent(component_type, remove_component.mNext).?;
                         const prev_component = self.GetComponent(component_type, remove_component.mPrev).?;
 

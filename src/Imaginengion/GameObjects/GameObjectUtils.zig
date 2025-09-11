@@ -24,13 +24,14 @@ pub fn AddScriptToEntity(entity: Entity, rel_path_script: []const u8, path_type:
     };
 
     // Use ECSManager's AddComponent which handles the linked list logic
-    const script_component_ptr = try ecs.AddComponent(ScriptComponent, entity.mEntityID, new_script_component);
+    const script_component_ptr = try entity.AddComponent(ScriptComponent, new_script_component);
 
     // Get the last entity in the script linked list
-    // mFirst points to the first entity in the chain, and mPrev on that entity points to the last entity
-    const first_script_entity_id = script_component_ptr.mFirst;
-    const first_script_component = ecs.GetComponent(ScriptComponent, first_script_entity_id).?;
-    const last_script_entity_id = first_script_component.mPrev;
+    const prev_script_entity_id = script_component_ptr.mPrev;
+    const prev_script_component = ecs.GetComponent(ScriptComponent, prev_script_entity_id).?;
+    const last_script_entity_id = prev_script_component.mNext;
+
+    std.debug.assert(ecs.GetComponent(ScriptComponent, last_script_entity_id).? == script_component_ptr);
 
     // Add the appropriate script type component based on the script asset
     switch (script_asset.mScriptType) {
@@ -43,6 +44,8 @@ pub fn AddScriptToEntity(entity: Entity, rel_path_script: []const u8, path_type:
         else => {},
     }
 }
+
+//pub fn RemoveScriptFromEntity(parent_entity: Entity, script_component_id: Entity.Type) !void {}
 
 pub fn AddChildEntity(parent_entity: Entity, scene_layer: SceneLayer) !void {
     const new_entity = try scene_layer.CreateEntity();

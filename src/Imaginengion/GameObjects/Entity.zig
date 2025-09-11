@@ -21,8 +21,25 @@ mECSManagerRef: *ECSManagerGameObj,
 pub fn AddComponent(self: Entity, comptime component_type: type, component: ?component_type) !*component_type {
     return try self.mECSManagerRef.AddComponent(component_type, self.mEntityID, component);
 }
-pub fn RemoveComponent(self: Entity, comptime component_type: type) !void {
-    try self.mECSManagerRef.RemoveComponent(component_type, self.mEntityID);
+pub fn RemoveComponent(self: Entity, args: anytype) !void {
+    const t = @TypeOf(args);
+    const t_info = @typeInfo(t);
+
+    switch (t_info) {
+        .type => {
+            if (args.Category == .Unique) {
+                return try self.mECSManagerRef.RemoveComponent(args, self.mEntityID);
+            }
+        },
+        .@"struct" => |s| {
+            if (s.is_tuple == true and s.fields.len == 2 and s.fields[0].type == type and s.fields[1].type == Entity.Type and s.fields[0].type.Category == .Multiple) {
+                return try self.mECSManagerRef.RemoveComponent(args[0], args[1]);
+            }
+        },
+        else => {},
+    }
+
+    @compileError("Entity.RemoveComponent can not be called with these arguments");
 }
 pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_type {
     return self.mECSManagerRef.GetComponent(component_type, self.mEntityID);

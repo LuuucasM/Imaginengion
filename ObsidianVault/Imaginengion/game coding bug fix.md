@@ -1,9 +1,8 @@
-- since i changed how heiarchy works in adding components to a completely circular list i need to use a do-while loop instead of regular while(curr != sentinal) and the continue statement will be if (curr == first) break instead
-	- once i have this then I need to convert every time i iterate through scripts anywhere in the engine to use the new do-while way. or if im just getting the end of the script linked list (which i think is most of the cases) then i can just do prev with no loop :) O(1)
-	- but for delete entity i need to loop through the scripts to delete them so i need to change that one for sure. but that should be quite easy cuz with deleting i want to actually start ON next so i dont even need a do-while i can just check if next IS first 
-- add a variable to each component that is the ComponentCategory and then have it pub const comptime value so instead of passing it as an argument to AddComponent it will automatically know its self.
-	- this is because if someone is writing cod ein a script to add something to an object (likely) i want to make adding an object as straight forward as possible so they should just need to the component type, the entity id, the component intiailzie if they want,  and thats it
-- i need to add deleting scripts to both destroying scenes and destroying entities
+- finish add and remove components revision and fixing bugs related to such
+	- I still need a clean way of removing components that are multi
+	- i am currently thinking that removecomponent can be any anytype and then i check if the type is of type then i do a unique remove and if its a struct (aka a component) then do a multi remove
+	- but then this creates some weird shiet lol maybe I can create a new remove component function that takes in a component object always. but then I can just remove by giving 
+- make parent and child relationships first class citizen of the ECS
 - finish scene specs panel printing out all the scripts for a scene.
 	- it can just be selectable bools
 	- the text can be the name of the script so the file name
