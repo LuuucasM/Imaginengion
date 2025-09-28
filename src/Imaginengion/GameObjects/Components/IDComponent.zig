@@ -9,6 +9,8 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
 
+pub const Editable: bool = true;
+
 ID: u64 = std.math.maxInt(u64),
 
 pub fn Deinit(_: *IDComponent) !void {}

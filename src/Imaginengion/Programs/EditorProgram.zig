@@ -515,6 +515,10 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             self._ScenePanel.OnDeleteScene(e.mScene);
             self._ComponentsPanel.OnDeleteScene(e.mScene);
         },
+        .ET_RmEntityCompEvent => |e| {
+            //if the component has an editor window open close it
+            self._CSEditorPanel.RmEntityComp(e.mComponent_ptr);
+        },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
 }

@@ -5,6 +5,7 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 pub const Category: ComponentCategory = .Unique;
+pub const Editable: bool = false;
 
 mFirstChild: Entity.Type = Entity.NullEntity,
 

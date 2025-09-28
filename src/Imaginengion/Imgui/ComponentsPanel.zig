@@ -129,21 +129,44 @@ fn EntityImguiRender(entity: Entity) !void {
 
 fn ComponentRender(comptime component_type: type, entity: Entity) void {
     if (entity.HasComponent(component_type)) {
-        if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-            const new_event = ImguiEvent{
-                .ET_SelectComponentEvent = .{
-                    .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity),
-                },
-            };
-            try ImguiEventManager.Insert(new_event);
-        }
-        if (imgui.igBeginPopupContextItem(@typeName(component_type), imgui.ImGuiPopupFlags_MouseButtonRight)) {
-            defer imgui.igEndPopup();
+        if (component_type.Category == .Unique) {
+            //single unique component so we can just get and display component
+            PrintComponent(component_type, entity);
+        } else {
+            //it is a multi component so we need to get the parents component and then
+            //get first and then we can iterate creating a selectable bool for each one
+            const ecs = entity.mECSManagerRef;
+            if (entity.GetComponent(component_type)) |component| {
+                const curr_id = component.mFirst;
+                const curr_comp = ecs.GetComponent(component_type, curr_id);
+                //the : (stuff) gets evaluated at the end of the loop so its equivalent to a
+                //do-while loop
+                while (true) : (if (curr_id == component.mFirst) break) {
+                    defer curr_comp = ecs.GetComponent(component_type, curr_id);
+                    defer curr_id = curr_comp.mNext;
 
-            if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntity = entity.mEntityID, .mComponentInd = component_type.Ind } });
-                try ImguiEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
+                    const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
+                    PrintComponent(component_type, component_entity);
+                }
             }
+        }
+    }
+}
+
+fn PrintComponent(comptime component_type: type, entity: Entity) !void {
+    if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
+        if (component_type.Editable == true) {
+            try ImguiEventManager.Insert(ImguiEvent{
+                .ET_SelectComponentEvent = .{ .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity) },
+            });
+        }
+    }
+    if (imgui.igBeginPopupContextItem(@typeName(component_type), imgui.ImGuiPopupFlags_MouseButtonRight)) {
+        defer imgui.igEndPopup();
+
+        if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
+            try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntity = entity.mEntityID, .mComponentInd = component_type.Ind } });
+            try ImguiEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
         }
     }
 }
@@ -178,21 +201,21 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
     }
     if (entity.HasComponent(AISlotComponent) == false) {
         if (imgui.igMenuItem_Bool("AISlotComponent", "", false, true) == true) {
+            defer imgui.igCloseCurrentPopup();
             _ = try entity.AddComponent(AISlotComponent, null);
-            imgui.igCloseCurrentPopup();
         }
     }
     if (entity.HasComponent(PlayerSlotComponent) == false) {
         if (imgui.igMenuItem_Bool("PlayerSlotComponent", "", false, true) == true) {
+            defer imgui.igCloseCurrentPopup();
             _ = try entity.AddComponent(PlayerSlotComponent, null);
-            imgui.igCloseCurrentPopup();
         }
     }
     if (entity.HasComponent(QuadComponent) == false) {
         if (imgui.igMenuItem_Bool("QuadComponent", "", false, true) == true) {
+            defer imgui.igCloseCurrentPopup();
             const new_sprite_component = try entity.AddComponent(QuadComponent, null);
             new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
-            imgui.igCloseCurrentPopup();
         }
     }
 }

@@ -16,16 +16,22 @@ const Entity = @import("../GameObjects/Entity.zig");
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityComponentsArray = EntityComponents.ComponentsList;
+const EEntityComponents = EntityComponents.EComponents;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const CameraComponent = EntityComponents.CameraComponent;
-const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const EntityParentComponent = EntityComponents.ParentComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
+const EntityAISlotComponent = EntityComponents.AISlotComponent;
+const EntityIDComponent = EntityComponents.IDComponent;
+const EntityNameComponent = EntityComponents.NameComponent;
+const EntityPlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const EntityQuadComponent = EntityComponents.QuadComponent;
 
 const SceneComponents = @import("SceneComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
+const ESceneComponents = SceneComponents.EComponents;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneIDComponent = SceneComponents.IDComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
@@ -98,9 +104,6 @@ pub fn CreateEntityWithUUID(self: *SceneManager, uuid: u128, scene_id: SceneLaye
 pub fn DestroyEntity(self: *SceneManager, destroy_entity: Entity) !void {
     const zone = Tracy.ZoneInit("SceneManager DestroyEntity", @src());
     defer zone.Deinit();
-
-    //handle scripts
-    try self.RemoveAllEntityScripts(destroy_entity);
 
     try self.DestroyAllChildren(destroy_entity);
 
@@ -359,6 +362,33 @@ pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneLayer.Type) SceneLayer 
     return SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 }
 
+pub fn RmEntityComp(self: *SceneManager, entity_id: Entity.Type, component_ind: EEntityComponents) !void {
+    switch (component_ind) {
+        .AISlotComponent => try self.mECSManagerGO.RemoveComponent(EntityAISlotComponent, entity_id),
+        .CameraComponent => try self.mECSManagerGO.RemoveComponent(CameraComponent, entity_id),
+        .ChildComponent => try self.mECSManagerGO.RemoveComponent(EntityChildComponent, entity_id),
+        .IDComponent => try self.mECSManagerGO.RemoveComponent(EntityIDComponent, entity_id),
+        .NameComponent => try self.mECSManagerGO.RemoveComponent(EntityNameComponent, entity_id),
+        .ParentComponent => try self.mECSManagerGO.RemoveComponent(EntityParentComponent, entity_id),
+        .PlayerSlotComponent => try self.mECSManagerGO.RemoveComponent(EntityPlayerSlotComponent, entity_id),
+        .QuadComponent => try self.mECSManagerGO.RemoveComponent(EntityQuadComponent, entity_id),
+        .SceneIDComponent => try self.mECSManagerGO.RemoveComponent(EntitySceneComponent, entity_id),
+        .ScriptComponent => try self.mECSManagerGO.RemoveComponent(EntityScriptComponent, entity_id),
+        .TransformComponent => try self.mECSManagerGO.RemoveComponent(EntityTransformComponent, entity_id),
+    }
+}
+
+pub fn RmSceneComp(self: *SceneManager, scene_id: SceneLayer.Type, component_ind: ESceneComponents) !void {
+    switch (component_ind) {
+        .IDComponent => try self.mECSManagerSC.RemoveComponent(SceneIDComponent, scene_id),
+        .NameComponent => try self.mECSManagerSC.RemoveComponent(SceneNameComponent, scene_id),
+        .SceneComponent => try self.mECSManagerSC.RemoveComponent(SceneComponent, scene_id),
+        .ScriptComponent => try self.mECSManagerSC.RemoveComponent(SceneScriptComponent, scene_id),
+        .StackPosComponent => try self.mECSManagerSC.RemoveComponent(SceneStackPos, scene_id),
+        .TransformComponent => try self.mECSManagerSC.RemoveComponent(SceneTransformComponent, scene_id),
+    }
+}
+
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mLayerType == .GameLayer) {
@@ -396,22 +426,6 @@ fn CalculateEntityTransform(entity: Entity, parent_transform: Mat4f32, parent_di
 
             const child_component = child_entity.GetComponent(EntityChildComponent);
             curr_id = child_component.mNext;
-        }
-    }
-}
-
-fn RemoveAllEntityScripts(self: *SceneManager, destroy_entity: Entity) !void {
-    const zone = Tracy.ZoneInit("SceneManager RemoveAllScripts", @src());
-    defer zone.Deinit();
-    if (destroy_entity.GetComponent(EntityScriptComponent)) |script_component| {
-        var curr = script_component.mNext;
-        while (curr != Entity.NullEntity) {
-            const entity = self.GetEntity(curr);
-            const entity_script_comp = entity.GetComponent(EntityScriptComponent).?;
-
-            curr = entity_script_comp.mNext;
-
-            try self.mECSManagerGO.DestroyEntity(entity.mEntityID);
         }
     }
 }

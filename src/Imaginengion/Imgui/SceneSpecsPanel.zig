@@ -69,12 +69,19 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
     }
     if (is_tree_open == true) {
         defer imgui.igTreePop();
-        if (self.mSceneLayer.HasComponent(SceneScriptComponent) == true) {
-            var curr_id = self.mSceneLayer.mSceneID;
-            while (curr_id != AssetHandle.NullHandle) {
-                const script_component = self.mSceneLayer.mECSManagerSCRef.GetComponent(SceneScriptComponent, curr_id).?;
-                const file_meta_data = try script_component.mScriptAssetHandle.GetAsset(FileMetaData);
-                const script_name = try frame_allocator.dupeZ(u8, std.fs.path.basename(file_meta_data.mRelPath.items));
+        if (self.mSceneLayer.GetComponent(SceneScriptComponent)) |scene_script_comp| {
+            const scene_ecs = self.mSceneLayer.mECSManagerSCRef;
+            var curr_id = scene_script_comp.mFirst;
+            var curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id).?;
+
+            while (true) : (if (curr_id == scene_script_comp.mFirst) break) {
+                defer curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id);
+                defer curr_id = curr_script.mNext;
+
+                const script_file_data = try curr_script.mScriptAssetHandle.GetAsset(FileMetaData);
+
+                const script_name = try std.fmt.allocPrint(frame_allocator, std.fs.path.basename(script_file_data.mRelPath.items) ++ "###{d}", .{curr_id});
+
                 _ = imgui.igSelectable_Bool(script_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 });
                 if (imgui.igBeginPopupContextItem(script_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                     defer imgui.igEndPopup();
@@ -82,7 +89,6 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
                         try GameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mScene = self.mSceneLayer.mSceneID, .mComponentInd = SceneScriptComponent.Ind } });
                     }
                 }
-                curr_id = script_component.mNext;
             }
         }
     }

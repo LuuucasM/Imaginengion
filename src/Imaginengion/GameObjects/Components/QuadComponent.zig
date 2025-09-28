@@ -17,6 +17,7 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
+pub const Editable: bool = true;
 
 mShouldRender: bool = true,
 mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },

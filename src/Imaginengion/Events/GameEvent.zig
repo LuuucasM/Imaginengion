@@ -1,5 +1,7 @@
 const Entity = @import("../GameObjects/Entity.zig");
+const EEntityComponents = @import("../GameObjects/Components.zig").EComponents;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
+const ESceneComponents = @import("../Scene/SceneComponents.zig").EComponents;
 
 pub const GameEventCategory = enum(u8) {
     EC_Default,
@@ -44,8 +46,8 @@ pub const DestroySceneEvent = struct {
 };
 
 pub const RmEntityCompEvent = struct {
-    mEntity: Entity.Type,
-    mComponentInd: u32,
+    mEntityID: Entity.Type,
+    mComponentType: EEntityComponents,
     pub fn GetEventCategory(self: RmEntityCompEvent) GameEventCategory {
         _ = self;
         return .EC_EndOfFrame;
@@ -53,8 +55,8 @@ pub const RmEntityCompEvent = struct {
 };
 
 pub const RmSceneCompEvent = struct {
-    mScene: SceneLayer.Type,
-    mComponentInd: u32,
+    mSceneID: SceneLayer.Type,
+    mComponentType: ESceneComponents,
     pub fn GetEventCategory(self: RmSceneCompEvent) GameEventCategory {
         _ = self;
         return .EC_EndOfFrame;

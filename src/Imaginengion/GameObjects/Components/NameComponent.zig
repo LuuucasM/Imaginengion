@@ -9,6 +9,8 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
 
+pub const Editable: bool = true;
+
 Name: [24]u8 = std.mem.zeroes([24]u8),
 
 pub fn Deinit(_: *NameComponent) !void {}

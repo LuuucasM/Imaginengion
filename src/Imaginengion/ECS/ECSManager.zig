@@ -44,8 +44,34 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t) !void {
+            //need to change this to handle being able to remove multi components first before destroying the entity.
+            //I believe i will need to get the skip field for the given entity
+            //then I will need to get the iterator of the skip field (have to make one)
+            //then i iterate through the field and call a function GetCategory (have to make)
+            //if it is unique then I can call remove component from the component manager
+            //if it is multi then i have to get the component, iterate through the linked list
+            //destroying each one including the one on the entity to destroy
+
             try self.mEntityManager.DestroyEntity(entity_id);
-            try self.mComponentManager.DestroyEntity(entity_id);
+
+            std.debug.assert(self.mComponentManager.mEntitySkipField.HasSparse(entity_id));
+
+            const entity_skipfield = self.mComponentManager.mEntitySkipField.getValueBySparse(entity_id);
+            const field_iter = entity_skipfield.Iterator();
+
+            while (field_iter.Next()) |comp_arr_ind| {
+                const component_category = self.mComponentManager.mComponentsArrays.items[comp_arr_ind].GetCategory();
+                switch (component_category) {
+                    .Unique => {
+                        self.mComponentManager.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
+                    },
+                    .Multiple => {
+                        //remove multi components
+                    },
+                }
+            }
+
+            //try self.mComponentManager.DestroyEntity(entity_id);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
@@ -79,6 +105,8 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
 
         //components related functions
         pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
+            const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
+            defer zone.Deinit();
             var new_type_component: component_type = if (new_component) |c| c else component_type{};
 
             switch (component_type.Category) {
@@ -129,6 +157,8 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn RemoveComponent(self: *Self, comptime component_type: type, entity_id: entity_t) !void {
+            const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
+            defer zone.Deinit();
             switch (component_type.Category) {
                 .Unique => {
                     //in this case the entity ID is just simply the entity we want to remove the component from

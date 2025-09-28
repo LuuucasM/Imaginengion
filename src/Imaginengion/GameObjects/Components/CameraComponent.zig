@@ -26,6 +26,8 @@ pub const ProjectionType = enum(u1) {
 
 pub const Category: ComponentCategory = .Unique;
 
+pub const Editable: bool = true;
+
 //viewport stuff
 //TODO: finish changing this to use the new framebuffer system
 mViewportWidth: usize = 1600,

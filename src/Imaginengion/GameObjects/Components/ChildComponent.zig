@@ -12,6 +12,8 @@ mParent: Entity.Type = Entity.NullEntity,
 
 pub const Category: ComponentCategory = .Unique;
 
+pub const Editable: bool = false;
+
 pub fn Deinit(_: *ChildComponent) !void {}
 
 pub fn GetName(self: ChildComponent) []const u8 {

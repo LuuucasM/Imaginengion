@@ -1,7 +1,7 @@
-- finish add and remove components revision and fixing bugs related to such
-	- I still need a clean way of removing components that are multi
-	- i am currently thinking that removecomponent can be any anytype and then i check if the type is of type then i do a unique remove and if its a struct (aka a component) then do a multi remove
-	- but then this creates some weird shiet lol maybe I can create a new remove component function that takes in a component object always. but then I can just remove by giving 
+- ensure support for destroy entity in ECS for the new unique / multi component system
+	- make skip field iterator. not sure what to call it something like ContainsIterator maybe..?
+	- then modify it as i put in the comments in the function
+- add iterator for multi components maybe?
 - make parent and child relationships first class citizen of the ECS
 - finish scene specs panel printing out all the scripts for a scene.
 	- it can just be selectable bools
@@ -19,8 +19,10 @@
 		- the one good thing is that the more accurate i make the imgui code now the better prepared i will be to make the switch because I will know exactly what i need from my engines own UI system to be able to recreate the engine gui
 - add ability to render font
 - i need to add components at some point:
-	- attribute component
-	- collider component
-	- rigid body component
-	- particle component i suppose but will probably be a while until i can do this one
+	- attribute component (multi)
+	- collider component (multi)
+	- rigid body component (unique)
+	- particle component (dont know yet its so far away)
 - add sound
+- add physics
+- add entity picking in the editor

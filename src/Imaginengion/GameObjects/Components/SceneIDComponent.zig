@@ -4,6 +4,7 @@ const IDComponent = @This();
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 pub const Category: ComponentCategory = .Unique;
+pub const Editable: bool = false;
 
 SceneID: u128 = std.math.maxInt(u128),
 

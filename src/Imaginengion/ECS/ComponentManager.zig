@@ -78,11 +78,10 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             // Remove all components from this entity
             const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
-            var i: usize = entity_skipfield.mSkipField[0];
-            while (i < entity_skipfield.mSkipField.len) {
-                try self.mComponentsArrays.items[i].RemoveComponent(entityID);
-                i += 1;
-                i += entity_skipfield.mSkipField[i];
+
+            var field_iter = entity_skipfield.Iterator();
+            while (field_iter.Next()) |comp_arr_ind| {
+                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entityID);
             }
 
             // Remove entity from skip field
@@ -97,11 +96,9 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             const new_skipfield = self.mEntitySkipField.getValueBySparse(new_entity_id);
             @memcpy(&new_skipfield.mSkipField, &original_skipfield.mSkipField);
 
-            var i: usize = original_skipfield.mSkipField[0];
-            while (i < original_skipfield.mSkipField.len) {
-                self.mComponentsArrays.items[i].DuplicateEntity(original_entity_id, new_entity_id);
-                i += 1;
-                i += original_skipfield.mSkipField[i];
+            var field_iter = original_skipfield.Iterator();
+            while (field_iter.Next()) |comp_arr_ind| {
+                self.mComponentsArrays.items[comp_arr_ind].DuplicateEntity(original_entity_id, new_entity_id);
             }
         }
 

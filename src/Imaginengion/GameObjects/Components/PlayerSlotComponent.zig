@@ -6,6 +6,7 @@ const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const PlayerSlotComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
+pub const Editable: bool = false;
 
 mPlayerEntity: Player.Type = Player.NullPlayer,
 

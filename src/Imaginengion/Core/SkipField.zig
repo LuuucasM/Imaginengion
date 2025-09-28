@@ -33,6 +33,23 @@ pub fn StaticSkipField(size: usize) type {
             AllSkip = 0,
             NoSkip = 1,
         };
+
+        const FieldIterator = struct {
+            mSkipFieldRef: *Self,
+            mI: usize,
+
+            pub fn Next(self: *FieldIterator) ?usize {
+                if (self.mI >= self.mSkipFieldRef.mSkipField.len) return null;
+
+                const current_index = self.mI;
+
+                self.mI += 1;
+                self.mI += self.mSkipFieldRef.mSkipField[self.mI];
+
+                return current_index;
+            }
+        };
+
         const SkipFieldType = std.math.IntFittingRange(0, size);
 
         mSkipField: [size]SkipFieldType = std.mem.zeroes([size]SkipFieldType),
@@ -68,6 +85,13 @@ pub fn StaticSkipField(size: usize) type {
             } else { //NoSkip option
                 self.mSkipField = std.mem.zeroes([size]SkipFieldType);
             }
+        }
+
+        pub fn Iterator(self: *Self) FieldIterator {
+            return FieldIterator{
+                .mSkipFieldRef = self,
+                .mI = self.mSkipField[0],
+            };
         }
 
         /// Marks the element at the specified index as skipped.

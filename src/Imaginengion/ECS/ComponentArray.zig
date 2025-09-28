@@ -1,4 +1,5 @@
 const std = @import("std");
+const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
 
 pub fn ComponentArray(entity_t: type) type {
@@ -8,6 +9,7 @@ pub fn ComponentArray(entity_t: type) type {
         HasComponent: *const fn (*anyopaque, entity_t) bool,
         RemoveComponent: *const fn (*anyopaque, entity_t) anyerror!void,
         clearAndFree: *const fn (*anyopaque) void,
+        GetCategory: *const fn (*anyopaque) ComponentCategory,
     };
     return struct {
         const Self = @This();
@@ -20,25 +22,29 @@ pub fn ComponentArray(entity_t: type) type {
 
             const impl = struct {
                 fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) void {
-                    const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.Deinit();
                     deinit_allocator.destroy(self);
                 }
                 fn DuplicateEntity(ptr: *anyopaque, original_entity_id: entity_t, new_entity_id: entity_t) void {
-                    const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.DuplicateEntity(original_entity_id, new_entity_id);
                 }
                 fn HasComponent(ptr: *anyopaque, entityID: entity_t) bool {
-                    const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     return self.HasComponent(entityID);
                 }
                 fn RemoveComponent(ptr: *anyopaque, entityID: entity_t) anyerror!void {
-                    const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.RemoveComponent(entityID);
                 }
                 fn clearAndFree(ptr: *anyopaque) void {
-                    const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.clearAndFree();
+                }
+                fn GetCategory(ptr: *anyopaque) void {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    self.GetCategory();
                 }
             };
 

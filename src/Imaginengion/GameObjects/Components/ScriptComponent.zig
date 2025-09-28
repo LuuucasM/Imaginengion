@@ -20,9 +20,10 @@ mFirst: Entity.Type = Entity.NullEntity,
 mPrev: Entity.Type = Entity.NullEntity,
 mNext: Entity.Type = Entity.NullEntity,
 mParent: Entity.Type = Entity.NullEntity,
-mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
+mScriptAssetHandle: ?AssetHandle = null,
 
 pub const Category: ComponentCategory = .Multiple;
+pub const Editable: bool = false;
 
 pub fn Deinit(self: *ScriptComponent) !void {
     if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {

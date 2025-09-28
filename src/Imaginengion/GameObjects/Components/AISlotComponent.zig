@@ -17,3 +17,5 @@ pub const Ind: usize = blk: {
 };
 
 pub const Category: ComponentCategory = .Unique;
+
+pub const Editable: bool = false;

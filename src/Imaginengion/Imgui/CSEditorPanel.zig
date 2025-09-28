@@ -49,10 +49,10 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
     var iter = self.mEditorWindows.iterator();
     while (iter.next()) |entry| {
         const id_name = entry.key_ptr.*;
-        const window = entry.value_ptr;
+        const editor_window = entry.value_ptr;
 
-        const entity_name = window.mEntity.GetName();
-        const component_name = window.GetComponentName();
+        const entity_name = editor_window.mEntity.GetName();
+        const component_name = editor_window.GetComponentName();
 
         const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len; // Find first null byte or use full length
         const trimmed_name = entity_name[0..name_len];
@@ -65,7 +65,7 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
         var is_open = true;
         _ = imgui.igBegin(name.ptr, &is_open, 0);
         defer imgui.igEnd();
-        try window.EditorRender();
+        try editor_window.EditorRender();
 
         if (is_open == false) {
             try to_remove.append(fba_allocator, id_name);
@@ -107,5 +107,18 @@ pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow
 
     if (self.mEditorWindows.contains(key) == false) {
         try self.mEditorWindows.put(key, new_editor_window);
+    }
+}
+
+pub fn RmEntityComp(self: *CSEditorPanel, component_ptr: *anyopaque) !void {
+    var iter = self.mEditorWindows.iterator();
+    while (iter.next()) |entry| {
+        const id_name = entry.key_ptr;
+        const editor_window = entry.value_ptr;
+        if (editor_window.mPtr == component_ptr) {
+            //this will invalidate iter but we know there is only 1 possible so we can return here
+            self.mEditorWindows.orderedRemove(id_name);
+            return;
+        }
     }
 }

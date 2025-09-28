@@ -1,7 +1,7 @@
 const std = @import("std");
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
-const EditorWindow = @import("../Imgui/EditorWindow.zig");
+const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 
 pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) type {
     return struct {
@@ -84,6 +84,9 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
                 try self.mComponents.values[i].Deinit();
             }
             self.mComponents.clear();
+        }
+        pub fn GetCategory(_: *Self) ComponentCategory {
+            return componentType.Category;
         }
     };
 }

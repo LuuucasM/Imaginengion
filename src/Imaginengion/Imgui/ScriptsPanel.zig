@@ -3,12 +3,16 @@ const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const Entity = @import("../GameObjects/Entity.zig");
-const ScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
+const EntityScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
 const ImguiUtils = @import("ImguiUtils.zig");
 
-const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
+const Assets = @import("../Assets/Assets.zig");
+const FileMetaData = Assets.FileMetaData;
+const ScriptAsset = Assets.ScriptAsset;
 const Components = @import("../GameObjects/Components.zig");
 const OnUpdateInputScript = Components.OnUpdateInputScript;
+
+const GameEventManager = @import("../Events/GameEventManager.zig");
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
@@ -26,7 +30,7 @@ pub fn Init() ScriptsPanel {
     };
 }
 
-pub fn OnImguiRender(self: ScriptsPanel) !void {
+pub fn OnImguiRender(self: ScriptsPanel, frame_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
     defer zone.Deinit();
 
@@ -49,16 +53,30 @@ pub fn OnImguiRender(self: ScriptsPanel) !void {
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
-            if (entity.GetComponent(ScriptComponent)) |script_component| {
+            if (entity.GetComponent(EntityScriptComponent)) |script_component| {
                 var ecs = entity.mECSManagerRef;
+                const curr_id = script_component.mFirst;
+                const curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id);
 
-                var iter = ecs.GetComponent(ScriptComponent, script_component.mFirst).?;
+                while (true) : (if (curr_id == script_component.mFirst) break) {
+                    defer curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
+                    defer curr_id = curr_comp.mNext;
 
-                if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
+                    if (curr_comp.mScriptAssetHandle) |asset_handle| {
+                        const script_file_data = asset_handle.GetAsset(FileMetaData);
 
-                while (iter.mNext != Entity.NullEntity) {
-                    iter = ecs.GetComponent(ScriptComponent, iter.mNext).?;
-                    if (imgui.igSelectable_Bool(@typeName(ScriptComponent), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {}
+                        const script_name = std.fmt.allocPrint(frame_allocator, std.fs.path.basename(script_file_data.mRelPath) ++ "###{d}", .{curr_id});
+
+                        if (imgui.igSelectable_Bool(script_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
+
+                        if (imgui.igBeginPopupContextItem(script_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+                            defer imgui.igEndPopup();
+
+                            if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
+                                try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntity = curr_id, .mComponentInd = EntityScriptComponent.Ind } });
+                            }
+                        }
+                    }
                 }
             }
         }

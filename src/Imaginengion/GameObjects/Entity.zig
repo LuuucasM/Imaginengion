@@ -41,6 +41,7 @@ pub fn RemoveComponent(self: Entity, args: anytype) !void {
 
     @compileError("Entity.RemoveComponent can not be called with these arguments");
 }
+
 pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_type {
     return self.mECSManagerRef.GetComponent(component_type, self.mEntityID);
 }
