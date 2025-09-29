@@ -13,15 +13,19 @@ pub const ComponentCategory = enum {
 
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
+        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
+
         const Self = @This();
         mEntityManager: EntityManager(entity_t),
         mComponentManager: ComponentManager(entity_t, component_types_size),
+        mECSEventManager: ECSEventManager,
         mECSAllocator: std.mem.Allocator,
 
         pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_types: []const type) !Self {
             return Self{
                 .mEntityManager = EntityManager(entity_t).Init(ECSAllocator),
                 .mComponentManager = try ComponentManager(entity_t, component_types_size).Init(ECSAllocator, components_types),
+                .mECSEventManager = ECSEventManager.Init(),
                 .mECSAllocator = ECSAllocator,
             };
         }
@@ -52,26 +56,8 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             //if it is multi then i have to get the component, iterate through the linked list
             //destroying each one including the one on the entity to destroy
 
-            try self.mEntityManager.DestroyEntity(entity_id);
-
-            std.debug.assert(self.mComponentManager.mEntitySkipField.HasSparse(entity_id));
-
-            const entity_skipfield = self.mComponentManager.mEntitySkipField.getValueBySparse(entity_id);
-            const field_iter = entity_skipfield.Iterator();
-
-            while (field_iter.Next()) |comp_arr_ind| {
-                const component_category = self.mComponentManager.mComponentsArrays.items[comp_arr_ind].GetCategory();
-                switch (component_category) {
-                    .Unique => {
-                        self.mComponentManager.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
-                    },
-                    .Multiple => {
-                        //remove multi components
-                    },
-                }
-            }
-
-            //try self.mComponentManager.DestroyEntity(entity_id);
+            try self.mEntityManager.DestroyEntity(entity_id, self.DestroyMultiEntity);
+            try self.mComponentManager.DestroyEntity(entity_id, self.DestroyMultiEntity);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
@@ -202,6 +188,16 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
             defer zone.Deinit();
             return self.mComponentManager.GetComponent(ComponentType, entityID);
+        }
+
+        pub fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
+            _ = self;
+            _ = entity_id;
+        }
+
+        pub fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+            _ = self;
+            _ = entity_id;
         }
     };
 }
