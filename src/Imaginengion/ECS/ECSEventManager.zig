@@ -2,37 +2,38 @@ const std = @import("std");
 const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
 const Tracy = @import("../Core/Tracy.zig");
 
-pub fn ECSEventManager(entity_t: type) type {
+pub fn ECSEventManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
         const Self = @This();
         const ECSEvent = @import("ECSEvent.zig").ECSEvent(entity_t);
+        const ECSManager = @import("ECSManager.zig").ECSManager(entity_t, component_types_size);
 
         mDestroyEntities: std.ArrayList(ECSEvent) = .{},
         mCleanMultiEntities: std.ArrayList(ECSEvent) = .{},
+        mAllocator: std.mem.Allocator,
 
-        var EventGPA = std.heap.DebugAllocator(.{}).init;
-        const EventAllocator = EventGPA.allocator();
-
-        pub fn Init() !ECSEventManager {
-            return ECSEventManager{};
+        pub fn Init(allocator: std.mem.Allocator) !Self {
+            return Self{
+                .mAllocator = allocator,
+            };
         }
 
-        pub fn Deinit(self: ECSEventManager) void {
-            self.mDestroyEntities.deinit(EventAllocator);
-            _ = EventGPA.deinit();
+        pub fn Deinit(self: Self) void {
+            self.mDestroyEntities.deinit(self.mAllocator);
+            self.mCleanMultiEntities.deinit(self.mAllocator);
         }
 
-        pub fn Insert(self: ECSEventManager, event: ECSEvent) !void {
+        pub fn Insert(self: Self, event: ECSEvent) !void {
             const zone = Tracy.ZoneInit("ECS Insert Events", @src());
             defer zone.Deinit();
             switch (event.GetEventCategory()) {
-                .EC_DestroyEntities => try self.mDestroyEntities.append(EventAllocator, event),
-                .EC_CleanMultiEntities => try self.mCleanMultiEntities.append(EventAllocator, event),
+                .EC_DestroyEntities => try self.mDestroyEntities.append(self.mAllocator, event),
+                .EC_CleanMultiEntities => try self.mCleanMultiEntities.append(self.mAllocator, event),
                 else => @panic("Default Events are not allowed!\n"),
             }
         }
 
-        pub fn ProcessEvents(self: ECSEventManager, eventCategory: ECSEventCategory) !void {
+        pub fn ProcessEvents(self: Self, ecs_manager: ECSManager, eventCategory: ECSEventCategory) !void {
             const zone = Tracy.ZoneInit("ECS ProcessEvents", @src());
             defer zone.Deinit();
             const array = switch (eventCategory) {
@@ -43,16 +44,17 @@ pub fn ECSEventManager(entity_t: type) type {
 
             for (array.items) |event| {
                 switch (event) {
-                    .EC_DestroyEntities => |e| try self.mECSManager._InternalDestroyEntity(e),
-                    .EC_CleanMultiEntities => |e| try self.mECSManager._InternalDestroyMultiEntity(e),
+                    .ET_DestroyEntity => |e| try ecs_manager._InternalDestroyEntity(e.mEntityID),
+                    .ET_CleanMultiEntity => |e| try ecs_manager._InternalDestroyMultiEntity(e.mEntityID),
                 }
             }
         }
 
-        pub fn EventsReset(self: ECSEventManager) void {
+        pub fn EventsReset(self: Self) void {
             const zone = Tracy.ZoneInit("ECS Event Reset", @src());
             defer zone.Deinit();
-            _ = self.mDestroyEntities.clearAndFree(EventAllocator);
+            _ = self.mDestroyEntities.clearAndFree(self.mAllocator);
+            _ = self.mCleanMultiEntities.clearAndFree(self.mAllocator);
         }
     };
 }

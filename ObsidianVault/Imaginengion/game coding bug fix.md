@@ -26,3 +26,4 @@
 - add sound
 - add physics
 - add entity picking in the editor
+- move away from "managed" structs. aka ones that keep reference to their own allocator, in favor of unmanaged and just passing around allocators more explicitly.

@@ -13,7 +13,7 @@ pub const ComponentCategory = enum {
 
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
-        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
+        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t, component_types_size);
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t),
@@ -25,7 +25,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             return Self{
                 .mEntityManager = EntityManager(entity_t).Init(ECSAllocator),
                 .mComponentManager = try ComponentManager(entity_t, component_types_size).Init(ECSAllocator, components_types),
-                .mECSEventManager = ECSEventManager.Init(),
+                .mECSEventManager = ECSEventManager.Init(ECSAllocator),
                 .mECSAllocator = ECSAllocator,
             };
         }
@@ -48,16 +48,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t) !void {
-            //need to change this to handle being able to remove multi components first before destroying the entity.
-            //I believe i will need to get the skip field for the given entity
-            //then I will need to get the iterator of the skip field (have to make one)
-            //then i iterate through the field and call a function GetCategory (have to make)
-            //if it is unique then I can call remove component from the component manager
-            //if it is multi then i have to get the component, iterate through the linked list
-            //destroying each one including the one on the entity to destroy
-
-            try self.mEntityManager.DestroyEntity(entity_id, self.DestroyMultiEntity);
-            try self.mComponentManager.DestroyEntity(entity_id, self.DestroyMultiEntity);
+            try self.mECSEventManager.Insert(.{ .ET_DestroyEntity = .{ .mEntityID = entity_id } });
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
