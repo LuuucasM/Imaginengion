@@ -3,6 +3,7 @@ const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
 
 pub fn ComponentArray(entity_t: type) type {
+    const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
     const VTab = struct {
         Deinit: *const fn (*anyopaque, std.mem.Allocator) void,
         DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
@@ -10,6 +11,7 @@ pub fn ComponentArray(entity_t: type) type {
         RemoveComponent: *const fn (*anyopaque, entity_t) anyerror!void,
         clearAndFree: *const fn (*anyopaque) void,
         GetCategory: *const fn (*anyopaque) ComponentCategory,
+        DestroyEntity: *const fn (*anyopaque, entity_t, ECSEventManager) anyerror!void,
     };
     return struct {
         const Self = @This();
@@ -46,6 +48,10 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.GetCategory();
                 }
+                fn DestroyEntity(ptr: *anyopaque, entity_id: entity_t, ecs_event_manager: ECSEventManager) anyerror!void {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    self.DestroyEntity(entity_id, ecs_event_manager);
+                }
             };
 
             const new_component_array = try allocator.create(internal_type);
@@ -59,6 +65,7 @@ pub fn ComponentArray(entity_t: type) type {
                     .HasComponent = impl.HasComponent,
                     .RemoveComponent = impl.RemoveComponent,
                     .clearAndFree = impl.clearAndFree,
+                    .DestroyEntity = impl.DestroyEntity,
                 },
                 .mAllocator = allocator,
             };
@@ -78,6 +85,9 @@ pub fn ComponentArray(entity_t: type) type {
         }
         pub fn clearAndFree(self: Self) void {
             self.mVtable.clearAndFree(self.mPtr);
+        }
+        pub fn DestroyEntity(self: Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) anyerror!void {
+            self.mVtable.DestroyEntity(self.mPtr, entity_id, ecs_event_manager);
         }
     };
 }

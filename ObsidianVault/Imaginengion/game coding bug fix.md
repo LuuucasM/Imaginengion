@@ -1,7 +1,4 @@
-- ensure support for destroy entity in ECS for the new unique / multi component system
-	- make skip field iterator. not sure what to call it something like ContainsIterator maybe..?
-	- then modify it as i put in the comments in the function
-- add iterator for multi components maybe?
+- change ECSEventManager to be a singleton but it feels weird because 
 - make parent and child relationships first class citizen of the ECS
 - finish scene specs panel printing out all the scripts for a scene.
 	- it can just be selectable bools

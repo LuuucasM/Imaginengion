@@ -1,7 +1,6 @@
 pub const ECSEventCategory = enum(u8) {
     EC_Default,
-    EC_DestroyEntities,
-    EC_CleanMultiEntities,
+    EC_CleanUp,
 };
 
 pub fn ECSEvent(entity_t: type) type {
@@ -13,6 +12,7 @@ pub fn ECSEvent(entity_t: type) type {
 
         pub fn GetEventCategory(self: Self) ECSEventCategory {
             switch (self) {
+                .ET_Default => return .EC_Default,
                 inline else => |event| return event.GetEventCategory(),
             }
         }
@@ -26,14 +26,14 @@ pub fn ECSEvent(entity_t: type) type {
         pub const DestroyEntityEvent = struct {
             mEntityID: entity_t,
             pub fn GetEventCategory(_: DestroyEntityEvent) ECSEventCategory {
-                return .EC_DestroyEntities;
+                return .EC_CleanUp;
             }
         };
 
         pub const CleanMultiEntityEvent = struct {
             mEntityID: entity_t,
             pub fn GetEventCategory(_: CleanMultiEntityEvent) ECSEventCategory {
-                return .EC_CleanMultiEntities;
+                return .EC_CleanUp;
             }
         };
     };

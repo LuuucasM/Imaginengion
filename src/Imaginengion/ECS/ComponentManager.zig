@@ -18,6 +18,7 @@ pub const GroupQuery = union(enum) {
 
 pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
     return struct {
+        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
         const Self = @This();
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)),
         mEntitySkipField: SparseSet(.{
@@ -73,7 +74,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(component_type_size).Init(.AllSkip);
         }
 
-        pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
+        pub fn DestroyEntity(self: *Self, entityID: entity_t, ecs_event_manager: ECSEventManager) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
 
             // Remove all components from this entity
@@ -81,11 +82,26 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entityID);
+                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(entityID, ecs_event_manager);
             }
 
             // Remove entity from skip field
             _ = self.mEntitySkipField.remove(entityID);
+        }
+
+        pub fn DestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
+
+            // Remove all components from this entity
+            const entity_skipfield = self.mEntitySkipField.getValueBySparse(entity_id);
+
+            var field_iter = entity_skipfield.Iterator();
+            while (field_iter.Next()) |comp_arr_ind| {
+                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
+            }
+
+            // Remove entity from skip field
+            _ = self.mEntitySkipField.remove(entity_id);
         }
 
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {

@@ -5,6 +5,7 @@ const GroupQuery = @import("ComponentManager.zig").GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
+const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
 
 pub const ComponentCategory = enum {
     Unique,
@@ -13,7 +14,7 @@ pub const ComponentCategory = enum {
 
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
-        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t, component_types_size);
+        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t),
@@ -144,7 +145,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
                 .Multiple => {
                     //entity_id in this case refers to the entity id of the component we want to remove not the parent
                     //multi components always have their own entity_id so we can just ensure linked list pointers are updated
-                    //and then remove the entity
+                    //and then destroy the entity
                     const remove_component = self.GetComponent(component_type, entity_id).?;
                     const parent_component = self.GetComponent(component_type, remove_component.mParent).?;
 
@@ -181,14 +182,27 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             return self.mComponentManager.GetComponent(ComponentType, entityID);
         }
 
+        pub fn ProcessEvents(self: *Self, event_category: ECSEventCategory) !void {
+            var iter = self.mECSEventManager.GetEventsIteartor(event_category);
+            while (iter.Next()) |event| {
+                switch (event) {
+                    .ET_DestroyEntity => |e| try self._InternalDestroyEntity(e.mEntityID),
+                    .ET_CleanMultiEntity => |e| try self._InternalDestroyMultiEntity(e.mEntityID),
+                    else => {
+                        @panic("Default Events are not allowed!\n");
+                    },
+                }
+            }
+        }
+
         pub fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
-            _ = self;
-            _ = entity_id;
+            self.mEntityManager.DestroyEntity(entity_id);
+            self.mComponentManager.DestroyEntity(entity_id, self.mECSEventManager);
         }
 
         pub fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
-            _ = self;
-            _ = entity_id;
+            self.mEntityManager.DestroyEntity(entity_id);
+            self.mComponentManager.DestroyMultiEntity(entity_id);
         }
     };
 }

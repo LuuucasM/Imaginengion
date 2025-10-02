@@ -5,6 +5,7 @@ const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 
 pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) type {
     return struct {
+        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
         const Self = @This();
 
         mComponents: SparseSet(.{
@@ -87,6 +88,27 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
         }
         pub fn GetCategory(_: *Self) ComponentCategory {
             return componentType.Category;
+        }
+        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) anyerror!void {
+            if (componentType.Category == .Multiple) {
+                std.debug.assert(self.mComponents.HasSparse(entity_id));
+                const component = self.mComponents.getValueBySparse(entity_id);
+                var curr_id = entity_id;
+                var curr_component = component;
+
+                //step forward manually once because we dont want to call internal multi destroy
+                //on the parent entity (entity_id) we want to create an event for all of the children
+                curr_id = curr_component.mNext;
+                curr_component = self.mComponents.getValueBySparse(curr_id);
+
+                while (true) : (if (curr_id == curr_component.mFirst) break) {
+                    defer curr_component = self.mComponents.getValueBySparse(curr_id);
+                    defer curr_id = curr_component.mNext;
+
+                    ecs_event_manager.Insert(.{.ET_CleanMultiEntity{ .mEntityID = curr_id }});
+                }
+            }
+            self.RemoveComponent(entity_id);
         }
     };
 }
