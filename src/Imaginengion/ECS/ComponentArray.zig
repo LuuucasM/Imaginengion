@@ -5,13 +5,13 @@ const InternalComponentArray = @import("InternalComponentArray.zig").ComponentAr
 pub fn ComponentArray(entity_t: type) type {
     const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
     const VTab = struct {
-        Deinit: *const fn (*anyopaque, std.mem.Allocator) void,
+        Deinit: *const fn (*anyopaque, std.mem.Allocator) anyerror!void,
         DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
         RemoveComponent: *const fn (*anyopaque, entity_t) anyerror!void,
         clearAndFree: *const fn (*anyopaque) void,
         GetCategory: *const fn (*anyopaque) ComponentCategory,
-        DestroyEntity: *const fn (*anyopaque, entity_t, ECSEventManager) anyerror!void,
+        DestroyEntity: *const fn (*anyopaque, entity_t, *ECSEventManager) anyerror!void,
     };
     return struct {
         const Self = @This();
@@ -23,9 +23,9 @@ pub fn ComponentArray(entity_t: type) type {
             const internal_type = InternalComponentArray(entity_t, component_type);
 
             const impl = struct {
-                fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) void {
+                fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) !void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.Deinit();
+                    try self.Deinit();
                     deinit_allocator.destroy(self);
                 }
                 fn DuplicateEntity(ptr: *anyopaque, original_entity_id: entity_t, new_entity_id: entity_t) void {
@@ -44,13 +44,13 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.clearAndFree();
                 }
-                fn GetCategory(ptr: *anyopaque) void {
+                fn GetCategory(ptr: *anyopaque) ComponentCategory {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.GetCategory();
+                    return self.GetCategory();
                 }
-                fn DestroyEntity(ptr: *anyopaque, entity_id: entity_t, ecs_event_manager: ECSEventManager) anyerror!void {
+                fn DestroyEntity(ptr: *anyopaque, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.DestroyEntity(entity_id, ecs_event_manager);
+                    try self.DestroyEntity(entity_id, ecs_event_manager);
                 }
             };
 
@@ -65,14 +65,15 @@ pub fn ComponentArray(entity_t: type) type {
                     .HasComponent = impl.HasComponent,
                     .RemoveComponent = impl.RemoveComponent,
                     .clearAndFree = impl.clearAndFree,
+                    .GetCategory = impl.GetCategory,
                     .DestroyEntity = impl.DestroyEntity,
                 },
                 .mAllocator = allocator,
             };
         }
 
-        pub fn Deinit(self: Self) void {
-            self.mVtable.Deinit(self.mPtr, self.mAllocator);
+        pub fn Deinit(self: Self) !void {
+            try self.mVtable.Deinit(self.mPtr, self.mAllocator);
         }
         pub fn DuplicateEntity(self: Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
             self.mVtable.DuplicateEntity(self.mPtr, original_entity_id, new_entity_id);
@@ -86,8 +87,12 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn clearAndFree(self: Self) void {
             self.mVtable.clearAndFree(self.mPtr);
         }
-        pub fn DestroyEntity(self: Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) anyerror!void {
+        pub fn DestroyEntity(self: Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
             self.mVtable.DestroyEntity(self.mPtr, entity_id, ecs_event_manager);
+        }
+
+        pub fn GetCategory(self: Self) ComponentCategory {
+            self.mVtable.GetCategory(self.mPtr);
         }
     };
 }

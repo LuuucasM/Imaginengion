@@ -2,10 +2,9 @@ const std = @import("std");
 const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
 const Tracy = @import("../Core/Tracy.zig");
 
-const ECSEventManager = @This();
-
-pub fn ECSManager(entity_t: type) type {
+pub fn ECSEventManager(entity_t: type) type {
     return struct {
+        const Self = @This();
         const ECSEvent = @import("ECSEvent.zig").ECSEvent(entity_t);
 
         pub const Iterator = struct {
@@ -22,17 +21,17 @@ pub fn ECSManager(entity_t: type) type {
         mCleanUp: std.ArrayList(ECSEvent) = .{},
         mAllocator: std.mem.Allocator,
 
-        pub fn Init(allocator: std.mem.Allocator) !ECSEventManager {
-            return ECSEventManager{
+        pub fn Init(allocator: std.mem.Allocator) !Self {
+            return Self{
                 .mAllocator = allocator,
             };
         }
 
-        pub fn Deinit(self: ECSEventManager) void {
+        pub fn Deinit(self: *Self) void {
             self.mCleanUp.deinit(self.mAllocator);
         }
 
-        pub fn Insert(self: ECSEventManager, event: ECSEvent) !void {
+        pub fn Insert(self: *Self, event: ECSEvent) !void {
             const zone = Tracy.ZoneInit("ECS Insert Events", @src());
             defer zone.Deinit();
             switch (event.GetEventCategory()) {
@@ -40,7 +39,7 @@ pub fn ECSManager(entity_t: type) type {
                 else => @panic("Default Events are not allowed!\n"),
             }
         }
-        pub fn GetEventsIteartor(self: ECSEventManager, eventCategory: ECSEventCategory) Iterator {
+        pub fn GetEventsIteartor(self: Self, eventCategory: ECSEventCategory) Iterator {
             const zone = Tracy.ZoneInit("ECS GetEventsIterator", @src());
             defer zone.Deinit();
             return switch (eventCategory) {
@@ -52,7 +51,7 @@ pub fn ECSManager(entity_t: type) type {
             };
         }
 
-        pub fn EventsReset(self: ECSEventManager) void {
+        pub fn EventsReset(self: *Self) void {
             const zone = Tracy.ZoneInit("ECS Event Reset", @src());
             defer zone.Deinit();
             _ = self.mCleanUp.clearAndFree(self.mAllocator);

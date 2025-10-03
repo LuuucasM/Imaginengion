@@ -27,7 +27,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
                 }).init(allocator, 20, 10),
             };
         }
-        pub fn Deinit(self: *Self) void {
+        pub fn Deinit(self: *Self) !void {
             var i: usize = 0;
             while (i < self.mComponents.dense_count) : (i += 1) {
                 try self.mComponents.values[i].Deinit();
@@ -48,11 +48,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
 
             const new_component = self.mComponents.getValueByDense(dense_ind);
 
-            if (component) |comp| {
-                new_component.* = comp;
-            } else {
-                new_component.* = componentType{};
-            }
+            new_component.* = component;
 
             return new_component;
         }
@@ -89,7 +85,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
         pub fn GetCategory(_: *Self) ComponentCategory {
             return componentType.Category;
         }
-        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) anyerror!void {
+        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
             if (componentType.Category == .Multiple) {
                 std.debug.assert(self.mComponents.HasSparse(entity_id));
                 const component = self.mComponents.getValueBySparse(entity_id);
@@ -101,14 +97,15 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
                 curr_id = curr_component.mNext;
                 curr_component = self.mComponents.getValueBySparse(curr_id);
 
-                while (true) : (if (curr_id == curr_component.mFirst) break) {
-                    defer curr_component = self.mComponents.getValueBySparse(curr_id);
-                    defer curr_id = curr_component.mNext;
-
-                    ecs_event_manager.Insert(.{.ET_CleanMultiEntity{ .mEntityID = curr_id }});
+                while (true) : (if (curr_id == component.mFirst) break) {
+                    const next_id = curr_component.mNext;
+                    try ecs_event_manager.Insert(.{ .ET_CleanMultiEntity = .{ .mEntityID = curr_id } });
+                    if (next_id == component.mFirst) break;
+                    curr_id = next_id;
+                    curr_component = self.mComponents.getValueBySparse(curr_id);
                 }
             }
-            self.RemoveComponent(entity_id);
+            try self.RemoveComponent(entity_id);
         }
     };
 }

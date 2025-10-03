@@ -1,9 +1,7 @@
 pub const AISlotComponent = @import("Components/AISlotComponent.zig");
 pub const CameraComponent = @import("Components/CameraComponent.zig");
-pub const ChildComponent = @import("Components/ChildComponent.zig");
 pub const IDComponent = @import("Components/IDComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
-pub const ParentComponent = @import("Components/ParentComponent.zig");
 pub const PlayerSlotComponent = @import("Components/PlayerSlotComponent.zig");
 pub const QuadComponent = @import("Components/QuadComponent.zig");
 pub const SceneIDComponent = @import("Components/SceneIDComponent.zig");
@@ -17,10 +15,8 @@ pub const OnUpdateInputScript = TagComponents.OnUpdateInputScript;
 pub const ComponentsList = [_]type{
     AISlotComponent,
     CameraComponent,
-    ChildComponent,
     IDComponent,
     NameComponent,
-    ParentComponent,
     PlayerSlotComponent,
     QuadComponent,
     SceneIDComponent,
@@ -33,10 +29,8 @@ pub const ComponentsList = [_]type{
 pub const EComponents = enum(u16) {
     AISlotComponent = AISlotComponent.Ind,
     CameraComponent = CameraComponent.Ind,
-    ChildComponent = ChildComponent.Ind,
     IDComponent = IDComponent.Ind,
     NameComponent = NameComponent.Ind,
-    ParentComponent = ParentComponent.Ind,
     PlayerSlotComponent = PlayerSlotComponent.Ind,
     QuadComponent = QuadComponent.Ind,
     SceneIDComponent = SceneIDComponent.Ind,

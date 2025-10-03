@@ -19,7 +19,11 @@ pub const GroupQuery = union(enum) {
 pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
     return struct {
         const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
+        const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
+        const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
+
         const Self = @This();
+
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)),
         mEntitySkipField: SparseSet(.{
             .SparseT = entity_t,
@@ -42,6 +46,13 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 }).init(ECSAllocator, 20, 10),
                 .mECSAllocator = ECSAllocator,
             };
+
+            //add the components for entity hiearchy
+            const parent_array = try ComponentArray(entity_t).Init(ECSAllocator, ParentComponent);
+            try new_component_manager.mComponentsArrays.append(ECSAllocator, parent_array);
+
+            const child_array = try ComponentArray(entity_t).Init(ECSAllocator, ChildComponent);
+            try new_component_manager.mComponentsArrays.append(ECSAllocator, child_array);
 
             inline for (components_list) |component_type| {
                 const new_component_array = try ComponentArray(entity_t).Init(ECSAllocator, component_type);

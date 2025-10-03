@@ -62,7 +62,7 @@ pub fn Deinit(self: *ScriptAsset) !void {
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
         if (asset_type == ScriptAsset) {
-            break :blk i;
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
 };

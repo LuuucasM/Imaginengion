@@ -15,7 +15,7 @@ pub fn Deinit(_: *PlayerSlotComponent) !void {}
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == PlayerSlotComponent) {
-            break :blk i;
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
 };

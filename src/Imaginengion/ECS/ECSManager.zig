@@ -15,18 +15,20 @@ pub const ComponentCategory = enum {
 pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
     return struct {
         const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
+        const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
+        const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t),
-        mComponentManager: ComponentManager(entity_t, component_types_size),
+        mComponentManager: ComponentManager(entity_t, component_types_size + 2),
         mECSEventManager: ECSEventManager,
         mECSAllocator: std.mem.Allocator,
 
         pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_types: []const type) !Self {
             return Self{
                 .mEntityManager = EntityManager(entity_t).Init(ECSAllocator),
-                .mComponentManager = try ComponentManager(entity_t, component_types_size).Init(ECSAllocator, components_types),
-                .mECSEventManager = ECSEventManager.Init(ECSAllocator),
+                .mComponentManager = try ComponentManager(entity_t, component_types_size + 2).Init(ECSAllocator, components_types),
+                .mECSEventManager = try ECSEventManager.Init(ECSAllocator),
                 .mECSAllocator = ECSAllocator,
             };
         }
@@ -81,15 +83,55 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             try self.mComponentManager.EntityListIntersection(result, list2, allocator);
         }
 
-        //components related functions
+        pub fn AddChild(self: *Self, entity_id: entity_t) !entity_t {
+            const new_entity_id = try self.CreateEntity();
+
+            if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
+                const first_child_entity_id = parent_component.mFirstChild;
+                const first_child_component = self.GetComponent(ChildComponent, first_child_entity_id).?;
+
+                const last_child_entity_id = first_child_component.mPrev;
+                const last_child_component = self.GetComponent(ChildComponent, last_child_entity_id).?;
+
+                const new_child_component = ChildComponent{
+                    .mFirst = first_child_entity_id,
+                    .mNext = first_child_entity_id,
+                    .mParent = entity_id,
+                    .mPrev = last_child_entity_id,
+                };
+
+                _ = try self.AddComponent(ChildComponent, new_entity_id, new_child_component);
+
+                last_child_component.mNext = new_entity_id;
+
+                first_child_component.mPrev = new_entity_id;
+            } else {
+                const new_parent_component = ParentComponent{ .mFirstChild = new_entity_id };
+                _ = try self.AddComponent(ParentComponent, entity_id, new_parent_component);
+
+                const new_child_component = ChildComponent{
+                    .mFirst = new_entity_id,
+                    .mNext = new_entity_id,
+                    .mParent = entity_id,
+                    .mPrev = new_entity_id,
+                };
+
+                _ = try self.AddComponent(ChildComponent, new_entity_id, new_child_component);
+            }
+
+            return new_entity_id;
+        }
+
+        //--------components related functions----------
         pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
             const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
             defer zone.Deinit();
+
             var new_type_component: component_type = if (new_component) |c| c else component_type{};
 
             switch (component_type.Category) {
                 .Unique => {
-                    return try self.mComponentManager.AddComponent(component_type, entity_id, new_component);
+                    return try self.mComponentManager.AddComponent(component_type, entity_id, new_type_component);
                 },
                 .Multiple => {
                     const new_component_entity_id = try self.CreateEntity();
@@ -127,7 +169,7 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
                         new_type_component.mParent = entity_id;
                         new_type_component.mPrev = new_component_entity_id;
 
-                        try self.mComponentManager.AddComponent(component_type, entity_id, parent_component_type);
+                        _ = try self.mComponentManager.AddComponent(component_type, entity_id, parent_component_type);
                         return try self.mComponentManager.AddComponent(component_type, new_component_entity_id, new_type_component);
                     }
                 },
@@ -195,14 +237,51 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             }
         }
 
-        pub fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
+        fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
             self.mEntityManager.DestroyEntity(entity_id);
+            self._InternalRemoveFromHierarchy(entity_id);
             self.mComponentManager.DestroyEntity(entity_id, self.mECSEventManager);
         }
 
-        pub fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+        fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
             self.mEntityManager.DestroyEntity(entity_id);
+            self._InternalRemoveFromHierarchy(entity_id);
             self.mComponentManager.DestroyMultiEntity(entity_id);
+        }
+
+        fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) !void {
+            if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
+                var curr_id = parent_component.mFirstChild;
+                var curr_component = self.GetComponent(ChildComponent, curr_id).?;
+
+                while (true) {
+                    const next_id = curr_component.mNext;
+                    try self._InternalDestroyEntity(curr_id);
+                    if (next_id == parent_component.mFirstChild) break;
+                    curr_id = next_id;
+                    curr_component = self.GetComponent(ChildComponent, curr_id).?;
+                }
+            }
+
+            if (self.GetComponent(ChildComponent, entity_id)) |child_component| {
+                const parent_entity: entity_t = child_component.mParent;
+                if (self.GetComponent(ParentComponent, parent_entity)) |parent_component| {
+                    // If this is the only child, remove the ParentComponent from the parent
+                    if (child_component.mNext == entity_id and child_component.mPrev == entity_id) {
+                        try self.mComponentManager.RemoveComponent(ParentComponent, parent_entity);
+                    } else {
+                        // Relink siblings around this child
+                        const next_comp = self.GetComponent(ChildComponent, child_component.mNext).?;
+                        const prev_comp = self.GetComponent(ChildComponent, child_component.mPrev).?;
+                        next_comp.mPrev = child_component.mPrev;
+                        prev_comp.mNext = child_component.mNext;
+                        // If this child was the first, move first to next
+                        if (parent_component.mFirstChild == entity_id) {
+                            parent_component.mFirstChild = child_component.mNext;
+                        }
+                    }
+                }
+            }
         }
     };
 }
