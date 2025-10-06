@@ -12,7 +12,7 @@ pub const ComponentCategory = enum {
     Multiple,
 };
 
-pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
+pub fn ECSManager(entity_t: type, comptime components_types: []const type) type {
     return struct {
         const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
         const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
@@ -20,45 +20,59 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t),
-        mComponentManager: ComponentManager(entity_t, component_types_size + 2),
+        mComponentManager: ComponentManager(entity_t, components_types),
         mECSEventManager: ECSEventManager,
         mECSAllocator: std.mem.Allocator,
 
-        pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_types: []const type) !Self {
+        pub fn Init(ECSAllocator: std.mem.Allocator) !Self {
+            const zone = Tracy.ZoneInit("ECSM Init", @src());
+            defer zone.Deinit();
             return Self{
                 .mEntityManager = EntityManager(entity_t).Init(ECSAllocator),
-                .mComponentManager = try ComponentManager(entity_t, component_types_size + 2).Init(ECSAllocator, components_types),
+                .mComponentManager = try ComponentManager(entity_t, components_types.len + 2).Init(ECSAllocator, components_types),
                 .mECSEventManager = try ECSEventManager.Init(ECSAllocator),
                 .mECSAllocator = ECSAllocator,
             };
         }
 
         pub fn Deinit(self: *Self) void {
+            const zone = Tracy.ZoneInit("ECSM Deinit", @src());
+            defer zone.Deinit();
             self.mEntityManager.Deinit();
             self.mComponentManager.Deinit();
         }
 
         pub fn clearAndFree(self: *Self) void {
+            const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
+            defer zone.Deinit();
             self.mEntityManager.clearAndFree();
             self.mComponentManager.clearAndFree();
         }
 
         //---------------EntityManager--------------
         pub fn CreateEntity(self: *Self) !entity_t {
+            const zone = Tracy.ZoneInit("ECSM CreateEntity", @src());
+            defer zone.Deinit();
             const entityID = try self.mEntityManager.CreateEntity();
             try self.mComponentManager.CreateEntity(entityID);
             return entityID;
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t) !void {
+            const zone = Tracy.ZoneInit("ECSM DestroyEntity", @src());
+            defer zone.Deinit();
             try self.mECSEventManager.Insert(.{ .ET_DestroyEntity = .{ .mEntityID = entity_id } });
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
+            const zone = Tracy.ZoneInit("ECSM GetAllEntities", @src());
+            defer zone.Deinit();
             return self.mEntityManager.GetAllEntities();
         }
 
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t) !entity_t {
+            const zone = Tracy.ZoneInit("ECSM DuplicateEntity", @src());
+            defer zone.Deinit();
             const new_entity_id = try self.CreateEntity();
             self.mComponentManager.DuplicateEntity(original_entity_id, new_entity_id);
             return new_entity_id;
@@ -84,6 +98,8 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn AddChild(self: *Self, entity_id: entity_t) !entity_t {
+            const zone = Tracy.ZoneInit("ECSM AddChild", @src());
+            defer zone.Deinit();
             const new_entity_id = try self.CreateEntity();
 
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
@@ -176,40 +192,10 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             }
         }
 
-        pub fn RemoveComponent(self: *Self, comptime component_type: type, entity_id: entity_t) !void {
+        pub fn RemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
             defer zone.Deinit();
-            switch (component_type.Category) {
-                .Unique => {
-                    //in this case the entity ID is just simply the entity we want to remove the component from
-                    try self.mComponentManager.RemoveComponent(component_type, entity_id);
-                },
-                .Multiple => {
-                    //entity_id in this case refers to the entity id of the component we want to remove not the parent
-                    //multi components always have their own entity_id so we can just ensure linked list pointers are updated
-                    //and then destroy the entity
-                    const remove_component = self.GetComponent(component_type, entity_id).?;
-                    const parent_component = self.GetComponent(component_type, remove_component.mParent).?;
-
-                    if (remove_component.mNext == entity_id and remove_component.mPrev == entity_id) {
-                        //case: this is the only one of this type of component so we can fully remove from parent
-                        try self.mComponentManager.RemoveComponent(component_type, remove_component.mParent);
-                    } else {
-                        //case: there are multiples of this component
-                        const next_component = self.GetComponent(component_type, remove_component.mNext).?;
-                        const prev_component = self.GetComponent(component_type, remove_component.mPrev).?;
-
-                        next_component.mPrev = remove_component.mPrev;
-                        prev_component.mNext = remove_component.mNext;
-
-                        if (parent_component.mFirst == entity_id) {
-                            parent_component.mFirst = remove_component.mNext;
-                        }
-                    }
-
-                    try self.DestroyEntity(entity_id);
-                },
-            }
+            try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entityID: entity_t) bool {
@@ -225,11 +211,14 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         pub fn ProcessEvents(self: *Self, event_category: ECSEventCategory) !void {
+            const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
+            defer zone.Deinit();
             var iter = self.mECSEventManager.GetEventsIteartor(event_category);
             while (iter.Next()) |event| {
                 switch (event) {
                     .ET_DestroyEntity => |e| try self._InternalDestroyEntity(e.mEntityID),
                     .ET_CleanMultiEntity => |e| try self._InternalDestroyMultiEntity(e.mEntityID),
+                    .ET_RemoveComponent => |e| try self._InternalRemoveComponent(e.mEntityID, e.mComponentInd),
                     else => {
                         @panic("Default Events are not allowed!\n");
                     },
@@ -237,20 +226,67 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
             }
         }
 
+        fn _InternalRemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+            const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
+            defer zone.Deinit();
+            const component_category = self.mComponentManager.mComponentsArrays.items[component_ind].GetCategory();
+            switch (component_category) {
+                .Unique => {
+                    //in this case the entity ID is just simply the entity we want to remove the component from
+                    try self.mComponentManager.RemoveComponent(entity_id, component_ind);
+                },
+                .Multiple => {
+                    //entity_id in this case refers to the entity id of the component we want to remove not the parent
+                    //multi components always have their own entity_id so we can just ensure linked list pointers are updated
+                    //and then destroy the entity
+                    //0 -> mParent, 1 -> mFirst, 2 -> mNext, 3 -> mPrev
+                    const removed_multidata = self.mComponentManager.GetMultiData(entity_id, component_ind);
+                    const parent_multidata = self.mComponentManager.GetMultiData(removed_multidata[0], component_ind);
+
+                    if (removed_multidata[2] == entity_id and removed_multidata[3] == entity_id) {
+                        //case: this is the only one of this type of component so we can fully remove from parent
+                        try self.mComponentManager.RemoveComponent(removed_multidata[0], component_ind);
+                    } else {
+                        //case: there are multiples of this component
+                        var next_multidata = self.mComponentManager.GetMultiData(removed_multidata[2], component_ind);
+                        var prev_multidata = self.mComponentManager.GetMultiData(removed_multidata[3], component_ind);
+
+                        next_multidata[3] = removed_multidata[3];
+                        prev_multidata[2] = removed_multidata[2];
+
+                        self.mComponentManager.SetMultiData(removed_multidata[2], component_ind, next_multidata);
+                        self.mComponentManager.SetMultiData(removed_multidata[3], component_ind, prev_multidata);
+
+                        if (parent_multidata[1] == entity_id) {
+                            parent_multidata[1] = removed_multidata[2];
+                            self.mComponentManager.SetMultiData(removed_multidata[0], component_ind, parent_multidata);
+                        }
+                    }
+
+                    try self._InternalDestroyMultiEntity(entity_id);
+                },
+            }
+        }
+
         fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
+            const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
+            defer zone.Deinit();
             self.mEntityManager.DestroyEntity(entity_id);
             self._InternalRemoveFromHierarchy(entity_id);
             self.mComponentManager.DestroyEntity(entity_id, self.mECSEventManager);
         }
 
         fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+            const zone = Tracy.ZoneInit("ECSM Internal Destroy MultiEntity", @src());
+            defer zone.Deinit();
             self.mEntityManager.DestroyEntity(entity_id);
             self._InternalRemoveFromHierarchy(entity_id);
             self.mComponentManager.DestroyMultiEntity(entity_id);
         }
 
         fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) !void {
-
+            const zone = Tracy.ZoneInit("ECSM Internal Remove From Hierarchy", @src());
+            defer zone.Deinit();
             //delete all children
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
                 var curr_id = parent_component.mFirstChild;

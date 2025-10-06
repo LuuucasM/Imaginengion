@@ -312,7 +312,7 @@ fn HandleEntityContextMenu(_: *ScenePanel, entity: Entity, entity_name: [*:0]con
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            try scene_layer.AddChildEntity(entity);
+            _ = try scene_layer.AddChildEntity(entity);
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {

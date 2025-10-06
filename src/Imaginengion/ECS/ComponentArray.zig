@@ -12,16 +12,19 @@ pub fn ComponentArray(entity_t: type) type {
         clearAndFree: *const fn (*anyopaque) void,
         GetCategory: *const fn (*anyopaque) ComponentCategory,
         DestroyEntity: *const fn (*anyopaque, entity_t, *ECSEventManager) anyerror!void,
+        GetComponent: *const fn (*anyopaque, entity_t) *anyopaque,
+        GetMultiData: *const fn (*anyopaque, entity_t) @Vector(4, entity_t),
+        SetMultiData: *const fn (*anyopaque, entity_t, @Vector(4, entity_t)) void,
     };
     return struct {
         const Self = @This();
+
         mPtr: *anyopaque,
         mVtable: *const VTab,
         mAllocator: std.mem.Allocator,
 
         pub fn Init(allocator: std.mem.Allocator, comptime component_type: type) !Self {
             const internal_type = InternalComponentArray(entity_t, component_type);
-
             const impl = struct {
                 fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) !void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -52,6 +55,23 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.DestroyEntity(entity_id, ecs_event_manager);
                 }
+                fn GetComponent(ptr: *anyopaque, entity_id: entity_t) *anyopaque {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    // Internal returns ?*component_type; return null as null pointer when absent
+                    if (self.GetComponent(entity_id)) |comp| {
+                        return comp;
+                    } else {
+                        return @ptrFromInt(0);
+                    }
+                }
+                fn GetMultiData(ptr: *anyopaque, entity_id: entity_t) @Vector(4, entity_t) {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    return self.GetMultiData(entity_id);
+                }
+                fn SetMultiData(ptr: *anyopaque, entity_id: entity_t, multi_data: @Vector(4, entity_t)) void {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    self.SetMultiData(entity_id, multi_data);
+                }
             };
 
             const new_component_array = try allocator.create(internal_type);
@@ -67,6 +87,9 @@ pub fn ComponentArray(entity_t: type) type {
                     .clearAndFree = impl.clearAndFree,
                     .GetCategory = impl.GetCategory,
                     .DestroyEntity = impl.DestroyEntity,
+                    .GetComponent = impl.GetComponent,
+                    .GetMultiData = impl.GetMultiData,
+                    .SetMultiData = impl.SetMultiData,
                 },
                 .mAllocator = allocator,
             };
@@ -92,7 +115,16 @@ pub fn ComponentArray(entity_t: type) type {
         }
 
         pub fn GetCategory(self: Self) ComponentCategory {
-            self.mVtable.GetCategory(self.mPtr);
+            return self.mVtable.GetCategory(self.mPtr);
+        }
+        pub fn GetComponent(self: Self, entity_id: entity_t) *anyopaque {
+            return self.mVtable.GetComponent(self.mPtr, entity_id);
+        }
+        pub fn GetMultiData(self: Self, entity_id: entity_t) @Vector(4, entity_t) {
+            return self.mVtable.GetMultiData(self.mPtr, entity_id);
+        }
+        pub fn SetMultiData(self: Self, entity_id: entity_t, multi_data: @Vector(4, entity_t)) void {
+            self.mVtable.SetMultiData(self.mPtr, entity_id, multi_data);
         }
     };
 }

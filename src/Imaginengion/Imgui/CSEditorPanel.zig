@@ -113,11 +113,11 @@ pub fn OnSelectScriptEvent(self: *CSEditorPanel, new_editor_window: EditorWindow
 pub fn RmEntityComp(self: *CSEditorPanel, component_ptr: *anyopaque) !void {
     var iter = self.mEditorWindows.iterator();
     while (iter.next()) |entry| {
-        const id_name = entry.key_ptr;
+        const id_name = entry.key_ptr.*;
         const editor_window = entry.value_ptr;
         if (editor_window.mPtr == component_ptr) {
             //this will invalidate iter but we know there is only 1 possible so we can return here
-            self.mEditorWindows.orderedRemove(id_name);
+            _ = self.mEditorWindows.orderedRemove(id_name);
             return;
         }
     }

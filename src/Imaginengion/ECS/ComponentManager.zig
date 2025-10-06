@@ -16,7 +16,7 @@ pub const GroupQuery = union(enum) {
     Component: type,
 };
 
-pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
+pub fn ComponentManager(entity_t: type, comptime components_types: []const type) type {
     return struct {
         const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
         const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
@@ -28,7 +28,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
         mEntitySkipField: SparseSet(.{
             .SparseT = entity_t,
             .DenseT = entity_t,
-            .ValueT = StaticSkipField(component_type_size),
+            .ValueT = StaticSkipField(components_types.len),
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
         }),
@@ -40,7 +40,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 .mEntitySkipField = try SparseSet(.{
                     .SparseT = entity_t,
                     .DenseT = entity_t,
-                    .ValueT = StaticSkipField(component_type_size),
+                    .ValueT = StaticSkipField(components_types.len),
                     .value_layout = .InternalArrayOfStructs,
                     .allow_resize = .ResizeAllowed,
                 }).init(ECSAllocator, 20, 10),
@@ -82,22 +82,22 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
         pub fn CreateEntity(self: *Self, entityID: entity_t) !void {
             std.debug.assert(!self.mEntitySkipField.HasSparse(entityID));
             const dense_ind = self.mEntitySkipField.add(entityID);
-            self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(component_type_size).Init(.AllSkip);
+            self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(components_types.len).Init(.AllSkip);
         }
 
-        pub fn DestroyEntity(self: *Self, entityID: entity_t, ecs_event_manager: ECSEventManager) !void {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
+        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) !void {
+            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
 
             // Remove all components from this entity
-            const entity_skipfield = self.mEntitySkipField.getValueBySparse(entityID);
+            const entity_skipfield = self.mEntitySkipField.getValueBySparse(entity_id);
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(entityID, ecs_event_manager);
+                self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(entity_id, ecs_event_manager);
             }
 
             // Remove entity from skip field
-            _ = self.mEntitySkipField.remove(entityID);
+            _ = self.mEntitySkipField.remove(entity_id);
         }
 
         pub fn DestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
@@ -108,7 +108,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
+                self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
             }
 
             // Remove entity from skip field
@@ -137,25 +137,31 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
 
             self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_type.Ind);
 
-            return try @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).AddComponent(entityID, component);
+            const internal_array_t = InternalComponentArray(entity_t, component_type);
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+
+            return try internal_array.AddComponent(entityID, component);
         }
 
-        pub fn RemoveComponent(self: *Self, comptime component_type: type, entityID: entity_t) !void {
-            std.debug.assert(@hasDecl(component_type, "Ind"));
-            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-            std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-            std.debug.assert(self.HasComponent(component_type, entityID));
+        pub fn RemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
+            std.debug.assert(component_ind < self.mComponentsArrays.items.len);
+            std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
 
-            self.mEntitySkipField.getValueBySparse(entityID).ChangeToSkipped(component_type.Ind);
+            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(component_ind);
 
-            return try self.mComponentsArrays.items[component_type.Ind].RemoveComponent(entityID);
+            try self.mComponentsArrays.items[component_ind].RemoveComponent(entity_id);
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {
             std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-            return @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).HasComponent(entityID);
+
+            const internal_array_t = InternalComponentArray(entity_t, component_type);
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+
+            return internal_array.HasComponent(entityID);
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) ?*component_type {
@@ -163,7 +169,26 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
             std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
 
-            return @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetComponent(entityID);
+            const internal_array_t = InternalComponentArray(entity_t, component_type);
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+
+            return internal_array.GetComponent(entityID);
+        }
+
+        pub fn GetMultiData(self: Self, entity_id: entity_t, component_ind: usize) @Vector(4, entity_t) {
+            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
+            std.debug.assert(component_ind < self.mComponentsArrays.items.len);
+            std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
+
+            return self.mComponentsArrays.items[component_ind].GetMultiData(entity_id);
+        }
+
+        pub fn SetMultiData(self: Self, entity_id: entity_t, component_ind: usize, multi_data: @Vector(4, entity_t)) void {
+            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
+            std.debug.assert(component_ind < self.mComponentsArrays.items.len);
+            std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
+
+            self.mComponentsArrays.items[component_ind].SetMultiData(entity_id, multi_data);
         }
 
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
@@ -171,7 +196,11 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                 .Component => |component_type| {
                     std.debug.assert(@hasDecl(component_type, "Ind"));
                     std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-                    return try @as(*InternalComponentArray(entity_t, component_type), @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr))).GetAllEntities(allocator);
+
+                    const internal_array_t = InternalComponentArray(entity_t, component_type);
+                    const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+
+                    return try internal_array.GetAllEntities(allocator);
                 },
                 .Not => |not| {
                     var result = try self.GetGroup(not.mFirst, allocator);

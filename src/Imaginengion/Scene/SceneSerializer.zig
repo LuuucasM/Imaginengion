@@ -359,6 +359,6 @@ fn DeserializeCameraComponent(entity: Entity, engine_allocator: std.mem.Allocato
 }
 
 fn DeSerializeParentComponent(reader: *std.json.Reader, entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) anyerror!void {
-    const new_entity = scene_layer.AddChildEntity(entity);
+    const new_entity = try scene_layer.AddChildEntity(entity);
     try DeSerializeEntity(reader, new_entity, scene_layer, frame_allocator, engine_allocator);
 }

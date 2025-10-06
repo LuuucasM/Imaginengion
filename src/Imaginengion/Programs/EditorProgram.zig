@@ -517,7 +517,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         },
         .ET_RmEntityCompEvent => |e| {
             //if the component has an editor window open close it
-            self._CSEditorPanel.RmEntityComp(e.mComponent_ptr);
+            try self._CSEditorPanel.RmEntityComp(e.mComponent_ptr);
         },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
@@ -534,10 +534,10 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
             try self.mGameSceneManager.RemoveScene(scene, self.mFrameAllocator);
         },
         .ET_RmEntityCompEvent => |e| {
-            try self.mGameSceneManager.RmEntityComp(e.mEntity, e.mComponentInd);
+            try self.mGameSceneManager.RmEntityComp(e.mEntityID, e.mComponentType);
         },
         .ET_RmSceneCompEvent => |e| {
-            try self.mGameSceneManager.RmSceneComp(e.mScene, e.mComponentInd);
+            try self.mGameSceneManager.RmSceneComp(e.mSceneID, e.mComponentType);
         },
         else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
     }
@@ -546,7 +546,7 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play) {
         try self.mGameSceneManager.SaveAllScenes(self.mFrameAllocator);
-        _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{});
+        _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{}, self.mFrameAllocator);
     } else { //stop
         try self.mGameSceneManager.ReloadAllScenes(self.mFrameAllocator);
 
