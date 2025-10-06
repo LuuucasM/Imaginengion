@@ -26,8 +26,8 @@ pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
 
 pub fn Deinit(self: *ScriptComponent) !void {
-    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-        AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
+    if (self.mScriptAssetHandle) |*asset_handle| {
+        AssetManager.ReleaseAssetHandleRef(asset_handle);
     }
 }
 
@@ -59,8 +59,8 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
 
     try jw.objectField("FilePath");
 
-    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-        const asset_file_data = try self.mScriptAssetHandle.GetAsset(FileMetaData);
+    if (self.mScriptAssetHandle) |asset_handle| {
+        const asset_file_data = try asset_handle.GetAsset(FileMetaData);
         try jw.write(asset_file_data.mRelPath.items);
     } else {
         try jw.write("No Script Asset");

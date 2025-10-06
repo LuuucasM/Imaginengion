@@ -8,7 +8,7 @@ pub fn ParentComponent(entity_t: type) type {
         pub const Category: ComponentCategory = .Unique;
         pub const Editable: bool = false;
 
-        mFirstChild: entity_t,
+        mFirstChild: entity_t = std.math.maxInt(entity_t),
 
         pub fn Deinit(_: *Self) !void {}
 
@@ -32,10 +32,10 @@ pub fn ChildComponent(entity_t: type) type {
         pub const Category: ComponentCategory = .Unique;
         pub const Editable: bool = false;
 
-        mFirst: entity_t,
-        mPrev: entity_t,
-        mNext: entity_t,
-        mParent: entity_t,
+        mFirst: entity_t = std.math.maxInt(entity_t),
+        mPrev: entity_t = std.math.maxInt(entity_t),
+        mNext: entity_t = std.math.maxInt(entity_t),
+        mParent: entity_t = std.math.maxInt(entity_t),
 
         pub fn Deinit(_: *Self) !void {}
 

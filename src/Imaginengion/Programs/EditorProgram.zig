@@ -262,7 +262,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
             try scene_spec_panel.OnImguiRender(self.mFrameAllocator);
         }
         try self._ComponentsPanel.OnImguiRender();
-        try self._ScriptsPanel.OnImguiRender();
+        try self._ScriptsPanel.OnImguiRender(self.mFrameAllocator);
         try self._CSEditorPanel.OnImguiRender();
 
         //----------------rendering game world to screen-------------

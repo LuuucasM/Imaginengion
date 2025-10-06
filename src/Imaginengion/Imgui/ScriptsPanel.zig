@@ -54,29 +54,30 @@ pub fn OnImguiRender(self: ScriptsPanel, frame_allocator: std.mem.Allocator) !vo
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
             if (entity.GetComponent(EntityScriptComponent)) |script_component| {
-                var ecs = entity.mECSManagerRef;
-                const curr_id = script_component.mFirst;
-                const curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id);
+                const ecs = entity.mECSManagerRef;
+
+                var curr_id = script_component.mFirst;
+                var curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
 
                 while (true) : (if (curr_id == script_component.mFirst) break) {
-                    defer curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
-                    defer curr_id = curr_comp.mNext;
-
                     if (curr_comp.mScriptAssetHandle) |asset_handle| {
-                        const script_file_data = asset_handle.GetAsset(FileMetaData);
+                        const script_file_data = try asset_handle.GetAsset(FileMetaData);
 
-                        const script_name = std.fmt.allocPrint(frame_allocator, std.fs.path.basename(script_file_data.mRelPath) ++ "###{d}", .{curr_id});
+                        const script_name = try std.fmt.allocPrint(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id });
 
-                        if (imgui.igSelectable_Bool(script_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
+                        if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
 
-                        if (imgui.igBeginPopupContextItem(script_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+                        if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                             defer imgui.igEndPopup();
 
                             if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                                try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntity = curr_id, .mComponentInd = EntityScriptComponent.Ind } });
+                                try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
                             }
                         }
                     }
+
+                    curr_id = curr_comp.mNext;
+                    curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
                 }
             }
         }

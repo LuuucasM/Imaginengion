@@ -118,35 +118,33 @@ pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
 }
 
 fn EntityImguiRender(entity: Entity) !void {
-    ComponentRender(EntityIDComponent, entity);
-    ComponentRender(EntityNameComponent, entity);
-    ComponentRender(TransformComponent, entity);
-    ComponentRender(CameraComponent, entity);
-    ComponentRender(QuadComponent, entity);
-    ComponentRender(AISlotComponent, entity);
-    ComponentRender(PlayerSlotComponent, entity);
+    try ComponentRender(EntityIDComponent, entity);
+    try ComponentRender(EntityNameComponent, entity);
+    try ComponentRender(TransformComponent, entity);
+    try ComponentRender(CameraComponent, entity);
+    try ComponentRender(QuadComponent, entity);
+    try ComponentRender(AISlotComponent, entity);
+    try ComponentRender(PlayerSlotComponent, entity);
 }
 
-fn ComponentRender(comptime component_type: type, entity: Entity) void {
+fn ComponentRender(comptime component_type: type, entity: Entity) !void {
     if (entity.HasComponent(component_type)) {
         if (component_type.Category == .Unique) {
             //single unique component so we can just get and display component
-            PrintComponent(component_type, entity);
+            try PrintComponent(component_type, entity);
         } else {
             //it is a multi component so we need to get the parents component and then
             //get first and then we can iterate creating a selectable bool for each one
-            const ecs = entity.mECSManagerRef;
             if (entity.GetComponent(component_type)) |component| {
-                const curr_id = component.mFirst;
-                const curr_comp = ecs.GetComponent(component_type, curr_id);
+                var curr_id = component.mFirst;
                 //the : (stuff) gets evaluated at the end of the loop so its equivalent to a
                 //do-while loop
                 while (true) : (if (curr_id == component.mFirst) break) {
-                    defer curr_comp = ecs.GetComponent(component_type, curr_id);
-                    defer curr_id = curr_comp.mNext;
-
                     const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
                     PrintComponent(component_type, component_entity);
+
+                    const curr_comp = component_entity.GetComponent(component_type).?;
+                    curr_id = curr_comp.mNext;
                 }
             }
         }
@@ -165,7 +163,7 @@ fn PrintComponent(comptime component_type: type, entity: Entity) !void {
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntity = entity.mEntityID, .mComponentInd = component_type.Ind } });
+            try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = entity.mEntityID, .mComponentType = @enumFromInt(component_type.Ind) } });
             try ImguiEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
         }
     }

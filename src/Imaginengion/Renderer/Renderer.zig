@@ -17,8 +17,8 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const CameraComponent = EntityComponents.CameraComponent;
-const EntityChildComponent = EntityComponents.ChildComponent;
-const EntityParentComponent = EntityComponents.ParentComponent;
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
+const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -165,9 +165,10 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
     defer zone.Deinit();
 
     const parent_component = entity.GetComponent(EntityParentComponent).?;
+
     var curr_id = parent_component.mFirstChild;
 
-    while (curr_id != Entity.NullEntity) {
+    while (true) : (if (curr_id == parent_component.mFirstChild) break) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
         try DrawShape(child_entity, parent_transform);

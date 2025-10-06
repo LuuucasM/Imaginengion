@@ -181,6 +181,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                     return result;
                 },
                 .Or => |ors| {
+                    std.debug.assert(ors.len > 0);
                     var result = try self.GetGroup(ors[0], allocator);
                     inline for (ors[1..]) |or_query| {
                         var intermediate = try self.GetGroup(or_query, allocator);
@@ -190,6 +191,7 @@ pub fn ComponentManager(entity_t: type, component_type_size: usize) type {
                     return result;
                 },
                 .And => |ands| {
+                    std.debug.assert(ands.len > 0);
                     var result = try self.GetGroup(ands[0], allocator);
                     inline for (ands[1..]) |and_query| {
                         var intermediate = try self.GetGroup(and_query, allocator);

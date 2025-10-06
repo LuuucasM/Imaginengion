@@ -4,8 +4,8 @@ const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
 const NameComponent = Components.NameComponent;
 const CameraComponent = Components.CameraComponent;
-const EntityParentComponent = Components.ParentComponent;
-const EntityChildComponent = Components.ChildComponent;
+const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const PlayerSlotComponent = Components.PlayerSlotComponent;
 const Tracy = @import("../Core/Tracy.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
@@ -60,7 +60,7 @@ pub fn GetCameraEntity(self: Entity) ?Entity {
     if (self.GetComponent(EntityParentComponent)) |parent_component| {
         var curr_id = parent_component.mFirstChild;
 
-        while (curr_id != Entity.NullEntity) {
+        while (true) : (if (curr_id == parent_component.mFirstChild) break) {
             const child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = self.mECSManagerRef };
 
             if (child_entity.HasComponent(CameraComponent)) {

@@ -21,8 +21,8 @@ const SceneNameComponent = SceneComponents.NameComponent;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
-const EntityParentComponent = EntityComponents.ParentComponent;
-const EntityChildComponent = EntityComponents.ChildComponent;
+const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -312,7 +312,7 @@ fn HandleEntityContextMenu(_: *ScenePanel, entity: Entity, entity_name: [*:0]con
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            try GameObjectUtils.AddChildEntity(entity, scene_layer);
+            try scene_layer.AddChildEntity(entity);
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
@@ -321,15 +321,17 @@ fn HandleEntityContextMenu(_: *ScenePanel, entity: Entity, entity_name: [*:0]con
     }
 }
 fn RenderChildEntities(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) anyerror!void {
-    const entity_parent_component = parent_entity.GetComponent(EntityParentComponent).?;
-    var curr_id = entity_parent_component.mFirstChild;
+    if (parent_entity.GetComponent(EntityParentComponent)) |parent_component| {
+        var curr_id = parent_component.mFirstChild;
 
-    while (curr_id != Entity.NullEntity) {
-        const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
-        try self.RenderEntity(child_entity, scene_layer, already_popup, frame_allocator);
+        while (true) : (if (curr_id == parent_component.mFirstChild) break) {
+            const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
 
-        const child_component = child_entity.GetComponent(EntityChildComponent).?;
-        curr_id = child_component.mNext;
+            try self.RenderEntity(child_entity, scene_layer, already_popup, frame_allocator);
+
+            const child_component = child_entity.GetComponent(EntityChildComponent).?;
+            curr_id = child_component.mNext;
+        }
     }
 }
 

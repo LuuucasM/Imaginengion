@@ -86,22 +86,21 @@ pub fn ComponentArray(comptime entity_t: type, comptime componentType: type) typ
             return componentType.Category;
         }
         pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+            std.debug.assert(self.mComponents.HasSparse(entity_id));
+
             if (componentType.Category == .Multiple) {
-                std.debug.assert(self.mComponents.HasSparse(entity_id));
-                const component = self.mComponents.getValueBySparse(entity_id);
-                var curr_id = entity_id;
-                var curr_component = component;
+                const first_component = self.mComponents.getValueBySparse(entity_id);
 
-                //step forward manually once because we dont want to call internal multi destroy
-                //on the parent entity (entity_id) we want to create an event for all of the children
-                curr_id = curr_component.mNext;
-                curr_component = self.mComponents.getValueBySparse(curr_id);
+                var curr_id = first_component.mNext;
+                var curr_component = self.mComponents.getValueBySparse(curr_id);
 
-                while (true) : (if (curr_id == component.mFirst) break) {
-                    const next_id = curr_component.mNext;
+                //start fromt he second component in the list (if there is one) because we will manually
+                //delete the first component after iterating through (possible) children
+
+                while (curr_id != entity_id) {
                     try ecs_event_manager.Insert(.{ .ET_CleanMultiEntity = .{ .mEntityID = curr_id } });
-                    if (next_id == component.mFirst) break;
-                    curr_id = next_id;
+
+                    curr_id = curr_component.mNext;
                     curr_component = self.mComponents.getValueBySparse(curr_id);
                 }
             }

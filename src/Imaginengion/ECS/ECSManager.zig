@@ -250,19 +250,22 @@ pub fn ECSManager(entity_t: type, comptime component_types_size: usize) type {
         }
 
         fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) !void {
+
+            //delete all children
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
                 var curr_id = parent_component.mFirstChild;
                 var curr_component = self.GetComponent(ChildComponent, curr_id).?;
 
-                while (true) {
+                while (true) : (if (curr_id == parent_component.mFirstChild) break) {
                     const next_id = curr_component.mNext;
                     try self._InternalDestroyEntity(curr_id);
-                    if (next_id == parent_component.mFirstChild) break;
+
                     curr_id = next_id;
                     curr_component = self.GetComponent(ChildComponent, curr_id).?;
                 }
             }
 
+            //remove from child hierarchy if we are in one
             if (self.GetComponent(ChildComponent, entity_id)) |child_component| {
                 const parent_entity: entity_t = child_component.mParent;
                 if (self.GetComponent(ParentComponent, parent_entity)) |parent_component| {

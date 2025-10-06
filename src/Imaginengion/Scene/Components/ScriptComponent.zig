@@ -28,12 +28,14 @@ mFirst: SceneType = SceneLayer.NullScene,
 mPrev: SceneType = SceneLayer.NullScene,
 mNext: SceneType = SceneLayer.NullScene,
 mParent: SceneType = SceneLayer.NullScene,
-mScriptAssetHandle: AssetHandle = .{ .mID = AssetHandle.NullHandle },
+mScriptAssetHandle: ?AssetHandle = null,
 
 pub const Category: ComponentCategory = .Multiple;
 
 pub fn Deinit(self: *ScriptComponent) !void {
-    AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
+    if (self.mScriptAssetHandle) |*asset_handle| {
+        AssetManager.ReleaseAssetHandleRef(asset_handle);
+    }
 }
 
 pub fn GetName(self: ScriptComponent) []const u8 {
@@ -51,8 +53,8 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
 
     try jw.objectField("FilePath");
 
-    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-        const asset_file_data = try self.mScriptAssetHandle.GetAsset(FileMetaData);
+    if (self.mScriptAssetHandle) |asset_handle| {
+        const asset_file_data = try asset_handle.GetAsset(FileMetaData);
         try jw.write(asset_file_data.mRelPath.items);
     } else {
         try jw.write("No Script Asset");

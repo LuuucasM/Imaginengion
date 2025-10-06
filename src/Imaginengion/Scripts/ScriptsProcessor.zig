@@ -44,6 +44,7 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
             @compileError("Cannot use this type as a Entity Script type!");
         }
     }
+
     const ecs_manager_go = scene_manager.mECSManagerGO;
 
     const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, frame_allocator);
@@ -58,57 +59,58 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_go.GetComponent(EntityScriptComponent, script_id).?;
-            const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
-            const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
+            if (script_component.mScriptAssetHandle) |asset_handle| {
+                const script_asset = try asset_handle.GetAsset(ScriptAsset);
 
-            var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
+                const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
-            const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &entity } ++ args;
+                var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
 
-            cont_bool = cont_bool and @call(.auto, run_func, combined_args);
+                const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &entity } ++ args;
+
+                cont_bool = cont_bool and @call(.auto, run_func, combined_args);
+            }
         }
     }
     return cont_bool;
 }
 
-pub fn RunSceneScript(scene_manager: *SceneManager, comptime script_type: type, args: anytype) !bool {
+pub fn RunSceneScript(scene_manager: *SceneManager, comptime script_type: type, args: anytype, frame_allocator: std.mem.Allocator) !bool {
     comptime {
         if (script_type != OnSceneStartScript) {
             @compileError("Cannot use this type as a Scene Script type!");
         }
     }
-    //TODO: change to new scene system
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
 
     const ecs_manager_sc = scene_manager.mECSManagerSC;
 
-    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, allocator);
+    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, frame_allocator);
     std.sort.insertion(SceneType, scene_stack_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
 
     var cont_bool = true;
     for (scene_stack_scenes.items) |scene_id| {
         if (cont_bool == false) break;
 
-        var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, allocator);
-        scene_manager.FilterSceneScriptsByScene(&scene_scripts, scene_id, allocator);
+        var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
+        scene_manager.FilterSceneScriptsByScene(&scene_scripts, scene_id, frame_allocator);
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_sc.GetComponent(SceneScriptComponent, script_id).?;
-            const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
-            const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
+            if (script_component.mScriptAssetHandle) |asset_handle| {
+                const script_asset = try asset_handle.GetAsset(ScriptAsset);
+                const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
-            var scene = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
+                var scene = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
 
-            const combined_args = .{ StaticEngineContext.GetInstance(), &allocator, &scene } ++ args;
+                const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &scene } ++ args;
 
-            cont_bool = cont_bool and @call(.auto, run_func, combined_args);
+                cont_bool = cont_bool and @call(.auto, run_func, combined_args);
+            }
         }
     }
     return cont_bool;
 }
-pub fn RunEntityScriptEditor(scene_manager: *SceneManager, comptime script_type: type, args: anytype, editor_scene_layer: *SceneLayer) !bool {
+pub fn RunEntityScriptEditor(scene_manager: *SceneManager, comptime script_type: type, args: anytype, editor_scene_layer: *SceneLayer, frame_allocator: std.mem.Allocator) !bool {
     comptime {
         if (script_type != OnInputPressedScript and
             script_type != OnUpdateInputScript)
@@ -116,56 +118,52 @@ pub fn RunEntityScriptEditor(scene_manager: *SceneManager, comptime script_type:
             @compileError("Cannot use this type as a Entity Script type!");
         }
     }
-    //TODO: change to new scene system
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
 
     const ecs_manager_go = scene_manager.mECSManagerGO;
 
-    var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, allocator);
+    var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
     scene_manager.FilterEntityScriptsByScene(&scene_scripts, editor_scene_layer.mSceneID);
 
     for (scene_scripts.items) |script_id| {
         const script_component = ecs_manager_go.GetComponent(EntityScriptComponent, script_id);
-        const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
-        const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
+        if (script_component.mScriptAssetHandle) |asset_handle| {
+            const script_asset = try asset_handle.GetAsset(ScriptAsset);
+            const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
-        var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
+            var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
 
-        const combined_args = .{ StaticEngineContext.GetInstance(), &allocator, &entity } ++ args;
+            const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &entity } ++ args;
 
-        _ = @call(.auto, run_func, combined_args);
+            _ = @call(.auto, run_func, combined_args);
+        }
     }
     return true;
 }
 
-pub fn RunSceneScriptEditor(scene_manager: *SceneManager, comptime script_type: type, args: anytype, editor_scene_layer: *SceneLayer) !bool {
+pub fn RunSceneScriptEditor(scene_manager: *SceneManager, comptime script_type: type, args: anytype, editor_scene_layer: *SceneLayer, frame_allocator: std.mem.Allocator) !bool {
     comptime {
         if (script_type != OnSceneStartScript) {
             @compileError("Cannot use this type as a Scene Script type!");
         }
     }
-    //TODO: change to new scene system
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
 
     const ecs_manager_sc = scene_manager.mECSManagerSC;
 
-    var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, allocator);
+    var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
     scene_manager.FilterSceneScriptsByScene(&scene_scripts, editor_scene_layer.mSceneID);
 
     for (scene_scripts.items) |script_id| {
         const script_component = ecs_manager_sc.GetComponent(SceneScriptComponent, script_id);
-        const script_asset = try script_component.mScriptAssetHandle.GetAsset(ScriptAsset);
-        const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
+        if (script_component.mScriptAssetHandle) |asset_handle| {
+            const script_asset = try asset_handle.GetAsset(ScriptAsset);
+            const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
-        var scene = SceneLayer{ .mSceneID = editor_scene_layer.mSceneID, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
+            var scene = SceneLayer{ .mSceneID = editor_scene_layer.mSceneID, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
 
-        const combined_args = .{ StaticEngineContext.GetInstance(), &allocator, &scene } ++ args;
+            const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &scene } ++ args;
 
-        _ = @call(.auto, run_func, combined_args);
+            _ = @call(.auto, run_func, combined_args);
+        }
     }
     return true;
 }

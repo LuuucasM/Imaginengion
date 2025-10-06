@@ -160,20 +160,7 @@ pub fn NewScene(self: *SceneManager, layer_type: LayerType) !SceneLayer {
 pub fn RemoveScene(self: *SceneManager, destroy_scene: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     try self.SaveScene(destroy_scene, frame_allocator);
 
-    //first remove all scripts from othe scene
-    if (destroy_scene.GetComponent(SceneScriptComponent)) |script_component| {
-        var curr = script_component.mNext;
-        while (curr != SceneLayer.NullScene) {
-            const scene = self.GetSceneLayer(curr);
-            const scene_script_comp = scene.GetComponent(SceneScriptComponent).?;
-
-            curr = scene_script_comp.mNext;
-
-            try self.mECSManagerSC.DestroyEntity(scene.mSceneID);
-        }
-    }
-
-    //next destroy all the entities in the scene
+    //remove all the entities from the scene
     var entity_scene_entities = try self.mECSManagerGO.GetGroup(.{ .Component = EntitySceneComponent }, frame_allocator);
     defer entity_scene_entities.deinit(frame_allocator);
 
@@ -408,80 +395,4 @@ fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {
         _ = try scene_layer.AddComponent(SceneStackPos, .{ .mPosition = self.mNumofLayers });
     }
     self.mNumofLayers += 1;
-}
-
-fn CalculateEntityTransform(entity: Entity, parent_transform: Mat4f32, parent_dirty: bool) void {
-    const transform_component = entity.GetComponent(EntityTransformComponent);
-    defer transform_component.Dirty = false;
-    if (transform_component.Dirty or parent_dirty) {
-        transform_component.WorldTransform = LinAlg.Mat4MulMat4(parent_transform, transform_component.GetLocalTransform());
-    }
-    if (entity.HasComponent(EntityParentComponent)) {
-        const parent_component = entity.GetComponent(EntityParentComponent);
-
-        var curr_id = parent_component.mFirstChild;
-        while (curr_id != Entity.NullEntity) {
-            const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
-            CalculateEntityTransform(child_entity, transform_component.WorldTransform, transform_component.Dirty);
-
-            const child_component = child_entity.GetComponent(EntityChildComponent);
-            curr_id = child_component.mNext;
-        }
-    }
-}
-
-fn DestroyAllChildren(self: *SceneManager, destroy_entity: Entity) anyerror!void {
-    const zone = Tracy.ZoneInit("SceneManager DestroyAllChildren", @src());
-    defer zone.Deinit();
-    if (destroy_entity.GetComponent(EntityParentComponent)) |parent_component| {
-        var curr = parent_component.mFirstChild;
-        while (curr != Entity.NullEntity) {
-            const entity = self.GetEntity(curr);
-            const entity_child_comp = entity.GetComponent(EntityChildComponent).?;
-
-            curr = entity_child_comp.mNext;
-
-            try self.DestroyEntity(entity);
-        }
-    }
-}
-
-fn OrphanEntity(self: *SceneManager, destroy_entity: Entity) !void {
-    const zone = Tracy.ZoneInit("SceneManager OrphanEntity", @src());
-    defer zone.Deinit();
-    if (destroy_entity.GetComponent(EntityChildComponent)) |child_component| {
-        const parent_entity_id = child_component.mParent;
-
-        // Update parent's first child if this entity is the first child
-        const parent_entity = self.GetEntity(parent_entity_id);
-        if (parent_entity.GetComponent(EntityParentComponent)) |parent_component| {
-            if (parent_component.mFirstChild == destroy_entity.mEntityID) {
-                if (child_component.mNext == Entity.NullEntity) {
-                    // No more children, remove parent component entirely
-                    try self.mECSManagerGO.RemoveComponent(EntityParentComponent, parent_entity_id);
-                } else {
-                    // Update parent's first child to point to next sibling
-                    parent_component.mFirstChild = child_component.mNext;
-
-                    // Update the next sibling's prev pointer
-                    const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
-                    next_child_component.mPrev = Entity.NullEntity;
-                }
-            } else {
-                // This entity is not the first child, update sibling links
-                const prev_entity_id = child_component.mPrev;
-                const prev_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, prev_entity_id).?;
-
-                if (child_component.mNext != Entity.NullEntity) {
-                    // Update next sibling's prev pointer
-                    const next_child_component = self.mECSManagerGO.GetComponent(EntityChildComponent, child_component.mNext).?;
-                    next_child_component.mPrev = prev_entity_id;
-                    prev_child_component.mNext = child_component.mNext;
-                } else {
-                    // This was the last child
-                    prev_child_component.mNext = Entity.NullEntity;
-                }
-            }
-        }
-    }
 }

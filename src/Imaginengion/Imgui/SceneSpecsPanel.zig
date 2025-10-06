@@ -71,24 +71,27 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
         defer imgui.igTreePop();
         if (self.mSceneLayer.GetComponent(SceneScriptComponent)) |scene_script_comp| {
             const scene_ecs = self.mSceneLayer.mECSManagerSCRef;
+
             var curr_id = scene_script_comp.mFirst;
             var curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id).?;
 
             while (true) : (if (curr_id == scene_script_comp.mFirst) break) {
-                defer curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id);
-                defer curr_id = curr_script.mNext;
+                if (curr_script.mScriptAssetHandle) |asset_handle| {
+                    const script_file_data = try asset_handle.GetAsset(FileMetaData);
 
-                const script_file_data = try curr_script.mScriptAssetHandle.GetAsset(FileMetaData);
+                    const script_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id }, 0);
 
-                const script_name = try std.fmt.allocPrint(frame_allocator, std.fs.path.basename(script_file_data.mRelPath.items) ++ "###{d}", .{curr_id});
-
-                _ = imgui.igSelectable_Bool(script_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 });
-                if (imgui.igBeginPopupContextItem(script_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
-                    defer imgui.igEndPopup();
-                    if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                        try GameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mScene = self.mSceneLayer.mSceneID, .mComponentInd = SceneScriptComponent.Ind } });
+                    _ = imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 });
+                    if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+                        defer imgui.igEndPopup();
+                        if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
+                            try GameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
+                        }
                     }
                 }
+
+                curr_id = curr_script.mNext;
+                curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id).?;
             }
         }
     }

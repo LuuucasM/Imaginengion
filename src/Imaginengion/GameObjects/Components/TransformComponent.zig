@@ -14,6 +14,7 @@ const Mat4f32 = LinAlg.Mat4f32;
 const TransformComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
+pub const Editable: bool = true;
 
 Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },

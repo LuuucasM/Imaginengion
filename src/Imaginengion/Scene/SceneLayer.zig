@@ -76,8 +76,20 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
 pub fn Delete(self: SceneLayer) !void {
     try GameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
     try ImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
+}
 
-    self.mSceneID = SceneLayer.NullScene;
+pub fn AddChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
+    const new_entity_id = try self.mECSManagerGORef.AddChild(parent_entity.mEntityID);
+    const new_entity = Entity{ .mEntityID = new_entity_id, .mECSManagerRef = self.mECSManagerGORef };
+
+    _ = try new_entity.AddComponent(EntityIDComponent, .{ .ID = try GenUUID() });
+    _ = try new_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
+    var name = [_]u8{0} ** 24;
+    @memcpy(name[0..14], "Unnamed Entity");
+    _ = try new_entity.AddComponent(EntityNameComponent, .{ .Name = name });
+    _ = try new_entity.AddComponent(TransformComponent, null);
+
+    return new_entity;
 }
 
 pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
