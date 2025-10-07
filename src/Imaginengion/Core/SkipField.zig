@@ -29,6 +29,7 @@ const std = @import("std");
 pub fn StaticSkipField(size: usize) type {
     return struct {
         const Self = @This();
+        pub const SkipFieldType = std.math.IntFittingRange(0, size);
         const InitOption = enum(u1) {
             AllSkip = 0,
             NoSkip = 1,
@@ -49,8 +50,6 @@ pub fn StaticSkipField(size: usize) type {
                 return current_index;
             }
         };
-
-        const SkipFieldType = std.math.IntFittingRange(0, size);
 
         mSkipField: [size]SkipFieldType = std.mem.zeroes([size]SkipFieldType),
 

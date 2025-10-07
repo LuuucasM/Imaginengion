@@ -18,7 +18,7 @@ pub fn ECSEventManager(entity_t: type) type {
             }
         };
 
-        mCleanUp: std.ArrayList(ECSEvent) = .{},
+        mRemoveObj: std.ArrayList(ECSEvent) = .{},
         mAllocator: std.mem.Allocator,
 
         pub fn Init(allocator: std.mem.Allocator) !Self {
@@ -28,14 +28,14 @@ pub fn ECSEventManager(entity_t: type) type {
         }
 
         pub fn Deinit(self: *Self) void {
-            self.mCleanUp.deinit(self.mAllocator);
+            self.mRemoveObj.deinit(self.mAllocator);
         }
 
         pub fn Insert(self: *Self, event: ECSEvent) !void {
             const zone = Tracy.ZoneInit("ECS Insert Events", @src());
             defer zone.Deinit();
             switch (event.GetEventCategory()) {
-                .EC_CleanUp => try self.mCleanUp.append(self.mAllocator, event),
+                .EC_RemoveObj => try self.mRemoveObj.append(self.mAllocator, event),
                 else => @panic("Default Events are not allowed!\n"),
             }
         }
@@ -43,18 +43,19 @@ pub fn ECSEventManager(entity_t: type) type {
             const zone = Tracy.ZoneInit("ECS GetEventsIterator", @src());
             defer zone.Deinit();
             return switch (eventCategory) {
-                .EC_CleanUp => Iterator{
-                    .mList = self.mCleanUp,
+                .EC_RemoveObj => Iterator{
+                    .mList = self.mRemoveObj,
                     .mIndex = 0,
                 },
                 else => @panic("Default Events are not allowed!\n"),
             };
         }
 
-        pub fn EventsReset(self: *Self) void {
-            const zone = Tracy.ZoneInit("ECS Event Reset", @src());
-            defer zone.Deinit();
-            _ = self.mCleanUp.clearAndFree(self.mAllocator);
+        pub fn ClearEvents(self: *Self, event_category: ECSEventCategory) void {
+            switch (event_category) {
+                .EC_RemoveObj => self.mRemoveObj.clearAndFree(self.mAllocator),
+                else => @panic("default event is not allowed"),
+            }
         }
     };
 }

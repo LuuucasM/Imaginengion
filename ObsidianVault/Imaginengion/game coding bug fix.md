@@ -1,9 +1,4 @@
-- change ECSEventManager to be a singleton but it feels weird because 
-- make parent and child relationships first class citizen of the ECS
-- finish scene specs panel printing out all the scripts for a scene.
-	- it can just be selectable bools
-	- the text can be the name of the script so the file name
-	- then add the function to right click to delete a script by right clicking on the selectable bool
+
 - add the ability to change TexCoord(UV).
 	- on quad components first print just text the UV's
 	- then on the same line beside it have a button that says like edit UVs

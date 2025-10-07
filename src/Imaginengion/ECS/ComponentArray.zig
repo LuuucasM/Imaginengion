@@ -100,7 +100,7 @@ pub fn ComponentArray(entity_t: type) type {
             self.mVtable.clearAndFree(self.mPtr);
         }
         pub fn DestroyEntity(self: Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
-            self.mVtable.DestroyEntity(self.mPtr, entity_id, ecs_event_manager);
+            try self.mVtable.DestroyEntity(self.mPtr, entity_id, ecs_event_manager);
         }
 
         pub fn GetCategory(self: Self) ComponentCategory {

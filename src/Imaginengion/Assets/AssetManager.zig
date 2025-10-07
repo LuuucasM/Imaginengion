@@ -35,7 +35,6 @@ mCWD: std.fs.Dir = undefined,
 mCWDPath: std.ArrayList(u8) = undefined,
 mProjectDirectory: ?std.fs.Dir = undefined,
 mProjectPath: std.ArrayList(u8) = undefined,
-_AssetToDelete: std.ArrayList(AssetType) = .{},
 
 pub fn Init() !void {
     AssetM = AssetManager{
@@ -63,7 +62,6 @@ pub fn Deinit() !void {
     if (AssetM.mProjectDirectory) |*dir| {
         dir.close();
     }
-    AssetM._AssetToDelete.deinit(AssetAllocator);
     AssetM.mCWDPath.deinit(AssetAllocator);
     AssetM.mProjectPath.deinit(AssetAllocator);
 
@@ -249,10 +247,7 @@ pub fn GetRelPath(abs_path: []const u8) []const u8 {
 }
 
 pub fn ProcessDestroyedAssets() !void {
-    for (AssetM._AssetToDelete.items) |asset_id| {
-        try AssetM.mAssetECS.DestroyEntity(asset_id);
-    }
-    AssetM._AssetToDelete.clearAndFree(AssetAllocator);
+    try AssetM.mAssetECS.ProcessEvents(.EC_RemoveObj);
 }
 
 fn GetFileStatsIfExists(rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File.Stat {
@@ -341,7 +336,7 @@ fn DeleteAsset(asset_id: AssetType) !void {
         .Prj => AssetM.mPathToIDPrj.remove(path_hash),
     };
 
-    try AssetM._AssetToDelete.append(AssetAllocator, asset_id);
+    try AssetM.mAssetECS.DestroyEntity(asset_id);
 }
 
 fn MarkAssetToDelete(asset_id: AssetType) void {

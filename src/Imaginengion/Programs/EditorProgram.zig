@@ -384,6 +384,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
         //handle deleted objects this frame
         try GameEventManager.ProcessEvents(.EC_EndOfFrame);
+        try self.mGameSceneManager.ProcessRemovedObj();
+        try self.mEditorSceneManager.ProcessRemovedObj();
         try AssetManager.ProcessDestroyedAssets();
         try PlayerManager.ProcessDestroyedPlayers();
 
@@ -526,8 +528,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
 pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
     switch (event.*) {
         .ET_DestroyEntityEvent => |e| {
-            const entity = self.mGameSceneManager.GetEntity(e.mEntity);
-            try self.mGameSceneManager.DestroyEntity(entity);
+            try self.mGameSceneManager.DestroyEntity(e.mEntity);
         },
         .ET_DestroySceneEvent => |e| {
             const scene = self.mGameSceneManager.GetSceneLayer(e.mSceneID);

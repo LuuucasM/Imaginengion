@@ -100,6 +100,6 @@ pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
 }
 pub fn Delete(self: Entity) !void {
-    try GameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntity = self.mEntityID } });
+    try GameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
     try ImguiEventManager.Insert(.{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
 }

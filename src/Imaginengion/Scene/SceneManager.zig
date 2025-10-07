@@ -345,11 +345,16 @@ pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneLayer.Type) SceneLayer 
 }
 
 pub fn RmEntityComp(self: *SceneManager, entity_id: Entity.Type, component_ind: EEntityComponents) !void {
-    try self.mECSManagerGO.RemoveComponent(entity_id, @intFromEnum(component_ind));
+    try self.mECSManagerGO.RemoveComponentInd(entity_id, @intFromEnum(component_ind));
 }
 
 pub fn RmSceneComp(self: *SceneManager, scene_id: SceneLayer.Type, component_ind: ESceneComponents) !void {
-    try self.mECSManagerSC.RemoveComponent(scene_id, @intFromEnum(component_ind));
+    try self.mECSManagerSC.RemoveComponentInd(scene_id, @intFromEnum(component_ind));
+}
+
+pub fn ProcessRemovedObj(self: *SceneManager) !void {
+    try self.mECSManagerGO.ProcessEvents(.EC_RemoveObj);
+    try self.mECSManagerSC.ProcessEvents(.EC_RemoveObj);
 }
 
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {

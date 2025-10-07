@@ -44,6 +44,7 @@ pub const ImguiEvent = union(enum) {
     ET_DeleteEntityEvent: DeleteEntityEvent,
     ET_DeleteSceneEvent: DeleteSceneEvent,
     ET_RmEntityCompEvent: RmEntityCompEvent,
+    ET_RmSceneCompEvent: RmSceneCompEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -139,3 +140,5 @@ pub const DeleteSceneEvent = struct {
 pub const RmEntityCompEvent = struct {
     mComponent_ptr: *anyopaque,
 };
+
+pub const RmSceneCompEvent = struct {};

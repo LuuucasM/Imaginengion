@@ -30,7 +30,7 @@ pub const DefaultEvent = struct {
 };
 
 pub const DestroyEntityEvent = struct {
-    mEntity: Entity.Type,
+    mEntity: Entity,
     pub fn GetEventCategory(self: DestroyEntityEvent) GameEventCategory {
         _ = self;
         return .EC_EndOfFrame;

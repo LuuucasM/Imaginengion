@@ -21,29 +21,25 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
         const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
         const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
+        const SkipFieldT = StaticSkipField(components_types.len + 2);
+        const SpraseSkipFieldT = SparseSet(.{
+            .SparseT = entity_t,
+            .DenseT = entity_t,
+            .ValueT = SkipFieldT,
+            .value_layout = .InternalArrayOfStructs,
+            .allow_resize = .ResizeAllowed,
+        });
 
         const Self = @This();
 
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)),
-        mEntitySkipField: SparseSet(.{
-            .SparseT = entity_t,
-            .DenseT = entity_t,
-            .ValueT = StaticSkipField(components_types.len + 2),
-            .value_layout = .InternalArrayOfStructs,
-            .allow_resize = .ResizeAllowed,
-        }),
+        mEntitySkipField: SpraseSkipFieldT,
         mECSAllocator: std.mem.Allocator,
 
         pub fn Init(ECSAllocator: std.mem.Allocator) !Self {
             var new_component_manager = Self{
                 .mComponentsArrays = std.ArrayList(ComponentArray(entity_t)){},
-                .mEntitySkipField = try SparseSet(.{
-                    .SparseT = entity_t,
-                    .DenseT = entity_t,
-                    .ValueT = StaticSkipField(components_types.len + 2),
-                    .value_layout = .InternalArrayOfStructs,
-                    .allow_resize = .ResizeAllowed,
-                }).init(ECSAllocator, 20, 10),
+                .mEntitySkipField = try SpraseSkipFieldT.init(ECSAllocator, 20, 10),
                 .mECSAllocator = ECSAllocator,
             };
 
@@ -82,10 +78,10 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         pub fn CreateEntity(self: *Self, entityID: entity_t) !void {
             std.debug.assert(!self.mEntitySkipField.HasSparse(entityID));
             const dense_ind = self.mEntitySkipField.add(entityID);
-            self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(components_types.len + 2).Init(.AllSkip);
+            self.mEntitySkipField.getValueByDense(dense_ind).* = SkipFieldT.Init(.AllSkip);
         }
 
-        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) !void {
+        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
 
             // Remove all components from this entity
@@ -93,7 +89,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(entity_id, ecs_event_manager);
+                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(entity_id, ecs_event_manager);
             }
 
             // Remove entity from skip field
@@ -108,7 +104,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
+                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
             }
 
             // Remove entity from skip field
@@ -147,8 +143,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
             std.debug.assert(component_ind < self.mComponentsArrays.items.len);
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
+            std.debug.assert(component_ind <= std.math.maxInt(SkipFieldT.SkipFieldType));
 
-            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(component_ind);
+            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(@intCast(component_ind));
 
             try self.mComponentsArrays.items[component_ind].RemoveComponent(entity_id);
         }

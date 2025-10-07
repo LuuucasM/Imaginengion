@@ -192,9 +192,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 },
             }
         }
-
-        pub fn RemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+        pub fn RemoveComponent(self: *Self, entity_id: entity_t, comptime component_type: type) !void {
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
+            defer zone.Deinit();
+            try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
+        }
+        pub fn RemoveComponentInd(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+            const zone = Tracy.ZoneInit("ECSM RemoveComponentInd", @src());
             defer zone.Deinit();
             try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
@@ -225,6 +229,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     },
                 }
             }
+            self.mECSEventManager.ClearEvents(event_category);
         }
 
         fn _InternalRemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
@@ -242,7 +247,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     //and then destroy the entity
                     //0 -> mParent, 1 -> mFirst, 2 -> mNext, 3 -> mPrev
                     const removed_multidata = self.mComponentManager.GetMultiData(entity_id, component_ind);
-                    const parent_multidata = self.mComponentManager.GetMultiData(removed_multidata[0], component_ind);
+                    var parent_multidata = self.mComponentManager.GetMultiData(removed_multidata[0], component_ind);
 
                     if (removed_multidata[2] == entity_id and removed_multidata[3] == entity_id) {
                         //case: this is the only one of this type of component so we can fully remove from parent
@@ -272,20 +277,20 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
             const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
             defer zone.Deinit();
-            self.mEntityManager.DestroyEntity(entity_id);
-            self._InternalRemoveFromHierarchy(entity_id);
-            self.mComponentManager.DestroyEntity(entity_id, self.mECSEventManager);
+            try self.mEntityManager.DestroyEntity(entity_id);
+            try self._InternalRemoveFromHierarchy(entity_id);
+            try self.mComponentManager.DestroyEntity(entity_id, &self.mECSEventManager);
         }
 
         fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
             const zone = Tracy.ZoneInit("ECSM Internal Destroy MultiEntity", @src());
             defer zone.Deinit();
-            self.mEntityManager.DestroyEntity(entity_id);
-            self._InternalRemoveFromHierarchy(entity_id);
-            self.mComponentManager.DestroyMultiEntity(entity_id);
+            try self.mEntityManager.DestroyEntity(entity_id);
+            try self._InternalRemoveFromHierarchy(entity_id);
+            try self.mComponentManager.DestroyMultiEntity(entity_id);
         }
 
-        fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) !void {
+        fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) anyerror!void {
             const zone = Tracy.ZoneInit("ECSM Internal Remove From Hierarchy", @src());
             defer zone.Deinit();
             //delete all children
@@ -308,7 +313,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 if (self.GetComponent(ParentComponent, parent_entity)) |parent_component| {
                     // If this is the only child, remove the ParentComponent from the parent
                     if (child_component.mNext == entity_id and child_component.mPrev == entity_id) {
-                        try self.mComponentManager.RemoveComponent(ParentComponent, parent_entity);
+                        try self.RemoveComponent(parent_entity, ParentComponent);
                     } else {
                         // Relink siblings around this child
                         const next_comp = self.GetComponent(ChildComponent, child_component.mNext).?;
