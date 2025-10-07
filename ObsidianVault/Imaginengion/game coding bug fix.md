@@ -1,15 +1,7 @@
-
-- add the ability to change TexCoord(UV).
-	- on quad components first print just text the UV's
-	- then on the same line beside it have a button that says like edit UVs
-	- that button opens up a new panel where 
-		- it is the texture image but like really big with 
-		- 2 small circle dots on it representing the uv top left and uv bottom right
-		- below the image there is an imgui drag float 2 for both top and bottom that the user can drag around or edit the exact number if they want
-		- these 3 things gives the user to both set the UV visually ON the actual image, and then also programatically.
-		- the only thing i am considering is if i should allow dragging of the dots on the image as it might be hard and i want to write as little imgui code as possible because id rather just replace imgui with my own UI stuff later
-		- the one good thing is that the more accurate i make the imgui code now the better prepared i will be to make the switch because I will know exactly what i need from my engines own UI system to be able to recreate the engine gui
 - add ability to render font
+	- ttf file + output.png + output.json are the assets
+	- so i need a like TextAsset that will hold the above 3
+	- 
 - i need to add components at some point:
 	- attribute component (multi)
 	- collider component (multi)
