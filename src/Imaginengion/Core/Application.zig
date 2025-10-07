@@ -74,7 +74,7 @@ pub fn Deinit(self: *Application) !void {
     SystemEventManager.Deinit();
     GameEventManager.Deinit();
     ImguiEventManager.Deinit();
-    PlayerManager.Deinit();
+    try PlayerManager.Deinit();
     Input.Deinit();
     _ = self.mEngineGPA.deinit();
     self.mFrameArena.deinit();

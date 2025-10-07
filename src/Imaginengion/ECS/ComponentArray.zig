@@ -12,7 +12,6 @@ pub fn ComponentArray(entity_t: type) type {
         clearAndFree: *const fn (*anyopaque) void,
         GetCategory: *const fn (*anyopaque) ComponentCategory,
         DestroyEntity: *const fn (*anyopaque, entity_t, *ECSEventManager) anyerror!void,
-        GetComponent: *const fn (*anyopaque, entity_t) *anyopaque,
         GetMultiData: *const fn (*anyopaque, entity_t) @Vector(4, entity_t),
         SetMultiData: *const fn (*anyopaque, entity_t, @Vector(4, entity_t)) void,
     };
@@ -55,15 +54,6 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.DestroyEntity(entity_id, ecs_event_manager);
                 }
-                fn GetComponent(ptr: *anyopaque, entity_id: entity_t) *anyopaque {
-                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    // Internal returns ?*component_type; return null as null pointer when absent
-                    if (self.GetComponent(entity_id)) |comp| {
-                        return comp;
-                    } else {
-                        return @ptrFromInt(0);
-                    }
-                }
                 fn GetMultiData(ptr: *anyopaque, entity_id: entity_t) @Vector(4, entity_t) {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     return self.GetMultiData(entity_id);
@@ -87,7 +77,6 @@ pub fn ComponentArray(entity_t: type) type {
                     .clearAndFree = impl.clearAndFree,
                     .GetCategory = impl.GetCategory,
                     .DestroyEntity = impl.DestroyEntity,
-                    .GetComponent = impl.GetComponent,
                     .GetMultiData = impl.GetMultiData,
                     .SetMultiData = impl.SetMultiData,
                 },
@@ -116,9 +105,6 @@ pub fn ComponentArray(entity_t: type) type {
 
         pub fn GetCategory(self: Self) ComponentCategory {
             return self.mVtable.GetCategory(self.mPtr);
-        }
-        pub fn GetComponent(self: Self, entity_id: entity_t) *anyopaque {
-            return self.mVtable.GetComponent(self.mPtr, entity_id);
         }
         pub fn GetMultiData(self: Self, entity_id: entity_t) @Vector(4, entity_t) {
             return self.mVtable.GetMultiData(self.mPtr, entity_id);

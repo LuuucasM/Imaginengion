@@ -26,7 +26,7 @@ const AssetAllocator = AssetGPA.allocator();
 
 pub const AssetType = u32;
 
-pub const ECSManagerAssets = ECSManager(AssetType, AssetsList.len);
+pub const ECSManagerAssets = ECSManager(AssetType, &AssetsList);
 
 mAssetECS: ECSManagerAssets = undefined,
 mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
@@ -39,7 +39,7 @@ _AssetToDelete: std.ArrayList(AssetType) = .{},
 
 pub fn Init() !void {
     AssetM = AssetManager{
-        .mAssetECS = try ECSManagerAssets.Init(AssetAllocator, &AssetsList),
+        .mAssetECS = try ECSManagerAssets.Init(AssetAllocator),
         .mPathToIDEng = std.AutoHashMap(u64, AssetType).init(AssetAllocator),
         .mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(AssetAllocator),
         .mCWD = std.fs.cwd(),
@@ -56,7 +56,7 @@ pub fn Init() !void {
 }
 
 pub fn Deinit() !void {
-    AssetM.mAssetECS.Deinit();
+    try AssetM.mAssetECS.Deinit();
     AssetM.mPathToIDEng.deinit();
     AssetM.mPathToIDPrj.deinit();
     AssetM.mCWD.close();

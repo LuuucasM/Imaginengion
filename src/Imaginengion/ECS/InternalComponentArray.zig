@@ -68,23 +68,27 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
             return null;
         }
         pub fn GetMultiData(self: Self, entity_id: entity_t) @Vector(4, entity_t) {
-            std.debug.assert(component_type.Category == .Multiple);
-            std.debug.assert(self.mComponents.HasSparse(entity_id));
-            const component = self.mComponents.getValueBySparse(entity_id);
+            if (component_type.Category == .Multiple) {
+                std.debug.assert(self.mComponents.HasSparse(entity_id));
 
-            return @Vector(4, entity_t){ component.mParent, component.mFirst, component.mNext, component.mPrev };
+                const component = self.mComponents.getValueBySparse(entity_id);
+                return @Vector(4, entity_t){ component.mParent, component.mFirst, component.mNext, component.mPrev };
+            }
+            return @Vector(4, entity_t){ 0, 0, 0, 0 };
         }
+        // Conditionally include SetMultiData function based on component type
         pub fn SetMultiData(self: Self, entity_id: entity_t, multi_data: @Vector(4, entity_t)) void {
-            std.debug.assert(component_type.Category == .Multiple);
-            std.debug.assert(self.mComponents.HasSparse(entity_id));
+            if (component_type.Category == .Multiple) {
+                std.debug.assert(self.mComponents.HasSparse(entity_id));
 
-            const component = self.mComponents.getValueBySparse(entity_id);
-
-            component.mParent = multi_data[0];
-            component.mFirst = multi_data[1];
-            component.mNext = multi_data[2];
-            component.mPrev = multi_data[3];
+                const component = self.mComponents.getValueBySparse(entity_id);
+                component.mParent = multi_data[0];
+                component.mFirst = multi_data[1];
+                component.mNext = multi_data[2];
+                component.mPrev = multi_data[3];
+            }
         }
+
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
         }

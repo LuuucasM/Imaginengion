@@ -28,19 +28,19 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         mEntitySkipField: SparseSet(.{
             .SparseT = entity_t,
             .DenseT = entity_t,
-            .ValueT = StaticSkipField(components_types.len),
+            .ValueT = StaticSkipField(components_types.len + 2),
             .value_layout = .InternalArrayOfStructs,
             .allow_resize = .ResizeAllowed,
         }),
         mECSAllocator: std.mem.Allocator,
 
-        pub fn Init(ECSAllocator: std.mem.Allocator, comptime components_list: []const type) !Self {
+        pub fn Init(ECSAllocator: std.mem.Allocator) !Self {
             var new_component_manager = Self{
                 .mComponentsArrays = std.ArrayList(ComponentArray(entity_t)){},
                 .mEntitySkipField = try SparseSet(.{
                     .SparseT = entity_t,
                     .DenseT = entity_t,
-                    .ValueT = StaticSkipField(components_types.len),
+                    .ValueT = StaticSkipField(components_types.len + 2),
                     .value_layout = .InternalArrayOfStructs,
                     .allow_resize = .ResizeAllowed,
                 }).init(ECSAllocator, 20, 10),
@@ -54,7 +54,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             const child_array = try ComponentArray(entity_t).Init(ECSAllocator, ChildComponent);
             try new_component_manager.mComponentsArrays.append(ECSAllocator, child_array);
 
-            inline for (components_list) |component_type| {
+            inline for (components_types) |component_type| {
                 const new_component_array = try ComponentArray(entity_t).Init(ECSAllocator, component_type);
                 try new_component_manager.mComponentsArrays.append(ECSAllocator, new_component_array);
             }
@@ -62,10 +62,10 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return new_component_manager;
         }
 
-        pub fn Deinit(self: *Self) void {
+        pub fn Deinit(self: *Self) !void {
             //delete component arrays
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.Deinit();
+                try component_array.Deinit();
             }
 
             self.mComponentsArrays.deinit(self.mECSAllocator);
@@ -82,7 +82,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         pub fn CreateEntity(self: *Self, entityID: entity_t) !void {
             std.debug.assert(!self.mEntitySkipField.HasSparse(entityID));
             const dense_ind = self.mEntitySkipField.add(entityID);
-            self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(components_types.len).Init(.AllSkip);
+            self.mEntitySkipField.getValueByDense(dense_ind).* = StaticSkipField(components_types.len + 2).Init(.AllSkip);
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: ECSEventManager) !void {

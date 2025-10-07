@@ -6,7 +6,7 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const Tracy = @import("../Core/Tracy.zig");
 const PlayerManager = @This();
 
-pub const ECSManagerPlayer = ECSManager(Player.Type, ComponentsList.len);
+pub const ECSManagerPlayer = ECSManager(Player.Type, &ComponentsList);
 
 var StaticPlayerManager: PlayerManager = undefined;
 
@@ -17,13 +17,13 @@ mEngineAllocator: std.mem.Allocator = undefined,
 
 pub fn Init(engine_allocator: std.mem.Allocator) !void {
     StaticPlayerManager = PlayerManager{
-        .mECSManager = try ECSManager(Player.Type, ComponentsList.len).Init(engine_allocator, ComponentsList),
+        .mECSManager = try ECSManagerPlayer.Init(engine_allocator),
         .mEngineAllocator = engine_allocator,
     };
 }
 
-pub fn Deinit() void {
-    StaticPlayerManager.mECSManager.Deinit();
+pub fn Deinit() !void {
+    try StaticPlayerManager.mECSManager.Deinit();
     StaticPlayerManager._PlayersToDestroy.deinit(StaticPlayerManager.mEngineAllocator);
 }
 

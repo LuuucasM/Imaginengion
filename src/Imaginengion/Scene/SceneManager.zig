@@ -55,9 +55,9 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const SceneManager = @This();
 
-pub const ECSManagerGameObj = ECSManager(Entity.Type, EntityComponentsArray.len);
+pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
 
-pub const ECSManagerScenes = ECSManager(SceneLayer.Type, EntityComponentsArray.len);
+pub const ECSManagerScenes = ECSManager(SceneLayer.Type, &SceneComponentsList);
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj,
@@ -73,8 +73,8 @@ mEngineAllocator: std.mem.Allocator,
 
 pub fn Init(width: usize, height: usize, engine_allocator: std.mem.Allocator) !SceneManager {
     return SceneManager{
-        .mECSManagerGO = try ECSManagerGameObj.Init(engine_allocator, &EntityComponentsArray),
-        .mECSManagerSC = try ECSManagerScenes.Init(engine_allocator, &SceneComponentsList),
+        .mECSManagerGO = try ECSManagerGameObj.Init(engine_allocator),
+        .mECSManagerSC = try ECSManagerScenes.Init(engine_allocator),
         .mGameLayerInsertIndex = 0,
         .mNumofLayers = 0,
         .mViewportWidth = width,
@@ -84,8 +84,8 @@ pub fn Init(width: usize, height: usize, engine_allocator: std.mem.Allocator) !S
 }
 
 pub fn Deinit(self: *SceneManager) !void {
-    self.mECSManagerGO.Deinit();
-    self.mECSManagerSC.Deinit();
+    try self.mECSManagerGO.Deinit();
+    try self.mECSManagerSC.Deinit();
 }
 
 pub fn CreateEntity(self: *SceneManager, scene_id: SceneLayer.Type) !Entity {
@@ -345,11 +345,11 @@ pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneLayer.Type) SceneLayer 
 }
 
 pub fn RmEntityComp(self: *SceneManager, entity_id: Entity.Type, component_ind: EEntityComponents) !void {
-    self.mECSManagerGO.RemoveComponent(entity_id, component_ind);
+    try self.mECSManagerGO.RemoveComponent(entity_id, @intFromEnum(component_ind));
 }
 
 pub fn RmSceneComp(self: *SceneManager, scene_id: SceneLayer.Type, component_ind: ESceneComponents) !void {
-    self.mECSManagerSC.RemoveComponent(scene_id, component_ind);
+    try self.mECSManagerSC.RemoveComponent(scene_id, @intFromEnum(component_ind));
 }
 
 fn InsertScene(self: *SceneManager, scene_layer: SceneLayer) !void {

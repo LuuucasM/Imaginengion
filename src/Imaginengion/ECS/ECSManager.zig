@@ -29,17 +29,18 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             defer zone.Deinit();
             return Self{
                 .mEntityManager = EntityManager(entity_t).Init(ECSAllocator),
-                .mComponentManager = try ComponentManager(entity_t, components_types.len + 2).Init(ECSAllocator, components_types),
+                .mComponentManager = try ComponentManager(entity_t, components_types).Init(ECSAllocator),
                 .mECSEventManager = try ECSEventManager.Init(ECSAllocator),
                 .mECSAllocator = ECSAllocator,
             };
         }
 
-        pub fn Deinit(self: *Self) void {
+        pub fn Deinit(self: *Self) !void {
             const zone = Tracy.ZoneInit("ECSM Deinit", @src());
             defer zone.Deinit();
             self.mEntityManager.Deinit();
-            self.mComponentManager.Deinit();
+            try self.mComponentManager.Deinit();
+            self.mECSEventManager.Deinit();
         }
 
         pub fn clearAndFree(self: *Self) void {
