@@ -54,7 +54,7 @@ pub fn ECSEventManager(entity_t: type) type {
         pub fn ClearEvents(self: *Self, event_category: ECSEventCategory) void {
             switch (event_category) {
                 .EC_RemoveObj => self.mRemoveObj.clearAndFree(self.mAllocator),
-                else => @panic("default event is not allowed"),
+                else => @panic("default event is not allowed\n"),
             }
         }
     };

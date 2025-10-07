@@ -26,6 +26,7 @@ mTexCoords: [2]Vec2f32 = [2]Vec2f32{
     Vec2f32{ 0, 0 },
     Vec2f32{ 1, 1 },
 },
+mEditTexCoords: bool = false,
 mTexture: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *QuadComponent) !void {}
@@ -52,15 +53,22 @@ pub fn EditorRender(self: *QuadComponent) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (try self.mTexture.GetAsset(Texture2D)).GetID())));
+    const texture_asset = try self.mTexture.GetAsset(Texture2D);
+    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (texture_asset.GetID()))));
     imgui.igImage(
         texture_id,
         .{ .x = 50.0, .y = 50.0 },
-        .{ .x = self.mTexCoords[0][0], .y = 1.0 - self.mTexCoords[0][1] },
-        .{ .x = self.mTexCoords[1][0], .y = 1.0 - self.mTexCoords[1][1] },
+        // Always show full texture in preview
+        .{ .x = 0.0, .y = 1.0 },
+        .{ .x = 1.0, .y = 0.0 },
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
     );
+
+    // Open tiling editor on double-click of the image
+    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseDoubleClicked_Nil(0)) {
+        self.mEditTexCoords = true;
+    }
 
     if (imgui.igBeginDragDropTarget() == true) {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
@@ -70,6 +78,84 @@ pub fn EditorRender(self: *QuadComponent) !void {
                 AssetM.ReleaseAssetHandleRef(&self.mTexture);
             }
             self.mTexture = try AssetM.GetAssetHandleRef(path, .Prj);
+        }
+    }
+    try self.EditTexCoords(texture_asset);
+}
+
+fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
+    if (!self.mEditTexCoords) return;
+    //const window_flags = imgui.ImGuiWindowFlags_NoDecoration | imgui.ImGuiWindowFlags_NoCollapse | imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoResize | imgui.ImGuiWindowFlags_NoSavedSettings | imgui.ImGuiWindowFlags_NoBringToFrontOnFocus | imgui.ImGuiWindowFlags_NoNavFocus;
+    imgui.igSetNextWindowSize(.{ .x = @floatFromInt(texture_asset.GetWidth()), .y = @floatFromInt(texture_asset.GetHeight()) }, imgui.ImGuiCond_Once);
+
+    if (imgui.igBegin("Texture Coordinate Editor", &self.mEditTexCoords, 0)) {
+        defer imgui.igEnd();
+        // Compute image size to fit above the controls while preserving aspect ratio
+        var available: imgui.struct_ImVec2 = undefined;
+        imgui.igGetContentRegionAvail(&available);
+        const tex_w: f32 = @floatFromInt(texture_asset.GetWidth());
+        const tex_h: f32 = @floatFromInt(texture_asset.GetHeight());
+        const texture_aspect = if (tex_h > 0) tex_w / tex_h else 1.0;
+
+        const frame_h = imgui.igGetFrameHeightWithSpacing();
+        const text_h = imgui.igGetTextLineHeightWithSpacing();
+        // Reserve space for: label + two sliders + a little padding
+        const reserved_controls_h: f32 = text_h + frame_h * 2 + 8.0;
+        const allowed_h = @max(available.y - reserved_controls_h, 50.0);
+
+        var draw_w = available.x;
+        var draw_h = draw_w / texture_aspect;
+        if (draw_h > allowed_h) {
+            draw_h = allowed_h;
+            draw_w = draw_h * texture_aspect;
+        }
+
+        const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, texture_asset.GetID())));
+
+        imgui.igImage(
+            texture_id,
+            .{ .x = draw_w, .y = draw_h },
+            .{ .x = self.mTexCoords[0][0], .y = 1.0 - self.mTexCoords[0][1] },
+            .{ .x = self.mTexCoords[1][0], .y = 1.0 - self.mTexCoords[1][1] },
+            .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
+            .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
+        );
+
+        // UV editors under the image
+        imgui.igDummy(.{ .x = 0.0, .y = 8.0 });
+        imgui.igSeparatorText("Texture Coordinates (UV)");
+
+        // UV0 (Min)
+        _ = imgui.igSliderFloat2(
+            "UV0 (Min) - Slider",
+            @ptrCast(&self.mTexCoords[0]),
+            0.0,
+            1.0,
+            "%.3f",
+            imgui.ImGuiSliderFlags_AlwaysClamp,
+        );
+
+        // UV1 (Max)
+        _ = imgui.igSliderFloat2(
+            "UV1 (Max) - Slider",
+            @ptrCast(&self.mTexCoords[1]),
+            0.0,
+            1.0,
+            "%.3f",
+            imgui.ImGuiSliderFlags_AlwaysClamp,
+        );
+
+        // Clamp and enforce min <= max per component
+        self.mTexCoords[0][0] = std.math.clamp(self.mTexCoords[0][0], 0.0, 1.0);
+        self.mTexCoords[0][1] = std.math.clamp(self.mTexCoords[0][1], 0.0, 1.0);
+        self.mTexCoords[1][0] = std.math.clamp(self.mTexCoords[1][0], 0.0, 1.0);
+        self.mTexCoords[1][1] = std.math.clamp(self.mTexCoords[1][1], 0.0, 1.0);
+        if (self.mTexCoords[0][0] > self.mTexCoords[1][0]) self.mTexCoords[0][0] = self.mTexCoords[1][0];
+        if (self.mTexCoords[0][1] > self.mTexCoords[1][1]) self.mTexCoords[0][1] = self.mTexCoords[1][1];
+
+        // Close editor on double-click or outside click
+        if (imgui.igIsMouseDoubleClicked_Nil(0) and imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None)) {
+            self.mEditTexCoords = false;
         }
     }
 }

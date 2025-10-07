@@ -73,10 +73,10 @@ pub fn Deinit(self: OpenGLTexture2D) !void {
     glad.glDeleteTextures(1, &self._TextureID);
 }
 pub fn GetWidth(self: OpenGLTexture2D) usize {
-    return self._Width;
+    return @intCast(self._Width);
 }
 pub fn GetHeight(self: OpenGLTexture2D) usize {
-    return self._Height;
+    return @intCast(self._Height);
 }
 pub fn GetID(self: OpenGLTexture2D) c_uint {
     return self._TextureID;
