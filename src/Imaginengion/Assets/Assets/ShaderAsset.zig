@@ -7,7 +7,7 @@ const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 mShader: Shader = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !ShaderAsset {
+pub fn Init(allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !ShaderAsset {
     return ShaderAsset{
         .mShader = try Shader.Init(allocator, asset_file, rel_path),
     };

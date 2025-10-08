@@ -5,6 +5,7 @@ const Assets = @import("Assets.zig");
 const AssetMetaData = Assets.AssetMetaData;
 const FileMetaData = Assets.FileMetaData;
 const ScriptAsset = Assets.ScriptAsset;
+const TextAsset = Assets.TextAsset;
 const AssetsList = Assets.AssetsList;
 const AssetHandle = @import("AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
@@ -116,26 +117,18 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
         } else {
             const file_data = AssetM.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
-            //branch off depending on asset type because script asset doesnt require to open the file, rather it requires the path
-            //so that the script can be compiled. both opening a file and getting the abs path requires a system call
-            //so ratehr than make 2 system calls for every object and have them all follow the same code we can do a comptime
-            //branch and ensure that both assets whos files need to be opened, and ones that are not can both run well
-            if (asset_type == ScriptAsset) {
-                var buffer: [260 * 2]u8 = undefined;
-                var fba = std.heap.FixedBufferAllocator.init(&buffer);
-                const fba_allocator = fba.allocator();
+            var buffer: [260 * 2]u8 = undefined;
+            var fba = std.heap.FixedBufferAllocator.init(&buffer);
+            const fba_allocator = fba.allocator();
 
-                const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, fba_allocator);
+            const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, fba_allocator);
 
-                const new_asset = try ScriptAsset.Init(AssetAllocator, abs_path);
-                return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
-            } else {
-                const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
-                defer CloseFile(asset_file);
+            const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
+            defer CloseFile(asset_file);
 
-                const new_asset: asset_type = try asset_type.Init(AssetAllocator, asset_file, file_data.mRelPath.items);
-                return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
-            }
+            const new_asset = try asset_type.Init(AssetAllocator, abs_path, file_data.mRelPath.items, asset_file);
+
+            return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
         }
     }
 }

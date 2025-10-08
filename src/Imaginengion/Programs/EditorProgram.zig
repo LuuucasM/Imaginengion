@@ -10,9 +10,11 @@ const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const PlayerManager = @import("../Players/PlayerManager.zig");
 const Player = @import("../Players/Player.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 const Assets = @import("../Assets/Assets.zig");
 const ShaderAsset = Assets.ShaderAsset;
+const TextAsset = Assets.TextAsset;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -96,6 +98,7 @@ mOverlayScene: SceneLayer,
 mGameScene: SceneLayer,
 mEditorEditorEntity: Entity,
 mEditorViewportEntity: Entity,
+mEditorFont: AssetHandle,
 
 //not editor stuff
 mWindow: *Window,
@@ -127,6 +130,7 @@ pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocato
         ._StatsPanel = StatsPanel.Init(),
         ._ToolbarPanel = try ToolbarPanel.Init(),
         ._ViewportPanel = ViewportPanel.Init(window.GetWidth(), window.GetHeight()),
+        .mEditorFont = undefined,
     };
 }
 
@@ -192,6 +196,12 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
 
     new_camera_component_camera.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
     _ = try self.mEditorEditorEntity.AddComponent(CameraComponent, new_camera_component_camera);
+
+    //test for fonts
+    self.mEditorFont = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
+    const text_asset = try self.mEditorFont.GetAsset(TextAsset);
+    _ = text_asset;
+    AssetManager.ReleaseAssetHandleRef(&self.mEditorFont);
 }
 
 pub fn Deinit(self: *EditorProgram) !void {

@@ -9,7 +9,7 @@ mSceneContents: std.ArrayList(u8) = .{},
 
 _ContentsAllocator: std.mem.Allocator = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !SceneAsset {
+pub fn Init(allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !SceneAsset {
     _ = rel_path;
     const file_size = try asset_file.getEndPos();
 
