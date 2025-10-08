@@ -57,6 +57,7 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
     const fba_allocator = fba.allocator();
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
     const arena_allocator = arena.allocator();
 
     const name_png = try std.fmt.allocPrint(fba_allocator, "{s}/{s}.png", .{ file_path, name });
@@ -115,8 +116,8 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
 }
 
 pub fn Deinit(self: *TextAsset) !void {
-    AssetManager.ReleaseAssetHandleRef(&self.mTextureAtlas);
-    for (self.mGlyphs.values) |glyph_info| {
+    if (self.mTextureAtlas.mID != AssetHandle.NullHandle) AssetManager.ReleaseAssetHandleRef(&self.mTextureAtlas);
+    for (self.mGlyphs.values) |*glyph_info| {
         glyph_info.mKernings.deinit();
     }
     self.mGlyphs.deinit();
@@ -125,14 +126,16 @@ pub fn Deinit(self: *TextAsset) !void {
 fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !TextAsset {
     var new_text_asset = TextAsset{
         .mAllocator = asset_allocator,
-        .mGlyphs = GlyphSetT.init(asset_allocator, SPARSE_SET_SIZE + 1, SPARSE_SET_SIZE),
+        .mGlyphs = try GlyphSetT.init(asset_allocator, SPARSE_SET_SIZE + 1, SPARSE_SET_SIZE),
     };
 
     const file_size = try text_json.getEndPos();
 
-    const file_contents = try std.ArrayList(u8).initCapacity(arena_allocator, file_size);
-    text_json.readAll(file_contents.items);
+    var file_contents = try std.ArrayList(u8).initCapacity(arena_allocator, file_size);
+    try file_contents.resize(arena_allocator, file_size);
+    _ = try text_json.readAll(file_contents.items);
 
+    std.debug.print("file contents size: {}\n", .{file_contents.items.len});
     var io_reader = std.io.Reader.fixed(file_contents.items);
 
     var reader = std.json.Reader.init(arena_allocator, &io_reader);
@@ -157,19 +160,25 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
         defer arena_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "atlas")) {
-            ProcessAtlas(reader, &new_text_asset, &atlas_size, arena_allocator);
+            try ProcessAtlas(&reader, &new_text_asset, &atlas_size, arena_allocator);
+            std.debug.print("i do this\n", .{});
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
-            ProcessMetrics(reader, &new_text_asset, arena_allocator);
+            try ProcessMetrics(&reader, &new_text_asset, arena_allocator);
+            std.debug.print("i do this2\n", .{});
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            ProcessGlyphs(reader, &new_text_asset, atlas_size, arena_allocator, asset_allocator);
+            try ProcessGlyphs(&reader, &new_text_asset, atlas_size, arena_allocator, asset_allocator);
+            std.debug.print("i do this3\n", .{});
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
-            ProcessKerning(reader, &new_text_asset, arena_allocator);
+            try ProcessKerning(&reader, &new_text_asset, arena_allocator);
+            std.debug.print("i do this4\n", .{});
         }
     }
+
+    return new_text_asset;
 }
 
-fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size: Vec2f32, arena_allocator: std.mem.Allocator) !void {
-    SkipToken(reader); //skip the begin object for the atlas
+fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size: *Vec2f32, arena_allocator: std.mem.Allocator) !void {
+    try SkipToken(reader); //skip the begin object for the atlas
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -190,17 +199,17 @@ fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size
             const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
             new_text_asset.mSize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "width")) {
-            const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
             atlas_size[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "height")) {
-            const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
             atlas_size[1] = parsed_value;
         }
     }
 }
 
 fn ProcessMetrics(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
-    SkipToken(reader); //skip the begin object for the metrics
+    try SkipToken(reader); //skip the begin object for the metrics
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -230,7 +239,7 @@ fn ProcessMetrics(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_al
     }
 }
 fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size: Vec2f32, arena_allocator: std.mem.Allocator, asset_allocator: std.mem.Allocator) !void {
-    SkipToken(reader); //skip the begin array
+    try SkipToken(reader); //skip the begin array
 
     while (true) {
         const token = try reader.next();
@@ -243,9 +252,9 @@ fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_siz
             .mKernings = KerningsT.init(asset_allocator),
         };
         var unicode: i32 = 0;
-        SingleGlyph(reader, &unicode, &new_glyph, atlas_size, arena_allocator);
+        try SingleGlyph(reader, &unicode, &new_glyph, atlas_size, arena_allocator);
         if (unicode > -1) {
-            new_text_asset.mGlyphs.addValue(unicode, new_glyph);
+            _ = new_text_asset.mGlyphs.addValue(@intCast(unicode), new_glyph);
         }
     }
 }
@@ -271,16 +280,15 @@ fn SingleGlyph(reader: *std.json.Reader, unicode: *i32, new_glyph: *GlyphInfo, a
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAdvance = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "planeBounds")) {
-            ProcessPlaneBounds(reader, new_glyph, arena_allocator);
+            try ProcessPlaneBounds(reader, new_glyph, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "atlasBounds")) {
-            ProcessAtlasBounds(reader, new_glyph, atlas_size, arena_allocator);
+            try ProcessAtlasBounds(reader, new_glyph, atlas_size, arena_allocator);
         }
     }
-    SkipToken(reader); //skip the end object token
 }
 
 fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_allocator: std.mem.Allocator) !void {
-    SkipToken(reader); //skip the begin object token
+    try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -311,7 +319,7 @@ fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_all
 }
 
 fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, atlas_size: Vec2f32, arena_allocator: std.mem.Allocator) !void {
-    SkipToken(reader); //skip the begin object token
+    try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -342,7 +350,7 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, atlas_siz
 }
 
 fn ProcessKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
-    SkipToken(reader); //skip the begin array
+    try SkipToken(reader); //skip the begin array
 
     while (true) {
         const token = try reader.next();
@@ -352,7 +360,7 @@ fn ProcessKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_al
             else => return error.NotExpected,
         }
 
-        SingleKerning(reader, &new_text_asset, arena_allocator);
+        try SingleKerning(reader, new_text_asset, arena_allocator);
     }
 }
 
@@ -370,7 +378,7 @@ fn SingleKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
     const actual_value1 = try arena_allocator.dupe(u8, token_value1);
     defer arena_allocator.free(actual_value1);
 
-    const unicode1 = try std.json.innerParse(i32, arena_allocator, reader, PARSE_OPTIONS);
+    const unicode1 = try std.json.innerParse(u16, arena_allocator, reader, PARSE_OPTIONS);
 
     //unicode2
     const token2 = try reader.next();
@@ -384,26 +392,28 @@ fn SingleKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
     const actual_value2 = try arena_allocator.dupe(u8, token_value2);
     defer arena_allocator.free(actual_value2);
 
-    const unicode2 = try std.json.innerParse(i32, arena_allocator, reader, PARSE_OPTIONS);
+    const unicode2 = try std.json.innerParse(u16, arena_allocator, reader, PARSE_OPTIONS);
 
-    //advance
-    const token3 = try reader.next();
-    const token_value3 = try switch (token3) {
-        .string => |value| value,
-        .number => |value| value,
+    if (new_text_asset.mGlyphs.hasSparse(unicode1) and new_text_asset.mGlyphs.hasSparse(unicode2)) {
+        //advance
+        const token3 = try reader.next();
+        const token_value3 = try switch (token3) {
+            .string => |value| value,
+            .number => |value| value,
 
-        else => error.NotExpected,
-    };
+            else => error.NotExpected,
+        };
 
-    const actual_value3 = try arena_allocator.dupe(u8, token_value3);
-    defer arena_allocator.free(actual_value3);
+        const actual_value3 = try arena_allocator.dupe(u8, token_value3);
+        defer arena_allocator.free(actual_value3);
 
-    const advance = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+        const advance = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
 
-    var glyph_info = new_text_asset.mGlyphs.getValueBySparse(unicode1);
-    try glyph_info.mKernings.put(unicode2, advance);
+        var glyph_info = new_text_asset.mGlyphs.getValueBySparse(unicode1);
+        try glyph_info.mKernings.put(unicode2, advance);
+    }
 
-    SkipToken(reader); //skip the end object token
+    try SkipToken(reader); //skip the end object token
 }
 
 //NOTE: this to sprase index is based off of the current format of the charset.txt
