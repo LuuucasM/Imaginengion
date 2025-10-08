@@ -117,8 +117,9 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
 
 pub fn Deinit(self: *TextAsset) !void {
     if (self.mTextureAtlas.mID != AssetHandle.NullHandle) AssetManager.ReleaseAssetHandleRef(&self.mTextureAtlas);
-    for (self.mGlyphs.values) |*glyph_info| {
-        glyph_info.mKernings.deinit();
+    var i: usize = 0;
+    while (i < self.mGlyphs.dense_count) : (i += 1) {
+        self.mGlyphs.values[i].mKernings.deinit();
     }
     self.mGlyphs.deinit();
 }
