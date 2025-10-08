@@ -200,7 +200,7 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     //test for fonts
     self.mEditorFont = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
     const text_asset = try self.mEditorFont.GetAsset(TextAsset);
-    _ = text_asset;
+    text_asset.mTextureAtlas = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
     AssetManager.ReleaseAssetHandleRef(&self.mEditorFont);
 }
 

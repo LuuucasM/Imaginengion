@@ -50,7 +50,7 @@ const SceneUtils = @import("../Scene/SceneUtils.zig");
 
 const WriteStream = std.json.Stringify;
 const StringifyOptions = std.json.Stringify.Options{ .whitespace = .indent_2 };
-const ParseOptions = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
+const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
 
 pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
     var out: std.io.Writer.Allocating = .init(frame_allocator);
@@ -288,7 +288,7 @@ fn DeSerializeSceneData(reader: *std.json.Reader, scene_layer: SceneLayer, frame
 }
 
 fn DeSerializeSceneComponent(reader: *std.json.Reader, scene_layer: SceneLayer, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
-    const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, ParseOptions);
+    const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, PARSE_OPTIONS);
     _ = try scene_layer.AddComponent(component_type, parsed_component);
 }
 
@@ -331,7 +331,7 @@ fn DeSerializeEntity(reader: *std.json.Reader, entity: Entity, scene_layer: Scen
 }
 
 fn DeSerializeEntityComponent(reader: *std.json.Reader, entity: Entity, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
-    const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, ParseOptions);
+    const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, PARSE_OPTIONS);
     _ = try entity.AddComponent(component_type, parsed_component);
 }
 
