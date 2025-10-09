@@ -7,6 +7,7 @@ pub const QuadComponent = @import("Components/QuadComponent.zig");
 pub const SceneIDComponent = @import("Components/SceneIDComponent.zig");
 pub const TransformComponent = @import("Components/TransformComponent.zig");
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
+pub const TextComponent = @import("Components/TextComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
@@ -20,6 +21,7 @@ pub const ComponentsList = [_]type{
     PlayerSlotComponent,
     QuadComponent,
     SceneIDComponent,
+    TextComponent,
     TransformComponent,
     ScriptComponent,
     OnInputPressedScript,
@@ -34,6 +36,7 @@ pub const EComponents = enum(u16) {
     PlayerSlotComponent = PlayerSlotComponent.Ind,
     QuadComponent = QuadComponent.Ind,
     SceneIDComponent = SceneIDComponent.Ind,
+    TextComponent = TextComponent.Ind,
     TransformComponent = TransformComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
     OnInputPressedScript = OnInputPressedScript.Ind,

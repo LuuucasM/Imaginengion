@@ -38,7 +38,6 @@ pub const Ind: usize = blk: {
 
 pub const Category: ComponentCategory = .Unique;
 
-mTextureAtlas: AssetHandle = undefined,
 mGlyphs: GlyphSetT = undefined,
 mDistanceRange: u32 = 0,
 mSize: u32 = 0,
@@ -47,6 +46,7 @@ mLineHeight: f32 = 0.0,
 mAscender: f32 = 0.0,
 mDescender: f32 = 0.0,
 mEmsize: f32 = 0.0,
+mAtlasSize: Vec2f32 = Vec2f32{ 0, 0 },
 
 pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !TextAsset {
     const file_path = std.fs.path.dirname(rel_path).?;
@@ -116,7 +116,6 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
 }
 
 pub fn Deinit(self: *TextAsset) !void {
-    if (self.mTextureAtlas.mID != AssetHandle.NullHandle) AssetManager.ReleaseAssetHandleRef(&self.mTextureAtlas);
     var i: usize = 0;
     while (i < self.mGlyphs.dense_count) : (i += 1) {
         self.mGlyphs.values[i].mKernings.deinit();
@@ -142,8 +141,6 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
     var reader = std.json.Reader.init(arena_allocator, &io_reader);
     defer reader.deinit();
 
-    var atlas_size: Vec2f32 = Vec2f32{ 0.0, 0.0 };
-
     //deserialize
     while (true) {
         const token = try reader.next();
@@ -161,13 +158,13 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
         defer arena_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "atlas")) {
-            try ProcessAtlas(&reader, &new_text_asset, &atlas_size, arena_allocator);
+            try ProcessAtlas(&reader, &new_text_asset, arena_allocator);
             std.debug.print("i do this\n", .{});
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
             try ProcessMetrics(&reader, &new_text_asset, arena_allocator);
             std.debug.print("i do this2\n", .{});
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try ProcessGlyphs(&reader, &new_text_asset, atlas_size, arena_allocator, asset_allocator);
+            try ProcessGlyphs(&reader, &new_text_asset, arena_allocator, asset_allocator);
             std.debug.print("i do this3\n", .{});
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
             try ProcessKerning(&reader, &new_text_asset, arena_allocator);
@@ -178,7 +175,7 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
     return new_text_asset;
 }
 
-fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size: *Vec2f32, arena_allocator: std.mem.Allocator) !void {
+fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the atlas
     while (true) {
         const token = try reader.next();
@@ -201,10 +198,10 @@ fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size
             new_text_asset.mSize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "width")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            atlas_size[0] = parsed_value;
+            new_text_asset.mAtlasSize[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "height")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            atlas_size[1] = parsed_value;
+            new_text_asset.mAtlasSize[1] = parsed_value;
         }
     }
 }
@@ -239,7 +236,7 @@ fn ProcessMetrics(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_al
         }
     }
 }
-fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_size: Vec2f32, arena_allocator: std.mem.Allocator, asset_allocator: std.mem.Allocator) !void {
+fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator, asset_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -253,7 +250,7 @@ fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, atlas_siz
             .mKernings = KerningsT.init(asset_allocator),
         };
         var unicode: i32 = 0;
-        try SingleGlyph(reader, &unicode, &new_glyph, atlas_size, arena_allocator);
+        try SingleGlyph(reader, &unicode, &new_glyph, new_text_asset.mAtlasSize, arena_allocator);
         if (unicode > -1) {
             _ = new_text_asset.mGlyphs.addValue(@intCast(unicode), new_glyph);
         }

@@ -33,7 +33,7 @@ pub fn EntityManager(entity_t: type) type {
         }
 
         pub fn CreateEntity(self: *Self) !entity_t {
-            if (self._IDsRemoved.items.len != 0) {
+            if (self._IDsRemoved.items.len > 0) {
                 const new_id = self._IDsRemoved.pop().?;
                 _ = try self._IDsInUse.add(new_id);
                 return new_id;
@@ -49,18 +49,12 @@ pub fn EntityManager(entity_t: type) type {
         }
 
         pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
-            std.debug.assert(self._IDsInUse.contains(entityID));
             _ = self._IDsInUse.remove(entityID);
             try self._IDsRemoved.append(self._ECSAllocator, entityID);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
             return self._IDsInUse;
-        }
-
-        pub fn SetToDestroy(self: *Self, entityID: entity_t) !void {
-            std.debug.assert(self._IDsInUse.contains(entityID));
-            try self.mIDsToRemove.append(self._ECSAllocator, entityID);
         }
     };
 }

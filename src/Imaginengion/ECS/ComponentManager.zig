@@ -51,6 +51,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             try new_component_manager.mComponentsArrays.append(ECSAllocator, child_array);
 
             inline for (components_types) |component_type| {
+                _InternalTypeValidation(component_type);
                 const new_component_array = try ComponentArray(entity_t).Init(ECSAllocator, component_type);
                 try new_component_manager.mComponentsArrays.append(ECSAllocator, new_component_array);
             }
@@ -75,10 +76,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.mEntitySkipField.clear();
         }
 
-        pub fn CreateEntity(self: *Self, entityID: entity_t) !void {
-            std.debug.assert(!self.mEntitySkipField.HasSparse(entityID));
-            const dense_ind = self.mEntitySkipField.add(entityID);
-            self.mEntitySkipField.getValueByDense(dense_ind).* = SkipFieldT.Init(.AllSkip);
+        pub fn CreateEntity(self: *Self, entity_id: entity_t) !void {
+            std.debug.assert(!self.mEntitySkipField.HasSparse(entity_id));
+            self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
@@ -126,9 +126,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn AddComponent(self: *Self, comptime component_type: type, entityID: entity_t, component: component_type) !*component_type {
-            std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-            std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
             std.debug.assert(!self.HasComponent(component_type, entityID));
 
             self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_type.Ind);
@@ -141,7 +139,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn RemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-            std.debug.assert(component_ind < self.mComponentsArrays.items.len);
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
             std.debug.assert(component_ind <= std.math.maxInt(SkipFieldT.SkipFieldType));
 
@@ -151,9 +148,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {
-            std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-            std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
 
             const internal_array_t = InternalComponentArray(entity_t, component_type);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
@@ -162,9 +157,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) ?*component_type {
-            std.debug.assert(@hasDecl(component_type, "Ind"));
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-            std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
 
             const internal_array_t = InternalComponentArray(entity_t, component_type);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
@@ -174,7 +167,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn GetMultiData(self: Self, entity_id: entity_t, component_ind: usize) @Vector(4, entity_t) {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-            std.debug.assert(component_ind < self.mComponentsArrays.items.len);
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
 
             return self.mComponentsArrays.items[component_ind].GetMultiData(entity_id);
@@ -182,7 +174,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn SetMultiData(self: Self, entity_id: entity_t, component_ind: usize, multi_data: @Vector(4, entity_t)) void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-            std.debug.assert(component_ind < self.mComponentsArrays.items.len);
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
 
             self.mComponentsArrays.items[component_ind].SetMultiData(entity_id, multi_data);
@@ -191,9 +182,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
             switch (query) {
                 .Component => |component_type| {
-                    std.debug.assert(@hasDecl(component_type, "Ind"));
-                    std.debug.assert(component_type.Ind < self.mComponentsArrays.items.len);
-
                     const internal_array_t = InternalComponentArray(entity_t, component_type);
                     const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
 
@@ -207,7 +195,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     return result;
                 },
                 .Or => |ors| {
-                    std.debug.assert(ors.len > 0);
                     var result = try self.GetGroup(ors[0], allocator);
                     inline for (ors[1..]) |or_query| {
                         var intermediate = try self.GetGroup(or_query, allocator);
@@ -217,7 +204,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     return result;
                 },
                 .And => |ands| {
-                    std.debug.assert(ands.len > 0);
                     var result = try self.GetGroup(ands[0], allocator);
                     inline for (ands[1..]) |and_query| {
                         var intermediate = try self.GetGroup(and_query, allocator);
@@ -288,6 +274,37 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
 
             result.shrinkAndFree(allocator, end_index);
+        }
+
+        fn _InternalTypeValidation(comptime component_type: type) void {
+            if (@hasDecl(component_type, "Ind") == false) {
+                @compileError("Component type does not have member \"Ind\"\n");
+            }
+            if (component_type.ind >= components_types.len) {
+                @compileError("Component Type ind value is invalid\n");
+            }
+            if (@hasDecl(component_type, "Category") == false) {
+                @compileError("Component type does not contain a component category field\n");
+            }
+            if (@hasDecl(component_type, "Editable") == true) {
+                const is_editable = component_type.Editable;
+                if (is_editable) {
+                    if (std.meta.hasFn(component_type, "EditorRender") == false) {
+                        @compileError("Component type is editable but does not have a EditorRender function\n");
+                    }
+                }
+            } else {
+                @compileError("Component type does not contain an editable field\n");
+            }
+            if (std.meta.hasFn(component_type, "GetName") == false) {
+                @compileError("Component type does not contain a GetName function");
+            }
+            if (std.meta.hasFn(component_type, "GetInd") == false) {
+                @compileError("Component type does not contain a GetInd function");
+            }
+            if (std.meta.hasFn(component_type, "Deinit") == false) {
+                @compileError("Component type does not contain a Deinit function");
+            }
         }
     };
 }

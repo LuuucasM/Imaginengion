@@ -60,6 +60,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t) !void {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM DestroyEntity", @src());
             defer zone.Deinit();
             try self.mECSEventManager.Insert(.{ .ET_DestroyEntity = .{ .mEntityID = entity_id } });
@@ -72,6 +73,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t) !entity_t {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(original_entity_id));
             const zone = Tracy.ZoneInit("ECSM DuplicateEntity", @src());
             defer zone.Deinit();
             const new_entity_id = try self.CreateEntity();
@@ -81,6 +83,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         //for getting groups of entities
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
+            _InternalCheckGroup(query);
             const zone = Tracy.ZoneInit("ECSM GetGroup", @src());
             defer zone.Deinit();
             return try self.mComponentManager.GetGroup(query, allocator);
@@ -99,8 +102,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         pub fn AddChild(self: *Self, entity_id: entity_t) !entity_t {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+
             const zone = Tracy.ZoneInit("ECSM AddChild", @src());
             defer zone.Deinit();
+
             const new_entity_id = try self.CreateEntity();
 
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
@@ -141,6 +147,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         //--------components related functions----------
         pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
+            _InternalTypeCheck(component_type);
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
             defer zone.Deinit();
 
@@ -193,26 +201,33 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             }
         }
         pub fn RemoveComponent(self: *Self, entity_id: entity_t, comptime component_type: type) !void {
+            _InternalTypeCheck(component_type);
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
             defer zone.Deinit();
             try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
         }
         pub fn RemoveComponentInd(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+            std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM RemoveComponentInd", @src());
             defer zone.Deinit();
             try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
-        pub fn HasComponent(self: Self, comptime ComponentType: type, entityID: entity_t) bool {
+        pub fn HasComponent(self: Self, comptime ComponentType: type, entity_id: entity_t) bool {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM HasComponent", @src());
             defer zone.Deinit();
-            return self.mComponentManager.HasComponent(ComponentType, entityID);
+            return self.mComponentManager.HasComponent(ComponentType, entity_id);
         }
 
-        pub fn GetComponent(self: Self, comptime ComponentType: type, entityID: entity_t) ?*ComponentType {
+        pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
+            _InternalTypeCheck(component_type);
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
             defer zone.Deinit();
-            return self.mComponentManager.GetComponent(ComponentType, entityID);
+            return self.mComponentManager.GetComponent(component_type, entity_id);
         }
 
         pub fn ProcessEvents(self: *Self, event_category: ECSEventCategory) !void {
@@ -233,6 +248,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         fn _InternalRemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+            std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
             defer zone.Deinit();
             const component_category = self.mComponentManager.mComponentsArrays.items[component_ind].GetCategory();
@@ -275,6 +292,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
             defer zone.Deinit();
             try self.mEntityManager.DestroyEntity(entity_id);
@@ -283,6 +301,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy MultiEntity", @src());
             defer zone.Deinit();
             try self.mEntityManager.DestroyEntity(entity_id);
@@ -291,6 +310,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) anyerror!void {
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Remove From Hierarchy", @src());
             defer zone.Deinit();
             //delete all children
@@ -326,6 +346,47 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         }
                     }
                 }
+            }
+        }
+
+        fn _InternalTypeCheck(comptime component_type: type) void {
+            var is_valid_type: bool = false;
+            inline for (components_types) |comp_t| {
+                if (component_type == comp_t) {
+                    is_valid_type = true;
+                }
+            }
+
+            if (is_valid_type == false) {
+                @compileError("that type can not be used with this ECS");
+            }
+        }
+
+        fn _InternalCheckGroup(comptime query: GroupQuery) void {
+            switch (query) {
+                .Component => |component_type| {
+                    _InternalTypeCheck(component_type);
+                },
+                .Not => |not| {
+                    _InternalCheckGroup(not.mFirst);
+                    _InternalCheckGroup(not.mSecond);
+                },
+                .Or => |ors| {
+                    if (ors.len < 1) {
+                        @compileError("Must have 1 or more in ors group");
+                    }
+                    inline for (ors[1..]) |or_query| {
+                        _InternalCheckGroup(or_query);
+                    }
+                },
+                .And => |ands| {
+                    if (ands.len < 1) {
+                        @compileError("Must have 1 or more in ands group");
+                    }
+                    inline for (ands[1..]) |and_query| {
+                        _InternalCheckGroup(and_query);
+                    }
+                },
             }
         }
     };

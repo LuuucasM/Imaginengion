@@ -8,11 +8,11 @@ pub const Texture2D = @import("Assets/Texture2D.zig");
 pub const TextAsset = @import("Assets/TextAsset.zig");
 
 pub const AssetsList = [_]type{
-    AssetMetaData,
-    FileMetaData,
     Texture2D,
     ScriptAsset,
     ShaderAsset,
     SceneAsset,
     TextAsset,
+    AssetMetaData,
+    FileMetaData,
 };

@@ -96,9 +96,7 @@ pub fn GetAssetHandleRef(rel_path: []const u8, path_type: PathType) !AssetHandle
 }
 
 pub fn ReleaseAssetHandleRef(asset_handle: *AssetHandle) void {
-    if (AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID)) |meta_data| {
-        meta_data.mRefs -= 1;
-    }
+    AssetM.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs -= 1;
     asset_handle.mID = AssetHandle.NullHandle;
 }
 
