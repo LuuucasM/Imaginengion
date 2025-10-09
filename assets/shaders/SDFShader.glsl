@@ -10,13 +10,12 @@ void main() {
 
 
 #type fragment
-#version 460
+#version 460 core
 #extension GL_ARB_bindless_texture : require
 #extension GL_ARB_gpu_shader_int64 : require
 
 #define MAX_STEPS 128
 #define SURF_DIST 0.00099
-#define QUAD_THICKNESS 0.001
 
 layout(location = 0) out vec4 oFragColor;
 
@@ -26,10 +25,9 @@ vec3 QuatRotate(vec3 v, vec4 q) {
     vec3 uv = cross(qvec, v);
     return v + 2.0 * q.x * uv + 2.0 * cross(qvec, uv);
 }
-
 //inverse rotation for (w, x, y, z) format
 vec3 QuatRotateInv(vec3 v, vec4 q) {
-    return QuatRotate(v, vec4(q.x, -q.y, -q.z, -q.w));
+    return QuatRotate(v, vec4(q.x, -q.y, -q.z, -q.w)); //format is (w, x, y, z) even tho opengl does (x, y, z, w)
 }
 //===========================End LinAlg=======================
 
@@ -55,8 +53,6 @@ layout(std140, binding = 0) uniform CameraUBO {
 layout(std140, binding = 1) uniform ModeUBO {
     ModeData data;
 } Mode;
-
-
 //===========================End Camera===========================
 
 //=======================Exclusion ring buffer===============
@@ -90,7 +86,10 @@ void ExcludeShape(uint shape_type, uint shape_index) {
 //===========================Shape Data===========================
 #define SHAPE_NONE 0
 #define SHAPE_QUAD 1
+#define SHAPE_GLYPH 2
 
+//========quads=========
+#define QUAD_THICKNESS 0.001
 struct QuadData {
     vec3 Position;
     vec4 Rotation;
@@ -101,14 +100,18 @@ struct QuadData {
     float TilingFactor;
     uint64_t TexIndex;
 };
-
 layout (std430, binding = 2) buffer QuadsSSBO {
      QuadData data[];
 } Quads;
-
 layout(std140, binding = 3) uniform QuadsCountUBO {
     uint count;
 } QuadsCount;
+//======end quads======
+
+//======glyphs========
+//======end glyphs======
+
+
 //===========================End Shape Data===========================
 
 //===========================Pixel Color functions====================
@@ -164,18 +167,18 @@ float IMQuad( vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
 }
 //===========================End IM SDF Functions===========================
 
+//===========================RAY MARCHING===================================
 struct DistData {
     float min_dist;
     int shape_type;
     uint shape_index;
 };
-
 DistData ShortestDistance(vec3 p){
-    float min_dist = 3.402823466e+38;
+    float min_dist = Camera.data.PerspectiveFar;
     int shape_type = SHAPE_NONE;
     uint shape_index = 0;
 
-    //for quads
+    //=========for quads===========
     for(uint i = 0u; i < QuadsCount.count; i++){
         if (IsExcluded(SHAPE_QUAD, i)) continue;
 
@@ -189,12 +192,13 @@ DistData ShortestDistance(vec3 p){
             };
         if (min_dist < SURF_DIST) return DistData(min_dist, shape_type, shape_index);
     }
+    //========end for quads============
 
-    //for future shapes
+    //=======for glyphs==============
+    //======end for glyphs===============
 
     return DistData(min_dist, shape_type, shape_index);
 }
-
 vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
     vec3 out_color = vec3(0.0);
     float out_alpha = 0.0;
@@ -227,6 +231,7 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
     }
     return vec4(out_color, out_alpha);
 }
+//===========================END RAY MARCHING===================================
 
 void main() {
     // Center gl_FragCoord.xy so that (0,0) is the center of the screen

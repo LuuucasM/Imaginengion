@@ -34,5 +34,5 @@ pub fn GetInd(self: NameComponent) u32 {
 }
 
 pub fn EditorRender(self: *NameComponent) !void {
-    _ = imgui.igInputText("##Name", &self.Name, self.Name.len, imgui.ImGuiInputTextFlags_None, null, null);
+    _ = imgui.igInputText("Name", &self.Name, self.Name.len, imgui.ImGuiInputTextFlags_None, null, null);
 }
