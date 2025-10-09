@@ -11,6 +11,7 @@ pub const OnInputPressedScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *const Entity, *const InputPressedEvent) callconv(.c) bool;
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
+    pub const Editable: bool = false;
     pub fn Deinit(_: *OnInputPressedScript) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
@@ -19,12 +20,20 @@ pub const OnInputPressedScript = struct {
             }
         }
     };
+    pub fn GetName(_: OnInputPressedScript) []const u8 {
+        return "OnInputPressedScript";
+    }
+
+    pub fn GetInd(_: OnInputPressedScript) u32 {
+        return @intCast(Ind);
+    }
 };
 
 pub const OnUpdateInputScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *const Entity) callconv(.c) bool;
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
+    pub const Editable: bool = false;
     pub fn Deinit(_: *OnUpdateInputScript) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
@@ -33,4 +42,11 @@ pub const OnUpdateInputScript = struct {
             }
         }
     };
+    pub fn GetName(_: OnUpdateInputScript) []const u8 {
+        return "OnUpdateInputScript";
+    }
+
+    pub fn GetInd(_: OnUpdateInputScript) u32 {
+        return @intCast(Ind);
+    }
 };

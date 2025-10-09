@@ -78,7 +78,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn CreateEntity(self: *Self, entity_id: entity_t) !void {
             std.debug.assert(!self.mEntitySkipField.HasSparse(entity_id));
-            self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
+            _ = self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
         }
 
         pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
@@ -277,33 +277,18 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         fn _InternalTypeValidation(comptime component_type: type) void {
+            const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
             if (@hasDecl(component_type, "Ind") == false) {
-                @compileError("Component type does not have member \"Ind\"\n");
+                @compileError("Component type does not have member \"Ind\"!" ++ type_name);
             }
-            if (component_type.ind >= components_types.len) {
-                @compileError("Component Type ind value is invalid\n");
+            if (component_type.Ind >= components_types.len + 2) {
+                @compileError("Component Type ind value is invalid!" ++ type_name);
             }
             if (@hasDecl(component_type, "Category") == false) {
-                @compileError("Component type does not contain a component category field\n");
-            }
-            if (@hasDecl(component_type, "Editable") == true) {
-                const is_editable = component_type.Editable;
-                if (is_editable) {
-                    if (std.meta.hasFn(component_type, "EditorRender") == false) {
-                        @compileError("Component type is editable but does not have a EditorRender function\n");
-                    }
-                }
-            } else {
-                @compileError("Component type does not contain an editable field\n");
-            }
-            if (std.meta.hasFn(component_type, "GetName") == false) {
-                @compileError("Component type does not contain a GetName function");
-            }
-            if (std.meta.hasFn(component_type, "GetInd") == false) {
-                @compileError("Component type does not contain a GetInd function");
+                @compileError("Component type does not contain a component category field" ++ type_name);
             }
             if (std.meta.hasFn(component_type, "Deinit") == false) {
-                @compileError("Component type does not contain a Deinit function");
+                @compileError("Component type does not contain a Deinit function" ++ type_name);
             }
         }
     };

@@ -350,15 +350,18 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         fn _InternalTypeCheck(comptime component_type: type) void {
-            var is_valid_type: bool = false;
+            const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+            comptime var is_valid_type: bool = false;
             inline for (components_types) |comp_t| {
                 if (component_type == comp_t) {
                     is_valid_type = true;
                 }
             }
-
+            if (component_type == ParentComponent or component_type == ChildComponent) {
+                is_valid_type = true;
+            }
             if (is_valid_type == false) {
-                @compileError("that type can not be used with this ECS");
+                @compileError("that type can not be used with this ECS" ++ type_name);
             }
         }
 

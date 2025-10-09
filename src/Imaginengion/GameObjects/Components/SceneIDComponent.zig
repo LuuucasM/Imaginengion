@@ -17,3 +17,11 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn GetName(_: IDComponent) []const u8 {
+    return "IDComponent";
+}
+
+pub fn GetInd(_: IDComponent) u32 {
+    return @intCast(Ind);
+}

@@ -70,6 +70,9 @@ pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHa
     defer json_reader.deinit();
 
     try DeSerializeSceneData(&json_reader, scene_layer, frame_allocator, engine_allocator);
+
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
+    scene_component.mSceneAssetHandle = scene_asset_handle;
 }
 
 pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager, frame_allocator: std.mem.Allocator) void {

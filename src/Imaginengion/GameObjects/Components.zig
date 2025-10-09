@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const AISlotComponent = @import("Components/AISlotComponent.zig");
 pub const CameraComponent = @import("Components/CameraComponent.zig");
 pub const IDComponent = @import("Components/IDComponent.zig");
@@ -42,3 +43,25 @@ pub const EComponents = enum(u16) {
     OnInputPressedScript = OnInputPressedScript.Ind,
     OnUpdateInputScript = OnUpdateInputScript.Ind,
 };
+
+comptime {
+    for (ComponentsList) |component_type| {
+        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+        if (@hasDecl(component_type, "Editable") == true) {
+            const is_editable = component_type.Editable;
+            if (is_editable) {
+                if (std.meta.hasFn(component_type, "EditorRender") == false) {
+                    @compileError("Component type is editable but does not have a EditorRender function" ++ type_name);
+                }
+            }
+        } else {
+            @compileError("Component type does not contain an editable field" ++ type_name);
+        }
+        if (std.meta.hasFn(component_type, "GetName") == false) {
+            @compileError("Component type does not contain a GetName function" ++ type_name);
+        }
+        if (std.meta.hasFn(component_type, "GetInd") == false) {
+            @compileError("Component type does not contain a GetInd function" ++ type_name);
+        }
+    }
+}

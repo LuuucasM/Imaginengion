@@ -135,7 +135,6 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
     try file_contents.resize(arena_allocator, file_size);
     _ = try text_json.readAll(file_contents.items);
 
-    std.debug.print("file contents size: {}\n", .{file_contents.items.len});
     var io_reader = std.io.Reader.fixed(file_contents.items);
 
     var reader = std.json.Reader.init(arena_allocator, &io_reader);
@@ -159,16 +158,12 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
 
         if (std.mem.eql(u8, actual_value, "atlas")) {
             try ProcessAtlas(&reader, &new_text_asset, arena_allocator);
-            std.debug.print("i do this\n", .{});
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
             try ProcessMetrics(&reader, &new_text_asset, arena_allocator);
-            std.debug.print("i do this2\n", .{});
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
             try ProcessGlyphs(&reader, &new_text_asset, arena_allocator, asset_allocator);
-            std.debug.print("i do this3\n", .{});
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
             try ProcessKerning(&reader, &new_text_asset, arena_allocator);
-            std.debug.print("i do this4\n", .{});
         }
     }
 

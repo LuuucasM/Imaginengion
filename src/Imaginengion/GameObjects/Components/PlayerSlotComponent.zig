@@ -19,3 +19,12 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn GetInd(self: PlayerSlotComponent) u32 {
+    _ = self;
+    return @intCast(Ind);
+}
+
+pub fn GetName(_: PlayerSlotComponent) []const u8 {
+    return "AISlotComponent";
+}

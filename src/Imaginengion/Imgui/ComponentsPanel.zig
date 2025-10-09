@@ -24,6 +24,7 @@ const CameraComponent = EntityComponents.CameraComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
+const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
@@ -125,6 +126,7 @@ fn EntityImguiRender(entity: Entity) !void {
     try ComponentRender(QuadComponent, entity);
     try ComponentRender(AISlotComponent, entity);
     try ComponentRender(PlayerSlotComponent, entity);
+    try ComponentRender(TextComponent, entity);
 }
 
 fn ComponentRender(comptime component_type: type, entity: Entity) !void {
@@ -214,6 +216,16 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
             defer imgui.igCloseCurrentPopup();
             const new_sprite_component = try entity.AddComponent(QuadComponent, null);
             new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
+        }
+    }
+    if (entity.HasComponent(TextComponent) == false) {
+        if (imgui.igMenuItem_Bool("TextComponent", "", false, true)) {
+            defer imgui.igCloseCurrentPopup();
+            const new_text_component = try entity.AddComponent(TextComponent, null);
+            new_text_component.mTextAssetHandle = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
+            new_text_component.mAtlasHandle = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
+            new_text_component.mAllocator = self.mEngineAllocator;
+            try new_text_component.mText.appendSlice(new_text_component.mAllocator, "No Text\x00");
         }
     }
 }
