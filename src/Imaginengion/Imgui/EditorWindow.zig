@@ -7,7 +7,7 @@ mPtr: *anyopaque,
 mVTable: *const VTab,
 
 const VTab = struct {
-    EditorRender: *const fn (*anyopaque) anyerror!void,
+    EditorRender: *const fn (*anyopaque, std.mem.Allocator) anyerror!void,
     GetComponentName: *const fn (*anyopaque) []const u8,
     GetComponentID: *const fn (*anyopaque) u32,
 };
@@ -20,17 +20,17 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
 
     const impl = struct {
-        fn EditorRender(ptr: *anyopaque) !void {
-            const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
-            try self.EditorRender();
+        fn EditorRender(ptr: *anyopaque, frame_allocator: std.mem.Allocator) !void {
+            const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
+            try self.EditorRender(frame_allocator);
         }
         fn GetComponentName(ptr: *anyopaque) []const u8 {
-            const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+            const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
             return self.GetName();
         }
 
         fn GetComponentID(ptr: *anyopaque) u32 {
-            const self = @as(Ptr, @alignCast(@ptrCast(ptr)));
+            const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
             return @intCast(self.GetInd());
         }
     };
@@ -46,8 +46,8 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     };
 }
 
-pub fn EditorRender(self: EditorWindow) !void {
-    try self.mVTable.EditorRender(self.mPtr);
+pub fn EditorRender(self: EditorWindow, frame_allocator: std.mem.Allocator) !void {
+    try self.mVTable.EditorRender(self.mPtr, frame_allocator);
 }
 
 pub fn GetComponentName(self: EditorWindow) []const u8 {

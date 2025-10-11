@@ -143,16 +143,23 @@ pub fn IsValidVec4f32(v: Vec4f32) bool {
 
     return true;
 }
+
 pub fn QuatNormalize(q: Quatf32) Quatf32 {
     const len = @sqrt(@reduce(.Add, q * q));
     if (len <= 0) return Quatf32{ 1.0, 0.0, 0.0, 0.0 };
     return q / @as(Quatf32, @splat(len));
 }
 
-pub fn NormalizeVec3(v: Vec3f32) Vec3f32 {
+pub fn NormalizeVec(v: anytype) Vec3f32 {
+    const v_type = @TypeOf(v);
+    if (v_type != Vec1f32 and v_type != Vec2f32 and v_type != Vec3f32 and v_type != Vec4f32) {
+        const type_name = std.fmt.comptimePrint("{s}\n", .{@typeName(v_type)});
+        @compileError("type must be a vector! instead type is: " ++ type_name);
+    }
+
     const len = @sqrt(@reduce(.Add, v * v));
-    if (len <= 0) return Vec3f32{ 0.0, 0.0, 0.0 };
-    return v / @as(Vec3f32, @splat(len));
+    if (len <= 0) return v_type{ 0.0, 0.0, 0.0 };
+    return v / @as(v_type, @splat(len));
 }
 
 pub fn QuatAngleAxis(angle_degrees: f32, axis: Vec3f32) Quatf32 {
@@ -224,7 +231,6 @@ pub fn Translate(v: Vec3f32) Mat4f32 {
     return result;
 }
 
-//TODO: code scale
 pub fn Scale(v: Vec3f32) Mat4f32 {
     const m = Mat4Identity();
     return Mat4f32{
@@ -288,7 +294,7 @@ pub fn Mat4Inverse(m: Mat4f32) Mat4f32 {
 
     const Col0 = Vec4f32{ Inverse[0][0], Inverse[1][0], Inverse[2][0], Inverse[3][0] };
 
-    const Dot1 = Vec4DotVec4(m[0], Col0);
+    const Dot1 = VecDotVec(m[0], Col0);
 
     return .{
         Inverse[0] / @as(Vec4f32, @splat(Dot1)),
@@ -376,11 +382,25 @@ pub fn RotationMatrixToQuat(row: Mat3f32, rotation: *Quatf32) void {
     }
 }
 
-pub fn Vec4DotVec4(v1: Vec4f32, v2: Vec4f32) f32 {
-    return @reduce(.Add, v1 * v2);
-}
+pub fn VecDotVec(v1: anytype, v2: anytype) f32 {
+    const v1_type = @TypeOf(v1);
+    const v2_type = @TypeOf(v2);
 
-pub fn Vec3DotVec3(v1: Vec3f32, v2: Vec3f32) f32 {
+    if (v1_type != v2_type) {
+        const type_name1 = std.fmt.comptimePrint(" {s}\n", .{@typeName(v1_type)});
+        const type_name2 = std.fmt.comptimePrint(" {s}\n", .{@typeName(v1_type)});
+        @compileError("vector types must be the same. instead types are:" ++ type_name1 ++ type_name2);
+    }
+
+    if (v1_type != Vec1f32 and v1_type != Vec2f32 and v1_type != Vec3f32 and v1_type != Vec4f32) {
+        const type_name = std.fmt.comptimePrint("{s}\n", .{@typeName(v1_type)});
+        @compileError("type must be a vector! instead type is: " ++ type_name);
+    }
+
+    if (v2_type != Vec1f32 and v2_type != Vec2f32 and v2_type != Vec3f32 and v2_type != Vec4f32) {
+        const type_name = std.fmt.comptimePrint("{s}\n", .{@typeName(v2_type)});
+        @compileError("type must be a vector! instead type is: " ++ type_name);
+    }
     return @reduce(.Add, v1 * v2);
 }
 
@@ -420,7 +440,7 @@ pub fn RotateVec3Quat(q: Quatf32, v: Vec3f32) Vec3f32 {
     return v + expanded_uv + expanded_uuv;
 }
 
-//TODO: glm functions for quat to degrees can be found here:
+//glm functions for quat to degrees can be found here:
 //https://github.com/g-truc/glm/blob/6543cc9ad1476dd62fbfbe3194fcf19412f0cbc0/glm/gtc/quaternion.inl#L10
 pub fn QuatToDegrees(q: Quatf32) Vec3f32 {
     const rad = Vec3f32{ QuatToPitch(q), QuatToYaw(q), QuatToRoll(q) };
@@ -452,33 +472,6 @@ pub fn QuatToRoll(q: Quatf32) f32 {
     }
     return math.atan2(y, x);
 }
-
-//TODO: for degrees to quat look into the following website:
-//https://gamedev.stackexchange.com/questions/13436/glm-euler-angles-to-quaternion
-//pub fn DegreesToQuat(euler_vector: Vec3f32) Quatf32 {
-//    const to_rad = @as(Vec3f32, @splat(math.pi / 180.0));
-//    const rad = euler_vector * to_rad;
-//
-//    const half = @as(Vec3f32, @splat(0.5));
-//    const half_angles = rad * half;
-//
-//    const c = @cos(half_angles);
-//    const s = @sin(half_angles);
-//
-//    const cr = c[0];
-//    const cp = c[1];
-//    const cy = c[2];
-//    const sr = s[0];
-//    const sp = s[1];
-//    const sy = s[2];
-//
-//    return Quatf32{
-//        cr * cp * cy + sr * sp * sy,
-//        sr * cp * cy - cr * sp * sy,
-//        cr * sp * cy + sr * cp * sy,
-//        cr * cp * sy - sr * sp * cy,
-//    };
-//}
 
 //----------------------------------UNIT TESTS----------------------------------------------------------------
 //###############################################################################################################

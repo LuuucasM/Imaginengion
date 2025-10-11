@@ -10,23 +10,17 @@ const AssetManager = @import("../AssetManager.zig");
 const TextAsset = @This();
 
 const KerningsT = std.AutoHashMap(u16, f32);
+
 const GlyphInfo = struct {
-    mPlaneBounds: Vec4f32 = Vec4f32{ -1, -1, -1, -1 },
-    mUVBounds: Vec4f32 = Vec4f32{ -1, -1, -1, -1 }, //bounds 0 and 1 are x and y for bottom left, 2 and 3 are x and y for top right for uv bounds
+    mPlaneBounds: Vec4f32 = Vec4f32{ -1, -1, -1, -1 }, //0 == left, 1 == top, 2 == right, 1 == bottom
+    mAtlasBounds: Vec4f32 = Vec4f32{ -1, -1, -1, -1 }, //bounds 0 and 1 are x and y for top left UV, 2 and 3 are x and y for bottom right UV
     mAdvance: f32 = -1,
     mKernings: KerningsT = undefined,
 };
-const GlyphSetT = SparseSet(.{
-    .SparseT = u16,
-    .DenseT = u16,
-    .ValueT = GlyphInfo,
-    .value_layout = .InternalArrayOfStructs,
-    .allow_resize = .ResizeAllowed,
-});
 
 const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
 
-const SPARSE_SET_SIZE = 2797; //note this comes from adding up all the characters from the charset.txt if that file change this number also needs to change
+const GYLPH_SET_SIZE = 2798; //note this comes from adding up all the characters from the charset.txt if that file change this number also needs to change
 
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
@@ -38,10 +32,10 @@ pub const Ind: usize = blk: {
 
 pub const Category: ComponentCategory = .Unique;
 
-mGlyphs: GlyphSetT = undefined,
+mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = undefined,
 mDistanceRange: u32 = 0,
 mSize: u32 = 0,
-mAllocator: std.mem.Allocator = undefined,
+mAssetAllocator: std.mem.Allocator = undefined,
 mLineHeight: f32 = 0.0,
 mAscender: f32 = 0.0,
 mDescender: f32 = 0.0,
@@ -116,17 +110,15 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
 }
 
 pub fn Deinit(self: *TextAsset) !void {
-    var i: usize = 0;
-    while (i < self.mGlyphs.dense_count) : (i += 1) {
-        self.mGlyphs.values[i].mKernings.deinit();
+    for (self.mGlyphs, 0..) |_, i| {
+        self.mGlyphs[i].mKernings.deinit();
     }
-    self.mGlyphs.deinit();
 }
 
 fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !TextAsset {
     var new_text_asset = TextAsset{
-        .mAllocator = asset_allocator,
-        .mGlyphs = try GlyphSetT.init(asset_allocator, SPARSE_SET_SIZE + 1, SPARSE_SET_SIZE),
+        .mAssetAllocator = asset_allocator,
+        .mGlyphs = [_]GlyphInfo{GlyphInfo{}} ** GYLPH_SET_SIZE,
     };
 
     const file_size = try text_json.getEndPos();
@@ -161,7 +153,7 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
             try ProcessMetrics(&reader, &new_text_asset, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try ProcessGlyphs(&reader, &new_text_asset, arena_allocator, asset_allocator);
+            try ProcessGlyphs(&reader, &new_text_asset, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
             try ProcessKerning(&reader, &new_text_asset, arena_allocator);
         }
@@ -231,7 +223,7 @@ fn ProcessMetrics(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_al
         }
     }
 }
-fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator, asset_allocator: std.mem.Allocator) !void {
+fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -242,17 +234,17 @@ fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
             else => return error.NotExpected,
         }
         var new_glyph = GlyphInfo{
-            .mKernings = KerningsT.init(asset_allocator),
+            .mKernings = KerningsT.init(new_text_asset.mAssetAllocator),
         };
-        var unicode: i32 = 0;
-        try SingleGlyph(reader, &unicode, &new_glyph, new_text_asset.mAtlasSize, arena_allocator);
-        if (unicode > -1) {
-            _ = new_text_asset.mGlyphs.addValue(@intCast(unicode), new_glyph);
+        var glyph_ind: usize = 0;
+        try SingleGlyph(reader, &glyph_ind, &new_glyph, arena_allocator);
+        if (glyph_ind > -1) {
+            new_text_asset.mGlyphs[@intCast(glyph_ind)] = new_glyph;
         }
     }
 }
 
-fn SingleGlyph(reader: *std.json.Reader, unicode: *i32, new_glyph: *GlyphInfo, atlas_size: Vec2f32, arena_allocator: std.mem.Allocator) !void {
+fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInfo, arena_allocator: std.mem.Allocator) !void {
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -262,20 +254,19 @@ fn SingleGlyph(reader: *std.json.Reader, unicode: *i32, new_glyph: *GlyphInfo, a
 
             else => error.NotExpected,
         };
-
         const actual_value = try arena_allocator.dupe(u8, token_value);
         defer arena_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "unicode")) {
-            const parsed_value = try std.json.innerParse(i32, arena_allocator, reader, PARSE_OPTIONS);
-            unicode.* = ToSparseIndex(parsed_value);
+            const parsed_value = try std.json.innerParse(usize, arena_allocator, reader, PARSE_OPTIONS);
+            glyph_ind.* = ToArrayIndex(parsed_value);
         } else if (std.mem.eql(u8, actual_value, "advance")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAdvance = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "planeBounds")) {
             try ProcessPlaneBounds(reader, new_glyph, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "atlasBounds")) {
-            try ProcessAtlasBounds(reader, new_glyph, atlas_size, arena_allocator);
+            try ProcessAtlasBounds(reader, new_glyph, arena_allocator);
         }
     }
 }
@@ -300,18 +291,18 @@ fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_all
             new_glyph.mPlaneBounds[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mPlaneBounds[1] = parsed_value;
+            new_glyph.mPlaneBounds[3] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneBounds[2] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mPlaneBounds[3] = parsed_value;
+            new_glyph.mPlaneBounds[1] = parsed_value;
         }
     }
 }
 
-fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, atlas_size: Vec2f32, arena_allocator: std.mem.Allocator) !void {
+fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
@@ -328,16 +319,16 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, atlas_siz
 
         if (std.mem.eql(u8, actual_value, "left")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mUVBounds[0] = parsed_value / atlas_size[0];
+            new_glyph.mAtlasBounds[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mUVBounds[1] = parsed_value / atlas_size[1];
+            new_glyph.mAtlasBounds[3] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mUVBounds[2] = parsed_value / atlas_size[0];
+            new_glyph.mAtlasBounds[2] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mUVBounds[3] = parsed_value / atlas_size[1];
+            new_glyph.mAtlasBounds[1] = parsed_value;
         }
     }
 }
@@ -372,6 +363,7 @@ fn SingleKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
     defer arena_allocator.free(actual_value1);
 
     const unicode1 = try std.json.innerParse(u16, arena_allocator, reader, PARSE_OPTIONS);
+    const glyph_ind1 = ToArrayIndex(unicode1);
 
     //unicode2
     const token2 = try reader.next();
@@ -387,55 +379,58 @@ fn SingleKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
 
     const unicode2 = try std.json.innerParse(u16, arena_allocator, reader, PARSE_OPTIONS);
 
-    if (new_text_asset.mGlyphs.hasSparse(unicode1) and new_text_asset.mGlyphs.hasSparse(unicode2)) {
-        //advance
-        const token3 = try reader.next();
-        const token_value3 = try switch (token3) {
-            .string => |value| value,
-            .number => |value| value,
+    const token3 = try reader.next();
+    const token_value3 = try switch (token3) {
+        .string => |value| value,
+        .number => |value| value,
 
-            else => error.NotExpected,
-        };
+        else => error.NotExpected,
+    };
 
-        const actual_value3 = try arena_allocator.dupe(u8, token_value3);
-        defer arena_allocator.free(actual_value3);
+    const actual_value3 = try arena_allocator.dupe(u8, token_value3);
+    defer arena_allocator.free(actual_value3);
 
-        const advance = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+    const advance = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
 
-        var glyph_info = new_text_asset.mGlyphs.getValueBySparse(unicode1);
-        try glyph_info.mKernings.put(unicode2, advance);
-    }
-
+    try new_text_asset.mGlyphs[glyph_ind1].mKernings.put(unicode2, advance);
     try SkipToken(reader); //skip the end object token
 }
 
 //NOTE: this to sprase index is based off of the current format of the charset.txt
 //if charset.txt changes this has to as well
-fn ToSparseIndex(unicode: i32) i32 {
+pub fn ToArrayIndex(unicode: usize) usize {
     const ascii_ofset = 0;
     const jamo_offset = 95;
-    const comp_jamo_offset = 351;
-    const hangul_syllables_offset = 447;
-    // 1. ASCII: [32, 126]
+    const box_offset = 351;
+    const comp_jamo_offset = 352;
+    const hangul_syllables_offset = 448;
+
+    // 1. ASCII: [32, 126] (95 chars) -> [0, 94]
     if (unicode >= 32 and unicode <= 126) {
         return unicode - 32 + ascii_ofset;
     }
 
-    // 2. Hangul Jamo: [4352, 4607]
+    // 2. Hangul Jamo: [4352, 4607] (256 chars) -> [95, 350]
     if (unicode >= 4352 and unicode <= 4607) {
         return unicode - 4352 + jamo_offset;
     }
 
-    // 3. Hangul Compatibility Jamo: [12592, 12687]
+    // New: 9633 (1 char) -> [351]
+    if (unicode == 9633) {
+        return box_offset;
+    }
+
+    // 3. Hangul Compatibility Jamo: [12592, 12687] (96 chars) -> [352, 447]
     if (unicode >= 12592 and unicode <= 12687) {
         return unicode - 12592 + comp_jamo_offset;
     }
 
-    // 4. Hangul Syllables (2,350 common): [44032, 46381]
+    // 4. Hangul Syllables (2,350 common): [44032, 46381] (2350 chars) -> [448, 2797]
     if (unicode >= 44032 and unicode <= 46381) {
         return unicode - 44032 + hangul_syllables_offset;
     }
-    return -1;
+
+    @panic("it should not get here!");
 }
 
 fn SkipToken(reader: *std.json.Reader) !void {

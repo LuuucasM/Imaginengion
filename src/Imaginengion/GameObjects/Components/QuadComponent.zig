@@ -20,14 +20,9 @@ pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 
 mShouldRender: bool = true,
-mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
-mTilingFactor: f32 = 1.0,
-mTexCoords: [2]Vec2f32 = [2]Vec2f32{
-    Vec2f32{ 0, 0 },
-    Vec2f32{ 1, 1 },
-},
+mTexture: AssetHandle = undefined,
+mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
-mTexture: AssetHandle = .{ .mID = AssetHandle.NullHandle },
 
 pub fn Deinit(_: *QuadComponent) !void {}
 
@@ -49,10 +44,14 @@ pub fn GetInd(self: QuadComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *QuadComponent) !void {
+pub fn EditorRender(self: *QuadComponent, _: std.mem.Allocator) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
-    _ = imgui.igDragFloat("TilingFactor", &self.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+
+    imgui.igSeparator();
+
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+
     const texture_asset = try self.mTexture.GetAsset(Texture2D);
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (texture_asset.GetID()))));
     imgui.igImage(
@@ -74,9 +73,7 @@ pub fn EditorRender(self: *QuadComponent) !void {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            if (self.mTexture.mID != AssetHandle.NullHandle) {
-                AssetM.ReleaseAssetHandleRef(&self.mTexture);
-            }
+            AssetM.ReleaseAssetHandleRef(&self.mTexture);
             self.mTexture = try AssetM.GetAssetHandleRef(path, .Prj);
         }
     }
@@ -115,8 +112,8 @@ fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
         imgui.igImage(
             texture_id,
             .{ .x = draw_w, .y = draw_h },
-            .{ .x = self.mTexCoords[0][0], .y = 1.0 - self.mTexCoords[0][1] },
-            .{ .x = self.mTexCoords[1][0], .y = 1.0 - self.mTexCoords[1][1] },
+            .{ .x = self.mTexOptions.mTexCoords[0], .y = 1.0 - self.mTexOptions.mTexCoords[1] },
+            .{ .x = self.mTexOptions.mTexCoords[2], .y = 1.0 - self.mTexOptions.mTexCoords[3] },
             .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
             .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
         );
@@ -128,7 +125,7 @@ fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
         // UV0 (Min)
         _ = imgui.igSliderFloat2(
             "UV0 (Min) - Slider",
-            @ptrCast(&self.mTexCoords[0]),
+            @ptrCast(&self.mTexOptions.mTexCoords[0]),
             0.0,
             1.0,
             "%.3f",
@@ -138,7 +135,7 @@ fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
         // UV1 (Max)
         _ = imgui.igSliderFloat2(
             "UV1 (Max) - Slider",
-            @ptrCast(&self.mTexCoords[1]),
+            @ptrCast(&self.mTexOptions.mTexCoords[1]),
             0.0,
             1.0,
             "%.3f",
@@ -146,12 +143,12 @@ fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
         );
 
         // Clamp and enforce min <= max per component
-        self.mTexCoords[0][0] = std.math.clamp(self.mTexCoords[0][0], 0.0, 1.0);
-        self.mTexCoords[0][1] = std.math.clamp(self.mTexCoords[0][1], 0.0, 1.0);
-        self.mTexCoords[1][0] = std.math.clamp(self.mTexCoords[1][0], 0.0, 1.0);
-        self.mTexCoords[1][1] = std.math.clamp(self.mTexCoords[1][1], 0.0, 1.0);
-        if (self.mTexCoords[0][0] > self.mTexCoords[1][0]) self.mTexCoords[0][0] = self.mTexCoords[1][0];
-        if (self.mTexCoords[0][1] > self.mTexCoords[1][1]) self.mTexCoords[0][1] = self.mTexCoords[1][1];
+        self.mTexOptions.mTexCoords[0] = std.math.clamp(self.mTexOptions.mTexCoords[0], 0.0, 1.0);
+        self.mTexOptions.mTexCoords[1] = std.math.clamp(self.mTexOptions.mTexCoords[1], 0.0, 1.0);
+        self.mTexOptions.mTexCoords[2] = std.math.clamp(self.mTexOptions.mTexCoords[2], 0.0, 1.0);
+        self.mTexOptions.mTexCoords[3] = std.math.clamp(self.mTexOptions.mTexCoords[3], 0.0, 1.0);
+        if (self.mTexOptions.mTexCoords[0] < self.mTexOptions.mTexCoords[2]) self.mTexOptions.mTexCoords[0] = self.mTexOptions.mTexCoords[2];
+        if (self.mTexOptions.mTexCoords[1] < self.mTexOptions.mTexCoords[3]) self.mTexOptions.mTexCoords[1] = self.mTexOptions.mTexCoords[3];
 
         // Close editor on double-click or outside click
         if (imgui.igIsMouseDoubleClicked_Nil(0) and imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None)) {
@@ -167,13 +164,13 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.write(self.mShouldRender);
 
     try jw.objectField("Color");
-    try jw.write(self.mColor);
+    try jw.write(self.mTexOptions.mColor);
 
     try jw.objectField("TilingFactor");
-    try jw.write(self.mTilingFactor);
+    try jw.write(self.mTexOptions.mTilingFactor);
 
     try jw.objectField("TexCoords");
-    try jw.write(self.mTexCoords);
+    try jw.write(self.mTexOptions.mTexCoords);
 
     try jw.objectField("Texture");
     if (self.mTexture.mID != AssetHandle.NullHandle) {
@@ -203,11 +200,11 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         if (std.mem.eql(u8, field_name, "ShouldRender")) {
             result.mShouldRender = try std.json.innerParse(bool, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
+            result.mTexOptions.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
-            result.mTilingFactor = try std.json.innerParse(f32, allocator, reader, options);
+            result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TexCoords")) {
-            result.mTexCoords = try std.json.innerParse([2]Vec2f32, allocator, reader, options);
+            result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Texture")) {
             const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
             result.mTexture = AssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {

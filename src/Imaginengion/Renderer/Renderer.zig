@@ -16,6 +16,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
+const TextComponent = EntityComponents.TextComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
@@ -96,6 +97,8 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
     defer zone.Deinit();
 
+    std.debug.assert(mode == 0b0 or mode == 0b1);
+
     UpdateCameraBuffer(camera_component, camera_transform);
     UpdateModeBuffer(mode);
     BeginRendering();
@@ -103,13 +106,19 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     //get all the shapes minus the children because we will render them with the parents
     const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{
         .Not = .{
-            .mFirst = GroupQuery{ .Component = QuadComponent },
+            .mFirst = GroupQuery{
+                .Or = &[_]GroupQuery{
+                    GroupQuery{ .Component = QuadComponent },
+                    GroupQuery{ .Component = TextComponent },
+                },
+            },
             .mSecond = GroupQuery{ .Component = EntityChildComponent },
         },
     }, frame_allocator);
 
     //TODO: sorting
     //TODO: culling
+    //TODO: other optimizsations?
 
     //draw the shapes
     var base_transform_component = TransformComponent{};
@@ -186,14 +195,13 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
     parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
     parent_transform.Scale += transform_component.Scale;
 
-    //draw the shape
+    //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try RenderManager.mR2D.DrawQuad(
-            parent_transform,
-            quad_component,
-        );
+        try RenderManager.mR2D.DrawQuad(parent_transform, quad_component);
     }
-    //else if more shapes when more shapes are added
+    if (entity.GetComponent(TextComponent)) |text_component| {
+        try RenderManager.mR2D.DrawText(parent_transform, text_component);
+    }
 
     //check is if parent, if so draw children else nothing
     if (entity.GetComponent(EntityParentComponent)) |parent_component| {
@@ -214,6 +222,7 @@ fn EndRendering(camera_component: *CameraComponent) !void {
 
     try RenderManager.mR2D.SetBuffers();
 
+    //UBOs
     RenderManager.mCameraUniformBuffer.Bind(0);
     RenderManager.mModeUniformBuffer.Bind(1);
 

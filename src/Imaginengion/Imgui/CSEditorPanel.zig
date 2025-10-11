@@ -22,7 +22,7 @@ pub fn Deinit(self: *CSEditorPanel) void {
     self.mEditorWindows.deinit();
 }
 
-pub fn OnImguiRender(self: *CSEditorPanel) !void {
+pub fn OnImguiRender(self: *CSEditorPanel, frame_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("CSEditor OIR", @src());
     defer zone.Deinit();
 
@@ -65,7 +65,7 @@ pub fn OnImguiRender(self: *CSEditorPanel) !void {
         var is_open = true;
         _ = imgui.igBegin(name.ptr, &is_open, 0);
         defer imgui.igEnd();
-        try editor_window.EditorRender();
+        try editor_window.EditorRender(frame_allocator);
 
         if (is_open == false) {
             try to_remove.append(fba_allocator, id_name);

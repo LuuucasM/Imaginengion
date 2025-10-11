@@ -245,11 +245,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             var result_set = HashSet(entity_t).init(allocator);
             defer result_set.deinit();
-            try result_set.appendSlice(result.items);
+            _ = try result_set.appendSlice(result.items);
 
             for (list2.items) |entity_id| {
                 if (result_set.contains(entity_id) == false) {
-                    result.append(allocator, entity_id);
+                    try result.append(allocator, entity_id);
                 }
             }
         }

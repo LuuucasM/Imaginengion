@@ -375,7 +375,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     _InternalCheckGroup(not.mSecond);
                 },
                 .Or => |ors| {
-                    if (ors.len < 1) {
+                    if (ors.len == 0) {
                         @compileError("Must have 1 or more in ors group");
                     }
                     inline for (ors[1..]) |or_query| {
@@ -383,7 +383,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     }
                 },
                 .And => |ands| {
-                    if (ands.len < 1) {
+                    if (ands.len == 0) {
                         @compileError("Must have 1 or more in ands group");
                     }
                     inline for (ands[1..]) |and_query| {

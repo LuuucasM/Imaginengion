@@ -14,6 +14,7 @@ const GameEvent = @import("../Events/GameEvent.zig");
 const SystemEvent = @import("../Events/SystemEvent.zig");
 const InputPressedEvent = SystemEvent.InputPressedEvent;
 
+const EntityScriptList = @import("../GameObjects/Components.zig").ScriptList;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
@@ -21,11 +22,13 @@ const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 
+const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptList;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const StackPosComponent = SceneComponents.StackPosComponent;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
+const AssetsList = @import("../Assets/Assets.zig").AssetsList;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 
@@ -36,14 +39,6 @@ const Tracy = @import("../Core/Tracy.zig");
 pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type, args: anytype, frame_allocator: std.mem.Allocator) !bool {
     const zone = Tracy.ZoneInit("RunEntityScript", @src());
     defer zone.Deinit();
-
-    comptime {
-        if (script_type != OnInputPressedScript and
-            script_type != OnUpdateInputScript)
-        {
-            @compileError("Cannot use this type as a Entity Script type!");
-        }
-    }
 
     const ecs_manager_go = scene_manager.mECSManagerGO;
 
@@ -59,17 +54,17 @@ pub fn RunEntityScript(scene_manager: *SceneManager, comptime script_type: type,
 
         for (scene_scripts.items) |script_id| {
             const script_component = ecs_manager_go.GetComponent(EntityScriptComponent, script_id).?;
-            if (script_component.mScriptAssetHandle) |asset_handle| {
-                const script_asset = try asset_handle.GetAsset(ScriptAsset);
 
-                const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
+            const asset_handle = script_component.mScriptAssetHandle;
+            const script_asset = try asset_handle.GetAsset(ScriptAsset);
 
-                var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
+            const run_func = script_asset.mLib.lookup(script_type.RunFuncSig, "Run").?;
 
-                const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &entity } ++ args;
+            var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
 
-                cont_bool = cont_bool and @call(.auto, run_func, combined_args);
-            }
+            const combined_args = .{ StaticEngineContext.GetInstance(), &frame_allocator, &entity } ++ args;
+
+            cont_bool = cont_bool and @call(.auto, run_func, combined_args);
         }
     }
     return cont_bool;
@@ -166,4 +161,30 @@ pub fn RunSceneScriptEditor(scene_manager: *SceneManager, comptime script_type: 
         }
     }
     return true;
+}
+
+fn _ValidateEntityType(script_type: type) void {
+    comptime var is_valid: bool = false;
+    for (EntityScriptList) |s_type| {
+        if (script_type == s_type) {
+            is_valid = true;
+        }
+    }
+    if (is_valid == false) {
+        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
+        @compileError("Invalid type passed!" ++ type_name);
+    }
+}
+
+fn _ValidateSceneType(script_type: type) void {
+    comptime var is_valid: bool = false;
+    for (SceneScriptList) |s_type| {
+        if (script_type == s_type) {
+            is_valid = true;
+        }
+    }
+    if (is_valid == false) {
+        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
+        @compileError("Invalid type passed!" ++ type_name);
+    }
 }

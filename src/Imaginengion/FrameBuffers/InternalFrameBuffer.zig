@@ -44,15 +44,18 @@ pub fn FrameBuffer(color_texture_formats: []const TextureFormat, depth_texture_f
             self.mImpl.Resize(width, height);
         }
         pub fn GetColorAttachmentID(self: Self, attachment_index: u8) usize {
+            std.debug.assert(attachment_index < color_texture_formats.len);
             return self.mImpl.GetColorAttachmentID(attachment_index);
         }
         pub fn ClearFrameBuffer(self: Self, color: Vec4f32) void {
             self.mImpl.ClearFrameBuffer(color);
         }
         pub fn ClearColorAttachment(self: Self, attachment_index: u8, value: u32) void {
+            std.debug.assert(attachment_index < color_texture_formats.len);
             self.mImpl.ClearColorAttachment(attachment_index, value);
         }
         pub fn BindColorAttachment(self: Self, attachment_index: u8, slot: usize) void {
+            std.debug.assert(attachment_index < color_texture_formats.len);
             self.mImpl.BindColorAttachment(attachment_index, slot);
         }
         pub fn BindDepthAttachment(self: Self, slot: usize) void {

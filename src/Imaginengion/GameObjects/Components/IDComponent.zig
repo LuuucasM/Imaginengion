@@ -33,7 +33,7 @@ pub fn GetInd(self: IDComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *IDComponent) !void {
+pub fn EditorRender(self: *IDComponent, _: std.mem.Allocator) !void {
     var buff: [140]u8 = undefined;
     const text = try std.fmt.bufPrintZ(&buff, "{d}\n", .{self.ID});
     _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);

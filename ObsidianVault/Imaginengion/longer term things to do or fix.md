@@ -1,3 +1,4 @@
+- add more testing and assertions
 - add sound
 - add physics
 - make animation system

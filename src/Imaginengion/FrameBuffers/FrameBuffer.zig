@@ -27,44 +27,44 @@ pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []cons
 
     const impl = struct {
         fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.Deinit();
             deinit_allocator.destroy(self);
         }
         fn Invalidate(ptr: *anyopaque) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.Invalidate();
         }
         fn Bind(ptr: *anyopaque) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.Bind();
         }
         fn Unbind(ptr: *anyopaque) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.Unbind();
         }
         fn Resize(ptr: *anyopaque, resize_width: usize, resize_height: usize) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.Resize(resize_width, resize_height);
         }
         fn ClearFrameBuffer(ptr: *anyopaque, color: Vec4f32) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.ClearFrameBuffer(color);
         }
         fn GetColorAttachmentID(ptr: *anyopaque, attachment_index: u8) usize {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             return self.GetColorAttachmentID(attachment_index);
         }
         fn ClearColorAttachment(ptr: *anyopaque, attachment_index: u8, value: u32) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.ClearColorAttachment(attachment_index, value);
         }
         fn BindColorAttachment(ptr: *anyopaque, attachment_index: u8, slot: usize) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.BindColorAttachment(attachment_index, slot);
         }
         fn BindDepthAttachment(ptr: *anyopaque, slot: usize) void {
-            const self = @as(*internal_type, @alignCast(@ptrCast(ptr)));
+            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
             self.BindDepthAttachment(slot);
         }
     };

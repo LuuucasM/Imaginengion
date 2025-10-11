@@ -21,7 +21,6 @@ pub fn GetAsset(self: AssetHandle, comptime component_type: type) !*component_ty
                 is_type = true;
             }
         }
-
         if (is_type == false) {
             @compileError("Trying to call AssetHandle.GetAsset with a non-asset type!\n");
         }

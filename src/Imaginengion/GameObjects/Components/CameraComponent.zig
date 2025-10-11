@@ -114,7 +114,7 @@ pub fn GetInd(self: CameraComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *CameraComponent) !void {
+pub fn EditorRender(self: *CameraComponent, _: std.mem.Allocator) !void {
 
     //aspect ratio
     _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);

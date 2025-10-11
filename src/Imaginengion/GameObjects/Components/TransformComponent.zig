@@ -49,7 +49,7 @@ pub fn GetInd(self: TransformComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *TransformComponent) !void {
+pub fn EditorRender(self: *TransformComponent, _: std.mem.Allocator) !void {
     DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
     DrawVec3ControlRot("Rotation", &self.Rotation, Quatf32{ 1.0, 0.0, 0.0, 0.0 }, 0.25, 100.0);
     DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);

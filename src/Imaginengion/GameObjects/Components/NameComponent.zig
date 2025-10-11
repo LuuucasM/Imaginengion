@@ -33,6 +33,6 @@ pub fn GetInd(self: NameComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *NameComponent) !void {
+pub fn EditorRender(self: *NameComponent, _: std.mem.Allocator) !void {
     _ = imgui.igInputText("Name", &self.Name, self.Name.len, imgui.ImGuiInputTextFlags_None, null, null);
 }

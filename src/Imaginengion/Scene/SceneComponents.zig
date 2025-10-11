@@ -18,6 +18,10 @@ pub const ComponentsList = [_]type{
     OnSceneStartScript,
 };
 
+pub const ScriptList = [_]type{
+    OnSceneStartScript,
+};
+
 pub const EComponents = enum(u16) {
     IDComponent = IDComponent.Ind,
     NameComponent = NameComponent.Ind,

@@ -21,15 +21,13 @@ mFirst: Entity.Type = Entity.NullEntity,
 mPrev: Entity.Type = Entity.NullEntity,
 mNext: Entity.Type = Entity.NullEntity,
 
-mScriptAssetHandle: ?AssetHandle = null,
+mScriptAssetHandle: AssetHandle = undefined,
 
 pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
 
 pub fn Deinit(self: *ScriptComponent) !void {
-    if (self.mScriptAssetHandle) |*asset_handle| {
-        AssetManager.ReleaseAssetHandleRef(asset_handle);
-    }
+    AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
 }
 
 pub fn GetName(self: ScriptComponent) []const u8 {
@@ -42,9 +40,9 @@ pub fn GetInd(self: ScriptComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *ScriptComponent) !void {
+pub fn EditorRender(self: *ScriptComponent, frame_allocator: std.mem.Allocator) !void {
     const script = try self.mScriptHandle.GetAsset(ScriptAsset);
-    try script.EditorRender();
+    try script.EditorRender(frame_allocator);
 }
 
 pub const Ind: usize = blk: {
@@ -59,13 +57,11 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.beginObject();
 
     try jw.objectField("FilePath");
+    const asset_file_data = try self.mScriptAssetHandle.GetAsset(FileMetaData);
+    try jw.write(asset_file_data.mRelPath.items);
 
-    if (self.mScriptAssetHandle) |asset_handle| {
-        const asset_file_data = try asset_handle.GetAsset(FileMetaData);
-        try jw.write(asset_file_data.mRelPath.items);
-    } else {
-        try jw.write("No Script Asset");
-    }
+    try jw.objectField("PathType");
+    try jw.write(asset_file_data.mPathType);
 
     try jw.endObject();
 }
@@ -87,7 +83,11 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         if (std.mem.eql(u8, field_name, "FilePath")) {
             const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
 
-            result.mScriptAssetHandle = AssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
+            try SkipToken(reader); //skip PathType object field
+
+            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, allocator, reader, options);
+
+            result.mScriptAssetHandle = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -95,4 +95,8 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
     }
 
     return result;
+}
+
+fn SkipToken(reader: *std.json.Reader) !void {
+    _ = try reader.next();
 }

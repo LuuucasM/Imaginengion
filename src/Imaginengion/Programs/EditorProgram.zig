@@ -273,7 +273,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         }
         try self._ComponentsPanel.OnImguiRender();
         try self._ScriptsPanel.OnImguiRender(self.mFrameAllocator);
-        try self._CSEditorPanel.OnImguiRender();
+        try self._CSEditorPanel.OnImguiRender(self.mFrameAllocator);
 
         //----------------rendering game world to screen-------------
         var camera_components = try std.ArrayList(*CameraComponent).initCapacity(self.mFrameAllocator, 1);

@@ -8,6 +8,7 @@ const Vec4f32 = LinAlg.Vec4f32;
 const Vec2f32 = LinAlg.Vec2f32;
 const AssetsList = @import("../../Assets/Assets.zig");
 const FileMetaData = AssetsList.FileMetaData;
+const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
 const TextComponent = @This();
 
 //IMGUI
@@ -33,43 +34,41 @@ pub fn GetInd(_: TextComponent) u32 {
     return @intCast(Ind);
 }
 
+mShouldRender: bool = true,
 mAllocator: std.mem.Allocator = undefined,
 mText: std.ArrayList(u8) = .{},
-mTextAssetHandle: ?AssetHandle = null,
-mAtlasHandle: ?AssetHandle = null,
-mFontSize: u32 = 12,
-mColor: Vec4f32 = Vec4f32{ 1.0, 1.0, 1.0, 1.0 },
-mBounds: Vec2f32 = Vec2f32{ -100.0, 100.0 },
+mTextAssetHandle: AssetHandle = undefined,
+mAtlasHandle: AssetHandle = undefined,
+mTexHandle: AssetHandle = undefined,
+mTexOptions: Texture2D.TexOptions = .{},
+mFontSize: f32 = 12,
+mBounds: Vec2f32 = Vec2f32{ -50.0, 50.0 },
 
 pub fn Deinit(self: *TextComponent) !void {
-    if (self.mTextAssetHandle) |*asset_handle| {
-        AssetManager.ReleaseAssetHandleRef(asset_handle);
-    }
-    if (self.mAtlasHandle) |*asset_handle| {
-        AssetManager.ReleaseAssetHandleRef(asset_handle);
-    }
+    AssetManager.ReleaseAssetHandleRef(&self.mTextAssetHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mAtlasHandle);
     self.mText.deinit(self.mAllocator);
 }
 
-pub fn EditorRender(self: *TextComponent) !void {
+pub fn EditorRender(self: *TextComponent, frame_allocator: std.mem.Allocator) !void {
     //text box
-    _ = imgui.igInputText("Text", self.mText.items.ptr, self.mText.items.len, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(@constCast(&self)));
+    const text = try frame_allocator.dupeZ(u8, self.mText.items);
+    _ = imgui.igInputText("Text", text, self.mText.items.len, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(@constCast(&self)));
 
     //font name just as a text that can be drag dropped onto to change the text
-    if (self.mTextAssetHandle) |text_asset| {
-        const file_data_asset = try text_asset.GetAsset(FileMetaData);
-        imgui.igTextUnformatted(file_data_asset.mRelPath.items.ptr, null);
-        //drag drop target for ttf files from content browser
-    }
+    const file_data_asset = try self.mTextAssetHandle.GetAsset(FileMetaData);
+    const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
+    const name_term = try frame_allocator.dupeZ(u8, name);
+    imgui.igTextUnformatted(name_term, null);
+    //drag drop target for ttf files from content browser
 
-    //font size, just set the integer
-    _ = imgui.igInputInt("Font Size", @ptrCast(&self.mFontSize), 1, 5, imgui.ImGuiInputTextFlags_None);
+    _ = imgui.igInputFloat("Font Size", @ptrCast(&self.mFontSize), 1, 5, "%.3", imgui.ImGuiInputTextFlags_None);
 
     //bounds, have sliders for left ([0]) and right ([1])
     _ = imgui.igDragFloat2("Bounds L R", @ptrCast(&self.mBounds), 0.1, 0, 0, "%.3f", imgui.ImGuiSliderFlags_None);
 
     //color, do the color picker from imgui
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mColor), imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
 }
 
 fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {
@@ -85,39 +84,30 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.beginObject();
 
     try jw.objectField("TextAssetHandle");
-    if (self.mTextAssetHandle) |asset_handle| {
-        const file_data_asset = try asset_handle.GetAsset(FileMetaData);
-        try jw.write(file_data_asset.mRelPath.items);
-
-        try jw.objectField("PathType");
-        try jw.write(file_data_asset.mPathType);
-    } else {
-        try jw.write("No Text Handle");
-
-        try jw.objectField("PathType");
-        try jw.write("No Text Handle");
-    }
+    const text_asset_data = try self.mTextAssetHandle.GetAsset(FileMetaData);
+    try jw.write(text_asset_data.mRelPath.items);
 
     try jw.objectField("AtlasHandle");
-    if (self.mAtlasHandle) |asset_handle| {
-        const file_data_asset = try asset_handle.GetAsset(FileMetaData);
-        try jw.write(file_data_asset.mRelPath.items);
+    const file_data_asset = try self.mAtlasHandle.GetAsset(FileMetaData);
+    try jw.write(file_data_asset.mRelPath.items);
 
-        try jw.objectField("PathType");
-        try jw.write(file_data_asset.mPathType);
-    } else {
-        try jw.write("No Atlas Handle");
-
-        try jw.objectField("PathType");
-        try jw.write("No Atlas Handle");
-    }
+    try jw.objectField("PathType");
+    try jw.write(file_data_asset.mPathType);
 
     try jw.objectField("FontSize");
     try jw.write(self.mFontSize);
 
+    //texture options
     try jw.objectField("Color");
-    try jw.write(self.mColor);
+    try jw.write(self.mTexOptions.mColor);
 
+    try jw.objectField("TilingFactor");
+    try jw.write(self.mTexOptions.mTilingFactor);
+
+    try jw.objectField("TexCoords");
+    try jw.write(self.mTexOptions.mTexCoords);
+
+    //bounds
     try jw.objectField("Bounds");
     try jw.write(self.mBounds);
 
@@ -163,7 +153,11 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         } else if (std.mem.eql(u8, field_name, "FontSize")) {
             result.mFontSize = try std.json.innerParse(u32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
+            result.mTexOptions.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
+            result.mTexOptions.mTilingFactor = try std.json.innerParse(Vec4f32, allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "TexCoords")) {
+            result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Bounds")) {
             result.mBounds = try std.json.innerParse(Vec2f32, allocator, reader, options);
         }

@@ -4,11 +4,22 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
+const LinAlg = @import("../../Math/LinAlg.zig");
+const Vec4f32 = LinAlg.Vec4f32;
+const Vec2f32 = LinAlg.Vec2f32;
+
+pub const TexOptions = struct {
+    mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
+    mTilingFactor: f32 = 1.0,
+    mTexCoords: Vec4f32 = Vec4f32{ 0, 0, 1, 1 },
+};
+
 const Impl = switch (builtin.os.tag) {
     .windows => @import("Texture2Ds/OpenGLTexture2D.zig"),
     else => @import("Texture2Ds/UnsupportedTexture2D.zig"),
 };
 
+mTexOptions: TexOptions = .{},
 _Impl: Impl = undefined,
 
 pub fn Init(allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !Texture2D {

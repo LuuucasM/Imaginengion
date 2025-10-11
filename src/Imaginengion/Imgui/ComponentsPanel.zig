@@ -224,8 +224,9 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
             const new_text_component = try entity.AddComponent(TextComponent, null);
             new_text_component.mTextAssetHandle = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
             new_text_component.mAtlasHandle = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
+            new_text_component.mTexHandle = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
             new_text_component.mAllocator = self.mEngineAllocator;
-            try new_text_component.mText.appendSlice(new_text_component.mAllocator, "No Text\x00");
+            try new_text_component.mText.appendSlice(new_text_component.mAllocator, "No Text");
         }
     }
 }

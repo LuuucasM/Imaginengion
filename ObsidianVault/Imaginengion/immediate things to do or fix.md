@@ -1,8 +1,4 @@
 - add ability to render font
-	- finish writing text component
-		- add a left and right bounds
-		- add color
-	- test text component is compiling and can be added to an entity and removed with no memory leaks or crashes
 	- then actually render the text component somehow
 		- so first on the cpu side, for each letter in the text create a glyphInstance (this is similar to a quad instance that we put into the quad ssbo)
 			- glyph instance will have a transform, atlas_uv, planeBounds, advance, unicode

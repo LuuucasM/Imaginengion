@@ -60,19 +60,18 @@ pub fn OnImguiRender(self: ScriptsPanel, frame_allocator: std.mem.Allocator) !vo
                 var curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
 
                 while (true) : (if (curr_id == script_component.mFirst) break) {
-                    if (curr_comp.mScriptAssetHandle) |asset_handle| {
-                        const script_file_data = try asset_handle.GetAsset(FileMetaData);
+                    const asset_handle = curr_comp.mScriptAssetHandle;
+                    const script_file_data = try asset_handle.GetAsset(FileMetaData);
 
-                        const script_name = try std.fmt.allocPrint(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id });
+                    const script_name = try std.fmt.allocPrint(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id });
 
-                        if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
+                    if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
 
-                        if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
-                            defer imgui.igEndPopup();
+                    if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+                        defer imgui.igEndPopup();
 
-                            if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                                try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
-                            }
+                        if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
+                            try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
                         }
                     }
 

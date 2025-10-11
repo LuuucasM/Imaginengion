@@ -8,7 +8,6 @@ void main() {
     gl_Position = vec4(aPosition, 0.0, 1.0);
 }
 
-
 #type fragment
 #version 460 core
 #extension GL_ARB_bindless_texture : require
@@ -28,6 +27,10 @@ vec3 QuatRotate(vec3 v, vec4 q) {
 //inverse rotation for (w, x, y, z) format
 vec3 QuatRotateInv(vec3 v, vec4 q) {
     return QuatRotate(v, vec4(q.x, -q.y, -q.z, -q.w)); //format is (w, x, y, z) even tho opengl does (x, y, z, w)
+}
+
+float Median(float r, float g, float b) {
+    return max(min(r, g), min(max(r, g), b));
 }
 //===========================End LinAlg=======================
 
@@ -88,34 +91,53 @@ void ExcludeShape(uint shape_type, uint shape_index) {
 #define SHAPE_QUAD 1
 #define SHAPE_GLYPH 2
 
+struct TextureOptions {
+    vec4 Color;
+    vec4 TexCoords;
+    float TilingFactor;
+};
+
 //========quads=========
 #define QUAD_THICKNESS 0.001
 struct QuadData {
     vec3 Position;
     vec4 Rotation;
     vec3 Scale;
-    vec4 Color;
-    vec2 TexUVTop;
-    vec2 TexUVBottom;
-    float TilingFactor;
+    TextureOptions TexOptions;
     uint64_t TexIndex;
 };
-layout (std430, binding = 2) buffer QuadsSSBO {
+layout (std430, binding = 0) buffer QuadsSSBO {
      QuadData data[];
 } Quads;
-layout(std140, binding = 3) uniform QuadsCountUBO {
+layout(std140, binding = 2) uniform QuadsCountUBO {
     uint count;
 } QuadsCount;
 //======end quads======
 
 //======glyphs========
+struct GlyphData {
+    vec3 Position;
+    float Scale;
+    vec4 Rotation;
+    vec4 AtlasBounds;
+    vec4 PlaneBounds;
+    TextureOptions TexOptions;
+    uint64_t AtlasIndex;
+    uint64_t TexIndex;
+};
+layout (std430, binding = 1) buffer GlyphSSBO {
+     GlyphData data[];
+} Glyphs;
+layout(std140, binding = 3) uniform GlyphCountUBO {
+    uint count;
+} GlyphsCount;
 //======end glyphs======
 
 
 //===========================End Shape Data===========================
 
 //===========================Pixel Color functions====================
-vec2 GetTexUVQuad(vec3 hit_point, vec3 translation, vec4 rotation, vec3 scale) {
+vec2 GetQuadUV(vec3 hit_point, vec3 translation, vec4 rotation, vec3 scale) {
     vec3 local_p = QuatRotateInv(hit_point - translation, rotation);
     vec2 half_extents_xy = scale.xy * 0.5;
     
@@ -130,21 +152,53 @@ vec2 GetTexUVQuad(vec3 hit_point, vec3 translation, vec4 rotation, vec3 scale) {
     return vec2(-1.0); // Invalid UV
 }
 
+vec2 GetTextUV(vec3 hit_point, GlyphData glyph){
+    vec3 local_p = QuatRotateInv(hit_point - glyph.Position, glyph.Rotation);
+
+    if (abs(local_p.z - QUAD_THICKNESS) < QUAD_THICKNESS) {
+        vec2 plane_size = glyph.PlaneBounds.zw - glyph.PlaneBounds.xy;
+        vec2 uv = (local_p.xy - glyph.PlaneBounds.xy) / plane_size; 
+        // Combined bounds check
+        if (all(bvec4(greaterThanEqual(uv, vec2(0.0)), lessThanEqual(uv, vec2(1.0))))) {
+            return uv;
+        }
+    }
+
+    return vec2(-1.0);
+}
+
 vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
     if (shape_type == SHAPE_QUAD){
         QuadData quad = Quads.data[shape_index];
-        vec2 texture_uv = GetTexUVQuad(hit_point, quad.Position, quad.Rotation, quad.Scale);
+        vec2 texture_uv = GetQuadUV(hit_point, quad.Position, quad.Rotation, quad.Scale);
 
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
             // Apply tiling factor to UV coordinates
-            vec2 tiled_uv = texture_uv * quad.TilingFactor;
+            vec2 tiled_uv = texture_uv * quad.TexOptions.TilingFactor;
             
             // Remap UV coordinates from quad local space to texture atlas space
-            vec2 atlas_uv = mix(quad.TexUVTop, quad.TexUVBottom, tiled_uv);
+            vec2 atlas_uv = mix(quad.TexOptions.TexCoords.xy, quad.TexOptions.TexCoords.zw, tiled_uv);
             
             sampler2D tex = sampler2D(quad.TexIndex);
             vec4 texture_color = texture(tex, atlas_uv);
-            return (quad.Color * texture_color);
+            return (quad.TexOptions.Color * texture_color);
+        }
+    }
+    if (shape_type == SHAPE_GLYPH){
+        return vec4(1.0, 0.0, 0.0, 1.0);
+        GlyphData glyph = Glyphs.data[shape_index];
+        vec2 texture_uv = GetTextUV(hit_point, glyph);
+
+        if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
+            // Apply tiling factor to UV coordinates
+            vec2 tiled_uv = texture_uv * glyph.TexOptions.TilingFactor;
+            
+            // Remap UV coordinates from quad local space to texture atlas space
+            vec2 atlas_uv = mix(glyph.TexOptions.TexCoords.xy, glyph.TexOptions.TexCoords.zw, tiled_uv);
+            
+            sampler2D tex = sampler2D(glyph.TexIndex);
+            vec4 texture_color = texture(tex, atlas_uv);
+            return (glyph.TexOptions.Color * texture_color);
         }
     }
     return vec4(0.0);
@@ -152,10 +206,23 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
 //===========================End Pixel Color Functions================
 
 //===========================Primitive SDF Functions===========================
-float sdBox( vec3 p, vec3 b )
-{
+float sdBox( vec3 p, vec3 b ) {
     vec3 q = abs(p) - b;
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
+}
+float sdGlyph(vec3 local_p, GlyphData glyph){
+
+    vec2 local = local_p.xy;
+    vec2 plane_size = glyph.PlaneBounds.zw - glyph.PlaneBounds.xy;
+
+    vec2 uv = mix(glyph.AtlasBounds.xy, glyph.AtlasBounds.zw, (local_p.xy - glyph.PlaneBounds.xy) / plane_size);
+    
+    sampler2D tex = sampler2D(glyph.AtlasIndex);
+    vec3 atlas = texture(tex, uv).rgb;
+
+    float sd = Median(atlas.r, atlas.g, atlas.b) - 0.5;
+
+    return sd;
 }
 //===========================End Primitive SDF Functions===========================
 
@@ -164,6 +231,11 @@ float IMQuad( vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
     vec3 local_p = QuatRotateInv(p - translation, rotation);
     vec3 half_extents = vec3(scale.xy * 0.5, QUAD_THICKNESS);
     return sdBox(local_p, half_extents);
+}
+
+float IMGlyph(vec3 p, GlyphData glyph){
+    vec3 local_p = QuatRotateInv(p - glyph.Position, glyph.Rotation) / glyph.Scale;
+    return sdGlyph(local_p, glyph) * glyph.Scale;
 }
 //===========================End IM SDF Functions===========================
 
@@ -195,6 +267,19 @@ DistData ShortestDistance(vec3 p){
     //========end for quads============
 
     //=======for glyphs==============
+    for(uint i = 0u; i < GlyphsCount.count; i++){
+        if (IsExcluded(SHAPE_GLYPH, i)) continue;
+
+        GlyphData glyph = Glyphs.data[i];
+        float dist = IMGlyph(p, glyph);
+        
+        if (dist < min_dist) {
+                min_dist = dist;
+                shape_type = SHAPE_GLYPH;
+                shape_index = i;
+            };
+        if (min_dist < SURF_DIST) return DistData(min_dist, shape_type, shape_index);
+    }
     //======end for glyphs===============
 
     return DistData(min_dist, shape_type, shape_index);
