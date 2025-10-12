@@ -430,7 +430,7 @@ pub fn ToArrayIndex(unicode: usize) usize {
         return unicode - 44032 + hangul_syllables_offset;
     }
 
-    @panic("it should not get here!");
+    return box_offset;
 }
 
 fn SkipToken(reader: *std.json.Reader) !void {

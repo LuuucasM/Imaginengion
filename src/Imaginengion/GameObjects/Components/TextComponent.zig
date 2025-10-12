@@ -41,19 +41,20 @@ mTextAssetHandle: AssetHandle = undefined,
 mAtlasHandle: AssetHandle = undefined,
 mTexHandle: AssetHandle = undefined,
 mTexOptions: Texture2D.TexOptions = .{},
-mFontSize: f32 = 12,
-mBounds: Vec2f32 = Vec2f32{ -50.0, 50.0 },
+mFontSize: f32 = 9,
+mBounds: Vec2f32 = Vec2f32{ 8, 8 },
 
 pub fn Deinit(self: *TextComponent) !void {
     AssetManager.ReleaseAssetHandleRef(&self.mTextAssetHandle);
     AssetManager.ReleaseAssetHandleRef(&self.mAtlasHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mTexHandle);
     self.mText.deinit(self.mAllocator);
 }
 
 pub fn EditorRender(self: *TextComponent, frame_allocator: std.mem.Allocator) !void {
     //text box
     const text = try frame_allocator.dupeZ(u8, self.mText.items);
-    _ = imgui.igInputText("Text", text, self.mText.items.len, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(@constCast(&self)));
+    _ = imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self));
 
     //font name just as a text that can be drag dropped onto to change the text
     const file_data_asset = try self.mTextAssetHandle.GetAsset(FileMetaData);
@@ -62,7 +63,7 @@ pub fn EditorRender(self: *TextComponent, frame_allocator: std.mem.Allocator) !v
     imgui.igTextUnformatted(name_term, null);
     //drag drop target for ttf files from content browser
 
-    _ = imgui.igInputFloat("Font Size", @ptrCast(&self.mFontSize), 1, 5, "%.3", imgui.ImGuiInputTextFlags_None);
+    _ = imgui.igInputFloat("Font Size", @ptrCast(&self.mFontSize), 1, 5, "%.3f", imgui.ImGuiInputTextFlags_None);
 
     //bounds, have sliders for left ([0]) and right ([1])
     _ = imgui.igDragFloat2("Bounds L R", @ptrCast(&self.mBounds), 0.1, 0, 0, "%.3f", imgui.ImGuiSliderFlags_None);
@@ -86,13 +87,23 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.objectField("TextAssetHandle");
     const text_asset_data = try self.mTextAssetHandle.GetAsset(FileMetaData);
     try jw.write(text_asset_data.mRelPath.items);
+    try jw.objectField("PathType");
+    try jw.write(text_asset_data.mPathType);
 
     try jw.objectField("AtlasHandle");
     const file_data_asset = try self.mAtlasHandle.GetAsset(FileMetaData);
     try jw.write(file_data_asset.mRelPath.items);
-
     try jw.objectField("PathType");
     try jw.write(file_data_asset.mPathType);
+
+    try jw.objectField("TextureAssetHandle");
+    const file_data_texture = try self.mTexHandle.GetAsset(FileMetaData);
+    try jw.write(file_data_texture.mRelPath.items);
+    try jw.objectField("PathType");
+    try jw.write(file_data_texture.mPathType);
+
+    try jw.objectField("Text");
+    try jw.write(self.mText.items);
 
     try jw.objectField("FontSize");
     try jw.write(self.mFontSize);
@@ -146,16 +157,33 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, allocator, reader, options);
 
-            result.mTextAssetHandle = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mAtlasHandle = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+                std.debug.print("error: {}\n", .{err});
+                @panic("");
+            };
+        } else if (std.mem.eql(u8, field_name, "TextureAssetHandle")) {
+            const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
+
+            try SkipToken(reader); //skip PathType object field
+
+            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, allocator, reader, options);
+
+            result.mTexHandle = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
         } else if (std.mem.eql(u8, field_name, "FontSize")) {
-            result.mFontSize = try std.json.innerParse(u32, allocator, reader, options);
+            result.mFontSize = try std.json.innerParse(f32, allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "Text")) {
+            const text = try std.json.innerParse([]const u8, allocator, reader, options);
+            result.mAllocator = allocator;
+            result.mText.appendSlice(result.mAllocator, text) catch {
+                @panic("error appending slice, error out of memory");
+            };
         } else if (std.mem.eql(u8, field_name, "Color")) {
             result.mTexOptions.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
-            result.mTexOptions.mTilingFactor = try std.json.innerParse(Vec4f32, allocator, reader, options);
+            result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TexCoords")) {
             result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Bounds")) {

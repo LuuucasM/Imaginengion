@@ -183,7 +183,7 @@ pub fn DrawText(self: *Renderer2D, transform_component: *EntityTransformComponen
     var pen_y = transform_component.Translation[1];
 
     for (text_component.mText.items, 0..) |char, i| {
-        const array_ind = TextAsset.ToArrayIndex(char);
+        const array_ind: usize = TextAsset.ToArrayIndex(char);
         const glyph = text_asset.mGlyphs[array_ind];
 
         if (char == 32) { //if its space just continue on

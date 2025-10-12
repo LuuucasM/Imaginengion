@@ -18,6 +18,7 @@ const EntityTransformComponent = EntityComponents.TransformComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
+const EntityTextComponent = EntityComponents.TextComponent;
 
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
@@ -126,8 +127,8 @@ fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame
     try write_stream.beginObject();
 
     try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneIDComponent, "SceneID");
-    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneIDComponent, "SceneData");
-    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneIDComponent, "Transform");
+    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneComponent, "SceneData");
+    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneTransformComponent, "Transform");
     try SerializeMultiSceneComponents(write_stream, scene_layer, SceneScriptComponent, "SceneScript");
 
     try SerializeSceneEntities(write_stream, scene_layer, frame_allocator);
@@ -200,6 +201,7 @@ fn SerializeEntity(write_stream: *WriteStream, entity: Entity) !void {
     try SerializeUniqueEntityComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent");
     try SerializeUniqueEntityComponent(write_stream, entity, EntityTransformComponent, "TransformComponent");
     try SerializeUniqueEntityComponent(write_stream, entity, QuadComponent, "QuadComponent");
+    try SerializeUniqueEntityComponent(write_stream, entity, EntityTextComponent, "TextComponent");
     try SerializeMultiEntityComponents(write_stream, entity, EntityScriptComponent, "EntityScript");
 
     try SerializeParentComponent(write_stream, entity);
@@ -282,6 +284,7 @@ fn DeSerializeSceneData(reader: *std.json.Reader, scene_layer: SceneLayer, frame
         } else if (std.mem.eql(u8, actual_value, "Transform")) {
             try DeSerializeSceneComponent(reader, scene_layer, SceneTransformComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "SceneScript")) {
+            std.debug.print("crash script\n", .{});
             try DeSerializeSceneComponent(reader, scene_layer, SceneScriptComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             const new_entity = try scene_layer.CreateBlankEntity();
@@ -327,6 +330,9 @@ fn DeSerializeEntity(reader: *std.json.Reader, entity: Entity, scene_layer: Scen
             try DeSerializeEntityComponent(reader, entity, QuadComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityTransformComponent, frame_allocator);
+        } else if (std.mem.eql(u8, actual_value, "TextComponent")) {
+            try DeSerializeEntityComponent(reader, entity, EntityTextComponent, frame_allocator);
+            try DeserializeTextComponent(entity, engine_allocator);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             try DeSerializeParentComponent(reader, entity, scene_layer, frame_allocator, engine_allocator);
         }
@@ -358,6 +364,22 @@ fn DeserializeCameraComponent(entity: Entity, engine_allocator: std.mem.Allocato
         camera_component.mViewportVertexArray.SetIndexBuffer(camera_component.mViewportIndexBuffer);
 
         camera_component.SetViewportSize(camera_component.mViewportWidth, camera_component.mViewportHeight);
+    }
+}
+
+fn DeserializeTextComponent(entity: Entity, engine_allocator: std.mem.Allocator) !void {
+    if (entity.GetComponent(EntityTextComponent)) |text_component| {
+        const new_memory = try engine_allocator.alloc(u8, text_component.mText.items.len);
+
+        @memcpy(new_memory, text_component.mText.items);
+
+        text_component.mText.deinit(text_component.mAllocator);
+
+        text_component.mText.items = new_memory;
+
+        text_component.mText.capacity = new_memory.len;
+
+        text_component.mAllocator = engine_allocator;
     }
 }
 

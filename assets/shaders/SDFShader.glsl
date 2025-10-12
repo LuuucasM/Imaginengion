@@ -156,13 +156,30 @@ vec2 GetTextUV(vec3 hit_point, GlyphData glyph){
     vec3 local_p = QuatRotateInv(hit_point - glyph.Position, glyph.Rotation);
 
     if (abs(local_p.z - QUAD_THICKNESS) < QUAD_THICKNESS) {
-        vec2 plane_size = glyph.PlaneBounds.zw - glyph.PlaneBounds.xy;
-        vec2 uv = (local_p.xy - glyph.PlaneBounds.xy) / plane_size; 
-        // Combined bounds check
+        // Extract bounds: [left, top, right, bottom]
+        float left = glyph.PlaneBounds.x;
+        float top = glyph.PlaneBounds.y;
+        float right = glyph.PlaneBounds.z;
+        float bottom = glyph.PlaneBounds.w;
+        
+        // Apply centering offset
+        vec2 plane_center = vec2((left + right) * 0.5, (top + bottom) * 0.5) * glyph.Scale;
+        local_p.xy -= plane_center;
+        
+        // Calculate size
+        vec2 plane_size = vec2(right - left, top - bottom) * glyph.Scale;
+        
+        // UV calculation: map from centered space back to [0,1]
+        vec2 uv = (local_p.xy + plane_size * 0.5) / plane_size;
+        
+        // Flip V coordinate since texture space is typically bottom-up but plane is top-down
+        uv.y = 1.0 - uv.y;
+        
         if (all(bvec4(greaterThanEqual(uv, vec2(0.0)), lessThanEqual(uv, vec2(1.0))))) {
             return uv;
         }
     }
+    glyph.Atlas
 
     return vec2(-1.0);
 }
@@ -185,17 +202,15 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
         }
     }
     if (shape_type == SHAPE_GLYPH){
-        return vec4(1.0, 0.0, 0.0, 1.0);
+        //return vec4(1.0, 0.0, 0.0, 1.0);
         GlyphData glyph = Glyphs.data[shape_index];
         vec2 texture_uv = GetTextUV(hit_point, glyph);
 
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
-            // Apply tiling factor to UV coordinates
             vec2 tiled_uv = texture_uv * glyph.TexOptions.TilingFactor;
-            
-            // Remap UV coordinates from quad local space to texture atlas space
+
             vec2 atlas_uv = mix(glyph.TexOptions.TexCoords.xy, glyph.TexOptions.TexCoords.zw, tiled_uv);
-            
+
             sampler2D tex = sampler2D(glyph.TexIndex);
             vec4 texture_color = texture(tex, atlas_uv);
             return (glyph.TexOptions.Color * texture_color);
@@ -210,19 +225,22 @@ float sdBox( vec3 p, vec3 b ) {
     vec3 q = abs(p) - b;
     return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0);
 }
-float sdGlyph(vec3 local_p, GlyphData glyph){
-
-    vec2 local = local_p.xy;
-    vec2 plane_size = glyph.PlaneBounds.zw - glyph.PlaneBounds.xy;
-
-    vec2 uv = mix(glyph.AtlasBounds.xy, glyph.AtlasBounds.zw, (local_p.xy - glyph.PlaneBounds.xy) / plane_size);
+float sdGlyph(vec3 p, GlyphData glyph){
+    float left = glyph.PlaneBounds.x;
+    float top = glyph.PlaneBounds.y;
+    float right = glyph.PlaneBounds.z;
+    float bottom = glyph.PlaneBounds.w;
     
-    sampler2D tex = sampler2D(glyph.AtlasIndex);
-    vec3 atlas = texture(tex, uv).rgb;
+    vec2 plane_size = vec2(right - left, top - bottom) * glyph.Scale;
+    
+    vec2 plane_center = vec2((left + right) * 0.5, (top + bottom) * 0.5) * glyph.Scale;
+    
+    // Offset to center
+    p.xy -= plane_center;
+    
+    vec3 half_extents = vec3(plane_size * 0.5, QUAD_THICKNESS);
 
-    float sd = Median(atlas.r, atlas.g, atlas.b) - 0.5;
-
-    return sd;
+    return sdBox(p, half_extents);
 }
 //===========================End Primitive SDF Functions===========================
 
@@ -234,8 +252,8 @@ float IMQuad( vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
 }
 
 float IMGlyph(vec3 p, GlyphData glyph){
-    vec3 local_p = QuatRotateInv(p - glyph.Position, glyph.Rotation) / glyph.Scale;
-    return sdGlyph(local_p, glyph) * glyph.Scale;
+    vec3 local_p = QuatRotateInv(p - glyph.Position, glyph.Rotation);
+    return sdGlyph(local_p, glyph);
 }
 //===========================End IM SDF Functions===========================
 
