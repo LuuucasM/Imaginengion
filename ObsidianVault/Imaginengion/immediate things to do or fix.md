@@ -1,8 +1,7 @@
-- add ability to render font
-	- then actually render the text component somehow
-		- so first on the cpu side, for each letter in the text create a glyphInstance (this is similar to a quad instance that we put into the quad ssbo)
-			- glyph instance will have a transform, atlas_uv, planeBounds, advance, unicode
-			- note: the transform will be calculated on the cpu side. 
-				- We will take the transform of the TextComponent and then starting from left bounds and process each glyphs position one at a time advancing using the advance and plane bounds. we can use the line height from the text asset to determine how far spacing we should go down. gpt uses a pen_x and pen_y when iterating through glyphs to calculate their instance data
-		- then on the gpu side we just iterate through for each ray we do the same thing we are doing for quads except we create a new data structure called like glyphs? and per pixel per day we iterate through the glyphs and check the distance and if we are touching then we color that pixel the color of whatever is set in the color variable
+- change shaders so that vertex and fragment shader are separate files
+	- download glslangValidator from git hub and use it to pre compile shaders into spirv binary files 
+		- https://chatgpt.com/share/68ebb7bc-d824-8004-86e0-5fd151bbb773
+		- use specific flags to enable nsight debugging
+	- change shaders again so that when having enable_tracy_gpu (new compile option that i have to make) is enabled it instead uses these binaries instead
+	- do profiling hopefully?
 - change name component to use dynamic array like everything else for the editor we want it to be dynamic and then during the runtime we can use comptime programming to make everything static / fixed sized (some things need to be on heap still but fixed size)

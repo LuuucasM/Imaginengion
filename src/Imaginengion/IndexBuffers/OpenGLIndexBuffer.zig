@@ -15,6 +15,8 @@ pub fn Init(indices: []u32, count: usize) OpenGLIndexBuffer {
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_ib.mBufferID);
     glad.glBufferData(glad.GL_ARRAY_BUFFER, @intCast(count * @sizeOf(u32)), indices.ptr, glad.GL_STATIC_DRAW);
 
+    glad.glObjectLabel(glad.GL_BUFFER, new_ib.mBufferID, -1, "IndexBuffer");
+
     return new_ib;
 }
 

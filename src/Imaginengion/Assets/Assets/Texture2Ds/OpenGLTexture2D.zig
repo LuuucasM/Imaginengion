@@ -59,6 +59,8 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
 
     glad.glMakeTextureHandleResidentARB(arb_handle);
 
+    glad.glObjectLabel(glad.GL_TEXTURE, new_texture_id, -1, "Texture2D");
+
     return OpenGLTexture2D{
         ._Width = width,
         ._Height = height,

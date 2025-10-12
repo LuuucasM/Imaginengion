@@ -54,7 +54,9 @@ pub fn Deinit(self: *TextComponent) !void {
 pub fn EditorRender(self: *TextComponent, frame_allocator: std.mem.Allocator) !void {
     //text box
     const text = try frame_allocator.dupeZ(u8, self.mText.items);
-    _ = imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self));
+    if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
+        _ = self.mText.swapRemove(self.mText.items.len - 1);
+    }
 
     //font name just as a text that can be drag dropped onto to change the text
     const file_data_asset = try self.mTextAssetHandle.GetAsset(FileMetaData);

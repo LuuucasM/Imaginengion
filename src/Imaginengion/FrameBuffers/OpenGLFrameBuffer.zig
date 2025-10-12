@@ -115,6 +115,8 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             std.debug.assert(glad.glCheckFramebufferStatus(glad.GL_FRAMEBUFFER) == glad.GL_FRAMEBUFFER_COMPLETE);
 
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, 0);
+
+            glad.glObjectLabel(glad.GL_FRAMEBUFFER, self.mBufferID, -1, "FrameBuffer");
         }
 
         fn AttachColorTexture(attachment_id: u32, texture_format: TextureFormat, width: usize, height: usize, index: c_uint) void {

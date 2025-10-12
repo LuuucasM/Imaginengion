@@ -14,6 +14,8 @@ pub fn Init(size: usize) OpenGLSSBO {
     glad.glCreateBuffers(1, @ptrCast(&new_ssbo.mBufferID));
     glad.glNamedBufferData(new_ssbo.mBufferID, @intCast(size), null, glad.GL_DYNAMIC_DRAW);
 
+    glad.glObjectLabel(glad.GL_BUFFER, new_ssbo.mBufferID, -1, "SSBO");
+
     return new_ssbo;
 }
 

@@ -19,12 +19,10 @@ pub fn Init(in_window: *Window) OpenGLContext {
     const success: c_int = glad.gladLoadGLLoader(procaddr);
     std.debug.assert(success == @as(c_int, 1));
 
-    if ((builtin.mode == .Debug) or (builtin.mode == .ReleaseSafe)) {
-        glad.glEnable(glad.GL_DEBUG_OUTPUT);
-        glad.glEnable(glad.GL_DEBUG_OUTPUT_SYNCHRONOUS);
-        glad.glDebugMessageCallback(glDebugOutput, null);
-        glad.glDebugMessageControl(glad.GL_DONT_CARE, glad.GL_DONT_CARE, glad.GL_DONT_CARE, 0, null, glad.GL_TRUE);
-    }
+    glad.glEnable(glad.GL_DEBUG_OUTPUT);
+    glad.glEnable(glad.GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glad.glDebugMessageCallback(glDebugOutput, null);
+    glad.glDebugMessageControl(glad.GL_DONT_CARE, glad.GL_DONT_CARE, glad.GL_DONT_CARE, 0, null, glad.GL_TRUE);
 
     glad.glEnable(glad.GL_DEPTH_TEST);
     glad.glDepthFunc(glad.GL_LESS);

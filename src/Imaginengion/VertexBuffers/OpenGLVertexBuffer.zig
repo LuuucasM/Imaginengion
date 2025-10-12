@@ -22,6 +22,9 @@ pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
     glad.glCreateBuffers(1, &new_vb.mBufferID);
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_vb.mBufferID);
     glad.glNamedBufferStorage(new_vb.mBufferID, @intCast(size), null, glad.GL_DYNAMIC_STORAGE_BIT);
+
+    glad.glObjectLabel(glad.GL_BUFFER, new_vb.mBufferID, -1, "VertexBuffer");
+
     return new_vb;
 }
 

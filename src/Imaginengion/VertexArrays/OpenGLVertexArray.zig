@@ -23,6 +23,8 @@ pub fn Init(allocator: std.mem.Allocator) OpenGLVertexArray {
 
     glad.glCreateVertexArrays(1, &new_va.mArrayID);
 
+    glad.glObjectLabel(glad.GL_VERTEX_ARRAY, new_va.mArrayID, -1, "VertexArray");
+
     return new_va;
 }
 

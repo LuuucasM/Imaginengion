@@ -27,9 +27,9 @@ pub fn Init() WindowsWindow {
     const success: c_int = glfw.glfwInit();
     std.debug.assert(success != glfw.GLFW_FALSE);
 
-    if ((builtin.mode == .Debug) or (builtin.mode == .ReleaseSafe)) {
-        glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, glfw.GLFW_TRUE);
-    }
+    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 6);
+    glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, glfw.GLFW_TRUE);
 
     const new_glfw_window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
     if (new_glfw_window == null) {

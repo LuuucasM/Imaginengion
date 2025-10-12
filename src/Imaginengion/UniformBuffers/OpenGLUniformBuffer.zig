@@ -12,6 +12,8 @@ pub fn Init(size: u32) OpenGLUniformBuffer {
     glad.glCreateBuffers(1, &new_ub.mBufferID);
     glad.glNamedBufferData(new_ub.mBufferID, size, null, glad.GL_DYNAMIC_DRAW);
 
+    glad.glObjectLabel(glad.GL_BUFFER, new_ub.mBufferID, -1, "UniformBuffer");
+
     return new_ub;
 }
 

@@ -302,6 +302,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
         }
         glad.glAttachShader(shader_id, shader);
         try gl_shader_ids.append(allocator, shader);
+        glad.glObjectLabel(glad.GL_SHADER, shader, -1, ShaderStrFromType(shader_type).ptr);
     }
 
     self.mShaderID = shader_id;
@@ -329,10 +330,14 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
         return false;
     }
+
     for (gl_shader_ids.items) |id| {
         glad.glDetachShader(shader_id, id);
         glad.glDeleteShader(id);
     }
+
+    glad.glObjectLabel(glad.GL_PROGRAM, shader_id, -1, "ShaderProgram");
+
     return true;
 }
 
@@ -346,6 +351,40 @@ fn ShaderTypeFromStr(str: []const u8) glad.GLenum {
     }
 }
 
+fn ShaderStrFromType(shader_type: glad.GLenum) []const u8 {
+    if (shader_type == glad.GL_VERTEX_SHADER) {
+        return "Vertex Shader";
+    } else if (shader_type == glad.GL_FRAGMENT_SHADER) {
+        return "Fragment Shader";
+    } else {
+        @panic("That shader type isnt supported yet!\n");
+    }
+}
+
 fn TypeStrToDataType(str: []const u8) ShaderDataType {
-    if (std.mem.eql(u8, str, "float")) return ShaderDataType.Float else if (std.mem.eql(u8, str, "vec2")) return ShaderDataType.Float2 else if (std.mem.eql(u8, str, "vec3")) return ShaderDataType.Float3 else if (std.mem.eql(u8, str, "vec4")) return ShaderDataType.Float4 else if (std.mem.eql(u8, str, "mat3")) return ShaderDataType.Mat3 else if (std.mem.eql(u8, str, "mat4")) return ShaderDataType.Mat4 else if (std.mem.eql(u8, str, "uint")) return ShaderDataType.UInt else if (std.mem.eql(u8, str, "int")) return ShaderDataType.Int else if (std.mem.eql(u8, str, "int2")) return ShaderDataType.Int2 else if (std.mem.eql(u8, str, "int3")) return ShaderDataType.Int3 else if (std.mem.eql(u8, str, "int4")) return ShaderDataType.Int4 else if (std.mem.eql(u8, str, "bool")) return ShaderDataType.Bool else @panic("unrecognized type str!\n");
+    if (std.mem.eql(u8, str, "float")) {
+        return ShaderDataType.Float;
+    } else if (std.mem.eql(u8, str, "vec2")) {
+        return ShaderDataType.Float2;
+    } else if (std.mem.eql(u8, str, "vec3")) {
+        return ShaderDataType.Float3;
+    } else if (std.mem.eql(u8, str, "vec4")) {
+        return ShaderDataType.Float4;
+    } else if (std.mem.eql(u8, str, "mat3")) {
+        return ShaderDataType.Mat3;
+    } else if (std.mem.eql(u8, str, "mat4")) {
+        return ShaderDataType.Mat4;
+    } else if (std.mem.eql(u8, str, "uint")) {
+        return ShaderDataType.UInt;
+    } else if (std.mem.eql(u8, str, "int")) {
+        return ShaderDataType.Int;
+    } else if (std.mem.eql(u8, str, "int2")) {
+        return ShaderDataType.Int2;
+    } else if (std.mem.eql(u8, str, "int3")) {
+        return ShaderDataType.Int3;
+    } else if (std.mem.eql(u8, str, "int4")) {
+        return ShaderDataType.Int4;
+    } else if (std.mem.eql(u8, str, "bool")) {
+        return ShaderDataType.Bool;
+    } else @panic("unrecognized type str!\n");
 }
