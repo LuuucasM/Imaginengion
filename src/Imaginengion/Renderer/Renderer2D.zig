@@ -187,7 +187,7 @@ pub fn DrawText(self: *Renderer2D, transform_component: *EntityTransformComponen
         const glyph = text_asset.mGlyphs[array_ind];
 
         if (char == 32) { //if its space just continue on
-            pen_x += glyph.mAdvance;
+            pen_x += glyph.mAdvance * text_component.mFontSize;
             continue;
         }
 
@@ -198,7 +198,7 @@ pub fn DrawText(self: *Renderer2D, transform_component: *EntityTransformComponen
 
         if (pen_x + glyph_width > right_bounds) {
             pen_x = left_bounds;
-            pen_y -= text_asset.mLineHeight;
+            pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
         try self.mGlyphBufferBase.append(self._Allocator, .{

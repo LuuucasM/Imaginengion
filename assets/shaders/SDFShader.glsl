@@ -179,9 +179,23 @@ vec2 GetTextUV(vec3 hit_point, GlyphData glyph){
             return uv;
         }
     }
-    glyph.Atlas
-
     return vec2(-1.0);
+}
+
+float GetMSD(vec2 texture_uv, GlyphData glyph){
+    sampler2D atlas_tex = sampler2D(glyph.AtlasIndex);
+    vec2 atlas_size = vec2(textureSize(atlas_tex, 0));
+
+    vec2 atlas_min = glyph.AtlasBounds.xy / atlas_size;
+    vec2 atlas_max = glyph.AtlasBounds.zw / atlas_size;
+
+    // Map UV to atlas bounds
+    vec2 atlas_uv = mix(atlas_min, atlas_max, texture_uv);
+    
+    vec3 msd = texture(atlas_tex, atlas_uv).rgb;
+    
+    // Get median signed distance
+    return Median(msd.r, msd.g, msd.b);
 }
 
 vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
@@ -207,13 +221,21 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
         vec2 texture_uv = GetTextUV(hit_point, glyph);
 
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
-            vec2 tiled_uv = texture_uv * glyph.TexOptions.TilingFactor;
+            float msd = GetMSD(texture_uv, glyph);
 
-            vec2 atlas_uv = mix(glyph.TexOptions.TexCoords.xy, glyph.TexOptions.TexCoords.zw, tiled_uv);
+            if (msd >= 0.5){
+                float alpha = smoothstep(0.4, 0.6, msd);
 
-            sampler2D tex = sampler2D(glyph.TexIndex);
-            vec4 texture_color = texture(tex, atlas_uv);
-            return (glyph.TexOptions.Color * texture_color);
+                vec2 tiled_uv = texture_uv * glyph.TexOptions.TilingFactor;
+
+                vec2 atlas_uv = mix(glyph.TexOptions.TexCoords.xy, glyph.TexOptions.TexCoords.zw, tiled_uv);
+
+                sampler2D tex = sampler2D(glyph.TexIndex);
+
+                vec4 texture_color = texture(tex, atlas_uv);
+
+                return (vec4(glyph.TexOptions.Color.rgb, alpha * glyph.TexOptions.Color.a) * texture_color);
+            }
         }
     }
     return vec4(0.0);
