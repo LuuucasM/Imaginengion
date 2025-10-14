@@ -6,13 +6,18 @@ const RendererBackend = enum {
     Vulkan,
 };
 
-pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, enable_prof: ?bool) *std.Build.Step.Compile {
+pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, enable_tracy: ?bool, enable_nsight: ?bool) *std.Build.Step.Compile {
     //---------------------------BUILD OPTIONS--------------------------
     var build_options = b.addOptions();
-    if (enable_prof != null and enable_prof.? == true) {
-        build_options.addOption(bool, "enable_profiler", true);
+    if (enable_tracy != null and enable_tracy.? == true) {
+        build_options.addOption(bool, "enable_tracy", true);
     } else {
-        build_options.addOption(bool, "enable_profiler", false);
+        build_options.addOption(bool, "enable_tracy", false);
+    }
+    if (enable_nsight != null and enable_nsight.? == true) {
+        build_options.addOption(bool, "enable_nsight", true);
+    } else {
+        build_options.addOption(bool, "enable_nsight", false);
     }
     //--------------------------END BUILD OPTIONS------------------------
 

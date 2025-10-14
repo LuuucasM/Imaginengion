@@ -1,5 +1,5 @@
-const ShaderDataType = @import("../Shaders/Shader.zig").ShaderDataType;
-const ShaderDataTypeSize = @import("../Shaders/Shader.zig").ShaderDataTypeSize;
+const ShaderDataType = @import("../Assets/Assets/ShaderAsset.zig").ShaderDataType;
+const ShaderDataTypeSize = @import("../Assets/Assets/ShaderAsset.zig").ShaderDataTypeSize;
 
 const VertexBufferElement = @This();
 

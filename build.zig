@@ -9,9 +9,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const enable_prof = b.option(bool, "enable_profiler", "Enable the profiler");
+    const enable_tracy = b.option(bool, "enable_tracy", "Enable the CPU profiler tracy");
+    const enable_nsight = b.option(bool, "enable_tracy", "Enable the GPU profiler nvidia nsight");
     //function builds the entire engine lib including the dependencies and all
-    const engine_lib = MakeEngineLib(b, target, optimize, enable_prof);
+    const engine_lib = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight);
 
     //make exe
     const editor_exe = b.addExecutable(.{

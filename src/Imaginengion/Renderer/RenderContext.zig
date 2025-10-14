@@ -41,3 +41,11 @@ pub fn DrawIndexed(self: RenderContext, vertex_array: VertexArray, index_count: 
 pub fn DrawELines(self: RenderContext, vertex_array: VertexArray, vertex_count: usize) void {
     self.mImpl.DrawELines(vertex_array, vertex_count);
 }
+
+pub fn PushDebugGroup(self: RenderContext, message: []const u8) void {
+    self.mImpl.PushDebugGroup(message);
+}
+
+pub fn PopDebugGroup(self: RenderContext) void {
+    self.mImpl.PopDebugGroup();
+}

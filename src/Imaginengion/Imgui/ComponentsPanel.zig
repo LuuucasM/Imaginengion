@@ -30,7 +30,6 @@ const TransformComponent = EntityComponents.TransformComponent;
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
-const ShaderAsset = Assets.ShaderAsset;
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -184,8 +183,8 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
             };
 
             const shader_asset = try Renderer.GetSDFShader();
-            try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.mShader.GetLayout());
-            new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.mShader.GetStride());
+            try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout());
+            new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
             var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
             new_camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);

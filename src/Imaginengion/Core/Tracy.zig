@@ -1,11 +1,11 @@
 const std = @import("std");
 const build_options = @import("build_options");
 
-pub const enable_profiler = build_options.enable_profiler;
+pub const enable_tracy = build_options.enable_tracy;
 
-const tracy = if (enable_profiler) @import("CImports.zig").tracy else void;
+const tracy = if (enable_tracy) @import("CImports.zig").tracy else void;
 
-pub const Zone = if (enable_profiler) struct {
+pub const Zone = if (enable_tracy) struct {
     mContext: tracy.TracyCZoneCtx,
 
     pub fn begin(
@@ -47,7 +47,7 @@ pub const Zone = if (enable_profiler) struct {
 };
 
 pub fn ZoneInit(comptime name: [*:0]const u8, comptime src: std.builtin.SourceLocation) Zone {
-    if (enable_profiler) {
+    if (enable_tracy) {
         return Zone.begin(
             name,
             src.fn_name, // Optionally use @src().fn_name if available
@@ -61,7 +61,7 @@ pub fn ZoneInit(comptime name: [*:0]const u8, comptime src: std.builtin.SourceLo
 }
 
 pub fn FrameMark() void {
-    if (enable_profiler) {
+    if (enable_tracy) {
         tracy.___tracy_emit_frame_mark(null);
     }
 }

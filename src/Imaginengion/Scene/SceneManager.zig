@@ -44,7 +44,6 @@ const Assets = @import("../Assets/Assets.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const SceneAsset = Assets.SceneAsset;
-const ShaderAsset = Assets.ShaderAsset;
 const FileMetaData = Assets.FileMetaData;
 
 const RenderManager = @import("../Renderer/Renderer.zig");

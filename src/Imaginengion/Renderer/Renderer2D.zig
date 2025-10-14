@@ -3,7 +3,6 @@ const SSBO = @import("../SSBOs/SSBO.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
-const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");

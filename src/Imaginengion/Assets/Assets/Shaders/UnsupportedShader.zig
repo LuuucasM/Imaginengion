@@ -1,6 +1,6 @@
 const std = @import("std");
-const VertexBufferElement = @import("../VertexBuffers/VertexBufferElement.zig");
-const LinAlg = @import("../Math/LinAlg.zig");
+const VertexBufferElement = @import("../../../VertexBuffers/VertexBufferElement.zig");
+const LinAlg = @import("../../../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
@@ -15,7 +15,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8) UnsupportedShade
     Unsupported();
 }
 
-pub fn Deinit(self: *UnsupportedShader) void {
+pub fn Deinit(self: *UnsupportedShader) !void {
     _ = self;
     Unsupported();
 }

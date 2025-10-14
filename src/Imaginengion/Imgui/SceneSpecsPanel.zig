@@ -9,7 +9,6 @@ const SceneTransformComponent = SceneComponents.TransformComponent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
-const ShaderAsset = Assets.ShaderAsset;
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const SceneUtils = @import("../Scene/SceneUtils.zig");

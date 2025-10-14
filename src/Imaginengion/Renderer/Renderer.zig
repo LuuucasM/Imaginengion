@@ -78,7 +78,7 @@ pub fn Init(window: *Window) !void {
     RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
     RenderManager.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
 
-    RenderManager.mSDFShader = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.glsl", .Eng);
+    RenderManager.mSDFShader = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.program", .Eng);
 }
 
 pub fn Deinit() !void {
@@ -89,6 +89,8 @@ pub fn Deinit() !void {
 }
 
 pub fn SwapBuffers() void {
+    RenderManager.mRenderContext.PushDebugGroup("Swap Buffers\x00");
+    defer RenderManager.mRenderContext.PopDebugGroup();
     RenderManager.mRenderContext.SwapBuffers();
 }
 
@@ -96,6 +98,9 @@ pub fn SwapBuffers() void {
 pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator, mode: u32) !void {
     const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
     defer zone.Deinit();
+
+    RenderManager.mRenderContext.PushDebugGroup("Frame\x00");
+    defer RenderManager.mRenderContext.PopDebugGroup();
 
     std.debug.assert(mode == 0b0 or mode == 0b1);
 
@@ -161,6 +166,9 @@ fn BeginRendering() void {
     const zone = Tracy.ZoneInit("BeginRendering", @src());
     defer zone.Deinit();
 
+    RenderManager.mRenderContext.PushDebugGroup("Set Camera Data\x00");
+    defer RenderManager.mRenderContext.PopDebugGroup();
+
     RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
     RenderManager.mModeUniformBuffer.SetData(&RenderManager.mModeBuffer, @sizeOf(ModeData), 0);
 
@@ -190,6 +198,7 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
 fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!void {
     const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
     defer zone.Deinit();
+
     const transform_component = entity.GetComponent(TransformComponent).?;
     parent_transform.Translation += transform_component.Translation;
     parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
@@ -214,11 +223,14 @@ fn EndRendering(camera_component: *CameraComponent) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
+    RenderManager.mRenderContext.PushDebugGroup("End Rendering\x00");
+    defer RenderManager.mRenderContext.PopDebugGroup();
+
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 
     const sdf_shader_asset = try RenderManager.mSDFShader.GetAsset(ShaderAsset);
-    sdf_shader_asset.mShader.Bind();
+    sdf_shader_asset.Bind();
 
     try RenderManager.mR2D.SetBuffers();
 
@@ -228,5 +240,7 @@ fn EndRendering(camera_component: *CameraComponent) !void {
 
     RenderManager.mR2D.BindBuffers();
 
+    RenderManager.mRenderContext.PushDebugGroup("Draw Indexed\x00");
     RenderManager.mRenderContext.DrawIndexed(camera_component.mViewportVertexArray, camera_component.mViewportIndexBuffer.GetCount());
+    RenderManager.mRenderContext.PopDebugGroup();
 }

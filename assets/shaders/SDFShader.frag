@@ -1,14 +1,3 @@
-#type vertex
-#version 460 core
-
-layout(location = 0) in vec2 aPosition;
-
-
-void main() {
-    gl_Position = vec4(aPosition, 0.0, 1.0);
-}
-
-#type fragment
 #version 460 core
 #extension GL_ARB_bindless_texture : require
 #extension GL_ARB_gpu_shader_int64 : require

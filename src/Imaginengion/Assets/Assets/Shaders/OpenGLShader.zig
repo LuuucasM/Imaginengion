@@ -1,14 +1,20 @@
 const std = @import("std");
-const glad = @import("../Core/CImports.zig").glad;
-const VertexBufferElement = @import("../VertexBuffers/VertexBufferElement.zig");
-const ShaderDataType = @import("Shader.zig").ShaderDataType;
-const ShaderDataTypeSize = @import("Shader.zig").ShaderDataTypeSize;
-const LinAlg = @import("../Math/LinAlg.zig");
+const glad = @import("../../../Core/CImports.zig").glad;
+const VertexBufferElement = @import("../../../VertexBuffers/VertexBufferElement.zig");
+const ShaderDataType = @import("../ShaderAsset.zig").ShaderDataType;
+const ShaderDataTypeSize = @import("../ShaderAsset.zig").ShaderDataTypeSize;
+const LinAlg = @import("../../../Math/LinAlg.zig");
 const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
 const Mat3f32 = LinAlg.Mat3f32;
 const Mat4f32 = LinAlg.Mat4f32;
+
+const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
+
+const build_options = @import("build_options");
+
+pub const enable_nsight = build_options.enable_nsight;
 
 const OpenGLShader = @This();
 
@@ -19,7 +25,7 @@ mShaderID: u32,
 
 _Allocator: std.mem.Allocator,
 
-pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !OpenGLShader {
+pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !OpenGLShader {
     var new_shader = OpenGLShader{
         .mUniforms = std.AutoHashMap(usize, i32).init(allocator),
         .mBufferStride = 0,
@@ -32,17 +38,19 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    const shader_sources = try ReadFile(asset_file, arena_allocator);
+    const shader_sources = try ReadFile(asset_file, arena_allocator, abs_path);
 
     if (try new_shader.Compile(shader_sources, rel_path) == true) {
         try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
         try new_shader.DiscoverUniforms();
     }
 
+    glad.glObjectLabel(glad.GL_PROGRAM, new_shader.mShaderID, -1, "ShaderProgram");
+
     return new_shader;
 }
 
-pub fn Deinit(self: *OpenGLShader) void {
+pub fn Deinit(self: *OpenGLShader) !void {
     glad.glDeleteProgram(self.mShaderID);
 
     self.mBufferElements.deinit(self._Allocator);
@@ -211,9 +219,11 @@ fn CalculateStride(self: *OpenGLShader) void {
     }
 }
 
-fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator) !std.AutoArrayHashMap(c_uint, []const u8) {
+fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator, abs_path: []const u8) !std.AutoArrayHashMap(c_uint, []const u8) {
     var source = std.ArrayList(u8){};
     defer source.deinit(arena_allocator);
+
+    const file_path = std.fs.path.dirname(abs_path).?;
 
     const file_size = try asset_file.getEndPos();
     try source.ensureTotalCapacity(arena_allocator, @intCast(file_size));
@@ -221,43 +231,53 @@ fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator) !std.Au
 
     _ = try asset_file.readAll(source.items);
 
+    var io_reader = std.io.Reader.fixed(source.items);
+
+    var reader = std.json.Reader.init(arena_allocator, &io_reader);
+    defer reader.deinit();
+
     var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(arena_allocator);
 
-    var lines = std.mem.splitSequence(u8, source.items, "\n");
-    var current_type: c_uint = undefined;
-    var has_type = false;
-    var current_source = std.ArrayList(u8){};
-    defer current_source.deinit(arena_allocator);
+    //deserialize
+    while (true) {
+        const token = try reader.next();
+        const token_value = try switch (token) {
+            .end_of_document => break,
+            .object_begin => continue,
+            .object_end => continue,
+            .string => |value| value,
+            .number => |value| value,
 
-    while (lines.next()) |line| {
-        const trimmed = std.mem.trim(u8, line, " \t\r\n");
-        if (std.mem.startsWith(u8, trimmed, "#type")) {
-            // If we have accumulated source code, save it
-            if (current_source.items.len > 0 and has_type) {
-                try shaders.put(
-                    current_type,
-                    try arena_allocator.dupeZ(u8, current_source.items),
-                );
-                current_source.clearRetainingCapacity();
-            }
+            else => error.NotExpected,
+        };
 
-            // Parse the shader type
-            const type_str = std.mem.trim(u8, trimmed[5..], " \t\r\n");
-            current_type = ShaderTypeFromStr(type_str);
-            has_type = true;
-        } else if (has_type) {
-            // Add the current line to the source code
-            try current_source.appendSlice(arena_allocator, line);
-            try current_source.append(arena_allocator, '\n');
+        const shader_type_str = try arena_allocator.dupe(u8, token_value);
+        defer arena_allocator.free(shader_type_str);
+
+        var shader_source = std.ArrayList(u8){};
+        defer shader_source.deinit(arena_allocator);
+
+        var shader_file: std.fs.File = undefined;
+
+        if (enable_nsight) {
+            //write code here
+            //basically we just need to change the path to include .spv at the end so we open the pre compiled shader instead
+            //everything else should work the same and normally
+            //TODO
+        } else {
+            const shader_name = try std.json.innerParse([]const u8, arena_allocator, &reader, PARSE_OPTIONS);
+            const shader_path = try std.fs.path.join(arena_allocator, &[_][]const u8{ file_path, shader_name });
+
+            shader_file = try std.fs.openFileAbsolute(shader_path, .{});
         }
-    }
+        const shader_size = try shader_file.getEndPos();
 
-    // Don't forget to save the last shader section
-    if (current_source.items.len > 0 and has_type) {
-        try shaders.put(
-            current_type,
-            try arena_allocator.dupeZ(u8, current_source.items),
-        );
+        try shader_source.ensureTotalCapacity(arena_allocator, shader_size);
+        try shader_source.resize(arena_allocator, shader_size);
+
+        _ = try shader_file.readAll(shader_source.items);
+
+        try shaders.put(ShaderTypeFromStr(shader_type_str), try arena_allocator.dupe(u8, shader_source.items));
     }
 
     return shaders;
@@ -279,9 +299,17 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
         const shader = glad.glCreateShader(shader_type);
 
-        glad.glShaderSource(shader, 1, &shader_source.ptr, 0);
+        if (enable_nsight) {
+            //write code for enabling nsight here
+            //need to use glShaderBinary instead of shader source
+            //and glSpecializeShader instead of glCompileShader
+            //TODO
+        } else {
+            const len: c_int = @intCast(shader_source.len);
+            glad.glShaderSource(shader, 1, &shader_source.ptr, &len);
 
-        glad.glCompileShader(shader);
+            glad.glCompileShader(shader);
+        }
 
         var is_compiled: glad.GLint = 0;
         glad.glGetShaderiv(shader, glad.GL_COMPILE_STATUS, &is_compiled);
@@ -296,7 +324,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
             glad.glDeleteShader(shader);
 
-            std.log.err("Shader Compilation Failure! {s}\n for file: {s}", .{ info_log.items, rel_path });
+            std.log.err("Shader Compilation {s} Failure! {s}\n for file: {s}", .{ ShaderStrFromType(shader_type), info_log.items, rel_path });
 
             return false;
         }
@@ -335,8 +363,6 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
         glad.glDetachShader(shader_id, id);
         glad.glDeleteShader(id);
     }
-
-    glad.glObjectLabel(glad.GL_PROGRAM, shader_id, -1, "ShaderProgram");
 
     return true;
 }
