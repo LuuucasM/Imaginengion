@@ -260,10 +260,11 @@ fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator, abs_pat
         var shader_file: std.fs.File = undefined;
 
         if (enable_nsight) {
-            //write code here
-            //basically we just need to change the path to include .spv at the end so we open the pre compiled shader instead
-            //everything else should work the same and normally
-            //TODO
+            const shader_name = try std.json.innerParse([]const u8, arena_allocator, &reader, PARSE_OPTIONS);
+            const name = std.mem.join(arena_allocator, ".", &[_][]const u8{ shader_name, "spv" });
+            const shader_path = try std.fs.path.join(arena_allocator, &[_][]const u8{ file_path, name });
+
+            shader_file = try std.fs.openFileAbsolute(shader_path, .{});
         } else {
             const shader_name = try std.json.innerParse([]const u8, arena_allocator, &reader, PARSE_OPTIONS);
             const shader_path = try std.fs.path.join(arena_allocator, &[_][]const u8{ file_path, shader_name });
@@ -304,6 +305,9 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
             //need to use glShaderBinary instead of shader source
             //and glSpecializeShader instead of glCompileShader
             //TODO
+            glad.glShaderBinary(1, &shader, glad.GL_SHADER_BINARY_FORMAT_SPIR_V, shader_source.ptr, shader_source.len);
+
+            glad.glSpecializeShader(shader, "main", 0, null, null);
         } else {
             const len: c_int = @intCast(shader_source.len);
             glad.glShaderSource(shader, 1, &shader_source.ptr, &len);

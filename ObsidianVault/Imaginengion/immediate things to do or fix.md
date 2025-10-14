@@ -1,7 +1,3 @@
-- change shaders so that vertex and fragment shader are separate files
-	- download glslangValidator from git hub and use it to pre compile shaders into spirv binary files 
-		- https://chatgpt.com/share/68ebb7bc-d824-8004-86e0-5fd151bbb773
-		- use specific flags to enable nsight debugging
-	- change shaders again so that when having enable_tracy_gpu (new compile option that i have to make) is enabled it instead uses these binaries instead
-	- do profiling hopefully?
 - change name component to use dynamic array like everything else for the editor we want it to be dynamic and then during the runtime we can use comptime programming to make everything static / fixed sized (some things need to be on heap still but fixed size)
+	- change the scene name component to also use the new convention if it isnt already
+	- also change the allocators used. i just added a function to the ecs "GetECSAllocator()" I should use this instead to make the allocations for the name

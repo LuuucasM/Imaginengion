@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const enable_tracy = b.option(bool, "enable_tracy", "Enable the CPU profiler tracy");
-    const enable_nsight = b.option(bool, "enable_tracy", "Enable the GPU profiler nvidia nsight");
+    const enable_nsight = b.option(bool, "enable_nsight", "Enable the GPU profiler nvidia nsight");
     //function builds the entire engine lib including the dependencies and all
     const engine_lib = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight);
 

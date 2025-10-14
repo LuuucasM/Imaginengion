@@ -1,3 +1,19 @@
+- read about vulkan
+	- using bindless textures in opengl prevents from using spirv, which prevents from using detailed performance profiling using nsight so i have no choice but to switch now
+	- start reading: https://vulkan-tutorial.com/en/Overview
+	- another resource: https://paroj.github.io/gltut/
+	- another resource: https://vkguide.dev/
+	- i need to learn how to:
+		- initiailize a vulkan context
+		- frame buffer
+		- vertex buffer
+		- index buffer
+		- SSBO
+		- Texture2D
+		- Shader
+		- uniform buffer
+		- vertex array
+	- or at least these equivalents how they can work into the engine
 - add sound
 - add physics
 - make animation system

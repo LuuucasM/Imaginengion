@@ -314,7 +314,7 @@ fn DeSerializeEntity(reader: *std.json.Reader, entity: Entity, scene_layer: Scen
 
         if (std.mem.eql(u8, actual_value, "CameraComponent")) {
             try DeSerializeEntityComponent(reader, entity, CameraComponent, frame_allocator);
-            try DeserializeCameraComponent(entity, engine_allocator);
+            try DeserializeCameraComponent(entity);
         } else if (std.mem.eql(u8, actual_value, "AISlotComponent")) {
             try DeSerializeEntityComponent(reader, entity, AISlotComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "PlayerSlotComponent")) {
@@ -323,6 +323,7 @@ fn DeSerializeEntity(reader: *std.json.Reader, entity: Entity, scene_layer: Scen
             try DeSerializeEntityComponent(reader, entity, EntityIDComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityNameComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityNameComponent, frame_allocator);
+            try DeserializeEntityNameComp(entity);
         } else if (std.mem.eql(u8, actual_value, "EntityScript")) {
             try DeSerializeEntityComponent(reader, entity, EntityScriptComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "QuadComponent")) {
@@ -331,7 +332,7 @@ fn DeSerializeEntity(reader: *std.json.Reader, entity: Entity, scene_layer: Scen
             try DeSerializeEntityComponent(reader, entity, EntityTransformComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "TextComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityTextComponent, frame_allocator);
-            try DeserializeTextComponent(entity, engine_allocator);
+            try DeserializeTextComponent(entity);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             try DeSerializeParentComponent(reader, entity, scene_layer, frame_allocator, engine_allocator);
         }
@@ -343,11 +344,12 @@ fn DeSerializeEntityComponent(reader: *std.json.Reader, entity: Entity, comptime
     _ = try entity.AddComponent(component_type, parsed_component);
 }
 
-fn DeserializeCameraComponent(entity: Entity, engine_allocator: std.mem.Allocator) !void {
+fn DeserializeCameraComponent(entity: Entity) !void {
     if (entity.GetComponent(CameraComponent)) |camera_component| {
-        camera_component.mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, camera_component.mViewportWidth, camera_component.mViewportHeight);
-        camera_component.mViewportVertexArray = VertexArray.Init(engine_allocator);
-        camera_component.mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32));
+        const ecs_allocator = entity.GetECSAllocator();
+        camera_component.mViewportFrameBuffer = try FrameBuffer.Init(ecs_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, camera_component.mViewportWidth, camera_component.mViewportHeight);
+        camera_component.mViewportVertexArray = VertexArray.Init(ecs_allocator);
+        camera_component.mViewportVertexBuffer = VertexBuffer.Init(ecs_allocator, @sizeOf([4][2]f32));
         camera_component.mViewportIndexBuffer = undefined;
 
         const shader_asset = try Renderer.GetSDFShader();
@@ -366,9 +368,11 @@ fn DeserializeCameraComponent(entity: Entity, engine_allocator: std.mem.Allocato
     }
 }
 
-fn DeserializeTextComponent(entity: Entity, engine_allocator: std.mem.Allocator) !void {
+fn DeserializeTextComponent(entity: Entity) !void {
     if (entity.GetComponent(EntityTextComponent)) |text_component| {
-        const new_memory = try engine_allocator.alloc(u8, text_component.mText.items.len);
+        const ecs_allocator = entity.GetECSAllocator();
+
+        const new_memory = try ecs_allocator.alloc(u8, text_component.mText.items.len);
 
         @memcpy(new_memory, text_component.mText.items);
 
@@ -378,7 +382,25 @@ fn DeserializeTextComponent(entity: Entity, engine_allocator: std.mem.Allocator)
 
         text_component.mText.capacity = new_memory.len;
 
-        text_component.mAllocator = engine_allocator;
+        text_component.mAllocator = ecs_allocator;
+    }
+}
+
+fn DeserializeEntityNameComp(entity: Entity) !void {
+    if (entity.GetComponent(EntityNameComponent)) |name_component| {
+        const ecs_allocator = entity.GetECSAllocator();
+
+        const new_memory = try ecs_allocator.alloc(u8, name_component.mName.items.len);
+
+        @memcpy(new_memory, name_component.mName.items);
+
+        name_component.mName.deinit(name_component.mAllocator);
+
+        name_component.mName.items = new_memory;
+
+        name_component.mName.capacity = new_memory.len;
+
+        name_component.mAllocator = ecs_allocator;
     }
 }
 

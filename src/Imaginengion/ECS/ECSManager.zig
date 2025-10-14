@@ -247,6 +247,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mECSEventManager.ClearEvents(event_category);
         }
 
+        pub fn GetECSAllocator(self: Self) std.mem.Allocator {
+            return self.mECSAllocator;
+        }
+
         fn _InternalRemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);

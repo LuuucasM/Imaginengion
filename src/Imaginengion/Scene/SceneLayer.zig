@@ -65,9 +65,11 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
     const e = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
     _ = try e.AddComponent(EntityIDComponent, .{ .ID = uuid });
     _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
-    var name = [_]u8{0} ** 24;
-    @memcpy(name[0..14], "Unnamed Entity");
-    _ = try e.AddComponent(EntityNameComponent, .{ .Name = name });
+
+    var new_name_component = EntityNameComponent{};
+    new_name_component.mAllocator = e.GetECSAllocator();
+    new_name_component.mName.appendSlice(new_name_component.mAllocator, "Unnamed Entity");
+    _ = try e.AddComponent(EntityNameComponent, new_name_component);
     _ = try e.AddComponent(TransformComponent, null);
 
     return e;
@@ -80,16 +82,18 @@ pub fn Delete(self: SceneLayer) !void {
 
 pub fn AddChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
     const new_entity_id = try self.mECSManagerGORef.AddChild(parent_entity.mEntityID);
-    const new_entity = Entity{ .mEntityID = new_entity_id, .mECSManagerRef = self.mECSManagerGORef };
+    const child_entity = Entity{ .mEntityID = new_entity_id, .mECSManagerRef = self.mECSManagerGORef };
 
-    _ = try new_entity.AddComponent(EntityIDComponent, .{ .ID = try GenUUID() });
-    _ = try new_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
-    var name = [_]u8{0} ** 24;
-    @memcpy(name[0..14], "Unnamed Entity");
-    _ = try new_entity.AddComponent(EntityNameComponent, .{ .Name = name });
-    _ = try new_entity.AddComponent(TransformComponent, null);
+    _ = try child_entity.AddComponent(EntityIDComponent, .{ .ID = try GenUUID() });
+    _ = try child_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
-    return new_entity;
+    var new_name_component = EntityNameComponent{};
+    new_name_component.mAllocator = child_entity.GetECSAllocator();
+    new_name_component.mName.appendSlice(new_name_component.mAllocator, "Unnamed Entity");
+    _ = try child_entity.AddComponent(EntityNameComponent, new_name_component);
+    _ = try child_entity.AddComponent(TransformComponent, null);
+
+    return child_entity;
 }
 
 pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
@@ -157,4 +161,12 @@ pub fn FilterSceneScriptsByScene(self: SceneLayer, scripts_result_list: *std.Arr
 
 pub fn EntityListDifference(self: SceneLayer, result: *std.ArrayList(Entity.Type), list2: std.ArrayList(Entity.Type), allocator: std.mem.Allocator) !void {
     try self.mECSManagerGORef.EntityListDifference(result, list2, allocator);
+}
+
+pub fn GetEntityECSAllocator(self: SceneLayer) std.mem.Allocator {
+    return self.mECSManagerGORef.GetECSAllocator();
+}
+
+pub fn GetSceneECSAllocator(self: SceneLayer) std.mem.Allocator {
+    return self.mECSManagerSCRef.GetECSAllocator();
 }
