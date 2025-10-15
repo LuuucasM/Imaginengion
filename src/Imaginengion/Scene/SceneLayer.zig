@@ -66,10 +66,9 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
     _ = try e.AddComponent(EntityIDComponent, .{ .ID = uuid });
     _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
-    var new_name_component = EntityNameComponent{};
-    new_name_component.mAllocator = e.GetECSAllocator();
-    new_name_component.mName.appendSlice(new_name_component.mAllocator, "Unnamed Entity");
-    _ = try e.AddComponent(EntityNameComponent, new_name_component);
+    const new_name_component = try e.AddComponent(EntityNameComponent, .{ .mAllocator = e.GetECSAllocator() });
+    _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
+
     _ = try e.AddComponent(TransformComponent, null);
 
     return e;
@@ -87,10 +86,9 @@ pub fn AddChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
     _ = try child_entity.AddComponent(EntityIDComponent, .{ .ID = try GenUUID() });
     _ = try child_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
-    var new_name_component = EntityNameComponent{};
-    new_name_component.mAllocator = child_entity.GetECSAllocator();
-    new_name_component.mName.appendSlice(new_name_component.mAllocator, "Unnamed Entity");
-    _ = try child_entity.AddComponent(EntityNameComponent, new_name_component);
+    const new_name_component = try child_entity.AddComponent(EntityNameComponent, .{ .mAllocator = child_entity.GetECSAllocator() });
+    _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
+
     _ = try child_entity.AddComponent(TransformComponent, null);
 
     return child_entity;

@@ -1,3 +1,2 @@
 - change name component to use dynamic array like everything else for the editor we want it to be dynamic and then during the runtime we can use comptime programming to make everything static / fixed sized (some things need to be on heap still but fixed size)
-	- change the scene name component to also use the new convention if it isnt already
 	- also change the allocators used. i just added a function to the ecs "GetECSAllocator()" I should use this instead to make the allocations for the name

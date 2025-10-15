@@ -17,12 +17,12 @@ pub const Ind: usize = blk: {
 
 pub const Category: ComponentCategory = .Unique;
 
-Name: std.ArrayList(u8) = .{},
+mName: std.ArrayList(u8) = .{},
 
-_NameAllocator: std.mem.Allocator = undefined,
+mAllocator: std.mem.Allocator = undefined,
 
 pub fn Deinit(self: *NameComponent) !void {
-    self.Name.deinit(self._NameAllocator);
+    self.mName.deinit(self.mAllocator);
 }
 
 pub fn GetName(self: NameComponent) []const u8 {

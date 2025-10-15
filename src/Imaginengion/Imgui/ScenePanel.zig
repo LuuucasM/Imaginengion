@@ -125,7 +125,7 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent).?;
 
-    const scene_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ scene_name_component.Name.items, scene_id }, 0);
+    const scene_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ scene_name_component.mName.items, scene_id }, 0);
 
     //push ID so that each scene can have their unique display
     imgui.igPushID_Str(scene_name.ptr);

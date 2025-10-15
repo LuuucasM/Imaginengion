@@ -52,7 +52,7 @@ pub fn GetUUID(self: Entity) u128 {
     return self.mECSManagerRef.GetComponent(IDComponent, self.mEntityID).?.*.ID;
 }
 pub fn GetName(self: Entity) []const u8 {
-    return &self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).?.*.mName.items;
+    return self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).?.*.mName.items;
 }
 pub fn GetCameraEntity(self: Entity) ?Entity {
     const zone = Tracy.ZoneInit("Entity GetCameraEntity", @src());

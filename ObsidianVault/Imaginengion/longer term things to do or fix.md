@@ -1,3 +1,10 @@
+- add sound
+	- likely to use mini audio
+	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform
+	- thats about all i know right now lol because i dont really know much about audio in general but i guess im about to learn :)
+- add physics
+- make pong
+- add a way to export the game into its standalone
 - read about vulkan
 	- using bindless textures in opengl prevents from using spirv, which prevents from using detailed performance profiling using nsight so i have no choice but to switch now
 	- start reading: https://vulkan-tutorial.com/en/Overview
@@ -14,8 +21,6 @@
 		- uniform buffer
 		- vertex array
 	- or at least these equivalents how they can work into the engine
-- add sound
-- add physics
 - make animation system
 - add entity picking in the editor
 - move away from "managed" structs. aka ones that keep reference to their own allocator, in favor of unmanaged and just passing around allocators more explicitly.
@@ -25,14 +30,12 @@
 	- rigid body component (unique)
 	- particle component (dont know yet its so far away)
 - make event manager clear and free / clear retaining capacity an option in the editor. give it some default of like 10 or something but then make it 
-- maybe in the future i can introduce like saved editor states where you can like hotkey or save specific scene setups so you can use later?
-- split these mega shaders into smaller shaders so like a .vert and .frag instead of one big .glsl that we parse through
+- maybe in the future i can introduce like saved editor states where you can like hotkey or save specific scene setups so you can use later that way you can hot swap like if you want to start a game from the main menu screen after working on some other scene you can quick load the main menu setup and play from there and when it ends you can quick load back to the setup that ur editing currently
 - add a function to scene_layer to "spawn player" which is an entity which has a component like PlayerComponent which contains the data related to the player. 
 	- then i can for example on scene_layer.OnSceneStart I can spawn a player -> then somehow take control of an entity with a controller component, and then 
 	- Then in scene scripts like OnSceneStart you can spawn a player and then set that players "ToControlEntity" to a specified entity
 - fix bug where if you minimize it crashes because imgui begin/end children dont match
 - does alt + f4 work natively with every program or does it need to be implemented?
-- add a way to export the game into its standalone
 - make it so u cant make scenes or anything until you have a project selected first
 - Editor settings file
 - Add localization for Korean
@@ -40,3 +43,4 @@
 - expose a way to use internal engine assets to the editor
 	- like for example if something is white texture and then i change it, i have no way of changing it back to white texture if i change my mind 
 	- i can either expose the engine assets OR add some X button that will return the value back to default but I think just exposing engine assets is better and who knows maybe in the future engine assets will contain a whole lots of nice goodies to make dev lives easier
+- abstract away the ECS so I can start working on comparing my ECS with others to do research on heuristic functions when dealing with sorting component buckets

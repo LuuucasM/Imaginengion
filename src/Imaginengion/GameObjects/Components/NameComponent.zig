@@ -14,7 +14,9 @@ pub const Editable: bool = true;
 mAllocator: std.mem.Allocator = undefined,
 mName: std.ArrayList(u8) = .{},
 
-pub fn Deinit(_: *NameComponent) !void {}
+pub fn Deinit(self: *NameComponent) !void {
+    self.mName.deinit(self.mAllocator);
+}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

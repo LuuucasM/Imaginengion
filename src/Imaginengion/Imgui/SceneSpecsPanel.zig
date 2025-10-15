@@ -33,7 +33,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
 
     const name_component = self.mSceneLayer.GetComponent(SceneNameComponent).?;
 
-    const scene_name = try frame_allocator.dupeZ(u8, name_component.Name.items);
+    const scene_name = try frame_allocator.dupeZ(u8, name_component.mName.items);
     imgui.igSetNextWindowSize(.{ .x = 800, .y = 600 }, imgui.ImGuiCond_Once);
     _ = imgui.igBegin(scene_name, &self.mPOpen, 0);
     defer imgui.igEnd();
