@@ -10,3 +10,5 @@ pub const stb = @cImport({
 pub const nfd = @import("NFD").c;
 
 pub const tracy = @import("Tracy").c;
+
+pub const miniaudio = @import("MiniAudio").c;

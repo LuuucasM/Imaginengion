@@ -283,6 +283,32 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     }
     //--------------------------------------------------END TRACY-------------------------------------------------------------
 
+    //-------------------------------------------------MINIAUDIO-------------------------------------------------------------
+    //make library
+    const miniaudio_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "MiniAudio",
+        .root_module = b.addModule("MiniAudio", .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .link_libcpp = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/miniaudio/MiniAudio.zig" } },
+        }),
+    });
+
+    //add c source files
+    {
+        const options = std.Build.Module.AddCSourceFilesOptions{
+            .files = &[_][]const u8{
+                "src/Imaginengion/Vendor/miniaudio/miniaudio.c",
+            },
+            .flags = &[_][]const u8{},
+        };
+        miniaudio_lib.addCSourceFiles(options);
+    }
+    //--------------------------------------------------END MINIAUDIO--------------------------------------------------------
+
     //------------------------------------------------------IMAGINENGION-------------------------------------------------------
     //make library
     const engine_lib = b.addLibrary(.{
@@ -296,28 +322,25 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                 .link_libc = true,
                 .link_libcpp = true,
                 .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
-                .imports = &[_]std.Build.Module.Import{
-                    std.Build.Module.Import{
-                        .name = "GLFW",
-                        .module = glfw_lib.root_module,
-                    },
-                    std.Build.Module.Import{
-                        .name = "GLAD",
-                        .module = glad_lib.root_module,
-                    },
-                    std.Build.Module.Import{
-                        .name = "IMGUI",
-                        .module = imgui_lib.root_module,
-                    },
-                    std.Build.Module.Import{
-                        .name = "NFD",
-                        .module = nfd_lib.root_module,
-                    },
-                    std.Build.Module.Import{
-                        .name = "Tracy",
-                        .module = tracy_lib.root_module,
-                    },
-                },
+                .imports = &[_]std.Build.Module.Import{ std.Build.Module.Import{
+                    .name = "GLFW",
+                    .module = glfw_lib.root_module,
+                }, std.Build.Module.Import{
+                    .name = "GLAD",
+                    .module = glad_lib.root_module,
+                }, std.Build.Module.Import{
+                    .name = "IMGUI",
+                    .module = imgui_lib.root_module,
+                }, std.Build.Module.Import{
+                    .name = "NFD",
+                    .module = nfd_lib.root_module,
+                }, std.Build.Module.Import{
+                    .name = "Tracy",
+                    .module = tracy_lib.root_module,
+                }, std.Build.Module.Import{
+                    .name = "MiniAudio",
+                    .module = miniaudio_lib.root_module,
+                } },
             },
         ),
     });
