@@ -6,6 +6,7 @@ pub const ScriptAsset = @import("Assets/ScriptAsset.zig");
 pub const ShaderAsset = @import("Assets/ShaderAsset.zig");
 pub const Texture2D = @import("Assets/Texture2D.zig");
 pub const TextAsset = @import("Assets/TextAsset.zig");
+pub const AudioAsset = @import("Assets/AudioAsset.zig");
 
 pub const AssetsList = [_]type{
     Texture2D,
@@ -15,4 +16,5 @@ pub const AssetsList = [_]type{
     TextAsset,
     AssetMetaData,
     FileMetaData,
+    AudioAsset,
 };

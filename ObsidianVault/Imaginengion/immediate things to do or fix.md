@@ -1,2 +1,13 @@
-- change name component to use dynamic array like everything else for the editor we want it to be dynamic and then during the runtime we can use comptime programming to make everything static / fixed sized (some things need to be on heap still but fixed size)
-	- also change the allocators used. i just added a function to the ecs "GetECSAllocator()" I should use this instead to make the allocations for the name
+- add mini audio to engine
+	- audio buffer
+	- audio asset
+	- game object -> listener component
+	- game object -> audio emitter component
+	- scene -> audio emitter component
+	- audio manager
+- change all the vendor library interfaces to rely on command line variables rather than like just builtin.os.tag like it is right now
+	- like add a "RenderContext" flag that u can set to either opengl or vulkan or whatever
+	- one for audio
+	- one for ECS
+	- platform utils (like native file dialog)
+	- window maker (like glfw)

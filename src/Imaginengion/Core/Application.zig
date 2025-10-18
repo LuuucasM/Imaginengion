@@ -14,6 +14,7 @@ const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const Window = @import("../Windows/Window.zig");
 const Input = @import("../Inputs/Input.zig");
 const Program = @import("../Programs/Program.zig");
+const AudioManager = @import("../AudioManager/AudioManager.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
@@ -46,6 +47,7 @@ pub fn Init(self: *Application) !void {
     self.mFrameAllocator = self.mFrameArena.allocator();
 
     try AssetManager.Init();
+    try AudioManager.Init();
     try Input.Init();
     try SystemEventManager.Init(self);
     try PlayerManager.Init(self.mEngineAllocator);

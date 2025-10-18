@@ -22,9 +22,9 @@ const Impl = switch (builtin.os.tag) {
 mTexOptions: TexOptions = .{},
 _Impl: Impl = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !Texture2D {
+pub fn Init(asset_allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !Texture2D {
     return Texture2D{
-        ._Impl = try Impl.Init(allocator, asset_file, rel_path),
+        ._Impl = try Impl.Init(asset_allocator, asset_file, rel_path),
     };
 }
 

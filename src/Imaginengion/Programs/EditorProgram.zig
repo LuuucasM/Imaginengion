@@ -13,7 +13,7 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 const Assets = @import("../Assets/Assets.zig");
-const TextAsset = Assets.TextAsset;
+const AudioAsset = Assets.AudioAsset;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -196,9 +196,9 @@ pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
     new_camera_component_camera.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
     _ = try self.mEditorEditorEntity.AddComponent(CameraComponent, new_camera_component_camera);
 
-    //test for fonts
-    self.mEditorFont = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
-    const text_asset = try self.mEditorFont.GetAsset(TextAsset);
+    //test for audio
+    self.mEditorFont = try AssetManager.GetAssetHandleRef("assets/sounds/piano.wav", .Eng);
+    const text_asset = try self.mEditorFont.GetAsset(AudioAsset);
     _ = text_asset;
     AssetManager.ReleaseAssetHandleRef(&self.mEditorFont);
 }

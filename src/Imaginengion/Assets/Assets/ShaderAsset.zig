@@ -57,11 +57,11 @@ pub fn StrToDataType(name: []const u8) ShaderDataType {
 
 mImpl: Impl = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !ShaderAsset {
+pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !ShaderAsset {
     const zone = Tracy.ZoneInit("Shader Init", @src());
     defer zone.Deinit();
     return ShaderAsset{
-        .mImpl = try Impl.Init(allocator, abs_path, rel_path, asset_file),
+        .mImpl = try Impl.Init(asset_allocator, abs_path, rel_path, asset_file),
     };
 }
 

@@ -5,8 +5,9 @@ var ManagerInstance: AudioManager = .{};
 
 mAudioContext: AudioContext = undefined,
 
-pub fn Init() void {
-    ManagerInstance.mAudioContext = AudioContext.Init();
+pub fn Init() !void {
+    ManagerInstance.mAudioContext = try AudioContext.Init();
+    try ManagerInstance.mAudioContext.Setup();
 }
 
 pub fn Deinit() void {

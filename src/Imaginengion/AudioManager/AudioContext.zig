@@ -1,17 +1,23 @@
 const builtin = @import("builtin");
-const miniaudio = @import("../Core/CImports.zig").miniaudio;
 const AudioContext = @This();
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("MiniAudioContext.zig"),
-    else => @import("UnsupportedContext.zig"),
+    else => @import("NullContext.zig"),
 };
 
-mContext: miniaudio.ma_engine,
+mImpl: Impl = undefined,
 
-pub fn Init() AudioContext {
+pub fn Init() !AudioContext {
     return AudioContext{
-        .mContext = miniaudio.m
-    }
+        .mImpl = try Impl.Init(),
+    };
 }
-pub fn Deinit() AudioContext {}
+
+pub fn Setup(self: *AudioContext) !void {
+    try self.mImpl.Setup();
+}
+
+pub fn Deinit(self: *AudioContext) AudioContext {
+    self.mImpl.Deinit();
+}

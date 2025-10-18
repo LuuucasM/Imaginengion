@@ -297,6 +297,9 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         }),
     });
 
+    //add include paths
+    miniaudio_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/miniaudio" } });
+
     //add c source files
     {
         const options = std.Build.Module.AddCSourceFilesOptions{

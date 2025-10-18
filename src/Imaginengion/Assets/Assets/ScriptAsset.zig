@@ -17,11 +17,11 @@ pub const ScriptType = enum(u8) {
 mLib: std.DynLib = undefined,
 mScriptType: ScriptType = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _: std.fs.File) !ScriptAsset {
+pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _: std.fs.File) !ScriptAsset {
 
     //spawn a child to handle compiling the zig file into a dll
-    const file_arg = try std.fmt.allocPrint(allocator, "-Dscript_abs_path={s}", .{abs_path});
-    defer allocator.free(file_arg);
+    const file_arg = try std.fmt.allocPrint(asset_allocator, "-Dscript_abs_path={s}", .{abs_path});
+    defer asset_allocator.free(file_arg);
     //defer allocator.free(file_arg);
 
     var child = std.process.Child.init(
@@ -32,7 +32,7 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _
             "build_dyn.zig",
             file_arg,
         },
-        allocator,
+        asset_allocator,
     );
     child.stdin_behavior = .Inherit;
     child.stdout_behavior = .Inherit;
@@ -43,8 +43,8 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _
     std.log.debug("child [{s}] exited with code {}\n", .{ abs_path, result });
 
     //get the path of the newly create dyn lib and open it
-    const dyn_path = try std.fmt.allocPrint(allocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
-    defer allocator.free(dyn_path);
+    const dyn_path = try std.fmt.allocPrint(asset_allocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
+    defer asset_allocator.free(dyn_path);
 
     var lib = try std.DynLib.open(dyn_path);
     const GetScriptTypeFunc = lib.lookup(*const fn () ScriptType, "GetScriptType").?;
