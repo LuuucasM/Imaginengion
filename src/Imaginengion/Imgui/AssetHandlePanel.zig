@@ -6,12 +6,10 @@ const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const AssetHandlePanel = @This();
 
-_P_Open: bool,
+_P_Open: bool = false,
 
-pub fn Init() AssetHandlePanel {
-    return AssetHandlePanel{
-        ._P_Open = false,
-    };
+pub fn Init(self: AssetHandlePanel) void {
+    _ = self;
 }
 
 pub fn OnImguiRender(self: AssetHandlePanel, frame_allocator: std.mem.Allocator) !void {

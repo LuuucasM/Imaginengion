@@ -33,18 +33,13 @@ const Assets = @import("../Assets/Assets.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
-_P_Open: bool,
-mSelectedScene: ?SceneLayer,
-mSelectedEntity: ?Entity,
-mEngineAllocator: std.mem.Allocator,
+_P_Open: bool = true,
+mSelectedScene: ?SceneLayer = null,
+mSelectedEntity: ?Entity = null,
+mEngineAllocator: std.mem.Allocator = undefined,
 
-pub fn Init(engine_allocator: std.mem.Allocator) ComponentsPanel {
-    return ComponentsPanel{
-        ._P_Open = true,
-        .mSelectedEntity = null,
-        .mSelectedScene = null,
-        .mEngineAllocator = engine_allocator,
-    };
+pub fn Init(self: *ComponentsPanel, engine_allocator: std.mem.Allocator) void {
+    self.mEngineAllocator = engine_allocator;
 }
 
 pub fn OnImguiRender(self: ComponentsPanel) !void {

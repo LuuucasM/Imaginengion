@@ -4,7 +4,7 @@ const AssetManager = @import("AssetManager.zig");
 const AssetHandle = @This();
 pub const NullHandle = std.math.maxInt(AssetManager.AssetType);
 
-mID: AssetManager.AssetType,
+mID: AssetManager.AssetType = NullHandle,
 
 pub fn GetAsset(self: AssetHandle, comptime component_type: type) !*component_type {
     comptime {

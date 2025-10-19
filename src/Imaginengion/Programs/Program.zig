@@ -8,16 +8,10 @@ const Window = @import("../Windows/Window.zig");
 const Program = @This();
 
 const Impl = @import("EditorProgram.zig");
-_Impl: Impl,
+_Impl: Impl = .{},
 
-pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !Program {
-    return Program{
-        ._Impl = try Impl.Init(engine_allocator, window, frame_allocator),
-    };
-}
-
-pub fn Setup(self: *Program, engine_allocator: std.mem.Allocator) !void {
-    try self._Impl.Setup(engine_allocator);
+pub fn Init(self: *Program, engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !void {
+    try self._Impl.Init(engine_allocator, window, frame_allocator);
 }
 
 pub fn Deinit(self: *Program) !void {

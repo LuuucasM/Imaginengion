@@ -15,8 +15,8 @@ pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
 const Entity = @This();
 
-mEntityID: Type,
-mECSManagerRef: *ECSManagerGameObj,
+mEntityID: Type = NullEntity,
+mECSManagerRef: *ECSManagerGameObj = undefined,
 
 pub fn AddComponent(self: Entity, comptime component_type: type, component: ?component_type) !*component_type {
     return try self.mECSManagerRef.AddComponent(component_type, self.mEntityID, component);

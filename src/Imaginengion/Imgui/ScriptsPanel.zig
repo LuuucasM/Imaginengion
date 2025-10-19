@@ -20,14 +20,11 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const ScriptsPanel = @This();
 
-_P_Open: bool,
-mSelectedEntity: ?Entity,
+_P_Open: bool = true,
+mSelectedEntity: ?Entity = null,
 
-pub fn Init() ScriptsPanel {
-    return ScriptsPanel{
-        ._P_Open = true,
-        .mSelectedEntity = null,
-    };
+pub fn Init(self: ScriptsPanel) void {
+    _ = self;
 }
 
 pub fn OnImguiRender(self: ScriptsPanel, frame_allocator: std.mem.Allocator) !void {

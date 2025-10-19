@@ -11,18 +11,13 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const WindowsWindow = @This();
 
-_Title: [*:0]const u8 = "Imaginengion",
-_Width: usize,
-_Height: usize,
-_IsVSync: bool,
-_Window: ?*glfw.struct_GLFWwindow,
+_Title: []const u8 = "Imaginengion\x00",
+_Width: usize = 1600,
+_Height: usize = 900,
+_IsVSync: bool = true,
+_Window: ?*glfw.struct_GLFWwindow = null,
 
-pub fn Init() WindowsWindow {
-    const title: [*:0]const u8 = "Imaginengion";
-    const width: usize = 1600;
-    const height: usize = 900;
-    const is_v_sync: bool = true;
-
+pub fn Init(self: *WindowsWindow) void {
     _ = glfw.glfwSetErrorCallback(GLFWErrorCallback);
     const success: c_int = glfw.glfwInit();
     std.debug.assert(success != glfw.GLFW_FALSE);
@@ -31,24 +26,17 @@ pub fn Init() WindowsWindow {
     glfw.glfwWindowHint(glfw.GLFW_CONTEXT_VERSION_MINOR, 6);
     glfw.glfwWindowHint(glfw.GLFW_OPENGL_DEBUG_CONTEXT, glfw.GLFW_TRUE);
 
-    const new_glfw_window = glfw.glfwCreateWindow(@intCast(width), @intCast(height), title, null, null);
-    if (new_glfw_window == null) {
+    self._Window = glfw.glfwCreateWindow(@intCast(self._Width), @intCast(self._Height), self._Title.ptr, null, null);
+    if (self._Window == null) {
         @panic("Could not create glfw window in WindowsWindow::Init");
     }
 
-    _ = glfw.glfwSetWindowCloseCallback(new_glfw_window, GLFWWindowCloseCallback);
-    _ = glfw.glfwSetWindowSizeCallback(new_glfw_window, GLFWWindowResizeCallback);
-    _ = glfw.glfwSetKeyCallback(new_glfw_window, GLFWKeyCallback);
-    _ = glfw.glfwSetMouseButtonCallback(new_glfw_window, GLFWMouseButtonCallback);
-    _ = glfw.glfwSetCursorPosCallback(new_glfw_window, GLFWMouseMovedCallback);
-    _ = glfw.glfwSetScrollCallback(new_glfw_window, GLFWMouseScrolledCallback);
-
-    return WindowsWindow{
-        ._Width = width,
-        ._Height = height,
-        ._IsVSync = is_v_sync,
-        ._Window = new_glfw_window,
-    };
+    _ = glfw.glfwSetWindowCloseCallback(self._Window, GLFWWindowCloseCallback);
+    _ = glfw.glfwSetWindowSizeCallback(self._Window, GLFWWindowResizeCallback);
+    _ = glfw.glfwSetKeyCallback(self._Window, GLFWKeyCallback);
+    _ = glfw.glfwSetMouseButtonCallback(self._Window, GLFWMouseButtonCallback);
+    _ = glfw.glfwSetCursorPosCallback(self._Window, GLFWMouseMovedCallback);
+    _ = glfw.glfwSetScrollCallback(self._Window, GLFWMouseScrolledCallback);
 }
 
 pub fn Deinit(self: *WindowsWindow) void {

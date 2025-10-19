@@ -80,60 +80,50 @@ pub const PanelOpen = struct {
 };
 
 //editor imgui stuff
-_AssetHandlePanel: AssetHandlePanel,
-_ComponentsPanel: ComponentsPanel,
-_ContentBrowserPanel: ContentBrowserPanel,
-_CSEditorPanel: CSEditorPanel,
-_ScenePanel: ScenePanel,
-_ScriptsPanel: ScriptsPanel,
-_StatsPanel: StatsPanel,
-_ToolbarPanel: ToolbarPanel,
-_ViewportPanel: ViewportPanel,
+_AssetHandlePanel: AssetHandlePanel = .{},
+_ComponentsPanel: ComponentsPanel = .{},
+_ContentBrowserPanel: ContentBrowserPanel = .{},
+_CSEditorPanel: CSEditorPanel = .{},
+_ScenePanel: ScenePanel = .{},
+_ScriptsPanel: ScriptsPanel = .{},
+_StatsPanel: StatsPanel = .{},
+_ToolbarPanel: ToolbarPanel = .{},
+_ViewportPanel: ViewportPanel = .{},
 _SceneSpecList: std.ArrayList(SceneSpecPanel) = .{},
 
 //editor stuff
-mEditorSceneManager: SceneManager,
-mOverlayScene: SceneLayer,
-mGameScene: SceneLayer,
-mEditorEditorEntity: Entity,
-mEditorViewportEntity: Entity,
-mEditorFont: AssetHandle,
+mEditorSceneManager: SceneManager = .{},
+mOverlayScene: SceneLayer = .{},
+mGameScene: SceneLayer = .{},
+mEditorEditorEntity: Entity = .{},
+mEditorViewportEntity: Entity = .{},
+mEditorFont: AssetHandle = .{},
 
 //not editor stuff
-mWindow: *Window,
-mGameSceneManager: SceneManager,
-mFrameAllocator: std.mem.Allocator,
-_EngineAllocator: std.mem.Allocator,
+mWindow: *Window = undefined,
+mGameSceneManager: SceneManager = .{},
+mFrameAllocator: std.mem.Allocator = undefined,
+_EngineAllocator: std.mem.Allocator = undefined,
 
 const EditorProgram = @This();
 
-pub fn Init(engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !EditorProgram {
-    try Renderer.Init(window);
-    try ImGui.Init(window);
-    return EditorProgram{
-        .mGameSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
-        .mEditorSceneManager = try SceneManager.Init(window.GetWidth(), window.GetHeight(), engine_allocator),
-        .mOverlayScene = undefined,
-        .mGameScene = undefined,
-        .mEditorEditorEntity = undefined,
-        .mEditorViewportEntity = undefined,
-        .mWindow = window,
-        .mFrameAllocator = frame_allocator,
-        ._EngineAllocator = engine_allocator,
-        ._AssetHandlePanel = AssetHandlePanel.Init(),
-        ._ComponentsPanel = ComponentsPanel.Init(engine_allocator),
-        ._ContentBrowserPanel = try ContentBrowserPanel.Init(engine_allocator),
-        ._CSEditorPanel = CSEditorPanel.Init(engine_allocator),
-        ._ScenePanel = ScenePanel.Init(),
-        ._ScriptsPanel = ScriptsPanel.Init(),
-        ._StatsPanel = StatsPanel.Init(),
-        ._ToolbarPanel = try ToolbarPanel.Init(),
-        ._ViewportPanel = ViewportPanel.Init(window.GetWidth(), window.GetHeight()),
-        .mEditorFont = undefined,
-    };
-}
+pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !void {
+    self.mFrameAllocator = frame_allocator;
+    self._EngineAllocator = engine_allocator;
+    self.mWindow = window;
 
-pub fn Setup(self: *EditorProgram, engine_allocator: std.mem.Allocator) !void {
+    try self.mEditorSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
+    try self.mGameSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
+
+    try Renderer.Init(self.mWindow);
+    try ImGui.Init(self.mWindow);
+
+    self._ComponentsPanel.Init(engine_allocator);
+    try self._ContentBrowserPanel.Init(engine_allocator);
+    self._CSEditorPanel.Init(engine_allocator);
+    try self._ToolbarPanel.Init();
+    self._ViewportPanel.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight());
+
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
     self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
 

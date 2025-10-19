@@ -59,27 +59,23 @@ pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
 pub const ECSManagerScenes = ECSManager(SceneLayer.Type, &SceneComponentsList);
 
 //scene stuff
-mECSManagerGO: ECSManagerGameObj,
-mECSManagerSC: ECSManagerScenes,
-mGameLayerInsertIndex: usize,
-mNumofLayers: usize,
+mECSManagerGO: ECSManagerGameObj = .{},
+mECSManagerSC: ECSManagerScenes = .{},
+mGameLayerInsertIndex: usize = 0,
+mNumofLayers: usize = 0,
 
 //viewport stuff
-mViewportWidth: usize,
-mViewportHeight: usize,
+mViewportWidth: usize = 0,
+mViewportHeight: usize = 0,
 
-mEngineAllocator: std.mem.Allocator,
+mEngineAllocator: std.mem.Allocator = undefined,
 
-pub fn Init(width: usize, height: usize, engine_allocator: std.mem.Allocator) !SceneManager {
-    return SceneManager{
-        .mECSManagerGO = try ECSManagerGameObj.Init(engine_allocator),
-        .mECSManagerSC = try ECSManagerScenes.Init(engine_allocator),
-        .mGameLayerInsertIndex = 0,
-        .mNumofLayers = 0,
-        .mViewportWidth = width,
-        .mViewportHeight = height,
-        .mEngineAllocator = engine_allocator,
-    };
+pub fn Init(self: *SceneManager, width: usize, height: usize, engine_allocator: std.mem.Allocator) !void {
+    try self.mECSManagerGO.Init(engine_allocator);
+    try self.mECSManagerSC.Init(engine_allocator);
+    self.mViewportWidth = width;
+    self.mViewportHeight = height;
+    self.mEngineAllocator = engine_allocator;
 }
 
 pub fn Deinit(self: *SceneManager) !void {

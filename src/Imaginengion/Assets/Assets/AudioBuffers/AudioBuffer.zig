@@ -7,12 +7,14 @@ const Impl = switch (builtin.os.tag) {
     else => @import("NullAudioBuffer.zig"),
 };
 
-mImpl: Impl,
+mImpl: Impl = .{},
 
-pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File) !AudioBuffer {
-    return AudioBuffer{
-        .mImpl = try Impl.Init(allocator, asset_file),
-    };
+pub fn Init(self: *AudioBuffer, allocator: std.mem.Allocator, asset_file: std.fs.File) !void {
+    try self.mImpl.Init(allocator, asset_file);
+}
+
+pub fn Setup(self: *AudioBuffer) !void {
+    try self.mImpl.Setup();
 }
 
 pub fn Deinit(self: *AudioBuffer) !void {

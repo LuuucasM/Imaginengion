@@ -19,33 +19,27 @@ const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
 const MAX_PATH_LEN = 260;
 
 mIsVisible: bool = true,
-mDirTextureHandle: AssetHandle,
-mPngTextureHandle: AssetHandle,
-mBackArrowTextureHandle: AssetHandle,
-mSceneTextureHandle: AssetHandle,
-mScriptTextureHandle: AssetHandle,
-mProjectDirectory: ?std.fs.Dir,
+mDirTextureHandle: AssetHandle = undefined,
+mPngTextureHandle: AssetHandle = undefined,
+mBackArrowTextureHandle: AssetHandle = undefined,
+mSceneTextureHandle: AssetHandle = undefined,
+mScriptTextureHandle: AssetHandle = undefined,
+mProjectDirectory: ?std.fs.Dir = null,
 mProjectPath: std.ArrayList(u8) = .{},
-mCurrentDirectory: ?std.fs.Dir,
+mCurrentDirectory: ?std.fs.Dir = null,
 mCurrentPath: std.ArrayList(u8) = .{},
 mProjectFile: ?std.fs.File = null,
 
-_EngineAllocator: std.mem.Allocator,
+_EngineAllocator: std.mem.Allocator = undefined,
 
-pub fn Init(engine_allocator: std.mem.Allocator) !ContentBrowserPanel {
-    return ContentBrowserPanel{
-        .mIsVisible = true,
-        .mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png", .Eng),
-        .mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png", .Eng),
-        .mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Eng),
-        .mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng),
-        .mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng),
-        .mProjectDirectory = null,
-        .mCurrentDirectory = null,
-        .mProjectFile = null,
+pub fn Init(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) !void {
+    self._EngineAllocator = engine_allocator;
 
-        ._EngineAllocator = engine_allocator,
-    };
+    self.mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png", .Eng);
+    self.mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png", .Eng);
+    self.mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Eng);
+    self.mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng);
+    self.mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng);
 }
 
 pub fn Deinit(self: *ContentBrowserPanel) void {

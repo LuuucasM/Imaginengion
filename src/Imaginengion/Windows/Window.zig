@@ -7,12 +7,10 @@ const Impl = switch (builtin.os.tag) {
     else => @import("UnsupportedWindow.zig"),
 };
 
-_Impl: Impl,
+_Impl: Impl = .{},
 
-pub fn Init() Window {
-    return Window{
-        ._Impl = Impl.Init(),
-    };
+pub fn Init(self: *Window) void {
+    self._Impl.Init();
 }
 
 pub fn Deinit(self: *Window) void {

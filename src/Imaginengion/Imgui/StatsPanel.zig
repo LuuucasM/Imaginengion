@@ -5,12 +5,10 @@ const RenderStats = @import("../Renderer/Renderer.zig").RenderStats;
 const Tracy = @import("../Core/Tracy.zig");
 const StatsPanel = @This();
 
-_P_Open: bool,
+_P_Open: bool = false,
 
-pub fn Init() StatsPanel {
-    return StatsPanel{
-        ._P_Open = false,
-    };
+pub fn Init(self: StatsPanel) void {
+    _ = self;
 }
 
 pub fn OnImguiRender(self: StatsPanel, dt: f64, render_stats: RenderStats) !void {

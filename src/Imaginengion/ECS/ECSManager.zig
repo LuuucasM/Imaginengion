@@ -19,20 +19,19 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
 
         const Self = @This();
-        mEntityManager: EntityManager(entity_t),
-        mComponentManager: ComponentManager(entity_t, components_types),
-        mECSEventManager: ECSEventManager,
-        mECSAllocator: std.mem.Allocator,
+        mEntityManager: EntityManager(entity_t) = .{},
+        mComponentManager: ComponentManager(entity_t, components_types) = .{},
+        mECSEventManager: ECSEventManager = .{},
+        mECSAllocator: std.mem.Allocator = undefined,
 
-        pub fn Init(ECSAllocator: std.mem.Allocator) !Self {
+        pub fn Init(self: *Self, ECSAllocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ECSM Init", @src());
             defer zone.Deinit();
-            return Self{
-                .mEntityManager = EntityManager(entity_t).Init(ECSAllocator),
-                .mComponentManager = try ComponentManager(entity_t, components_types).Init(ECSAllocator),
-                .mECSEventManager = try ECSEventManager.Init(ECSAllocator),
-                .mECSAllocator = ECSAllocator,
-            };
+
+            self.mEntityManager.Init(ECSAllocator);
+            try self.mComponentManager.Init(ECSAllocator);
+            try self.mECSEventManager.Init(ECSAllocator);
+            self.mECSAllocator = ECSAllocator;
         }
 
         pub fn Deinit(self: *Self) !void {

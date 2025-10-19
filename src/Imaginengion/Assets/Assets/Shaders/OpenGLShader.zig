@@ -19,20 +19,15 @@ pub const enable_nsight = build_options.enable_nsight;
 const OpenGLShader = @This();
 
 mBufferElements: std.ArrayList(VertexBufferElement) = .{},
-mUniforms: std.AutoHashMap(usize, i32),
-mBufferStride: usize,
-mShaderID: u32,
+mUniforms: std.AutoHashMap(usize, i32) = undefined,
+mBufferStride: usize = undefined,
+mShaderID: u32 = undefined,
 
-_Allocator: std.mem.Allocator,
+_Allocator: std.mem.Allocator = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !OpenGLShader {
-    var new_shader = OpenGLShader{
-        .mUniforms = std.AutoHashMap(usize, i32).init(allocator),
-        .mBufferStride = 0,
-        .mShaderID = 0,
-
-        ._Allocator = allocator,
-    };
+pub fn Init(self: *OpenGLShader, allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+    self.mUniforms = std.AutoHashMap(usize, i32).init(allocator);
+    self._Allocator = allocator;
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -40,14 +35,12 @@ pub fn Init(allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []cons
 
     const shader_sources = try ReadFile(asset_file, arena_allocator, abs_path);
 
-    if (try new_shader.Compile(shader_sources, rel_path) == true) {
-        try new_shader.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
-        try new_shader.DiscoverUniforms();
+    if (try self.Compile(shader_sources, rel_path) == true) {
+        try self.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
+        try self.DiscoverUniforms();
     }
 
-    glad.glObjectLabel(glad.GL_PROGRAM, new_shader.mShaderID, -1, "ShaderProgram");
-
-    return new_shader;
+    glad.glObjectLabel(glad.GL_PROGRAM, self.mShaderID, -1, "ShaderProgram");
 }
 
 pub fn Deinit(self: *OpenGLShader) !void {

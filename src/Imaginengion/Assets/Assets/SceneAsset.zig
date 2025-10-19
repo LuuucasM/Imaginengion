@@ -9,17 +9,15 @@ mSceneContents: std.ArrayList(u8) = .{},
 
 _ContentsAllocator: std.mem.Allocator = undefined,
 
-pub fn Init(allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !SceneAsset {
+pub fn Init(self: *SceneAsset, allocator: std.mem.Allocator, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
     _ = rel_path;
-    const file_size = try asset_file.getEndPos();
+    self._ContentsAllocator = allocator;
 
-    var new_scene_asset = SceneAsset{
-        .mSceneContents = try std.ArrayList(u8).initCapacity(allocator, file_size),
-        ._ContentsAllocator = allocator,
-    };
-    try new_scene_asset.mSceneContents.resize(allocator, file_size);
-    _ = try asset_file.readAll(new_scene_asset.mSceneContents.items);
-    return new_scene_asset;
+    const file_size = try asset_file.getEndPos();
+    self.mSceneContents = try std.ArrayList(u8).initCapacity(allocator, file_size);
+    try self.mSceneContents.resize(allocator, file_size);
+
+    _ = try asset_file.readAll(self.mSceneContents.items);
 }
 
 pub fn Deinit(self: *SceneAsset) !void {

@@ -8,17 +8,15 @@ const PlayerManager = @This();
 
 pub const ECSManagerPlayer = ECSManager(Player.Type, &ComponentsList);
 
-var StaticPlayerManager: PlayerManager = undefined;
+var StaticPlayerManager: PlayerManager = .{};
 
-mECSManager: ECSManagerPlayer = undefined,
+mECSManager: ECSManagerPlayer = .{},
 
 mEngineAllocator: std.mem.Allocator = undefined,
 
 pub fn Init(engine_allocator: std.mem.Allocator) !void {
-    StaticPlayerManager = PlayerManager{
-        .mECSManager = try ECSManagerPlayer.Init(engine_allocator),
-        .mEngineAllocator = engine_allocator,
-    };
+    try StaticPlayerManager.mECSManager.Init(engine_allocator);
+    StaticPlayerManager.mEngineAllocator = engine_allocator;
 }
 
 pub fn Deinit() !void {

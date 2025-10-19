@@ -32,7 +32,7 @@ pub const Ind: usize = blk: {
 
 pub const Category: ComponentCategory = .Unique;
 
-mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = undefined,
+mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = [_]GlyphInfo{GlyphInfo{}} ** GYLPH_SET_SIZE,
 mDistanceRange: u32 = 0,
 mSize: u32 = 0,
 mAssetAllocator: std.mem.Allocator = undefined,
@@ -42,7 +42,9 @@ mDescender: f32 = 0.0,
 mEmsize: f32 = 0.0,
 mAtlasSize: Vec2f32 = Vec2f32{ 0, 0 },
 
-pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !TextAsset {
+pub fn Init(self: *TextAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
+    self.mAssetAllocator = asset_allocator;
+
     const file_path = std.fs.path.dirname(rel_path).?;
     const name = std.fs.path.stem(std.fs.path.basename(rel_path));
 
@@ -106,7 +108,7 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: 
 
     defer text_json.close();
 
-    return try ProcessTextJson(asset_allocator, arena_allocator, text_json);
+    return try self.ProcessTextJson(arena_allocator, text_json);
 }
 
 pub fn Deinit(self: *TextAsset) !void {
@@ -115,12 +117,7 @@ pub fn Deinit(self: *TextAsset) !void {
     }
 }
 
-fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !TextAsset {
-    var new_text_asset = TextAsset{
-        .mAssetAllocator = asset_allocator,
-        .mGlyphs = [_]GlyphInfo{GlyphInfo{}} ** GYLPH_SET_SIZE,
-    };
-
+fn ProcessTextJson(self: *TextAsset, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !void {
     const file_size = try text_json.getEndPos();
 
     var file_contents = try std.ArrayList(u8).initCapacity(arena_allocator, file_size);
@@ -149,20 +146,18 @@ fn ProcessTextJson(asset_allocator: std.mem.Allocator, arena_allocator: std.mem.
         defer arena_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "atlas")) {
-            try ProcessAtlas(&reader, &new_text_asset, arena_allocator);
+            try self.ProcessAtlas(&reader, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
-            try ProcessMetrics(&reader, &new_text_asset, arena_allocator);
+            try self.ProcessMetrics(&reader, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try ProcessGlyphs(&reader, &new_text_asset, arena_allocator);
+            try self.ProcessGlyphs(&reader, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
-            try ProcessKerning(&reader, &new_text_asset, arena_allocator);
+            try self.ProcessKerning(&reader, arena_allocator);
         }
     }
-
-    return new_text_asset;
 }
 
-fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
+fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the atlas
     while (true) {
         const token = try reader.next();
@@ -179,21 +174,21 @@ fn ProcessAtlas(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allo
 
         if (std.mem.eql(u8, actual_value, "distanceRange")) {
             const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mDistanceRange = parsed_value;
+            self.mDistanceRange = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "size")) {
             const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mSize = parsed_value;
+            self.mSize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "width")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mAtlasSize[0] = parsed_value;
+            self.mAtlasSize[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "height")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mAtlasSize[1] = parsed_value;
+            self.mAtlasSize[1] = parsed_value;
         }
     }
 }
 
-fn ProcessMetrics(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
+fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the metrics
     while (true) {
         const token = try reader.next();
@@ -210,20 +205,20 @@ fn ProcessMetrics(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_al
 
         if (std.mem.eql(u8, actual_value, "emSize")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mEmsize = parsed_value;
+            self.mEmsize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "lineHeight")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mLineHeight = parsed_value;
+            self.mLineHeight = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "ascender")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mAscender = parsed_value;
+            self.mAscender = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "descender")) {
             const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
-            new_text_asset.mDescender = parsed_value;
+            self.mDescender = parsed_value;
         }
     }
 }
-fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
+fn ProcessGlyphs(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -234,12 +229,12 @@ fn ProcessGlyphs(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
             else => return error.NotExpected,
         }
         var new_glyph = GlyphInfo{
-            .mKernings = KerningsT.init(new_text_asset.mAssetAllocator),
+            .mKernings = KerningsT.init(self.mAssetAllocator),
         };
         var glyph_ind: usize = 0;
         try SingleGlyph(reader, &glyph_ind, &new_glyph, arena_allocator);
         if (glyph_ind > -1) {
-            new_text_asset.mGlyphs[@intCast(glyph_ind)] = new_glyph;
+            self.mGlyphs[@intCast(glyph_ind)] = new_glyph;
         }
     }
 }
@@ -333,7 +328,7 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_all
     }
 }
 
-fn ProcessKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
+fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -344,11 +339,11 @@ fn ProcessKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_al
             else => return error.NotExpected,
         }
 
-        try SingleKerning(reader, new_text_asset, arena_allocator);
+        try self.SingleKerning(reader, arena_allocator);
     }
 }
 
-fn SingleKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_allocator: std.mem.Allocator) !void {
+fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
 
     //unicode1
     const token1 = try reader.next();
@@ -392,7 +387,7 @@ fn SingleKerning(reader: *std.json.Reader, new_text_asset: *TextAsset, arena_all
 
     const advance = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
 
-    try new_text_asset.mGlyphs[glyph_ind1].mKernings.put(unicode2, advance);
+    try self.mGlyphs[glyph_ind1].mKernings.put(unicode2, advance);
     try SkipToken(reader); //skip the end object token
 }
 

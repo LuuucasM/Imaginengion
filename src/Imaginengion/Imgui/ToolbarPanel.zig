@@ -21,20 +21,15 @@ pub const EditorState = enum(u2) {
     Stop = 1,
 };
 
-mP_Open: bool,
-mState: EditorState,
-mPlayIcon: AssetHandle,
-mStopIcon: AssetHandle,
-mStartEntity: ?Entity,
+mP_Open: bool = true,
+mState: EditorState = .Stop,
+mPlayIcon: AssetHandle = undefined,
+mStopIcon: AssetHandle = undefined,
+mStartEntity: ?Entity = null,
 
-pub fn Init() !ToolbarPanel {
-    return ToolbarPanel{
-        .mP_Open = true,
-        .mState = .Stop,
-        .mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng),
-        .mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng),
-        .mStartEntity = null,
-    };
+pub fn Init(self: *ToolbarPanel) !void {
+    self.mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng);
+    self.mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng);
 }
 
 pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {

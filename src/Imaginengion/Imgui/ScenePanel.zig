@@ -35,16 +35,12 @@ const TREE_FLAGS = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
 const OVERLAY_LAYER_COLOR = 0xFFEBCE87;
 const GAME_LAYER_COLOR = 0xFF84A4C4;
 
-mIsVisible: bool,
-mSelectedScene: ?SceneLayer,
-mSelectedEntity: ?Entity,
+mIsVisible: bool = true,
+mSelectedScene: ?SceneLayer = null,
+mSelectedEntity: ?Entity = null,
 
-pub fn Init() ScenePanel {
-    return ScenePanel{
-        .mIsVisible = true,
-        .mSelectedScene = null,
-        .mSelectedEntity = null,
-    };
+pub fn Init(self: ScenePanel) void {
+    _ = self;
 }
 
 pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {

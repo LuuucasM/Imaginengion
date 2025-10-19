@@ -20,9 +20,9 @@ pub const Type = u32;
 pub const NullScene: Type = std.math.maxInt(Type);
 const SceneLayer = @This();
 
-mSceneID: Type,
-mECSManagerGORef: *ECSManagerGameObj,
-mECSManagerSCRef: *ECSManagerScenes,
+mSceneID: Type = NullScene,
+mECSManagerGORef: *ECSManagerGameObj = undefined,
+mECSManagerSCRef: *ECSManagerScenes = undefined,
 
 //for the scenes themselves
 pub fn AddComponent(self: SceneLayer, comptime component_type: type, component: ?component_type) !*component_type {

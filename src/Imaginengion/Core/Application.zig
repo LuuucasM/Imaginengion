@@ -27,8 +27,8 @@ const Application: type = @This();
 
 mIsRunning: bool = true,
 mIsMinimized: bool = false,
-mWindow: Window = undefined,
-mProgram: Program = undefined,
+mWindow: Window = .{},
+mProgram: Program = .{},
 mEngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
 mEngineAllocator: std.mem.Allocator = undefined,
 mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
@@ -51,12 +51,13 @@ pub fn Init(self: *Application) !void {
     try Input.Init();
     try SystemEventManager.Init(self);
     try PlayerManager.Init(self.mEngineAllocator);
-
-    self.mWindow = Window.Init();
-    self.mProgram = try Program.Init(self.mEngineAllocator, &self.mWindow, self.mFrameAllocator);
-    try self.mProgram.Setup(self.mEngineAllocator);
     try ImguiEventManager.Init(&self.mProgram);
     try GameEventManager.Init(&self.mProgram);
+
+    self.mWindow.Init();
+
+    try self.mProgram.Init(self.mEngineAllocator, &self.mWindow, self.mFrameAllocator);
+
     self.mWindow.SetVSync(false);
 
     StaticEngineContext.Init();

@@ -3,14 +3,14 @@ const glad = @import("../../../Core/CImports.zig").glad;
 const stb = @import("../../../Core/CImports.zig").stb;
 const OpenGLTexture2D = @This();
 
-_Width: c_int,
-_Height: c_int,
-_TextureID: c_uint,
-_InternalFormat: c_uint,
-_DataFormat: c_uint,
-mARBHandle: u64,
+_Width: c_int = 0,
+_Height: c_int = 0,
+_TextureID: c_uint = 0,
+_InternalFormat: c_uint = 0,
+_DataFormat: c_uint = 0,
+mARBHandle: u64 = 0,
 
-pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !OpenGLTexture2D {
+pub fn Init(self: *OpenGLTexture2D, allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !void {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
@@ -61,14 +61,12 @@ pub fn Init(allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []c
 
     glad.glObjectLabel(glad.GL_TEXTURE, new_texture_id, -1, "Texture2D");
 
-    return OpenGLTexture2D{
-        ._Width = width,
-        ._Height = height,
-        ._TextureID = new_texture_id,
-        ._InternalFormat = internal_format,
-        ._DataFormat = data_format,
-        .mARBHandle = arb_handle,
-    };
+    self._Width = width;
+    self._Height = height;
+    self._TextureID = new_texture_id;
+    self._InternalFormat = internal_format;
+    self._DataFormat = data_format;
+    self.mARBHandle = arb_handle;
 }
 
 pub fn Deinit(self: OpenGLTexture2D) !void {

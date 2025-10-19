@@ -17,7 +17,7 @@ pub const ScriptType = enum(u8) {
 mLib: std.DynLib = undefined,
 mScriptType: ScriptType = undefined,
 
-pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _: std.fs.File) !ScriptAsset {
+pub fn Init(self: *ScriptAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _: std.fs.File) !void {
 
     //spawn a child to handle compiling the zig file into a dll
     const file_arg = try std.fmt.allocPrint(asset_allocator, "-Dscript_abs_path={s}", .{abs_path});
@@ -49,10 +49,8 @@ pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, _: []const
     var lib = try std.DynLib.open(dyn_path);
     const GetScriptTypeFunc = lib.lookup(*const fn () ScriptType, "GetScriptType").?;
 
-    return ScriptAsset{
-        .mLib = lib,
-        .mScriptType = GetScriptTypeFunc(),
-    };
+    self.mLib = lib;
+    self.mScriptType = GetScriptTypeFunc();
 }
 
 pub fn Deinit(self: *ScriptAsset) !void {

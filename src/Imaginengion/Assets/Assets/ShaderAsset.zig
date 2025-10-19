@@ -55,14 +55,12 @@ pub fn StrToDataType(name: []const u8) ShaderDataType {
     if (std.mem.eql(u8, name, "float")) return ShaderDataType.Float;
 }
 
-mImpl: Impl = undefined,
+mImpl: Impl = .{},
 
-pub fn Init(asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !ShaderAsset {
+pub fn Init(self: *ShaderAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
     const zone = Tracy.ZoneInit("Shader Init", @src());
     defer zone.Deinit();
-    return ShaderAsset{
-        .mImpl = try Impl.Init(asset_allocator, abs_path, rel_path, asset_file),
-    };
+    try self.mImpl.Init(asset_allocator, abs_path, rel_path, asset_file);
 }
 
 pub fn Deinit(self: *ShaderAsset) !void {

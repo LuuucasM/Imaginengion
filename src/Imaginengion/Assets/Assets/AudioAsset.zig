@@ -5,16 +5,18 @@ const AudioBuffer = @import("AudioBuffers/AudioBuffer.zig");
 const miniaudio = @import("../../Core/CImports.zig").miniaudio;
 const AudioAsset = @This();
 
-mAudioBuffer: AudioBuffer = undefined,
+mAudioBuffer: AudioBuffer = .{},
 
-pub fn Init(allocator: std.mem.Allocator, _: []const u8, _: []const u8, asset_file: std.fs.File) !AudioAsset {
-    return AudioAsset{
-        .mAudioBuffer = try AudioBuffer.Init(allocator, asset_file),
-    };
+pub fn Init(self: *AudioAsset, allocator: std.mem.Allocator, _: []const u8, _: []const u8, asset_file: std.fs.File) !void {
+    try self.mAudioBuffer.Init(allocator, asset_file);
 }
 
 pub fn Deinit(self: *AudioAsset) !void {
     try self.mAudioBuffer.Deinit();
+}
+
+pub fn Setup(self: *AudioAsset) !void {
+    try self.mAudioBuffer.Setup();
 }
 
 pub const Ind: usize = blk: {

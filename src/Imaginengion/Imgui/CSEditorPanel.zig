@@ -8,14 +8,11 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 const Tracy = @import("../Core/Tracy.zig");
 const CSEditorPanel = @This();
 
-mP_Open: bool,
-mEditorWindows: std.AutoArrayHashMap(u64, EditorWindow),
+mP_Open: bool = true,
+mEditorWindows: std.AutoArrayHashMap(u64, EditorWindow) = undefined,
 
-pub fn Init(engine_allocator: std.mem.Allocator) CSEditorPanel {
-    return CSEditorPanel{
-        .mP_Open = true,
-        .mEditorWindows = std.AutoArrayHashMap(u64, EditorWindow).init(engine_allocator),
-    };
+pub fn Init(self: *CSEditorPanel, engine_allocator: std.mem.Allocator) void {
+    self.mEditorWindows = std.AutoArrayHashMap(u64, EditorWindow).init(engine_allocator);
 }
 
 pub fn Deinit(self: *CSEditorPanel) void {

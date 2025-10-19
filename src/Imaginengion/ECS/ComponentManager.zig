@@ -32,31 +32,26 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         const Self = @This();
 
-        mComponentsArrays: std.ArrayList(ComponentArray(entity_t)),
-        mEntitySkipField: SpraseSkipFieldT,
-        mECSAllocator: std.mem.Allocator,
+        mComponentsArrays: std.ArrayList(ComponentArray(entity_t)) = .{},
+        mEntitySkipField: SpraseSkipFieldT = undefined,
+        mECSAllocator: std.mem.Allocator = undefined,
 
-        pub fn Init(ECSAllocator: std.mem.Allocator) !Self {
-            var new_component_manager = Self{
-                .mComponentsArrays = std.ArrayList(ComponentArray(entity_t)){},
-                .mEntitySkipField = try SpraseSkipFieldT.init(ECSAllocator, 20, 10),
-                .mECSAllocator = ECSAllocator,
-            };
+        pub fn Init(self: *Self, ECSAllocator: std.mem.Allocator) !void {
+            self.mEntitySkipField = try SpraseSkipFieldT.init(ECSAllocator, 20, 10);
+            self.mECSAllocator = ECSAllocator;
 
             //add the components for entity hiearchy
             const parent_array = try ComponentArray(entity_t).Init(ECSAllocator, ParentComponent);
-            try new_component_manager.mComponentsArrays.append(ECSAllocator, parent_array);
+            try self.mComponentsArrays.append(ECSAllocator, parent_array);
 
             const child_array = try ComponentArray(entity_t).Init(ECSAllocator, ChildComponent);
-            try new_component_manager.mComponentsArrays.append(ECSAllocator, child_array);
+            try self.mComponentsArrays.append(ECSAllocator, child_array);
 
             inline for (components_types) |component_type| {
                 _InternalTypeValidation(component_type);
                 const new_component_array = try ComponentArray(entity_t).Init(ECSAllocator, component_type);
-                try new_component_manager.mComponentsArrays.append(ECSAllocator, new_component_array);
+                try self.mComponentsArrays.append(ECSAllocator, new_component_array);
             }
-
-            return new_component_manager;
         }
 
         pub fn Deinit(self: *Self) !void {

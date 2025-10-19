@@ -34,35 +34,25 @@ const GizmoType = enum(c_int) {
 };
 
 //for viewport window
-mP_OpenViewport: bool,
-mIsFocusedViewport: bool,
-mViewportWidth: usize,
-mViewportHeight: usize,
-mSelectedEntity: ?Entity,
-mGizmoType: GizmoType,
+mP_OpenViewport: bool = true,
+mIsFocusedViewport: bool = false,
+mViewportWidth: usize = 0,
+mViewportHeight: usize = 0,
+mSelectedEntity: ?Entity = null,
+mGizmoType: GizmoType = .None,
 
 //for play window
-mP_OpenPlay: bool,
-mIsFocusedPlay: bool,
-mPlayWidth: usize,
-mPlayHeight: usize,
+mP_OpenPlay: bool = true,
+mIsFocusedPlay: bool = false,
+mPlayWidth: usize = 0,
+mPlayHeight: usize = 0,
 
-pub fn Init(viewport_width: usize, viewport_height: usize) ViewportPanel {
-    return ViewportPanel{
-        //for viewport window
-        .mP_OpenViewport = true,
-        .mIsFocusedViewport = false,
-        .mViewportWidth = viewport_width,
-        .mViewportHeight = viewport_height,
-        .mSelectedEntity = null,
-        .mGizmoType = .None,
+pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize) void {
+    self.mViewportWidth = viewport_width;
+    self.mViewportHeight = viewport_height;
 
-        //for play window
-        .mP_OpenPlay = true,
-        .mPlayWidth = viewport_width,
-        .mPlayHeight = viewport_height,
-        .mIsFocusedPlay = false,
-    };
+    self.mPlayWidth = viewport_width;
+    self.mPlayHeight = viewport_height;
 }
 
 pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {

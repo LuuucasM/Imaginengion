@@ -6,17 +6,15 @@ pub fn EntityManager(entity_t: type) type {
         const Self = @This();
 
         _NextID: entity_t = 0,
-        _IDsInUse: ArraySet(entity_t),
+        _IDsInUse: ArraySet(entity_t) = undefined,
         _IDsRemoved: std.ArrayList(entity_t) = .{},
         mIDsToRemove: std.ArrayList(entity_t) = .{},
 
-        _ECSAllocator: std.mem.Allocator,
+        _ECSAllocator: std.mem.Allocator = undefined,
 
-        pub fn Init(ECSAllocator: std.mem.Allocator) Self {
-            return Self{
-                ._IDsInUse = ArraySet(entity_t).init(ECSAllocator),
-                ._ECSAllocator = ECSAllocator,
-            };
+        pub fn Init(self: *Self, ECSAllocator: std.mem.Allocator) void {
+            self._IDsInUse = ArraySet(entity_t).init(ECSAllocator);
+            self._ECSAllocator = ECSAllocator;
         }
 
         pub fn Deinit(self: *Self) void {

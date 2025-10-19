@@ -33,19 +33,15 @@ mAssetECS: ECSManagerAssets = undefined,
 mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
 mPathToIDPrj: std.AutoHashMap(u64, AssetType) = undefined,
 mCWD: std.fs.Dir = undefined,
-mCWDPath: std.ArrayList(u8) = undefined,
+mCWDPath: std.ArrayList(u8) = .{},
 mProjectDirectory: ?std.fs.Dir = undefined,
-mProjectPath: std.ArrayList(u8) = undefined,
+mProjectPath: std.ArrayList(u8) = .{},
 
 pub fn Init() !void {
-    AssetM = AssetManager{
-        .mAssetECS = try ECSManagerAssets.Init(AssetAllocator),
-        .mPathToIDEng = std.AutoHashMap(u64, AssetType).init(AssetAllocator),
-        .mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(AssetAllocator),
-        .mCWD = std.fs.cwd(),
-        .mCWDPath = std.ArrayList(u8){},
-        .mProjectPath = std.ArrayList(u8){},
-    };
+    try AssetM.mAssetECS.Init(AssetAllocator);
+    AssetM.mPathToIDEng = std.AutoHashMap(u64, AssetType).init(AssetAllocator);
+    AssetM.mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(AssetAllocator);
+    AssetM.mCWD = std.fs.cwd();
 
     var buffer: [260]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
@@ -126,9 +122,10 @@ pub fn GetAsset(comptime asset_type: type, asset_id: AssetType) !*asset_type {
             const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
             defer CloseFile(asset_file);
 
-            const new_asset = try asset_type.Init(AssetAllocator, abs_path, file_data.mRelPath.items, asset_file);
+            const asset_component = try AssetM.mAssetECS.AddComponent(asset_type, asset_id, null);
+            try asset_component.Init(AssetAllocator, abs_path, file_data.mRelPath.items, asset_file);
 
-            return try AssetM.mAssetECS.AddComponent(asset_type, asset_id, new_asset);
+            return asset_component;
         }
     }
 }
