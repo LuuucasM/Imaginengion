@@ -2,11 +2,13 @@ const std = @import("std");
 const ma = @import("../../../Core/CImports.zig").miniaudio;
 const MiniAudioBuffer = @This();
 
-const AUDIO_FORMAT = ma.ma_format_f32;
-const AUDIO_CHANNELS = 2;
-const SAMPLE_RATE = 44100;
+const AUDIO_FORMAT = @import("../../../AudioManager/MiniAudioContext.zig").AUDIO_FORMAT;
+const AUDIO_CHANNELS = @import("../../../AudioManager/MiniAudioContext.zig").AUDIO_CHANNELS;
+const SAMPLE_RATE = @import("../../../AudioManager/MiniAudioContext.zig").SAMPLE_RATE;
 
-mAudioBuffer: ma.ma_audio_buffer = undefined,
+mAudioConfig: ma.ma_audio_buffer_config = undefined,
+mPcmFrames: ?*anyopaque = null,
+mFrameCount: u64 = 0,
 
 pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_file: std.fs.File) !void {
     _ = asset_allocator;
@@ -23,18 +25,14 @@ pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_fi
     _ = try asset_file.readAll(file_data.items);
 
     var decoder_config = ma.ma_decoder_config_init(AUDIO_FORMAT, AUDIO_CHANNELS, SAMPLE_RATE);
-    var frame_count: u64 = 0;
-    var pcm_frames: ?*anyopaque = null;
 
-    const decoder_result = ma.ma_decode_memory(file_data.items.ptr, file_data.items.len, &decoder_config, &frame_count, &pcm_frames);
-    if (decoder_result == ma.MA_ERROR) return error.DecoderInitFail;
+    if (ma.ma_decode_memory(file_data.items.ptr, file_data.items.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
+        return error.DecoderInitFail;
+    }
 
-    const audio_buffer_config = ma.ma_audio_buffer_config_init(AUDIO_FORMAT, AUDIO_CHANNELS, frame_count, pcm_frames, null);
-
-    const buffer_result = ma.ma_audio_buffer_init(&audio_buffer_config, &self.mAudioBuffer);
-    if (buffer_result == ma.MA_ERROR) return error.AudioBufferInitFail;
+    self.mAudioConfig = ma.ma_audio_buffer_config_init(AUDIO_FORMAT, AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);
 }
 
 pub fn Deinit(self: *MiniAudioBuffer) !void {
-    ma.ma_audio_buffer_uninit(&self.mAudioBuffer);
+    ma.ma_free(self.mPcmFrames);
 }

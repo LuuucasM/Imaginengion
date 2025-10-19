@@ -6,12 +6,10 @@ const Impl = switch (builtin.os.tag) {
     else => @import("NullContext.zig"),
 };
 
-mImpl: Impl = undefined,
+mImpl: Impl = .{},
 
-pub fn Init() !AudioContext {
-    return AudioContext{
-        .mImpl = try Impl.Init(),
-    };
+pub fn Init(self: *AudioContext) !AudioContext {
+    self.mImpl.Init();
 }
 
 pub fn Setup(self: *AudioContext) !void {

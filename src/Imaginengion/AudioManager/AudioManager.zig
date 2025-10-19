@@ -3,7 +3,7 @@ const AudioManager = @This();
 
 var ManagerInstance: AudioManager = .{};
 
-mAudioContext: AudioContext = undefined,
+mAudioContext: AudioContext = .{},
 
 pub fn Init() !void {
     ManagerInstance.mAudioContext = try AudioContext.Init();
