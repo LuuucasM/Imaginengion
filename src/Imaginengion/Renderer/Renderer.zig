@@ -35,8 +35,7 @@ var RenderManager: Renderer = .{};
 
 pub const RenderStats = struct {
     mQuadNum: usize = 0,
-    mCircleNum: usize = 0,
-    mLineNum: usize = 0,
+    mGlyphNum: usize = 0,
 };
 
 const CameraData = extern struct {
@@ -56,8 +55,8 @@ const ModeData = extern struct {
 mRenderContext: RenderContext = undefined,
 mStats: RenderStats = .{},
 
-mR2D: Renderer2D = undefined,
-mR3D: Renderer3D = undefined,
+mR2D: Renderer2D = .{},
+mR3D: Renderer3D = .{},
 
 mCameraBuffer: CameraData = std.mem.zeroes(CameraData),
 mCameraUniformBuffer: UniformBuffer = undefined,
@@ -65,15 +64,15 @@ mCameraUniformBuffer: UniformBuffer = undefined,
 mModeBuffer: ModeData = std.mem.zeroes(ModeData),
 mModeUniformBuffer: UniformBuffer = undefined,
 
-mSDFShader: AssetHandle = undefined,
+mSDFShader: AssetHandle = .{},
 
 var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 
 pub fn Init(window: *Window) !void {
     RenderManager.mRenderContext = RenderContext.Init(window);
 
-    RenderManager.mR2D = try Renderer2D.Init(RenderAllocator.allocator());
-    RenderManager.mR3D = Renderer3D.Init();
+    RenderManager.mR2D.Init(RenderAllocator.allocator());
+    RenderManager.mR3D.Init();
 
     RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
     RenderManager.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
@@ -96,13 +95,13 @@ pub fn SwapBuffers() void {
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
 pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator, mode: u32) !void {
+    std.debug.assert(mode == 0b0 or mode == 0b1);
+
     const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
     defer zone.Deinit();
 
     RenderManager.mRenderContext.PushDebugGroup("Frame\x00");
     defer RenderManager.mRenderContext.PopDebugGroup();
-
-    std.debug.assert(mode == 0b0 or mode == 0b1);
 
     UpdateCameraBuffer(camera_component, camera_transform);
     UpdateModeBuffer(mode);
@@ -222,6 +221,9 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
 fn EndRendering(camera_component: *CameraComponent) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
+
+    RenderManager.mStats.mQuadNum = RenderManager.mR2D.mQuadBufferBase.items.len;
+    RenderManager.mStats.mGlyphNum = RenderManager.mR2D.mGlyphBufferBase.items.len;
 
     RenderManager.mRenderContext.PushDebugGroup("End Rendering\x00");
     defer RenderManager.mRenderContext.PopDebugGroup();

@@ -71,32 +71,29 @@ const RectVertexPositions = Mat4f32{
     Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
 };
 
-mAllocator: std.mem.Allocator,
+mAllocator: std.mem.Allocator = undefined,
 
-mQuadBuffer: SSBO,
+mQuadBuffer: SSBO = undefined,
 mQuadBufferBase: std.ArrayList(QuadData) = .{},
-mQuadCountUB: UniformBuffer,
+mQuadCountUB: UniformBuffer = undefined,
 
-mGlyphBuffer: SSBO,
+mGlyphBuffer: SSBO = undefined,
 mGlyphBufferBase: std.ArrayList(GlyphData) = .{},
-mGlyphCountUB: UniformBuffer,
+mGlyphCountUB: UniformBuffer = undefined,
 
-_Allocator: std.mem.Allocator,
+_Allocator: std.mem.Allocator = undefined,
 
-pub fn Init(allocator: std.mem.Allocator) !Renderer2D {
-    return Renderer2D{
-        .mAllocator = allocator,
+pub fn Init(self: Renderer2D, allocator: std.mem.Allocator) !void {
+    self.mAllocator = allocator;
+    self._Allocator = allocator;
 
-        .mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100),
-        .mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(allocator, 100),
-        .mQuadCountUB = UniformBuffer.Init(@sizeOf(c_uint)),
+    self.mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100);
+    self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(allocator, 100);
+    self.mQuadCountUB = UniformBuffer.Init(@sizeOf(c_uint));
 
-        .mGlyphBuffer = SSBO.Init(@sizeOf(GlyphData) * 100),
-        .mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(allocator, 100),
-        .mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint)),
-
-        ._Allocator = allocator,
-    };
+    self.mGlyphBuffer = SSBO.Init(@sizeOf(GlyphData) * 100);
+    self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(allocator, 100);
+    self.mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint));
 }
 
 pub fn Deinit(self: *Renderer2D) !void {
