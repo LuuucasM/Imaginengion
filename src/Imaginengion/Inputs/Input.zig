@@ -5,7 +5,6 @@ const Vec2f32 = LinAlg.Vec2f32;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const HashMap = std.AutoHashMap;
 const InputCodes = @import("InputCodes.zig").InputCodes;
-const CircularBuffer = @import("../Core/CircularBuffer.zig").CircularBuffer;
 const Tracy = @import("../Core/Tracy.zig");
 
 pub const InputPress = struct {

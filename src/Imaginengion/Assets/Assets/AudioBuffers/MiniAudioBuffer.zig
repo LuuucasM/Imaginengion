@@ -34,5 +34,5 @@ pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_fi
 }
 
 pub fn Deinit(self: *MiniAudioBuffer) !void {
-    ma.ma_free(self.mPcmFrames);
+    ma.ma_free(self.mPcmFrames, null);
 }
