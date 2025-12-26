@@ -33,6 +33,7 @@ mEngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
 mEngineAllocator: std.mem.Allocator = undefined,
 mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 mFrameAllocator: std.mem.Allocator = undefined,
+//mEngineContext: EngineContext = .{}, //TODO: Implement this
 
 /// Initializes the engine application.
 ///

@@ -2,6 +2,11 @@
 	- likely to use mini audio
 	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform
 	- thats about all i know right now lol because i dont really know much about audio in general but i guess im about to learn :)
+- change core of the engine to a mediator pattern mentioned in this video https://www.youtube.com/watch?v=Sa1Z4GlY7As
+	- mediator pattern afaik looks to be similar to how allocators and io is done in zig. 
+	- as we know from zig passing around a reference does not really impact performance so that is ok
+	- the good thing is the entire engine like renderer, and everything can exist in one memory space, and we dont need to have global memory space used.
+	- additionally we already sort of have the concept of this in the engine already but its used only for scripts and contains only a couple of things but i can just extend it to the whole engine and that will be good. this way it simplifies dependencies, consolidates memory, and 
 - add physics
 - make pong
 - add a way to export the game into its standalone

@@ -13,10 +13,10 @@ pub fn Init(self: *AudioBuffer, allocator: std.mem.Allocator, asset_file: std.fs
     try self.mImpl.Init(allocator, asset_file);
 }
 
-pub fn Setup(self: *AudioBuffer) !void {
-    try self.mImpl.Setup();
-}
-
 pub fn Deinit(self: *AudioBuffer) !void {
     try self.mImpl.Deinit();
+}
+
+pub fn ReadFrames(self: *AudioBuffer, frames_out: []f32, frame_count: u64, cursor: *u64, loop: bool) !u64 {
+    try self.mImpl.ReadFrames(frames_out, frame_count, cursor, loop);
 }

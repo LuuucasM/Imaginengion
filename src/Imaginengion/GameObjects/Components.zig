@@ -1,7 +1,9 @@
 const std = @import("std");
 pub const AISlotComponent = @import("Components/AISlotComponent.zig");
+pub const AudioComponent = @import("Components/AudioComponent.zig");
 pub const CameraComponent = @import("Components/CameraComponent.zig");
 pub const IDComponent = @import("Components/IDComponent.zig");
+pub const MicComponent = @import("Components/MicComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
 pub const PlayerSlotComponent = @import("Components/PlayerSlotComponent.zig");
 pub const QuadComponent = @import("Components/QuadComponent.zig");
@@ -16,8 +18,10 @@ pub const OnUpdateInputScript = TagComponents.OnUpdateInputScript;
 
 pub const ComponentsList = [_]type{
     AISlotComponent,
+    AudioComponent,
     CameraComponent,
     IDComponent,
+    MicComponent,
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
@@ -36,8 +40,10 @@ pub const ScriptList = [_]type{
 
 pub const EComponents = enum(u16) {
     AISlotComponent = AISlotComponent.Ind,
+    AudioComponent = AudioComponent.Ind,
     CameraComponent = CameraComponent.Ind,
     IDComponent = IDComponent.Ind,
+    MicComponent = MicComponent.Ind,
     NameComponent = NameComponent.Ind,
     PlayerSlotComponent = PlayerSlotComponent.Ind,
     QuadComponent = QuadComponent.Ind,

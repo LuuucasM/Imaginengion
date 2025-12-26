@@ -7,7 +7,7 @@ const AUDIO_CHANNELS = @import("../../../AudioManager/MiniAudioContext.zig").AUD
 const SAMPLE_RATE = @import("../../../AudioManager/MiniAudioContext.zig").SAMPLE_RATE;
 
 mAudioConfig: ma.ma_audio_buffer_config = undefined,
-mPcmFrames: ?*anyopaque = null,
+mPcmFrames: ?*const anyopaque = null,
 mFrameCount: u64 = 0,
 
 pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_file: std.fs.File) !void {
@@ -35,4 +35,50 @@ pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_fi
 
 pub fn Deinit(self: *MiniAudioBuffer) !void {
     ma.ma_free(self.mPcmFrames, null);
+}
+
+pub fn ReadFrames(self: *MiniAudioBuffer, frames_out: []f32, cursor: *u64, loop: bool) !u64 {
+    std.debug.assert(self.mPcmFrames != null);
+    std.debug.assert(self.mFrameCount > 0);
+    std.debug.assert(cursor.* <= self.mFrameCount);
+    std.debug.assert(frames_out.len % self.mAudioConfig.channels == 0);
+
+    if (frames_out.len == 0) return 0;
+
+    const pcm_data = @as([*]const f32, @ptrCast(@alignCast(self.mPcmFrames.?)));
+    const channels = @as(usize, @intCast(self.mAudioConfig.channels));
+    const frames_requested = frames_out.len / channels;
+
+    if (cursor.* >= self.mFrameCount) {
+        if (!loop) return 0;
+        cursor.* = 0;
+    }
+
+    const frames_available = self.mFrameCount - cursor.*;
+    const first_frames = @min(frames_requested, frames_available);
+    const first_samples = first_frames * channels;
+
+    const start_sample_ind = cursor.* * channels;
+    const end_sample_ind = (cursor.* + first_frames) * channels;
+
+    @memcpy(frames_out[0..first_samples], pcm_data[start_sample_ind..end_sample_ind]);
+
+    cursor.* += first_frames;
+
+    var total_frames = first_frames;
+
+    if (loop and first_frames < frames_requested) {
+        cursor.* = 0;
+
+        const remaining_frames = frames_requested - first_frames;
+        const second_frames = @min(remaining_frames, self.mFrameCount);
+        const second_samples = second_frames * channels;
+
+        @memcpy(frames_out[first_samples .. first_samples + second_samples], pcm_data[0..second_samples]);
+
+        cursor.* = second_frames;
+        total_frames += second_frames;
+    }
+
+    return total_frames;
 }

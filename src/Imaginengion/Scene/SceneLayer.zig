@@ -28,8 +28,25 @@ mECSManagerSCRef: *ECSManagerScenes = undefined,
 pub fn AddComponent(self: SceneLayer, comptime component_type: type, component: ?component_type) !*component_type {
     return try self.mECSManagerSCRef.AddComponent(component_type, self.mSceneID, component);
 }
-pub fn RemoveComponent(self: SceneLayer, comptime component_type: type) !void {
-    try self.mECSManagerSCRef.RemoveComponent(component_type, self.mSceneID);
+pub fn RemoveComponent(self: SceneLayer, args: anytype) !void {
+    const t = @TypeOf(args);
+    const t_info = @typeInfo(t);
+
+    switch (t_info) {
+        .type => {
+            if (args.Category == .Unique) {
+                return try self.mECSManagerSCRef.RemoveComponent(args, self.mEntityID);
+            }
+        },
+        .@"struct" => |s| {
+            if (s.is_tuple == true and s.fields.len == 2 and s.fields[0].type == type and s.fields[1].type == Entity.Type and s.fields[0].type.Category == .Multiple) {
+                return try self.mECSManagerSCRef.RemoveComponent(args[0], args[1]);
+            }
+        },
+        else => {},
+    }
+
+    @compileError("Entity.RemoveComponent can not be called with these arguments");
 }
 pub fn GetComponent(self: SceneLayer, comptime component_type: type) ?*component_type {
     return self.mECSManagerSCRef.GetComponent(component_type, self.mSceneID);
