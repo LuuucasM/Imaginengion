@@ -37,7 +37,7 @@ pub fn Deinit(self: *MiniAudioBuffer) !void {
     ma.ma_free(self.mPcmFrames, null);
 }
 
-pub fn ReadFrames(self: *MiniAudioBuffer, frames_out: []f32, cursor: *u64, loop: bool) !u64 {
+pub fn ReadFrames(self: *MiniAudioBuffer, frames_out: []f32, cursor: *u64, loop: bool) u64 {
     std.debug.assert(self.mPcmFrames != null);
     std.debug.assert(self.mFrameCount > 0);
     std.debug.assert(cursor.* <= self.mFrameCount);

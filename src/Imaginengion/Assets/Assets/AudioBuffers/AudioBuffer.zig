@@ -17,6 +17,6 @@ pub fn Deinit(self: *AudioBuffer) !void {
     try self.mImpl.Deinit();
 }
 
-pub fn ReadFrames(self: *AudioBuffer, frames_out: []f32, frame_count: u64, cursor: *u64, loop: bool) !u64 {
-    try self.mImpl.ReadFrames(frames_out, frame_count, cursor, loop);
+pub fn ReadFrames(self: *AudioBuffer, frames_out: []f32, frame_count: u64, cursor: *u64, loop: bool) u64 {
+    return self.mImpl.ReadFrames(frames_out, frame_count, cursor, loop);
 }

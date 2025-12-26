@@ -10,7 +10,6 @@ pub const PlaybackState = enum(u8) {
     Playing = 0,
     Paused = 1,
     Finished = 2,
-    Virtualized = 3,
 };
 
 pub const AudioType = enum(u8) {
@@ -32,7 +31,7 @@ mLoop: bool = false,
 pub fn ReadFrames(self: *AudioComponent, frames_out: []f32, frame_count: u64) !u64 {
     const audio_asset = try self.mAudioAsset.GetAsset(AudioAsset);
 
-    audio_asset.ReadFrames(frames_out, frame_count, *self.mCursor, self.mLoop);
+    return audio_asset.ReadFrames(frames_out, frame_count, *self.mCursor, self.mLoop);
 }
 
 pub fn Deinit(self: *AudioComponent) void {
