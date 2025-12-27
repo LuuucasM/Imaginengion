@@ -173,12 +173,11 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.write(self.mTexOptions.mTexCoords);
 
     try jw.objectField("Texture");
-    if (self.mTexture.mID != AssetHandle.NullHandle) {
-        const asset_file_data = try self.mTexture.GetAsset(FileMetaData);
-        try jw.write(asset_file_data.mRelPath.items);
-    } else {
-        try jw.write("No Script Asset");
-    }
+    const asset_file_data = try self.mTexture.GetAsset(FileMetaData);
+    try jw.write(asset_file_data.mRelPath.items);
+
+    try jw.objectField("PathType");
+    try jw.write(asset_file_data.mPathType);
 
     try jw.endObject();
 }
@@ -207,7 +206,12 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
             result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Texture")) {
             const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
-            result.mTexture = AssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
+
+            try SkipToken(reader); //skip PathType object field
+
+            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, allocator, reader, options);
+
+            result.mTexture = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -215,4 +219,8 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
     }
 
     return result;
+}
+
+fn SkipToken(reader: *std.json.Reader) !void {
+    _ = try reader.next();
 }

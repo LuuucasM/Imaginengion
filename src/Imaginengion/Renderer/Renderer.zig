@@ -71,7 +71,7 @@ var RenderAllocator = std.heap.DebugAllocator(.{}).init;
 pub fn Init(window: *Window) !void {
     RenderManager.mRenderContext = RenderContext.Init(window);
 
-    RenderManager.mR2D.Init(RenderAllocator.allocator());
+    try RenderManager.mR2D.Init(RenderAllocator.allocator());
     RenderManager.mR3D.Init();
 
     RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));

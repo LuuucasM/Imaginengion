@@ -71,8 +71,6 @@ const RectVertexPositions = Mat4f32{
     Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
 };
 
-mAllocator: std.mem.Allocator = undefined,
-
 mQuadBuffer: SSBO = undefined,
 mQuadBufferBase: std.ArrayList(QuadData) = .{},
 mQuadCountUB: UniformBuffer = undefined,
@@ -83,8 +81,7 @@ mGlyphCountUB: UniformBuffer = undefined,
 
 _Allocator: std.mem.Allocator = undefined,
 
-pub fn Init(self: Renderer2D, allocator: std.mem.Allocator) !void {
-    self.mAllocator = allocator;
+pub fn Init(self: *Renderer2D, allocator: std.mem.Allocator) !void {
     self._Allocator = allocator;
 
     self.mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100);

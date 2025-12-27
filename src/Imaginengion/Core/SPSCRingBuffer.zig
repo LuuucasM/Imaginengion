@@ -63,8 +63,8 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
         }
 
         pub fn Pop(self: *Self) ?T {
-            const write = self.mWriteIndex.load(.acquire);
             const read = self.mReadIndex.load(.monotonic);
+            const write = self.mWriteIndex.load(.acquire);
 
             if (write == read) {
                 return null;
@@ -76,8 +76,8 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
         }
 
         pub fn PopSlice(self: *Self, buffer: []T) usize {
-            const write = self.mWriteIndex.load(.acquire);
             const read = self.mReadIndex.load(.monotonic);
+            const write = self.mWriteIndex.load(.acquire);
 
             const available = write - read;
             const read_size = @min(buffer.len, available);
@@ -101,6 +101,32 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
 
             self.mReadIndex.store(read + read_size, .release);
             return read_size;
+        }
+
+        //utility
+        pub fn IsEmpty(self: *Self) bool {
+            const write = self.mWriteIndex.load(.acquire);
+            const read = self.mReadIndex.load(.acquire);
+
+            return write == read;
+        }
+        pub fn isFull(self: *Self) bool {
+            const write = self.mWriteIndex.load(.acquire);
+            const read = self.mReadIndex.load(.acquire);
+
+            return write - read == size;
+        }
+        pub fn AvailableRead(self: *Self) usize {
+            const read = self.mReadIndex.load(.monotonic);
+            const write = self.mWriteIndex.load(.acquire);
+
+            return write - read;
+        }
+        pub fn AvailableWrite(self: *Self) usize {
+            const write = self.mWriteIndex.load(.monotonic);
+            const read = self.mReadIndex.load(.acquire);
+
+            return size - (write - read);
         }
     };
 }

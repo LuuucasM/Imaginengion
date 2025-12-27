@@ -65,6 +65,8 @@ const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 
+const AudioManager = @import("../AudioManager/AudioManager.zig");
+
 const Tracy = @import("../Core/Tracy.zig");
 
 pub const PanelOpen = struct {
@@ -185,12 +187,6 @@ pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *
 
     new_camera_component_camera.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
     _ = try self.mEditorEditorEntity.AddComponent(CameraComponent, new_camera_component_camera);
-
-    //test for audio
-    self.mEditorFont = try AssetManager.GetAssetHandleRef("assets/sounds/piano.wav", .Eng);
-    const text_asset = try self.mEditorFont.GetAsset(AudioAsset);
-    _ = text_asset;
-    AssetManager.ReleaseAssetHandleRef(&self.mEditorFont);
 }
 
 pub fn Deinit(self: *EditorProgram) !void {
@@ -268,7 +264,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         var camera_components = try std.ArrayList(*CameraComponent).initCapacity(self.mFrameAllocator, 1);
         var transform_components = try std.ArrayList(*TransformComponent).initCapacity(self.mFrameAllocator, 1);
 
-        if (self._ToolbarPanel.mState == .Stop) {
+        if (self._ToolbarPanel.mState == .Stop) { //editor state is stopped
             const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
             const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
 
@@ -362,7 +358,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
     //--------------Render End-------------------
 
     //--------------Audio Begin------------------
-
+    {
+        const audio_zone = Tracy.ZoneInit("Audio Section", @src());
+        defer audio_zone.Deinit();
+    }
     //--------------Audio End--------------------
 
     //--------------Networking Begin-------------

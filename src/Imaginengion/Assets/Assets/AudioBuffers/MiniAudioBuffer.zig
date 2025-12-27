@@ -2,12 +2,13 @@ const std = @import("std");
 const ma = @import("../../../Core/CImports.zig").miniaudio;
 const MiniAudioBuffer = @This();
 
-const AUDIO_FORMAT = @import("../../../AudioManager/MiniAudioContext.zig").AUDIO_FORMAT;
-const AUDIO_CHANNELS = @import("../../../AudioManager/MiniAudioContext.zig").AUDIO_CHANNELS;
-const SAMPLE_RATE = @import("../../../AudioManager/MiniAudioContext.zig").SAMPLE_RATE;
+const AUDIO_FORMAT = @import("../../../AudioManager/AudioManager.zig").AUDIO_FORMAT;
+const AUDIO_CHANNELS = @import("../../../AudioManager/AudioManager.zig").AUDIO_CHANNELS;
+const SAMPLE_RATE = @import("../../../AudioManager/AudioManager.zig").SAMPLE_RATE;
+const AudioFormatToMAFormat = @import("../../../AudioManager/MiniAudioContext.zig").AudioFormatToMAFormat;
 
 mAudioConfig: ma.ma_audio_buffer_config = undefined,
-mPcmFrames: ?*const anyopaque = null,
+mPcmFrames: ?*anyopaque = null,
 mFrameCount: u64 = 0,
 
 pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_file: std.fs.File) !void {
@@ -24,13 +25,13 @@ pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_fi
 
     _ = try asset_file.readAll(file_data.items);
 
-    var decoder_config = ma.ma_decoder_config_init(AUDIO_FORMAT, AUDIO_CHANNELS, SAMPLE_RATE);
+    var decoder_config = ma.ma_decoder_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, SAMPLE_RATE);
 
     if (ma.ma_decode_memory(file_data.items.ptr, file_data.items.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
         return error.DecoderInitFail;
     }
 
-    self.mAudioConfig = ma.ma_audio_buffer_config_init(AUDIO_FORMAT, AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);
+    self.mAudioConfig = ma.ma_audio_buffer_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);
 }
 
 pub fn Deinit(self: *MiniAudioBuffer) !void {

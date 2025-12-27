@@ -1,6 +1,5 @@
 const std = @import("std");
 const AudioContext = @import("AudioContext.zig");
-const AudioFrameBuffer = @import("AudioFrameBuffer.zig").AudioFrameBuffer;
 const ECSManager = @import("../ECS/ECSManager.zig");
 const Vec3f32 = @import("../Math/LinAlg.zig").Vec3f32;
 const SPSCRingBuffer = @import("../Core/SPSCRingBuffer.zig");
@@ -15,6 +14,7 @@ pub const AUDIO_FORMAT = f32;
 pub const AUDIO_CHANNELS = 2;
 pub const SAMPLE_RATE = 48000;
 pub const BUFFER_CAPACITY = 8192; //sample rate * latency_seconds, but has to be power of 2
+pub const tAudioBuffer = SPSCRingBuffer.SPSCRingBuffer(f32, BUFFER_CAPACITY);
 
 pub const AudioStats = struct {
     mNum2DAudio: usize = 0,
@@ -29,20 +29,36 @@ var ManagerInstance: AudioManager = .{};
 mAudioStats: AudioStats = .{},
 mAudioContext: AudioContext = .{},
 
+mFrameAccumulator: f32 = 0.0,
+
 pub fn Init() !void {
-    try ManagerInstance.mAudioContext.Init(&ManagerInstance.mFrameBuffers);
+    try ManagerInstance.mAudioContext.Init();
 }
 
 pub fn Deinit() void {
     ManagerInstance.mAudioContext.Deinit();
 }
 
-pub fn OnUpdate(delta_time: f32, scene_manager: *SceneManager, mic_component: *MicComponent, mic_transform: *EntityTransformComponent, frame_allocator: std.mem.Allocator) void {
+pub fn SetAudioBuffer(buffer: *tAudioBuffer) void {
+    ManagerInstance.mAudioContext.SetAudioBuffer(buffer);
+}
+
+pub fn RemoveAudioBuffer() void {
+    ManagerInstance.mAudioContext.RemoveAudioBuffer();
+}
+
+pub fn OnUpdate(delta_time: f32, scene_manager: *SceneManager, mic_component: *MicComponent, mic_transform: *EntityTransformComponent, frame_allocator: std.mem.Allocator) !void {
     _ = mic_transform; //used later for when dealing with spacialized sounds but for now simply doing 2d sounds
 
-    const frames_num: usize = @as(usize, @intFromFloat(delta_time * @as(f32, @floatFromInt(SAMPLE_RATE))));
-    const frames_to_produce = @min(frames_num, BUFFER_CAPACITY);
+    ManagerInstance.mFrameAccumulator += delta_time * SAMPLE_RATE;
+
+    const frames_num: usize = @as(usize, @intFromFloat(ManagerInstance.mFrameAccumulator));
+    const frames_to_produce = @min(frames_num, mic_component.mAudioBuffer.RemainingSpace());
     const samples_to_produce = frames_to_produce * AUDIO_CHANNELS;
+
+    ManagerInstance.mFrameAccumulator -= @floatFromInt(frames_to_produce);
+
+    if (samples_to_produce == 0) return;
 
     const audio_entities = try scene_manager.GetEntityGroup(
         .{ .Component = AudioComponent },
@@ -63,11 +79,20 @@ pub fn OnUpdate(delta_time: f32, scene_manager: *SceneManager, mic_component: *M
         const samples_read = frames_read * AUDIO_CHANNELS;
 
         for (0..samples_read) |i| {
-            //apply volume
-            //apply pitch
-            //add to mixed_buffer
+            var source = source_buffer[i];
+            SourceVolume(audio_component, &source);
+            mixed_buffer[i] += source;
+
+            ClampMix(&mixed_buffer[i]);
         }
     }
-
     _ = mic_component.mAudioBuffer.PushSlice(mixed_buffer);
+}
+
+fn ClampMix(source: *f32) void {
+    source.* = std.math.clamp(source.*, -1.0, 1.0);
+}
+
+fn SourceVolume(audio_component: *AudioComponent, source: *f32) void {
+    source.* = source.* * audio_component.mVolume;
 }

@@ -298,8 +298,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
             defer zone.Deinit();
-            try self.mEntityManager.DestroyEntity(entity_id);
             try self._InternalRemoveFromHierarchy(entity_id);
+            try self.mEntityManager.DestroyEntity(entity_id);
             try self.mComponentManager.DestroyEntity(entity_id, &self.mECSEventManager);
         }
 
@@ -307,8 +307,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy MultiEntity", @src());
             defer zone.Deinit();
-            try self.mEntityManager.DestroyEntity(entity_id);
             try self._InternalRemoveFromHierarchy(entity_id);
+            try self.mEntityManager.DestroyEntity(entity_id);
             try self.mComponentManager.DestroyMultiEntity(entity_id);
         }
 

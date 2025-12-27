@@ -1,3 +1,3 @@
 const Renderer3D = @This();
 
-pub fn Init() void {}
+pub fn Init(_: Renderer3D) void {}

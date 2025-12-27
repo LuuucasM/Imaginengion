@@ -36,7 +36,7 @@ pub fn OnImguiRender(self: *CSEditorPanel, frame_allocator: std.mem.Allocator) !
     const dockspace_id = imgui.igGetID_Str("EditorDockspace");
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, 0, @ptrCast(@alignCast(my_null_ptr)));
 
-    var buffer: [300]u8 = undefined;
+    var buffer: [1000]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buffer);
     const fba_allocator = fba.allocator();
 
@@ -54,8 +54,8 @@ pub fn OnImguiRender(self: *CSEditorPanel, frame_allocator: std.mem.Allocator) !
         const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len; // Find first null byte or use full length
         const trimmed_name = entity_name[0..name_len];
 
-        const name = try std.fmt.allocPrint(fba.allocator(), "{s} - {s}###{d}\x00", .{ trimmed_name, component_name, id_name });
-        defer fba.allocator().free(name);
+        const name = try std.fmt.allocPrint(fba_allocator, "{s} - {s}###{d}\x00", .{ trimmed_name, component_name, id_name });
+        defer fba_allocator.free(name);
 
         imgui.igSetNextWindowDockID(dockspace_id, imgui.ImGuiCond_Once);
 

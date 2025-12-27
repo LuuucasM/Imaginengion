@@ -19,11 +19,14 @@ const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
 const MAX_PATH_LEN = 260;
 
 mIsVisible: bool = true,
+
 mDirTextureHandle: AssetHandle = undefined,
 mPngTextureHandle: AssetHandle = undefined,
 mBackArrowTextureHandle: AssetHandle = undefined,
 mSceneTextureHandle: AssetHandle = undefined,
 mScriptTextureHandle: AssetHandle = undefined,
+mAudioTextureHandle: AssetHandle = undefined,
+
 mProjectDirectory: ?std.fs.Dir = null,
 mProjectPath: std.ArrayList(u8) = .{},
 mCurrentDirectory: ?std.fs.Dir = null,
@@ -40,6 +43,7 @@ pub fn Init(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) !vo
     self.mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Eng);
     self.mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng);
     self.mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng);
+    self.mAudioTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/mp3.png", .Eng);
 }
 
 pub fn Deinit(self: *ContentBrowserPanel) void {
@@ -48,6 +52,7 @@ pub fn Deinit(self: *ContentBrowserPanel) void {
     AssetManager.ReleaseAssetHandleRef(&self.mBackArrowTextureHandle);
     AssetManager.ReleaseAssetHandleRef(&self.mSceneTextureHandle);
     AssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
+    AssetManager.ReleaseAssetHandleRef(&self.mAudioTextureHandle);
     if (self.mProjectDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
@@ -201,6 +206,15 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
             try self.DragDropSourceScript(entry_name);
+            NextColumn(entry_name);
+        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".mp3") == true) {
+            const texutre_asset = try self.mAudioTextureHandle.GetAsset(Texture2D);
+
+            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+
+            try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
+
+            try self.DragDropSourceBase(entry_name, "MP3Load");
             NextColumn(entry_name);
         }
     }

@@ -26,6 +26,7 @@ const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
+const AudioComponent = EntityComponents.AudioComponent;
 
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
@@ -121,6 +122,7 @@ fn EntityImguiRender(entity: Entity) !void {
     try ComponentRender(AISlotComponent, entity);
     try ComponentRender(PlayerSlotComponent, entity);
     try ComponentRender(TextComponent, entity);
+    try ComponentRender(AudioComponent, entity);
 }
 
 fn ComponentRender(comptime component_type: type, entity: Entity) !void {
@@ -221,6 +223,13 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
             new_text_component.mTexHandle = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
             new_text_component.mAllocator = entity.GetECSAllocator();
             try new_text_component.mText.appendSlice(new_text_component.mAllocator, "No Text");
+        }
+    }
+    if (entity.HasComponent(AudioComponent) == false) {
+        if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
+            defer imgui.igCloseCurrentPopup();
+            const new_audio_component = try entity.AddComponent(AudioComponent, null);
+            new_audio_component.mAudioAsset = try AssetManager.GetAssetHandleRef("assets/sounds/pop.mp3", .Eng);
         }
     }
 }
