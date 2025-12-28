@@ -6,12 +6,10 @@ const glfw = @import("../Core/CImports.zig").glfw;
 const Tracy = @import("../Core/Tracy.zig");
 const Imgui = @This();
 
-var ImguiManager: Imgui = .{};
-
 mWindow: *Window = undefined,
 
-pub fn Init(window: *Window) !void {
-    ImguiManager.mWindow = window;
+pub fn Init(self: Imgui, window: *Window) !void {
+    self.mWindow = window;
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
     io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard;
@@ -46,13 +44,13 @@ pub fn Begin() void {
     imgui.igNewFrame();
     imgui.ImGuizmo_BeginFrame();
 }
-pub fn End() void {
+pub fn End(self: *Imgui) void {
     const zone = Tracy.ZoneInit("ImguiEnd ", @src());
     defer zone.Deinit();
 
     const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
-    const window: *Window = ImguiManager.mWindow;
+    const window: *Window = self.mWindow;
 
     io.DisplaySize = .{ .x = @floatFromInt(window.GetWidth()), .y = @floatFromInt(window.GetHeight()) };
 

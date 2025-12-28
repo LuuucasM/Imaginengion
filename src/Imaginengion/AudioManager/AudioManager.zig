@@ -21,42 +21,37 @@ pub const AudioStats = struct {
     mNum3DAudio: usize = 0,
 };
 
-var AudioGPA = std.heap.DebugAllocator(.{}).init;
-const AudioAllocator = AudioGPA.allocator();
-
-var ManagerInstance: AudioManager = .{};
-
 mAudioStats: AudioStats = .{},
 mAudioContext: AudioContext = .{},
 
 mFrameAccumulator: f32 = 0.0,
 
-pub fn Init() !void {
-    try ManagerInstance.mAudioContext.Init();
+pub fn Init(self: *AudioManager) !void {
+    try self.mAudioContext.Init();
 }
 
-pub fn Deinit() void {
-    ManagerInstance.mAudioContext.Deinit();
+pub fn Deinit(self: *AudioManager) void {
+    self.mAudioContext.Deinit();
 }
 
-pub fn SetAudioBuffer(buffer: *tAudioBuffer) void {
-    ManagerInstance.mAudioContext.SetAudioBuffer(buffer);
+pub fn SetAudioBuffer(self: *AudioManager, buffer: *tAudioBuffer) void {
+    self.mAudioContext.SetAudioBuffer(buffer);
 }
 
-pub fn RemoveAudioBuffer() void {
-    ManagerInstance.mAudioContext.RemoveAudioBuffer();
+pub fn RemoveAudioBuffer(self: *AudioManager) void {
+    self.mAudioContext.RemoveAudioBuffer();
 }
 
-pub fn OnUpdate(delta_time: f32, scene_manager: *SceneManager, mic_component: *MicComponent, mic_transform: *EntityTransformComponent, frame_allocator: std.mem.Allocator) !void {
+pub fn OnUpdate(self: *AudioManager, delta_time: f32, scene_manager: *SceneManager, mic_component: *MicComponent, mic_transform: *EntityTransformComponent, frame_allocator: std.mem.Allocator) !void {
     _ = mic_transform; //used later for when dealing with spacialized sounds but for now simply doing 2d sounds
 
-    ManagerInstance.mFrameAccumulator += delta_time * SAMPLE_RATE;
+    self.mFrameAccumulator += delta_time * SAMPLE_RATE;
 
-    const frames_num: usize = @as(usize, @intFromFloat(ManagerInstance.mFrameAccumulator));
+    const frames_num: usize = @as(usize, @intFromFloat(self.mFrameAccumulator));
     const frames_to_produce = @min(frames_num, mic_component.mAudioBuffer.RemainingSpace());
     const samples_to_produce = frames_to_produce * AUDIO_CHANNELS;
 
-    ManagerInstance.mFrameAccumulator -= @floatFromInt(frames_to_produce);
+    self.mFrameAccumulator -= @floatFromInt(frames_to_produce);
 
     if (samples_to_produce == 0) return;
 

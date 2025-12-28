@@ -27,12 +27,17 @@ pub fn RemoveComponent(self: Entity, args: anytype) !void {
 
     switch (t_info) {
         .type => {
+            //this is for removing components like Entity.RemoveComponent(TransformComponent)
+            //where there is only 1 so we can remove it by component type
             if (args.Category == .Unique) {
-                return try self.mECSManagerRef.RemoveComponent(args, self.mEntityID);
+                return try self.mECSManagerRef.RemoveComponent(self.mEntityID, args);
             }
         },
         .@"struct" => |s| {
-            if (s.is_tuple == true and s.fields.len == 2 and s.fields[0].type == type and s.fields[1].type == Entity.Type and s.fields[0].type.Category == .Multiple) {
+            //this is for when removing multi components which a single entity can have multiple of
+            //Entity.RemoveComponent(.{id_of_specific_script_component, ScriptComponent});
+            //ECSManager will check internally that it is a multi-type component when removing and ensure removal is done correctly
+            if (s.is_tuple == true and s.fields.len == 2 and s.fields[0].type == Entity.Type and s.fields[1].type == type and s.fields[1].type.Category == .Multiple) {
                 return try self.mECSManagerRef.RemoveComponent(args[0], args[1]);
             }
         },

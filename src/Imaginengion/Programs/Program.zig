@@ -5,21 +5,22 @@ const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 const Window = @import("../Windows/Window.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const Program = @This();
 
 const Impl = @import("EditorProgram.zig");
 _Impl: Impl = .{},
 
-pub fn Init(self: *Program, engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !void {
-    try self._Impl.Init(engine_allocator, window, frame_allocator);
+pub fn Init(self: *Program, engine_allocator: std.mem.Allocator, window: *Window, engine_context: *EngineContext) !void {
+    try self._Impl.Init(engine_allocator, window, engine_context);
 }
 
 pub fn Deinit(self: *Program) !void {
     try self._Impl.Deinit();
 }
 
-pub fn OnUpdate(self: *Program, dt: f32) !void {
-    try self._Impl.OnUpdate(dt);
+pub fn OnUpdate(self: *Program, dt: f32, engine_context: *EngineContext, frame_allocator: std.mem.Allocator) !void {
+    try self._Impl.OnUpdate(dt, engine_context, frame_allocator);
 }
 
 pub fn OnWindowResize(self: *Program, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {

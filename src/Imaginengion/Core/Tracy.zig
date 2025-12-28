@@ -3,7 +3,7 @@ const build_options = @import("build_options");
 
 pub const enable_tracy = build_options.enable_tracy;
 
-const tracy = if (enable_tracy) @import("CImports.zig").tracy else void;
+const tracy = @import("CImports.zig").tracy;
 
 pub const Zone = if (enable_tracy) struct {
     mContext: tracy.TracyCZoneCtx,

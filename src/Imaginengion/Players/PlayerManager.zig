@@ -8,44 +8,40 @@ const PlayerManager = @This();
 
 pub const ECSManagerPlayer = ECSManager(Player.Type, &ComponentsList);
 
-var StaticPlayerManager: PlayerManager = .{};
-
 mECSManager: ECSManagerPlayer = .{},
 
-mEngineAllocator: std.mem.Allocator = undefined,
-
-pub fn Init(engine_allocator: std.mem.Allocator) !void {
-    try StaticPlayerManager.mECSManager.Init(engine_allocator);
-    StaticPlayerManager.mEngineAllocator = engine_allocator;
+pub fn Init(self: *PlayerManager, engine_allocator: std.mem.Allocator) !void {
+    try self.mECSManager.Init(engine_allocator);
+    self.mEngineAllocator = engine_allocator;
 }
 
-pub fn Deinit() !void {
-    try StaticPlayerManager.mECSManager.Deinit();
+pub fn Deinit(self: *PlayerManager) !void {
+    try self.mECSManager.Deinit();
 }
 
-pub fn CreatePlayer() !Player {
+pub fn CreatePlayer(self: *PlayerManager) !Player {
     return Player{
-        .mEntityID = try StaticPlayerManager.mECSManager.CreateEntity(),
-        .mECSManagerRef = &StaticPlayerManager.mECSManager,
+        .mEntityID = try self.mECSManager.CreateEntity(),
+        .mECSManagerRef = &self.mECSManager,
     };
 }
 
-pub fn DestroyPlayer(player: Player) void {
-    StaticPlayerManager.mECSManager.DestroyEntity(player.mEntityID);
+pub fn DestroyPlayer(self: *PlayerManager, player: Player) void {
+    self.mECSManager.DestroyEntity(player.mEntityID);
 }
 
-pub fn GetPlayer(player_id: Player.Type) Player {
+pub fn GetPlayer(self: *PlayerManager, player_id: Player.Type) Player {
     const zone = Tracy.ZoneInit("PlayerManager GetPlayer", @src());
     defer zone.Deinit();
-    return Player{ .mEntityID = player_id, .mECSManagerRef = &StaticPlayerManager.mECSManager };
+    return Player{ .mEntityID = player_id, .mECSManagerRef = &self.mECSManager };
 }
 
-pub fn ProcessDestroyedPlayers() !void {
-    try StaticPlayerManager.mECSManager.ProcessEvents(.EC_RemoveObj);
+pub fn ProcessDestroyedPlayers(self: *PlayerManager) !void {
+    try self.mECSManager.ProcessEvents(.EC_RemoveObj);
 }
 
-pub fn GetGroup(query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Player.Type) {
+pub fn GetGroup(self: *PlayerManager, query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Player.Type) {
     const zone = Tracy.ZoneInit("PlayerManager GetGroup", @src());
     defer zone.Deinit();
-    return try StaticPlayerManager.mECSManager.GetGroup(query, frame_allocator);
+    return try self.mECSManager.GetGroup(query, frame_allocator);
 }

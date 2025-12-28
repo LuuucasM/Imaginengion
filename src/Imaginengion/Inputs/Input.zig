@@ -6,92 +6,75 @@ const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetMan
 const HashMap = std.AutoHashMap;
 const InputCodes = @import("InputCodes.zig").InputCodes;
 const Tracy = @import("../Core/Tracy.zig");
+const InputManager = @This();
 
 pub const InputPress = struct {
     mInputCode: InputCodes,
     mTimestamp: i32,
 };
 
-var StaticInputContext: InputContext = InputContext{};
+_InputPressedSet: HashMap(InputCodes, u1) = undefined,
+_MousePositionNew: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MouseScrolledNew: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MousePositionOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MouseScrolledOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MousePositionDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MouseScrolledDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 
-pub const InputContext = struct {
-    _InputPressedSet: HashMap(InputCodes, u1) = undefined,
-    _MousePositionNew: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-    _MouseScrolledNew: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-    _MousePositionOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-    _MouseScrolledOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-    _MousePositionDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-    _MouseScrolledDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-
-    pub fn IsInputPressed(self: *InputContext, key: InputCodes) bool {
-        return self._InputPressedSet.contains(key);
-    }
-    pub fn IsInputRepeated(self: *InputContext, key: InputCodes) bool {
-        if (self._InputPressedSet.get(key)) |value| {
-            return value == 1;
-        }
-        return false;
-    }
-    pub fn GetMousePosition(self: *InputContext) Vec2f32 {
-        return self._MousePositionNew;
-    }
-    pub fn GetMousePositionDelta(self: *InputContext) Vec2f32 {
-        return self._MousePositionDelta;
-    }
-    pub fn GetMouseScrolled(self: *InputContext) Vec2f32 {
-        return self._MouseScrolledNew;
-    }
-    pub fn GetMouseScrolledDelta(self: *InputContext) Vec2f32 {
-        return self._MouseScrolledDelta;
-    }
-};
-
-var InputGPA = std.heap.DebugAllocator(.{}).init;
-
-pub fn Init() !void {
-    StaticInputContext._InputPressedSet = HashMap(InputCodes, u1).init(InputGPA.allocator());
+pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
+    self._InputPressedSet = HashMap(InputCodes, u1).init(engine_allocator);
 }
-pub fn Deinit() void {
-    StaticInputContext._InputPressedSet.deinit();
-    _ = InputGPA.deinit();
+pub fn Deinit(self: *InputManager) void {
+    self._InputPressedSet.deinit();
 }
 
-pub fn GetInstance() *InputContext {
-    return &StaticInputContext;
-}
-
-pub fn OnUpdate() void {
-    const zone = Tracy.ZoneInit("Input OnUpdate", @src());
+pub fn OnUpdate(self: *InputManager) void {
+    const zone = Tracy.ZoneInit("Input::OnUpdate", @src());
     defer zone.Deinit();
-    StaticInputContext._MousePositionDelta = StaticInputContext._MousePositionNew - StaticInputContext._MousePositionOld;
-    StaticInputContext._MouseScrolledDelta = StaticInputContext._MouseScrolledNew - StaticInputContext._MouseScrolledOld;
-    StaticInputContext._MousePositionOld = StaticInputContext._MousePositionNew;
-    StaticInputContext._MouseScrolledOld = StaticInputContext._MouseScrolledNew;
+    self._MousePositionDelta = self._MousePositionNew - self._MousePositionOld;
+    self._MouseScrolledDelta = self._MouseScrolledNew - self._MouseScrolledOld;
+    self._MousePositionOld = self._MousePositionNew;
+    self._MouseScrolledOld = self._MouseScrolledNew;
 }
 
-pub fn SetInputPressed(input: InputCodes) !void {
-    if (StaticInputContext._InputPressedSet.contains(input) == true) {
-        try StaticInputContext._InputPressedSet.put(input, 1);
+pub fn IsInputPressed(self: *InputManager, key: InputCodes) bool {
+    return self._InputPressedSet.contains(key);
+}
+pub fn IsInputRepeated(self: *InputManager, key: InputCodes) bool {
+    if (self._InputPressedSet.get(key)) |value| {
+        return value == 1;
+    }
+    return false;
+}
+pub fn GetMousePosition(self: *InputManager) Vec2f32 {
+    return self._MousePositionNew;
+}
+pub fn GetMousePositionDelta(self: *InputManager) Vec2f32 {
+    return self._MousePositionDelta;
+}
+pub fn GetMouseScrolled(self: *InputManager) Vec2f32 {
+    return self._MouseScrolledNew;
+}
+pub fn GetMouseScrolledDelta(self: *InputManager) Vec2f32 {
+    return self._MouseScrolledDelta;
+}
+
+pub fn SetInputPressed(self: *InputManager, input: InputCodes) !void {
+    if (self._InputPressedSet.contains(input) == true) {
+        try self._InputPressedSet.put(input, 1);
     } else {
-        try StaticInputContext._InputPressedSet.put(input, 0);
+        try self._InputPressedSet.put(input, 0);
     }
 }
 
-pub fn SetInputReleased(input: InputCodes) void {
-    _ = StaticInputContext._InputPressedSet.remove(input);
+pub fn SetInputReleased(self: *InputManager, input: InputCodes) void {
+    _ = self._InputPressedSet.remove(input);
 }
-pub fn IsInputPressed(input: InputCodes) bool {
-    return StaticInputContext._InputPressedSet.contains(input);
+
+pub fn SetMousePosition(self: *InputManager, new_pos: Vec2f32) void {
+    self._MousePositionNew = new_pos;
 }
-pub fn SetMousePosition(new_pos: Vec2f32) void {
-    StaticInputContext._MousePositionNew = new_pos;
-}
-pub fn GetMousePosition() Vec2f32 {
-    return StaticInputContext._MousePositionNew;
-}
-pub fn SetMouseScrolled(new_scrolled: Vec2f32) void {
-    StaticInputContext._MouseScrolledNew = new_scrolled;
-}
-pub fn GetMouseScrolled() Vec2f32 {
-    return StaticInputContext._MouseScrolledNew;
+
+pub fn SetMouseScrolled(self: *InputManager, new_scrolled: Vec2f32) void {
+    self._MouseScrolledNew = new_scrolled;
 }

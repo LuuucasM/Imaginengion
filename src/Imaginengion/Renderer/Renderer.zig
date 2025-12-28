@@ -31,8 +31,6 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const Renderer = @This();
 
-var RenderManager: Renderer = .{};
-
 pub const RenderStats = struct {
     mQuadNum: usize = 0,
     mGlyphNum: usize = 0,
@@ -66,42 +64,38 @@ mModeUniformBuffer: UniformBuffer = undefined,
 
 mSDFShader: AssetHandle = .{},
 
-var RenderAllocator = std.heap.DebugAllocator(.{}).init;
+pub fn Init(self: *Renderer, window: *Window, engine_allocator: std.mem.Allocator) !void {
+    self.mRenderContext = RenderContext.Init(window);
 
-pub fn Init(window: *Window) !void {
-    RenderManager.mRenderContext = RenderContext.Init(window);
+    try self.mR2D.Init(engine_allocator);
+    self.mR3D.Init();
 
-    try RenderManager.mR2D.Init(RenderAllocator.allocator());
-    RenderManager.mR3D.Init();
+    self.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
+    self.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
 
-    RenderManager.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
-    RenderManager.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
-
-    RenderManager.mSDFShader = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.program", .Eng);
+    self.mSDFShader = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.program", .Eng);
 }
 
-pub fn Deinit() !void {
-    try RenderManager.mR2D.Deinit();
-    RenderManager.mCameraUniformBuffer.Deinit();
-
-    RenderAllocator.deinit();
+pub fn Deinit(self: *Renderer) !void {
+    try self.mR2D.Deinit();
+    self.mCameraUniformBuffer.Deinit();
 }
 
-pub fn SwapBuffers() void {
-    RenderManager.mRenderContext.PushDebugGroup("Swap Buffers\x00");
-    defer RenderManager.mRenderContext.PopDebugGroup();
-    RenderManager.mRenderContext.SwapBuffers();
+pub fn SwapBuffers(self: *Renderer) void {
+    self.mRenderContext.PushDebugGroup("Swap Buffers\x00");
+    defer self.mRenderContext.PopDebugGroup();
+    self.mRenderContext.SwapBuffers();
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator, mode: u32) !void {
+pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator, mode: u32) !void {
     std.debug.assert(mode == 0b0 or mode == 0b1);
 
     const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
     defer zone.Deinit();
 
-    RenderManager.mRenderContext.PushDebugGroup("Frame\x00");
-    defer RenderManager.mRenderContext.PopDebugGroup();
+    self.mRenderContext.PushDebugGroup("Frame\x00");
+    defer self.mRenderContext.PopDebugGroup();
 
     UpdateCameraBuffer(camera_component, camera_transform);
     UpdateModeBuffer(mode);
@@ -139,41 +133,41 @@ pub fn OnUpdate(scene_manager: *SceneManager, camera_component: *CameraComponent
     try EndRendering(camera_component);
 }
 
-pub fn GetRenderStats() RenderStats {
-    return RenderManager.mStats;
+pub fn GetRenderStats(self: *Renderer) RenderStats {
+    return self.mStats;
 }
 
-pub fn GetSDFShader() !*ShaderAsset {
-    return try RenderManager.mSDFShader.GetAsset(ShaderAsset);
+pub fn GetSDFShader(self: *Renderer) !*ShaderAsset {
+    return try self.mSDFShader.GetAsset(ShaderAsset);
 }
 
-fn UpdateCameraBuffer(camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
-    RenderManager.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
-    RenderManager.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
-    RenderManager.mCameraBuffer.mPerspectiveFar = camera_component.mPerspectiveFar;
-    RenderManager.mCameraBuffer.mResolutionWidth = @floatFromInt(camera_component.mViewportWidth);
-    RenderManager.mCameraBuffer.mResolutionHeight = @floatFromInt(camera_component.mViewportHeight);
-    RenderManager.mCameraBuffer.mAspectRatio = camera_component.mAspectRatio;
-    RenderManager.mCameraBuffer.mFOV = camera_component.mPerspectiveFOVRad;
+fn UpdateCameraBuffer(self: *Renderer, camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
+    self.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
+    self.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
+    self.mCameraBuffer.mPerspectiveFar = camera_component.mPerspectiveFar;
+    self.mCameraBuffer.mResolutionWidth = @floatFromInt(camera_component.mViewportWidth);
+    self.mCameraBuffer.mResolutionHeight = @floatFromInt(camera_component.mViewportHeight);
+    self.mCameraBuffer.mAspectRatio = camera_component.mAspectRatio;
+    self.mCameraBuffer.mFOV = camera_component.mPerspectiveFOVRad;
 }
 
-fn UpdateModeBuffer(mode: u32) void {
-    RenderManager.mModeBuffer.mMode = mode;
+fn UpdateModeBuffer(self: *Renderer, mode: u32) void {
+    self.mModeBuffer.mMode = mode;
 }
 
-fn BeginRendering() void {
+fn BeginRendering(self: *Renderer) void {
     const zone = Tracy.ZoneInit("BeginRendering", @src());
     defer zone.Deinit();
 
-    RenderManager.mRenderContext.PushDebugGroup("Set Camera Data\x00");
-    defer RenderManager.mRenderContext.PopDebugGroup();
+    self.mRenderContext.PushDebugGroup("Set Camera Data\x00");
+    defer self.mRenderContext.PopDebugGroup();
 
-    RenderManager.mCameraUniformBuffer.SetData(&RenderManager.mCameraBuffer, @sizeOf(CameraData), 0);
-    RenderManager.mModeUniformBuffer.SetData(&RenderManager.mModeBuffer, @sizeOf(ModeData), 0);
+    self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraData), 0);
+    self.mModeUniformBuffer.SetData(&self.mModeBuffer, @sizeOf(ModeData), 0);
 
-    RenderManager.mStats = std.mem.zeroes(RenderStats);
+    self.mStats = std.mem.zeroes(RenderStats);
 
-    RenderManager.mR2D.StartBatch();
+    self.mR2D.StartBatch();
 }
 
 fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
@@ -194,7 +188,7 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
     }
 }
 
-fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!void {
+fn DrawShape(self: *Renderer, entity: Entity, parent_transform: *TransformComponent) anyerror!void {
     const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
     defer zone.Deinit();
 
@@ -205,10 +199,10 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
 
     //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try RenderManager.mR2D.DrawQuad(parent_transform, quad_component);
+        try self.mR2D.DrawQuad(parent_transform, quad_component);
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        try RenderManager.mR2D.DrawText(parent_transform, text_component);
+        try self.mR2D.DrawText(parent_transform, text_component);
     }
 
     //check is if parent, if so draw children else nothing
@@ -218,31 +212,31 @@ fn DrawShape(entity: Entity, parent_transform: *TransformComponent) anyerror!voi
     }
 }
 
-fn EndRendering(camera_component: *CameraComponent) !void {
+fn EndRendering(self: *Renderer, camera_component: *CameraComponent) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
-    RenderManager.mStats.mQuadNum = RenderManager.mR2D.mQuadBufferBase.items.len;
-    RenderManager.mStats.mGlyphNum = RenderManager.mR2D.mGlyphBufferBase.items.len;
+    self.mStats.mQuadNum = self.mR2D.mQuadBufferBase.items.len;
+    self.mStats.mGlyphNum = self.mR2D.mGlyphBufferBase.items.len;
 
-    RenderManager.mRenderContext.PushDebugGroup("End Rendering\x00");
-    defer RenderManager.mRenderContext.PopDebugGroup();
+    self.mRenderContext.PushDebugGroup("End Rendering\x00");
+    defer self.mRenderContext.PopDebugGroup();
 
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 
-    const sdf_shader_asset = try RenderManager.mSDFShader.GetAsset(ShaderAsset);
+    const sdf_shader_asset = try self.mSDFShader.GetAsset(ShaderAsset);
     sdf_shader_asset.Bind();
 
-    try RenderManager.mR2D.SetBuffers();
+    try self.mR2D.SetBuffers();
 
     //UBOs
-    RenderManager.mCameraUniformBuffer.Bind(0);
-    RenderManager.mModeUniformBuffer.Bind(1);
+    self.mCameraUniformBuffer.Bind(0);
+    self.mModeUniformBuffer.Bind(1);
 
-    RenderManager.mR2D.BindBuffers();
+    self.mR2D.BindBuffers();
 
-    RenderManager.mRenderContext.PushDebugGroup("Draw Indexed\x00");
-    RenderManager.mRenderContext.DrawIndexed(camera_component.mViewportVertexArray, camera_component.mViewportIndexBuffer.GetCount());
-    RenderManager.mRenderContext.PopDebugGroup();
+    self.mRenderContext.PushDebugGroup("Draw Indexed\x00");
+    self.mRenderContext.DrawIndexed(camera_component.mViewportVertexArray, camera_component.mViewportIndexBuffer.GetCount());
+    self.mRenderContext.PopDebugGroup();
 }

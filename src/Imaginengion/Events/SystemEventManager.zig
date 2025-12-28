@@ -4,52 +4,46 @@ const Application = @import("../Core/Application.zig");
 const SystemEvent = @import("SystemEvent.zig").SystemEvent;
 const SystemEventCategory = @import("SystemEvent.zig").SystemEventCategory;
 const Tracy = @import("../Core/Tracy.zig");
-const Self = @This();
-
-var EventManager: Self = .{};
+const SystemEventManager = @This();
 
 _InputEventPool: std.ArrayList(SystemEvent) = .{},
 _WindowEventPool: std.ArrayList(SystemEvent) = .{},
 _Application: *Application = undefined,
 
-var EventGPA = std.heap.DebugAllocator(.{}).init;
-const EventAllocator = EventGPA.allocator();
-
-pub fn Init(application: *Application) !void {
-    EventManager._Application = application;
+pub fn Init(self: *SystemEventManager, application: *Application) !void {
+    self._Application = application;
 }
 
-pub fn Deinit() void {
-    EventManager._InputEventPool.deinit(EventAllocator);
-    EventManager._WindowEventPool.deinit(EventAllocator);
-    _ = EventGPA.deinit();
+pub fn Deinit(self: *SystemEventManager, engine_allocator: std.mem.Allocator) void {
+    self._InputEventPool.deinit(engine_allocator);
+    self._WindowEventPool.deinit(engine_allocator);
 }
 
-pub fn Insert(event: SystemEvent) !void {
+pub fn Insert(self: *SystemEventManager, event: SystemEvent, engine_allocator: std.mem.Allocator) !void {
     switch (event.GetEventCategory()) {
-        .EC_Input => try EventManager._InputEventPool.append(EventAllocator, event),
-        .EC_Window => try EventManager._WindowEventPool.append(EventAllocator, event),
+        .EC_Input => try self._InputEventPool.append(engine_allocator, event),
+        .EC_Window => try self._WindowEventPool.append(engine_allocator, event),
         else => @panic("Default Events are not allowed!\n"),
     }
 }
 
-pub fn ProcessEvents(eventCategory: SystemEventCategory) !void {
+pub fn ProcessEvents(self: *SystemEventManager, eventCategory: SystemEventCategory) !void {
     const zone = Tracy.ZoneInit("ProcessEvents", @src());
     defer zone.Deinit();
     const array = switch (eventCategory) {
-        .EC_Input => EventManager._InputEventPool,
-        .EC_Window => EventManager._WindowEventPool,
+        .EC_Input => self._InputEventPool,
+        .EC_Window => self._WindowEventPool,
         else => @panic("Default Events are not allowed!\n"),
     };
 
     for (array.items) |*event| {
-        try EventManager._Application.OnEvent(event);
+        try self._Application.OnEvent(event);
     }
 }
 
-pub fn EventsReset() void {
+pub fn EventsReset(self: *SystemEventManager, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("System Event Reset", @src());
     defer zone.Deinit();
-    _ = EventManager._InputEventPool.clearAndFree(EventAllocator);
-    _ = EventManager._WindowEventPool.clearAndFree(EventAllocator);
+    _ = self._InputEventPool.clearAndFree(engine_allocator);
+    _ = self._WindowEventPool.clearAndFree(engine_allocator);
 }

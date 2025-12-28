@@ -2,58 +2,48 @@ const std = @import("std");
 const Program = @import("../Programs/Program.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const Tracy = @import("../Core/Tracy.zig");
-const Self = @This();
-
-var EventManager: Self = .{};
+const ImguiEventManager = @This();
 
 mEventPool: std.ArrayList(ImguiEvent) = .{},
 mProgram: *Program = undefined,
 
-var EventGPA = std.heap.DebugAllocator(.{}).init;
-const EventAllocator = EventGPA.allocator();
-
-pub fn Init(program: *Program) !void {
-    EventManager.mProgram = program;
+pub fn Init(self: *ImguiEventManager, program: *Program) !void {
+    self.mProgram = program;
 }
 
-pub fn Deinit() void {
-    EventManager.mEventPool.deinit(EventAllocator);
-    _ = EventGPA.deinit();
+pub fn Deinit(self: *ImguiEventManager, engine_allocator: std.mem.Allocator) void {
+    self.mEventPool.deinit(engine_allocator);
 }
 
-pub fn Insert(event: ImguiEvent) !void {
-    try EventManager.mEventPool.append(EventAllocator, event);
+pub fn Insert(self: *ImguiEventManager, event: ImguiEvent, engine_allocator: std.mem.Allocator) !void {
+    try self.mEventPool.append(engine_allocator, event);
 }
 
-pub fn ProcessEvents() !void {
+pub fn ProcessEvents(self: *ImguiEventManager, engine_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("ImguiEventManager ProcessEvents", @src());
     defer zone.Deinit();
-    for (EventManager.mEventPool.items) |*event| {
-        try EventManager.mProgram.OnImguiEvent(event);
+    for (self.mEventPool.items) |*event| {
+        try self.mProgram.OnImguiEvent(event);
         switch (event.*) {
             .ET_OpenSceneEvent => |e| {
-                EventGPA.allocator().free(e.Path);
+                engine_allocator.free(e.Path);
             },
             .ET_SaveSceneAsEvent => |e| {
-                EventGPA.allocator().free(e.AbsPath);
+                engine_allocator.free(e.AbsPath);
             },
             .ET_NewProjectEvent => |e| {
-                EventGPA.allocator().free(e.Path);
+                engine_allocator.free(e.Path);
             },
             .ET_OpenProjectEvent => |e| {
-                EventGPA.allocator().free(e.Path);
+                engine_allocator.free(e.Path);
             },
             else => {},
         }
     }
 }
 
-pub fn EventsReset() void {
+pub fn EventsReset(self: *ImguiEventManager, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("Imgui Event Reset", @src());
     defer zone.Deinit();
-    EventManager.mEventPool.clearAndFree(EventAllocator);
-}
-
-pub fn GetEventAllocator() std.mem.Allocator {
-    return EventGPA.allocator();
+    self.mEventPool.clearAndFree(engine_allocator);
 }

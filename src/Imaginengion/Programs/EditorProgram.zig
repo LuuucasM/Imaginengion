@@ -4,6 +4,7 @@ const Window = @import("../Windows/Window.zig");
 const StaticInputContext = @import("../Inputs/Input.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
@@ -103,22 +104,20 @@ mEditorFont: AssetHandle = .{},
 
 //not editor stuff
 mWindow: *Window = undefined,
+mImgui: ImGui = .{},
 mGameSceneManager: SceneManager = .{},
 mFrameAllocator: std.mem.Allocator = undefined,
-_EngineAllocator: std.mem.Allocator = undefined,
+mPlayerManager: PlayerManager = .{},
 
 const EditorProgram = @This();
 
-pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *Window, frame_allocator: std.mem.Allocator) !void {
-    self.mFrameAllocator = frame_allocator;
-    self._EngineAllocator = engine_allocator;
+pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *Window, engine_context: *EngineContext) !void {
     self.mWindow = window;
 
     try self.mEditorSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
     try self.mGameSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
 
-    try Renderer.Init(self.mWindow);
-    try ImGui.Init(self.mWindow);
+    try self.mImgui.Init(self.mWindow);
 
     self._ComponentsPanel.Init(engine_allocator);
     try self._ContentBrowserPanel.Init(engine_allocator);
@@ -148,7 +147,7 @@ pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *
         .mViewportHeight = self._ViewportPanel.mViewportHeight,
     };
 
-    const shader_asset = try Renderer.GetSDFShader();
+    const shader_asset = try engine_context.mRenderer.GetSDFShader();
     try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout());
     new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
@@ -173,7 +172,7 @@ pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *
         .mViewportIndexBuffer = undefined,
     };
 
-    const shader_asset_camera = try Renderer.GetSDFShader();
+    const shader_asset_camera = try engine_context.mRenderer.GetSDFShader();
     try new_camera_component_camera.mViewportVertexBuffer.SetLayout(shader_asset_camera.GetLayout());
     new_camera_component_camera.mViewportVertexBuffer.SetStride(shader_asset_camera.GetStride());
 
@@ -194,8 +193,7 @@ pub fn Deinit(self: *EditorProgram) !void {
     try self.mEditorSceneManager.Deinit();
     self._ContentBrowserPanel.Deinit();
     self._CSEditorPanel.Deinit();
-
-    ImGui.Deinit();
+    self.mImgui.Deinit();
 }
 
 //Note other systems to consider in the on update loop
@@ -203,12 +201,12 @@ pub fn Deinit(self: *EditorProgram) !void {
 //particles
 //handling the loading and unloading of assets and scene transitions
 //debug/profiling
-pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
+pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext, frame_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("Program OnUpdate", @src());
     defer zone.Deinit();
 
     //update asset manager
-    try AssetManager.OnUpdate(self.mFrameAllocator);
+    try engine_context.mAssetManager.OnUpdate(frame_allocator);
 
     //-------------Inputs Begin------------------
     {
@@ -217,8 +215,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
 
         //Human Inputs
         self.mWindow.PollInputEvents();
-        StaticInputContext.OnUpdate();
-        try SystemEventManager.ProcessEvents(.EC_Input);
+        engine_context.mInputManager.OnUpdate();
+        engine_context.mSystemEventManager.ProcessEvents(.EC_Input);
         if (self._ToolbarPanel.mState == .Play) {
             _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{}, self.mFrameAllocator);
         }
@@ -245,7 +243,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
 
-        ImGui.Begin();
+        self.mImgui.Begin();
         Dockspace.Begin();
 
         try self._ContentBrowserPanel.OnImguiRender();
@@ -283,7 +281,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         try ImguiEventManager.ProcessEvents();
 
         Dockspace.End();
-        ImGui.End();
+        self.mImgui.End();
     }
     //--------------Render End-------------------
 
@@ -316,7 +314,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         try self.mGameSceneManager.ProcessRemovedObj();
         try self.mEditorSceneManager.ProcessRemovedObj();
         try AssetManager.ProcessDestroyedAssets();
-        try PlayerManager.ProcessDestroyedPlayers();
+        try self.mPlayerManager.ProcessDestroyedPlayers();
 
         //end of frame resets
         SystemEventManager.EventsReset();

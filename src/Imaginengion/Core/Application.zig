@@ -19,16 +19,18 @@ const AssetManager = @import("../Assets/AssetManager.zig");
 const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEventManager = @import("../Events/GameEventManager.zig");
-const PlayerManager = @import("../Players/PlayerManager.zig");
-const StaticEngineContext = @import("EngineContext.zig");
+const EngineContext = @import("EngineContext.zig");
 const Tracy = @import("Tracy.zig");
 
 const Application: type = @This();
 
 mIsRunning: bool = true,
 mIsMinimized: bool = false,
+
 mWindow: Window = .{},
 mProgram: Program = .{},
+mEngineContext: EngineContext = .{},
+
 mEngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
 mEngineAllocator: std.mem.Allocator = undefined,
 mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
@@ -47,21 +49,13 @@ pub fn Init(self: *Application) !void {
     self.mEngineAllocator = self.mEngineGPA.allocator();
     self.mFrameAllocator = self.mFrameArena.allocator();
 
-    try AssetManager.Init();
-    try AudioManager.Init();
-    try Input.Init();
-    try SystemEventManager.Init(self);
-    try PlayerManager.Init(self.mEngineAllocator);
-    try ImguiEventManager.Init(&self.mProgram);
-    try GameEventManager.Init(&self.mProgram);
-
     self.mWindow.Init();
 
-    try self.mProgram.Init(self.mEngineAllocator, &self.mWindow, self.mFrameAllocator);
+    EngineContext.Init(&self.mWindow, self.mEngineAllocator, &self.mProgram, self);
+
+    try self.mProgram.Init(self.mEngineAllocator, &self.mWindow, &self.mEngineContext);
 
     self.mWindow.SetVSync(false);
-
-    StaticEngineContext.Init();
 }
 
 /// Shuts down the application and cleans up resources.
@@ -78,7 +72,6 @@ pub fn Deinit(self: *Application) !void {
     SystemEventManager.Deinit();
     GameEventManager.Deinit();
     ImguiEventManager.Deinit();
-    try PlayerManager.Deinit();
     Input.Deinit();
     _ = self.mEngineGPA.deinit();
     self.mFrameArena.deinit();
@@ -96,12 +89,12 @@ pub fn Run(self: *Application) !void {
     var delta_time: f32 = 0;
 
     while (self.mIsRunning) : (delta_time = @as(f32, @floatFromInt(timer.lap())) / std.time.ns_per_s) {
-        StaticEngineContext.SetDT(delta_time);
+        self.mEngineContext.mDT = delta_time;
 
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
 
-        try self.mProgram.OnUpdate(delta_time);
+        try self.mProgram.OnUpdate(delta_time, &self.mEngineContext, self.mFrameAllocator);
         _ = self.mFrameArena.reset(.retain_capacity);
 
         Tracy.FrameMark();
