@@ -139,7 +139,7 @@ fn ComponentRender(comptime component_type: type, entity: Entity) !void {
                 //do-while loop
                 while (true) : (if (curr_id == component.mFirst) break) {
                     const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
-                    PrintComponent(component_type, component_entity);
+                    try PrintComponent(component_type, component_entity);
 
                     const curr_comp = component_entity.GetComponent(component_type).?;
                     curr_id = curr_comp.mNext;

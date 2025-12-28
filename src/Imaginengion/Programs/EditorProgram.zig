@@ -260,77 +260,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32) !void {
         try self._ScriptsPanel.OnImguiRender(self.mFrameAllocator);
         try self._CSEditorPanel.OnImguiRender(self.mFrameAllocator);
 
-        //----------------rendering game world to screen-------------
-        var camera_components = try std.ArrayList(*CameraComponent).initCapacity(self.mFrameAllocator, 1);
-        var transform_components = try std.ArrayList(*TransformComponent).initCapacity(self.mFrameAllocator, 1);
-
-        if (self._ToolbarPanel.mState == .Stop) { //editor state is stopped
-            const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
-            const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
-
-            try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
-
-            try camera_components.append(self.mFrameAllocator, editor_camera_component);
-            try transform_components.append(self.mFrameAllocator, editor_camera_transform);
-
-            try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
-
-            camera_components.clearRetainingCapacity();
-            transform_components.clearRetainingCapacity();
-
-            if (self._ViewportPanel.mP_OpenPlay) {
-                if (self._ToolbarPanel.mStartEntity) |start_entity| {
-                    const camera_entity = start_entity.GetCameraEntity();
-                    if (camera_entity) |entity| {
-                        const start_camera_component = entity.GetComponent(CameraComponent).?;
-                        const start_transform_component = entity.GetComponent(TransformComponent).?;
-
-                        try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
-
-                        try camera_components.append(self.mFrameAllocator, start_camera_component);
-                        try transform_components.append(self.mFrameAllocator, start_transform_component);
-
-                        try self._ViewportPanel.OnImguiRenderPlay(camera_components);
-
-                        camera_components.clearRetainingCapacity();
-                        transform_components.clearRetainingCapacity();
-                    }
-                } else {
-                    try self._ViewportPanel.OnImguiRenderPlay(camera_components);
-                }
-            }
-        } else { //editor state is play
-            if (self._ViewportPanel.mP_OpenPlay) {
-                const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
-                const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
-
-                try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
-
-                try camera_components.append(self.mFrameAllocator, editor_camera_component);
-                try transform_components.append(self.mFrameAllocator, editor_camera_transform);
-
-                try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
-
-                camera_components.clearRetainingCapacity();
-                transform_components.clearRetainingCapacity();
-            } else {
-                const camera_entity = self._ToolbarPanel.mStartEntity.?.GetCameraEntity();
-                if (camera_entity) |entity| {
-                    const start_camera_component = entity.GetComponent(CameraComponent).?;
-                    const start_transform_component = entity.GetComponent(TransformComponent).?;
-
-                    try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
-
-                    try camera_components.append(self.mFrameAllocator, start_camera_component);
-                    try transform_components.append(self.mFrameAllocator, start_transform_component);
-
-                    try self._ViewportPanel.OnImguiRenderPlay(camera_components);
-
-                    camera_components.clearRetainingCapacity();
-                    transform_components.clearRetainingCapacity();
-                }
-            }
-        }
+        try self.RenderBuffers();
 
         try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -544,7 +474,7 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
 }
 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) !void {
-    if (event.mEditorState == .Play) {
+    if (event.mEditorState == .Play) { //the play button was pressed so now we playing
         try self.mGameSceneManager.SaveAllScenes(self.mFrameAllocator);
         _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{}, self.mFrameAllocator);
     } else { //stop
@@ -592,4 +522,99 @@ fn CleanSceneSpecs(self: *EditorProgram) void {
         }
     }
     self._SceneSpecList.shrinkAndFree(self._EngineAllocator, end_index);
+}
+
+fn RenderBuffers(self: *EditorProgram) !void {
+    const zone = Tracy.ZoneInit("Render Bufferss", @src());
+    defer zone.Deinit();
+
+    var camera_components = try std.ArrayList(*CameraComponent).initCapacity(self.mFrameAllocator, 1);
+    var transform_components = try std.ArrayList(*TransformComponent).initCapacity(self.mFrameAllocator, 1);
+
+    if (self._ToolbarPanel.mState == .Stop) { //editor state is stopped
+        const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
+        const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
+
+        try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
+
+        try camera_components.append(self.mFrameAllocator, editor_camera_component);
+        try transform_components.append(self.mFrameAllocator, editor_camera_transform);
+
+        try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
+
+        camera_components.clearRetainingCapacity();
+        transform_components.clearRetainingCapacity();
+
+        if (self._ViewportPanel.mP_OpenPlay) {
+            if (self._ToolbarPanel.mStartEntity) |start_entity| {
+                const camera_entity = start_entity.GetCameraEntity();
+                if (camera_entity) |entity| {
+                    const start_camera_component = entity.GetComponent(CameraComponent).?;
+                    const start_transform_component = entity.GetComponent(TransformComponent).?;
+
+                    try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
+
+                    try camera_components.append(self.mFrameAllocator, start_camera_component);
+                    try transform_components.append(self.mFrameAllocator, start_transform_component);
+
+                    try self._ViewportPanel.OnImguiRenderPlay(camera_components);
+
+                    camera_components.clearRetainingCapacity();
+                    transform_components.clearRetainingCapacity();
+                }
+            } else {
+                try self._ViewportPanel.OnImguiRenderPlay(camera_components);
+            }
+        }
+    } else { //editor state is play
+        if (self._ViewportPanel.mP_OpenPlay) {
+
+            //render the viewport
+            const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
+            const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
+
+            try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
+
+            try camera_components.append(self.mFrameAllocator, editor_camera_component);
+            try transform_components.append(self.mFrameAllocator, editor_camera_transform);
+
+            try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
+
+            camera_components.clearRetainingCapacity();
+            transform_components.clearRetainingCapacity();
+
+            //render the play from the camera entity
+            const camera_entity = self._ToolbarPanel.mStartEntity.?.GetCameraEntity();
+            if (camera_entity) |entity| {
+                const start_camera_component = entity.GetComponent(CameraComponent).?;
+                const start_transform_component = entity.GetComponent(TransformComponent).?;
+
+                try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
+
+                try camera_components.append(self.mFrameAllocator, start_camera_component);
+                try transform_components.append(self.mFrameAllocator, start_transform_component);
+
+                try self._ViewportPanel.OnImguiRenderPlay(camera_components);
+
+                camera_components.clearRetainingCapacity();
+                transform_components.clearRetainingCapacity();
+            }
+        } else {
+            const camera_entity = self._ToolbarPanel.mStartEntity.?.GetCameraEntity();
+            if (camera_entity) |entity| {
+                const start_camera_component = entity.GetComponent(CameraComponent).?;
+                const start_transform_component = entity.GetComponent(TransformComponent).?;
+
+                try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
+
+                try camera_components.append(self.mFrameAllocator, start_camera_component);
+                try transform_components.append(self.mFrameAllocator, start_transform_component);
+
+                try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
+
+                camera_components.clearRetainingCapacity();
+                transform_components.clearRetainingCapacity();
+            }
+        }
+    }
 }

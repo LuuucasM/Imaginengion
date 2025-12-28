@@ -281,6 +281,21 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
             if (@hasDecl(component_type, "Category") == false) {
                 @compileError("Component type does not contain a component category field" ++ type_name);
+            } else {
+                if (component_type.Category == .Multiple) {
+                    if (@hasField(component_type, "mParent") == false) {
+                        @compileError("Component of Category == .Multiple must contain mParent field" ++ type_name);
+                    }
+                    if (@hasField(component_type, "mFirst") == false) {
+                        @compileError("Component of Category == .Multiple must contain mFirst field" ++ type_name);
+                    }
+                    if (@hasField(component_type, "mPrev") == false) {
+                        @compileError("Component of Category == .Multiple must contain mPrev field" ++ type_name);
+                    }
+                    if (@hasField(component_type, "mNext") == false) {
+                        @compileError("Component of Category == .Multiple must contain mNext field" ++ type_name);
+                    }
+                }
             }
             if (std.meta.hasFn(component_type, "Deinit") == false) {
                 @compileError("Component type does not contain a Deinit function" ++ type_name);

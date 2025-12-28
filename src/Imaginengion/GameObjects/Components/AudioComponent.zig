@@ -7,6 +7,7 @@ const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
 const Assets = @import("../../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const imgui = @import("../../Core/CImports.zig").imgui;
+const Entity = @import("../Entity.zig");
 const AudioComponent = @This();
 
 pub const PlaybackState = enum(u8) {
@@ -23,6 +24,11 @@ pub const AudioType = enum(u8) {
 
 pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = true;
+
+mParent: Entity.Type = Entity.NullEntity,
+mFirst: Entity.Type = Entity.NullEntity,
+mPrev: Entity.Type = Entity.NullEntity,
+mNext: Entity.Type = Entity.NullEntity,
 
 mAudioType: AudioType = .Audio2D,
 mPlaybackState: PlaybackState = .Ready,

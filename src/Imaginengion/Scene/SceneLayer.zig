@@ -96,6 +96,15 @@ pub fn Delete(self: SceneLayer) !void {
     try ImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }
 
+pub fn AddBlankChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
+    const new_entity_id = try self.mECSManagerGORef.AddChild(parent_entity.mEntityID);
+    const child_entity = Entity{ .mEntityID = new_entity_id, .mECSManagerRef = self.mECSManagerGORef };
+
+    _ = try child_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
+
+    return child_entity;
+}
+
 pub fn AddChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
     const new_entity_id = try self.mECSManagerGORef.AddChild(parent_entity.mEntityID);
     const child_entity = Entity{ .mEntityID = new_entity_id, .mECSManagerRef = self.mECSManagerGORef };

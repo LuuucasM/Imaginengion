@@ -80,15 +80,13 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        if (self.mStartEntity) |entity| {
-            if (self.mState == .Stop) {
-                try ImguiEventManager.Insert(ImguiEvent{
-                    .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = entity },
-                });
-                self.mState = .Play;
-            }
-        }
-        if (self.mState == .Play) {
+        if (self.mStartEntity != null and self.mState == .Stop) {
+            const entity = self.mStartEntity.?;
+            try ImguiEventManager.Insert(ImguiEvent{
+                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = entity },
+            });
+            self.mState = .Play;
+        } else if (self.mState == .Play) {
             std.debug.assert(self.mStartEntity != null);
             try ImguiEventManager.Insert(ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = null },

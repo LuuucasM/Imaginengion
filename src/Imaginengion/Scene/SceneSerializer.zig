@@ -61,7 +61,6 @@ pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_a
     try SerializeSceneData(&write_stream, scene_layer, frame_allocator);
     try WriteToFile(abs_path, out.written());
 }
-
 pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
     const scene_asset = try scene_asset_handle.GetAsset(SceneAsset);
 
@@ -73,6 +72,16 @@ pub fn DeSerializeSceneText(scene_layer: SceneLayer, scene_asset_handle: AssetHa
 
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     scene_component.mSceneAssetHandle = scene_asset_handle;
+}
+
+pub fn SceneReloadText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+    const scene_asset = try scene_asset_handle.GetAsset(SceneAsset);
+
+    var io_reader = std.io.Reader.fixed(scene_asset.mSceneContents.items);
+    var json_reader = std.json.Reader.init(frame_allocator, &io_reader);
+    defer json_reader.deinit();
+
+    try DeSerializeSceneEntities(&json_reader, scene_layer, frame_allocator, engine_allocator);
 }
 
 pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager, frame_allocator: std.mem.Allocator) void {
@@ -292,6 +301,34 @@ fn DeSerializeSceneData(reader: *std.json.Reader, scene_layer: SceneLayer, frame
     }
 }
 
+fn DeSerializeSceneEntities(reader: *std.json.Reader, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
+    while (true) {
+        const token = try reader.next();
+        const token_value = switch (token) {
+            .end_of_document => break,
+            .object_begin => continue,
+            .object_end => continue,
+            .array_begin => continue,
+            .array_end => continue,
+            .string => |value| value,
+            .number => |value| value,
+
+            else => {
+                std.debug.print("Unexpected token: {s}\n", .{@tagName(token)});
+                return error.NotExpected;
+            },
+        };
+
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
+
+        if (std.mem.eql(u8, actual_value, "Entity")) {
+            const new_entity = try scene_layer.CreateBlankEntity();
+            try DeSerializeEntity(reader, new_entity, scene_layer, frame_allocator, engine_allocator);
+        }
+    }
+}
+
 fn DeSerializeSceneComponent(reader: *std.json.Reader, scene_layer: SceneLayer, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
     const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, PARSE_OPTIONS);
     _ = try scene_layer.AddComponent(component_type, parsed_component);
@@ -405,6 +442,6 @@ fn DeserializeEntityNameComp(entity: Entity) !void {
 }
 
 fn DeSerializeParentComponent(reader: *std.json.Reader, entity: Entity, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) anyerror!void {
-    const new_entity = try scene_layer.AddChildEntity(entity);
+    const new_entity = try scene_layer.AddBlankChildEntity(entity);
     try DeSerializeEntity(reader, new_entity, scene_layer, frame_allocator, engine_allocator);
 }
