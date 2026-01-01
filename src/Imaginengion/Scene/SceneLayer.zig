@@ -13,8 +13,7 @@ const TransformComponent = EntityComponents.TransformComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
-const GameEventManager = @import("../Events/GameEventManager.zig");
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const Type = u32;
 pub const NullScene: Type = std.math.maxInt(Type);
@@ -91,9 +90,9 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
     return e;
 }
 
-pub fn Delete(self: SceneLayer) !void {
-    try GameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
-    try ImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
+pub fn Delete(self: SceneLayer, engine_context: EngineContext) !void {
+    try engine_context.mGameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
+    try engine_context.mImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }
 
 pub fn AddBlankChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {

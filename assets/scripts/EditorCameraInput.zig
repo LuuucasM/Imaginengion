@@ -14,7 +14,7 @@ const OnUpdateInputTemplate = @This();
 /// if it returns false it will stop at this layer
 pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.c) bool {
     _ = allocator;
-    const input_context = engine_context.GetInputContext();
+    const input_context = engine_context.mInputManager;
     if (input_context.IsInputPressed(.LeftAlt) == true) {
         const PanSpeed = 0.015;
         const RotateSpeed = 0.08;

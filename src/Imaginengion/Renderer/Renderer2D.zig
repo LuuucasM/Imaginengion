@@ -4,7 +4,6 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
-const AssetManager = @import("../Assets/AssetManager.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 
 const Assets = @import("../Assets/Assets.zig");
@@ -79,33 +78,29 @@ mGlyphBuffer: SSBO = undefined,
 mGlyphBufferBase: std.ArrayList(GlyphData) = .{},
 mGlyphCountUB: UniformBuffer = undefined,
 
-_Allocator: std.mem.Allocator = undefined,
-
-pub fn Init(self: *Renderer2D, allocator: std.mem.Allocator) !void {
-    self._Allocator = allocator;
-
+pub fn Init(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
     self.mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100);
-    self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(allocator, 100);
+    self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_allocator, 100);
     self.mQuadCountUB = UniformBuffer.Init(@sizeOf(c_uint));
 
     self.mGlyphBuffer = SSBO.Init(@sizeOf(GlyphData) * 100);
-    self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(allocator, 100);
+    self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_allocator, 100);
     self.mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint));
 }
 
-pub fn Deinit(self: *Renderer2D) !void {
+pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
     self.mQuadBuffer.Deinit();
-    self.mQuadBufferBase.deinit(self._Allocator);
+    self.mQuadBufferBase.deinit(engine_allocator);
     self.mQuadCountUB.Deinit();
 
     self.mGlyphBuffer.Deinit();
-    self.mGlyphBufferBase.deinit(self._Allocator);
+    self.mGlyphBufferBase.deinit(engine_allocator);
     self.mGlyphCountUB.Deinit();
 }
 
-pub fn StartBatch(self: *Renderer2D) void {
-    self.mQuadBufferBase.clearAndFree(self._Allocator);
-    self.mGlyphBufferBase.clearAndFree(self._Allocator);
+pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
+    self.mQuadBufferBase.clearAndFree(engine_allocator);
+    self.mGlyphBufferBase.clearAndFree(engine_allocator);
 }
 
 pub fn SetBuffers(self: *Renderer2D) !void {

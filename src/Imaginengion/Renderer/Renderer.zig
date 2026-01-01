@@ -6,7 +6,6 @@ const RenderContext = @import("RenderContext.zig");
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
 
-const AssetManager = @import("../Assets/AssetManager.zig");
 const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 
@@ -20,6 +19,7 @@ const TextComponent = EntityComponents.TextComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
+const EngineContext = @import("../Core/EngineContext.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -64,7 +64,8 @@ mModeUniformBuffer: UniformBuffer = undefined,
 
 mSDFShader: AssetHandle = .{},
 
-pub fn Init(self: *Renderer, window: *Window, engine_allocator: std.mem.Allocator) !void {
+pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !void {
+    const engine_allocator = engine_context.mEngineAllocator;
     self.mRenderContext = RenderContext.Init(window);
 
     try self.mR2D.Init(engine_allocator);
@@ -73,7 +74,7 @@ pub fn Init(self: *Renderer, window: *Window, engine_allocator: std.mem.Allocato
     self.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
     self.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
 
-    self.mSDFShader = try AssetManager.GetAssetHandleRef("assets/shaders/SDFShader.program", .Eng);
+    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef("assets/shaders/SDFShader.program", .Eng);
 }
 
 pub fn Deinit(self: *Renderer) !void {

@@ -10,23 +10,20 @@ pub fn EntityManager(entity_t: type) type {
         _IDsRemoved: std.ArrayList(entity_t) = .{},
         mIDsToRemove: std.ArrayList(entity_t) = .{},
 
-        _ECSAllocator: std.mem.Allocator = undefined,
-
-        pub fn Init(self: *Self, ECSAllocator: std.mem.Allocator) void {
-            self._IDsInUse = ArraySet(entity_t).init(ECSAllocator);
-            self._ECSAllocator = ECSAllocator;
+        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) void {
+            self._IDsInUse = ArraySet(entity_t).init(engine_allocator);
         }
 
-        pub fn Deinit(self: *Self) void {
+        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
             self._IDsInUse.deinit();
-            self._IDsRemoved.deinit(self._ECSAllocator);
-            self.mIDsToRemove.deinit(self._ECSAllocator);
+            self._IDsRemoved.deinit(engine_allocator);
+            self.mIDsToRemove.deinit(engine_allocator);
         }
 
-        pub fn clearAndFree(self: *Self) void {
+        pub fn clearAndFree(self: *Self, engine_allocator: std.mem.Allocator) void {
             self._IDsInUse.clearAndFree();
-            self._IDsRemoved.clearAndFree(self._ECSAllocator);
-            self.mIDsToRemove.clearAndFree(self._ECSAllocator);
+            self._IDsRemoved.clearAndFree(engine_allocator);
+            self.mIDsToRemove.clearAndFree(engine_allocator);
             self._NextID = 0;
         }
 
@@ -37,8 +34,8 @@ pub fn EntityManager(entity_t: type) type {
                 return new_id;
             } else {
                 const new_id = self._NextID;
-
                 std.debug.assert(!self._IDsInUse.contains(new_id));
+                std.debug.assert(self._NextID != std.math.maxInt(entity_t));
 
                 self._NextID += 1;
                 _ = try self._IDsInUse.add(new_id);
@@ -46,9 +43,9 @@ pub fn EntityManager(entity_t: type) type {
             }
         }
 
-        pub fn DestroyEntity(self: *Self, entityID: entity_t) !void {
+        pub fn DestroyEntity(self: *Self, entityID: entity_t, engine_allocator: std.mem.Allocator) !void {
             _ = self._IDsInUse.remove(entityID);
-            try self._IDsRemoved.append(self._ECSAllocator, entityID);
+            try self._IDsRemoved.append(engine_allocator, entityID);
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {

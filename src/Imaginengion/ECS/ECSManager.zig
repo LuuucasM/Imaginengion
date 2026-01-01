@@ -22,16 +22,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         mEntityManager: EntityManager(entity_t) = .{},
         mComponentManager: ComponentManager(entity_t, components_types) = .{},
         mECSEventManager: ECSEventManager = .{},
-        mECSAllocator: std.mem.Allocator = undefined,
 
-        pub fn Init(self: *Self, ECSAllocator: std.mem.Allocator) !void {
+        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ECSM Init", @src());
             defer zone.Deinit();
 
-            self.mEntityManager.Init(ECSAllocator);
-            try self.mComponentManager.Init(ECSAllocator);
-            try self.mECSEventManager.Init(ECSAllocator);
-            self.mECSAllocator = ECSAllocator;
+            self.mEntityManager.Init(engine_allocator);
+            try self.mComponentManager.Init(engine_allocator);
+            try self.mECSEventManager.Init(engine_allocator);
         }
 
         pub fn Deinit(self: *Self) !void {
@@ -244,10 +242,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 }
             }
             self.mECSEventManager.ClearEvents(event_category);
-        }
-
-        pub fn GetECSAllocator(self: Self) std.mem.Allocator {
-            return self.mECSAllocator;
         }
 
         fn _InternalRemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {

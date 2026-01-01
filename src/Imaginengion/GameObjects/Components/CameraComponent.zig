@@ -6,7 +6,6 @@ const VertexArray = @import("../../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
-const AssetManager = @import("../../Assets/AssetManager.zig");
 const Entity = @import("../Entity.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 

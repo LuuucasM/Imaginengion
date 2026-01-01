@@ -1,6 +1,5 @@
 const std = @import("std");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
-const AssetManager = @import("../../Assets/AssetManager.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
@@ -8,6 +7,7 @@ const Assets = @import("../../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const imgui = @import("../../Core/CImports.zig").imgui;
 const Entity = @import("../Entity.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
 const AudioComponent = @This();
 
 pub const PlaybackState = enum(u8) {
@@ -45,9 +45,7 @@ pub fn ReadFrames(self: *AudioComponent, frames_out: []f32, frame_count: u64) !u
 }
 
 pub fn Deinit(self: *AudioComponent) !void {
-    if (self.mAudioAsset.mID != AssetHandle.NullHandle) {
-        AssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-    }
+    self.mAudioAsset.ReleaseAsset();
 }
 
 pub fn GetName(_: AudioComponent) []const u8 {
@@ -66,7 +64,9 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn EditorRender(self: *AudioComponent, frame_allocator: std.mem.Allocator) !void {
+pub fn EditorRender(self: *AudioComponent, engine_context: EngineContext) !void {
+    const frame_allocator = engine_context.mFrameAllocator;
+
     // Volume drag
     _ = imgui.igDragFloat("Volume", &self.mVolume, 0.01, 0.0, 1.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
@@ -117,8 +117,8 @@ pub fn EditorRender(self: *AudioComponent, frame_allocator: std.mem.Allocator) !
         if (imgui.igAcceptDragDropPayload("MP3Load", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            AssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-            self.mAudioAsset = try AssetManager.GetAssetHandleRef(path, .Prj);
+            engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
+            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(path, .Prj);
         }
         imgui.igEndDragDropTarget();
     }

@@ -1,13 +1,6 @@
 //Core Stuff -----------------------------------
 pub const Application = @import("Core/Application.zig");
-pub const EngineContext = @import("Core/EngineContext.zig").EngineContext;
-
-//Input Stuff -----------------------------------
-pub const StaticInputContext = @import("Inputs/Input.zig");
-
-//Event Stuff ------------------------------------
-pub const GameEvent = @import("Events/GameEvent.zig");
-pub const SystemEvent = @import("Events/SystemEvent.zig");
+pub const EngineContext = @import("Core/EngineContext.zig");
 
 //Game Object stuff -------------------------------
 pub const Entity = @import("GameObjects/Entity.zig");

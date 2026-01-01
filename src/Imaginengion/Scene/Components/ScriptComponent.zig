@@ -12,9 +12,8 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const SceneLayer = @import("../SceneLayer.zig");
 const SceneType = @import("../SceneLayer.zig").Type;
-const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
-const AssetManager = @import("../../Assets/AssetManager.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
@@ -34,7 +33,7 @@ pub const Category: ComponentCategory = .Multiple;
 
 pub fn Deinit(self: *ScriptComponent) !void {
     if (self.mScriptAssetHandle) |*asset_handle| {
-        AssetManager.ReleaseAssetHandleRef(asset_handle);
+        asset_handle.ReleaseAsset();
     }
 }
 
@@ -63,7 +62,8 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
+pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
+    const frame_allocator = engine_context.mFrameAllocator;
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
     var result: ScriptComponent = .{};
@@ -78,9 +78,9 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "FilePath")) {
-            const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
+            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
 
-            result.mScriptAssetHandle = AssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
+            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

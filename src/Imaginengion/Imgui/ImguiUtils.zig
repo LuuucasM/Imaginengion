@@ -1,7 +1,7 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn AllScriptPopupMenu() !void {
     if (imgui.igBeginMenu("All Scripts", true) == true) {
@@ -11,7 +11,7 @@ pub fn AllScriptPopupMenu() !void {
     }
 }
 
-pub fn EntityScriptPopupMenu() !void {
+pub fn EntityScriptPopupMenu(engine_context: EngineContext) !void {
     if (imgui.igBeginMenu("New Game Object Script", true) == true) {
         defer imgui.igEndMenu();
         if (imgui.igMenuItem_Bool("On Key Pressed Script", "", false, true) == true) {
@@ -20,7 +20,7 @@ pub fn EntityScriptPopupMenu() !void {
                     .mScriptType = .OnInputPressed,
                 },
             };
-            try ImguiEventManager.Insert(new_script_event);
+            try engine_context.mImguiEventManager.Insert(new_script_event);
         }
         if (imgui.igMenuItem_Bool("On Update Input Script", "", false, true) == true) {
             const new_script_event = ImguiEvent{
@@ -28,12 +28,12 @@ pub fn EntityScriptPopupMenu() !void {
                     .mScriptType = .OnUpdateInput,
                 },
             };
-            try ImguiEventManager.Insert(new_script_event);
+            try engine_context.mImguiEventManager.Insert(new_script_event);
         }
     }
 }
 
-pub fn SceneScriptPopupMenu() !void {
+pub fn SceneScriptPopupMenu(engine_context: EngineContext) !void {
     if (imgui.igBeginMenu("New Scene Script", true) == true) {
         defer imgui.igEndMenu();
         if (imgui.igMenuItem_Bool("On Scene Start Script", "", false, true) == true) {
@@ -42,7 +42,7 @@ pub fn SceneScriptPopupMenu() !void {
                     .mScriptType = .OnSceneStart,
                 },
             };
-            try ImguiEventManager.Insert(new_script_event);
+            try engine_context.mImguiEventManager.Insert(new_script_event);
         }
     }
 }

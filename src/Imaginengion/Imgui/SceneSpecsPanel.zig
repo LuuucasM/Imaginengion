@@ -10,11 +10,10 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const SceneUtils = @import("../Scene/SceneUtils.zig");
 const ImguiUtils = @import("../Imgui/ImguiUtils.zig");
 const Tracy = @import("../Core/Tracy.zig");
-const GameEventManager = @import("../Events/GameEventManager.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const SceneSpecsPanel = @This();
 
 mSceneLayer: SceneLayer,
@@ -27,9 +26,11 @@ pub fn Init(scene_layer: SceneLayer) !SceneSpecsPanel {
     };
 }
 
-pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator) !void {
+pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("Scene Specs Panel OIR", @src());
     defer zone.Deinit();
+
+    const frame_allocator = engine_context.mFrameAllocator;
 
     const name_component = self.mSceneLayer.GetComponent(SceneNameComponent).?;
 
@@ -84,7 +85,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, frame_allocator: std.mem.Allocator)
                     if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                         defer imgui.igEndPopup();
                         if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                            try GameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
+                            try engine_context.mGameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
                         }
                     }
                 }

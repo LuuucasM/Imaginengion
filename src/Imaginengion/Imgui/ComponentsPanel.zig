@@ -1,7 +1,5 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
-const GameEventManager = @import("../Events/GameEventManager.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
@@ -28,7 +26,8 @@ const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const AudioComponent = EntityComponents.AudioComponent;
 
-const AssetManager = @import("../Assets/AssetManager.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
+
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 
@@ -37,13 +36,10 @@ const Tracy = @import("../Core/Tracy.zig");
 _P_Open: bool = true,
 mSelectedScene: ?SceneLayer = null,
 mSelectedEntity: ?Entity = null,
-mEngineAllocator: std.mem.Allocator = undefined,
 
-pub fn Init(self: *ComponentsPanel, engine_allocator: std.mem.Allocator) void {
-    self.mEngineAllocator = engine_allocator;
-}
+pub fn Init(_: *ComponentsPanel) void {}
 
-pub fn OnImguiRender(self: ComponentsPanel) !void {
+pub fn OnImguiRender(self: ComponentsPanel, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("Components Panel OIR", @src());
     defer zone.Deinit();
 
@@ -74,7 +70,7 @@ pub fn OnImguiRender(self: ComponentsPanel) !void {
             defer imgui.igEndPopup();
             try self.AddComponentPopupMenu(entity);
         }
-        try EntityImguiRender(entity);
+        try EntityImguiRender(entity, engine_context);
     }
 }
 
@@ -113,19 +109,19 @@ pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
     }
 }
 
-fn EntityImguiRender(entity: Entity) !void {
-    try ComponentRender(EntityIDComponent, entity);
-    try ComponentRender(EntityNameComponent, entity);
-    try ComponentRender(TransformComponent, entity);
-    try ComponentRender(CameraComponent, entity);
-    try ComponentRender(QuadComponent, entity);
-    try ComponentRender(AISlotComponent, entity);
-    try ComponentRender(PlayerSlotComponent, entity);
-    try ComponentRender(TextComponent, entity);
-    try ComponentRender(AudioComponent, entity);
+fn EntityImguiRender(entity: Entity, engine_context: EngineContext) !void {
+    try ComponentRender(EntityIDComponent, entity, engine_context);
+    try ComponentRender(EntityNameComponent, entity, engine_context);
+    try ComponentRender(TransformComponent, entity, engine_context);
+    try ComponentRender(CameraComponent, entity, engine_context);
+    try ComponentRender(QuadComponent, entity, engine_context);
+    try ComponentRender(AISlotComponent, entity, engine_context);
+    try ComponentRender(PlayerSlotComponent, entity, engine_context);
+    try ComponentRender(TextComponent, entity, engine_context);
+    try ComponentRender(AudioComponent, entity, engine_context);
 }
 
-fn ComponentRender(comptime component_type: type, entity: Entity) !void {
+fn ComponentRender(comptime component_type: type, entity: Entity, engine_context: EngineContext) !void {
     if (entity.HasComponent(component_type)) {
         if (component_type.Category == .Unique) {
             //single unique component so we can just get and display component
@@ -139,7 +135,7 @@ fn ComponentRender(comptime component_type: type, entity: Entity) !void {
                 //do-while loop
                 while (true) : (if (curr_id == component.mFirst) break) {
                     const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
-                    try PrintComponent(component_type, component_entity);
+                    try PrintComponent(component_type, component_entity, engine_context);
 
                     const curr_comp = component_entity.GetComponent(component_type).?;
                     curr_id = curr_comp.mNext;
@@ -149,10 +145,10 @@ fn ComponentRender(comptime component_type: type, entity: Entity) !void {
     }
 }
 
-fn PrintComponent(comptime component_type: type, entity: Entity) !void {
+fn PrintComponent(comptime component_type: type, entity: Entity, engine_context: EngineContext) !void {
     if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
         if (component_type.Editable == true) {
-            try ImguiEventManager.Insert(ImguiEvent{
+            try engine_context.mImguiEventManager.Insert(ImguiEvent{
                 .ET_SelectComponentEvent = .{ .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity) },
             });
         }
@@ -161,21 +157,22 @@ fn PrintComponent(comptime component_type: type, entity: Entity) !void {
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = entity.mEntityID, .mComponentType = @enumFromInt(component_type.Ind) } });
-            try ImguiEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
+            try engine_context.mGameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = entity.mEntityID, .mComponentType = @enumFromInt(component_type.Ind) } });
+            try engine_context.mImguiEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
         }
     }
 }
 
-fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
+fn AddComponentPopupMenu(_: ComponentsPanel, entity: Entity, engine_context: EngineContext) !void {
+    const engine_allocator = engine_context.mEngineAllocator;
     if (entity.HasComponent(CameraComponent) == false) {
         if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
             defer imgui.igCloseCurrentPopup();
 
             var new_camera_component = CameraComponent{
-                .mViewportFrameBuffer = try FrameBuffer.Init(self.mEngineAllocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
-                .mViewportVertexArray = VertexArray.Init(self.mEngineAllocator),
-                .mViewportVertexBuffer = VertexBuffer.Init(self.mEngineAllocator, @sizeOf([4][2]f32)),
+                .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
+                .mViewportVertexArray = VertexArray.Init(engine_allocator),
+                .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
                 .mViewportIndexBuffer = undefined,
             };
 
@@ -211,16 +208,16 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
         if (imgui.igMenuItem_Bool("QuadComponent", "", false, true) == true) {
             defer imgui.igCloseCurrentPopup();
             const new_sprite_component = try entity.AddComponent(QuadComponent, null);
-            new_sprite_component.mTexture = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
+            new_sprite_component.mTexture = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
         }
     }
     if (entity.HasComponent(TextComponent) == false) {
         if (imgui.igMenuItem_Bool("TextComponent", "", false, true)) {
             defer imgui.igCloseCurrentPopup();
             const new_text_component = try entity.AddComponent(TextComponent, null);
-            new_text_component.mTextAssetHandle = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
-            new_text_component.mAtlasHandle = try AssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
-            new_text_component.mTexHandle = try AssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
+            new_text_component.mTextAssetHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
+            new_text_component.mAtlasHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
+            new_text_component.mTexHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/whitetexture.png", .Eng);
             new_text_component.mAllocator = entity.GetECSAllocator();
             try new_text_component.mText.appendSlice(new_text_component.mAllocator, "No Text");
         }
@@ -229,7 +226,7 @@ fn AddComponentPopupMenu(self: ComponentsPanel, entity: Entity) !void {
         if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
             defer imgui.igCloseCurrentPopup();
             const new_audio_component = try entity.AddComponent(AudioComponent, null);
-            new_audio_component.mAudioAsset = try AssetManager.GetAssetHandleRef("assets/sounds/pop.mp3", .Eng);
+            new_audio_component.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef("assets/sounds/pop.mp3", .Eng);
         }
     }
 }

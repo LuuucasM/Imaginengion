@@ -26,6 +26,12 @@
 		- uniform buffer
 		- vertex array
 	- or at least these equivalents how they can work into the engine
+- change all the vendor library interfaces to rely on command line variables rather than like just builtin.os.tag like it is right now
+	- like add a "RenderContext" flag that u can set to either opengl or vulkan or whatever
+	- one for audio
+	- one for ECS
+	- platform utils (like native file dialog)
+	- window maker (like glfw)
 - make animation system
 - add entity picking in the editor
 - move away from "managed" structs. aka ones that keep reference to their own allocator, in favor of unmanaged and just passing around allocators more explicitly.

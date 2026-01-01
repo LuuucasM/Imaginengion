@@ -8,8 +8,7 @@ const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(T
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const PlayerSlotComponent = Components.PlayerSlotComponent;
 const Tracy = @import("../Core/Tracy.zig");
-const GameEventManager = @import("../Events/GameEventManager.zig");
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -104,9 +103,9 @@ pub fn GetPossessable(self: Entity) ?Entity {
 pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
 }
-pub fn Delete(self: Entity) !void {
-    try GameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
-    try ImguiEventManager.Insert(.{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
+pub fn Delete(self: Entity, engine_context: EngineContext) !void {
+    try engine_context.mGameEventManager.Insert(.{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
+    try engine_context.mImguiEventManager.Insert(.{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
 }
 pub fn GetECSAllocator(self: Entity) std.mem.Allocator {
     return self.mECSManagerRef.GetECSAllocator();

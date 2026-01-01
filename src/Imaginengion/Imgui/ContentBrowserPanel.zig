@@ -4,7 +4,6 @@ const ImguiEvents = @import("../Events/ImguiEvent.zig");
 const ImguiEvent = ImguiEvents.ImguiEvent;
 const NewProjectEvent = ImguiEvents.NewProjectEvent;
 const OpenProjectEvent = ImguiEvents.OpenProjectEvent;
-const AssetManager = @import("../Assets/AssetManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
 const Assets = @import("../Assets/Assets.zig");
@@ -13,8 +12,8 @@ const ScriptAsset = Assets.ScriptAsset;
 const ImguiUtils = @import("ImguiUtils.zig");
 const NewScriptEvent = @import("../Events/ImguiEvent.zig").NewScriptEvent;
 const Tracy = @import("../Core/Tracy.zig");
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 const MAX_PATH_LEN = 260;
 
@@ -33,43 +32,39 @@ mCurrentDirectory: ?std.fs.Dir = null,
 mCurrentPath: std.ArrayList(u8) = .{},
 mProjectFile: ?std.fs.File = null,
 
-_EngineAllocator: std.mem.Allocator = undefined,
-
-pub fn Init(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) !void {
-    self._EngineAllocator = engine_allocator;
-
-    self.mDirTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/foldericon.png", .Eng);
-    self.mPngTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/pngicon.png", .Eng);
-    self.mBackArrowTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Eng);
-    self.mSceneTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng);
-    self.mScriptTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng);
-    self.mAudioTextureHandle = try AssetManager.GetAssetHandleRef("assets/textures/mp3.png", .Eng);
+pub fn Init(self: *ContentBrowserPanel, engine_context: EngineContext) !void {
+    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/foldericon.png", .Eng);
+    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/pngicon.png", .Eng);
+    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/backarrowicon.png", .Eng);
+    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/sceneicon.png", .Eng);
+    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/scripticon.png", .Eng);
+    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/mp3.png", .Eng);
 }
 
-pub fn Deinit(self: *ContentBrowserPanel) void {
-    AssetManager.ReleaseAssetHandleRef(&self.mDirTextureHandle);
-    AssetManager.ReleaseAssetHandleRef(&self.mPngTextureHandle);
-    AssetManager.ReleaseAssetHandleRef(&self.mBackArrowTextureHandle);
-    AssetManager.ReleaseAssetHandleRef(&self.mSceneTextureHandle);
-    AssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
-    AssetManager.ReleaseAssetHandleRef(&self.mAudioTextureHandle);
+pub fn Deinit(self: *ContentBrowserPanel, engine_context: EngineContext) void {
+    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mDirTextureHandle);
+    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mPngTextureHandle);
+    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mBackArrowTextureHandle);
+    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mSceneTextureHandle);
+    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
+    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioTextureHandle);
     if (self.mProjectDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
     }
-    self.mProjectPath.deinit(self._EngineAllocator);
+    self.mProjectPath.deinit(engine_context.mEngineAllocator);
     if (self.mCurrentDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
     }
-    self.mCurrentPath.deinit(self._EngineAllocator);
+    self.mCurrentPath.deinit(engine_context.mEngineAllocator);
     if (self.mProjectFile) |*file| {
         file.close();
         self.mProjectDirectory = null;
     }
 }
 
-pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
+pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("ContentBrowser OIR", @src());
     defer zone.Deinit();
 
@@ -78,7 +73,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     _ = imgui.igBegin("ContentBrowser", null, 0);
     defer imgui.igEnd();
 
-    try self.HandlePopupContext();
+    try self.HandlePopupContext(engine_context);
 
     //if we dont have a project directory yet dont try to print stuff
     if (self.mProjectDirectory == null) return;
@@ -98,9 +93,9 @@ pub fn OnImguiRender(self: *ContentBrowserPanel) !void {
     imgui.igColumns(column_count, 0, false);
     defer imgui.igColumns(1, 0, true);
 
-    try RenderBackButton(self, thumbnail_size);
+    try RenderBackButton(self, thumbnail_size, engine_context);
 
-    try RenderDirectoryContents(self, thumbnail_size);
+    try RenderDirectoryContents(self, thumbnail_size, engine_context);
 }
 
 pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
@@ -112,20 +107,20 @@ pub fn OnImguiEvent(self: *ContentBrowserPanel, event: *ImguiEvent) !void {
     }
 }
 
-fn HandlePopupContext(_: *ContentBrowserPanel) !void {
+fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: EngineContext) !void {
     if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
         imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
-            try ImguiEventManager.Insert(.{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
+            try engine_context.mImguiEventManager.Insert(.{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
         }
         try ImguiUtils.AllScriptPopupMenu();
     }
 }
 
-fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
+fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
     defer zone.Deinit();
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
@@ -146,7 +141,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
         const last_slash = std.mem.lastIndexOf(u8, self.mCurrentPath.items, "/").?;
-        self.mCurrentPath.shrinkAndFree(self._EngineAllocator, last_slash);
+        self.mCurrentPath.shrinkAndFree(engine_context.mEngineAllocator, last_slash);
 
         self.mCurrentDirectory.?.close();
         self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
@@ -156,7 +151,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
     imgui.igNextColumn();
 }
 
-fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !void {
+fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("ContentBrowser Render Dir Contents", @src());
     defer zone.Deinit();
 
@@ -174,8 +169,8 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
             if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-                _ = try self.mCurrentPath.writer(self._EngineAllocator).write("/");
-                _ = try self.mCurrentPath.writer(self._EngineAllocator).write(entry.name);
+                _ = try self.mCurrentPath.writer(engine_context.mEngineAllocator).write("/");
+                _ = try self.mCurrentPath.writer(engine_context.mEngineAllocator).write(entry.name);
 
                 new_curr_dir = true;
             }
@@ -187,7 +182,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
-            try self.DragDropSourceBase(entry_name, "PNGLoad");
+            try self.DragDropSourceBase(entry_name, "PNGLoad", engine_context);
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
@@ -196,7 +191,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
-            try self.DragDropSourceBase(entry_name, "IMSCLoad");
+            try self.DragDropSourceBase(entry_name, "IMSCLoad", engine_context);
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
             const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
@@ -205,7 +200,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
-            try self.DragDropSourceScript(entry_name);
+            try self.DragDropSourceScript(entry_name, engine_context);
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".mp3") == true) {
             const texutre_asset = try self.mAudioTextureHandle.GetAsset(Texture2D);
@@ -214,7 +209,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, thumbnail_size: f32) !voi
 
             try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
 
-            try self.DragDropSourceBase(entry_name, "MP3Load");
+            try self.DragDropSourceBase(entry_name, "MP3Load", engine_context);
             NextColumn(entry_name);
         }
     }
@@ -228,7 +223,7 @@ pub fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
     self.mIsVisible = !self.mIsVisible;
 }
 
-pub fn OnNewProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !void {
+pub fn OnNewProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8, engine_context: EngineContext) !void {
     if (self.mProjectDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
@@ -239,19 +234,19 @@ pub fn OnNewProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !void
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree(self._EngineAllocator);
-    self.mCurrentPath.clearAndFree(self._EngineAllocator);
+    self.mProjectPath.clearAndFree();
+    self.mCurrentPath.clearAndFree(engine_context.mEngineAllocator);
 
     self.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
     self.mCurrentDirectory = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
 
-    _ = try self.mProjectPath.writer(self._EngineAllocator).write(abs_path);
-    _ = try self.mCurrentPath.writer(self._EngineAllocator).write(abs_path);
+    _ = try self.mProjectPath.writer(engine_context.mEngineAllocator).write(abs_path);
+    _ = try self.mCurrentPath.writer(engine_context.mEngineAllocator).write(abs_path);
 
     self.mProjectFile = try self.mProjectDirectory.?.createFile("NewGame.imprj", .{});
 }
 
-pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !void {
+pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8, engine_context: EngineContext) !void {
     const dir_name = std.fs.path.dirname(abs_path).?;
 
     if (self.mProjectDirectory) |*dir| {
@@ -264,14 +259,14 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8) !voi
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree(self._EngineAllocator);
-    self.mCurrentPath.clearAndFree(self._EngineAllocator);
+    self.mProjectPath.clearAndFree(engine_context.mEngineAllocator);
+    self.mCurrentPath.clearAndFree(engine_context.mEngineAllocator);
 
     self.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
     self.mCurrentDirectory = try std.fs.openDirAbsolute(dir_name, .{ .iterate = true });
 
-    _ = try self.mProjectPath.writer(self._EngineAllocator).write(dir_name);
-    _ = try self.mCurrentPath.writer(self._EngineAllocator).write(dir_name);
+    _ = try self.mProjectPath.writer(engine_context.mEngineAllocator).write(dir_name);
+    _ = try self.mCurrentPath.writer(engine_context.mEngineAllocator).write(dir_name);
 
     self.mProjectFile = try self.mProjectDirectory.?.openFile("NewGame.imprj", .{});
 }
@@ -318,7 +313,7 @@ fn RenderImageButton(entry_name: []const u8, id: c_uint, thumbnail_size: f32) !v
     );
 }
 
-fn DragDropSourceBase(self: ContentBrowserPanel, entry_name: []const u8, payload_type: []const u8) !void {
+fn DragDropSourceBase(self: ContentBrowserPanel, entry_name: []const u8, payload_type: []const u8, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("ContentBrowser DragDrop Base", @src());
     defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -329,13 +324,13 @@ fn DragDropSourceBase(self: ContentBrowserPanel, entry_name: []const u8, payload
 
         const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
 
-        const rel_path = AssetManager.GetRelPath(abs_path);
+        const rel_path = engine_context.mAssetManager.GetRelPath(abs_path);
 
         _ = imgui.igSetDragDropPayload(payload_type.ptr, rel_path.ptr, rel_path.len, 0);
     }
 }
 
-fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void {
+fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("ContentBrowser DragDrop Script", @src());
     defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -346,8 +341,8 @@ fn DragDropSourceScript(self: ContentBrowserPanel, entry_name: []const u8) !void
 
         const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
-        var script_handle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
-        defer AssetManager.ReleaseAssetHandleRef(&script_handle);
+        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(rel_path, .Prj);
+        defer engine_context.mAssetManager.ReleaseAssetHandleRef(&script_handle);
 
         const script_asset = try script_handle.GetAsset(ScriptAsset);
         if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {

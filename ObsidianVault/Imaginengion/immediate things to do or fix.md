@@ -1,13 +1,2 @@
-- add mini audio to engine
-	- audio buffer
-	- audio asset
-	- game object -> listener component
-	- game object -> audio emitter component
-	- scene -> audio emitter component
-	- audio manager
-- change all the vendor library interfaces to rely on command line variables rather than like just builtin.os.tag like it is right now
-	- like add a "RenderContext" flag that u can set to either opengl or vulkan or whatever
-	- one for audio
-	- one for ECS
-	- platform utils (like native file dialog)
-	- window maker (like glfw)
+- change all the components for all the ECS chagne the json parse functions replace the allocator param with engine context param
+- change all the asset handle member variables to not use ? because it takes extra memory so i should prefer using NullHandle/NullEntity/NullScene/etc.

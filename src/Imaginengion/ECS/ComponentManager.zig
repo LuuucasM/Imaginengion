@@ -34,33 +34,31 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)) = .{},
         mEntitySkipField: SpraseSkipFieldT = undefined,
-        mECSAllocator: std.mem.Allocator = undefined,
 
-        pub fn Init(self: *Self, ECSAllocator: std.mem.Allocator) !void {
-            self.mEntitySkipField = try SpraseSkipFieldT.init(ECSAllocator, 20, 10);
-            self.mECSAllocator = ECSAllocator;
+        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
+            self.mEntitySkipField = try SpraseSkipFieldT.init(engine_allocator, 20, 10);
 
             //add the components for entity hiearchy
-            const parent_array = try ComponentArray(entity_t).Init(ECSAllocator, ParentComponent);
-            try self.mComponentsArrays.append(ECSAllocator, parent_array);
+            const parent_array = try ComponentArray(entity_t).Init(engine_allocator, ParentComponent);
+            try self.mComponentsArrays.append(engine_allocator, parent_array);
 
-            const child_array = try ComponentArray(entity_t).Init(ECSAllocator, ChildComponent);
-            try self.mComponentsArrays.append(ECSAllocator, child_array);
+            const child_array = try ComponentArray(entity_t).Init(engine_allocator, ChildComponent);
+            try self.mComponentsArrays.append(engine_allocator, child_array);
 
             inline for (components_types) |component_type| {
                 _InternalTypeValidation(component_type);
-                const new_component_array = try ComponentArray(entity_t).Init(ECSAllocator, component_type);
-                try self.mComponentsArrays.append(ECSAllocator, new_component_array);
+                const new_component_array = try ComponentArray(entity_t).Init(engine_allocator, component_type);
+                try self.mComponentsArrays.append(engine_allocator, new_component_array);
             }
         }
 
-        pub fn Deinit(self: *Self) !void {
+        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) !void {
             //delete component arrays
             for (self.mComponentsArrays.items) |component_array| {
                 try component_array.Deinit();
             }
 
-            self.mComponentsArrays.deinit(self.mECSAllocator);
+            self.mComponentsArrays.deinit(engine_allocator);
             self.mEntitySkipField.deinit();
         }
 

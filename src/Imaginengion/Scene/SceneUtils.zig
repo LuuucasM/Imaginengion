@@ -1,16 +1,16 @@
 const std = @import("std");
 const SceneLayer = @import("SceneLayer.zig");
 const PathType = @import("../Assets/Assets/FileMetaData.zig").PathType;
-const StaticAssetContext = @import("../Assets/AssetManager.zig");
+const EngineContext = @import("../Core//EngineContext.zig");
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const SceneComponents = @import("SceneComponents.zig");
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
-pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, path_type: PathType) !void {
+pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, path_type: PathType, engine_context: EngineContext) !void {
     var ecs = scene_layer.mECSManagerSCRef;
-    var new_script_handle = try StaticAssetContext.GetAssetHandleRef(script_asset_path, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(ScriptAsset);
 
     if (scene_layer.HasComponent(SceneScriptComponent) == true) {

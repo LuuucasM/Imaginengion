@@ -13,8 +13,8 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 const Entity = @import("../../GameObjects/Entity.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
-const AssetManager = @import("../../Assets/AssetManager.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 mParent: Entity.Type = Entity.NullEntity,
 mFirst: Entity.Type = Entity.NullEntity,
@@ -27,7 +27,7 @@ pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
 
 pub fn Deinit(self: *ScriptComponent) !void {
-    AssetManager.ReleaseAssetHandleRef(&self.mScriptAssetHandle);
+    self.mScriptAssetHandle.ReleaseAsset();
 }
 
 pub fn GetName(self: ScriptComponent) []const u8 {
@@ -66,7 +66,8 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
+pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
+    const frame_allocator = engine_context.mFrameAllocator;
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
     var result: ScriptComponent = .{};
@@ -81,13 +82,13 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "FilePath")) {
-            const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
+            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
 
             try SkipToken(reader); //skip PathType object field
 
-            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, allocator, reader, options);
+            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mScriptAssetHandle = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

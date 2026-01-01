@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Window = @import("../Windows/Window.zig");
-const StaticInputContext = @import("../Inputs/Input.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -38,11 +37,9 @@ const ControllerComponent = PlayerComponents.ControllerComponent;
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
-const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
-const GameEventManager = @import("../Events/GameEventManager.zig");
 const ChangeEditorStateEvent = @import("../Events/ImguiEvent.zig").ChangeEditorStateEvent;
 
 const ImGui = @import("../Imgui/Imgui.zig");
@@ -56,7 +53,6 @@ const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
 const ToolbarPanel = @import("../Imgui/ToolbarPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
-const AssetManager = @import("../Assets/AssetManager.zig");
 const SceneSpecPanel = @import("../Imgui/SceneSpecsPanel.zig");
 
 const SceneManager = @import("../Scene/SceneManager.zig");
@@ -65,8 +61,6 @@ const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
-
-const AudioManager = @import("../AudioManager/AudioManager.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -111,7 +105,9 @@ mPlayerManager: PlayerManager = .{},
 
 const EditorProgram = @This();
 
-pub fn Init(self: *EditorProgram, engine_allocator: std.mem.Allocator, window: *Window, engine_context: *EngineContext) !void {
+pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContext) !void {
+    const engine_allocator = engine_context.mEngineAllocator;
+
     self.mWindow = window;
 
     try self.mEditorSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
@@ -201,9 +197,12 @@ pub fn Deinit(self: *EditorProgram) !void {
 //particles
 //handling the loading and unloading of assets and scene transitions
 //debug/profiling
-pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext, frame_allocator: std.mem.Allocator) !void {
+pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Program OnUpdate", @src());
     defer zone.Deinit();
+
+    const frame_allocator = engine_context.mFrameAllocator;
+    const engine_allocator = engine_context.mEngineAllocator;
 
     //update asset manager
     try engine_context.mAssetManager.OnUpdate(frame_allocator);
@@ -258,7 +257,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext, f
         try self._ScriptsPanel.OnImguiRender(self.mFrameAllocator);
         try self._CSEditorPanel.OnImguiRender(self.mFrameAllocator);
 
-        try self.RenderBuffers();
+        try self.RenderBuffers(engine_context);
 
         try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
@@ -278,7 +277,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext, f
 
         try Dockspace.OnImguiRender(opens);
 
-        try ImguiEventManager.ProcessEvents();
+        try engine_context.mImguiEventManager.ProcessEvents();
 
         Dockspace.End();
         self.mImgui.End();
@@ -301,31 +300,32 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext, f
         defer end_frame_zone.Deinit();
 
         //swap buffers
-        Renderer.SwapBuffers();
+        engine_context.mRenderer.SwapBuffers();
 
         //Process window events
-        try SystemEventManager.ProcessEvents(.EC_Window);
+        try engine_context.mSystemEventManager.ProcessEvents(.EC_Window);
 
         //handle any closed scene spec panels
         self.CleanSceneSpecs();
 
         //handle deleted objects this frame
-        try GameEventManager.ProcessEvents(.EC_EndOfFrame);
+        try engine_context.mGameEventManager.ProcessEvents(.EC_EndOfFrame);
+
         try self.mGameSceneManager.ProcessRemovedObj();
         try self.mEditorSceneManager.ProcessRemovedObj();
-        try AssetManager.ProcessDestroyedAssets();
+        try engine_context.mAssetManager.ProcessDestroyedAssets();
         try self.mPlayerManager.ProcessDestroyedPlayers();
 
         //end of frame resets
-        SystemEventManager.EventsReset();
-        GameEventManager.EventsReset();
-        ImguiEventManager.EventsReset();
+        engine_context.mSystemEventManager.EventsReset(engine_allocator);
+        engine_context.mGameEventManager.EventsReset(engine_allocator);
+        engine_context.mImguiEventManager.EventsReset(engine_allocator);
     }
     //-----------------End End of Frame-------------------
 
 }
 
-pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
+pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: EngineContext, engine_allocator: std.mem.Allocator) !void {
     switch (event.*) {
         .ET_TogglePanelEvent => |e| {
             switch (e._PanelType) {
@@ -344,13 +344,13 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
         .ET_NewProjectEvent => |e| {
             if (e.Path.len > 0) {
                 try self._ContentBrowserPanel.OnNewProjectEvent(e.Path);
-                try AssetManager.OnNewProjectEvent(e.Path);
+                engine_context.mAssetManager.OnNewProjectEvent(e.Path, engine_allocator);
             }
         },
         .ET_OpenProjectEvent => |e| {
             if (e.Path.len > 0) {
                 try self._ContentBrowserPanel.OnOpenProjectEvent(e.Path);
-                try AssetManager.OnOpenProjectEvent(e.Path);
+                engine_context.mAssetManager.OnOpenProjectEvent(e.Path, engine_allocator);
             }
         },
         .ET_NewSceneEvent => |e| {
@@ -365,9 +365,9 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent) !void {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.AbsPath.len > 0) {
                     const scene_component = scene_layer.GetComponent(SceneComponent).?;
-                    const rel_path = AssetManager.GetRelPath(e.AbsPath);
+                    const rel_path = engine_context.mAssetManager.GetRelPath(e.AbsPath);
                     _ = try std.fs.createFileAbsolute(e.AbsPath, .{});
-                    scene_component.mSceneAssetHandle = try AssetManager.GetAssetHandleRef(rel_path, .Prj);
+                    scene_component.mSceneAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(rel_path, .Prj);
                     try self.mGameSceneManager.SaveSceneAs(scene_layer, e.AbsPath, self.mFrameAllocator);
                 }
             }
@@ -522,7 +522,7 @@ fn CleanSceneSpecs(self: *EditorProgram) void {
     self._SceneSpecList.shrinkAndFree(self._EngineAllocator, end_index);
 }
 
-fn RenderBuffers(self: *EditorProgram) !void {
+fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("Render Bufferss", @src());
     defer zone.Deinit();
 
@@ -533,7 +533,7 @@ fn RenderBuffers(self: *EditorProgram) !void {
         const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
         const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
 
-        try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
+        try engine_context.mRenderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
 
         try camera_components.append(self.mFrameAllocator, editor_camera_component);
         try transform_components.append(self.mFrameAllocator, editor_camera_transform);
@@ -550,7 +550,7 @@ fn RenderBuffers(self: *EditorProgram) !void {
                     const start_camera_component = entity.GetComponent(CameraComponent).?;
                     const start_transform_component = entity.GetComponent(TransformComponent).?;
 
-                    try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
+                    try engine_context.mRenderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
 
                     try camera_components.append(self.mFrameAllocator, start_camera_component);
                     try transform_components.append(self.mFrameAllocator, start_transform_component);
@@ -571,7 +571,7 @@ fn RenderBuffers(self: *EditorProgram) !void {
             const editor_camera_component = self.mEditorViewportEntity.GetComponent(CameraComponent).?;
             const editor_camera_transform = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
 
-            try Renderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
+            try engine_context.mRenderer.OnUpdate(&self.mGameSceneManager, editor_camera_component, editor_camera_transform, self.mFrameAllocator, 0b1);
 
             try camera_components.append(self.mFrameAllocator, editor_camera_component);
             try transform_components.append(self.mFrameAllocator, editor_camera_transform);
@@ -587,7 +587,7 @@ fn RenderBuffers(self: *EditorProgram) !void {
                 const start_camera_component = entity.GetComponent(CameraComponent).?;
                 const start_transform_component = entity.GetComponent(TransformComponent).?;
 
-                try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
+                try engine_context.mRenderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
 
                 try camera_components.append(self.mFrameAllocator, start_camera_component);
                 try transform_components.append(self.mFrameAllocator, start_transform_component);
@@ -603,7 +603,7 @@ fn RenderBuffers(self: *EditorProgram) !void {
                 const start_camera_component = entity.GetComponent(CameraComponent).?;
                 const start_transform_component = entity.GetComponent(TransformComponent).?;
 
-                try Renderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
+                try engine_context.mRenderer.OnUpdate(&self.mGameSceneManager, start_camera_component, start_transform_component, self.mFrameAllocator, 0b0);
 
                 try camera_components.append(self.mFrameAllocator, start_camera_component);
                 try transform_components.append(self.mFrameAllocator, start_transform_component);

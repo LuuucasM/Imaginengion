@@ -2,14 +2,13 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const Vec2f32 = @import("../../Math/LinAlg.zig").Vec2f32;
-const AssetM = @import("../../Assets/AssetManager.zig");
 const Assets = @import("../../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
 const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
-const AssetManager = @import("../../Assets/AssetManager.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const QuadComponent = @This();
 
 //IMGUI
@@ -24,7 +23,9 @@ mTexture: AssetHandle = undefined,
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 
-pub fn Deinit(_: *QuadComponent) !void {}
+pub fn Deinit(self: *QuadComponent) !void {
+    self.mTexture.ReleaseAsset();
+}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
@@ -44,7 +45,7 @@ pub fn GetInd(self: QuadComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *QuadComponent, _: std.mem.Allocator) !void {
+pub fn EditorRender(self: *QuadComponent, engine_context: EngineContext) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
 
     imgui.igSeparator();
@@ -73,8 +74,8 @@ pub fn EditorRender(self: *QuadComponent, _: std.mem.Allocator) !void {
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            AssetM.ReleaseAssetHandleRef(&self.mTexture);
-            self.mTexture = try AssetM.GetAssetHandleRef(path, .Prj);
+            engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mTexture);
+            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(path, .Prj);
         }
     }
     try self.EditTexCoords(texture_asset);
@@ -182,7 +183,8 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
+pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
+    const frame_allocator = engine_context.mFrameAllocator;
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
     var result: QuadComponent = .{};
@@ -197,21 +199,21 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "ShouldRender")) {
-            result.mShouldRender = try std.json.innerParse(bool, allocator, reader, options);
+            result.mShouldRender = try std.json.innerParse(bool, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mTexOptions.mColor = try std.json.innerParse(Vec4f32, allocator, reader, options);
+            result.mTexOptions.mColor = try std.json.innerParse(Vec4f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
-            result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, allocator, reader, options);
+            result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TexCoords")) {
-            result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, allocator, reader, options);
+            result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Texture")) {
-            const parsed_path = try std.json.innerParse([]const u8, allocator, reader, options);
+            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
 
             try SkipToken(reader); //skip PathType object field
 
-            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, allocator, reader, options);
+            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexture = AssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

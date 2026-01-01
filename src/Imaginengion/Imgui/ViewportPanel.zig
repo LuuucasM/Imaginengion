@@ -4,7 +4,6 @@ const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const Entity = @import("../GameObjects/Entity.zig");
@@ -13,7 +12,6 @@ const EntityTransformComponent = EntityComponents.TransformComponent;
 const EntityCameraComponent = EntityComponents.CameraComponent;
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const StaticInputContext = @import("../Inputs/Input.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -23,6 +21,7 @@ const Mat4f32 = LinAlg.Mat4f32;
 const ProjectionType = @import("../GameObjects/Components.zig").CameraComponent.ProjectionType;
 
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 
 const ViewportPanel = @This();
 
@@ -55,7 +54,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent), engine_context: EngineContext) !void {
     _ = camera_transforms;
 
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
@@ -78,7 +77,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayL
                 .mHeight = @intFromFloat(viewport_size.y),
             },
         };
-        try ImguiEventManager.Insert(new_imgui_event);
+        try engine_context.mImguiEventManager.Insert(new_imgui_event);
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
     }
@@ -92,7 +91,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayL
     //TODO: gizmos to drag around entities in the viewport
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -113,7 +112,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(
                 .mHeight = @intFromFloat(viewport_size.y),
             },
         };
-        try ImguiEventManager.Insert(new_imgui_event);
+        try engine_context.mImguiEventManager.Insert(new_imgui_event);
         self.mPlayWidth = @intFromFloat(viewport_size.x);
         self.mPlayHeight = @intFromFloat(viewport_size.y);
     }

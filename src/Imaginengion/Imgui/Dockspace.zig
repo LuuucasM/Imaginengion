@@ -1,14 +1,13 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const Tracy = @import("../Core/Tracy.zig");
 const PanelOpen = @import("../Programs/EditorProgram.zig").PanelOpen;
 const Dockspace = @This();
 const Application = @import("../Core/Application.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn Begin() void {
     const zone = Tracy.ZoneInit("Dockspace Begin", @src());
@@ -40,7 +39,7 @@ pub fn Begin() void {
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 }
 
-pub fn OnImguiRender(panel_opens: PanelOpen) !void {
+pub fn OnImguiRender(panel_opens: PanelOpen, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("Dockspace OIR", @src());
     defer zone.Deinit();
 
@@ -57,7 +56,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                             .mLayerType = .GameLayer,
                         },
                     };
-                    try ImguiEventManager.Insert(new_event);
+                    try engine_context.mImguiEventManager.Insert(new_event);
                 }
                 if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true) {
                     const new_event = ImguiEvent{
@@ -65,42 +64,42 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                             .mLayerType = .OverlayLayer,
                         },
                     };
-                    try ImguiEventManager.Insert(new_event);
+                    try engine_context.mImguiEventManager.Insert(new_event);
                 }
             }
             if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(ImguiEventManager.GetEventAllocator(), ".imsc");
+                const path = try PlatformUtils.OpenFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
                     .ET_OpenSceneEvent = .{
                         .Path = path,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene", "", false, true) == true) {
                 const new_event = ImguiEvent{
                     .ET_SaveSceneEvent = .{},
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
-                const abs_path = try PlatformUtils.SaveFile(ImguiEventManager.GetEventAllocator(), ".imsc");
+                const abs_path = try PlatformUtils.SaveFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imsc");
                 const new_event = ImguiEvent{
                     .ET_SaveSceneAsEvent = .{
                         .AbsPath = abs_path,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Save Entity", "", false, true)) {
-                try ImguiEventManager.Insert(ImguiEvent{
+                try engine_context.mImguiEventManager.Insert(ImguiEvent{
                     .ET_SaveEntityEvent = .{},
                 });
             }
             if (imgui.igMenuItem_Bool("Save Entity As...", "", false, true)) {
-                const path = try PlatformUtils.SaveFile(ImguiEventManager.GetEventAllocator(), ".imfab");
-                try ImguiEventManager.Insert(ImguiEvent{
+                const path = try PlatformUtils.SaveFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imfab");
+                try engine_context.mImguiEventManager.Insert(ImguiEvent{
                     .ET_SaveEntityAsEvent = .{
                         .Path = path,
                     },
@@ -108,27 +107,27 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFolder(ImguiEventManager.GetEventAllocator());
+                const path = try PlatformUtils.OpenFolder(engine_context.mImguiEventManager.GetEventAllocator());
                 const new_event = ImguiEvent{
                     .ET_NewProjectEvent = .{
                         .Path = path,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(ImguiEventManager.GetEventAllocator(), ".imprj");
+                const path = try PlatformUtils.OpenFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imprj");
                 const new_event = ImguiEvent{
                     .ET_OpenProjectEvent = .{ .Path = path },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 const new_event = SystemEvent{
                     .ET_WindowClose = .{},
                 };
-                try SystemEventManager.Insert(new_event);
+                try engine_context.mSystemEventManager.Insert(new_event);
             }
         }
         if (imgui.igBeginMenu("Window", true) == true) {
@@ -139,7 +138,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .AssetHandles,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mComponentsPanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -147,7 +146,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .Components,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Content Browser", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mContentBrowserPanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -155,7 +154,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .ContentBrowser,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Component/Script Editor", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mCSEditorPanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -163,7 +162,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .CSEditor,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Scene", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mScenePanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -171,7 +170,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .Scene,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Scripts", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mScriptsPanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -179,7 +178,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .Scripts,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Stats", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mStatsPanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -187,7 +186,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .Stats,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), panel_opens.mViewportPanel, true) == true) {
                 const new_event = ImguiEvent{
@@ -195,7 +194,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .Viewport,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
         }
         if (imgui.igBeginMenu("Editor", true) == true) {
@@ -206,7 +205,7 @@ pub fn OnImguiRender(panel_opens: PanelOpen) !void {
                         ._PanelType = .PlayPanel,
                     },
                 };
-                try ImguiEventManager.Insert(new_event);
+                try engine_context.mImguiEventManager.Insert(new_event);
             }
         }
     }

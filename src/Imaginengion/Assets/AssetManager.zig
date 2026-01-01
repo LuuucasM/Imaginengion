@@ -11,6 +11,7 @@ const AssetHandle = @import("AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -72,7 +73,7 @@ pub fn GetAssetHandleRef(self: *AssetManager, rel_path: []const u8, path_type: P
 
     if (entity_id) |id| {
         self.mAssetECS.GetComponent(AssetMetaData, id).?.mRefs += 1;
-        return AssetHandle{ .mID = id };
+        return AssetHandle{ .mID = id, .mAssetManager = self };
     } else {
         const asset_handle = try CreateAsset(rel_path, path_type);
         self.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs += 1;
@@ -282,6 +283,7 @@ fn CreateAsset(self: *AssetManager, rel_path: []const u8, path_type: PathType, e
 
     const new_handle = AssetHandle{
         .mID = try self.mAssetECS.CreateEntity(),
+        .mAssetManager = self,
     };
     _ = try self.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
         .mRefs = 0,

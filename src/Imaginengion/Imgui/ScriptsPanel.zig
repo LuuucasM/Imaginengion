@@ -1,18 +1,15 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const AssetManager = @import("../Assets/AssetManager.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
 const ImguiUtils = @import("ImguiUtils.zig");
-
+const EngineContext = @import("../Core/EngineContext.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const ScriptAsset = Assets.ScriptAsset;
 const Components = @import("../GameObjects/Components.zig");
 const OnUpdateInputScript = Components.OnUpdateInputScript;
-
-const GameEventManager = @import("../Events/GameEventManager.zig");
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
@@ -27,9 +24,11 @@ pub fn Init(self: ScriptsPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: ScriptsPanel, frame_allocator: std.mem.Allocator) !void {
+pub fn OnImguiRender(self: ScriptsPanel, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
     defer zone.Deinit();
+
+    const frame_allocator = engine_context.mFrameAllocator;
 
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Scripts", null, 0);
@@ -68,7 +67,7 @@ pub fn OnImguiRender(self: ScriptsPanel, frame_allocator: std.mem.Allocator) !vo
                         defer imgui.igEndPopup();
 
                         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                            try GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
+                            try engine_context.GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
                         }
                     }
 

@@ -3,7 +3,6 @@ const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
-const AssetManager = @import("../Assets/AssetManager.zig");
 const ImguiManager = @import("Imgui.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const SceneManager = @import("../Scene/SceneManager.zig");
@@ -14,6 +13,7 @@ const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
 const Entity = @import("../GameObjects/Entity.zig");
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const ToolbarPanel = @This();
 
 pub const EditorState = enum(u2) {
@@ -27,9 +27,14 @@ mPlayIcon: AssetHandle = undefined,
 mStopIcon: AssetHandle = undefined,
 mStartEntity: ?Entity = null,
 
-pub fn Init(self: *ToolbarPanel) !void {
-    self.mPlayIcon = try AssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng);
-    self.mStopIcon = try AssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng);
+pub fn Init(self: *ToolbarPanel, engine_context: EngineContext) !void {
+    self.mPlayIcon = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng);
+    self.mStopIcon = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng);
+}
+
+pub fn Deinit(self: *ToolbarPanel) void {
+    self.mPlayIcon.ReleaseAsset();
+    self.mStopIcon.ReleaseAsset();
 }
 
 pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {

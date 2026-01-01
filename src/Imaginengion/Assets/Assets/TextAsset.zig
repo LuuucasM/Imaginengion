@@ -6,7 +6,6 @@ const AssetHandle = @import("../AssetHandle.zig");
 const SparseSet = @import("../../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const Vec4f32 = LinAlg.Vec4f32;
 const Vec2f32 = LinAlg.Vec2f32;
-const AssetManager = @import("../AssetManager.zig");
 const TextAsset = @This();
 
 const KerningsT = std.AutoHashMap(u16, f32);

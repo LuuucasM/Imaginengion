@@ -38,13 +38,12 @@ const SceneTransformComponent = SceneComponents.TransformComponent;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
-const AssetManager = @import("../Assets/AssetManager.zig");
 const Assets = @import("../Assets/Assets.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const FileMetaData = Assets.FileMetaData;
 const SceneManager = @import("SceneManager.zig");
 const SceneType = SceneManager.SceneType;
-const AssetType = AssetManager.AssetType;
+const AssetType = @import("../Assets/AssetManager.zig").AssetType;
 const SceneAsset = Assets.SceneAsset;
 const SceneUtils = @import("../Scene/SceneUtils.zig");
 
