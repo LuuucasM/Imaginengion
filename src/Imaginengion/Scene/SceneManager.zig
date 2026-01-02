@@ -182,7 +182,7 @@ pub fn LoadScene(self: *SceneManager, path: []const u8, engine_context: EngineCo
 
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    const scene_asset_handle = try engine_context.mEngineAllocatorAssetManager.GetAssetHandleRef(path, .Prj);
+    const scene_asset_handle = try engine_context.mAssetManager.GetAssetHandleRef(path, .Prj);
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
@@ -305,16 +305,22 @@ pub fn SaveEntityAs(_: *SceneManager, entity: Entity, abs_path: []const u8, fram
 }
 
 pub fn FilterEntityByScene(self: *SceneManager, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type, list_allocator: std.mem.Allocator) void {
+    const zone = Tracy.ZoneInit("SceneManager::FilterEntityByScene", @src());
+    defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterEntityByScene(entity_result_list, list_allocator);
 }
 
 pub fn FilterEntityScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type, list_allocator: std.mem.Allocator) void {
+    const zone = Tracy.ZoneInit("SceneManager::FilterEntityScriptsByScene", @src());
+    defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterEntityScriptsByScene(scripts_result_list, list_allocator);
 }
 
 pub fn FilterSceneScriptsByScene(self: *SceneManager, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type, list_allocator: std.mem.Allocator) void {
+    const zone = Tracy.ZoneInit("SceneManager::FilterSceneScriptsByScene", @src());
+    defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.FilterSceneScriptsByScene(scripts_result_list, list_allocator);
 }

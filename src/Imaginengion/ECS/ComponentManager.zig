@@ -55,7 +55,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) !void {
             //delete component arrays
             for (self.mComponentsArrays.items) |component_array| {
-                try component_array.Deinit();
+                try component_array.Deinit(engine_allocator);
             }
 
             self.mComponentsArrays.deinit(engine_allocator);

@@ -93,7 +93,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: EngineContext) 
     imgui.igColumns(column_count, 0, false);
     defer imgui.igColumns(1, 0, true);
 
-    try RenderBackButton(self, thumbnail_size, engine_context);
+    try RenderBackButton(self, thumbnail_size, engine_context.mEngineAllocator);
 
     try RenderDirectoryContents(self, thumbnail_size, engine_context);
 }
@@ -120,7 +120,7 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: EngineContext) !v
     }
 }
 
-fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32, engine_context: EngineContext) !void {
+fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32, engine_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
     defer zone.Deinit();
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
@@ -141,7 +141,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, thumbnail_size: f32, engine_cont
 
     if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
         const last_slash = std.mem.lastIndexOf(u8, self.mCurrentPath.items, "/").?;
-        self.mCurrentPath.shrinkAndFree(engine_context.mEngineAllocator, last_slash);
+        self.mCurrentPath.shrinkAndFree(engine_allocator, last_slash);
 
         self.mCurrentDirectory.?.close();
         self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
@@ -271,24 +271,23 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, abs_path: []const u8, engi
     self.mProjectFile = try self.mProjectDirectory.?.openFile("NewGame.imprj", .{});
 }
 
-pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptEvent) !void {
-    var buffer: [260 * 3]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const cwd = try std.fs.cwd().realpathAlloc(fba.allocator(), ".");
+pub fn OnNewScriptEvent(self: *ContentBrowserPanel, new_script_event: NewScriptEvent, engine_context: EngineContext) !void {
+    const frame_allocator = engine_context.mFrameAllocator;
+
     switch (new_script_event.mScriptType) {
         .OnInputPressed => {
-            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnInputPressedTemplate.zig" });
-            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentPath.items, "NewOnInputPressedScript.zig" });
+            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath, "src/Imaginengion/Scripts/GameObject/OnInputPressedTemplate.zig" });
+            const dest_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ self.mCurrentPath.items, "NewOnInputPressedScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
         .OnUpdateInput => {
-            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
-            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentPath.items, "NewOnUpdateInputScript.zig" });
+            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
+            const dest_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ self.mCurrentPath.items, "NewOnUpdateInputScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
         .OnSceneStart => {
-            const source_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ cwd, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
-            const dest_path = try std.fs.path.join(fba.allocator(), &[_][]const u8{ self.mCurrentPath.items, "NewOnSceneStartScript.zig" });
+            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
+            const dest_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ self.mCurrentPath.items, "NewOnSceneStartScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
     }

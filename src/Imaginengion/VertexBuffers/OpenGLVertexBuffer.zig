@@ -9,15 +9,11 @@ mSize: usize,
 mLayout: std.ArrayList(VertexBufferElement) = .{},
 mStride: usize,
 
-_Allocator: std.mem.Allocator,
-
-pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
+pub fn Init(size: usize) OpenGLVertexBuffer {
     var new_vb = OpenGLVertexBuffer{
         .mBufferID = undefined,
         .mSize = size,
         .mStride = 0,
-
-        ._Allocator = allocator,
     };
     glad.glCreateBuffers(1, &new_vb.mBufferID);
     glad.glBindBuffer(glad.GL_ARRAY_BUFFER, new_vb.mBufferID);
@@ -28,8 +24,8 @@ pub fn Init(allocator: std.mem.Allocator, size: usize) OpenGLVertexBuffer {
     return new_vb;
 }
 
-pub fn Deinit(self: *OpenGLVertexBuffer) void {
-    self.mLayout.deinit(self._Allocator);
+pub fn Deinit(self: *OpenGLVertexBuffer, engine_allocator: std.mem.Allocator) void {
+    self.mLayout.deinit(engine_allocator);
     glad.glDeleteBuffers(1, &self.mBufferID);
 }
 
@@ -49,10 +45,10 @@ pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize, offset: 
     }
 }
 
-pub fn SetLayout(self: *OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {
+pub fn SetLayout(self: *OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement), engine_allocator: std.mem.Allocator) !void {
     self.mLayout.clearRetainingCapacity();
-    try self.mLayout.appendSlice(self._Allocator, layout.items);
-    self.mLayout.shrinkAndFree(self._Allocator, layout.items.len);
+    try self.mLayout.appendSlice(engine_allocator, layout.items);
+    self.mLayout.shrinkAndFree(engine_allocator, layout.items.len);
 }
 
 pub fn SetStride(self: *OpenGLVertexBuffer, stride: usize) void {

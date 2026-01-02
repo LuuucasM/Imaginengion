@@ -20,9 +20,8 @@ pub fn ComponentArray(entity_t: type) type {
 
         mPtr: *anyopaque,
         mVtable: *const VTab,
-        mAllocator: std.mem.Allocator,
 
-        pub fn Init(allocator: std.mem.Allocator, comptime component_type: type) !Self {
+        pub fn Init(engine_allocator: std.mem.Allocator, comptime component_type: type) !Self {
             const internal_type = InternalComponentArray(entity_t, component_type);
             const impl = struct {
                 fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) !void {
@@ -64,8 +63,8 @@ pub fn ComponentArray(entity_t: type) type {
                 }
             };
 
-            const new_component_array = try allocator.create(internal_type);
-            new_component_array.* = try internal_type.Init(allocator);
+            const new_component_array = try engine_allocator.create(internal_type);
+            new_component_array.* = try internal_type.Init(engine_allocator);
 
             return Self{
                 .mPtr = new_component_array,
@@ -80,12 +79,11 @@ pub fn ComponentArray(entity_t: type) type {
                     .GetMultiData = impl.GetMultiData,
                     .SetMultiData = impl.SetMultiData,
                 },
-                .mAllocator = allocator,
             };
         }
 
-        pub fn Deinit(self: Self) !void {
-            try self.mVtable.Deinit(self.mPtr, self.mAllocator);
+        pub fn Deinit(self: Self, engine_allocator: std.mem.Allocator) !void {
+            try self.mVtable.Deinit(self.mPtr, engine_allocator);
         }
         pub fn DuplicateEntity(self: Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
             self.mVtable.DuplicateEntity(self.mPtr, original_entity_id, new_entity_id);

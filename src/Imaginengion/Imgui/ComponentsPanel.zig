@@ -125,7 +125,7 @@ fn ComponentRender(comptime component_type: type, entity: Entity, engine_context
     if (entity.HasComponent(component_type)) {
         if (component_type.Category == .Unique) {
             //single unique component so we can just get and display component
-            try PrintComponent(component_type, entity);
+            try PrintComponent(component_type, entity, engine_context);
         } else {
             //it is a multi component so we need to get the parents component and then
             //get first and then we can iterate creating a selectable bool for each one

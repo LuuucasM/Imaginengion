@@ -5,17 +5,25 @@ const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const imgui = @import("../../Core/CImports.zig").imgui;
 
+const EntityComponents = @import("../../GameObjects/Components.zig");
+const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
+const EntityUpdateScript = EntityComponents.OnUpdateScript;
+
+const SceneComponents = @import("../../Scene/SceneComponents.zig");
+const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
+
 pub const ScriptType = enum(u8) {
     //Game object scripts
-    OnInputPressed = 0,
-    OnUpdateInput = 1,
+    EntityInputPressed = 0,
+    EntityUpdateInput = 1,
 
     //Scene Scripts
-    OnSceneStart = 2,
+    SceneSceneStart = 2,
 };
 
 mLib: std.DynLib = undefined,
 mScriptType: ScriptType = undefined,
+mRunFunc: ?*anyopaque = null,
 
 pub fn Init(self: *ScriptAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _: std.fs.File) !void {
 
@@ -46,15 +54,21 @@ pub fn Init(self: *ScriptAsset, asset_allocator: std.mem.Allocator, abs_path: []
     const dyn_path = try std.fmt.allocPrint(asset_allocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
     defer asset_allocator.free(dyn_path);
 
-    var lib = try std.DynLib.open(dyn_path);
-    const GetScriptTypeFunc = lib.lookup(*const fn () ScriptType, "GetScriptType").?;
+    self.mLib = try std.DynLib.open(dyn_path);
 
-    self.mLib = lib;
-    self.mScriptType = GetScriptTypeFunc();
+    const script_type_func = self.mLib.lookup(*const fn () ScriptType, "GetScriptType").?;
+
+    self.mScriptType = script_type_func();
+
+    self.mRunFunc = self.mLib.lookup(EntityInputPressedScript.RunFuncSig, "Run").?;
 }
 
 pub fn Deinit(self: *ScriptAsset) !void {
     self.mLib.close();
+}
+
+pub fn Run(self: *ScriptAsset, args: anytype) bool {
+    return @call(.auto, self.mRunFunc, args);
 }
 
 pub const Ind: usize = blk: {

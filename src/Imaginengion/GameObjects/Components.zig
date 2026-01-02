@@ -14,7 +14,7 @@ pub const TextComponent = @import("Components/TextComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
-pub const OnUpdateInputScript = TagComponents.OnUpdateInputScript;
+pub const OnUpdateScript = TagComponents.OnUpdateScript;
 
 pub const ComponentsList = [_]type{
     AISlotComponent,
@@ -30,12 +30,12 @@ pub const ComponentsList = [_]type{
     TransformComponent,
     ScriptComponent,
     OnInputPressedScript,
-    OnUpdateInputScript,
+    OnUpdateScript,
 };
 
 pub const ScriptList = [_]type{
     OnInputPressedScript,
-    OnUpdateInputScript,
+    OnUpdateScript,
 };
 
 pub const EComponents = enum(u16) {
@@ -52,7 +52,7 @@ pub const EComponents = enum(u16) {
     TransformComponent = TransformComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
     OnInputPressedScript = OnInputPressedScript.Ind,
-    OnUpdateInputScript = OnUpdateInputScript.Ind,
+    OnUpdateScript = OnUpdateScript.Ind,
 };
 
 comptime {

@@ -26,7 +26,7 @@ pub fn Insert(self: *GameEventManager, event: GameEvent, engine_allocator: std.m
     }
 }
 
-pub fn ProcessEvents(self: *GameEventManager, eventCategory: GameEventCategory) !void {
+pub fn ProcessEvents(self: *GameEventManager, eventCategory: GameEventCategory, frame_allocator: std.mem.Allocator) !void {
     const zone = Tracy.ZoneInit("Game ProcessEvents", @src());
     defer zone.Deinit();
     const array = switch (eventCategory) {
@@ -35,7 +35,7 @@ pub fn ProcessEvents(self: *GameEventManager, eventCategory: GameEventCategory) 
     };
 
     for (array.items) |*event| {
-        try self.mProgram.OnGameEvent(event);
+        try self.mProgram.OnGameEvent(event, frame_allocator);
     }
 }
 

@@ -68,10 +68,11 @@ pub fn OnImguiRender(panel_opens: PanelOpen, engine_context: EngineContext) !voi
                 }
             }
             if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imsc");
+                const path = try PlatformUtils.OpenFile(engine_context.mEngineAllocator, ".imsc");
                 const new_event = ImguiEvent{
                     .ET_OpenSceneEvent = .{
-                        .Path = path,
+                        .mAbsPath = path,
+                        .mAllocator = engine_context.mEngineAllocator,
                     },
                 };
                 try engine_context.mImguiEventManager.Insert(new_event);
@@ -83,10 +84,11 @@ pub fn OnImguiRender(panel_opens: PanelOpen, engine_context: EngineContext) !voi
                 try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
-                const abs_path = try PlatformUtils.SaveFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imsc");
+                const abs_path = try PlatformUtils.SaveFile(engine_context.mEngineAllocator, ".imsc");
                 const new_event = ImguiEvent{
                     .ET_SaveSceneAsEvent = .{
-                        .AbsPath = abs_path,
+                        .mAbsPath = abs_path,
+                        .mAllocator = engine_context.mEngineAllocator,
                     },
                 };
                 try engine_context.mImguiEventManager.Insert(new_event);
@@ -98,27 +100,32 @@ pub fn OnImguiRender(panel_opens: PanelOpen, engine_context: EngineContext) !voi
                 });
             }
             if (imgui.igMenuItem_Bool("Save Entity As...", "", false, true)) {
-                const path = try PlatformUtils.SaveFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imfab");
+                const path = try PlatformUtils.SaveFile(engine_context.mEngineAllocator, ".imfab");
                 try engine_context.mImguiEventManager.Insert(ImguiEvent{
                     .ET_SaveEntityAsEvent = .{
-                        .Path = path,
+                        .mAbsPath = path,
+                        .mAllocator = engine_context.mEngineAllocator,
                     },
                 });
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFolder(engine_context.mImguiEventManager.GetEventAllocator());
+                const path = try PlatformUtils.OpenFolder(engine_context.mEngineAllocator);
                 const new_event = ImguiEvent{
                     .ET_NewProjectEvent = .{
-                        .Path = path,
+                        .mAbsPath = path,
+                        .mAllocator = engine_context.mEngineAllocator,
                     },
                 };
                 try engine_context.mImguiEventManager.Insert(new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(engine_context.mImguiEventManager.GetEventAllocator(), ".imprj");
+                const path = try PlatformUtils.OpenFile(engine_context.mEngineAllocator, ".imprj");
                 const new_event = ImguiEvent{
-                    .ET_OpenProjectEvent = .{ .Path = path },
+                    .ET_OpenProjectEvent = .{
+                        .mAbsPath = path,
+                        .mAllocator = engine_context.mEngineAllocator,
+                    },
                 };
                 try engine_context.mImguiEventManager.Insert(new_event);
             }

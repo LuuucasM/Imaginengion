@@ -3,7 +3,6 @@ const std = @import("std");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
-const AssetManager = @import("../Assets/AssetManager.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const CSEditorPanel = @This();

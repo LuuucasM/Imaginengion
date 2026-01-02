@@ -4,14 +4,14 @@ pub const EngineContext = @import("Core/EngineContext.zig");
 
 //Game Object stuff -------------------------------
 pub const Entity = @import("GameObjects/Entity.zig");
-const Components = @import("GameObjects/Components.zig");
-pub const TransformComponent = Components.TransformComponent;
+const EntityComponents = @import("GameObjects/Components.zig");
 
 //Scene Stuff -----------------------------------------
 pub const SceneLayer = @import("Scene/SceneLayer.zig");
 
 //Script Stuff ----------------------------------------------
 pub const ScriptType = @import("Assets/Assets/ScriptAsset.zig").ScriptType;
+pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
 
 //LinAlg stuff
 pub const LinAlg = @import("Math/LinAlg.zig");

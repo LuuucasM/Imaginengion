@@ -1,3 +1,4 @@
+const std = @import("std");
 const LayerType = @import("../Scene/SceneComponents.zig").SceneComponent.LayerType;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
@@ -54,11 +55,13 @@ pub const TogglePanelEvent = struct {
 };
 
 pub const NewProjectEvent = struct {
-    Path: []const u8,
+    mAbsPath: []const u8,
+    mAllocator: std.mem.Allocator,
 };
 
 pub const OpenProjectEvent = struct {
-    Path: []const u8,
+    mAbsPath: []const u8,
+    mAllocator: std.mem.Allocator,
 };
 
 pub const NewSceneEvent = struct {
@@ -68,11 +71,13 @@ pub const NewSceneEvent = struct {
 pub const SaveSceneEvent = struct {};
 
 pub const SaveSceneAsEvent = struct {
-    AbsPath: []const u8,
+    mAbsPath: []const u8,
+    mAllocator: std.mem.Allocator,
 };
 
 pub const OpenSceneEvent = struct {
-    Path: []const u8,
+    mAbsPath: []const u8,
+    mAllocator: std.mem.Allocator,
 };
 
 pub const MoveSceneEvent = struct {
@@ -126,7 +131,8 @@ pub const OpenSceneSpecEvent = struct {
 pub const SaveEntityEvent = struct {};
 
 pub const SaveEntityAsEvent = struct {
-    Path: []const u8,
+    mAbsPath: []const u8,
+    mAllocator: std.mem.Allocator,
 };
 
 pub const DeleteEntityEvent = struct {

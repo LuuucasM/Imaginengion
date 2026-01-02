@@ -1,14 +1,14 @@
 const ComponentsList = @import("../Components.zig").ComponentsList;
 
 const std = @import("std");
-const EngineContext = @import("../../Core/EngineContext.zig").EngineContext;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../GameObjects/Entity.zig");
 const InputPressedEvent = @import("../../Events/SystemEvent.zig").InputPressedEvent;
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //scripts
 pub const OnInputPressedScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *const Entity, *const InputPressedEvent) callconv(.c) bool;
+    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const InputPressedEvent) callconv(.c) bool;
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
@@ -29,24 +29,24 @@ pub const OnInputPressedScript = struct {
     }
 };
 
-pub const OnUpdateInputScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const std.mem.Allocator, *const Entity) callconv(.c) bool;
+pub const OnUpdateScript = struct {
+    pub const RunFuncSig = *const fn (*EngineContext, *const Entity) callconv(.c) bool;
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnUpdateInputScript) !void {}
+    pub fn Deinit(_: *OnUpdateScript) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == OnUpdateInputScript) {
+            if (component_type == OnUpdateScript) {
                 break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
             }
         }
     };
-    pub fn GetName(_: OnUpdateInputScript) []const u8 {
-        return "OnUpdateInputScript";
+    pub fn GetName(_: OnUpdateScript) []const u8 {
+        return "OnUpdateScript";
     }
 
-    pub fn GetInd(_: OnUpdateInputScript) u32 {
+    pub fn GetInd(_: OnUpdateScript) u32 {
         return @intCast(Ind);
     }
 };

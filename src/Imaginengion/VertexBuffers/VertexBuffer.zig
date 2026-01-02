@@ -12,14 +12,14 @@ const VertexBuffer = @This();
 
 mImpl: Impl,
 
-pub fn Init(allocator: std.mem.Allocator, size: usize) VertexBuffer {
+pub fn Init(size: usize) VertexBuffer {
     return VertexBuffer{
-        .mImpl = Impl.Init(allocator, size),
+        .mImpl = Impl.Init(size),
     };
 }
 
-pub fn Deinit(self: *VertexBuffer) void {
-    self.mImpl.Deinit();
+pub fn Deinit(self: *VertexBuffer, engine_allocator: std.mem.Allocator) void {
+    self.mImpl.Deinit(engine_allocator);
 }
 
 pub fn Bind(self: VertexBuffer) void {
@@ -34,8 +34,8 @@ pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize, offset: u32) v
     self.mImpl.SetData(data, size, offset);
 }
 
-pub fn SetLayout(self: *VertexBuffer, layout: std.ArrayList(VertexBufferElement)) !void {
-    try self.mImpl.SetLayout(layout);
+pub fn SetLayout(self: *VertexBuffer, layout: std.ArrayList(VertexBufferElement), engine_allocator: std.mem.Allocator) !void {
+    try self.mImpl.SetLayout(layout, engine_allocator);
 }
 
 pub fn SetStride(self: *VertexBuffer, stride: usize) void {

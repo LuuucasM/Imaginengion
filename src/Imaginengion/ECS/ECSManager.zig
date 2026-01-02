@@ -32,19 +32,19 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             try self.mECSEventManager.Init(engine_allocator);
         }
 
-        pub fn Deinit(self: *Self) !void {
+        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ECSM Deinit", @src());
             defer zone.Deinit();
-            self.mEntityManager.Deinit();
-            try self.mComponentManager.Deinit();
-            self.mECSEventManager.Deinit();
+            self.mEntityManager.Deinit(engine_allocator);
+            try self.mComponentManager.Deinit(engine_allocator);
+            self.mECSEventManager.Deinit(engine_allocator);
         }
 
-        pub fn clearAndFree(self: *Self) void {
+        pub fn clearAndFree(self: *Self, engine_allocator: std.mem.Allocator) void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
-            self.mEntityManager.clearAndFree();
-            self.mComponentManager.clearAndFree();
+            self.mEntityManager.clearAndFree(engine_allocator);
+            self.mComponentManager.clearAndFree(engine_allocator);
         }
 
         //---------------EntityManager--------------

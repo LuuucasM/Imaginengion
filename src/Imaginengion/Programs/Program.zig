@@ -31,8 +31,8 @@ pub fn OnInputPressedEvent(self: *Program, e: InputPressedEvent, frame_allocator
     return self._Impl.OnInputPressedEvent(e, frame_allocator);
 }
 
-pub fn OnImguiEvent(self: *Program, event: *ImguiEvent) !void {
-    try self._Impl.OnImguiEvent(event);
+pub fn OnImguiEvent(self: *Program, event: *ImguiEvent, engine_context: EngineContext) !void {
+    try self._Impl.OnImguiEvent(event, engine_context);
 }
 
 pub fn OnGameEvent(self: *Program, event: *GameEvent) !void {

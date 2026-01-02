@@ -7,7 +7,6 @@ const FrameBuffer = @This();
 
 mPtr: *anyopaque,
 mVTable: *const VTab,
-mAllocator: std.mem.Allocator,
 
 const VTab = struct {
     Deinit: *const fn (*anyopaque, std.mem.Allocator) void,

@@ -21,7 +21,7 @@ mFirst: Entity.Type = Entity.NullEntity,
 mPrev: Entity.Type = Entity.NullEntity,
 mNext: Entity.Type = Entity.NullEntity,
 
-mScriptAssetHandle: AssetHandle = undefined,
+mScriptAssetHandle: AssetHandle = .{},
 
 pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;

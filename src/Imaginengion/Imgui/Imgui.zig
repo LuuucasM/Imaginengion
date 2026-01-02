@@ -9,6 +9,8 @@ const Imgui = @This();
 mWindow: *Window = undefined,
 
 pub fn Init(self: Imgui, window: *Window) !void {
+    const zone = Tracy.ZoneInit("Imgui::Init", @src());
+    defer zone.Deinit();
     self.mWindow = window;
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
@@ -32,6 +34,8 @@ pub fn Init(self: Imgui, window: *Window) !void {
     _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
 }
 pub fn Deinit() void {
+    const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
+    defer zone.Deinit();
     imgui.ImGui_ImplOpenGL3_Shutdown();
     imgui.ImGui_ImplGlfw_Shutdown();
     imgui.igDestroyContext(null);

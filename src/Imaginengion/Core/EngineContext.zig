@@ -43,9 +43,9 @@ pub fn DeInit(self: *EngineContext) !void {
     self.mAssetManager.DeInit(self.mEngineAllocator);
     self.mAudioManager.DeInit();
     self.mGameEventManager.DeInit(self.mEngineAllocator);
-    self.mImguiEventManager.DeInit();
-    self.mSystemEventManager.DeInit();
-    self.mInputManager.DeInit();
+    self.mImguiEventManager.DeInit(self.mEngineAllocator);
+    self.mSystemEventManager.DeInit(self.mEngineAllocator);
+    self.mInputManager.DeInit(self.mEngineAllocator);
     self.mRenderer.DeInit();
 
     _ = self.mEngineGPA.deinit();

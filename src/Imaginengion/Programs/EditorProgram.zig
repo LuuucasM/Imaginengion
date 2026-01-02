@@ -115,10 +115,10 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
 
     try self.mImgui.Init(self.mWindow);
 
-    self._ComponentsPanel.Init(engine_allocator);
-    try self._ContentBrowserPanel.Init(engine_allocator);
+    self._ComponentsPanel.Init();
+    try self._ContentBrowserPanel.Init(engine_context);
     self._CSEditorPanel.Init(engine_allocator);
-    try self._ToolbarPanel.Init();
+    try self._ToolbarPanel.Init(engine_context);
     self._ViewportPanel.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight());
 
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
@@ -144,7 +144,7 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     };
 
     const shader_asset = try engine_context.mRenderer.GetSDFShader();
-    try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout());
+    try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout(), engine_allocator);
     new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
     var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -152,13 +152,13 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
 
     var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
     new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_camera_component.mViewportVertexArray.AddVertexBuffer(new_camera_component.mViewportVertexBuffer);
+    try new_camera_component.mViewportVertexArray.AddVertexBuffer(new_camera_component.mViewportVertexBuffer, engine_allocator);
     new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
 
     new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(CameraComponent, new_camera_component);
 
-    try GameObjectUtils.AddScriptToEntity(self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
+    try GameObjectUtils.AddScriptToEntity(self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng, engine_context);
 
     //setup the full screen editor camera
     var new_camera_component_camera = CameraComponent{
@@ -184,10 +184,10 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     _ = try self.mEditorEditorEntity.AddComponent(CameraComponent, new_camera_component_camera);
 }
 
-pub fn Deinit(self: *EditorProgram) !void {
+pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mGameSceneManager.Deinit();
     try self.mEditorSceneManager.Deinit();
-    self._ContentBrowserPanel.Deinit();
+    self._ContentBrowserPanel.Deinit(engine_context);
     self._CSEditorPanel.Deinit();
     self.mImgui.Deinit();
 }
@@ -217,24 +217,36 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         engine_context.mInputManager.OnUpdate();
         engine_context.mSystemEventManager.ProcessEvents(.EC_Input);
         if (self._ToolbarPanel.mState == .Play) {
-            _ = try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnUpdateInputScript, .{}, self.mFrameAllocator);
+            _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateInputScript, &self.mGameSceneManager, .{});
         }
-        //_ = try ScriptsProcessor.OnUpdateInputEditor(&self._SceneLayer, self._ViewportPanel.mIsFocused);
+        _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnUpdateInputScript, &self.mEditorSceneManager, &self.mGameScene, .{});
 
-        _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, self.mFrameAllocator);
+        //for debugging uncomment this
+        //_ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, self.mFrameAllocator);
 
         //AI Inputs
     }
-
     //---------------Inputs End-------------------
 
     //-------------Physics Begin-----------------
+    {
+        const audio_zone = Tracy.ZoneInit("Physics Section", @src());
+        defer audio_zone.Deinit();
+    }
     //-------------Physics End-------------------
 
     //-------------Game Logic Begin--------------
+    {
+        const audio_zone = Tracy.ZoneInit("Game Logic Section", @src());
+        defer audio_zone.Deinit();
+    }
     //-------------Game Logic End----------------
 
     //-------------Animation Begin--------------
+    {
+        const audio_zone = Tracy.ZoneInit("Animation Section", @src());
+        defer audio_zone.Deinit();
+    }
     //-------------Animation End----------------
 
     //---------Render Begin-------------
@@ -246,22 +258,22 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         Dockspace.Begin();
 
         try self._ContentBrowserPanel.OnImguiRender();
-        try self._AssetHandlePanel.OnImguiRender(self.mFrameAllocator);
+        try self._AssetHandlePanel.OnImguiRender(engine_context);
 
-        try self._ScenePanel.OnImguiRender(&self.mGameSceneManager, self.mFrameAllocator);
+        try self._ScenePanel.OnImguiRender(&self.mGameSceneManager, engine_context);
 
         for (self._SceneSpecList.items) |*scene_spec_panel| {
-            try scene_spec_panel.OnImguiRender(self.mFrameAllocator);
+            try scene_spec_panel.OnImguiRender(engine_context);
         }
         try self._ComponentsPanel.OnImguiRender();
-        try self._ScriptsPanel.OnImguiRender(self.mFrameAllocator);
-        try self._CSEditorPanel.OnImguiRender(self.mFrameAllocator);
+        try self._ScriptsPanel.OnImguiRender(engine_context);
+        try self._CSEditorPanel.OnImguiRender(engine_context.mFrameAllocator);
 
         try self.RenderBuffers(engine_context);
 
         try self._StatsPanel.OnImguiRender(dt, Renderer.GetRenderStats());
 
-        try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, self.mFrameAllocator);
+        try self._ToolbarPanel.OnImguiRender(&self.mGameSceneManager, engine_context.mFrameAllocator);
 
         const opens = PanelOpen{
             .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
@@ -275,9 +287,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
             .mViewportPanel = self._ViewportPanel.mP_OpenViewport,
         };
 
-        try Dockspace.OnImguiRender(opens);
+        try Dockspace.OnImguiRender(opens, engine_context);
 
-        try engine_context.mImguiEventManager.ProcessEvents();
+        try engine_context.mImguiEventManager.ProcessEvents(engine_allocator);
 
         Dockspace.End();
         self.mImgui.End();
@@ -292,6 +304,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
     //--------------Audio End--------------------
 
     //--------------Networking Begin-------------
+    {
+        const audio_zone = Tracy.ZoneInit("Networking Section", @src());
+        defer audio_zone.Deinit();
+    }
     //--------------Networking End---------------
 
     //-----------------Start End of Frame-----------------
@@ -306,10 +322,10 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         try engine_context.mSystemEventManager.ProcessEvents(.EC_Window);
 
         //handle any closed scene spec panels
-        self.CleanSceneSpecs();
+        self.CleanSceneSpecs(engine_context.mEngineAllocator);
 
         //handle deleted objects this frame
-        try engine_context.mGameEventManager.ProcessEvents(.EC_EndOfFrame);
+        try engine_context.mGameEventManager.ProcessEvents(.EC_EndOfFrame, engine_context.mFrameAllocator);
 
         try self.mGameSceneManager.ProcessRemovedObj();
         try self.mEditorSceneManager.ProcessRemovedObj();
@@ -325,7 +341,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
 
 }
 
-pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: EngineContext, engine_allocator: std.mem.Allocator) !void {
+pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: EngineContext) !void {
+    const engine_allocator = engine_context.mEngineAllocator;
     switch (event.*) {
         .ET_TogglePanelEvent => |e| {
             switch (e._PanelType) {
@@ -358,7 +375,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
         },
         .ET_SaveSceneEvent => {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                try self.mGameSceneManager.SaveScene(scene_layer, self.mFrameAllocator);
+                try self.mGameSceneManager.SaveScene(scene_layer, engine_context);
             }
         },
         .ET_SaveSceneAsEvent => |e| {
@@ -368,7 +385,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
                     const rel_path = engine_context.mAssetManager.GetRelPath(e.AbsPath);
                     _ = try std.fs.createFileAbsolute(e.AbsPath, .{});
                     scene_component.mSceneAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(rel_path, .Prj);
-                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.AbsPath, self.mFrameAllocator);
+                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.AbsPath, engine_context.mFrameAllocator);
                 }
             }
         },
@@ -405,32 +422,32 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
 
             //we must also resize the in game cameras to match the viewport since we are not using the play panel
             if (!self._ViewportPanel.mP_OpenPlay) {
-                try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
+                try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, engine_context.mFrameAllocator);
             }
         },
         .ET_PlayPanelResizeEvent => |e| {
             //we dont need to check if play panel is being used or not because if the panel was resized its has to be open i think?
-            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, self.mFrameAllocator);
+            try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, engine_context.mFrameAllocator);
         },
         .ET_NewScriptEvent => |e| {
-            try self._ContentBrowserPanel.OnNewScriptEvent(e);
+            try self._ContentBrowserPanel.OnNewScriptEvent(e, engine_context);
         },
         .ET_ChangeEditorStateEvent => |e| {
-            try self.OnChangeEditorStateEvent(e);
+            try self.OnChangeEditorStateEvent(e, engine_context.mFrameAllocator);
         },
         .ET_OpenSceneSpecEvent => |e| {
             const new_scene_spec_panel = try SceneSpecPanel.Init(e.mSceneLayer);
-            try self._SceneSpecList.append(self._EngineAllocator, new_scene_spec_panel);
+            try self._SceneSpecList.append(engine_context.mEngineAllocator, new_scene_spec_panel);
         },
         .ET_SaveEntityEvent => {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
-                try self.mGameSceneManager.SaveEntity(selected_entity, self.mFrameAllocator);
+                try self.mGameSceneManager.SaveEntity(selected_entity, engine_context.mFrameAllocator);
             }
         },
         .ET_SaveEntityAsEvent => |e| {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
                 if (e.Path.len > 0) {
-                    try self.mGameSceneManager.SaveEntityAs(selected_entity, e.Path, self.mFrameAllocator);
+                    try self.mGameSceneManager.SaveEntityAs(selected_entity, e.Path, engine_context.mFrameAllocator);
                 }
             }
         },
@@ -452,14 +469,14 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
     }
 }
 
-pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
+pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent, frame_allocator: std.mem.Allocator) !void {
     switch (event.*) {
         .ET_DestroyEntityEvent => |e| {
             try self.mGameSceneManager.DestroyEntity(e.mEntity);
         },
         .ET_DestroySceneEvent => |e| {
             const scene = self.mGameSceneManager.GetSceneLayer(e.mSceneID);
-            try self.mGameSceneManager.RemoveScene(scene, self.mFrameAllocator);
+            try self.mGameSceneManager.RemoveScene(scene, frame_allocator);
         },
         .ET_RmEntityCompEvent => |e| {
             try self.mGameSceneManager.RmEntityComp(e.mEntityID, e.mComponentType);
@@ -471,12 +488,12 @@ pub fn OnGameEvent(self: *EditorProgram, event: *GameEvent) !void {
     }
 }
 
-pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent) !void {
+pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEvent, frame_allocator: std.mem.Allocator) !void {
     if (event.mEditorState == .Play) { //the play button was pressed so now we playing
-        try self.mGameSceneManager.SaveAllScenes(self.mFrameAllocator);
-        _ = try ScriptsProcessor.RunSceneScript(&self.mGameSceneManager, OnSceneStartScript, .{}, self.mFrameAllocator);
+        try self.mGameSceneManager.SaveAllScenes(frame_allocator);
+        _ = try ScriptsProcessor.RunSceneScript(frame_allocator, &self.mGameSceneManager, OnSceneStartScript, .{});
     } else { //stop
-        try self.mGameSceneManager.ReloadAllScenes(self.mFrameAllocator);
+        try self.mGameSceneManager.ReloadAllScenes(frame_allocator);
 
         self._ScenePanel.OnSelectEntityEvent(null);
         self._ComponentsPanel.OnSelectEntityEvent(null);
@@ -487,25 +504,27 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
     }
 }
 
-pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, frame_allocator: std.mem.Allocator) !bool {
+pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, engine_context: EngineContext) !bool {
     var cont_bool = true;
     if (self._ToolbarPanel.mState == .Play) {
-        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(&self.mGameSceneManager, OnInputPressedScript, .{&e}, frame_allocator);
+        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(engine_context, OnInputPressedScript, &self.mGameSceneManager, .{&e});
     }
 
     cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
 
-    _ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnInputPressedScript, .{&e}, frame_allocator);
+    _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnInputPressedScript, &self.mEditorSceneManager, &self.mGameScene, .{&e});
+
+    //for quick debugging uncomment
+    //_ = try ScriptsProcessor.RunEntityScript(engine_context, OnInputPressedScript, &self.mGameSceneManager, .{&e});
     return cont_bool;
 }
 
-pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
-    _ = frame_allocator;
+pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize) !bool {
     self.mEditorEditorEntity.GetComponent(CameraComponent).?.SetViewportSize(width, height);
     return true;
 }
 
-fn CleanSceneSpecs(self: *EditorProgram) void {
+fn CleanSceneSpecs(self: *EditorProgram, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("Clean Scene Specs", @src());
     defer zone.Deinit();
     var end_index: usize = self._SceneSpecList.items.len;
@@ -519,7 +538,7 @@ fn CleanSceneSpecs(self: *EditorProgram) void {
             i += 1;
         }
     }
-    self._SceneSpecList.shrinkAndFree(self._EngineAllocator, end_index);
+    self._SceneSpecList.shrinkAndFree(engine_allocator, end_index);
 }
 
 fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {

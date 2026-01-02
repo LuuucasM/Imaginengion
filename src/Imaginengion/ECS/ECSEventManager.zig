@@ -19,21 +19,18 @@ pub fn ECSEventManager(entity_t: type) type {
         };
 
         mRemoveObj: std.ArrayList(ECSEvent) = .{},
-        mECSAllocator: std.mem.Allocator = undefined,
 
-        pub fn Init(self: *Self, ecs_allocator: std.mem.Allocator) !void {
-            self.mECSAllocator = ecs_allocator;
+        pub fn Init(_: *Self) !void {}
+
+        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
+            self.mRemoveObj.deinit(engine_allocator);
         }
 
-        pub fn Deinit(self: *Self) void {
-            self.mRemoveObj.deinit(self.mECSAllocator);
-        }
-
-        pub fn Insert(self: *Self, event: ECSEvent) !void {
+        pub fn Insert(self: *Self, event: ECSEvent, engine_allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ECS Insert Events", @src());
             defer zone.Deinit();
             switch (event.GetEventCategory()) {
-                .EC_RemoveObj => try self.mRemoveObj.append(self.mECSAllocator, event),
+                .EC_RemoveObj => try self.mRemoveObj.append(engine_allocator, event),
                 else => @panic("Default Events are not allowed!\n"),
             }
         }
@@ -49,9 +46,9 @@ pub fn ECSEventManager(entity_t: type) type {
             };
         }
 
-        pub fn ClearEvents(self: *Self, event_category: ECSEventCategory) void {
+        pub fn ClearEvents(self: *Self, event_category: ECSEventCategory, engine_allocator: std.mem.Allocator) void {
             switch (event_category) {
-                .EC_RemoveObj => self.mRemoveObj.clearAndFree(self.mECSAllocator),
+                .EC_RemoveObj => self.mRemoveObj.clearAndFree(engine_allocator),
                 else => @panic("default event is not allowed\n"),
             }
         }
