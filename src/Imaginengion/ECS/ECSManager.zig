@@ -6,6 +6,7 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 const Tracy = @import("../Core/Tracy.zig");
 const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const ComponentCategory = enum {
     Unique,
@@ -29,7 +30,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
             self.mEntityManager.Init(engine_allocator);
             try self.mComponentManager.Init(engine_allocator);
-            try self.mECSEventManager.Init(engine_allocator);
+            try self.mECSEventManager.Init();
         }
 
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) !void {
@@ -40,11 +41,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mECSEventManager.Deinit(engine_allocator);
         }
 
-        pub fn clearAndFree(self: *Self, engine_allocator: std.mem.Allocator) void {
+        pub fn clearAndFree(self: *Self, engine_context: EngineContext) void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
-            self.mEntityManager.clearAndFree(engine_allocator);
-            self.mComponentManager.clearAndFree(engine_allocator);
+            self.mEntityManager.clearAndFree(engine_context.mEngineAllocator);
+            self.mComponentManager.clearAndFree(engine_context);
         }
 
         //---------------EntityManager--------------
@@ -56,11 +57,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return entityID;
         }
 
-        pub fn DestroyEntity(self: *Self, entity_id: entity_t) !void {
+        pub fn DestroyEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM DestroyEntity", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(.{ .ET_DestroyEntity = .{ .mEntityID = entity_id } });
+            try self.mECSEventManager.Insert(engine_allocator, .{ .ET_DestroyEntity = .{ .mEntityID = entity_id } });
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
@@ -227,13 +228,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return self.mComponentManager.GetComponent(component_type, entity_id);
         }
 
-        pub fn ProcessEvents(self: *Self, event_category: ECSEventCategory) !void {
+        pub fn ProcessEvents(self: *Self, engine_allocator: std.mem.Allocator, event_category: ECSEventCategory) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
             var iter = self.mECSEventManager.GetEventsIteartor(event_category);
             while (iter.Next()) |event| {
                 switch (event) {
-                    .ET_DestroyEntity => |e| try self._InternalDestroyEntity(e.mEntityID),
+                    .ET_DestroyEntity => |e| try self._InternalDestroyEntity(engine_allocator, e.mEntityID),
                     .ET_CleanMultiEntity => |e| try self._InternalDestroyMultiEntity(e.mEntityID),
                     .ET_RemoveComponent => |e| try self._InternalRemoveComponent(e.mEntityID, e.mComponentInd),
                     else => {
@@ -288,13 +289,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             }
         }
 
-        fn _InternalDestroyEntity(self: *Self, entity_id: entity_t) !void {
+        fn _InternalDestroyEntity(self: *Self, engine_context: EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
             defer zone.Deinit();
             try self._InternalRemoveFromHierarchy(entity_id);
             try self.mEntityManager.DestroyEntity(entity_id);
-            try self.mComponentManager.DestroyEntity(entity_id, &self.mECSEventManager);
+            try self.mComponentManager.DestroyEntity(engine_context, entity_id, &self.mECSEventManager);
         }
 
         fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {

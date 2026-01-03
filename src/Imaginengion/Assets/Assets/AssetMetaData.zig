@@ -2,10 +2,11 @@ const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const AssetMetaData = @This();
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 mRefs: usize = 0,
 
-pub fn Deinit(_: *AssetMetaData) !void {}
+pub fn Deinit(_: *AssetMetaData, _: EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

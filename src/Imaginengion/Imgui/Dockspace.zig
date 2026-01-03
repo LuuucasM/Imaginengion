@@ -39,7 +39,7 @@ pub fn Begin() void {
     _ = imgui.igDockSpace(dockspace_id, .{ .x = 0, .y = 0 }, dockspace_flags, @ptrCast(@alignCast(my_null_ptr)));
 }
 
-pub fn OnImguiRender(panel_opens: PanelOpen, engine_context: EngineContext) !void {
+pub fn OnImguiRender(engine_context: *EngineContext, panel_opens: PanelOpen) !void {
     const zone = Tracy.ZoneInit("Dockspace OIR", @src());
     defer zone.Deinit();
 

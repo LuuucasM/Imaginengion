@@ -21,4 +21,7 @@ pub export fn GetScriptType() callconv(.c) ScriptType {
     return ScriptType.OnUpdateInput;
 }
 
+//This function helps validate that the script provided by the user
+//will not break anything when trying to use
+//It is intended to fail fast before it can even compile
 const _ValidateScript = @import("IM")._ValidateScript;

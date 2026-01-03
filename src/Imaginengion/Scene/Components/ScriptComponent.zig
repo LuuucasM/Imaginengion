@@ -62,7 +62,7 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
+pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
     const frame_allocator = engine_context.mFrameAllocator;
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 

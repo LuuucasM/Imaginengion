@@ -44,7 +44,7 @@ pub fn ReadFrames(self: *AudioComponent, frames_out: []f32, frame_count: u64) !u
     return audio_asset.ReadFrames(frames_out, frame_count, *self.mCursor, self.mLoop);
 }
 
-pub fn Deinit(self: *AudioComponent) !void {
+pub fn Deinit(self: *AudioComponent, _: EngineContext) !void {
     self.mAudioAsset.ReleaseAsset();
 }
 
@@ -64,7 +64,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn EditorRender(self: *AudioComponent, engine_context: EngineContext) !void {
+pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.mFrameAllocator;
 
     // Volume drag
@@ -118,7 +118,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: EngineContext) !void 
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(path, .Prj);
+            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, path, .Prj);
         }
         imgui.igEndDragDropTarget();
     }

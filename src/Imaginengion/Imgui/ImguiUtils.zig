@@ -11,7 +11,7 @@ pub fn AllScriptPopupMenu() !void {
     }
 }
 
-pub fn EntityScriptPopupMenu(engine_context: EngineContext) !void {
+pub fn EntityScriptPopupMenu(engine_context: *EngineContext) !void {
     if (imgui.igBeginMenu("New Game Object Script", true) == true) {
         defer imgui.igEndMenu();
         if (imgui.igMenuItem_Bool("On Key Pressed Script", "", false, true) == true) {
@@ -33,7 +33,7 @@ pub fn EntityScriptPopupMenu(engine_context: EngineContext) !void {
     }
 }
 
-pub fn SceneScriptPopupMenu(engine_context: EngineContext) !void {
+pub fn SceneScriptPopupMenu(engine_context: *EngineContext) !void {
     if (imgui.igBeginMenu("New Scene Script", true) == true) {
         defer imgui.igEndMenu();
         if (imgui.igMenuItem_Bool("On Scene Start Script", "", false, true) == true) {

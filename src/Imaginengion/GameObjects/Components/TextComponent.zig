@@ -43,14 +43,14 @@ mTexOptions: Texture2D.TexOptions = .{},
 mFontSize: f32 = 9,
 mBounds: Vec2f32 = Vec2f32{ 8, 8 },
 
-pub fn Deinit(self: *TextComponent) !void {
+pub fn Deinit(self: *TextComponent, engine_context: EngineContext) !void {
     self.mTextAssetHandle.ReleaseAsset();
     self.mAtlasHandle.ReleaseAsset();
     self.mTexHandle.ReleaseAsset();
-    self.mText.deinit(self.mAllocator);
+    self.mText.deinit(engine_context.mEngineAllocator);
 }
 
-pub fn EditorRender(self: *TextComponent, engine_context: EngineContext) !void {
+pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.mFrameAllocator;
     //text box
     const text = try frame_allocator.dupeZ(u8, self.mText.items);
@@ -127,7 +127,7 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TextComponent {
+pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TextComponent {
     const frame_allocator = engine_context.mFrameAllocator;
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
@@ -149,7 +149,7 @@ pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.js
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -160,7 +160,7 @@ pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.js
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mAtlasHandle = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mAtlasHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -171,7 +171,7 @@ pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.js
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexHandle = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mTexHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

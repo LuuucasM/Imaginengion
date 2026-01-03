@@ -61,7 +61,7 @@ pub fn Deinit(self: *AssetManager, engine_allocator: std.mem.Allocator) !void {
     self.mProjectPath.deinit(engine_allocator);
 }
 
-pub fn GetAssetHandleRef(self: *AssetManager, rel_path: []const u8, path_type: PathType) !AssetHandle {
+pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !AssetHandle {
     std.debug.assert(rel_path.len != 0);
 
     const path_hash = ComputePathHash(rel_path);
@@ -75,7 +75,7 @@ pub fn GetAssetHandleRef(self: *AssetManager, rel_path: []const u8, path_type: P
         self.mAssetECS.GetComponent(AssetMetaData, id).?.mRefs += 1;
         return AssetHandle{ .mID = id, .mAssetManager = self };
     } else {
-        const asset_handle = try CreateAsset(rel_path, path_type);
+        const asset_handle = try self.CreateAsset(engine_allocator, rel_path, path_type);
         self.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs += 1;
         _ = try switch (path_type) {
             .Eng => self.mPathToIDEng.put(path_hash, asset_handle.mID),
@@ -90,49 +90,47 @@ pub fn ReleaseAssetHandleRef(self: *AssetManager, asset_handle: *AssetHandle) vo
     asset_handle.mID = AssetHandle.NullHandle;
 }
 
-pub fn GetAsset(self: *AssetManager, asset_id: AssetType, comptime asset_type: type, engine_allocator: std.mem.Allocator) !*asset_type {
+pub fn GetAsset(self: *AssetManager, engine_context: EngineContext, comptime asset_type: type, asset_id: AssetType) !*asset_type {
     const zone = Tracy.ZoneInit("AssetManager::GetAsset", @src());
     defer zone.Deinit();
 
-    //checking the asset type will be evaluated at comptime which will determine which branch
-    //the function body will contain so it doesnt get processed in runtime
-    //and it is needed because the "meta" asset types dont have an Init(because they are not being)
-    //loaded from disk just meta data) so this lets it compile correct
+    std.debug.assert(self.mAssetECS.HasComponent(FileMetaData, asset_id));
+    std.debug.assert(self.mAssetECS.HasComponent(AssetMetaData, asset_id));
 
-    if (asset_type == FileMetaData or asset_type == AssetMetaData) {
-        return self.mAssetECS.GetComponent(asset_type, asset_id).?;
+    if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
+        return asset;
     } else {
-        if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
-            return asset;
-        } else {
-            const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
+        const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
+        std.debug.assert(file_data.mRelPath.items.len > 0);
 
-            var buffer: [260 * 2]u8 = undefined;
-            var fba = std.heap.FixedBufferAllocator.init(&buffer);
-            const fba_allocator = fba.allocator();
+        var buffer: [260 * 2]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const fba_allocator = fba.allocator();
 
-            const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, fba_allocator);
+        const abs_path = try GetAbsPath(file_data.mRelPath.items, file_data.mPathType, fba_allocator);
 
-            const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
-            defer CloseFile(asset_file);
+        const asset_file = try OpenFile(file_data.mRelPath.items, file_data.mPathType);
+        defer CloseFile(asset_file);
 
-            const asset_component = try self.mAssetECS.AddComponent(asset_type, asset_id, null);
-            try asset_component.Init(engine_allocator, abs_path, file_data.mRelPath.items, asset_file);
+        const asset_component = try self.mAssetECS.AddComponent(asset_type, asset_id, null);
+        try asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file);
 
-            return asset_component;
-        }
+        return asset_component;
     }
 }
 
-pub fn OnUpdate(self: *AssetManager, frame_allocator: std.mem.Allocator) !void {
+pub fn OnUpdate(self: *AssetManager, engine_context: EngineContext) !void {
     const zone = Tracy.ZoneInit("AssetManager OnUpdate", @src());
     defer zone.Deinit();
+
+    const engine_allocator = engine_context.mEngineAllocator;
+    const frame_allocator = engine_context.mFrameAllocator;
 
     const group = try self.mAssetECS.GetGroup(GroupQuery{ .Component = FileMetaData }, frame_allocator);
     for (group.items) |entity_id| {
         const file_data = self.mAssetECS.GetComponent(FileMetaData, entity_id).?;
         if (file_data.mSize == 0) {
-            try CheckAssetForDeletion(entity_id);
+            try CheckAssetForDeletion(engine_allocator, entity_id);
             continue;
         }
         //then check if the asset path is still valid
@@ -151,7 +149,7 @@ pub fn GetGroup(self: AssetManager, comptime query: GroupQuery, frame_allocator:
     return try self.mAssetECS.GetGroup(query, frame_allocator);
 }
 
-pub fn OnNewProjectEvent(self: *AssetManager, abs_path: []const u8, engine_allocator: std.mem.Allocator) !void {
+pub fn OnNewProjectEvent(self: *AssetManager, engine_allocator: std.mem.Allocator, abs_path: []const u8) !void {
     if (self.mProjectDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
@@ -164,7 +162,7 @@ pub fn OnNewProjectEvent(self: *AssetManager, abs_path: []const u8, engine_alloc
     _ = try self.mProjectPath.writer(engine_allocator).write(abs_path);
 }
 
-pub fn OnOpenProjectEvent(self: *AssetManager, abs_path: []const u8, engine_allocator: std.mem.Allocator) !void {
+pub fn OnOpenProjectEvent(self: *AssetManager, engine_allocator: std.mem.Allocator, abs_path: []const u8) !void {
     if (self.mProjectDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
@@ -277,7 +275,7 @@ fn ComputePathHash(path: []const u8) u64 {
     return hasher.final();
 }
 
-fn CreateAsset(self: *AssetManager, rel_path: []const u8, path_type: PathType, engine_allocator: std.mem.Allocator) !AssetHandle {
+fn CreateAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !AssetHandle {
     const zone = Tracy.ZoneInit("AssetManager CreateAsset", @src());
     defer zone.Deinit();
 
@@ -293,22 +291,20 @@ fn CreateAsset(self: *AssetManager, rel_path: []const u8, path_type: PathType, e
         .mSize = 0,
         .mHash = 0,
         .mPathType = path_type,
-
-        ._PathAllocator = engine_allocator,
     });
 
-    _ = try file_meta_data.mRelPath.writer(file_meta_data._PathAllocator).write(rel_path);
+    _ = try file_meta_data.mRelPath.writer(engine_allocator).write(rel_path);
 
-    const file = try OpenFile(rel_path, path_type);
+    const file = try self.OpenFile(rel_path, path_type);
     defer CloseFile(file);
     const fstats = try file.stat();
 
-    try UpdateAsset(new_handle.mID, file, fstats);
+    try self.UpdateAsset(new_handle.mID, file, fstats);
 
     return new_handle;
 }
 
-fn DeleteAsset(self: *AssetManager, asset_id: AssetType) !void {
+fn DeleteAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_id: AssetType) !void {
     const zone = Tracy.ZoneInit("AssetManager DeleteAsset", @src());
     defer zone.Deinit();
 
@@ -321,7 +317,7 @@ fn DeleteAsset(self: *AssetManager, asset_id: AssetType) !void {
         .Prj => self.mPathToIDPrj.remove(path_hash),
     };
 
-    try self.mAssetECS.DestroyEntity(asset_id);
+    try self.mAssetECS.DestroyEntity(engine_allocator, asset_id);
 }
 
 fn MarkAssetToDelete(self: *AssetManager, asset_id: AssetType) void {
@@ -351,17 +347,17 @@ fn UpdateAsset(self: *AssetManager, asset_id: AssetType, file: std.fs.File, fsta
     file_data.mSize = fstats.size;
 }
 
-fn CheckAssetForDeletion(self: *AssetManager, asset_id: AssetType) !void {
+fn CheckAssetForDeletion(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_id: AssetType) !void {
     const zone = Tracy.ZoneInit("AssetManager CheckAssetForDelete", @src());
     defer zone.Deinit();
 
     //check to see if we can recover the asset
     if (try RetryAssetExists(asset_id)) return;
 
-    //if its run out of time then just delete
+    //if we cannot recover it automatically then delete it from AssetManager
     const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
     if (std.time.nanoTimestamp() - file_data.mLastModified > ASSET_DELETE_TIMEOUT_NS) {
-        try DeleteAsset(asset_id);
+        try DeleteAsset(engine_allocator, asset_id);
     }
 }
 

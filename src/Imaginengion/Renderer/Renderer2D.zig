@@ -88,7 +88,7 @@ pub fn Init(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
     self.mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint));
 }
 
-pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
+pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mQuadBuffer.Deinit();
     self.mQuadBufferBase.deinit(engine_allocator);
     self.mQuadCountUB.Deinit();

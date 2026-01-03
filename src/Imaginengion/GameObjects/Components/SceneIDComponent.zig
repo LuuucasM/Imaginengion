@@ -2,13 +2,14 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const IDComponent = @This();
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = false;
 
 SceneID: u128 = std.math.maxInt(u128),
 
-pub fn Deinit(_: *IDComponent) !void {}
+pub fn Deinit(_: *IDComponent, _: EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

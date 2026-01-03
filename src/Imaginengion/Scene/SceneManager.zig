@@ -176,13 +176,13 @@ pub fn RemoveScene(self: *SceneManager, destroy_scene: SceneLayer, frame_allocat
     try self.mECSManagerSC.DestroyEntity(destroy_scene.mSceneID);
 }
 
-pub fn LoadScene(self: *SceneManager, path: []const u8, engine_context: EngineContext) !SceneLayer.Type {
+pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, path: []const u8) !SceneLayer.Type {
     const frame_allocator = engine_context.mFrameAllocator;
     const engine_allocator = engine_context.mEngineAllocator;
 
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    const scene_asset_handle = try engine_context.mAssetManager.GetAssetHandleRef(path, .Prj);
+    const scene_asset_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, path, .Prj);
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
@@ -198,13 +198,14 @@ pub fn LoadScene(self: *SceneManager, path: []const u8, engine_context: EngineCo
     return new_scene_id;
 }
 
-pub fn SaveAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) !void {
+pub fn SaveAllScenes(self: *SceneManager, engine_context: EngineContext) !void {
+    const frame_allocator = engine_context.mFrameAllocatorl;
     const all_scenes = try self.mECSManagerSC.GetGroup(GroupQuery{ .Component = SceneStackPos }, frame_allocator);
 
     for (all_scenes.items) |scene_id| {
         const scene = self.GetSceneLayer(scene_id);
 
-        try self.SaveScene(scene, frame_allocator);
+        try self.SaveScene(engine_context, scene);
     }
 }
 
@@ -220,7 +221,7 @@ pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) 
         try SceneSerializer.SceneReloadText(scene, scene_component.mSceneAssetHandle, frame_allocator, self.mEngineAllocator);
     }
 }
-pub fn SaveScene(self: *SceneManager, scene_layer: SceneLayer, engine_context: EngineContext) !void {
+pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const frame_allocator = engine_context.mFrameAllocator;
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {

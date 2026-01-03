@@ -2,6 +2,7 @@ const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const FileMetaData = @This();
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const PathType = enum(u2) {
     Eng = 0,
@@ -14,10 +15,8 @@ mSize: u64 = 0,
 mHash: u64 = 0,
 mPathType: PathType = .Eng,
 
-_PathAllocator: std.mem.Allocator = undefined,
-
-pub fn Deinit(self: *FileMetaData) !void {
-    self.mRelPath.deinit(self._PathAllocator);
+pub fn Deinit(self: *FileMetaData, engine_context: EngineContext) !void {
+    self.mRelPath.deinit(engine_context.mEngineAllocator);
 }
 
 pub const Ind: usize = blk: {

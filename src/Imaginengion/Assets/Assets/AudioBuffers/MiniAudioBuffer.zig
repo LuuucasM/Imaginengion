@@ -11,9 +11,7 @@ mAudioConfig: ma.ma_audio_buffer_config = undefined,
 mPcmFrames: ?*anyopaque = null,
 mFrameCount: u64 = 0,
 
-pub fn Init(self: *MiniAudioBuffer, asset_allocator: std.mem.Allocator, asset_file: std.fs.File) !void {
-    _ = asset_allocator;
-
+pub fn Init(self: *MiniAudioBuffer, asset_file: std.fs.File) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();

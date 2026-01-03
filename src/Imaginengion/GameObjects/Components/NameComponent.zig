@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const NameComponent = @This();
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -14,7 +15,7 @@ pub const Editable: bool = true;
 mAllocator: std.mem.Allocator = undefined,
 mName: std.ArrayList(u8) = .{},
 
-pub fn Deinit(self: *NameComponent) !void {
+pub fn Deinit(self: *NameComponent, _: EngineContext) !void {
     self.mName.deinit(self.mAllocator);
 }
 

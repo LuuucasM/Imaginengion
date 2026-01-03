@@ -9,7 +9,7 @@ const GameEventManager = @This();
 mEndOfFramePool: std.ArrayList(GameEvent) = .{},
 mProgram: *Program = undefined,
 
-pub fn Init(self: *GameEventManager, program: *Program) !void {
+pub fn Init(self: *GameEventManager, program: *Program) void {
     self.mProgram = program;
 }
 
@@ -17,7 +17,7 @@ pub fn Deinit(self: *GameEventManager, engine_allocator: std.mem.Allocator) void
     self.mEndOfFramePool.deinit(engine_allocator);
 }
 
-pub fn Insert(self: *GameEventManager, event: GameEvent, engine_allocator: std.mem.Allocator) !void {
+pub fn Insert(self: *GameEventManager, engine_allocator: std.mem.Allocator, event: GameEvent) !void {
     const zone = Tracy.ZoneInit("Game Insert Events", @src());
     defer zone.Deinit();
     switch (event.GetEventCategory()) {

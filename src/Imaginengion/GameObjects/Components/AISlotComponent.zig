@@ -2,11 +2,12 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const AISlotComponent = @This();
 
 mAIEntity: Entity.Type = Entity.NullEntity,
 
-pub fn Deinit(_: *AISlotComponent) !void {}
+pub fn Deinit(_: *AISlotComponent, _: EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

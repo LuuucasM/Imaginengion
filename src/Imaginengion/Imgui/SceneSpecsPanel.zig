@@ -26,7 +26,7 @@ pub fn Init(scene_layer: SceneLayer) !SceneSpecsPanel {
     };
 }
 
-pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: EngineContext) !void {
+pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Scene Specs Panel OIR", @src());
     defer zone.Deinit();
 

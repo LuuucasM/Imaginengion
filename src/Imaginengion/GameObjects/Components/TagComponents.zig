@@ -12,7 +12,7 @@ pub const OnInputPressedScript = struct {
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnInputPressedScript) !void {}
+    pub fn Deinit(_: *OnInputPressedScript, _: EngineContext) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnInputPressedScript) {
@@ -34,7 +34,7 @@ pub const OnUpdateScript = struct {
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnUpdateScript) !void {}
+    pub fn Deinit(_: *OnUpdateScript, _: EngineContext) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnUpdateScript) {

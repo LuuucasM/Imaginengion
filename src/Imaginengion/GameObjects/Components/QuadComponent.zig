@@ -23,7 +23,7 @@ mTexture: AssetHandle = undefined,
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 
-pub fn Deinit(self: *QuadComponent) !void {
+pub fn Deinit(self: *QuadComponent, _: EngineContext) !void {
     self.mTexture.ReleaseAsset();
 }
 
@@ -45,7 +45,7 @@ pub fn GetInd(self: QuadComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *QuadComponent, engine_context: EngineContext) !void {
+pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
 
     imgui.igSeparator();
@@ -75,7 +75,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: EngineContext) !void {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mTexture);
-            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(path, .Prj);
+            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, path, .Prj);
         }
     }
     try self.EditTexCoords(texture_asset);
@@ -183,7 +183,7 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
+pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
     const frame_allocator = engine_context.mFrameAllocator;
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
@@ -213,7 +213,7 @@ pub fn jsonParse(engine_context: EngineContext, reader: anytype, options: std.js
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, parsed_path_type) catch |err| {
+            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

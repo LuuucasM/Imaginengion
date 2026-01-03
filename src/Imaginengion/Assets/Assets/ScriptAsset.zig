@@ -11,6 +11,7 @@ const EntityUpdateScript = EntityComponents.OnUpdateScript;
 
 const SceneComponents = @import("../../Scene/SceneComponents.zig");
 const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const ScriptType = enum(u8) {
     //Game object scripts
@@ -25,11 +26,10 @@ mLib: std.DynLib = undefined,
 mScriptType: ScriptType = undefined,
 mRunFunc: ?*anyopaque = null,
 
-pub fn Init(self: *ScriptAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, _: []const u8, _: std.fs.File) !void {
+pub fn Init(self: *ScriptAsset, engine_context: EngineContext, abs_path: []const u8, _: []const u8, _: std.fs.File) !void {
 
     //spawn a child to handle compiling the zig file into a dll
-    const file_arg = try std.fmt.allocPrint(asset_allocator, "-Dscript_abs_path={s}", .{abs_path});
-    defer asset_allocator.free(file_arg);
+    const file_arg = try std.fmt.allocPrint(engine_context.mFrameAllocator, "-Dscript_abs_path={s}", .{abs_path});
     //defer allocator.free(file_arg);
 
     var child = std.process.Child.init(
@@ -40,7 +40,7 @@ pub fn Init(self: *ScriptAsset, asset_allocator: std.mem.Allocator, abs_path: []
             "build_dyn.zig",
             file_arg,
         },
-        asset_allocator,
+        engine_context.mFrameAllocator,
     );
     child.stdin_behavior = .Inherit;
     child.stdout_behavior = .Inherit;
@@ -50,9 +50,10 @@ pub fn Init(self: *ScriptAsset, asset_allocator: std.mem.Allocator, abs_path: []
     const result = try child.wait();
     std.log.debug("child [{s}] exited with code {}\n", .{ abs_path, result });
 
+    if (result != 0) return error.ScriptCompileError;
+
     //get the path of the newly create dyn lib and open it
-    const dyn_path = try std.fmt.allocPrint(asset_allocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
-    defer asset_allocator.free(dyn_path);
+    const dyn_path = try std.fmt.allocPrint(engine_context.mFrameAllocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
 
     self.mLib = try std.DynLib.open(dyn_path);
 

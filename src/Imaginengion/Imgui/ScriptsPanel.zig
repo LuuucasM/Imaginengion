@@ -24,7 +24,7 @@ pub fn Init(self: ScriptsPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: ScriptsPanel, engine_context: EngineContext) !void {
+pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
     defer zone.Deinit();
 

@@ -8,6 +8,7 @@ const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const Entity = @import("../Entity.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 const CameraComponent = @This();
 
@@ -46,10 +47,10 @@ mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 mAreaRect: Vec4f32 = Vec4f32{ 0.0, 0.0, 1.0, 1.0 },
 
-pub fn Deinit(self: *CameraComponent) !void {
+pub fn Deinit(self: *CameraComponent, engine_context: EngineContext) !void {
     self.mViewportFrameBuffer.Deinit();
-    self.mViewportVertexArray.Deinit();
-    self.mViewportVertexBuffer.Deinit();
+    self.mViewportVertexArray.Deinit(engine_context.mEngineAllocator);
+    self.mViewportVertexBuffer.Deinit(engine_context.mEngineAllocator);
     self.mViewportIndexBuffer.Deinit();
 }
 

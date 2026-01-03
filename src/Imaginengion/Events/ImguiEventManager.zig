@@ -8,7 +8,7 @@ const ImguiEventManager = @This();
 mEventPool: std.ArrayList(ImguiEvent) = .{},
 mProgram: *Program = undefined,
 
-pub fn Init(self: *ImguiEventManager, program: *Program) !void {
+pub fn Init(self: *ImguiEventManager, program: *Program) void {
     self.mProgram = program;
 }
 
@@ -20,7 +20,7 @@ pub fn Insert(self: *ImguiEventManager, event: ImguiEvent, engine_allocator: std
     try self.mEventPool.append(engine_allocator, event);
 }
 
-pub fn ProcessEvents(self: *ImguiEventManager, engine_context: EngineContext) !void {
+pub fn ProcessEvents(self: *ImguiEventManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("ImguiEventManager ProcessEvents", @src());
     defer zone.Deinit();
     const engine_allocator = engine_context.mEngineAllocator;

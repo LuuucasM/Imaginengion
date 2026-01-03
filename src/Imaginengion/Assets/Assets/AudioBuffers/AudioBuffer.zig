@@ -9,8 +9,8 @@ const Impl = switch (builtin.os.tag) {
 
 mImpl: Impl = .{},
 
-pub fn Init(self: *AudioBuffer, allocator: std.mem.Allocator, asset_file: std.fs.File) !void {
-    try self.mImpl.Init(allocator, asset_file);
+pub fn Init(self: *AudioBuffer, asset_file: std.fs.File) !void {
+    try self.mImpl.Init(asset_file);
 }
 
 pub fn Deinit(self: *AudioBuffer) !void {

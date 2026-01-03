@@ -90,7 +90,7 @@ pub fn CreateEntityWithUUID(self: SceneLayer, uuid: u64) !Entity {
     return e;
 }
 
-pub fn Delete(self: SceneLayer, engine_context: EngineContext) !void {
+pub fn Delete(self: SceneLayer, engine_context: *EngineContext) !void {
     try engine_context.mGameEventManager.Insert(.{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
     try engine_context.mImguiEventManager.Insert(.{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }

@@ -10,7 +10,7 @@ _InputEventPool: std.ArrayList(SystemEvent) = .{},
 _WindowEventPool: std.ArrayList(SystemEvent) = .{},
 _Application: *Application = undefined,
 
-pub fn Init(self: *SystemEventManager, application: *Application) !void {
+pub fn Init(self: *SystemEventManager, application: *Application) void {
     self._Application = application;
 }
 
@@ -19,7 +19,7 @@ pub fn Deinit(self: *SystemEventManager, engine_allocator: std.mem.Allocator) vo
     self._WindowEventPool.deinit(engine_allocator);
 }
 
-pub fn Insert(self: *SystemEventManager, event: SystemEvent, engine_allocator: std.mem.Allocator) !void {
+pub fn Insert(self: *SystemEventManager, engine_allocator: std.mem.Allocator, event: SystemEvent) !void {
     switch (event.GetEventCategory()) {
         .EC_Input => try self._InputEventPool.append(engine_allocator, event),
         .EC_Window => try self._WindowEventPool.append(engine_allocator, event),

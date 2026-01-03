@@ -30,17 +30,17 @@ pub fn Init(self: *EngineContext, window: *Window, program: *Program, app: *Appl
     self.mEngineAllocator = self.mEngineGPA.allocator();
     self.mFrameAllocator = self.mFrameArena.allocator();
 
-    self.mAssetManager.Init(self.mEngineAllocator);
-    self.mAudioManager.Init();
+    try self.mAssetManager.Init(self.mEngineAllocator);
+    try self.mAudioManager.Init();
     self.mGameEventManager.Init(program);
     self.mImguiEventManager.Init(program);
     self.mSystemEventManager.Init(app);
     self.mInputManager.Init(self.mEngineAllocator);
-    self.mRenderer.Init(window, self);
+    try self.mRenderer.Init(window, self);
 }
 
 pub fn DeInit(self: *EngineContext) !void {
-    self.mAssetManager.DeInit(self.mEngineAllocator);
+    try self.mAssetManager.DeInit(self.mEngineAllocator);
     self.mAudioManager.DeInit();
     self.mGameEventManager.DeInit(self.mEngineAllocator);
     self.mImguiEventManager.DeInit(self.mEngineAllocator);

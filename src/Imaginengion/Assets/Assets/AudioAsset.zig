@@ -3,15 +3,16 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const AudioBuffer = @import("AudioBuffers/AudioBuffer.zig");
 const miniaudio = @import("../../Core/CImports.zig").miniaudio;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const AudioAsset = @This();
 
 mAudioBuffer: AudioBuffer = .{},
 
-pub fn Init(self: *AudioAsset, allocator: std.mem.Allocator, _: []const u8, _: []const u8, asset_file: std.fs.File) !void {
-    try self.mAudioBuffer.Init(allocator, asset_file);
+pub fn Init(self: *AudioAsset, _: EngineContext, _: []const u8, _: []const u8, asset_file: std.fs.File) !void {
+    try self.mAudioBuffer.Init(asset_file);
 }
 
-pub fn Deinit(self: *AudioAsset) !void {
+pub fn Deinit(self: *AudioAsset, _: EngineContext) !void {
     try self.mAudioBuffer.Deinit();
 }
 

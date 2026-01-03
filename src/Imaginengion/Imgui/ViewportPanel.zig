@@ -54,7 +54,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent), engine_context: EngineContext) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
     _ = camera_transforms;
 
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
@@ -91,7 +91,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, camera_components: std.ArrayL
     //TODO: gizmos to drag around entities in the viewport
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, camera_components: std.ArrayList(*EntityCameraComponent), engine_context: EngineContext) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 

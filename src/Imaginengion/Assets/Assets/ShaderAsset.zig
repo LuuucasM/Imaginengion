@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const VertexBufferElement = @import("../../VertexBuffers/VertexBufferElement.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const Tracy = @import("../../Core/Tracy.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("Shaders/OpenGLShader.zig"),
@@ -57,10 +58,10 @@ pub fn StrToDataType(name: []const u8) ShaderDataType {
 
 mImpl: Impl = .{},
 
-pub fn Init(self: *ShaderAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+pub fn Init(self: *ShaderAsset, engine_context: EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
     const zone = Tracy.ZoneInit("Shader Init", @src());
     defer zone.Deinit();
-    try self.mImpl.Init(asset_allocator, abs_path, rel_path, asset_file);
+    try self.mImpl.Init(engine_context, abs_path, rel_path, asset_file);
 }
 
 pub fn Deinit(self: *ShaderAsset) !void {

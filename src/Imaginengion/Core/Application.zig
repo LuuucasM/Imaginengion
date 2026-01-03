@@ -25,8 +25,6 @@ mWindow: Window = .{},
 mProgram: Program = .{},
 mEngineContext: EngineContext = .{},
 
-//mEngineContext: EngineContext = .{}, //TODO: Implement this
-
 /// Initializes the engine application.
 ///
 /// Parameters:
@@ -36,9 +34,9 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
-    self.mWindow.Init();
+    self.mWindow.Init(&self.mEngineContext);
 
-    self.mEngineContext.Init(&self.mWindow, &self.mProgram, self);
+    try self.mEngineContext.Init(&self.mWindow, &self.mProgram, self);
 
     try self.mProgram.Init(&self.mWindow, &self.mEngineContext);
 

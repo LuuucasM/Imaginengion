@@ -21,7 +21,7 @@ _MouseScrolledOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 _MousePositionDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 _MouseScrolledDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 
-pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
+pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) void {
     self._InputPressedSet = HashMap(InputCodes, u1).init(engine_allocator);
 }
 pub fn Deinit(self: *InputManager) void {

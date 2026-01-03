@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const EngineContext = @import("../Core/EngineContext.zig");
 const Window = @This();
 
 const Impl = switch (builtin.os.tag) {
@@ -9,8 +10,8 @@ const Impl = switch (builtin.os.tag) {
 
 _Impl: Impl = .{},
 
-pub fn Init(self: *Window) void {
-    self._Impl.Init();
+pub fn Init(self: *Window, engine_context: *EngineContext) void {
+    self._Impl.Init(engine_context);
 }
 
 pub fn Deinit(self: *Window) void {

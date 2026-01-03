@@ -1,6 +1,7 @@
 const std = @import("std");
 const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ComponentArray(entity_t: type) type {
     const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
@@ -9,9 +10,9 @@ pub fn ComponentArray(entity_t: type) type {
         DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
         RemoveComponent: *const fn (*anyopaque, entity_t) anyerror!void,
-        clearAndFree: *const fn (*anyopaque) void,
+        clearAndFree: *const fn (*anyopaque, EngineContext) void,
         GetCategory: *const fn (*anyopaque) ComponentCategory,
-        DestroyEntity: *const fn (*anyopaque, entity_t, *ECSEventManager) anyerror!void,
+        DestroyEntity: *const fn (*anyopaque, EngineContext, entity_t, *ECSEventManager) anyerror!void,
         GetMultiData: *const fn (*anyopaque, entity_t) @Vector(4, entity_t),
         SetMultiData: *const fn (*anyopaque, entity_t, @Vector(4, entity_t)) void,
     };
@@ -41,17 +42,17 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.RemoveComponent(entityID);
                 }
-                fn clearAndFree(ptr: *anyopaque) void {
+                fn clearAndFree(ptr: *anyopaque, engine_context: EngineContext) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.clearAndFree();
+                    self.clearAndFree(engine_context);
                 }
                 fn GetCategory(ptr: *anyopaque) ComponentCategory {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     return self.GetCategory();
                 }
-                fn DestroyEntity(ptr: *anyopaque, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+                fn DestroyEntity(ptr: *anyopaque, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    try self.DestroyEntity(entity_id, ecs_event_manager);
+                    try self.DestroyEntity(engine_context, entity_id, ecs_event_manager);
                 }
                 fn GetMultiData(ptr: *anyopaque, entity_id: entity_t) @Vector(4, entity_t) {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -94,11 +95,11 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
             return self.mVtable.HasComponent(self.mPtr, entityID);
         }
-        pub fn clearAndFree(self: Self) void {
-            self.mVtable.clearAndFree(self.mPtr);
+        pub fn clearAndFree(self: Self, engine_context: EngineContext) void {
+            self.mVtable.clearAndFree(self.mPtr, engine_context);
         }
-        pub fn DestroyEntity(self: Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
-            try self.mVtable.DestroyEntity(self.mPtr, entity_id, ecs_event_manager);
+        pub fn DestroyEntity(self: Self, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+            try self.mVtable.DestroyEntity(self.mPtr, engine_context, entity_id, ecs_event_manager);
         }
 
         pub fn GetCategory(self: Self) ComponentCategory {

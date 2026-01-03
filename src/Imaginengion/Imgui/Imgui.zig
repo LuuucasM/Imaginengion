@@ -8,7 +8,7 @@ const Imgui = @This();
 
 mWindow: *Window = undefined,
 
-pub fn Init(self: Imgui, window: *Window) !void {
+pub fn Init(self: *Imgui, window: *Window) !void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
     self.mWindow = window;

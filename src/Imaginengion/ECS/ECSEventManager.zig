@@ -26,7 +26,7 @@ pub fn ECSEventManager(entity_t: type) type {
             self.mRemoveObj.deinit(engine_allocator);
         }
 
-        pub fn Insert(self: *Self, event: ECSEvent, engine_allocator: std.mem.Allocator) !void {
+        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, event: ECSEvent) !void {
             const zone = Tracy.ZoneInit("ECS Insert Events", @src());
             defer zone.Deinit();
             switch (event.GetEventCategory()) {

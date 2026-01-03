@@ -128,7 +128,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
         },
         else => @panic("Unknown glfw action in Windowswindow::GLFWKeyCallback\n"),
     };
-    engine_context.mSystemEventManager.Insert(new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.mEngineAllocator, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWKeyCallback\n");
     };
@@ -162,7 +162,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
         },
         else => @panic("Unknown glfw action in Windowswindow::GLFWMouseButtonCallback\n"),
     };
-    engine_context.mSystemEventManager.Insert(new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.mEngineAllocator, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseButtonCallback\n");
     };
@@ -178,7 +178,7 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
             ._MouseY = @floatCast(yPos),
         },
     };
-    engine_context.mSystemEventManager.Insert(new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.mEngineAllocator, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseMovedCallback");
     };
@@ -193,7 +193,7 @@ export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f
             ._YOffset = @floatCast(yOffset),
         },
     };
-    engine_context.mSystemEventManager.Insert(new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.mEngineAllocator, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseScrolledCallback\n");
     };
@@ -204,7 +204,7 @@ export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.c)
     const new_event = SystemEvent{
         .ET_WindowClose = .{},
     };
-    engine_context.mSystemEventManager.Insert(new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.mEngineAllocator, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWWindowCloseCallback\n");
     };
@@ -218,7 +218,7 @@ export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_in
             ._Height = @intCast(height),
         },
     };
-    engine_context.mSystemEventManager.Insert(new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.mEngineAllocator, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWWindowResizeCallback\n");
     };

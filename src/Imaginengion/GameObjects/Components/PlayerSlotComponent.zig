@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Player = @import("../../Players/Player.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 const PlayerSlotComponent = @This();
 
@@ -10,7 +11,7 @@ pub const Editable: bool = false;
 
 mPlayerEntity: Player.Type = Player.NullPlayer,
 
-pub fn Deinit(_: *PlayerSlotComponent) !void {}
+pub fn Deinit(_: *PlayerSlotComponent, _: EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

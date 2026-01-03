@@ -201,11 +201,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
     const zone = Tracy.ZoneInit("Program OnUpdate", @src());
     defer zone.Deinit();
 
-    const frame_allocator = engine_context.mFrameAllocator;
     const engine_allocator = engine_context.mEngineAllocator;
-
-    //update asset manager
-    try engine_context.mAssetManager.OnUpdate(frame_allocator);
 
     //-------------Inputs Begin------------------
     {
@@ -230,24 +226,32 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
 
     //-------------Physics Begin-----------------
     {
-        const audio_zone = Tracy.ZoneInit("Physics Section", @src());
-        defer audio_zone.Deinit();
+        const physics_zone = Tracy.ZoneInit("Physics Section", @src());
+        defer physics_zone.Deinit();
     }
     //-------------Physics End-------------------
 
     //-------------Game Logic Begin--------------
     {
-        const audio_zone = Tracy.ZoneInit("Game Logic Section", @src());
-        defer audio_zone.Deinit();
+        const game_logic_zone = Tracy.ZoneInit("Game Logic Section", @src());
+        defer game_logic_zone.Deinit();
     }
     //-------------Game Logic End----------------
 
     //-------------Animation Begin--------------
     {
-        const audio_zone = Tracy.ZoneInit("Animation Section", @src());
-        defer audio_zone.Deinit();
+        const animation_zone = Tracy.ZoneInit("Animation Section", @src());
+        defer animation_zone.Deinit();
     }
     //-------------Animation End----------------
+
+    //-------------Assets update Begin---------------
+    {
+        const assets_zone = Tracy.ZoneInit("Assets Section", @src());
+        defer assets_zone.Deinit();
+        try engine_context.mAssetManager.OnUpdate(engine_context);
+    }
+    //-------------End Assets Update
 
     //---------Render Begin-------------
     {
@@ -260,7 +264,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         try self._ContentBrowserPanel.OnImguiRender();
         try self._AssetHandlePanel.OnImguiRender(engine_context);
 
-        try self._ScenePanel.OnImguiRender(&self.mGameSceneManager, engine_context);
+        try self._ScenePanel.OnImguiRender(engine_context, &self.mGameSceneManager);
 
         for (self._SceneSpecList.items) |*scene_spec_panel| {
             try scene_spec_panel.OnImguiRender(engine_context);
@@ -287,7 +291,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
             .mViewportPanel = self._ViewportPanel.mP_OpenViewport,
         };
 
-        try Dockspace.OnImguiRender(opens, engine_context);
+        try Dockspace.OnImguiRender(engine_context, opens);
 
         try engine_context.mImguiEventManager.ProcessEvents(engine_allocator);
 
@@ -305,8 +309,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
 
     //--------------Networking Begin-------------
     {
-        const audio_zone = Tracy.ZoneInit("Networking Section", @src());
-        defer audio_zone.Deinit();
+        const networking_zone = Tracy.ZoneInit("Networking Section", @src());
+        defer networking_zone.Deinit();
     }
     //--------------Networking End---------------
 
@@ -341,7 +345,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
 
 }
 
-pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: EngineContext) !void {
+pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.mEngineAllocator;
     switch (event.*) {
         .ET_TogglePanelEvent => |e| {
@@ -360,14 +364,14 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
         },
         .ET_NewProjectEvent => |e| {
             if (e.Path.len > 0) {
-                try self._ContentBrowserPanel.OnNewProjectEvent(e.Path);
-                engine_context.mAssetManager.OnNewProjectEvent(e.Path, engine_allocator);
+                try self._ContentBrowserPanel.OnNewProjectEvent(engine_allocator, e.Path);
+                engine_context.mAssetManager.OnNewProjectEvent(engine_allocator, e.Path);
             }
         },
         .ET_OpenProjectEvent => |e| {
             if (e.Path.len > 0) {
-                try self._ContentBrowserPanel.OnOpenProjectEvent(e.Path);
-                engine_context.mAssetManager.OnOpenProjectEvent(e.Path, engine_allocator);
+                try self._ContentBrowserPanel.OnOpenProjectEvent(engine_allocator, e.Path);
+                engine_context.mAssetManager.OnOpenProjectEvent(engine_allocator, e.Path);
             }
         },
         .ET_NewSceneEvent => |e| {
@@ -384,7 +388,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
                     const scene_component = scene_layer.GetComponent(SceneComponent).?;
                     const rel_path = engine_context.mAssetManager.GetRelPath(e.AbsPath);
                     _ = try std.fs.createFileAbsolute(e.AbsPath, .{});
-                    scene_component.mSceneAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(rel_path, .Prj);
+                    scene_component.mSceneAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, rel_path, .Prj);
                     try self.mGameSceneManager.SaveSceneAs(scene_layer, e.AbsPath, engine_context.mFrameAllocator);
                 }
             }
@@ -430,7 +434,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: En
             try self.mGameSceneManager.OnViewportResize(e.mWidth, e.mHeight, engine_context.mFrameAllocator);
         },
         .ET_NewScriptEvent => |e| {
-            try self._ContentBrowserPanel.OnNewScriptEvent(e, engine_context);
+            try self._ContentBrowserPanel.OnNewScriptEvent(engine_context, e);
         },
         .ET_ChangeEditorStateEvent => |e| {
             try self.OnChangeEditorStateEvent(e, engine_context.mFrameAllocator);
@@ -504,7 +508,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
     }
 }
 
-pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, engine_context: EngineContext) !bool {
+pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, engine_context: *EngineContext) !bool {
     var cont_bool = true;
     if (self._ToolbarPanel.mState == .Play) {
         cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(engine_context, OnInputPressedScript, &self.mGameSceneManager, .{&e});
@@ -541,7 +545,7 @@ fn CleanSceneSpecs(self: *EditorProgram, engine_allocator: std.mem.Allocator) vo
     self._SceneSpecList.shrinkAndFree(engine_allocator, end_index);
 }
 
-fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
+fn RenderBuffers(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Render Bufferss", @src());
     defer zone.Deinit();
 
@@ -557,7 +561,7 @@ fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
         try camera_components.append(self.mFrameAllocator, editor_camera_component);
         try transform_components.append(self.mFrameAllocator, editor_camera_transform);
 
-        try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
+        try self._ViewportPanel.OnImguiRenderViewport(engine_context, camera_components, transform_components);
 
         camera_components.clearRetainingCapacity();
         transform_components.clearRetainingCapacity();
@@ -574,13 +578,13 @@ fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
                     try camera_components.append(self.mFrameAllocator, start_camera_component);
                     try transform_components.append(self.mFrameAllocator, start_transform_component);
 
-                    try self._ViewportPanel.OnImguiRenderPlay(camera_components);
+                    try self._ViewportPanel.OnImguiRenderPlay(engine_context, camera_components);
 
                     camera_components.clearRetainingCapacity();
                     transform_components.clearRetainingCapacity();
                 }
             } else {
-                try self._ViewportPanel.OnImguiRenderPlay(camera_components);
+                try self._ViewportPanel.OnImguiRenderPlay(engine_context, camera_components);
             }
         }
     } else { //editor state is play
@@ -595,7 +599,7 @@ fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
             try camera_components.append(self.mFrameAllocator, editor_camera_component);
             try transform_components.append(self.mFrameAllocator, editor_camera_transform);
 
-            try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
+            try self._ViewportPanel.OnImguiRenderViewport(engine_context, camera_components, transform_components);
 
             camera_components.clearRetainingCapacity();
             transform_components.clearRetainingCapacity();
@@ -611,7 +615,7 @@ fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
                 try camera_components.append(self.mFrameAllocator, start_camera_component);
                 try transform_components.append(self.mFrameAllocator, start_transform_component);
 
-                try self._ViewportPanel.OnImguiRenderPlay(camera_components);
+                try self._ViewportPanel.OnImguiRenderPlay(engine_context, camera_components);
 
                 camera_components.clearRetainingCapacity();
                 transform_components.clearRetainingCapacity();
@@ -627,7 +631,7 @@ fn RenderBuffers(self: *EditorProgram, engine_context: EngineContext) !void {
                 try camera_components.append(self.mFrameAllocator, start_camera_component);
                 try transform_components.append(self.mFrameAllocator, start_transform_component);
 
-                try self._ViewportPanel.OnImguiRenderViewport(camera_components, transform_components);
+                try self._ViewportPanel.OnImguiRenderViewport(engine_context, camera_components, transform_components);
 
                 camera_components.clearRetainingCapacity();
                 transform_components.clearRetainingCapacity();

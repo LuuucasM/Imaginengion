@@ -85,12 +85,11 @@ pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []cons
             .BindColorAttachment = impl.BindColorAttachment,
             .BindDepthAttachment = impl.BindDepthAttachment,
         },
-        .mAllocator = allocator,
     };
 }
 
-pub fn Deinit(self: FrameBuffer) void {
-    self.mVTable.Deinit(self.mPtr, self.mAllocator);
+pub fn Deinit(self: *FrameBuffer) void {
+    self.mVTable.Deinit(self.mPtr);
 }
 pub fn Invalidate(self: FrameBuffer) void {
     self.mVTable.Invalidate(self.mPtr);

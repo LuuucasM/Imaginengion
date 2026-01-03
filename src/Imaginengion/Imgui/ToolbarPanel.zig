@@ -27,9 +27,9 @@ mPlayIcon: AssetHandle = undefined,
 mStopIcon: AssetHandle = undefined,
 mStartEntity: ?Entity = null,
 
-pub fn Init(self: *ToolbarPanel, engine_context: EngineContext) !void {
-    self.mPlayIcon = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/play.png", .Eng);
-    self.mStopIcon = try engine_context.mAssetManager.GetAssetHandleRef("assets/textures/stop.png", .Eng);
+pub fn Init(self: *ToolbarPanel, engine_context: *EngineContext) !void {
+    self.mPlayIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/play.png", .Eng);
+    self.mStopIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/stop.png", .Eng);
 }
 
 pub fn Deinit(self: *ToolbarPanel) void {

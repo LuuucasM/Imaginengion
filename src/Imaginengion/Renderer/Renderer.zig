@@ -74,11 +74,11 @@ pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !v
     self.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
     self.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
 
-    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef("assets/shaders/SDFShader.program", .Eng);
+    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/shaders/SDFShader.program", .Eng);
 }
 
-pub fn Deinit(self: *Renderer) !void {
-    try self.mR2D.Deinit();
+pub fn Deinit(self: *Renderer) void {
+    self.mR2D.Deinit();
     self.mCameraUniformBuffer.Deinit();
 }
 

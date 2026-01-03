@@ -8,10 +8,17 @@ const SceneComponents = @import("SceneComponents.zig");
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
-pub fn AddScriptToScene(scene_layer: SceneLayer, script_asset_path: []const u8, path_type: PathType, engine_context: EngineContext) !void {
+pub fn AddScriptToScene(engine_context: *EngineContext, scene_layer: SceneLayer, script_asset_path: []const u8, path_type: PathType) !void {
     var ecs = scene_layer.mECSManagerSCRef;
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(script_asset_path, path_type);
-    const script_asset = try new_script_handle.GetAsset(ScriptAsset);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, script_asset_path, path_type);
+
+    const script_asset = new_script_handle.GetAsset(ScriptAsset) catch |err| switch (err) {
+        error.ScriptCompileError => {
+            new_script_handle.ReleaseAsset();
+            return;
+        },
+        else => return err,
+    };
 
     if (scene_layer.HasComponent(SceneScriptComponent) == true) {
         //entity already has a script so iterate until the end of the linked list

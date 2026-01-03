@@ -4,6 +4,7 @@ const VertexBufferElement = @import("../../../VertexBuffers/VertexBufferElement.
 const ShaderDataType = @import("../ShaderAsset.zig").ShaderDataType;
 const ShaderDataTypeSize = @import("../ShaderAsset.zig").ShaderDataTypeSize;
 const LinAlg = @import("../../../Math/LinAlg.zig");
+const EngineContext = @import("../../../Core/EngineContext.zig");
 const Vec2f32 = LinAlg.Vec2f32;
 const Vec3f32 = LinAlg.Vec3f32;
 const Vec4f32 = LinAlg.Vec4f32;
@@ -23,11 +24,8 @@ mUniforms: std.AutoHashMap(usize, i32) = undefined,
 mBufferStride: usize = undefined,
 mShaderID: u32 = undefined,
 
-_Allocator: std.mem.Allocator = undefined,
-
-pub fn Init(self: *OpenGLShader, allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
-    self.mUniforms = std.AutoHashMap(usize, i32).init(allocator);
-    self._Allocator = allocator;
+pub fn Init(self: *OpenGLShader, engine_context: EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+    self.mUniforms = std.AutoHashMap(usize, i32).init(engine_context.mEngineAllocator);
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -43,10 +41,10 @@ pub fn Init(self: *OpenGLShader, allocator: std.mem.Allocator, abs_path: []const
     glad.glObjectLabel(glad.GL_PROGRAM, self.mShaderID, -1, "ShaderProgram");
 }
 
-pub fn Deinit(self: *OpenGLShader) !void {
+pub fn Deinit(self: *OpenGLShader, engine_allocator: std.mem.Allocator) !void {
     glad.glDeleteProgram(self.mShaderID);
 
-    self.mBufferElements.deinit(self._Allocator);
+    self.mBufferElements.deinit(engine_allocator);
     self.mUniforms.deinit();
 }
 
@@ -140,7 +138,7 @@ pub fn SetUniform_Mat4(self: OpenGLShader, name: []const u8, value: Mat4f32) voi
     glad.glUniformMatrix4fv(self.mUniforms.get(hash_val).?, 1, glad.GL_FALSE, &value);
 }
 
-fn CreateLayout(self: *OpenGLShader, shader_source: []const u8) !void {
+fn CreateLayout(self: *OpenGLShader, engine_allocator: std.mem.Allocator, shader_source: []const u8) !void {
     // Split shader into lines
     var lines = std.mem.splitSequence(u8, shader_source, "\n");
 
@@ -160,7 +158,7 @@ fn CreateLayout(self: *OpenGLShader, shader_source: []const u8) !void {
                 if (tokens.next()) |type_str| {
                     // Convert type string to ShaderDataType
                     const data_type = TypeStrToDataType(type_str);
-                    try self.mBufferElements.append(self._Allocator, .{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
+                    try self.mBufferElements.append(engine_allocator, .{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
                 }
             }
         }

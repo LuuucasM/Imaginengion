@@ -3,6 +3,7 @@ const SPSCRingBuffer = @import("../../Core/SPSCRingBuffer.zig");
 const tAudioBuffer = @import("../../AudioManager/AudioManager.zig").tAudioBuffer;
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const MicComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
@@ -10,7 +11,7 @@ pub const Editable: bool = false;
 
 mAudioBuffer: tAudioBuffer = tAudioBuffer.Init(),
 
-pub fn Deinit(_: *MicComponent) !void {}
+pub fn Deinit(_: *MicComponent, _: EngineContext) !void {}
 
 pub fn GetName(_: MicComponent) []const u8 {
     return "MicComponent";

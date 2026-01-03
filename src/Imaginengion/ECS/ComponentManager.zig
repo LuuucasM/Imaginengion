@@ -5,6 +5,7 @@ const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const GroupQuery = union(enum) {
     And: []const GroupQuery,
@@ -62,9 +63,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.mEntitySkipField.deinit();
         }
 
-        pub fn clearAndFree(self: *Self) void {
+        pub fn clearAndFree(self: *Self, engine_context: EngineContext) void {
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.clearAndFree();
+                component_array.clearAndFree(engine_context);
             }
             self.mEntitySkipField.clear();
         }
@@ -74,7 +75,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             _ = self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
         }
 
-        pub fn DestroyEntity(self: *Self, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
+        pub fn DestroyEntity(self: *Self, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
 
             // Remove all components from this entity
@@ -82,7 +83,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(entity_id, ecs_event_manager);
+                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id, ecs_event_manager);
             }
 
             // Remove entity from skip field

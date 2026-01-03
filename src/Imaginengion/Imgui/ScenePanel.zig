@@ -43,7 +43,7 @@ pub fn Init(self: ScenePanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager, engine_context: EngineContext) !void {
+pub fn OnImguiRender(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
     const zone = Tracy.ZoneInit("ScenePanel OIR", @src());
     defer zone.Deinit();
 
@@ -61,9 +61,9 @@ pub fn OnImguiRender(self: *ScenePanel, scene_manager: *SceneManager, engine_con
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
 
-        try self.RenderScenes(scene_manager, &already_popup, engine_context);
+        try self.RenderScenes(engine_context, scene_manager, &already_popup);
     }
-    try self.HandlePanelContextMenu(already_popup, engine_context);
+    try self.HandlePanelContextMenu(engine_context, already_popup);
     try self.HandlePanelDragDrop(engine_context);
 }
 
@@ -95,7 +95,7 @@ pub fn OnDeleteScene(self: *ScenePanel, delete_scene: SceneLayer) void {
     }
 }
 
-fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, already_popup: *bool, engine_context: EngineContext) !void {
+fn RenderScenes(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager, already_popup: *bool) !void {
     const frame_allocator = engine_context.mFrameAllocator;
     //getting all the scenes and entities ahead of time to use later
     const name_entities = try scene_manager.mECSManagerGO.GetGroup(GroupQuery{
@@ -113,11 +113,11 @@ fn RenderScenes(self: *ScenePanel, scene_manager: *SceneManager, already_popup: 
         //setting up variables to be used later
         const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
 
-        try self.RenderScene(scene_layer, scene_manager, name_entities, already_popup, engine_context);
+        try self.RenderScene(engine_context, scene_layer, scene_manager, name_entities, already_popup);
     }
 }
 
-fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), already_popup: *bool, engine_context: EngineContext) !void {
+fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: SceneLayer, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), already_popup: *bool) !void {
     const frame_allocator = engine_context.mFrameAllocator;
     const scene_id = scene_layer.mSceneID;
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
@@ -139,7 +139,7 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
 
     //if the tree node gets left clicked it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
     if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left)) {
-        try self.SelectScene(scene_layer, engine_context);
+        try self.SelectScene(engine_context, scene_layer);
     }
 
     //if this scene is double clicked open up its scene specs window
@@ -151,11 +151,11 @@ fn RenderScene(self: *ScenePanel, scene_layer: SceneLayer, scene_manager: *Scene
 
     self.DrawSceneBorder(scene_component.mLayerType);
 
-    try self.HandleSceneDragDrop(scene_layer, engine_context);
+    try self.HandleSceneDragDrop(engine_context, scene_layer);
 
     if (is_tree_open) {
         defer imgui.igTreePop();
-        try self.RenderSceneEntities(scene_manager, name_entities, scene_layer, already_popup, engine_context);
+        try self.RenderSceneEntities(engine_context, scene_manager, name_entities, scene_layer, already_popup);
     }
 }
 
@@ -177,7 +177,7 @@ fn PopSceneTextStyle(_: *ScenePanel, is_selected: bool) void {
     imgui.igPopStyleColor(1);
 }
 
-fn SelectScene(self: *ScenePanel, scene_layer: SceneLayer, engine_context: EngineContext) !void {
+fn SelectScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const scene_id = scene_layer.mSceneID;
 
     try engine_context.mImguiEventManager.Insert(.{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
@@ -221,7 +221,7 @@ fn HandleScenePopupContext(_: *ScenePanel, scene_layer: SceneLayer, scene_name: 
     }
 }
 
-fn HandleSceneDragDrop(_: *ScenePanel, scene_layer: SceneLayer, engine_context: EngineContext) !void {
+fn HandleSceneDragDrop(_: *ScenePanel, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     //these are for repositioning and ordering the scenes the user can drag the scenes around to re-order them
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
         defer imgui.igEndDragDropSource();
@@ -243,7 +243,7 @@ fn HandleSceneDragDrop(_: *ScenePanel, scene_layer: SceneLayer, engine_context: 
     }
 }
 
-fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), scene_layer: SceneLayer, already_popup: *bool, engine_context: EngineContext) !void {
+fn RenderSceneEntities(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), scene_layer: SceneLayer, already_popup: *bool) !void {
     const frame_allocator = engine_context.mFrameAllocator;
 
     var scene_name_entities = try name_entities.clone(frame_allocator);
@@ -253,11 +253,11 @@ fn RenderSceneEntities(self: *ScenePanel, scene_manager: *SceneManager, name_ent
 
     for (scene_name_entities.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };
-        try self.RenderEntity(entity, scene_layer, already_popup, engine_context);
+        try self.RenderEntity(engine_context, entity, scene_layer, already_popup);
     }
 }
 
-fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, already_popup: *bool, engine_context: EngineContext) !void {
+fn RenderEntity(self: *ScenePanel, engine_context: EngineContext, entity: Entity, scene_layer: SceneLayer, already_popup: *bool) !void {
     const frame_allocator = engine_context.mFrameAllocator;
     const entity_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ entity.GetName(), entity.mEntityID }, 0);
 
@@ -271,13 +271,13 @@ fn RenderEntity(self: *ScenePanel, entity: Entity, scene_layer: SceneLayer, alre
     defer imgui.igPopID();
 
     if (entity.HasComponent(EntityParentComponent)) {
-        try self.RenderParentEntity(entity, entity_name, scene_layer, already_popup, frame_allocator);
+        try self.RenderParentEntity(engine_context, entity, entity_name, scene_layer, already_popup);
     } else {
-        try self.RenderLeafEntity(entity, entity_name, scene_layer, already_popup, engine_context);
+        try self.RenderLeafEntity(engine_context, entity, entity_name, scene_layer, already_popup);
     }
 }
 
-fn RenderParentEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) !void {
+fn RenderParentEntity(self: *ScenePanel, engine_context: EngineContext, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
     const is_entity_tree_open = imgui.igTreeNodeEx_Str(entity_name, TREE_FLAGS);
 
     //if the tree node gets left clicked it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
@@ -289,11 +289,11 @@ fn RenderParentEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
-        try self.RenderChildEntities(entity, scene_layer, already_popup, frame_allocator);
+        try self.RenderChildEntities(engine_context, entity, scene_layer, already_popup);
     }
 }
 
-fn RenderLeafEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool, engine_context: EngineContext) !void {
+fn RenderLeafEntity(self: *ScenePanel, engine_context: *EngineContext, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
     if (imgui.igSelectable_Bool(entity_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 })) {
         try self.SelectEntity(entity, scene_layer, engine_context);
     }
@@ -301,7 +301,7 @@ fn RenderLeafEntity(self: *ScenePanel, entity: Entity, entity_name: [*:0]const u
     try self.HandleEntityContextMenu(entity, entity_name, scene_layer, already_popup);
 }
 
-fn SelectEntity(_: *ScenePanel, entity: Entity, scene_layer: SceneLayer, engine_context: EngineContext) !void {
+fn SelectEntity(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, scene_layer: SceneLayer) !void {
     try engine_context.mImguiEventManager.Insert(.{ .ET_SelectEntityEvent = .{ .SelectedEntity = entity } });
     try engine_context.mImguiEventManager.Insert(.{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 }
@@ -321,14 +321,14 @@ fn HandleEntityContextMenu(_: *ScenePanel, entity: Entity, entity_name: [*:0]con
         }
     }
 }
-fn RenderChildEntities(self: *ScenePanel, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool, frame_allocator: std.mem.Allocator) anyerror!void {
+fn RenderChildEntities(self: *ScenePanel, engine_context: *EngineContext, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool) anyerror!void {
     if (parent_entity.GetComponent(EntityParentComponent)) |parent_component| {
         var curr_id = parent_component.mFirstChild;
 
         while (true) : (if (curr_id == parent_component.mFirstChild) break) {
             const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
 
-            try self.RenderEntity(child_entity, scene_layer, already_popup, frame_allocator);
+            try self.RenderEntity(engine_context, child_entity, scene_layer, already_popup);
 
             const child_component = child_entity.GetComponent(EntityChildComponent).?;
             curr_id = child_component.mNext;
@@ -351,7 +351,7 @@ fn HandlePanelDragDrop(_: *ScenePanel, engine_context: EngineContext) !void {
     }
 }
 
-fn HandlePanelContextMenu(_: *ScenePanel, already_popup: bool, engine_context: EngineContext) !void {
+fn HandlePanelContextMenu(_: *ScenePanel, engine_context: *EngineContext, already_popup: bool) !void {
     if (!already_popup and imgui.igBeginPopupContextItem("panel_context", imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
 
