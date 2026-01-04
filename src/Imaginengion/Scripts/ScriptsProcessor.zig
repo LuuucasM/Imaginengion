@@ -16,8 +16,8 @@ const InputPressedEvent = SystemEvent.InputPressedEvent;
 const EntityScriptList = @import("../GameObjects/Components.zig").ScriptList;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;
-const OnInputPressedScript = EntityComponents.OnInputPressedScript;
-const OnUpdateScript = EntityComponents.OnUpdateScript;
+const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
+const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 
@@ -25,13 +25,13 @@ const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptList;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const StackPosComponent = SceneComponents.StackPosComponent;
-const OnSceneStartScript = SceneComponents.OnSceneStartScript;
+const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
 
 const AssetsList = @import("../Assets/Assets.zig").AssetsList;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const ScriptType = ScriptAsset.ScriptType;
-const AssetHandle = @import("../Assets/AssetHandle.zig").AssetHandle;
+const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 const Entity = @import("../GameObjects/Entity.zig");
 
@@ -46,27 +46,26 @@ pub fn RunEntityScript(engine_context: *EngineContext, comptime script_type: typ
     const ecs_manager_go = scene_manager.mECSManagerGO;
     const frame_allocator = engine_context.mFrameAllocator;
 
-    const scene_stack_scenes = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = StackPosComponent }, frame_allocator);
+    const scene_stack_scenes = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
     std.sort.insertion(SceneType, scene_stack_scenes.items, ecs_manager_sc, SceneManager.SortScenesFunc);
 
     var cont_bool = true;
     for (scene_stack_scenes.items) |scene_id| {
         if (cont_bool == false) break;
 
-        var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
-        scene_manager.FilterEntityScriptsByScene(&scene_scripts, scene_id, frame_allocator);
+        var scene_scripts = try ecs_manager_go.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
+        scene_manager.FilterEntityScriptsByScene(frame_allocator, &scene_scripts, scene_id);
 
         for (scene_scripts.items) |script_id| {
             if (ecs_manager_go.GetComponent(EntityScriptComponent, script_id)) |script_component| {
                 if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
                 const asset_handle = script_component.mScriptAssetHandle;
-                const script_asset = try asset_handle.GetAsset(ScriptAsset);
+                const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
 
                 var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
 
                 const combined_args = .{ engine_context, &entity } ++ args;
-
-                cont_bool = cont_bool and script_asset.Run(combined_args);
+                cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
             }
         }
     }
@@ -79,14 +78,14 @@ pub fn RunSceneScript(engine_context: *EngineContext, comptime script_type: type
     const ecs_manager_sc = scene_manager.mECSManagerSC;
     const frame_allocator = engine_context.mFrameAllocator;
 
-    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(GroupQuery{ .Component = StackPosComponent }, frame_allocator);
+    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
     std.sort.insertion(SceneType, scene_stack_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
 
     var cont_bool = true;
     for (scene_stack_scenes.items) |scene_id| {
         if (cont_bool == false) break;
 
-        var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
+        var scene_scripts = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
         scene_manager.FilterSceneScriptsByScene(&scene_scripts, scene_id, frame_allocator);
 
         for (scene_scripts.items) |script_id| {
@@ -112,20 +111,20 @@ pub fn RunEntityScriptEditor(engine_context: *EngineContext, comptime script_typ
     const ecs_manager_go = scene_manager.mECSManagerGO;
     const frame_allocator = engine_context.mFrameAllocator;
 
-    var scene_scripts = try ecs_manager_go.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
-    scene_manager.FilterEntityScriptsByScene(&scene_scripts, editor_scene_layer.mSceneID);
+    var scene_scripts = try ecs_manager_go.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
+    scene_manager.FilterEntityScriptsByScene(engine_context.mFrameAllocator, &scene_scripts, editor_scene_layer.mSceneID);
 
     for (scene_scripts.items) |script_id| {
         if (ecs_manager_go.GetComponent(EntityScriptComponent, script_id)) |script_component| {
             if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
             const asset_handle = script_component.mScriptAssetHandle;
-            const script_asset = try asset_handle.GetAsset(ScriptAsset);
+            const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
 
             var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
 
             const combined_args = .{ engine_context, &entity } ++ args;
 
-            _ = script_asset.Run(combined_args);
+            _ = script_asset.Run(script_type, combined_args);
         }
     }
     return true;
@@ -137,7 +136,7 @@ pub fn RunSceneScriptEditor(engine_context: *EngineContext, comptime script_type
     const ecs_manager_sc = scene_manager.mECSManagerSC;
     const frame_allocator = engine_context.mFrameAllocator;
 
-    var scene_scripts = try ecs_manager_sc.GetGroup(GroupQuery{ .Component = script_type }, frame_allocator);
+    var scene_scripts = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
     scene_manager.FilterSceneScriptsByScene(&scene_scripts, editor_scene_layer.mSceneID);
 
     for (scene_scripts.items) |script_id| {
@@ -210,7 +209,7 @@ pub fn _ValidateScript(comptime script_type: type) void {
 
 fn _ValidateEntityType(script_type: type) void {
     comptime var is_valid: bool = false;
-    for (EntityScriptList) |s_type| {
+    inline for (EntityScriptList) |s_type| {
         if (script_type == s_type) {
             is_valid = true;
         }
@@ -223,7 +222,7 @@ fn _ValidateEntityType(script_type: type) void {
 
 fn _ValidateSceneType(script_type: type) void {
     comptime var is_valid: bool = false;
-    for (SceneScriptList) |s_type| {
+    inline for (SceneScriptList) |s_type| {
         if (script_type == s_type) {
             is_valid = true;
         }

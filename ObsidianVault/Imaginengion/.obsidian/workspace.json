@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "immediate things to do or fix.md",
+                "file": "longer term things to do or fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "immediate things to do or fix"
+              "title": "longer term things to do or fix"
             }
           }
         ]
@@ -171,8 +171,8 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
-    "longer term things to do or fix.md",
     "immediate things to do or fix.md",
+    "longer term things to do or fix.md",
     "Weekly Notes/2025.09.01-07.md",
     "Weekly Notes/2025.08.25-31.md",
     "Weekly Notes",

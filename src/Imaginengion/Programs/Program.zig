@@ -23,12 +23,12 @@ pub fn OnUpdate(self: *Program, dt: f32, engine_context: *EngineContext) !void {
     try self._Impl.OnUpdate(dt, engine_context);
 }
 
-pub fn OnWindowResize(self: *Program, width: usize, height: usize, frame_allocator: std.mem.Allocator) !bool {
-    return try self._Impl.OnWindowResize(width, height, frame_allocator);
+pub fn OnWindowResize(self: *Program, width: usize, height: usize) !bool {
+    return try self._Impl.OnWindowResize(width, height);
 }
 
-pub fn OnInputPressedEvent(self: *Program, e: InputPressedEvent, frame_allocator: std.mem.Allocator) !bool {
-    return self._Impl.OnInputPressedEvent(e, frame_allocator);
+pub fn OnInputPressedEvent(self: *Program, engine_context: *EngineContext, e: InputPressedEvent) !bool {
+    return self._Impl.OnInputPressedEvent(engine_context, e);
 }
 
 pub fn OnImguiEvent(self: *Program, event: *ImguiEvent, engine_context: *EngineContext) !void {

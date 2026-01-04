@@ -8,11 +8,11 @@ const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //scripts
 pub const OnInputPressedScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const InputPressedEvent) callconv(.c) bool;
+    pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const InputPressedEvent) callconv(.c) bool;
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnInputPressedScript, _: EngineContext) !void {}
+    pub fn Deinit(_: *OnInputPressedScript, _: *EngineContext) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnInputPressedScript) {
@@ -30,11 +30,11 @@ pub const OnInputPressedScript = struct {
 };
 
 pub const OnUpdateScript = struct {
-    pub const RunFuncSig = *const fn (*EngineContext, *const Entity) callconv(.c) bool;
+    pub const RunFuncSig = *const fn (*const EngineContext, *const Entity) callconv(.c) bool;
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnUpdateScript, _: EngineContext) !void {}
+    pub fn Deinit(_: *OnUpdateScript, _: *EngineContext) !void {}
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnUpdateScript) {

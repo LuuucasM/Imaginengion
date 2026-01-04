@@ -16,7 +16,7 @@ pub fn Deinit(self: *ImguiEventManager, engine_allocator: std.mem.Allocator) voi
     self.mEventPool.deinit(engine_allocator);
 }
 
-pub fn Insert(self: *ImguiEventManager, event: ImguiEvent, engine_allocator: std.mem.Allocator) !void {
+pub fn Insert(self: *ImguiEventManager, engine_allocator: std.mem.Allocator, event: ImguiEvent) !void {
     try self.mEventPool.append(engine_allocator, event);
 }
 

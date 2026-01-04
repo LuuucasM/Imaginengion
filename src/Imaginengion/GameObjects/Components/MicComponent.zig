@@ -11,7 +11,7 @@ pub const Editable: bool = false;
 
 mAudioBuffer: tAudioBuffer = tAudioBuffer.Init(),
 
-pub fn Deinit(_: *MicComponent, _: EngineContext) !void {}
+pub fn Deinit(_: *MicComponent, _: *EngineContext) !void {}
 
 pub fn GetName(_: MicComponent) []const u8 {
     return "MicComponent";

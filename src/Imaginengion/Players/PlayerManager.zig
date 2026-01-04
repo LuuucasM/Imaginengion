@@ -40,8 +40,8 @@ pub fn ProcessDestroyedPlayers(self: *PlayerManager) !void {
     try self.mECSManager.ProcessEvents(.EC_RemoveObj);
 }
 
-pub fn GetGroup(self: *PlayerManager, query: GroupQuery, frame_allocator: std.mem.Allocator) !std.ArrayList(Player.Type) {
+pub fn GetGroup(self: *PlayerManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Player.Type) {
     const zone = Tracy.ZoneInit("PlayerManager GetGroup", @src());
     defer zone.Deinit();
-    return try self.mECSManager.GetGroup(query, frame_allocator);
+    return try self.mECSManager.GetGroup(frame_allocator, query);
 }

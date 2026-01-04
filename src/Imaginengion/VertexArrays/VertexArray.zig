@@ -13,9 +13,9 @@ const VertexArray = @This();
 
 mImpl: Impl,
 
-pub fn Init(allocator: std.mem.Allocator) VertexArray {
+pub fn Init() VertexArray {
     return VertexArray{
-        .mImpl = Impl.Init(allocator),
+        .mImpl = Impl.Init(),
     };
 }
 
@@ -31,8 +31,8 @@ pub fn Unbind(self: VertexArray) void {
     self.mImpl.Unbind();
 }
 
-pub fn AddVertexBuffer(self: *VertexArray, new_vertex_buffer: VertexBuffer, engine_allocator: std.mem.Allocator) !void {
-    try self.mImpl.AddVertexBuffer(new_vertex_buffer, engine_allocator);
+pub fn AddVertexBuffer(self: *VertexArray, engine_allocator: std.mem.Allocator, new_vertex_buffer: VertexBuffer) !void {
+    try self.mImpl.AddVertexBuffer(engine_allocator, new_vertex_buffer);
 }
 
 pub fn SetIndexBuffer(self: *VertexArray, new_index_buffer: IndexBuffer) void {

@@ -176,7 +176,7 @@ fn AddComponentPopupMenu(_: ComponentsPanel, entity: Entity, engine_context: *En
                 .mViewportIndexBuffer = undefined,
             };
 
-            const shader_asset = try Renderer.GetSDFShader();
+            const shader_asset = try Renderer.GetSDFShader(engine_context);
             try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout());
             new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 

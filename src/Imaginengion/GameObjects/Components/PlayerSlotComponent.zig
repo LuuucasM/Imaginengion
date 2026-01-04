@@ -11,7 +11,7 @@ pub const Editable: bool = false;
 
 mPlayerEntity: Player.Type = Player.NullPlayer,
 
-pub fn Deinit(_: *PlayerSlotComponent, _: EngineContext) !void {}
+pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

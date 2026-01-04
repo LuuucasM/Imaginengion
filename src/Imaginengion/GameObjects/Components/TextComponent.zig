@@ -43,7 +43,7 @@ mTexOptions: Texture2D.TexOptions = .{},
 mFontSize: f32 = 9,
 mBounds: Vec2f32 = Vec2f32{ 8, 8 },
 
-pub fn Deinit(self: *TextComponent, engine_context: EngineContext) !void {
+pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
     self.mTextAssetHandle.ReleaseAsset();
     self.mAtlasHandle.ReleaseAsset();
     self.mTexHandle.ReleaseAsset();

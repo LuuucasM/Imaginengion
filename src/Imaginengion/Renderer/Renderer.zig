@@ -138,8 +138,8 @@ pub fn GetRenderStats(self: *Renderer) RenderStats {
     return self.mStats;
 }
 
-pub fn GetSDFShader(self: *Renderer) !*ShaderAsset {
-    return try self.mSDFShader.GetAsset(ShaderAsset);
+pub fn GetSDFShader(self: *Renderer, engine_context: *EngineContext) !*ShaderAsset {
+    return try self.mSDFShader.GetAsset(engine_context, ShaderAsset);
 }
 
 fn UpdateCameraBuffer(self: *Renderer, camera_component: *CameraComponent, camera_transform: *TransformComponent) void {

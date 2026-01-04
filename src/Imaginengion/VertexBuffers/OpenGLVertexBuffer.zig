@@ -45,7 +45,7 @@ pub fn SetData(self: OpenGLVertexBuffer, data: *anyopaque, size: usize, offset: 
     }
 }
 
-pub fn SetLayout(self: *OpenGLVertexBuffer, layout: std.ArrayList(VertexBufferElement), engine_allocator: std.mem.Allocator) !void {
+pub fn SetLayout(self: *OpenGLVertexBuffer, engine_allocator: std.mem.Allocator, layout: std.ArrayList(VertexBufferElement)) !void {
     self.mLayout.clearRetainingCapacity();
     try self.mLayout.appendSlice(engine_allocator, layout.items);
     self.mLayout.shrinkAndFree(engine_allocator, layout.items.len);

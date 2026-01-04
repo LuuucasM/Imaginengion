@@ -37,7 +37,7 @@ pub fn Unbind() void {
     glad.glBindVertexArray(0);
 }
 
-pub fn AddVertexBuffer(self: *OpenGLVertexArray, new_vertex_buffer: VertexBuffer, engine_allocator: std.mem.Allocator) !void {
+pub fn AddVertexBuffer(self: *OpenGLVertexArray, engine_allocator: std.mem.Allocator, new_vertex_buffer: VertexBuffer) !void {
     self.Bind();
     new_vertex_buffer.Bind();
     for (new_vertex_buffer.GetLayout().items, 0..) |element, i| {

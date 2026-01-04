@@ -93,7 +93,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext)
     imgui.igColumns(column_count, 0, false);
     defer imgui.igColumns(1, 0, true);
 
-    try self.RenderBackButton(engine_context.mEngineAllocator, thumbnail_size);
+    try self.RenderBackButton(engine_context, thumbnail_size);
     try self.RenderDirectoryContents(engine_context, thumbnail_size);
 }
 
@@ -113,18 +113,21 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
-            try engine_context.mImguiEventManager.Insert(.{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
         }
-        try ImguiUtils.AllScriptPopupMenu();
+        try ImguiUtils.AllScriptPopupMenu(engine_context);
     }
 }
 
-fn RenderBackButton(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator, thumbnail_size: f32) !void {
+fn RenderBackButton(self: *ContentBrowserPanel, engine_context: EngineContext, thumbnail_size: f32) !void {
     const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
     defer zone.Deinit();
+
+    const engine_allocator = engine_context.mEngineAllocator;
+
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
-    const back_texture = try self.mBackArrowTextureHandle.GetAsset(Texture2D);
+    const back_texture = try self.mBackArrowTextureHandle.GetAsset(engine_context, Texture2D);
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(

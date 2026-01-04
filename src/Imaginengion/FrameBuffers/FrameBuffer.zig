@@ -88,8 +88,8 @@ pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []cons
     };
 }
 
-pub fn Deinit(self: *FrameBuffer) void {
-    self.mVTable.Deinit(self.mPtr);
+pub fn Deinit(self: *FrameBuffer, engine_allocator: std.mem.Allocator) void {
+    self.mVTable.Deinit(self.mPtr, engine_allocator);
 }
 pub fn Invalidate(self: FrameBuffer) void {
     self.mVTable.Invalidate(self.mPtr);

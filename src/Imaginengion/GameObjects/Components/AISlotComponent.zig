@@ -7,7 +7,7 @@ const AISlotComponent = @This();
 
 mAIEntity: Entity.Type = Entity.NullEntity,
 
-pub fn Deinit(_: *AISlotComponent, _: EngineContext) !void {}
+pub fn Deinit(_: *AISlotComponent, _: *EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

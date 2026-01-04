@@ -26,7 +26,7 @@ mScriptAssetHandle: AssetHandle = .{},
 pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
 
-pub fn Deinit(self: *ScriptComponent, _: EngineContext) !void {
+pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
     self.mScriptAssetHandle.ReleaseAsset();
 }
 

@@ -16,5 +16,5 @@ pub const OnSceneStartScript = struct {
     };
     pub const Category: ComponentCategory = .Unique;
     bit: u1 = 0,
-    pub fn Deinit(_: *OnSceneStartScript) !void {}
+    pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) !void {}
 };

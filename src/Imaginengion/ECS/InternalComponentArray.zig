@@ -28,10 +28,10 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
                 }).init(allocator, 20, 10),
             };
         }
-        pub fn Deinit(self: *Self) !void {
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
             var i: usize = 0;
             while (i < self.mComponents.dense_count) : (i += 1) {
-                try self.mComponents.values[i].Deinit();
+                try self.mComponents.values[i].Deinit(engine_context);
             }
             self.mComponents.deinit();
         }
@@ -53,7 +53,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
 
             return new_component;
         }
-        pub fn RemoveComponent(self: *Self, engine_context: EngineContext, entityID: entity_t) !void {
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) !void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
             const component = self.mComponents.getValueBySparse(entityID);
             try component.Deinit(engine_context);
@@ -97,7 +97,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
             try entity_set.appendSlice(allocator, self.mComponents.dense_to_sparse[0..self.mComponents.dense_count]);
             return entity_set;
         }
-        pub fn clearAndFree(self: *Self, engine_context: EngineContext) void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             var i: usize = 0;
             while (i < self.mComponents.dense_count) : (i += 1) {
                 try self.mComponents.values[i].Deinit(engine_context);
@@ -107,7 +107,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
         pub fn GetCategory(_: *Self) ComponentCategory {
             return component_type.Category;
         }
-        pub fn DestroyEntity(self: *Self, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));
 
             if (component_type.Category == .Multiple) {

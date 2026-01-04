@@ -24,7 +24,7 @@ mUniforms: std.AutoHashMap(usize, i32) = undefined,
 mBufferStride: usize = undefined,
 mShaderID: u32 = undefined,
 
-pub fn Init(self: *OpenGLShader, engine_context: EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+pub fn Init(self: *OpenGLShader, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
     self.mUniforms = std.AutoHashMap(usize, i32).init(engine_context.mEngineAllocator);
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -33,18 +33,17 @@ pub fn Init(self: *OpenGLShader, engine_context: EngineContext, abs_path: []cons
 
     const shader_sources = try ReadFile(asset_file, arena_allocator, abs_path);
 
-    if (try self.Compile(shader_sources, rel_path) == true) {
-        try self.CreateLayout(shader_sources.get(glad.GL_VERTEX_SHADER).?);
-        try self.DiscoverUniforms();
-    }
+    try self.Compile(shader_sources, rel_path);
+    try self.CreateLayout(engine_context.mEngineAllocator, shader_sources.get(glad.GL_VERTEX_SHADER).?);
+    try self.DiscoverUniforms();
 
     glad.glObjectLabel(glad.GL_PROGRAM, self.mShaderID, -1, "ShaderProgram");
 }
 
-pub fn Deinit(self: *OpenGLShader, engine_allocator: std.mem.Allocator) !void {
+pub fn Deinit(self: *OpenGLShader, engine_context: *EngineContext) !void {
     glad.glDeleteProgram(self.mShaderID);
 
-    self.mBufferElements.deinit(engine_allocator);
+    self.mBufferElements.deinit(engine_context.mEngineAllocator);
     self.mUniforms.deinit();
 }
 
@@ -252,7 +251,7 @@ fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator, abs_pat
 
         if (enable_nsight) {
             const shader_name = try std.json.innerParse([]const u8, arena_allocator, &reader, PARSE_OPTIONS);
-            const name = std.mem.join(arena_allocator, ".", &[_][]const u8{ shader_name, "spv" });
+            const name = try std.mem.join(arena_allocator, ".", &[_][]const u8{ shader_name, "spv" });
             const shader_path = try std.fs.path.join(arena_allocator, &[_][]const u8{ file_path, name });
 
             shader_file = try std.fs.openFileAbsolute(shader_path, .{});
@@ -275,7 +274,7 @@ fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator, abs_pat
     return shaders;
 }
 
-fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8), rel_path: []const u8) !bool {
+fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8), rel_path: []const u8) !void {
     const shader_id: glad.GLuint = glad.glCreateProgram();
 
     var buffer: [2000]u8 = undefined;
@@ -292,10 +291,6 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
         const shader = glad.glCreateShader(shader_type);
 
         if (enable_nsight) {
-            //write code for enabling nsight here
-            //need to use glShaderBinary instead of shader source
-            //and glSpecializeShader instead of glCompileShader
-            //TODO
             glad.glShaderBinary(1, &shader, glad.GL_SHADER_BINARY_FORMAT_SPIR_V, shader_source.ptr, shader_source.len);
 
             glad.glSpecializeShader(shader, "main", 0, null, null);
@@ -321,7 +316,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
             std.log.err("Shader Compilation {s} Failure! {s}\n for file: {s}", .{ ShaderStrFromType(shader_type), info_log.items, rel_path });
 
-            return false;
+            return error.CreateAssetFail;
         }
         glad.glAttachShader(shader_id, shader);
         try gl_shader_ids.append(allocator, shader);
@@ -351,15 +346,13 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
         std.log.err("Program failed to link! {s}\n for file {s}", .{ info_log.items, rel_path });
 
-        return false;
+        return error.CreateAssetFail;
     }
 
     for (gl_shader_ids.items) |id| {
         glad.glDetachShader(shader_id, id);
         glad.glDeleteShader(id);
     }
-
-    return true;
 }
 
 fn ShaderTypeFromStr(str: []const u8) glad.GLenum {

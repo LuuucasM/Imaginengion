@@ -15,7 +15,7 @@ mSize: u64 = 0,
 mHash: u64 = 0,
 mPathType: PathType = .Eng,
 
-pub fn Deinit(self: *FileMetaData, engine_context: EngineContext) !void {
+pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) !void {
     self.mRelPath.deinit(engine_context.mEngineAllocator);
 }
 

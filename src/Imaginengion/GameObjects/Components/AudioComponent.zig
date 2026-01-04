@@ -38,13 +38,13 @@ mVolume: f32 = 1.0,
 mPitch: f32 = 1.0,
 mLoop: bool = false,
 
-pub fn ReadFrames(self: *AudioComponent, frames_out: []f32, frame_count: u64) !u64 {
-    const audio_asset = try self.mAudioAsset.GetAsset(AudioAsset);
+pub fn ReadFrames(self: *AudioComponent, engine_context: EngineContext, frames_out: []f32, frame_count: u64) !u64 {
+    const audio_asset = try self.mAudioAsset.GetAsset(engine_context, AudioAsset);
 
     return audio_asset.ReadFrames(frames_out, frame_count, *self.mCursor, self.mLoop);
 }
 
-pub fn Deinit(self: *AudioComponent, _: EngineContext) !void {
+pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
     self.mAudioAsset.ReleaseAsset();
 }
 
@@ -103,7 +103,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     // Audio asset display with drag-drop target
     imgui.igSeparator();
     if (self.mAudioAsset.mID != AssetHandle.NullHandle) {
-        const file_data_asset = try self.mAudioAsset.GetAsset(FileMetaData);
+        const file_data_asset = try self.mAudioAsset.GetAsset(engine_context, FileMetaData);
         const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
         const name_term = try frame_allocator.dupeZ(u8, name);
         imgui.igTextUnformatted("Audio Asset: ", null);

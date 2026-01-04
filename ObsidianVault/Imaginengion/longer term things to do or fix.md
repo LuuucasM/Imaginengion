@@ -7,6 +7,14 @@
 	- as we know from zig passing around a reference does not really impact performance so that is ok
 	- the good thing is the entire engine like renderer, and everything can exist in one memory space, and we dont need to have global memory space used.
 	- additionally we already sort of have the concept of this in the engine already but its used only for scripts and contains only a couple of things but i can just extend it to the whole engine and that will be good. this way it simplifies dependencies, consolidates memory, and 
+- change asset manager
+	- make it so that each asset type has a "default asset" that is stored in the asset manager
+	- then when doing GetAsset it can actually never fail and instead we handle errors inside the asset manager
+	- if we encounter any error we can instead return the "default asset" for that type
+	- i will need to make a GetAssetHandleRef("default") or something like this because normally get asset handle ref takes in a path but for the default assets we can maybe just type default and then the asset labeled as default will have a component for every asset type which is the default asset of that specific type. then when we do GetAsset on a default handle we return one of those default assets
+	- then now that we have default, when doing GetAssetHandleRef for actual paths given, if we encounter any error we can instead return the asset for that type using the default handle instead and then of course print the error that was generated
+	- i have to ensure that the initialization of default is done successfully and asserted because it is a core part of the engine that needs to exist
+	- since AssetHandles will have a default handle they will also always be valid. so i can change assethandles so that instead of having to ask the asset manager to assign to a handle, I can add a function to asset handle like ChangeAsset() which will take in a path like GetAssetHandleRef (or "default") like it does right now and automatically releases the previous asset and gets a reference to the new asset by its self
 - add physics
 - make pong
 - add a way to export the game into its standalone

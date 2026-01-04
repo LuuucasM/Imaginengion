@@ -107,6 +107,3 @@ pub fn Delete(self: Entity, engine_context: *EngineContext) !void {
     try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
     try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
 }
-pub fn GetECSAllocator(self: Entity) std.mem.Allocator {
-    return self.mECSManagerRef.GetECSAllocator();
-}

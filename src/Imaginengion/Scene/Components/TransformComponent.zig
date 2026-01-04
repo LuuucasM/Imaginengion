@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../../Core/EngineContext.zig");
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -16,7 +17,7 @@ Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
 Scale: Vec3f32 = .{ 1.0, 1.0, 1.0 },
 
-pub fn Deinit(_: *TransformComponent) !void {}
+pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
 
 pub fn SetTranslation(self: *TransformComponent, new_pos: Vec3f32) void {
     self.Translation = new_pos;

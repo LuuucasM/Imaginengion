@@ -8,11 +8,11 @@ const AudioAsset = @This();
 
 mAudioBuffer: AudioBuffer = .{},
 
-pub fn Init(self: *AudioAsset, _: EngineContext, _: []const u8, _: []const u8, asset_file: std.fs.File) !void {
-    try self.mAudioBuffer.Init(asset_file);
+pub fn Init(self: *AudioAsset, _: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+    try self.mAudioBuffer.Init(rel_path, asset_file);
 }
 
-pub fn Deinit(self: *AudioAsset, _: EngineContext) !void {
+pub fn Deinit(self: *AudioAsset, _: *EngineContext) !void {
     try self.mAudioBuffer.Deinit();
 }
 

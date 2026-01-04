@@ -80,7 +80,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         //for getting groups of entities
-        pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
+        pub fn GetGroup(self: Self, allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(entity_t) {
             _InternalCheckGroup(query);
             const zone = Tracy.ZoneInit("ECSM GetGroup", @src());
             defer zone.Deinit();

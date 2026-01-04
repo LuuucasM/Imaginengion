@@ -23,7 +23,7 @@ mTexture: AssetHandle = undefined,
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 
-pub fn Deinit(self: *QuadComponent, _: EngineContext) !void {
+pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
     self.mTexture.ReleaseAsset();
 }
 
@@ -53,7 +53,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
-    const texture_asset = try self.mTexture.GetAsset(Texture2D);
+    const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
     const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (texture_asset.GetID()))));
     imgui.igImage(
         texture_id,
@@ -174,7 +174,7 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.write(self.mTexOptions.mTexCoords);
 
     try jw.objectField("Texture");
-    const asset_file_data = try self.mTexture.GetAsset(FileMetaData);
+    const asset_file_data = try self.mTexture.GetFileMetaData();
     try jw.write(asset_file_data.mRelPath.items);
 
     try jw.objectField("PathType");

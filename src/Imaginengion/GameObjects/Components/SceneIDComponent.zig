@@ -9,7 +9,7 @@ pub const Editable: bool = false;
 
 SceneID: u128 = std.math.maxInt(u128),
 
-pub fn Deinit(_: *IDComponent, _: EngineContext) !void {}
+pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

@@ -23,7 +23,7 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const CameraComponent = EntityComponents.CameraComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
-const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
+const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
@@ -121,11 +121,11 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     try self._ToolbarPanel.Init(engine_context);
     self._ViewportPanel.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight());
 
-    self.mOverlayScene = try self.mEditorSceneManager.NewScene(.OverlayLayer);
-    self.mGameScene = try self.mEditorSceneManager.NewScene(.GameLayer);
+    self.mOverlayScene = try self.mEditorSceneManager.NewScene(engine_context, .OverlayLayer);
+    self.mGameScene = try self.mEditorSceneManager.NewScene(engine_context, .GameLayer);
 
-    self.mEditorEditorEntity = try self.mGameScene.CreateEntity();
-    self.mEditorViewportEntity = try self.mGameScene.CreateEntity();
+    self.mEditorEditorEntity = try self.mGameScene.CreateEntity(engine_allocator);
+    self.mEditorViewportEntity = try self.mGameScene.CreateEntity(engine_allocator);
 
     const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     viewport_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
@@ -136,15 +136,15 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     //setup the viewport camera
     var new_camera_component = CameraComponent{
         .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-        .mViewportVertexArray = VertexArray.Init(engine_allocator),
-        .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
+        .mViewportVertexArray = VertexArray.Init(),
+        .mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32)),
         .mViewportIndexBuffer = undefined,
         .mViewportWidth = self._ViewportPanel.mViewportWidth,
         .mViewportHeight = self._ViewportPanel.mViewportHeight,
     };
 
-    const shader_asset = try engine_context.mRenderer.GetSDFShader();
-    try new_camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout(), engine_allocator);
+    const shader_asset = try engine_context.mRenderer.GetSDFShader(engine_context);
+    try new_camera_component.mViewportVertexBuffer.SetLayout(engine_allocator, shader_asset.GetLayout());
     new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
     var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -152,7 +152,7 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
 
     var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
     new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_camera_component.mViewportVertexArray.AddVertexBuffer(new_camera_component.mViewportVertexBuffer, engine_allocator);
+    try new_camera_component.mViewportVertexArray.AddVertexBuffer(engine_allocator, new_camera_component.mViewportVertexBuffer);
     new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
 
     new_camera_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
@@ -163,13 +163,13 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     //setup the full screen editor camera
     var new_camera_component_camera = CameraComponent{
         .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, self.mWindow.GetWidth(), self.mWindow.GetHeight()),
-        .mViewportVertexArray = VertexArray.Init(engine_allocator),
-        .mViewportVertexBuffer = VertexBuffer.Init(engine_allocator, @sizeOf([4][2]f32)),
+        .mViewportVertexArray = VertexArray.Init(),
+        .mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32)),
         .mViewportIndexBuffer = undefined,
     };
 
-    const shader_asset_camera = try engine_context.mRenderer.GetSDFShader();
-    try new_camera_component_camera.mViewportVertexBuffer.SetLayout(shader_asset_camera.GetLayout());
+    const shader_asset_camera = try engine_context.mRenderer.GetSDFShader(engine_context);
+    try new_camera_component_camera.mViewportVertexBuffer.SetLayout(engine_allocator, shader_asset_camera.GetLayout());
     new_camera_component_camera.mViewportVertexBuffer.SetStride(shader_asset_camera.GetStride());
 
     var index_buffer_data_camera = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -177,7 +177,7 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
 
     var data_vertex_buffer_camera = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
     new_camera_component_camera.mViewportVertexBuffer.SetData(&data_vertex_buffer_camera[0][0], @sizeOf([4][2]f32), 0);
-    try new_camera_component_camera.mViewportVertexArray.AddVertexBuffer(new_camera_component_camera.mViewportVertexBuffer);
+    try new_camera_component_camera.mViewportVertexArray.AddVertexBuffer(engine_allocator, new_camera_component_camera.mViewportVertexBuffer);
     new_camera_component_camera.mViewportVertexArray.SetIndexBuffer(new_camera_component_camera.mViewportIndexBuffer);
 
     new_camera_component_camera.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
@@ -211,11 +211,11 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         //Human Inputs
         self.mWindow.PollInputEvents();
         engine_context.mInputManager.OnUpdate();
-        engine_context.mSystemEventManager.ProcessEvents(.EC_Input);
+        try engine_context.mSystemEventManager.ProcessEvents(.EC_Input);
         if (self._ToolbarPanel.mState == .Play) {
-            _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateInputScript, &self.mGameSceneManager, .{});
+            _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateScript, &self.mGameSceneManager, .{});
         }
-        _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnUpdateInputScript, &self.mEditorSceneManager, &self.mGameScene, .{});
+        _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnUpdateScript, &self.mEditorSceneManager, &self.mGameScene, .{});
 
         //for debugging uncomment this
         //_ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, self.mFrameAllocator);
@@ -261,7 +261,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         self.mImgui.Begin();
         Dockspace.Begin();
 
-        try self._ContentBrowserPanel.OnImguiRender();
+        try self._ContentBrowserPanel.OnImguiRender(engine_context);
         try self._AssetHandlePanel.OnImguiRender(engine_context);
 
         try self._ScenePanel.OnImguiRender(engine_context, &self.mGameSceneManager);
@@ -375,7 +375,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
             }
         },
         .ET_NewSceneEvent => |e| {
-            _ = try self.mGameSceneManager.NewScene(e.mLayerType);
+            _ = try self.mGameSceneManager.NewScene(engine_context, e.mLayerType);
         },
         .ET_SaveSceneEvent => {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
@@ -402,7 +402,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
             try self.mGameSceneManager.MoveScene(e.SceneID, e.NewPos);
         },
         .ET_NewEntityEvent => |e| {
-            _ = try self.mGameSceneManager.CreateEntity(e.SceneID);
+            _ = try self.mGameSceneManager.CreateEntity(engine_allocator, e.SceneID);
         },
         .ET_SelectSceneEvent => |e| {
             self._ScenePanel.OnSelectSceneEvent(e.SelectedScene);
@@ -508,7 +508,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, event: ChangeEditorStateEv
     }
 }
 
-pub fn OnInputPressedEvent(self: *EditorProgram, e: InputPressedEvent, engine_context: *EngineContext) !bool {
+pub fn OnInputPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: InputPressedEvent) !bool {
     var cont_bool = true;
     if (self._ToolbarPanel.mState == .Play) {
         cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(engine_context, OnInputPressedScript, &self.mGameSceneManager, .{&e});

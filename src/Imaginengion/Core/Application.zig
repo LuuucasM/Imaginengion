@@ -95,7 +95,7 @@ pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
     cont_bool = cont_bool and switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| try self.OnWindowResize(e._Width, e._Height),
-        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(e, self.mFrameAllocator),
+        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(&self.mEngineContext, e),
         else => true,
     };
 }
@@ -129,6 +129,6 @@ fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
     }
 
     self.mWindow.OnWindowResize(width, height);
-    _ = try self.mProgram.OnWindowResize(width, height, self.mFrameAllocator);
+    _ = try self.mProgram.OnWindowResize(width, height);
     return true;
 }

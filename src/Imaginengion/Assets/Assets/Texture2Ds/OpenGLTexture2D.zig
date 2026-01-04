@@ -1,6 +1,7 @@
 const std = @import("std");
 const glad = @import("../../../Core/CImports.zig").glad;
 const stb = @import("../../../Core/CImports.zig").stb;
+const EngineContext = @import("../../../Core/EngineContext.zig");
 const OpenGLTexture2D = @This();
 
 _Width: c_int = 0,
@@ -10,7 +11,7 @@ _InternalFormat: c_uint = 0,
 _DataFormat: c_uint = 0,
 mARBHandle: u64 = 0,
 
-pub fn Init(self: *OpenGLTexture2D, allocator: std.mem.Allocator, asset_file: std.fs.File, rel_path: []const u8) !void {
+pub fn Init(self: *OpenGLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
@@ -19,12 +20,15 @@ pub fn Init(self: *OpenGLTexture2D, allocator: std.mem.Allocator, asset_file: st
 
     const fstats = try asset_file.stat();
 
-    const contents = try asset_file.readToEndAlloc(allocator, @intCast(fstats.size));
-    defer allocator.free(contents);
+    const contents = try asset_file.readToEndAlloc(engine_context.mFrameAllocator, @intCast(fstats.size));
 
     data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
     defer stb.stbi_image_free(data);
-    std.debug.assert(data != null);
+
+    if (data == null) {
+        std.log.err("stbi_load_from_memory unable to correctly load the data for file {s}!\n", .{rel_path});
+        return error.CreateAssetFail;
+    }
 
     var internal_format: c_uint = 0;
     var data_format: c_uint = 0;
@@ -35,8 +39,8 @@ pub fn Init(self: *OpenGLTexture2D, allocator: std.mem.Allocator, asset_file: st
         internal_format = glad.GL_RGB8;
         data_format = glad.GL_RGB;
     } else {
-        std.log.err("Textureformat not supported in OpenGLTexture2D when loading file: {s}", .{rel_path});
-        @panic("");
+        std.log.err("Invalid number of channels for image {s}. Must have 3 or 4 channels only!\n", .{rel_path});
+        return error.CreateAssetFail;
     }
 
     var new_texture_id: c_uint = 0;
@@ -54,7 +58,8 @@ pub fn Init(self: *OpenGLTexture2D, allocator: std.mem.Allocator, asset_file: st
 
     const arb_handle = glad.glGetTextureHandleARB(new_texture_id);
     if (arb_handle == 0) {
-        @panic("could not get handle!");
+        std.log.err("Invalid ARB handle of 0 for texture {s}!\n", .{rel_path});
+        return error.CreateAssetFail;
     }
 
     glad.glMakeTextureHandleResidentARB(arb_handle);
@@ -69,7 +74,7 @@ pub fn Init(self: *OpenGLTexture2D, allocator: std.mem.Allocator, asset_file: st
     self.mARBHandle = arb_handle;
 }
 
-pub fn Deinit(self: OpenGLTexture2D) !void {
+pub fn Deinit(self: OpenGLTexture2D, _: *EngineContext) !void {
     glad.glDeleteTextures(1, &self._TextureID);
 }
 pub fn GetWidth(self: OpenGLTexture2D) usize {

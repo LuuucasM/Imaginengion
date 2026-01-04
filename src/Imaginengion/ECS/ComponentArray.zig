@@ -6,13 +6,13 @@ const EngineContext = @import("../Core/EngineContext.zig");
 pub fn ComponentArray(entity_t: type) type {
     const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
     const VTab = struct {
-        Deinit: *const fn (*anyopaque, std.mem.Allocator) anyerror!void,
+        Deinit: *const fn (*anyopaque, *EngineContext) anyerror!void,
         DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
-        RemoveComponent: *const fn (*anyopaque, entity_t) anyerror!void,
-        clearAndFree: *const fn (*anyopaque, EngineContext) void,
+        RemoveComponent: *const fn (*anyopaque, *EngineContext, entity_t) anyerror!void,
+        clearAndFree: *const fn (*anyopaque, *EngineContext) void,
         GetCategory: *const fn (*anyopaque) ComponentCategory,
-        DestroyEntity: *const fn (*anyopaque, EngineContext, entity_t, *ECSEventManager) anyerror!void,
+        DestroyEntity: *const fn (*anyopaque, *EngineContext, entity_t, *ECSEventManager) anyerror!void,
         GetMultiData: *const fn (*anyopaque, entity_t) @Vector(4, entity_t),
         SetMultiData: *const fn (*anyopaque, entity_t, @Vector(4, entity_t)) void,
     };
@@ -25,10 +25,10 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn Init(engine_allocator: std.mem.Allocator, comptime component_type: type) !Self {
             const internal_type = InternalComponentArray(entity_t, component_type);
             const impl = struct {
-                fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) !void {
+                fn Deinit(ptr: *anyopaque, engine_context: *EngineContext) !void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    try self.Deinit();
-                    deinit_allocator.destroy(self);
+                    try self.Deinit(engine_context);
+                    engine_context.mEngineAllocator.destroy(self);
                 }
                 fn DuplicateEntity(ptr: *anyopaque, original_entity_id: entity_t, new_entity_id: entity_t) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -38,11 +38,11 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     return self.HasComponent(entityID);
                 }
-                fn RemoveComponent(ptr: *anyopaque, entityID: entity_t) anyerror!void {
+                fn RemoveComponent(ptr: *anyopaque, engine_context: *EngineContext, entityID: entity_t) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    try self.RemoveComponent(entityID);
+                    try self.RemoveComponent(engine_context, entityID);
                 }
-                fn clearAndFree(ptr: *anyopaque, engine_context: EngineContext) void {
+                fn clearAndFree(ptr: *anyopaque, engine_context: *EngineContext) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     self.clearAndFree(engine_context);
                 }
@@ -50,7 +50,7 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     return self.GetCategory();
                 }
-                fn DestroyEntity(ptr: *anyopaque, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+                fn DestroyEntity(ptr: *anyopaque, engine_context: *EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.DestroyEntity(engine_context, entity_id, ecs_event_manager);
                 }
@@ -83,22 +83,22 @@ pub fn ComponentArray(entity_t: type) type {
             };
         }
 
-        pub fn Deinit(self: Self, engine_allocator: std.mem.Allocator) !void {
-            try self.mVtable.Deinit(self.mPtr, engine_allocator);
+        pub fn Deinit(self: Self, engine_context: *EngineContext) !void {
+            try self.mVtable.Deinit(self.mPtr, engine_context);
         }
         pub fn DuplicateEntity(self: Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
             self.mVtable.DuplicateEntity(self.mPtr, original_entity_id, new_entity_id);
         }
-        pub fn RemoveComponent(self: Self, entityID: entity_t) anyerror!void {
-            try self.mVtable.RemoveComponent(self.mPtr, entityID);
+        pub fn RemoveComponent(self: Self, engine_context: *EngineContext, entityID: entity_t) anyerror!void {
+            try self.mVtable.RemoveComponent(self.mPtr, engine_context, entityID);
         }
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
             return self.mVtable.HasComponent(self.mPtr, entityID);
         }
-        pub fn clearAndFree(self: Self, engine_context: EngineContext) void {
+        pub fn clearAndFree(self: Self, engine_context: *EngineContext) void {
             self.mVtable.clearAndFree(self.mPtr, engine_context);
         }
-        pub fn DestroyEntity(self: Self, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+        pub fn DestroyEntity(self: Self, engine_context: *EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
             try self.mVtable.DestroyEntity(self.mPtr, engine_context, entity_id, ecs_event_manager);
         }
 

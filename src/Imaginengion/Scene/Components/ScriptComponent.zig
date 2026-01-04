@@ -31,7 +31,7 @@ mScriptAssetHandle: ?AssetHandle = null,
 
 pub const Category: ComponentCategory = .Multiple;
 
-pub fn Deinit(self: *ScriptComponent) !void {
+pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
     if (self.mScriptAssetHandle) |*asset_handle| {
         asset_handle.ReleaseAsset();
     }

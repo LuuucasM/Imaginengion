@@ -6,7 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 mRefs: usize = 0,
 
-pub fn Deinit(_: *AssetMetaData, _: EngineContext) !void {}
+pub fn Deinit(_: *AssetMetaData, _: *EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

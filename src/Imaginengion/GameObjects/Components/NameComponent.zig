@@ -15,7 +15,7 @@ pub const Editable: bool = true;
 mAllocator: std.mem.Allocator = undefined,
 mName: std.ArrayList(u8) = .{},
 
-pub fn Deinit(self: *NameComponent, _: EngineContext) !void {
+pub fn Deinit(self: *NameComponent, _: *EngineContext) !void {
     self.mName.deinit(self.mAllocator);
 }
 

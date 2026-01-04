@@ -1,5 +1,6 @@
 const std = @import("std");
 const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ParentComponent(entity_t: type) type {
     return struct {
@@ -10,7 +11,7 @@ pub fn ParentComponent(entity_t: type) type {
 
         mFirstChild: entity_t = std.math.maxInt(entity_t),
 
-        pub fn Deinit(_: *Self) !void {}
+        pub fn Deinit(_: *Self, _: *EngineContext) !void {}
 
         pub fn GetName(_: Self) []const u8 {
             return "ParentComponent";
@@ -37,7 +38,7 @@ pub fn ChildComponent(entity_t: type) type {
         mNext: entity_t = std.math.maxInt(entity_t),
         mParent: entity_t = std.math.maxInt(entity_t),
 
-        pub fn Deinit(_: *Self) !void {}
+        pub fn Deinit(_: *Self, _: *EngineContext) !void {}
 
         pub fn GetName(self: Self) []const u8 {
             _ = self;

@@ -21,7 +21,7 @@ pub export fn Run(engine_context: *EngineContext, self: *const Entity, e: *const
 
 //Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
 pub export fn GetScriptType() callconv(.c) ScriptType {
-    return ScriptType.OnInputPressed;
+    return ScriptType.EntityInputPressed;
 }
 
 //This function helps validate that the script provided by the user

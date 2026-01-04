@@ -25,7 +25,7 @@ WorldTranslation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 WorldRotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
 WorldScale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
 
-pub fn Deinit(_: *TransformComponent, _: EngineContext) !void {}
+pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
 
 pub fn SetTranslation(self: *TransformComponent, new_pos: Vec3f32) void {
     self.Translation = new_pos;

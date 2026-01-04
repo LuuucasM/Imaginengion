@@ -3,9 +3,9 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const LinAlg = @import("../../Math/LinAlg.zig");
 const AssetHandle = @import("../AssetHandle.zig");
-const SparseSet = @import("../../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const Vec4f32 = LinAlg.Vec4f32;
 const Vec2f32 = LinAlg.Vec2f32;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const TextAsset = @This();
 
 const KerningsT = std.AutoHashMap(u16, f32);
@@ -34,20 +34,14 @@ pub const Category: ComponentCategory = .Unique;
 mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = [_]GlyphInfo{GlyphInfo{}} ** GYLPH_SET_SIZE,
 mDistanceRange: u32 = 0,
 mSize: u32 = 0,
-mAssetAllocator: std.mem.Allocator = undefined,
 mLineHeight: f32 = 0.0,
 mAscender: f32 = 0.0,
 mDescender: f32 = 0.0,
 mEmsize: f32 = 0.0,
 mAtlasSize: Vec2f32 = Vec2f32{ 0, 0 },
 
-pub fn Init(self: *TextAsset, asset_allocator: std.mem.Allocator, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
-    self.mAssetAllocator = asset_allocator;
-
-    const file_path = std.fs.path.dirname(rel_path).?;
-    const name = std.fs.path.stem(std.fs.path.basename(rel_path));
-
-    var buff: [260]u8 = undefined;
+pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
+    var buff: [260 * 2]u8 = undefined;
     var fba = std.heap.FixedBufferAllocator.init(&buff);
     const fba_allocator = fba.allocator();
 
@@ -55,8 +49,8 @@ pub fn Init(self: *TextAsset, asset_allocator: std.mem.Allocator, abs_path: []co
     defer arena.deinit();
     const arena_allocator = arena.allocator();
 
-    const name_png = try std.fmt.allocPrint(fba_allocator, "{s}/{s}.png", .{ file_path, name });
-    const name_json = try std.fmt.allocPrint(fba_allocator, "{s}/{s}.json", .{ file_path, name });
+    const name_png = try std.fmt.allocPrint(fba_allocator, "{s}.png", .{rel_path});
+    const name_json = try std.fmt.allocPrint(fba_allocator, "{s}.json", .{rel_path});
 
     const file_png = std.fs.cwd().openFile(name_png, .{}) catch |err| switch (err) {
         error.FileNotFound => null,
@@ -89,7 +83,7 @@ pub fn Init(self: *TextAsset, asset_allocator: std.mem.Allocator, abs_path: []co
                 "-json",
                 name_json,
             },
-            asset_allocator,
+            engine_context.mFrameAllocator,
         );
         child.stdin_behavior = .Inherit;
         child.stdout_behavior = .Inherit;
@@ -97,7 +91,16 @@ pub fn Init(self: *TextAsset, asset_allocator: std.mem.Allocator, abs_path: []co
 
         try child.spawn();
         const result = try child.wait();
-        std.log.debug("child [{s}] exited with code {}\n", .{ abs_path, result });
+
+        if (result != .Exited) {
+            std.log.err("Unable to correctly generate text files {s}. It terminated by {s}!", .{ rel_path, @tagName(result) });
+            return error.ScriptAssetInitFail;
+        }
+        if (result.Exited != 0) {
+            std.log.err("Unable to correctly generate text files {s} exited with code {d}!", .{ rel_path, result.Exited });
+            return error.ScriptAssetInitFail;
+        }
+        std.log.debug("text {s} generated success!\n", .{rel_path});
 
         if (file_json == null) {
             file_json = try std.fs.cwd().openFile(name_json, .{});
@@ -110,7 +113,7 @@ pub fn Init(self: *TextAsset, asset_allocator: std.mem.Allocator, abs_path: []co
     return try self.ProcessTextJson(arena_allocator, text_json);
 }
 
-pub fn Deinit(self: *TextAsset) !void {
+pub fn Deinit(self: *TextAsset, _: *EngineContext) !void {
     for (self.mGlyphs, 0..) |_, i| {
         self.mGlyphs[i].mKernings.deinit();
     }

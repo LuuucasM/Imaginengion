@@ -11,7 +11,7 @@ mAudioConfig: ma.ma_audio_buffer_config = undefined,
 mPcmFrames: ?*anyopaque = null,
 mFrameCount: u64 = 0,
 
-pub fn Init(self: *MiniAudioBuffer, asset_file: std.fs.File) !void {
+pub fn Init(self: *MiniAudioBuffer, rel_path: []const u8, asset_file: std.fs.File) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const arena_allocator = arena.allocator();
@@ -26,7 +26,8 @@ pub fn Init(self: *MiniAudioBuffer, asset_file: std.fs.File) !void {
     var decoder_config = ma.ma_decoder_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, SAMPLE_RATE);
 
     if (ma.ma_decode_memory(file_data.items.ptr, file_data.items.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
-        return error.DecoderInitFail;
+        std.log.err("Failed to decode memory for MiniAudioBuffer for file {s}!\n", .{rel_path});
+        return error.CreateAssetFail;
     }
 
     self.mAudioConfig = ma.ma_audio_buffer_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);

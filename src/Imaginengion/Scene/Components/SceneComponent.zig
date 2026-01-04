@@ -11,7 +11,7 @@ const SceneIDComponent = GameComponents.SceneIDComponent;
 const NameComponent = GameComponents.NameComponent;
 const TransformComponent = GameComponents.TransformComponent;
 const CameraComponent = GameComponents.CameraComponent;
-
+const EngineContext = @import("../../Core/EngineContext.zig");
 const SceneComponent = @This();
 
 pub const LayerType = enum(u1) {
@@ -32,7 +32,7 @@ pub const Category: ComponentCategory = .Unique;
 mSceneAssetHandle: AssetHandle = .{},
 mLayerType: LayerType = undefined,
 
-pub fn Deinit(self: *SceneComponent) !void {
+pub fn Deinit(self: *SceneComponent, _: *EngineContext) !void {
     self.mSceneAssetHandle.ReleaseAsset();
 }
 

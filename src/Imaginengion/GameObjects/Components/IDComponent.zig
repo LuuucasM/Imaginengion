@@ -14,7 +14,7 @@ pub const Editable: bool = true;
 
 ID: u64 = std.math.maxInt(u64),
 
-pub fn Deinit(_: *IDComponent, _: EngineContext) !void {}
+pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
 
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

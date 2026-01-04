@@ -47,8 +47,8 @@ mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 mAreaRect: Vec4f32 = Vec4f32{ 0.0, 0.0, 1.0, 1.0 },
 
-pub fn Deinit(self: *CameraComponent, engine_context: EngineContext) !void {
-    self.mViewportFrameBuffer.Deinit();
+pub fn Deinit(self: *CameraComponent, engine_context: *EngineContext) !void {
+    self.mViewportFrameBuffer.Deinit(engine_context.mEngineAllocator);
     self.mViewportVertexArray.Deinit(engine_context.mEngineAllocator);
     self.mViewportVertexBuffer.Deinit(engine_context.mEngineAllocator);
     self.mViewportIndexBuffer.Deinit();

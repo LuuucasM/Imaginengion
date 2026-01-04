@@ -5,7 +5,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const EntityComponents = @import("Components.zig");
 const ScriptComponent = EntityComponents.ScriptComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
-const OnUpdateInputScript = EntityComponents.OnUpdateInputScript;
+const OnUpdateScript = EntityComponents.OnUpdateScript;
 
 const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
@@ -13,7 +13,7 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 pub fn AddScriptToEntity(entity: Entity, rel_path_script: []const u8, path_type: PathType, engine_context: *EngineContext) !void {
     var ecs = entity.mECSManagerRef;
     var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, rel_path_script, path_type);
-    const script_asset = try new_script_handle.GetAsset(ScriptAsset);
+    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
     // Create the script component with the asset handle
     const new_script_component = ScriptComponent{
@@ -32,11 +32,11 @@ pub fn AddScriptToEntity(entity: Entity, rel_path_script: []const u8, path_type:
 
     // Add the appropriate script type component based on the script asset
     switch (script_asset.mScriptType) {
-        .OnInputPressed => {
+        .EntityInputPressed => {
             _ = try ecs.AddComponent(OnInputPressedScript, last_script_entity_id, null);
         },
-        .OnUpdateInput => {
-            _ = try ecs.AddComponent(OnUpdateInputScript, last_script_entity_id, null);
+        .EntityOnUpdate => {
+            _ = try ecs.AddComponent(OnUpdateScript, last_script_entity_id, null);
         },
         else => {},
     }

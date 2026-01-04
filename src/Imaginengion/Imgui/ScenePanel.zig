@@ -98,13 +98,11 @@ pub fn OnDeleteScene(self: *ScenePanel, delete_scene: SceneLayer) void {
 fn RenderScenes(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager, already_popup: *bool) !void {
     const frame_allocator = engine_context.mFrameAllocator;
     //getting all the scenes and entities ahead of time to use later
-    const name_entities = try scene_manager.mECSManagerGO.GetGroup(GroupQuery{
-        .Not = .{
-            .mFirst = GroupQuery{ .Component = EntityNameComponent },
-            .mSecond = GroupQuery{ .Component = EntityChildComponent },
-        },
-    }, frame_allocator);
-    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(.{ .Component = SceneStackPos }, frame_allocator);
+    const name_entities = try scene_manager.mECSManagerGO.GetGroup(frame_allocator, GroupQuery{ .Not = .{
+        .mFirst = GroupQuery{ .Component = EntityNameComponent },
+        .mSecond = GroupQuery{ .Component = EntityChildComponent },
+    } });
+    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
 
     //sort the scenes so we can display them in the correct order which matters for handling events and stuff
     std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
@@ -147,7 +145,7 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
         try engine_context.mImguiEventManager.Insert(ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer } });
     }
 
-    try self.HandleScenePopupContext(scene_layer, scene_name, already_popup);
+    try self.HandleScenePopupContext(engine_context.mEngineAllocator, scene_layer, scene_name, already_popup);
 
     self.DrawSceneBorder(scene_component.mLayerType);
 
@@ -205,14 +203,14 @@ fn DrawSceneBorder(_: *ScenePanel, layer_type: LayerType) void {
     imgui.ImDrawList_AddRect(draw_list, min_pos, max_pos, color, 0.0, imgui.ImDrawFlags_None, 1.0);
 }
 
-fn HandleScenePopupContext(_: *ScenePanel, scene_layer: SceneLayer, scene_name: []const u8, already_popup: *bool) !void {
+fn HandleScenePopupContext(_: *ScenePanel, engine_allocator: std.mem.Allocator, scene_layer: SceneLayer, scene_name: []const u8, already_popup: *bool) !void {
     //if item is right clicked open up menu that will allow you to add an entity to the scene
     if (!already_popup.* and imgui.igBeginPopupContextItem(scene_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try scene_layer.CreateEntity();
+            _ = try scene_layer.CreateEntity(engine_allocator);
         }
 
         if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {

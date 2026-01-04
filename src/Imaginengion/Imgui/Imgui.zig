@@ -33,14 +33,14 @@ pub fn Init(self: *Imgui, window: *Window) !void {
     _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window.GetNativeWindow()), true);
     _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
 }
-pub fn Deinit() void {
+pub fn Deinit(_: *Imgui) void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
     defer zone.Deinit();
     imgui.ImGui_ImplOpenGL3_Shutdown();
     imgui.ImGui_ImplGlfw_Shutdown();
     imgui.igDestroyContext(null);
 }
-pub fn Begin() void {
+pub fn Begin(_: *Imgui) void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
     defer zone.Deinit();
     imgui.ImGui_ImplOpenGL3_NewFrame();
