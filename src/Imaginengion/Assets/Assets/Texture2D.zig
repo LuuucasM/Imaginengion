@@ -23,8 +23,8 @@ const Impl = switch (builtin.os.tag) {
 mTexOptions: TexOptions = .{},
 _Impl: Impl = .{},
 
-pub fn Init(self: *Texture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
-    try self._Impl.Init(engine_context, asset_file, rel_path);
+pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+    try self._Impl.Init(engine_context, abs_path, rel_path, asset_file);
 }
 
 pub fn Deinit(self: Texture2D, engine_context: *EngineContext) !void {

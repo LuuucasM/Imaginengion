@@ -120,7 +120,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
 }
 
 pub fn GetFileMetaData(self: *AssetManager, id: AssetType) *FileMetaData {
-    return self.mAssetECS.GetComponent(FileMetaData, id);
+    return self.mAssetECS.GetComponent(FileMetaData, id).?;
 }
 
 pub fn OnUpdate(self: *AssetManager, engine_context: *EngineContext) !void {

@@ -119,7 +119,7 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
     }
 }
 
-fn RenderBackButton(self: *ContentBrowserPanel, engine_context: EngineContext, thumbnail_size: f32) !void {
+fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, thumbnail_size: f32) !void {
     const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
     defer zone.Deinit();
 
@@ -164,7 +164,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
     var iter = self.mCurrentDirectory.?.iterate();
     while (try iter.next()) |entry| {
         if (entry.kind == .directory) {
-            const texture_asset = try self.mDirTextureHandle.GetAsset(Texture2D);
+            const texture_asset = try self.mDirTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -178,7 +178,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
             }
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
-            const texture_asset = try self.mPngTextureHandle.GetAsset(Texture2D);
+            const texture_asset = try self.mPngTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -187,7 +187,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
             try self.DragDropSourceBase(engine_context, entry_name, "PNGLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
-            const texutre_asset = try self.mSceneTextureHandle.GetAsset(Texture2D);
+            const texutre_asset = try self.mSceneTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -196,7 +196,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
             try self.DragDropSourceBase(engine_context, entry_name, "IMSCLoad");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
-            const texutre_asset = try self.mScriptTextureHandle.GetAsset(Texture2D);
+            const texutre_asset = try self.mScriptTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -205,7 +205,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
             try self.DragDropSourceScript(engine_context, entry_name);
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".mp3") == true) {
-            const texutre_asset = try self.mAudioTextureHandle.GetAsset(Texture2D);
+            const texutre_asset = try self.mAudioTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
@@ -345,10 +345,10 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
         var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, rel_path, .Prj);
         defer engine_context.mAssetManager.ReleaseAssetHandleRef(&script_handle);
 
-        const script_asset = try script_handle.GetAsset(ScriptAsset);
-        if (script_asset.mScriptType == .OnInputPressed or script_asset.mScriptType == .OnUpdateInput) {
+        const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);
+        if (script_asset.mScriptType == .EntityInputPressed or script_asset.mScriptType == .EntityOnUpdate) {
             _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
-        } else if (script_asset.mScriptType == .OnSceneStart) {
+        } else if (script_asset.mScriptType == .SceneSceneStart) {
             _ = imgui.igSetDragDropPayload("SceneScriptLoad", rel_path.ptr, rel_path.len, 0);
         }
     }
