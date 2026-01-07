@@ -269,7 +269,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         for (self._SceneSpecList.items) |*scene_spec_panel| {
             try scene_spec_panel.OnImguiRender(engine_context);
         }
-        try self._ComponentsPanel.OnImguiRender();
+        try self._ComponentsPanel.OnImguiRender(engine_context);
         try self._ScriptsPanel.OnImguiRender(engine_context);
         try self._CSEditorPanel.OnImguiRender(engine_context.mFrameAllocator);
 

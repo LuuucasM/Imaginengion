@@ -104,14 +104,14 @@ pub fn AddBlankChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
     return child_entity;
 }
 
-pub fn AddChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {
+pub fn AddChildEntity(self: SceneLayer, engine_allocator: std.mem.Allocator, parent_entity: Entity) !Entity {
     const new_entity_id = try self.mECSManagerGORef.AddChild(parent_entity.mEntityID);
     const child_entity = Entity{ .mEntityID = new_entity_id, .mECSManagerRef = self.mECSManagerGORef };
 
     _ = try child_entity.AddComponent(EntityIDComponent, .{ .ID = try GenUUID() });
     _ = try child_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
-    const new_name_component = try child_entity.AddComponent(EntityNameComponent, .{ .mAllocator = child_entity.GetECSAllocator() });
+    const new_name_component = try child_entity.AddComponent(EntityNameComponent, .{ .mAllocator = engine_allocator });
     _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
 
     _ = try child_entity.AddComponent(TransformComponent, null);

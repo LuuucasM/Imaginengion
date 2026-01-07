@@ -47,7 +47,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-        try ImguiUtils.SceneScriptPopupMenu();
+        try ImguiUtils.SceneScriptPopupMenu(engine_context);
     }
     //scene layer type
     const scene_component = self.mSceneLayer.GetComponent(SceneComponent).?;
@@ -64,7 +64,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
         if (imgui.igAcceptDragDropPayload("SceneScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            try SceneUtils.AddScriptToScene(self.mSceneLayer, path, .Prj);
+            try SceneUtils.AddScriptToScene(engine_context, self.mSceneLayer, path, .Prj);
         }
     }
     if (is_tree_open == true) {
@@ -77,7 +77,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
 
             while (true) : (if (curr_id == scene_script_comp.mFirst) break) {
                 if (curr_script.mScriptAssetHandle) |asset_handle| {
-                    const script_file_data = try asset_handle.GetAsset(FileMetaData);
+                    const script_file_data = try asset_handle.GetAsset(engine_context, FileMetaData);
 
                     const script_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id }, 0);
 
@@ -85,7 +85,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
                     if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                         defer imgui.igEndPopup();
                         if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                            try engine_context.mGameEventManager.Insert(.{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
+                            try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
                         }
                     }
                 }

@@ -280,10 +280,10 @@ fn RenderParentEntity(self: *ScenePanel, engine_context: *EngineContext, entity:
 
     //if the tree node gets left clicked it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
     if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left)) {
-        try self.SelectEntity(entity, scene_layer);
+        try self.SelectEntity(engine_context, entity, scene_layer);
     }
 
-    try self.HandleEntityContextMenu(entity, entity_name, scene_layer, already_popup);
+    try self.HandleEntityContextMenu(engine_context, entity, entity_name, scene_layer, already_popup);
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
@@ -293,29 +293,29 @@ fn RenderParentEntity(self: *ScenePanel, engine_context: *EngineContext, entity:
 
 fn RenderLeafEntity(self: *ScenePanel, engine_context: *EngineContext, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
     if (imgui.igSelectable_Bool(entity_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 })) {
-        try self.SelectEntity(entity, scene_layer, engine_context);
+        try self.SelectEntity(engine_context, entity, scene_layer);
     }
 
-    try self.HandleEntityContextMenu(entity, entity_name, scene_layer, already_popup);
+    try self.HandleEntityContextMenu(engine_context, entity, entity_name, scene_layer, already_popup);
 }
 
 fn SelectEntity(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, scene_layer: SceneLayer) !void {
-    try engine_context.mImguiEventManager.Insert(.{ .ET_SelectEntityEvent = .{ .SelectedEntity = entity } });
-    try engine_context.mImguiEventManager.Insert(.{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
+    try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_SelectEntityEvent = .{ .SelectedEntity = entity } });
+    try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 }
 
-fn HandleEntityContextMenu(_: *ScenePanel, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
+fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
     //if item is right clicked open up menu that will allow you to add an entity to the scene
     if (!already_popup.* and imgui.igBeginPopupContextItem(entity_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try scene_layer.AddChildEntity(entity);
+            _ = try scene_layer.AddChildEntity(engine_context.mEngineAllocator, entity);
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
-            try entity.Delete();
+            try entity.Delete(engine_context);
         }
     }
 }
@@ -334,15 +334,16 @@ fn RenderChildEntities(self: *ScenePanel, engine_context: *EngineContext, parent
     }
 }
 
-fn HandlePanelDragDrop(_: *ScenePanel, engine_context: EngineContext) !void {
+fn HandlePanelDragDrop(_: *ScenePanel, engine_context: *EngineContext) !void {
     if (imgui.igBeginDragDropTarget()) {
         defer imgui.igEndDragDropTarget();
         if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            try engine_context.mImguiEventManager.Insert(.{
+            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{
                 .ET_OpenSceneEvent = .{
-                    .Path = try engine_context.mImguiEventManager.GetEventAllocator().dupe(u8, path),
+                    .mAbsPath = try engine_context.mEngineAllocator.dupe(u8, path),
+                    .mAllocator = engine_context.mEngineAllocator,
                 },
             });
         }
@@ -354,10 +355,10 @@ fn HandlePanelContextMenu(_: *ScenePanel, engine_context: *EngineContext, alread
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("New Game Scene", "", false, true)) {
-            try engine_context.mImguiEventManager.Insert(.{ .ET_NewSceneEvent = .{ .mLayerType = .GameLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_NewSceneEvent = .{ .mLayerType = .GameLayer } });
         }
         if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true)) {
-            try engine_context.mImguiEventManager.Insert(.{ .ET_NewSceneEvent = .{ .mLayerType = .OverlayLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_NewSceneEvent = .{ .mLayerType = .OverlayLayer } });
         }
     }
 }

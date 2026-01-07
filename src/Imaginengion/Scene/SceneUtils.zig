@@ -12,13 +12,7 @@ pub fn AddScriptToScene(engine_context: *EngineContext, scene_layer: SceneLayer,
     var ecs = scene_layer.mECSManagerSCRef;
     var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, script_asset_path, path_type);
 
-    const script_asset = new_script_handle.GetAsset(ScriptAsset) catch |err| switch (err) {
-        error.ScriptCompileError => {
-            new_script_handle.ReleaseAsset();
-            return;
-        },
-        else => return err,
-    };
+    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
     if (scene_layer.HasComponent(SceneScriptComponent) == true) {
         //entity already has a script so iterate until the end of the linked list
@@ -43,7 +37,7 @@ pub fn AddScriptToScene(engine_context: *EngineContext, scene_layer: SceneLayer,
             .mScriptAssetHandle = new_script_handle,
         };
         switch (script_asset.mScriptType) {
-            .OnSceneStart => {
+            .SceneSceneStart => {
                 _ = try new_scene_layer.AddComponent(SceneScriptComponent, new_script_component);
                 _ = try new_scene_layer.AddComponent(OnSceneStartScript, null);
             },
@@ -59,7 +53,7 @@ pub fn AddScriptToScene(engine_context: *EngineContext, scene_layer: SceneLayer,
             .mScriptAssetHandle = new_script_handle,
         };
         switch (script_asset.mScriptType) {
-            .OnSceneStart => {
+            .SceneSceneStart => {
                 _ = try scene_layer.AddComponent(SceneScriptComponent, entity_new_script_component);
                 _ = try scene_layer.AddComponent(OnSceneStartScript, null);
             },

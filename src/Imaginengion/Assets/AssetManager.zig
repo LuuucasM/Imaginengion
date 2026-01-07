@@ -97,6 +97,12 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
     std.debug.assert(self.mAssetECS.HasComponent(FileMetaData, asset_id));
     std.debug.assert(self.mAssetECS.HasComponent(AssetMetaData, asset_id));
 
+    if (asset_type == FileMetaData or asset_type == AssetMetaData) {
+        //this if statement allows filemetadata and assetmetadata to not require an Init function because compiler
+        //will do magic to ensure for those 2 asset types this branch is the only one that will exist
+        return self.mAssetECS.GetComponent(asset_type, asset_id).?;
+    }
+
     if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
         return asset;
     } else {
