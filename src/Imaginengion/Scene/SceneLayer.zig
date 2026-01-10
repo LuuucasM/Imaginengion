@@ -53,9 +53,9 @@ pub fn GetComponent(self: SceneLayer, comptime component_type: type) ?*component
 pub fn HasComponent(self: SceneLayer, comptime component_type: type) bool {
     return self.mECSManagerSCRef.HasComponent(component_type, self.mSceneID);
 }
-pub fn GetEntityGroup(self: SceneLayer, allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
-    var entity_list = try self.mECSManagerGORef.GetGroup(allocator, query);
-    self.FilterEntityByScene(&entity_list, allocator);
+pub fn GetEntityGroup(self: SceneLayer, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
+    var entity_list = try self.mECSManagerGORef.GetGroup(frame_allocator, query);
+    self.FilterEntityByScene(frame_allocator, &entity_list);
     return entity_list;
 }
 pub fn GetUUID(self: SceneLayer) u128 {

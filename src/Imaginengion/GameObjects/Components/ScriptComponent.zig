@@ -40,11 +40,6 @@ pub fn GetInd(self: ScriptComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *ScriptComponent, frame_allocator: std.mem.Allocator) !void {
-    const script = try self.mScriptHandle.GetAsset(ScriptAsset);
-    try script.EditorRender(frame_allocator);
-}
-
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == ScriptComponent) {
@@ -57,7 +52,7 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.beginObject();
 
     try jw.objectField("FilePath");
-    const asset_file_data = try self.mScriptAssetHandle.GetAsset(FileMetaData);
+    const asset_file_data = self.mScriptAssetHandle.GetFileMetaData();
     try jw.write(asset_file_data.mRelPath.items);
 
     try jw.objectField("PathType");

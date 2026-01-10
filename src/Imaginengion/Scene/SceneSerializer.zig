@@ -63,7 +63,7 @@ pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_a
 }
 pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
     const frame_allocator = engine_context.mFrameAllocator;
-    const scene_asset = try scene_asset_handle.GetAsset(SceneAsset);
+    const scene_asset = try scene_asset_handle.GetAsset(engine_context, SceneAsset);
 
     var io_reader = std.io.Reader.fixed(scene_asset.mSceneContents.items);
     var json_reader = std.json.Reader.init(frame_allocator, &io_reader);
@@ -185,12 +185,12 @@ fn SerializeMultiSceneComponents(write_stream: *WriteStream, scene_layer: SceneL
 }
 
 fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
-    const entity_list = try scene_layer.GetEntityGroup(.{
+    const entity_list = try scene_layer.GetEntityGroup(frame_allocator, .{
         .Not = .{
             .mFirst = .{ .Component = EntitySceneComponent },
             .mSecond = .{ .Component = EntityChildComponent },
         },
-    }, frame_allocator);
+    });
 
     for (entity_list.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = scene_layer.mECSManagerGORef };
@@ -388,7 +388,7 @@ fn DeSerializeEntityComponent(reader: *std.json.Reader, entity: Entity, comptime
 
 fn DeserializeCameraComponent(engine_context: *EngineContext, entity: Entity) !void {
     if (entity.GetComponent(CameraComponent)) |camera_component| {
-        const ecs_allocator = entity.GetECSAllocator();
+        const ecs_allocator = engine_context.mEngineAllocator;
         camera_component.mViewportFrameBuffer = try FrameBuffer.Init(ecs_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, camera_component.mViewportWidth, camera_component.mViewportHeight);
         camera_component.mViewportVertexArray = VertexArray.Init(ecs_allocator);
         camera_component.mViewportVertexBuffer = VertexBuffer.Init(ecs_allocator, @sizeOf([4][2]f32));

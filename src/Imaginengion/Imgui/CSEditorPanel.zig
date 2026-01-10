@@ -5,6 +5,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const CSEditorPanel = @This();
 
 mP_Open: bool = true,
@@ -18,7 +19,7 @@ pub fn Deinit(self: *CSEditorPanel) void {
     self.mEditorWindows.deinit();
 }
 
-pub fn OnImguiRender(self: *CSEditorPanel, frame_allocator: std.mem.Allocator) !void {
+pub fn OnImguiRender(self: *CSEditorPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("CSEditor OIR", @src());
     defer zone.Deinit();
 
@@ -61,7 +62,7 @@ pub fn OnImguiRender(self: *CSEditorPanel, frame_allocator: std.mem.Allocator) !
         var is_open = true;
         _ = imgui.igBegin(name.ptr, &is_open, 0);
         defer imgui.igEnd();
-        try editor_window.EditorRender(frame_allocator);
+        try editor_window.EditorRender(engine_context);
 
         if (is_open == false) {
             try to_remove.append(fba_allocator, id_name);

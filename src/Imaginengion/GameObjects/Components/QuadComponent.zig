@@ -174,7 +174,7 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.write(self.mTexOptions.mTexCoords);
 
     try jw.objectField("Texture");
-    const asset_file_data = try self.mTexture.GetFileMetaData();
+    const asset_file_data = self.mTexture.GetFileMetaData();
     try jw.write(asset_file_data.mRelPath.items);
 
     try jw.objectField("PathType");

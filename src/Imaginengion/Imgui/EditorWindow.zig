@@ -1,5 +1,6 @@
 const std = @import("std");
 const Entity = @import("../GameObjects/Entity.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const EditorWindow = @This();
 
 mEntity: Entity,
@@ -7,7 +8,7 @@ mPtr: *anyopaque,
 mVTable: *const VTab,
 
 const VTab = struct {
-    EditorRender: *const fn (*anyopaque, std.mem.Allocator) anyerror!void,
+    EditorRender: *const fn (*anyopaque, *EngineContext) anyerror!void,
     GetComponentName: *const fn (*anyopaque) []const u8,
     GetComponentID: *const fn (*anyopaque) u32,
 };
@@ -20,9 +21,9 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
 
     const impl = struct {
-        fn EditorRender(ptr: *anyopaque, frame_allocator: std.mem.Allocator) !void {
+        fn EditorRender(ptr: *anyopaque, engine_context: *EngineContext) !void {
             const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
-            try self.EditorRender(frame_allocator);
+            try self.EditorRender(engine_context);
         }
         fn GetComponentName(ptr: *anyopaque) []const u8 {
             const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
@@ -46,8 +47,8 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     };
 }
 
-pub fn EditorRender(self: EditorWindow, frame_allocator: std.mem.Allocator) !void {
-    try self.mVTable.EditorRender(self.mPtr, frame_allocator);
+pub fn EditorRender(self: EditorWindow, engine_context: *EngineContext) !void {
+    try self.mVTable.EditorRender(self.mPtr, engine_context);
 }
 
 pub fn GetComponentName(self: EditorWindow) []const u8 {

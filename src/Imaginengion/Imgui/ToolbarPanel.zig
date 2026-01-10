@@ -37,7 +37,7 @@ pub fn Deinit(self: *ToolbarPanel) void {
     self.mStopIcon.ReleaseAsset();
 }
 
-pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, frame_allocator: std.mem.Allocator) !void {
+pub fn OnImguiRender(self: *ToolbarPanel, engine_context: *EngineContext, game_scene_manager: *SceneManager) !void {
     const zone = Tracy.ZoneInit("ToolbarPanel OIR", @src());
     defer zone.Deinit();
 
@@ -59,7 +59,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
     defer imgui.igEnd();
 
     const size = imgui.igGetWindowHeight();
-    const texture: *Texture2D = if (self.mState == .Play) try self.mStopIcon.GetAsset(Texture2D) else try self.mPlayIcon.GetAsset(Texture2D);
+    const texture: *Texture2D = if (self.mState == .Play) try self.mStopIcon.GetAsset(engine_context, Texture2D) else try self.mPlayIcon.GetAsset(engine_context, Texture2D);
 
     var window_size: imgui.struct_ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&window_size);
@@ -87,13 +87,13 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
     ) == true) {
         if (self.mStartEntity != null and self.mState == .Stop) {
             const entity = self.mStartEntity.?;
-            try ImguiEventManager.Insert(ImguiEvent{
+            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = entity },
             });
             self.mState = .Play;
         } else if (self.mState == .Play) {
             std.debug.assert(self.mStartEntity != null);
-            try ImguiEventManager.Insert(ImguiEvent{
+            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = null },
             });
             self.mState = .Stop;
@@ -119,7 +119,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, game_scene_manager: *SceneManager, fra
             self.mStartEntity = null;
         }
 
-        const camera_entities = try game_scene_manager.GetEntityGroup(GroupQuery{ .Component = CameraComponent }, frame_allocator);
+        const camera_entities = try game_scene_manager.GetEntityGroup(engine_context.mFrameAllocator, GroupQuery{ .Component = CameraComponent });
 
         for (camera_entities.items) |entity_id| {
             const entity = game_scene_manager.GetEntity(entity_id);

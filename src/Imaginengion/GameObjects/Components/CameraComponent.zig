@@ -5,7 +5,6 @@ const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");
 const VertexArray = @import("../../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
-const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const Entity = @import("../Entity.zig");
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -114,7 +113,7 @@ pub fn GetInd(self: CameraComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *CameraComponent, _: std.mem.Allocator) !void {
+pub fn EditorRender(self: *CameraComponent, _: *EngineContext) !void {
 
     //aspect ratio
     _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);

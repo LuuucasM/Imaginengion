@@ -42,7 +42,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
-        try ImguiUtils.EntityScriptPopupMenu();
+        try ImguiUtils.EntityScriptPopupMenu(engine_context);
     }
 
     //making a child so that drag drop target will tae the entire available region
@@ -57,7 +57,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
 
                 while (true) : (if (curr_id == script_component.mFirst) break) {
                     const asset_handle = curr_comp.mScriptAssetHandle;
-                    const script_file_data = try asset_handle.GetAsset(FileMetaData);
+                    const script_file_data = try asset_handle.GetAsset(engine_context, FileMetaData);
 
                     const script_name = try std.fmt.allocPrint(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id });
 
@@ -67,7 +67,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
                         defer imgui.igEndPopup();
 
                         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                            try engine_context.GameEventManager.Insert(.{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
+                            try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
                         }
                     }
 
@@ -84,7 +84,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
             const path_len = payload.*.DataSize;
             const rel_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                try GameObjectUtils.AddScriptToEntity(entity, rel_path, .Prj);
+                try GameObjectUtils.AddScriptToEntity(engine_context, entity, rel_path, .Prj);
             }
         }
     }

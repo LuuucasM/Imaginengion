@@ -110,7 +110,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
 
     defer text_json.close();
 
-    return try self.ProcessTextJson(arena_allocator, text_json);
+    return try self.ProcessTextJson(engine_context.mEngineAllocator, arena_allocator, text_json);
 }
 
 pub fn Deinit(self: *TextAsset, _: *EngineContext) !void {
@@ -119,7 +119,7 @@ pub fn Deinit(self: *TextAsset, _: *EngineContext) !void {
     }
 }
 
-fn ProcessTextJson(self: *TextAsset, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !void {
+fn ProcessTextJson(self: *TextAsset, engine_allocator: std.mem.Allocator, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !void {
     const file_size = try text_json.getEndPos();
 
     var file_contents = try std.ArrayList(u8).initCapacity(arena_allocator, file_size);
@@ -152,7 +152,7 @@ fn ProcessTextJson(self: *TextAsset, arena_allocator: std.mem.Allocator, text_js
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
             try self.ProcessMetrics(&reader, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try self.ProcessGlyphs(&reader, arena_allocator);
+            try self.ProcessGlyphs(engine_allocator, &reader, arena_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
             try self.ProcessKerning(&reader, arena_allocator);
         }
@@ -220,7 +220,7 @@ fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, arena_allocator: s
         }
     }
 }
-fn ProcessGlyphs(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
+fn ProcessGlyphs(self: *TextAsset, engine_allocator: std.mem.Allocator, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -231,7 +231,7 @@ fn ProcessGlyphs(self: *TextAsset, reader: *std.json.Reader, arena_allocator: st
             else => return error.NotExpected,
         }
         var new_glyph = GlyphInfo{
-            .mKernings = KerningsT.init(self.mAssetAllocator),
+            .mKernings = KerningsT.init(engine_allocator),
         };
         var glyph_ind: usize = 0;
         try SingleGlyph(reader, &glyph_ind, &new_glyph, arena_allocator);

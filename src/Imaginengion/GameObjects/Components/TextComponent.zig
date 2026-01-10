@@ -42,6 +42,7 @@ mTexHandle: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},
 mFontSize: f32 = 9,
 mBounds: Vec2f32 = Vec2f32{ 8, 8 },
+mEngineAllocator: std.mem.Allocator = undefined,
 
 pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
     self.mTextAssetHandle.ReleaseAsset();
@@ -54,12 +55,13 @@ pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void 
     const frame_allocator = engine_context.mFrameAllocator;
     //text box
     const text = try frame_allocator.dupeZ(u8, self.mText.items);
+    self.mEngineAllocator = engine_context.mEngineAllocator;
     if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
         _ = self.mText.swapRemove(self.mText.items.len - 1);
     }
 
     //font name just as a text that can be drag dropped onto to change the text
-    const file_data_asset = try self.mTextAssetHandle.GetAsset(FileMetaData);
+    const file_data_asset = try self.mTextAssetHandle.GetAsset(engine_context, FileMetaData);
     const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
     const name_term = try frame_allocator.dupeZ(u8, name);
     imgui.igTextUnformatted(name_term, null);
@@ -77,7 +79,7 @@ pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void 
 fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {
     if (data.*.EventFlag == imgui.ImGuiInputTextFlags_CallbackResize) {
         const text_component: *TextComponent = @ptrCast(@alignCast(data.*.UserData.?));
-        _ = text_component.mText.resize(text_component.mAllocator, @intCast(data.*.BufTextLen + 1)) catch return 0;
+        _ = text_component.mText.resize(text_component.mEngineAllocator, @intCast(data.*.BufTextLen + 1)) catch return 0;
         data.*.Buf = text_component.mText.items.ptr;
     }
     return 0;
@@ -87,19 +89,19 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.beginObject();
 
     try jw.objectField("TextAssetHandle");
-    const text_asset_data = try self.mTextAssetHandle.GetAsset(FileMetaData);
+    const text_asset_data = self.mTextAssetHandle.GetFileMetaData();
     try jw.write(text_asset_data.mRelPath.items);
     try jw.objectField("PathType");
     try jw.write(text_asset_data.mPathType);
 
     try jw.objectField("AtlasHandle");
-    const file_data_asset = try self.mAtlasHandle.GetAsset(FileMetaData);
+    const file_data_asset = self.mAtlasHandle.GetFileMetaData();
     try jw.write(file_data_asset.mRelPath.items);
     try jw.objectField("PathType");
     try jw.write(file_data_asset.mPathType);
 
     try jw.objectField("TextureAssetHandle");
-    const file_data_texture = try self.mTexHandle.GetAsset(FileMetaData);
+    const file_data_texture = self.mTexHandle.GetFileMetaData();
     try jw.write(file_data_texture.mRelPath.items);
     try jw.objectField("PathType");
     try jw.write(file_data_texture.mPathType);

@@ -44,7 +44,7 @@ pub fn GetInd(self: TransformComponent) u32 {
 
 pub const Category: ComponentCategory = .Unique;
 
-pub fn EditorRender(self: *TransformComponent) !void {
+pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
     DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
     DrawVec3ControlRot("Rotation", &self.Rotation, Quatf32{ 1.0, 0.0, 0.0, 0.0 }, 0.25, 100.0);
     DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);

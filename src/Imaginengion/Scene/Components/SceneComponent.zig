@@ -45,3 +45,34 @@ pub fn GetName(self: SceneComponent) []const u8 {
     _ = self;
     return "SceneComponent";
 }
+
+pub fn jsonStringify(self: *const SceneComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("LayerType");
+    try jw.write(self.mLayerType);
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!SceneComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    var result: SceneComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, field_name, "LayerType")) {
+            result.mLayerType = try std.json.innerParse(bool, frame_allocator, reader, options);
+        }
+    }
+
+    return result;
+}

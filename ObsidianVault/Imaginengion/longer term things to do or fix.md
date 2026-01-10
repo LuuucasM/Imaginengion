@@ -15,9 +15,11 @@
 	- then now that we have default, when doing GetAssetHandleRef for actual paths given, if we encounter any error we can instead return the asset for that type using the default handle instead and then of course print the error that was generated
 	- i have to ensure that the initialization of default is done successfully and asserted because it is a core part of the engine that needs to exist
 	- since AssetHandles will have a default handle they will also always be valid. so i can change assethandles so that instead of having to ask the asset manager to assign to a handle, I can add a function to asset handle like ChangeAsset() which will take in a path like GetAssetHandleRef (or "default") like it does right now and automatically releases the previous asset and gets a reference to the new asset by its self
+- change text system so that while making a text asset it also precomputes the signed distances because they will never change anyway and then also save that to a file
 - add physics
 - make pong
 - add a way to export the game into its standalone
+- add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
 - read about vulkan
 	- using bindless textures in opengl prevents from using spirv, which prevents from using detailed performance profiling using nsight so i have no choice but to switch now
 	- start reading: https://vulkan-tutorial.com/en/Overview

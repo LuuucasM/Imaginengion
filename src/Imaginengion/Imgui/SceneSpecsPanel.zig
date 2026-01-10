@@ -54,7 +54,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     imgui.igText(@tagName(scene_component.mLayerType));
 
     const scene_transform = self.mSceneLayer.GetComponent(SceneTransformComponent).?;
-    try scene_transform.EditorRender();
+    try scene_transform.EditorRender(engine_context);
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
     const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;

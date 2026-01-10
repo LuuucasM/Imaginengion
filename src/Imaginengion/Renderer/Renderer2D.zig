@@ -5,6 +5,7 @@ const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
@@ -137,13 +138,13 @@ pub fn BindBuffers(self: *Renderer2D) void {
     self.mGlyphBuffer.Bind(1);
 }
 
-pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponent, quad_component: *QuadComponent) !void {
+pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, quad_component: *QuadComponent) !void {
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
-    const texture_asset = try quad_component.mTexture.GetAsset(Texture2D);
+    const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
 
-    try self.mQuadBufferBase.append(self._Allocator, .{
+    try self.mQuadBufferBase.append(engine_context.mFrameAllocator, .{
         .Position = [3]f32{ transform_component.Translation[0], transform_component.Translation[1], transform_component.Translation[2] },
         .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
         .Scale = [3]f32{ transform_component.Scale[0], transform_component.Scale[1], transform_component.Scale[2] },
@@ -156,13 +157,13 @@ pub fn DrawQuad(self: *Renderer2D, transform_component: *EntityTransformComponen
     });
 }
 
-pub fn DrawText(self: *Renderer2D, transform_component: *EntityTransformComponent, text_component: *TextComponent) !void {
+pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, text_component: *TextComponent) !void {
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
-    const text_asset = try text_component.mTextAssetHandle.GetAsset(TextAsset);
-    const atlas_asset = try text_component.mAtlasHandle.GetAsset(Texture2D);
-    const texture_asset = try text_component.mTexHandle.GetAsset(Texture2D);
+    const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
+    const atlas_asset = try text_component.mAtlasHandle.GetAsset(engine_context, Texture2D);
+    const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
 
     const left_bounds = transform_component.Translation[0] - text_component.mBounds[0];
     const right_bounds = transform_component.Translation[0] + text_component.mBounds[1];
@@ -189,7 +190,7 @@ pub fn DrawText(self: *Renderer2D, transform_component: *EntityTransformComponen
             pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
-        try self.mGlyphBufferBase.append(self._Allocator, .{
+        try self.mGlyphBufferBase.append(engine_context.mFrameAllocator, .{
             .Position = [3]f32{ pen_x, pen_y, transform_component.Translation[2] },
             .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
             .Scale = text_component.mFontSize,

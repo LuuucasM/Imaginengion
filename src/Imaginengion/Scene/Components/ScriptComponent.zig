@@ -53,7 +53,7 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.objectField("FilePath");
 
     if (self.mScriptAssetHandle) |asset_handle| {
-        const asset_file_data = try asset_handle.GetAsset(FileMetaData);
+        const asset_file_data = asset_handle.GetFileMetaData();
         try jw.write(asset_file_data.mRelPath.items);
     } else {
         try jw.write("No Script Asset");

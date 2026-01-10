@@ -37,8 +37,8 @@ pub fn GetInd(self: NameComponent) u32 {
     return @intCast(Ind);
 }
 
-pub fn EditorRender(self: *NameComponent, frame_allocator: std.mem.Allocator) !void {
-    const text = try frame_allocator.dupeZ(u8, self.mName.items);
+pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
+    const text = try engine_context.mFrameAllocator.dupeZ(u8, self.mName.items);
     if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
         _ = self.mName.swapRemove(self.mName.items.len - 1);
     }

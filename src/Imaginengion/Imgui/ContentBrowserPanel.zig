@@ -236,7 +236,7 @@ pub fn OnNewProjectEvent(self: *ContentBrowserPanel, engine_allocator: std.mem.A
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree();
+    self.mProjectPath.clearAndFree(engine_allocator);
     self.mCurrentPath.clearAndFree(engine_allocator);
 
     self.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});

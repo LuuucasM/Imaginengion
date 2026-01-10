@@ -89,7 +89,7 @@ pub fn SwapBuffers(self: *Renderer) void {
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, frame_allocator: std.mem.Allocator, mode: u32) !void {
+pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, mode: u32) !void {
     std.debug.assert(mode == 0b0 or mode == 0b1);
 
     const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
@@ -98,22 +98,25 @@ pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component:
     self.mRenderContext.PushDebugGroup("Frame\x00");
     defer self.mRenderContext.PopDebugGroup();
 
-    UpdateCameraBuffer(camera_component, camera_transform);
-    UpdateModeBuffer(mode);
-    BeginRendering();
+    self.UpdateCameraBuffer(camera_component, camera_transform);
+    self.UpdateModeBuffer(mode);
+    self.BeginRendering(engine_context.mEngineAllocator);
 
     //get all the shapes minus the children because we will render them with the parents
-    const shapes_ids = try scene_manager.GetEntityGroup(GroupQuery{
-        .Not = .{
-            .mFirst = GroupQuery{
-                .Or = &[_]GroupQuery{
-                    GroupQuery{ .Component = QuadComponent },
-                    GroupQuery{ .Component = TextComponent },
+    const shapes_ids = try scene_manager.GetEntityGroup(
+        engine_context.mFrameAllocator,
+        GroupQuery{
+            .Not = .{
+                .mFirst = GroupQuery{
+                    .Or = &[_]GroupQuery{
+                        GroupQuery{ .Component = QuadComponent },
+                        GroupQuery{ .Component = TextComponent },
+                    },
                 },
+                .mSecond = GroupQuery{ .Component = EntityChildComponent },
             },
-            .mSecond = GroupQuery{ .Component = EntityChildComponent },
         },
-    }, frame_allocator);
+    );
 
     //TODO: sorting
     //TODO: culling
@@ -128,10 +131,10 @@ pub fn OnUpdate(self: *Renderer, scene_manager: *SceneManager, camera_component:
         base_transform_component.SetScale(Vec3f32{ 0.0, 0.0, 0.0 });
 
         const shape_entity = scene_manager.GetEntity(shape_id);
-        try DrawShape(shape_entity, &base_transform_component);
+        try self.DrawShape(engine_context, shape_entity, &base_transform_component);
     }
 
-    try EndRendering(camera_component);
+    try self.EndRendering(engine_context, camera_component);
 }
 
 pub fn GetRenderStats(self: *Renderer) RenderStats {
@@ -156,7 +159,7 @@ fn UpdateModeBuffer(self: *Renderer, mode: u32) void {
     self.mModeBuffer.mMode = mode;
 }
 
-fn BeginRendering(self: *Renderer) void {
+fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("BeginRendering", @src());
     defer zone.Deinit();
 
@@ -168,10 +171,10 @@ fn BeginRendering(self: *Renderer) void {
 
     self.mStats = std.mem.zeroes(RenderStats);
 
-    self.mR2D.StartBatch();
+    self.mR2D.StartBatch(engine_allocator);
 }
 
-fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
+fn DrawChildren(self: *Renderer, engine_context: *EngineContext, entity: Entity, parent_transform: *TransformComponent) !void {
     const zone = Tracy.ZoneInit("Renderer DrawChildren", @src());
     defer zone.Deinit();
 
@@ -182,14 +185,14 @@ fn DrawChildren(entity: Entity, parent_transform: *TransformComponent) !void {
     while (true) : (if (curr_id == parent_component.mFirstChild) break) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-        try DrawShape(child_entity, parent_transform);
+        try self.DrawShape(engine_context, child_entity, parent_transform);
 
         const child_component = child_entity.GetComponent(EntityChildComponent).?;
         curr_id = child_component.mNext;
     }
 }
 
-fn DrawShape(self: *Renderer, entity: Entity, parent_transform: *TransformComponent) anyerror!void {
+fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, parent_transform: *TransformComponent) anyerror!void {
     const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
     defer zone.Deinit();
 
@@ -200,20 +203,20 @@ fn DrawShape(self: *Renderer, entity: Entity, parent_transform: *TransformCompon
 
     //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try self.mR2D.DrawQuad(parent_transform, quad_component);
+        try self.mR2D.DrawQuad(engine_context, parent_transform, quad_component);
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        try self.mR2D.DrawText(parent_transform, text_component);
+        try self.mR2D.DrawText(engine_context, parent_transform, text_component);
     }
 
     //check is if parent, if so draw children else nothing
     if (entity.GetComponent(EntityParentComponent)) |parent_component| {
         _ = parent_component;
-        try DrawChildren(entity, parent_transform);
+        try self.DrawChildren(engine_context, entity, parent_transform);
     }
 }
 
-fn EndRendering(self: *Renderer, camera_component: *CameraComponent) !void {
+fn EndRendering(self: *Renderer, engine_context: *EngineContext, camera_component: *CameraComponent) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
@@ -226,7 +229,7 @@ fn EndRendering(self: *Renderer, camera_component: *CameraComponent) !void {
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 
-    const sdf_shader_asset = try self.mSDFShader.GetAsset(ShaderAsset);
+    const sdf_shader_asset = try self.mSDFShader.GetAsset(engine_context, ShaderAsset);
     sdf_shader_asset.Bind();
 
     try self.mR2D.SetBuffers();
