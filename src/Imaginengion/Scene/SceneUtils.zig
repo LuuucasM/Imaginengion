@@ -10,7 +10,7 @@ const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
 pub fn AddScriptToScene(engine_context: *EngineContext, scene_layer: SceneLayer, script_asset_path: []const u8, path_type: PathType) !void {
     var ecs = scene_layer.mECSManagerSCRef;
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, script_asset_path, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), script_asset_path, path_type);
 
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 

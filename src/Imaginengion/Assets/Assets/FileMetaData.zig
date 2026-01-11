@@ -16,7 +16,7 @@ mHash: u64 = 0,
 mPathType: PathType = .Eng,
 
 pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) !void {
-    self.mRelPath.deinit(engine_context.mEngineAllocator);
+    self.mRelPath.deinit(engine_context.EngineAllocator());
 }
 
 pub const Ind: usize = blk: {

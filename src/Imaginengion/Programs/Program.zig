@@ -15,8 +15,8 @@ pub fn Init(self: *Program, window: *Window, engine_context: *EngineContext) !vo
     try self._Impl.Init(window, engine_context);
 }
 
-pub fn Deinit(self: *Program) !void {
-    try self._Impl.Deinit();
+pub fn Deinit(self: *Program, engine_context: *EngineContext) !void {
+    try self._Impl.Deinit(engine_context);
 }
 
 pub fn OnUpdate(self: *Program, dt: f32, engine_context: *EngineContext) !void {
@@ -35,6 +35,6 @@ pub fn OnImguiEvent(self: *Program, event: *ImguiEvent, engine_context: *EngineC
     try self._Impl.OnImguiEvent(event, engine_context);
 }
 
-pub fn OnGameEvent(self: *Program, event: *GameEvent) !void {
-    try self._Impl.OnGameEvent(event);
+pub fn OnGameEvent(self: *Program, engine_context: *EngineContext, event: *GameEvent) !void {
+    try self._Impl.OnGameEvent(engine_context, event);
 }

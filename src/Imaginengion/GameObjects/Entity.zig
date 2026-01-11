@@ -104,6 +104,6 @@ pub fn Duplicate(self: Entity) !Entity {
     return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
 }
 pub fn Delete(self: Entity, engine_context: *EngineContext) !void {
-    try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
-    try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
+    try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
 }

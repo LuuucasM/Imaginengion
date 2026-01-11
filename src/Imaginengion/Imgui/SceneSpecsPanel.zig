@@ -30,7 +30,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     const zone = Tracy.ZoneInit("Scene Specs Panel OIR", @src());
     defer zone.Deinit();
 
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     const name_component = self.mSceneLayer.GetComponent(SceneNameComponent).?;
 
@@ -76,7 +76,8 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
             var curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id).?;
 
             while (true) : (if (curr_id == scene_script_comp.mFirst) break) {
-                if (curr_script.mScriptAssetHandle) |asset_handle| {
+                if (curr_script.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
+                    const asset_handle = curr_script.mScriptAssetHandle;
                     const script_file_data = try asset_handle.GetAsset(engine_context, FileMetaData);
 
                     const script_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id }, 0);
@@ -85,7 +86,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
                     if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                         defer imgui.igEndPopup();
                         if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                            try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
+                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
                         }
                     }
                 }

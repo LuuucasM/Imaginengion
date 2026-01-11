@@ -10,14 +10,14 @@ mSceneContents: std.ArrayList(u8) = .{},
 
 pub fn Init(self: *SceneAsset, engine_context: *EngineContext, _: []const u8, _: []const u8, asset_file: std.fs.File) !void {
     const file_size = try asset_file.getEndPos();
-    self.mSceneContents = try std.ArrayList(u8).initCapacity(engine_context.mEngineAllocator, file_size);
-    try self.mSceneContents.resize(engine_context.mEngineAllocator, file_size);
+    self.mSceneContents = try std.ArrayList(u8).initCapacity(engine_context.EngineAllocator(), file_size);
+    try self.mSceneContents.resize(engine_context.EngineAllocator(), file_size);
 
     _ = try asset_file.readAll(self.mSceneContents.items);
 }
 
 pub fn Deinit(self: *SceneAsset, engine_context: *EngineContext) !void {
-    self.mSceneContents.deinit(engine_context.mEngineAllocator);
+    self.mSceneContents.deinit(engine_context.EngineAllocator());
 }
 
 pub const Ind: usize = blk: {

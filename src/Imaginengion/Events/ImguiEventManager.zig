@@ -23,24 +23,24 @@ pub fn Insert(self: *ImguiEventManager, engine_allocator: std.mem.Allocator, eve
 pub fn ProcessEvents(self: *ImguiEventManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("ImguiEventManager ProcessEvents", @src());
     defer zone.Deinit();
-    const engine_allocator = engine_context.mEngineAllocator;
+    const engine_allocator = engine_context.EngineAllocator();
     for (self.mEventPool.items) |*event| {
         try self.mProgram.OnImguiEvent(event, engine_context);
         switch (event.*) {
             .ET_OpenSceneEvent => |e| {
-                engine_allocator.free(e.Path);
+                engine_allocator.free(e.mAbsPath);
             },
             .ET_SaveSceneAsEvent => |e| {
-                engine_allocator.free(e.AbsPath);
+                engine_allocator.free(e.mAbsPath);
             },
             .ET_SaveEntityAsEvent => |e| {
-                engine_allocator.free(e.Path);
+                engine_allocator.free(e.mAbsPath);
             },
             .ET_NewProjectEvent => |e| {
-                engine_allocator.free(e.Path);
+                engine_allocator.free(e.mAbsPath);
             },
             .ET_OpenProjectEvent => |e| {
-                engine_allocator.free(e.Path);
+                engine_allocator.free(e.mAbsPath);
             },
             else => {},
         }

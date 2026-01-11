@@ -65,7 +65,7 @@ pub const Ind: usize = blk: {
 };
 
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     // Volume drag
     _ = imgui.igDragFloat("Volume", &self.mVolume, 0.01, 0.0, 1.0, "%.2f", imgui.ImGuiSliderFlags_None);
@@ -118,7 +118,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, path, .Prj);
+            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj);
         }
         imgui.igEndDragDropTarget();
     }

@@ -43,7 +43,7 @@ pub fn EntityManager(entity_t: type) type {
             }
         }
 
-        pub fn DestroyEntity(self: *Self, entityID: entity_t, engine_allocator: std.mem.Allocator) !void {
+        pub fn DestroyEntity(self: *Self, engine_allocator: std.mem.Allocator, entityID: entity_t) !void {
             _ = self._IDsInUse.remove(entityID);
             try self._IDsRemoved.append(engine_allocator, entityID);
         }

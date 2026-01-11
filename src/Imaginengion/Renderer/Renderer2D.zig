@@ -144,7 +144,7 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
 
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
 
-    try self.mQuadBufferBase.append(engine_context.mFrameAllocator, .{
+    try self.mQuadBufferBase.append(engine_context.FrameAllocator(), .{
         .Position = [3]f32{ transform_component.Translation[0], transform_component.Translation[1], transform_component.Translation[2] },
         .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
         .Scale = [3]f32{ transform_component.Scale[0], transform_component.Scale[1], transform_component.Scale[2] },
@@ -190,7 +190,7 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
             pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
-        try self.mGlyphBufferBase.append(engine_context.mFrameAllocator, .{
+        try self.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
             .Position = [3]f32{ pen_x, pen_y, transform_component.Translation[2] },
             .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
             .Scale = text_component.mFontSize,

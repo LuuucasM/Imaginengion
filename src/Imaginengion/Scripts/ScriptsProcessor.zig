@@ -44,7 +44,7 @@ pub fn RunEntityScript(engine_context: *EngineContext, comptime script_type: typ
 
     const ecs_manager_sc = scene_manager.mECSManagerSC;
     const ecs_manager_go = scene_manager.mECSManagerGO;
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     const scene_stack_scenes = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
     std.sort.insertion(SceneType, scene_stack_scenes.items, ecs_manager_sc, SceneManager.SortScenesFunc);
@@ -76,7 +76,7 @@ pub fn RunSceneScript(engine_context: *EngineContext, comptime script_type: type
     _ValidateSceneType(script_type);
 
     const ecs_manager_sc = scene_manager.mECSManagerSC;
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
     std.sort.insertion(SceneType, scene_stack_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
@@ -86,19 +86,19 @@ pub fn RunSceneScript(engine_context: *EngineContext, comptime script_type: type
         if (cont_bool == false) break;
 
         var scene_scripts = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
-        scene_manager.FilterSceneScriptsByScene(&scene_scripts, scene_id, frame_allocator);
+        scene_manager.FilterSceneScriptsByScene(frame_allocator, &scene_scripts, scene_id);
 
         for (scene_scripts.items) |script_id| {
             if (ecs_manager_sc.GetComponent(SceneScriptComponent, script_id)) |script_component| {
                 if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
                 const asset_handle = script_component.mScriptAssetHandle;
-                const script_asset = try asset_handle.GetAsset(ScriptAsset);
+                const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
 
                 var scene = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
 
                 const combined_args = .{ engine_context, &scene } ++ args;
 
-                cont_bool = cont_bool and script_asset.Run(combined_args);
+                cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
             }
         }
     }
@@ -109,10 +109,10 @@ pub fn RunEntityScriptEditor(engine_context: *EngineContext, comptime script_typ
     _ValidateEntityType(script_type);
 
     const ecs_manager_go = scene_manager.mECSManagerGO;
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     var scene_scripts = try ecs_manager_go.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
-    scene_manager.FilterEntityScriptsByScene(engine_context.mFrameAllocator, &scene_scripts, editor_scene_layer.mSceneID);
+    scene_manager.FilterEntityScriptsByScene(engine_context.FrameAllocator(), &scene_scripts, editor_scene_layer.mSceneID);
 
     for (scene_scripts.items) |script_id| {
         if (ecs_manager_go.GetComponent(EntityScriptComponent, script_id)) |script_component| {
@@ -134,7 +134,7 @@ pub fn RunSceneScriptEditor(engine_context: *EngineContext, comptime script_type
     _ValidateSceneType(script_type);
 
     const ecs_manager_sc = scene_manager.mECSManagerSC;
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     var scene_scripts = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
     scene_manager.FilterSceneScriptsByScene(&scene_scripts, editor_scene_layer.mSceneID);
@@ -149,7 +149,7 @@ pub fn RunSceneScriptEditor(engine_context: *EngineContext, comptime script_type
 
             const combined_args = .{ engine_context, &scene } ++ args;
 
-            script_asset.Run(combined_args);
+            script_asset.Run(script_type, combined_args);
         }
     }
     return true;

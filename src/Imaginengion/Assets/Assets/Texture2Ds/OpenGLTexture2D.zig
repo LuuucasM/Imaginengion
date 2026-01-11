@@ -20,7 +20,7 @@ pub fn Init(self: *OpenGLTexture2D, engine_context: *EngineContext, _: []const u
 
     const fstats = try asset_file.stat();
 
-    const contents = try asset_file.readToEndAlloc(engine_context.mFrameAllocator, @intCast(fstats.size));
+    const contents = try asset_file.readToEndAlloc(engine_context.FrameAllocator(), @intCast(fstats.size));
 
     data = stb.stbi_load_from_memory(contents.ptr, @intCast(contents.len), &width, &height, &channels, 0);
     defer stb.stbi_image_free(data);

@@ -70,7 +70,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         };
 
         if (std.mem.eql(u8, field_name, "LayerType")) {
-            result.mLayerType = try std.json.innerParse(bool, frame_allocator, reader, options);
+            result.mLayerType = try std.json.innerParse(LayerType, frame_allocator, reader, options);
         }
     }
 

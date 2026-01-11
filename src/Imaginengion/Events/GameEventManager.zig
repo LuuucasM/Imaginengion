@@ -4,6 +4,7 @@ const Program = @import("../Programs/Program.zig");
 const GameEvent = @import("GameEvent.zig").GameEvent;
 const GameEventCategory = @import("GameEvent.zig").GameEventCategory;
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const GameEventManager = @This();
 
 mEndOfFramePool: std.ArrayList(GameEvent) = .{},
@@ -26,7 +27,7 @@ pub fn Insert(self: *GameEventManager, engine_allocator: std.mem.Allocator, even
     }
 }
 
-pub fn ProcessEvents(self: *GameEventManager, eventCategory: GameEventCategory, frame_allocator: std.mem.Allocator) !void {
+pub fn ProcessEvents(self: *GameEventManager, engine_context: *EngineContext, eventCategory: GameEventCategory) !void {
     const zone = Tracy.ZoneInit("Game ProcessEvents", @src());
     defer zone.Deinit();
     const array = switch (eventCategory) {
@@ -35,7 +36,7 @@ pub fn ProcessEvents(self: *GameEventManager, eventCategory: GameEventCategory, 
     };
 
     for (array.items) |*event| {
-        try self.mProgram.OnGameEvent(event, frame_allocator);
+        try self.mProgram.OnGameEvent(engine_context, event);
     }
 }
 

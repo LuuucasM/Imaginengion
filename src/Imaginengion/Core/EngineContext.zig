@@ -9,12 +9,15 @@ const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @import("../Programs/Program.zig");
 const Application = @import("../Core/Application.zig");
+const Tracy = @import("Tracy.zig");
 const EngineContext = @This();
 
-mEngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
-mEngineAllocator: std.mem.Allocator = undefined,
-mFrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-mFrameAllocator: std.mem.Allocator = undefined,
+const internal_data = struct {
+    EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
+    EngineAllocator: std.mem.Allocator = undefined,
+    FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
+    FrameAllocator: std.mem.Allocator = undefined,
+};
 
 mDT: f32 = 0.0,
 
@@ -26,28 +29,104 @@ mSystemEventManager: SystemEventManager = .{},
 mInputManager: InputManager = .{},
 mRenderer: Renderer = .{},
 
-pub fn Init(self: *EngineContext, window: *Window, program: *Program, app: *Application) !void {
-    self.mEngineAllocator = self.mEngineGPA.allocator();
-    self.mFrameAllocator = self.mFrameArena.allocator();
+_internal: internal_data = .{},
 
-    try self.mAssetManager.Init(self.mEngineAllocator);
+pub fn Init(self: *EngineContext, window: *Window, program: *Program, app: *Application) !void {
+    const zone = Tracy.ZoneInit("EngineContext::Init", @src());
+    defer zone.Deinit();
+
+    self._internal.EngineAllocator = self._internal.EngineGPA.allocator();
+    self._internal.FrameAllocator = self._internal.FrameArena.allocator();
+
+    try self.mAssetManager.Init(self.EngineAllocator());
     try self.mAudioManager.Init();
     self.mGameEventManager.Init(program);
     self.mImguiEventManager.Init(program);
     self.mSystemEventManager.Init(app);
-    self.mInputManager.Init(self.mEngineAllocator);
+    self.mInputManager.Init(self.EngineAllocator());
     try self.mRenderer.Init(window, self);
 }
 
 pub fn DeInit(self: *EngineContext) !void {
-    try self.mAssetManager.DeInit(self.mEngineAllocator);
+    const zone = Tracy.ZoneInit("EngineContext::Deinit", @src());
+    defer zone.Deinit();
+
+    try self.mAssetManager.DeInit(self.EngineAllocator());
     self.mAudioManager.DeInit();
-    self.mGameEventManager.DeInit(self.mEngineAllocator);
-    self.mImguiEventManager.DeInit(self.mEngineAllocator);
-    self.mSystemEventManager.DeInit(self.mEngineAllocator);
-    self.mInputManager.DeInit(self.mEngineAllocator);
+    self.mGameEventManager.DeInit(self.EngineAllocator());
+    self.mImguiEventManager.DeInit(self.EngineAllocator());
+    self.mSystemEventManager.DeInit(self.EngineAllocator());
+    self.mInputManager.DeInit(self.EngineAllocator());
     self.mRenderer.DeInit();
 
-    _ = self.mEngineGPA.deinit();
-    self.mFrameArena.deinit();
+    _ = self._internal.EngineGPA.deinit();
+    self._internal.FrameArena.deinit();
+}
+
+pub fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
+    const zone = Tracy.ZoneInit("EngineContext::EngineAllocator", @src());
+    defer zone.Deinit();
+    return .{
+        .ptr = self,
+        .vtable = &.{
+            .alloc = engine_alloc,
+            .resize = engine_resize,
+            .remap = engine_remap,
+            .free = engine_free,
+        },
+    };
+}
+
+pub fn FrameAllocator(self: *EngineContext) std.mem.Allocator {
+    const zone = Tracy.ZoneInit("EngineContext::FrameAllocator", @src());
+    defer zone.Deinit();
+    return .{
+        .ptr = self,
+        .vtable = &.{
+            .alloc = frame_alloc,
+            .resize = frame_resize,
+            .remap = frame_remap,
+            .free = frame_free,
+        },
+    };
+}
+
+fn engine_alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.EngineAllocator.rawAlloc(len, alignment, ret_addr);
+}
+
+fn frame_alloc(context: *anyopaque, len: usize, alignment: std.mem.Alignment, ret_addr: usize) ?[*]u8 {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.FrameAllocator.rawAlloc(len, alignment, ret_addr);
+}
+
+fn engine_resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) bool {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.EngineAllocator.rawResize(memory, alignment, new_len, return_address);
+}
+
+fn frame_resize(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) bool {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.FrameAllocator.rawResize(memory, alignment, new_len, return_address);
+}
+
+fn engine_remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) ?[*]u8 {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.EngineAllocator.rawRemap(memory, alignment, new_len, return_address);
+}
+
+fn frame_remap(context: *anyopaque, memory: []u8, alignment: std.mem.Alignment, new_len: usize, return_address: usize) ?[*]u8 {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.FrameAllocator.rawRemap(memory, alignment, new_len, return_address);
+}
+
+fn engine_free(context: *anyopaque, old_memory: []u8, alignment: std.mem.Alignment, return_address: usize) void {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.EngineAllocator.rawFree(old_memory, alignment, return_address);
+}
+
+fn frame_free(context: *anyopaque, old_memory: []u8, alignment: std.mem.Alignment, return_address: usize) void {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context));
+    return engine_context._internal.FrameAllocator.rawFree(old_memory, alignment, return_address);
 }

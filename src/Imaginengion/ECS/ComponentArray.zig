@@ -28,7 +28,7 @@ pub fn ComponentArray(entity_t: type) type {
                 fn Deinit(ptr: *anyopaque, engine_context: *EngineContext) !void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.Deinit(engine_context);
-                    engine_context.mEngineAllocator.destroy(self);
+                    engine_context.EngineAllocator().destroy(self);
                 }
                 fn DuplicateEntity(ptr: *anyopaque, original_entity_id: entity_t, new_entity_id: entity_t) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));

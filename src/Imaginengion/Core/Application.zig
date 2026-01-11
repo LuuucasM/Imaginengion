@@ -51,7 +51,7 @@ pub fn Init(self: *Application) !void {
 /// Returns:
 /// - `!void` on deinitialization error return the error else return nothing.
 pub fn Deinit(self: *Application) !void {
-    try self.mProgram.Deinit();
+    try self.mProgram.Deinit(&self.mEngineContext);
     self.mWindow.Deinit();
     self.mEngineContext.DeInit();
 }
@@ -75,7 +75,7 @@ pub fn Run(self: *Application) !void {
 
         try self.mProgram.OnUpdate(delta_time, &self.mEngineContext);
 
-        self.mEngineContext.mFrameArena.reset();
+        _ = self.mEngineContext._internal.FrameArena.reset(.free_all);
 
         Tracy.FrameMark();
     }

@@ -16,7 +16,7 @@ pub fn OnImguiRender(self: AssetHandlePanel, engine_context: *EngineContext) !vo
     const zone = Tracy.ZoneInit("AssetHandle OIR", @src());
     defer zone.Deinit();
 
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     if (self._P_Open == false) return;
     _ = imgui.igBegin("AssetHandles", null, 0);

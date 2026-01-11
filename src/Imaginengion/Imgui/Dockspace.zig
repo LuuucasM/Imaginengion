@@ -43,7 +43,7 @@ pub fn OnImguiRender(engine_context: *EngineContext, panel_opens: PanelOpen) !vo
     const zone = Tracy.ZoneInit("Dockspace OIR", @src());
     defer zone.Deinit();
 
-    const engine_allocator = engine_context.mEngineAllocator;
+    const engine_allocator = engine_context.EngineAllocator();
 
     const my_null_ptr: ?*anyopaque = null;
     if (imgui.igBeginMenuBar() == true) {
@@ -122,11 +122,11 @@ pub fn OnImguiRender(engine_context: *EngineContext, panel_opens: PanelOpen) !vo
                 try engine_context.mImguiEventManager.Insert(engine_allocator, new_event);
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                const path = try PlatformUtils.OpenFile(engine_context.mEngineAllocator, ".imprj");
+                const path = try PlatformUtils.OpenFile(engine_context.EngineAllocator(), ".imprj");
                 const new_event = ImguiEvent{
                     .ET_OpenProjectEvent = .{
                         .mAbsPath = path,
-                        .mAllocator = engine_context.mEngineAllocator,
+                        .mAllocator = engine_context.EngineAllocator(),
                     },
                 };
                 try engine_context.mImguiEventManager.Insert(engine_allocator, new_event);

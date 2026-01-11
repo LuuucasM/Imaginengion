@@ -47,9 +47,9 @@ mPerspectiveFar: f32 = 1000.0,
 mAreaRect: Vec4f32 = Vec4f32{ 0.0, 0.0, 1.0, 1.0 },
 
 pub fn Deinit(self: *CameraComponent, engine_context: *EngineContext) !void {
-    self.mViewportFrameBuffer.Deinit(engine_context.mEngineAllocator);
-    self.mViewportVertexArray.Deinit(engine_context.mEngineAllocator);
-    self.mViewportVertexBuffer.Deinit(engine_context.mEngineAllocator);
+    self.mViewportFrameBuffer.Deinit(engine_context.EngineAllocator());
+    self.mViewportVertexArray.Deinit(engine_context.EngineAllocator());
+    self.mViewportVertexBuffer.Deinit(engine_context.EngineAllocator());
     self.mViewportIndexBuffer.Deinit();
 }
 
@@ -161,7 +161,7 @@ pub fn jsonStringify(self: *const CameraComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!CameraComponent {
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!CameraComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
     var result: CameraComponent = .{};
@@ -176,15 +176,15 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "IsFixedAspectRatio")) {
-            result.mIsFixedAspectRatio = try std.json.innerParse(bool, allocator, reader, options);
+            result.mIsFixedAspectRatio = try std.json.innerParse(bool, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "PerspectiveFOVRad")) {
-            result.mPerspectiveFOVRad = try std.json.innerParse(f32, allocator, reader, options);
+            result.mPerspectiveFOVRad = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "PerspectiveNear")) {
-            result.mPerspectiveNear = try std.json.innerParse(f32, allocator, reader, options);
+            result.mPerspectiveNear = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "PerspectiveFar")) {
-            result.mPerspectiveFar = try std.json.innerParse(f32, allocator, reader, options);
+            result.mPerspectiveFar = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "AreaRect")) {
-            result.mAreaRect = try std.json.innerParse(Vec4f32, allocator, reader, options);
+            result.mAreaRect = try std.json.innerParse(Vec4f32, frame_allocator, reader, options);
         }
     }
     result.RecalculateProjection();

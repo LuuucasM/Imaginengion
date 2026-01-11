@@ -238,7 +238,7 @@ pub fn jsonStringify(self: *const TransformComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TransformComponent {
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TransformComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
     var result: TransformComponent = .{};
@@ -253,11 +253,11 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "Translation")) {
-            result.Translation = try std.json.innerParse(Vec3f32, allocator, reader, options);
+            result.Translation = try std.json.innerParse(Vec3f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Rotation")) {
-            result.Rotation = try std.json.innerParse(Quatf32, allocator, reader, options);
+            result.Rotation = try std.json.innerParse(Quatf32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Scale")) {
-            result.Scale = try std.json.innerParse(Vec3f32, allocator, reader, options);
+            result.Scale = try std.json.innerParse(Vec3f32, frame_allocator, reader, options);
         }
     }
 

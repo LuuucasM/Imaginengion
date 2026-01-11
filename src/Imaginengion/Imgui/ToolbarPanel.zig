@@ -28,8 +28,8 @@ mStopIcon: AssetHandle = undefined,
 mStartEntity: ?Entity = null,
 
 pub fn Init(self: *ToolbarPanel, engine_context: *EngineContext) !void {
-    self.mPlayIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/play.png", .Eng);
-    self.mStopIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/stop.png", .Eng);
+    self.mPlayIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/play.png", .Eng);
+    self.mStopIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/stop.png", .Eng);
 }
 
 pub fn Deinit(self: *ToolbarPanel) void {
@@ -87,13 +87,13 @@ pub fn OnImguiRender(self: *ToolbarPanel, engine_context: *EngineContext, game_s
     ) == true) {
         if (self.mStartEntity != null and self.mState == .Stop) {
             const entity = self.mStartEntity.?;
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, ImguiEvent{
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play, .mStartEntity = entity },
             });
             self.mState = .Play;
         } else if (self.mState == .Play) {
             std.debug.assert(self.mStartEntity != null);
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, ImguiEvent{
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
                 .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop, .mStartEntity = null },
             });
             self.mState = .Stop;
@@ -119,7 +119,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, engine_context: *EngineContext, game_s
             self.mStartEntity = null;
         }
 
-        const camera_entities = try game_scene_manager.GetEntityGroup(engine_context.mFrameAllocator, GroupQuery{ .Component = CameraComponent });
+        const camera_entities = try game_scene_manager.GetEntityGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = CameraComponent });
 
         for (camera_entities.items) |entity_id| {
             const entity = game_scene_manager.GetEntity(entity_id);

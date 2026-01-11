@@ -41,10 +41,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mECSEventManager.Deinit(engine_allocator);
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: EngineContext) void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
-            self.mEntityManager.clearAndFree(engine_context.mEngineAllocator);
+            self.mEntityManager.clearAndFree(engine_context.EngineAllocator());
             self.mComponentManager.clearAndFree(engine_context);
         }
 
@@ -198,19 +198,19 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 },
             }
         }
-        pub fn RemoveComponent(self: *Self, entity_id: entity_t, comptime component_type: type) !void {
+        pub fn RemoveComponent(self: *Self, engine_allocator: std.mem.Allocator, comptime component_type: type, entity_id: entity_t) !void {
             _InternalTypeCheck(component_type);
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
+            try self.mECSEventManager.Insert(engine_allocator, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
         }
-        pub fn RemoveComponentInd(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+        pub fn RemoveComponentInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM RemoveComponentInd", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(.{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self.mECSEventManager.Insert(engine_allocator, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entity_id: entity_t) bool {
@@ -228,24 +228,24 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return self.mComponentManager.GetComponent(component_type, entity_id);
         }
 
-        pub fn ProcessEvents(self: *Self, engine_allocator: std.mem.Allocator, event_category: ECSEventCategory) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventCategory) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
             var iter = self.mECSEventManager.GetEventsIteartor(event_category);
             while (iter.Next()) |event| {
                 switch (event) {
-                    .ET_DestroyEntity => |e| try self._InternalDestroyEntity(engine_allocator, e.mEntityID),
-                    .ET_CleanMultiEntity => |e| try self._InternalDestroyMultiEntity(e.mEntityID),
-                    .ET_RemoveComponent => |e| try self._InternalRemoveComponent(e.mEntityID, e.mComponentInd),
+                    .ET_DestroyEntity => |e| try self._InternalDestroyEntity(engine_context, e.mEntityID),
+                    .ET_CleanMultiEntity => |e| try self._InternalDestroyMultiEntity(engine_context, e.mEntityID),
+                    .ET_RemoveComponent => |e| try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd),
                     else => {
                         @panic("Default Events are not allowed!\n");
                     },
                 }
             }
-            self.mECSEventManager.ClearEvents(event_category);
+            self.mECSEventManager.ClearEvents(engine_context.EngineAllocator(), event_category);
         }
 
-        fn _InternalRemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+        fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
@@ -254,7 +254,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             switch (component_category) {
                 .Unique => {
                     //in this case the entity ID is just simply the entity we want to remove the component from
-                    try self.mComponentManager.RemoveComponent(entity_id, component_ind);
+                    try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
                 },
                 .Multiple => {
                     //entity_id in this case refers to the entity id of the component we want to remove not the parent
@@ -266,7 +266,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
                     if (removed_multidata[2] == entity_id and removed_multidata[3] == entity_id) {
                         //case: this is the only one of this type of component so we can fully remove from parent
-                        try self.mComponentManager.RemoveComponent(removed_multidata[0], component_ind);
+                        try self.mComponentManager.RemoveComponent(engine_context, removed_multidata[0], component_ind);
                     } else {
                         //case: there are multiples of this component
                         var next_multidata = self.mComponentManager.GetMultiData(removed_multidata[2], component_ind);
@@ -284,30 +284,30 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         }
                     }
 
-                    try self._InternalDestroyMultiEntity(entity_id);
+                    try self._InternalDestroyMultiEntity(engine_context, entity_id);
                 },
             }
         }
 
-        fn _InternalDestroyEntity(self: *Self, engine_context: EngineContext, entity_id: entity_t) !void {
+        fn _InternalDestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
             defer zone.Deinit();
-            try self._InternalRemoveFromHierarchy(entity_id);
-            try self.mEntityManager.DestroyEntity(entity_id);
+            try self._InternalRemoveFromHierarchy(engine_context, entity_id);
+            try self.mEntityManager.DestroyEntity(engine_context.EngineAllocator(), entity_id);
             try self.mComponentManager.DestroyEntity(engine_context, entity_id, &self.mECSEventManager);
         }
 
-        fn _InternalDestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+        fn _InternalDestroyMultiEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Destroy MultiEntity", @src());
             defer zone.Deinit();
-            try self._InternalRemoveFromHierarchy(entity_id);
-            try self.mEntityManager.DestroyEntity(entity_id);
-            try self.mComponentManager.DestroyMultiEntity(entity_id);
+            try self._InternalRemoveFromHierarchy(engine_context, entity_id);
+            try self.mEntityManager.DestroyEntity(engine_context.EngineAllocator(), entity_id);
+            try self.mComponentManager.DestroyMultiEntity(engine_context, entity_id);
         }
 
-        fn _InternalRemoveFromHierarchy(self: *Self, entity_id: entity_t) anyerror!void {
+        fn _InternalRemoveFromHierarchy(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM Internal Remove From Hierarchy", @src());
             defer zone.Deinit();
@@ -318,7 +318,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
                 while (true) : (if (curr_id == parent_component.mFirstChild) break) {
                     const next_id = curr_component.mNext;
-                    try self._InternalDestroyEntity(curr_id);
+                    try self._InternalDestroyEntity(engine_context, curr_id);
 
                     curr_id = next_id;
                     curr_component = self.GetComponent(ChildComponent, curr_id).?;
@@ -331,7 +331,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 if (self.GetComponent(ParentComponent, parent_entity)) |parent_component| {
                     // If this is the only child, remove the ParentComponent from the parent
                     if (child_component.mNext == entity_id and child_component.mPrev == entity_id) {
-                        try self.RemoveComponent(parent_entity, ParentComponent);
+                        try self.RemoveComponent(engine_context.EngineAllocator(), ParentComponent, parent_entity);
                     } else {
                         // Relink siblings around this child
                         const next_comp = self.GetComponent(ChildComponent, child_component.mNext).?;

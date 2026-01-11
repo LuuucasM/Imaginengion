@@ -27,7 +27,9 @@ pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
 
 pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
-    self.mScriptAssetHandle.ReleaseAsset();
+    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
+        self.mScriptAssetHandle.ReleaseAsset();
+    }
 }
 
 pub fn GetName(self: ScriptComponent) []const u8 {
@@ -61,9 +63,10 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
-    const frame_allocator = engine_context.mFrameAllocator;
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
     var result: ScriptComponent = .{};
 
@@ -83,7 +86,7 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
+            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

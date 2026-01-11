@@ -38,7 +38,7 @@ pub fn GetInd(self: NameComponent) u32 {
 }
 
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
-    const text = try engine_context.mFrameAllocator.dupeZ(u8, self.mName.items);
+    const text = try engine_context.FrameAllocator().dupeZ(u8, self.mName.items);
     if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
         _ = self.mName.swapRemove(self.mName.items.len - 1);
     }

@@ -77,7 +77,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
                 .mHeight = @intFromFloat(viewport_size.y),
             },
         };
-        try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, new_imgui_event);
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_imgui_event);
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
     }
@@ -112,7 +112,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, c
                 .mHeight = @intFromFloat(viewport_size.y),
             },
         };
-        try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, new_imgui_event);
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_imgui_event);
         self.mPlayWidth = @intFromFloat(viewport_size.x);
         self.mPlayHeight = @intFromFloat(viewport_size.y);
     }

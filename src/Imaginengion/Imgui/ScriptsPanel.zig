@@ -28,7 +28,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
     defer zone.Deinit();
 
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Scripts", null, 0);
@@ -67,7 +67,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
                         defer imgui.igEndPopup();
 
                         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                            try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
+                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
                         }
                     }
 

@@ -5,6 +5,7 @@ const ScriptComponent = @This();
 const Assets = @import("../../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const FileMetaData = Assets.FileMetaData;
+const PathType = FileMetaData.PathType;
 
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
@@ -27,13 +28,13 @@ mFirst: SceneType = SceneLayer.NullScene,
 mPrev: SceneType = SceneLayer.NullScene,
 mNext: SceneType = SceneLayer.NullScene,
 mParent: SceneType = SceneLayer.NullScene,
-mScriptAssetHandle: ?AssetHandle = null,
+mScriptAssetHandle: AssetHandle = .{},
 
 pub const Category: ComponentCategory = .Multiple;
 
 pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
-    if (self.mScriptAssetHandle) |*asset_handle| {
-        asset_handle.ReleaseAsset();
+    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
+        self.mScriptAssetHandle.ReleaseAsset();
     }
 }
 
@@ -52,22 +53,28 @@ pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
 
     try jw.objectField("FilePath");
 
-    if (self.mScriptAssetHandle) |asset_handle| {
-        const asset_file_data = asset_handle.GetFileMetaData();
+    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
+        const asset_file_data = self.mScriptAssetHandle.GetFileMetaData();
         try jw.write(asset_file_data.mRelPath.items);
+
+        try jw.objectField("PathType");
+        try jw.write(asset_file_data.mPathType);
     } else {
-        try jw.write("No Script Asset");
+        try jw.write("Default");
+
+        try jw.objectField("PathType");
+        try jw.write(PathType.Eng);
     }
 
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
-    const frame_allocator = engine_context.mFrameAllocator;
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ScriptComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
-    var result: ScriptComponent = .{};
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
+    var result: ScriptComponent = .{};
     while (true) {
         const token = try reader.next();
 
@@ -80,7 +87,11 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
         if (std.mem.eql(u8, field_name, "FilePath")) {
             const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
 
-            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(parsed_path, .Prj) catch |err| {
+            try SkipToken(reader); //skip over "PathType" string token
+
+            const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
+
+            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -88,4 +99,8 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
     }
 
     return result;
+}
+
+fn SkipToken(reader: *std.json.Reader) !void {
+    _ = try reader.next();
 }

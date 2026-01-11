@@ -133,8 +133,8 @@ pub fn OnUpdate(self: *AssetManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("AssetManager OnUpdate", @src());
     defer zone.Deinit();
 
-    const engine_allocator = engine_context.mEngineAllocator;
-    const frame_allocator = engine_context.mFrameAllocator;
+    const engine_allocator = engine_context.EngineAllocator();
+    const frame_allocator = engine_context.FrameAllocator();
 
     const group = try self.mAssetECS.GetGroup(frame_allocator, GroupQuery{ .Component = FileMetaData });
     for (group.items) |entity_id| {
@@ -238,8 +238,8 @@ pub fn GetRelPath(self: *AssetManager, abs_path: []const u8) []const u8 {
     return abs_path[self.mProjectPath.items.len + 1 ..];
 }
 
-pub fn ProcessDestroyedAssets(self: *AssetManager) !void {
-    try self.mAssetECS.ProcessEvents(.EC_RemoveObj);
+pub fn ProcessDestroyedAssets(self: *AssetManager, engine_context: *EngineContext) !void {
+    try self.mAssetECS.ProcessEvents(engine_context, .EC_RemoveObj);
 }
 
 fn GetFileStatsIfExists(self: *AssetManager, rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File.Stat {

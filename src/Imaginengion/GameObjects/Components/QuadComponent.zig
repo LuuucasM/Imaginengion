@@ -75,7 +75,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mTexture);
-            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, path, .Prj);
+            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj);
         }
     }
     try self.EditTexCoords(texture_asset);
@@ -183,9 +183,10 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
-    const frame_allocator = engine_context.mFrameAllocator;
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
     var result: QuadComponent = .{};
 
@@ -213,7 +214,7 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
+            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

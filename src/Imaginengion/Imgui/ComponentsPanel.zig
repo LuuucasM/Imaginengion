@@ -148,7 +148,7 @@ fn ComponentRender(comptime component_type: type, entity: Entity, engine_context
 fn PrintComponent(comptime component_type: type, entity: Entity, engine_context: *EngineContext) !void {
     if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
         if (component_type.Editable == true) {
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, ImguiEvent{
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
                 .ET_SelectComponentEvent = .{ .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity) },
             });
         }
@@ -157,14 +157,14 @@ fn PrintComponent(comptime component_type: type, entity: Entity, engine_context:
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_RmEntityCompEvent = .{ .mEntityID = entity.mEntityID, .mComponentType = @enumFromInt(component_type.Ind) } });
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
+            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mEntityID = entity.mEntityID, .mComponentType = @enumFromInt(component_type.Ind) } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
         }
     }
 }
 
 fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, entity: Entity) !void {
-    const engine_allocator = engine_context.mEngineAllocator;
+    const engine_allocator = engine_context.EngineAllocator();
     if (entity.HasComponent(CameraComponent) == false) {
         if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
             defer imgui.igCloseCurrentPopup();
@@ -177,7 +177,7 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, ent
             };
 
             const shader_asset = try engine_context.mRenderer.GetSDFShader(engine_context);
-            try new_camera_component.mViewportVertexBuffer.SetLayout(engine_context.mEngineAllocator, shader_asset.GetLayout());
+            try new_camera_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
             new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
             var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -208,16 +208,16 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, ent
         if (imgui.igMenuItem_Bool("QuadComponent", "", false, true) == true) {
             defer imgui.igCloseCurrentPopup();
             const new_sprite_component = try entity.AddComponent(QuadComponent, null);
-            new_sprite_component.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/whitetexture.png", .Eng);
+            new_sprite_component.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/whitetexture.png", .Eng);
         }
     }
     if (entity.HasComponent(TextComponent) == false) {
         if (imgui.igMenuItem_Bool("TextComponent", "", false, true)) {
             defer imgui.igCloseCurrentPopup();
             const new_text_component = try entity.AddComponent(TextComponent, null);
-            new_text_component.mTextAssetHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
-            new_text_component.mAtlasHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
-            new_text_component.mTexHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/whitetexture.png", .Eng);
+            new_text_component.mTextAssetHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/fonts/Chiron/static/ChironGoRoundTC-Regular.ttf", .Eng);
+            new_text_component.mAtlasHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/fonts/Chiron/static/ChironGoRoundTC-Regular.png", .Eng);
+            new_text_component.mTexHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/whitetexture.png", .Eng);
             try new_text_component.mText.appendSlice(engine_allocator, "No Text");
         }
     }
@@ -225,7 +225,7 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, ent
         if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
             defer imgui.igCloseCurrentPopup();
             const new_audio_component = try entity.AddComponent(AudioComponent, null);
-            new_audio_component.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/sounds/pop.mp3", .Eng);
+            new_audio_component.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/sounds/pop.mp3", .Eng);
         }
     }
 }

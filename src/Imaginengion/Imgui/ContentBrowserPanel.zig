@@ -33,12 +33,12 @@ mCurrentPath: std.ArrayList(u8) = .{},
 mProjectFile: ?std.fs.File = null,
 
 pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
-    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/foldericon.png", .Eng);
-    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/pngicon.png", .Eng);
-    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/backarrowicon.png", .Eng);
-    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/sceneicon.png", .Eng);
-    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/scripticon.png", .Eng);
-    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/textures/mp3.png", .Eng);
+    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/foldericon.png", .Eng);
+    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/pngicon.png", .Eng);
+    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/backarrowicon.png", .Eng);
+    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/sceneicon.png", .Eng);
+    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/scripticon.png", .Eng);
+    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/mp3.png", .Eng);
 }
 
 pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
@@ -52,12 +52,12 @@ pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
         dir.close();
         self.mProjectDirectory = null;
     }
-    self.mProjectPath.deinit(engine_context.mEngineAllocator);
+    self.mProjectPath.deinit(engine_context.EngineAllocator());
     if (self.mCurrentDirectory) |*dir| {
         dir.close();
         self.mProjectDirectory = null;
     }
-    self.mCurrentPath.deinit(engine_context.mEngineAllocator);
+    self.mCurrentPath.deinit(engine_context.EngineAllocator());
     if (self.mProjectFile) |*file| {
         file.close();
         self.mProjectDirectory = null;
@@ -113,7 +113,7 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
         }
         try ImguiUtils.AllScriptPopupMenu(engine_context);
     }
@@ -123,7 +123,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
     const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
     defer zone.Deinit();
 
-    const engine_allocator = engine_context.mEngineAllocator;
+    const engine_allocator = engine_context.EngineAllocator();
 
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
@@ -171,8 +171,8 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
             try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
 
             if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-                _ = try self.mCurrentPath.writer(engine_context.mEngineAllocator).write("/");
-                _ = try self.mCurrentPath.writer(engine_context.mEngineAllocator).write(entry.name);
+                _ = try self.mCurrentPath.writer(engine_context.EngineAllocator()).write("/");
+                _ = try self.mCurrentPath.writer(engine_context.EngineAllocator()).write(entry.name);
 
                 new_curr_dir = true;
             }
@@ -274,21 +274,21 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, engine_allocator: std.mem.
 }
 
 pub fn OnNewScriptEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, new_script_event: NewScriptEvent) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     switch (new_script_event.mScriptType) {
-        .OnInputPressed => {
-            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath, "src/Imaginengion/Scripts/GameObject/OnInputPressedTemplate.zig" });
+        .EntityInputPressed => {
+            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath.items, "src/Imaginengion/Scripts/GameObject/OnInputPressedTemplate.zig" });
             const dest_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ self.mCurrentPath.items, "NewOnInputPressedScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
-        .OnUpdateInput => {
-            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
+        .EntityOnUpdate => {
+            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath.items, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
             const dest_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ self.mCurrentPath.items, "NewOnUpdateInputScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
-        .OnSceneStart => {
-            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
+        .SceneSceneStart => {
+            const source_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ engine_context.mAssetManager.mCWDPath.items, "src/Imaginengion/Scripts/GameObject/OnUpdateInputTemplate.zig" });
             const dest_path = try std.fs.path.join(frame_allocator, &[_][]const u8{ self.mCurrentPath.items, "NewOnSceneStartScript.zig" });
             try std.fs.copyFileAbsolute(source_path, dest_path, .{});
         },
@@ -342,7 +342,7 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
 
         const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
-        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, rel_path, .Prj);
+        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), rel_path, .Prj);
         defer engine_context.mAssetManager.ReleaseAssetHandleRef(&script_handle);
 
         const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);

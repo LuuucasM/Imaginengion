@@ -20,7 +20,7 @@ pub fn EntityScriptPopupMenu(engine_context: *EngineContext) !void {
                     .mScriptType = .EntityInputPressed,
                 },
             };
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, new_script_event);
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_script_event);
         }
         if (imgui.igMenuItem_Bool("On Update Input Script", "", false, true) == true) {
             const new_script_event = ImguiEvent{
@@ -28,7 +28,7 @@ pub fn EntityScriptPopupMenu(engine_context: *EngineContext) !void {
                     .mScriptType = .EntityOnUpdate,
                 },
             };
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, new_script_event);
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_script_event);
         }
     }
 }
@@ -42,7 +42,7 @@ pub fn SceneScriptPopupMenu(engine_context: *EngineContext) !void {
                     .mScriptType = .SceneSceneStart,
                 },
             };
-            try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, new_script_event);
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_script_event);
         }
     }
 }

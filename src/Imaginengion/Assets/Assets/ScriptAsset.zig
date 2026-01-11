@@ -29,7 +29,7 @@ mRunFunc: *anyopaque = undefined,
 pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
 
     //spawn a child to handle compiling the zig file into a dll
-    const file_arg = try std.fmt.allocPrint(engine_context.mFrameAllocator, "-Dscript_abs_path={s}", .{abs_path});
+    const file_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_abs_path={s}", .{abs_path});
     //defer allocator.free(file_arg);
 
     var child = std.process.Child.init(
@@ -40,7 +40,7 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
             "build_script.zig",
             file_arg,
         },
-        engine_context.mFrameAllocator,
+        engine_context.FrameAllocator(),
     );
     child.stdin_behavior = .Inherit;
     child.stdout_behavior = .Inherit;
@@ -60,7 +60,7 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
     std.log.debug("script {s} compile success!\n", .{rel_path});
 
     //get the path of the newly create dyn lib and open it
-    const dyn_path = try std.fmt.allocPrint(engine_context.mFrameAllocator, "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
+    const dyn_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
 
     self.mLib = try std.DynLib.open(dyn_path);
 

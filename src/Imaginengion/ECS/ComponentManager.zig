@@ -63,7 +63,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.mEntitySkipField.deinit();
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: EngineContext) void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponentsArrays.items) |component_array| {
                 component_array.clearAndFree(engine_context);
             }
@@ -75,7 +75,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             _ = self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
         }
 
-        pub fn DestroyEntity(self: *Self, engine_context: EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
 
             // Remove all components from this entity
@@ -90,7 +90,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             _ = self.mEntitySkipField.remove(entity_id);
         }
 
-        pub fn DestroyMultiEntity(self: *Self, entity_id: entity_t) !void {
+        pub fn DestroyMultiEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
 
             // Remove all components from this entity
@@ -98,7 +98,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(entity_id);
+                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(engine_context, entity_id);
             }
 
             // Remove entity from skip field
@@ -131,14 +131,14 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return try internal_array.AddComponent(entityID, component);
         }
 
-        pub fn RemoveComponent(self: *Self, entity_id: entity_t, component_ind: usize) !void {
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
             std.debug.assert(component_ind <= std.math.maxInt(SkipFieldT.SkipFieldType));
 
             self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(@intCast(component_ind));
 
-            try self.mComponentsArrays.items[component_ind].RemoveComponent(entity_id);
+            try self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {

@@ -120,7 +120,7 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
                 //delete the first component after iterating through (possible) children
 
                 while (curr_id != entity_id) {
-                    try ecs_event_manager.Insert(engine_context.mEngineAllocator, .{ .ET_CleanMultiEntity = .{ .mEntityID = curr_id } });
+                    try ecs_event_manager.Insert(engine_context.EngineAllocator(), .{ .ET_CleanMultiEntity = .{ .mEntityID = curr_id } });
 
                     curr_id = curr_component.mNext;
                     curr_component = self.mComponents.getValueBySparse(curr_id);

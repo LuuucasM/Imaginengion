@@ -66,14 +66,11 @@ mNumofLayers: usize = 0,
 mViewportWidth: usize = 0,
 mViewportHeight: usize = 0,
 
-mEngineAllocator: std.mem.Allocator = undefined,
-
 pub fn Init(self: *SceneManager, width: usize, height: usize, engine_allocator: std.mem.Allocator) !void {
     try self.mECSManagerGO.Init(engine_allocator);
     try self.mECSManagerSC.Init(engine_allocator);
     self.mViewportWidth = width;
     self.mViewportHeight = height;
-    self.mEngineAllocator = engine_allocator;
 }
 
 pub fn Deinit(self: *SceneManager) !void {
@@ -94,11 +91,11 @@ pub fn CreateEntityWithUUID(self: *SceneManager, engine_allocator: std.mem.Alloc
     return scene_layer.CreateEntityWithUUID(engine_allocator, uuid);
 }
 
-pub fn DestroyEntity(self: *SceneManager, destroy_entity: Entity) !void {
+pub fn DestroyEntity(self: *SceneManager, engine_allocator: std.mem.Allocator, destroy_entity: Entity) !void {
     const zone = Tracy.ZoneInit("SceneManager DestroyEntity", @src());
     defer zone.Deinit();
 
-    try self.mECSManagerGO.DestroyEntity(destroy_entity.mEntityID);
+    try self.mECSManagerGO.DestroyEntity(engine_allocator, destroy_entity.mEntityID);
 }
 
 pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneLayer.Type) !Entity {
@@ -135,28 +132,30 @@ pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, layer_type:
 
     _ = try scene_layer.AddComponent(SceneIDComponent, .{ .ID = try GenUUID() });
 
-    const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.mEngineAllocator });
+    const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("Unsaved Scene");
 
     _ = try scene_layer.AddComponent(SceneTransformComponent, null);
 
-    try self.InsertScene(engine_context.mFrameAllocator, scene_layer);
+    try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
     return scene_layer;
 }
 
-pub fn RemoveScene(self: *SceneManager, frame_allocator: std.mem.Allocator, destroy_scene: SceneLayer) !void {
-    try self.SaveScene(destroy_scene, frame_allocator);
+pub fn RemoveScene(self: *SceneManager, engine_context: *EngineContext, destroy_scene: SceneLayer) !void {
+    try self.SaveScene(engine_context, destroy_scene);
+
+    const frame_allocator = engine_context.FrameAllocator();
 
     //remove all the entities from the scene
     var entity_scene_entities = try self.mECSManagerGO.GetGroup(frame_allocator, .{ .Component = EntitySceneComponent });
     defer entity_scene_entities.deinit(frame_allocator);
 
-    self.FilterEntityByScene(&entity_scene_entities, destroy_scene.mSceneID, frame_allocator);
+    self.FilterEntityByScene(frame_allocator, &entity_scene_entities, destroy_scene.mSceneID);
 
     for (entity_scene_entities.items) |entity_id| {
         const entity = self.GetEntity(entity_id);
-        try self.DestroyEntity(entity);
+        try self.DestroyEntity(engine_context.EngineAllocator(), entity);
     }
 
     //next realign the scene stack so that everything is in the right position after this one is destroyed
@@ -173,30 +172,30 @@ pub fn RemoveScene(self: *SceneManager, frame_allocator: std.mem.Allocator, dest
     }
 
     //finally destroy the scene
-    try self.mECSManagerSC.DestroyEntity(destroy_scene.mSceneID);
+    try self.mECSManagerSC.DestroyEntity(engine_context.EngineAllocator(), destroy_scene.mSceneID);
 }
 
 pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, path: []const u8) !SceneLayer.Type {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    const scene_asset_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, path, .Prj);
+    const scene_asset_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj);
 
     const scene_basename = std.fs.path.basename(path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
-    const new_scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.mEngineAllocator });
+    const new_scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try new_scene_name_component.mName.writer(new_scene_name_component.mAllocator).write(scene_name);
 
     try SceneSerializer.DeSerializeSceneText(engine_context, scene_layer, scene_asset_handle);
 
-    try self.InsertScene(engine_context.mFrameAllocator, scene_layer);
+    try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
     return new_scene_id;
 }
 
 pub fn SaveAllScenes(self: *SceneManager, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.mFrameAllocatorl;
+    const frame_allocator = engine_context.FrameAllocator();
     const all_scenes = try self.mECSManagerSC.GetGroup(
         frame_allocator,
         GroupQuery{ .Component = SceneStackPos },
@@ -209,20 +208,20 @@ pub fn SaveAllScenes(self: *SceneManager, engine_context: *EngineContext) !void 
     }
 }
 
-pub fn ReloadAllScenes(self: *SceneManager, frame_allocator: std.mem.Allocator) !void {
-    self.mECSManagerGO.clearAndFree();
+pub fn ReloadAllScenes(self: *SceneManager, engine_context: *EngineContext) !void {
+    self.mECSManagerGO.clearAndFree(engine_context);
 
-    const all_scenes = try self.mECSManagerSC.GetGroup(frame_allocator, GroupQuery{ .Component = SceneStackPos });
+    const all_scenes = try self.mECSManagerSC.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = SceneStackPos });
 
     for (all_scenes.items) |scene_id| {
         const scene = self.GetSceneLayer(scene_id);
         const scene_component = scene.GetComponent(SceneComponent).?;
 
-        try SceneSerializer.SceneReloadText(scene, scene_component.mSceneAssetHandle, frame_allocator, self.mEngineAllocator);
+        try SceneSerializer.SceneReloadText(engine_context, scene, scene_component.mSceneAssetHandle);
     }
 }
 pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
         const file_data = try scene_component.mSceneAssetHandle.GetAsset(engine_context, FileMetaData);
@@ -343,17 +342,17 @@ pub fn GetSceneLayer(self: *SceneManager, scene_id: SceneLayer.Type) SceneLayer 
     return SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 }
 
-pub fn RmEntityComp(self: *SceneManager, entity_id: Entity.Type, component_ind: EEntityComponents) !void {
-    try self.mECSManagerGO.RemoveComponentInd(entity_id, @intFromEnum(component_ind));
+pub fn RmEntityComp(self: *SceneManager, engine_allocator: std.mem.Allocator, entity_id: Entity.Type, component_ind: EEntityComponents) !void {
+    try self.mECSManagerGO.RemoveComponentInd(engine_allocator, entity_id, @intFromEnum(component_ind));
 }
 
-pub fn RmSceneComp(self: *SceneManager, scene_id: SceneLayer.Type, component_ind: ESceneComponents) !void {
-    try self.mECSManagerSC.RemoveComponentInd(scene_id, @intFromEnum(component_ind));
+pub fn RmSceneComp(self: *SceneManager, engine_allocator: std.mem.Allocator, scene_id: SceneLayer.Type, component_ind: ESceneComponents) !void {
+    try self.mECSManagerSC.RemoveComponentInd(engine_allocator, scene_id, @intFromEnum(component_ind));
 }
 
-pub fn ProcessRemovedObj(self: *SceneManager) !void {
-    try self.mECSManagerGO.ProcessEvents(.EC_RemoveObj);
-    try self.mECSManagerSC.ProcessEvents(.EC_RemoveObj);
+pub fn ProcessRemovedObj(self: *SceneManager, engine_context: *EngineContext) !void {
+    try self.mECSManagerGO.ProcessEvents(engine_context, .EC_RemoveObj);
+    try self.mECSManagerSC.ProcessEvents(engine_context, .EC_RemoveObj);
 }
 
 fn InsertScene(self: *SceneManager, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer) !void {

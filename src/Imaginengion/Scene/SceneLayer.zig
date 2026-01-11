@@ -91,8 +91,8 @@ pub fn CreateEntityWithUUID(self: SceneLayer, engine_allocator: std.mem.Allocato
 }
 
 pub fn Delete(self: SceneLayer, engine_context: *EngineContext) !void {
-    try engine_context.mGameEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
-    try engine_context.mImguiEventManager.Insert(engine_context.mEngineAllocator, .{ .ET_DeleteSceneEvent = .{ .mScene = self } });
+    try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroySceneEvent = .{ .mSceneID = self.mSceneID } });
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }
 
 pub fn AddBlankChildEntity(self: SceneLayer, parent_entity: Entity) !Entity {

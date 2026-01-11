@@ -25,7 +25,7 @@ mBufferStride: usize = undefined,
 mShaderID: u32 = undefined,
 
 pub fn Init(self: *OpenGLShader, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
-    self.mUniforms = std.AutoHashMap(usize, i32).init(engine_context.mEngineAllocator);
+    self.mUniforms = std.AutoHashMap(usize, i32).init(engine_context.EngineAllocator());
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -34,7 +34,7 @@ pub fn Init(self: *OpenGLShader, engine_context: *EngineContext, abs_path: []con
     const shader_sources = try ReadFile(asset_file, arena_allocator, abs_path);
 
     try self.Compile(shader_sources, rel_path);
-    try self.CreateLayout(engine_context.mEngineAllocator, shader_sources.get(glad.GL_VERTEX_SHADER).?);
+    try self.CreateLayout(engine_context.EngineAllocator(), shader_sources.get(glad.GL_VERTEX_SHADER).?);
     try self.DiscoverUniforms();
 
     glad.glObjectLabel(glad.GL_PROGRAM, self.mShaderID, -1, "ShaderProgram");
@@ -43,7 +43,7 @@ pub fn Init(self: *OpenGLShader, engine_context: *EngineContext, abs_path: []con
 pub fn Deinit(self: *OpenGLShader, engine_context: *EngineContext) !void {
     glad.glDeleteProgram(self.mShaderID);
 
-    self.mBufferElements.deinit(engine_context.mEngineAllocator);
+    self.mBufferElements.deinit(engine_context.EngineAllocator());
     self.mUniforms.deinit();
 }
 

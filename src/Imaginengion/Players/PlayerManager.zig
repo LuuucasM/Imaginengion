@@ -4,6 +4,7 @@ const ComponentsList = @import("Components.zig").ComponentsList;
 const Player = @import("Player.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const PlayerManager = @This();
 
 pub const ECSManagerPlayer = ECSManager(Player.Type, &ComponentsList);
@@ -12,7 +13,6 @@ mECSManager: ECSManagerPlayer = .{},
 
 pub fn Init(self: *PlayerManager, engine_allocator: std.mem.Allocator) !void {
     try self.mECSManager.Init(engine_allocator);
-    self.mEngineAllocator = engine_allocator;
 }
 
 pub fn Deinit(self: *PlayerManager) !void {
@@ -36,8 +36,8 @@ pub fn GetPlayer(self: *PlayerManager, player_id: Player.Type) Player {
     return Player{ .mEntityID = player_id, .mECSManagerRef = &self.mECSManager };
 }
 
-pub fn ProcessDestroyedPlayers(self: *PlayerManager) !void {
-    try self.mECSManager.ProcessEvents(.EC_RemoveObj);
+pub fn ProcessDestroyedPlayers(self: *PlayerManager, engine_context: *EngineContext) !void {
+    try self.mECSManager.ProcessEvents(engine_context, .EC_RemoveObj);
 }
 
 pub fn GetGroup(self: *PlayerManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Player.Type) {

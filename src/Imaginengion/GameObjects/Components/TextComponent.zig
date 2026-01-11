@@ -48,14 +48,14 @@ pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
     self.mTextAssetHandle.ReleaseAsset();
     self.mAtlasHandle.ReleaseAsset();
     self.mTexHandle.ReleaseAsset();
-    self.mText.deinit(engine_context.mEngineAllocator);
+    self.mText.deinit(engine_context.EngineAllocator());
 }
 
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
     //text box
     const text = try frame_allocator.dupeZ(u8, self.mText.items);
-    self.mEngineAllocator = engine_context.mEngineAllocator;
+    self.mEngineAllocator = engine_context.EngineAllocator();
     if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
         _ = self.mText.swapRemove(self.mText.items.len - 1);
     }
@@ -129,9 +129,10 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TextComponent {
-    const frame_allocator = engine_context.mFrameAllocator;
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TextComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
     var result: TextComponent = .{};
 
@@ -151,7 +152,7 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
+            result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -162,7 +163,7 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mAtlasHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
+            result.mAtlasHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -173,7 +174,7 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, parsed_path, parsed_path_type) catch |err| {
+            result.mTexHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -181,8 +182,7 @@ pub fn jsonParse(engine_context: *EngineContext, reader: anytype, options: std.j
             result.mFontSize = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Text")) {
             const text = try std.json.innerParse([]const u8, frame_allocator, reader, options);
-            result.mAllocator = engine_context.mEngineAllocator;
-            result.mText.appendSlice(result.mAllocator, text) catch {
+            result.mText.appendSlice(engine_context.EngineAllocator(), text) catch {
                 @panic("error appending slice, error out of memory");
             };
         } else if (std.mem.eql(u8, field_name, "Color")) {

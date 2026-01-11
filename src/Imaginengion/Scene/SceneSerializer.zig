@@ -62,7 +62,7 @@ pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_a
     try WriteToFile(abs_path, out.written());
 }
 pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
     const scene_asset = try scene_asset_handle.GetAsset(engine_context, SceneAsset);
 
     var io_reader = std.io.Reader.fixed(scene_asset.mSceneContents.items);
@@ -75,14 +75,14 @@ pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLa
     scene_component.mSceneAssetHandle = scene_asset_handle;
 }
 
-pub fn SceneReloadText(scene_layer: SceneLayer, scene_asset_handle: AssetHandle, frame_allocator: std.mem.Allocator, engine_allocator: std.mem.Allocator) !void {
-    const scene_asset = try scene_asset_handle.GetAsset(SceneAsset);
+pub fn SceneReloadText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
+    const scene_asset = try scene_asset_handle.GetAsset(engine_context, SceneAsset);
 
     var io_reader = std.io.Reader.fixed(scene_asset.mSceneContents.items);
-    var json_reader = std.json.Reader.init(frame_allocator, &io_reader);
+    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
     defer json_reader.deinit();
 
-    try DeSerializeSceneEntities(&json_reader, scene_layer, frame_allocator, engine_allocator);
+    try DeSerializeSceneEntities(engine_context, &json_reader, scene_layer);
 }
 
 pub fn SerializeSceneBinary(scene_layer: SceneLayer, scene_manager: SceneManager, frame_allocator: std.mem.Allocator) void {
@@ -99,7 +99,7 @@ pub fn DeserializeSceneBinary(path: []const u8, scene_manager: SceneManager, fra
     _ = frame_allocator;
 }
 
-pub fn SerializeEntityText(entity: Entity, frame_allocator: std.mem.Allocator, abs_path: []const u8) !void {
+pub fn SerializeEntityText(frame_allocator: std.mem.Allocator, entity: Entity, abs_path: []const u8) !void {
     var out: std.io.Writer.Allocating = .init(frame_allocator);
     defer out.deinit();
 
@@ -271,7 +271,7 @@ fn SkipToken(reader: *std.json.Reader) !void {
 }
 
 fn DeSerializeSceneData(engine_context: *EngineContext, reader: *std.json.Reader, scene_layer: SceneLayer) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -304,7 +304,7 @@ fn DeSerializeSceneData(engine_context: *EngineContext, reader: *std.json.Reader
 }
 
 fn DeSerializeSceneEntities(engine_context: *EngineContext, reader: *std.json.Reader, scene_layer: SceneLayer) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
     while (true) {
         const token = try reader.next();
         const token_value = switch (token) {
@@ -338,7 +338,7 @@ fn DeSerializeSceneComponent(reader: *std.json.Reader, scene_layer: SceneLayer, 
 }
 
 fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, entity: Entity, scene_layer: SceneLayer) !void {
-    const frame_allocator = engine_context.mFrameAllocator;
+    const frame_allocator = engine_context.FrameAllocator();
 
     while (true) {
         const token = try reader.nextAlloc(frame_allocator, .alloc_if_needed);
@@ -365,7 +365,7 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
             try DeSerializeEntityComponent(reader, entity, EntityIDComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "EntityNameComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityNameComponent, frame_allocator);
-            try DeserializeEntityNameComp(entity);
+            try DeserializeEntityNameComp(engine_context.EngineAllocator(), entity);
         } else if (std.mem.eql(u8, actual_value, "EntityScript")) {
             try DeSerializeEntityComponent(reader, entity, EntityScriptComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "QuadComponent")) {
@@ -374,7 +374,7 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
             try DeSerializeEntityComponent(reader, entity, EntityTransformComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "TextComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityTextComponent, frame_allocator);
-            try DeserializeTextComponent(entity);
+            try DeserializeTextComponent(engine_context.EngineAllocator(), entity);
         } else if (std.mem.eql(u8, actual_value, "Entity")) {
             try DeSerializeParentComponent(engine_context, reader, entity, scene_layer);
         }
@@ -388,14 +388,14 @@ fn DeSerializeEntityComponent(reader: *std.json.Reader, entity: Entity, comptime
 
 fn DeserializeCameraComponent(engine_context: *EngineContext, entity: Entity) !void {
     if (entity.GetComponent(CameraComponent)) |camera_component| {
-        const ecs_allocator = engine_context.mEngineAllocator;
+        const ecs_allocator = engine_context.EngineAllocator();
         camera_component.mViewportFrameBuffer = try FrameBuffer.Init(ecs_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, camera_component.mViewportWidth, camera_component.mViewportHeight);
-        camera_component.mViewportVertexArray = VertexArray.Init(ecs_allocator);
-        camera_component.mViewportVertexBuffer = VertexBuffer.Init(ecs_allocator, @sizeOf([4][2]f32));
+        camera_component.mViewportVertexArray = VertexArray.Init();
+        camera_component.mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
         camera_component.mViewportIndexBuffer = undefined;
 
-        const shader_asset = try Renderer.GetSDFShader(engine_context);
-        try camera_component.mViewportVertexBuffer.SetLayout(shader_asset.GetLayout());
+        const shader_asset = try engine_context.mRenderer.GetSDFShader(engine_context);
+        try camera_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
         camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
         var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
@@ -403,36 +403,30 @@ fn DeserializeCameraComponent(engine_context: *EngineContext, entity: Entity) !v
 
         var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
         camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-        try camera_component.mViewportVertexArray.AddVertexBuffer(camera_component.mViewportVertexBuffer);
+        try camera_component.mViewportVertexArray.AddVertexBuffer(engine_context.EngineAllocator(), camera_component.mViewportVertexBuffer);
         camera_component.mViewportVertexArray.SetIndexBuffer(camera_component.mViewportIndexBuffer);
 
         camera_component.SetViewportSize(camera_component.mViewportWidth, camera_component.mViewportHeight);
     }
 }
 
-fn DeserializeTextComponent(entity: Entity) !void {
+fn DeserializeTextComponent(engine_allocator: std.mem.Allocator, entity: Entity) !void {
     if (entity.GetComponent(EntityTextComponent)) |text_component| {
-        const ecs_allocator = entity.GetECSAllocator();
-
-        const new_memory = try ecs_allocator.alloc(u8, text_component.mText.items.len);
+        const new_memory = try engine_allocator.alloc(u8, text_component.mText.items.len);
 
         @memcpy(new_memory, text_component.mText.items);
 
-        text_component.mText.deinit(text_component.mAllocator);
+        text_component.mText.deinit(engine_allocator);
 
         text_component.mText.items = new_memory;
 
         text_component.mText.capacity = new_memory.len;
-
-        text_component.mAllocator = ecs_allocator;
     }
 }
 
-fn DeserializeEntityNameComp(entity: Entity) !void {
+fn DeserializeEntityNameComp(engine_allocator: std.mem.Allocator, entity: Entity) !void {
     if (entity.GetComponent(EntityNameComponent)) |name_component| {
-        const ecs_allocator = entity.GetECSAllocator();
-
-        const new_memory = try ecs_allocator.alloc(u8, name_component.mName.items.len);
+        const new_memory = try engine_allocator.alloc(u8, name_component.mName.items.len);
 
         @memcpy(new_memory, name_component.mName.items);
 
@@ -442,7 +436,7 @@ fn DeserializeEntityNameComp(entity: Entity) !void {
 
         name_component.mName.capacity = new_memory.len;
 
-        name_component.mAllocator = ecs_allocator;
+        name_component.mAllocator = engine_allocator;
     }
 }
 

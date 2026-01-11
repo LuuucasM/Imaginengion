@@ -10,8 +10,4 @@ pub const stb = @cImport({
 
 pub const nfd = @import("NFD").c;
 
-const build_options = @import("build_options");
-pub const enable_tracy = build_options.enable_tracy;
-pub const tracy = if (enable_tracy) @import("Tracy").c else void;
-
 pub const miniaudio = @import("MiniAudio").c;

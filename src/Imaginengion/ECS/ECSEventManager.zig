@@ -46,7 +46,7 @@ pub fn ECSEventManager(entity_t: type) type {
             };
         }
 
-        pub fn ClearEvents(self: *Self, event_category: ECSEventCategory, engine_allocator: std.mem.Allocator) void {
+        pub fn ClearEvents(self: *Self, engine_allocator: std.mem.Allocator, event_category: ECSEventCategory) void {
             switch (event_category) {
                 .EC_RemoveObj => self.mRemoveObj.clearAndFree(engine_allocator),
                 else => @panic("default event is not allowed\n"),

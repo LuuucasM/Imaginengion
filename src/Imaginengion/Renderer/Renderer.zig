@@ -65,7 +65,7 @@ mModeUniformBuffer: UniformBuffer = undefined,
 mSDFShader: AssetHandle = .{},
 
 pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !void {
-    const engine_allocator = engine_context.mEngineAllocator;
+    const engine_allocator = engine_context.EngineAllocator();
     self.mRenderContext = RenderContext.Init(window);
 
     try self.mR2D.Init(engine_allocator);
@@ -74,7 +74,7 @@ pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !v
     self.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
     self.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
 
-    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.mEngineAllocator, "assets/shaders/SDFShader.program", .Eng);
+    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/shaders/SDFShader.program", .Eng);
 }
 
 pub fn Deinit(self: *Renderer) void {
@@ -100,11 +100,11 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
 
     self.UpdateCameraBuffer(camera_component, camera_transform);
     self.UpdateModeBuffer(mode);
-    self.BeginRendering(engine_context.mEngineAllocator);
+    self.BeginRendering(engine_context.EngineAllocator());
 
     //get all the shapes minus the children because we will render them with the parents
     const shapes_ids = try scene_manager.GetEntityGroup(
-        engine_context.mFrameAllocator,
+        engine_context.FrameAllocator(),
         GroupQuery{
             .Not = .{
                 .mFirst = GroupQuery{

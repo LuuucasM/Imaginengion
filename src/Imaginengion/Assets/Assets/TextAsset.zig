@@ -83,7 +83,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
                 "-json",
                 name_json,
             },
-            engine_context.mFrameAllocator,
+            engine_context.FrameAllocator(),
         );
         child.stdin_behavior = .Inherit;
         child.stdout_behavior = .Inherit;
@@ -110,7 +110,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
 
     defer text_json.close();
 
-    return try self.ProcessTextJson(engine_context.mEngineAllocator, arena_allocator, text_json);
+    return try self.ProcessTextJson(engine_context.EngineAllocator(), arena_allocator, text_json);
 }
 
 pub fn Deinit(self: *TextAsset, _: *EngineContext) !void {
