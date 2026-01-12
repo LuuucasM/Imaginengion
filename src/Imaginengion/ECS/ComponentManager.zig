@@ -53,13 +53,13 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) !void {
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
             //delete component arrays
             for (self.mComponentsArrays.items) |component_array| {
-                try component_array.Deinit(engine_allocator);
+                try component_array.Deinit(engine_context);
             }
 
-            self.mComponentsArrays.deinit(engine_allocator);
+            self.mComponentsArrays.deinit(engine_context.EngineAllocator());
             self.mEntitySkipField.deinit();
         }
 

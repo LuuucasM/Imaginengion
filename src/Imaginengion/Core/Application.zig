@@ -51,9 +51,11 @@ pub fn Init(self: *Application) !void {
 /// Returns:
 /// - `!void` on deinitialization error return the error else return nothing.
 pub fn Deinit(self: *Application) !void {
+    const zone = Tracy.ZoneInit("Application::Deinit", @src());
+    defer zone.Deinit();
     try self.mProgram.Deinit(&self.mEngineContext);
     self.mWindow.Deinit();
-    self.mEngineContext.DeInit();
+    try self.mEngineContext.DeInit();
 }
 
 /// Starts the main loop of the engine.

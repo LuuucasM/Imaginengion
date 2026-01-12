@@ -6,7 +6,7 @@ const Vec3f32 = @import("IM").Vec3f32;
 const Quatf32 = @import("IM").Quatf32;
 const Vec2f32 = @import("IM").Vec2f32;
 const ScriptType = @import("IM").ScriptType;
-const TransformComponent = @import("IM").TransformComponent;
+const TransformComponent = @import("IM").EntityComponents.TransformComponent;
 const OnUpdateInputTemplate = @This();
 
 /// Function that gets executed every frame after polling inputs and input events
@@ -14,7 +14,7 @@ const OnUpdateInputTemplate = @This();
 /// if it returns false it will stop at this layer
 pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.c) bool {
     _ = allocator;
-    const input_context = engine_context.mInputManager;
+    var input_context = engine_context.mInputManager;
     if (input_context.IsInputPressed(.LeftAlt) == true) {
         const PanSpeed = 0.015;
         const RotateSpeed = 0.08;
@@ -64,5 +64,5 @@ pub export fn EditorRender() callconv(.c) void {}
 
 //Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
 pub export fn GetScriptType() callconv(.c) ScriptType {
-    return ScriptType.OnUpdateInput;
+    return ScriptType.EntityOnUpdate;
 }

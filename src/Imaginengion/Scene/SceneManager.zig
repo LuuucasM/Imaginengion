@@ -73,9 +73,9 @@ pub fn Init(self: *SceneManager, width: usize, height: usize, engine_allocator: 
     self.mViewportHeight = height;
 }
 
-pub fn Deinit(self: *SceneManager) !void {
-    try self.mECSManagerGO.Deinit();
-    try self.mECSManagerSC.Deinit();
+pub fn Deinit(self: *SceneManager, engine_context: *EngineContext) !void {
+    try self.mECSManagerGO.Deinit(engine_context);
+    try self.mECSManagerSC.Deinit(engine_context);
 }
 
 pub fn CreateEntity(self: *SceneManager, engine_allocator: std.mem.Allocator, scene_id: SceneLayer.Type) !Entity {

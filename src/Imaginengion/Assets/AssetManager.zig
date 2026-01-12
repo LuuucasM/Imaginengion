@@ -26,6 +26,13 @@ pub const AssetType = u32;
 
 pub const ECSManagerAssets = ECSManager(AssetType, &AssetsList);
 
+const DefaultAssets = struct {
+    SceneAssetHandle: AssetHandle,
+    ScriptAssetHandle: AssetHandle,
+    TextAssetHandle: AssetHandle,
+    Texture2DAHandle: AssetHandle,
+};
+
 mAssetECS: ECSManagerAssets = undefined,
 mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
 mPathToIDPrj: std.AutoHashMap(u64, AssetType) = undefined,
@@ -46,10 +53,12 @@ pub fn Init(self: *AssetManager, engine_allocator: std.mem.Allocator) !void {
 
     const cwd_path = try std.fs.cwd().realpathAlloc(fba_allocator, ".");
     _ = try self.mCWDPath.writer(engine_allocator).write(cwd_path);
+
+    //self.mDefaultHandle = self.GetAssetHandleRef(engine_allocator, "Default", .Eng);
 }
 
-pub fn Deinit(self: *AssetManager, engine_allocator: std.mem.Allocator) !void {
-    try self.mAssetECS.Deinit();
+pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
+    try self.mAssetECS.Deinit(engine_context);
     self.mPathToIDEng.deinit();
     self.mPathToIDPrj.deinit();
     self.mCWD.close();
@@ -57,8 +66,8 @@ pub fn Deinit(self: *AssetManager, engine_allocator: std.mem.Allocator) !void {
     if (self.mProjectDirectory) |*dir| {
         dir.close();
     }
-    self.mCWDPath.deinit(engine_allocator);
-    self.mProjectPath.deinit(engine_allocator);
+    self.mCWDPath.deinit(engine_context.EngineAllocator());
+    self.mProjectPath.deinit(engine_context.EngineAllocator());
 }
 
 pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !AssetHandle {

@@ -1,10 +1,11 @@
 //Core Stuff -----------------------------------
 pub const Application = @import("Core/Application.zig");
 pub const EngineContext = @import("Core/EngineContext.zig");
+pub const Tracy = @import("Core/Tracy.zig");
 
 //Game Object stuff -------------------------------
 pub const Entity = @import("GameObjects/Entity.zig");
-const EntityComponents = @import("GameObjects/Components.zig");
+pub const EntityComponents = @import("GameObjects/Components.zig");
 
 //Scene Stuff -----------------------------------------
 pub const SceneLayer = @import("Scene/SceneLayer.zig");

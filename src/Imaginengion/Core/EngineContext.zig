@@ -51,13 +51,13 @@ pub fn DeInit(self: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EngineContext::Deinit", @src());
     defer zone.Deinit();
 
-    try self.mAssetManager.DeInit(self.EngineAllocator());
-    self.mAudioManager.DeInit();
-    self.mGameEventManager.DeInit(self.EngineAllocator());
-    self.mImguiEventManager.DeInit(self.EngineAllocator());
-    self.mSystemEventManager.DeInit(self.EngineAllocator());
-    self.mInputManager.DeInit(self.EngineAllocator());
-    self.mRenderer.DeInit();
+    try self.mAssetManager.Deinit(self);
+    self.mAudioManager.Deinit();
+    self.mGameEventManager.Deinit(self.EngineAllocator());
+    self.mImguiEventManager.Deinit(self.EngineAllocator());
+    self.mSystemEventManager.Deinit(self.EngineAllocator());
+    self.mInputManager.Deinit();
+    self.mRenderer.Deinit(self.EngineAllocator());
 
     _ = self._internal.EngineGPA.deinit();
     self._internal.FrameArena.deinit();

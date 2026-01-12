@@ -184,8 +184,11 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
 }
 
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
-    try self.mGameSceneManager.Deinit();
-    try self.mEditorSceneManager.Deinit();
+    const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
+    defer zone.Deinit();
+
+    try self.mGameSceneManager.Deinit(engine_context);
+    try self.mEditorSceneManager.Deinit(engine_context);
     self._ContentBrowserPanel.Deinit(engine_context);
     self._CSEditorPanel.Deinit();
     self.mImgui.Deinit();

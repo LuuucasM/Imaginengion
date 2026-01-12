@@ -77,8 +77,8 @@ pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !v
     self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/shaders/SDFShader.program", .Eng);
 }
 
-pub fn Deinit(self: *Renderer) void {
-    self.mR2D.Deinit();
+pub fn Deinit(self: *Renderer, engine_allocator: std.mem.Allocator) void {
+    self.mR2D.Deinit(engine_allocator);
     self.mCameraUniformBuffer.Deinit();
 }
 
