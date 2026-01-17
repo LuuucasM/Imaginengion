@@ -27,7 +27,7 @@ pub fn Init(self: *OpenGLTexture2D, engine_context: *EngineContext, _: []const u
 
     if (data == null) {
         std.log.err("stbi_load_from_memory unable to correctly load the data for file {s}!\n", .{rel_path});
-        return error.CreateAssetFail;
+        return error.AssetInitFailed;
     }
 
     var internal_format: c_uint = 0;
@@ -40,7 +40,7 @@ pub fn Init(self: *OpenGLTexture2D, engine_context: *EngineContext, _: []const u
         data_format = glad.GL_RGB;
     } else {
         std.log.err("Invalid number of channels for image {s}. Must have 3 or 4 channels only!\n", .{rel_path});
-        return error.CreateAssetFail;
+        return error.AssetInitFailed;
     }
 
     var new_texture_id: c_uint = 0;
@@ -59,7 +59,7 @@ pub fn Init(self: *OpenGLTexture2D, engine_context: *EngineContext, _: []const u
     const arb_handle = glad.glGetTextureHandleARB(new_texture_id);
     if (arb_handle == 0) {
         std.log.err("Invalid ARB handle of 0 for texture {s}!\n", .{rel_path});
-        return error.CreateAssetFail;
+        return error.AssetInitFailed;
     }
 
     glad.glMakeTextureHandleResidentARB(arb_handle);

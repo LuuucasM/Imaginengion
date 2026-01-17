@@ -223,6 +223,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _InternalTypeCheck(component_type);
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+
             const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
             defer zone.Deinit();
             return self.mComponentManager.GetComponent(component_type, entity_id);

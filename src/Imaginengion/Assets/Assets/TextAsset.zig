@@ -6,6 +6,7 @@ const AssetHandle = @import("../AssetHandle.zig");
 const Vec4f32 = LinAlg.Vec4f32;
 const Vec2f32 = LinAlg.Vec2f32;
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Texture2D = @import("Texture2D.zig");
 const TextAsset = @This();
 
 const KerningsT = std.AutoHashMap(u16, f32);
@@ -39,32 +40,35 @@ mAscender: f32 = 0.0,
 mDescender: f32 = 0.0,
 mEmsize: f32 = 0.0,
 mAtlasSize: Vec2f32 = Vec2f32{ 0, 0 },
+mAtlas: Texture2D = .{},
 
 pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
-    var buff: [260 * 2]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buff);
-    const fba_allocator = fba.allocator();
+    const frame_allocator = engine_context.FrameAllocator();
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
+    const ext = std.fs.path.extension(rel_path);
 
-    const name_png = try std.fmt.allocPrint(fba_allocator, "{s}.png", .{rel_path});
-    const name_json = try std.fmt.allocPrint(fba_allocator, "{s}.json", .{rel_path});
+    const base_path = rel_path[0 .. rel_path.len - ext.len];
 
-    const file_png = std.fs.cwd().openFile(name_png, .{}) catch |err| switch (err) {
+    const name_png = try std.fmt.allocPrint(frame_allocator, "{s}.png", .{base_path});
+    const name_json = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{base_path});
+
+    //test to see if both of the files are present already
+    var file_json: ?std.fs.File = std.fs.cwd().openFile(name_json, .{}) catch |err| switch (err) {
+        error.FileNotFound => null,
+        else => return err,
+    };
+    var file_png: ?std.fs.File = std.fs.cwd().openFile(name_png, .{}) catch |err| switch (err) {
         error.FileNotFound => null,
         else => return err,
     };
 
-    defer if (file_png) |file| file.close();
-
-    var file_json = std.fs.cwd().openFile(name_json, .{}) catch |err| switch (err) {
-        error.FileNotFound => null,
-        else => return err,
-    };
-
+    //if one of them is missing then we generate new files using msdfgen
     if (file_png == null or file_json == null) {
+        if (file_json) |f| f.close();
+        if (file_png) |f| f.close();
+
+        std.log.info("Font generated files not found for {s}.\n Generating files now.", .{rel_path});
+
         var child = std.process.Child.init(
             &[_][]const u8{
                 "./src/Imaginengion/Vendor/msdfgen/msdf-atlas-gen.exe",
@@ -94,41 +98,44 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
 
         if (result != .Exited) {
             std.log.err("Unable to correctly generate text files {s}. It terminated by {s}!", .{ rel_path, @tagName(result) });
-            return error.ScriptAssetInitFail;
+            return error.AssetInitFailed;
         }
         if (result.Exited != 0) {
             std.log.err("Unable to correctly generate text files {s} exited with code {d}!", .{ rel_path, result.Exited });
-            return error.ScriptAssetInitFail;
+            return error.AssetInitFailed;
         }
-        std.log.debug("text {s} generated success!\n", .{rel_path});
+        std.log.info("text {s} generated success!\n", .{rel_path});
 
-        if (file_json == null) {
-            file_json = try std.fs.cwd().openFile(name_json, .{});
-        }
+        file_json = try std.fs.cwd().openFile(name_json, .{});
+        file_png = try std.fs.cwd().openFile(name_png, .{});
     }
-    const text_json = file_json.?;
+    defer file_json.?.close();
+    defer file_png.?.close();
 
-    defer text_json.close();
+    try self.ProcessTextJson(engine_context.EngineAllocator(), frame_allocator, file_json.?);
 
-    return try self.ProcessTextJson(engine_context.EngineAllocator(), arena_allocator, text_json);
+    const atlas_rel_path = name_png;
+    const atlas_abs_path = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{abs_path});
+    try self.mAtlas.Init(engine_context, atlas_rel_path, atlas_abs_path, file_png.?);
 }
 
-pub fn Deinit(self: *TextAsset, _: *EngineContext) !void {
+pub fn Deinit(self: *TextAsset, engine_context: *EngineContext) !void {
     for (self.mGlyphs, 0..) |_, i| {
         self.mGlyphs[i].mKernings.deinit();
     }
+    try self.mAtlas.Deinit(engine_context);
 }
 
-fn ProcessTextJson(self: *TextAsset, engine_allocator: std.mem.Allocator, arena_allocator: std.mem.Allocator, text_json: std.fs.File) !void {
+fn ProcessTextJson(self: *TextAsset, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator, text_json: std.fs.File) !void {
     const file_size = try text_json.getEndPos();
 
-    var file_contents = try std.ArrayList(u8).initCapacity(arena_allocator, file_size);
-    try file_contents.resize(arena_allocator, file_size);
+    var file_contents = try std.ArrayList(u8).initCapacity(frame_allocator, file_size);
+    try file_contents.resize(frame_allocator, file_size);
     _ = try text_json.readAll(file_contents.items);
 
     var io_reader = std.io.Reader.fixed(file_contents.items);
 
-    var reader = std.json.Reader.init(arena_allocator, &io_reader);
+    var reader = std.json.Reader.init(frame_allocator, &io_reader);
     defer reader.deinit();
 
     //deserialize
@@ -144,22 +151,22 @@ fn ProcessTextJson(self: *TextAsset, engine_allocator: std.mem.Allocator, arena_
             else => error.NotExpected,
         };
 
-        const actual_value = try arena_allocator.dupe(u8, token_value);
-        defer arena_allocator.free(actual_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "atlas")) {
-            try self.ProcessAtlas(&reader, arena_allocator);
+            try self.ProcessAtlas(&reader, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
-            try self.ProcessMetrics(&reader, arena_allocator);
+            try self.ProcessMetrics(&reader, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try self.ProcessGlyphs(engine_allocator, &reader, arena_allocator);
+            try self.ProcessGlyphs(engine_allocator, &reader, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
-            try self.ProcessKerning(&reader, arena_allocator);
+            try self.ProcessKerning(&reader, frame_allocator);
         }
     }
 }
 
-fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
+fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the atlas
     while (true) {
         const token = try reader.next();
@@ -171,26 +178,26 @@ fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std
             else => error.NotExpected,
         };
 
-        const actual_value = try arena_allocator.dupe(u8, token_value);
-        defer arena_allocator.free(actual_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "distanceRange")) {
-            const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(u32, frame_allocator, reader, PARSE_OPTIONS);
             self.mDistanceRange = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "size")) {
-            const parsed_value = try std.json.innerParse(u32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(u32, frame_allocator, reader, PARSE_OPTIONS);
             self.mSize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "width")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             self.mAtlasSize[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "height")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             self.mAtlasSize[1] = parsed_value;
         }
     }
 }
 
-fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
+fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object for the metrics
     while (true) {
         const token = try reader.next();
@@ -202,25 +209,25 @@ fn ProcessMetrics(self: *TextAsset, reader: *std.json.Reader, arena_allocator: s
             else => error.NotExpected,
         };
 
-        const actual_value = try arena_allocator.dupe(u8, token_value);
-        defer arena_allocator.free(actual_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "emSize")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             self.mEmsize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "lineHeight")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             self.mLineHeight = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "ascender")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             self.mAscender = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "descender")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             self.mDescender = parsed_value;
         }
     }
 }
-fn ProcessGlyphs(self: *TextAsset, engine_allocator: std.mem.Allocator, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
+fn ProcessGlyphs(self: *TextAsset, engine_allocator: std.mem.Allocator, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -234,14 +241,14 @@ fn ProcessGlyphs(self: *TextAsset, engine_allocator: std.mem.Allocator, reader: 
             .mKernings = KerningsT.init(engine_allocator),
         };
         var glyph_ind: usize = 0;
-        try SingleGlyph(reader, &glyph_ind, &new_glyph, arena_allocator);
+        try SingleGlyph(reader, &glyph_ind, &new_glyph, frame_allocator);
         if (glyph_ind > -1) {
             self.mGlyphs[@intCast(glyph_ind)] = new_glyph;
         }
     }
 }
 
-fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInfo, arena_allocator: std.mem.Allocator) !void {
+fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInfo, frame_allocator: std.mem.Allocator) !void {
     while (true) {
         const token = try reader.next();
         const token_value = try switch (token) {
@@ -251,24 +258,24 @@ fn SingleGlyph(reader: *std.json.Reader, glyph_ind: *usize, new_glyph: *GlyphInf
 
             else => error.NotExpected,
         };
-        const actual_value = try arena_allocator.dupe(u8, token_value);
-        defer arena_allocator.free(actual_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "unicode")) {
-            const parsed_value = try std.json.innerParse(usize, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(usize, frame_allocator, reader, PARSE_OPTIONS);
             glyph_ind.* = ToArrayIndex(parsed_value);
         } else if (std.mem.eql(u8, actual_value, "advance")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAdvance = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "planeBounds")) {
-            try ProcessPlaneBounds(reader, new_glyph, arena_allocator);
+            try ProcessPlaneBounds(reader, new_glyph, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "atlasBounds")) {
-            try ProcessAtlasBounds(reader, new_glyph, arena_allocator);
+            try ProcessAtlasBounds(reader, new_glyph, frame_allocator);
         }
     }
 }
 
-fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_allocator: std.mem.Allocator) !void {
+fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
@@ -280,26 +287,26 @@ fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_all
             else => error.NotExpected,
         };
 
-        const actual_value = try arena_allocator.dupe(u8, token_value);
-        defer arena_allocator.free(actual_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "left")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneBounds[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneBounds[3] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneBounds[2] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mPlaneBounds[1] = parsed_value;
         }
     }
 }
 
-fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_allocator: std.mem.Allocator) !void {
+fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin object token
     while (true) {
         const token = try reader.next();
@@ -311,26 +318,26 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, arena_all
             else => error.NotExpected,
         };
 
-        const actual_value = try arena_allocator.dupe(u8, token_value);
-        defer arena_allocator.free(actual_value);
+        const actual_value = try frame_allocator.dupe(u8, token_value);
+        defer frame_allocator.free(actual_value);
 
         if (std.mem.eql(u8, actual_value, "left")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasBounds[0] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasBounds[3] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasBounds[2] = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
-            const parsed_value = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+            const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
             new_glyph.mAtlasBounds[1] = parsed_value;
         }
     }
 }
 
-fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
+fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
     try SkipToken(reader); //skip the begin array
 
     while (true) {
@@ -341,11 +348,11 @@ fn ProcessKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: s
             else => return error.NotExpected,
         }
 
-        try self.SingleKerning(reader, arena_allocator);
+        try self.SingleKerning(reader, frame_allocator);
     }
 }
 
-fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: std.mem.Allocator) !void {
+fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std.mem.Allocator) !void {
 
     //unicode1
     const token1 = try reader.next();
@@ -356,10 +363,10 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: st
         else => error.NotExpected,
     };
 
-    const actual_value1 = try arena_allocator.dupe(u8, token_value1);
-    defer arena_allocator.free(actual_value1);
+    const actual_value1 = try frame_allocator.dupe(u8, token_value1);
+    defer frame_allocator.free(actual_value1);
 
-    const unicode1 = try std.json.innerParse(u16, arena_allocator, reader, PARSE_OPTIONS);
+    const unicode1 = try std.json.innerParse(u16, frame_allocator, reader, PARSE_OPTIONS);
     const glyph_ind1 = ToArrayIndex(unicode1);
 
     //unicode2
@@ -371,10 +378,10 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: st
         else => error.NotExpected,
     };
 
-    const actual_value2 = try arena_allocator.dupe(u8, token_value2);
-    defer arena_allocator.free(actual_value2);
+    const actual_value2 = try frame_allocator.dupe(u8, token_value2);
+    defer frame_allocator.free(actual_value2);
 
-    const unicode2 = try std.json.innerParse(u16, arena_allocator, reader, PARSE_OPTIONS);
+    const unicode2 = try std.json.innerParse(u16, frame_allocator, reader, PARSE_OPTIONS);
 
     const token3 = try reader.next();
     const token_value3 = try switch (token3) {
@@ -384,10 +391,10 @@ fn SingleKerning(self: *TextAsset, reader: *std.json.Reader, arena_allocator: st
         else => error.NotExpected,
     };
 
-    const actual_value3 = try arena_allocator.dupe(u8, token_value3);
-    defer arena_allocator.free(actual_value3);
+    const actual_value3 = try frame_allocator.dupe(u8, token_value3);
+    defer frame_allocator.free(actual_value3);
 
-    const advance = try std.json.innerParse(f32, arena_allocator, reader, PARSE_OPTIONS);
+    const advance = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
 
     try self.mGlyphs[glyph_ind1].mKernings.put(unicode2, advance);
     try SkipToken(reader); //skip the end object token

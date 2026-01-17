@@ -29,11 +29,11 @@ pub const Ind: usize = blk: {
 
 pub const Category: ComponentCategory = .Unique;
 
-mSceneAssetHandle: AssetHandle = .{},
+mScenePath: std.ArrayList(u8) = .{},
 mLayerType: LayerType = undefined,
 
-pub fn Deinit(self: *SceneComponent, _: *EngineContext) !void {
-    self.mSceneAssetHandle.ReleaseAsset();
+pub fn Deinit(self: *SceneComponent, engine_context: *EngineContext) !void {
+    self.mScenePath.deinit(engine_context.EngineAllocator());
 }
 
 pub fn GetInd(self: SceneComponent) u32 {

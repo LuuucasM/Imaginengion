@@ -37,7 +37,6 @@ pub fn GetInd(_: TextComponent) u32 {
 mShouldRender: bool = true,
 mText: std.ArrayList(u8) = .{},
 mTextAssetHandle: AssetHandle = .{},
-mAtlasHandle: AssetHandle = .{},
 mTexHandle: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},
 mFontSize: f32 = 9,
@@ -46,7 +45,6 @@ mEngineAllocator: std.mem.Allocator = undefined,
 
 pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
     self.mTextAssetHandle.ReleaseAsset();
-    self.mAtlasHandle.ReleaseAsset();
     self.mTexHandle.ReleaseAsset();
     self.mText.deinit(engine_context.EngineAllocator());
 }
@@ -61,7 +59,7 @@ pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void 
     }
 
     //font name just as a text that can be drag dropped onto to change the text
-    const file_data_asset = try self.mTextAssetHandle.GetAsset(engine_context, FileMetaData);
+    const file_data_asset = self.mTextAssetHandle.GetFileMetaData();
     const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
     const name_term = try frame_allocator.dupeZ(u8, name);
     imgui.igTextUnformatted(name_term, null);
@@ -93,12 +91,6 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.write(text_asset_data.mRelPath.items);
     try jw.objectField("PathType");
     try jw.write(text_asset_data.mPathType);
-
-    try jw.objectField("AtlasHandle");
-    const file_data_asset = self.mAtlasHandle.GetFileMetaData();
-    try jw.write(file_data_asset.mRelPath.items);
-    try jw.objectField("PathType");
-    try jw.write(file_data_asset.mPathType);
 
     try jw.objectField("TextureAssetHandle");
     const file_data_texture = self.mTexHandle.GetFileMetaData();
@@ -153,17 +145,6 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
             result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
-                std.debug.print("error: {}\n", .{err});
-                @panic("");
-            };
-        } else if (std.mem.eql(u8, field_name, "AtlasHandle")) {
-            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
-
-            try SkipToken(reader); //skip PathType object field
-
-            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
-
-            result.mAtlasHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

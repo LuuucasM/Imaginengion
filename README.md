@@ -1,31 +1,31 @@
 # Imaginengion
-### A high-performance game engine designed to leverage emerging technologies with a strong focus on modern hardware optimization.
+### My take on a high-performance game engine designed to leverage emerging technologies with a strong focus on modern hardware optimization.
 
 ## Table of contents:
 1. [Introduction](#introduction)
-2. [Compatability and Instillation](#CandI)
-3. [How To Use](#howtouse)
-4. [System Requirements](#systemrequirements)
+2. [Compatibility](#Comp)
+3. [Installation](#Inst)
+4. [How To Use](#howtouse)
 
-## Introduction <a name="introduction"></a>
-I havnt written a proper introduction yet ^_^
+## Introduction <a  name="introduction"></a>
+I haven't written a proper introduction yet ^_^
 
-## Compatability and Instillation <a name="CandI"></a>
-### Compatability
-Currently compiles using the newest master-version x86_64 zig compiler for windows from the website https://ziglang.org/download/ 
-There is plan to extend compatability to other systems in the future but for now there is too many other things to develop
-to warrent additional compatability
+## Compatibility <a  name="Comp"></a>
+#### Platform:
+- Windows
+#### Compiler version:
+- 15.1
+#### System requirements:
+###### GPU:
+	- NVIDIA: GTX 700 series (2013) and newer
+	- AMD: R9 200 series (2013) and newer
+	- Intel: Arc series (2022) - avoid older Intel GPUs
 
-### Instillation
-1. Have this repo downloaded and in its own folder
-2. Have the master-version x86_64 zig compiler installed
-3. Run FirstBuild.bat file provided with the engine
-4. Run GameEngine.exe (appears after running FirstBuild.bat)
+## Instillation<a name="Inst"></a>
+1. Have this repo downloaded and extracted into a folder
+2. Have the correct version of the zig compiler downloaded
+3. Navigate to the folder with the extracted engine contents
+4. Compile the engine
 
-## How To Use <a name="howtouse"></a>
-I havnt written anything for this yet because its still in development ^_^
-
-## System Requirements <a name="systemrequirements"></a>
-NVIDIA: GTX 700 series (2013) and newer
-AMD: R9 200 series (2013) and newer
-Intel: Arc series (2022) - avoid older Intel GPUs
+## How To Use <a  name="howtouse"></a>
+I haven't written anything for this yet because its still in development ^_^

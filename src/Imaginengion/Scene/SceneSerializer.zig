@@ -52,7 +52,7 @@ const WriteStream = std.json.Stringify;
 const StringifyOptions = std.json.Stringify.Options{ .whitespace = .indent_2 };
 const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
 
-pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
+pub fn SerializeSceneText(frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, abs_path: []const u8) !void {
     var out: std.io.Writer.Allocating = .init(frame_allocator);
     defer out.deinit();
 
@@ -61,26 +61,21 @@ pub fn SerializeSceneText(scene_layer: SceneLayer, abs_path: []const u8, frame_a
     try SerializeSceneData(&write_stream, scene_layer, frame_allocator);
     try WriteToFile(abs_path, out.written());
 }
-pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-    const scene_asset = try scene_asset_handle.GetAsset(engine_context, SceneAsset);
+pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
+    const scene_file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
 
-    var io_reader = std.io.Reader.fixed(scene_asset.mSceneContents.items);
-    var json_reader = std.json.Reader.init(frame_allocator, &io_reader);
-    defer json_reader.deinit();
+    var json_reader = try ReaderInit(engine_context, scene_file);
 
     try DeSerializeSceneData(engine_context, &json_reader, scene_layer);
 
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
-    scene_component.mSceneAssetHandle = scene_asset_handle;
+    _ = try scene_component.mScenePath.writer(engine_context.EngineAllocator()).write(engine_context.mAssetManager.GetRelPath(abs_path));
 }
 
-pub fn SceneReloadText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_asset_handle: AssetHandle) !void {
-    const scene_asset = try scene_asset_handle.GetAsset(engine_context, SceneAsset);
+pub fn SceneReloadText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_component: *SceneComponent) !void {
+    const scene_file = try engine_context.mAssetManager.OpenFile(scene_component.mScenePath.items, .Prj);
 
-    var io_reader = std.io.Reader.fixed(scene_asset.mSceneContents.items);
-    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
-    defer json_reader.deinit();
+    var json_reader = try ReaderInit(engine_context, scene_file);
 
     try DeSerializeSceneEntities(engine_context, &json_reader, scene_layer);
 }
@@ -132,6 +127,16 @@ pub fn DeSerializeEntityText(scene_layer: SceneLayer, abs_path: []const u8, fram
     try DeSerializeEntity(&reader, new_entity, scene_layer, frame_allocator);
 }
 
+fn ReaderInit(engine_context: *EngineContext, scene_file: std.fs.File) !std.json.Reader {
+    //read contents
+    const file_size = try scene_file.getEndPos();
+    var scene_contents = try std.ArrayList(u8).initCapacity(engine_context.FrameAllocator(), file_size);
+    try scene_contents.resize(engine_context.FrameAllocator(), file_size);
+    _ = try scene_file.readAll(scene_contents.items);
+
+    var io_reader = std.io.Reader.fixed(scene_contents.items);
+    return std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
+}
 fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     try write_stream.beginObject();
 
@@ -394,7 +399,7 @@ fn DeserializeCameraComponent(engine_context: *EngineContext, entity: Entity) !v
         camera_component.mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
         camera_component.mViewportIndexBuffer = undefined;
 
-        const shader_asset = try engine_context.mRenderer.GetSDFShader(engine_context);
+        const shader_asset = engine_context.mRenderer.GetSDFShader();
         try camera_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
         camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 

@@ -57,7 +57,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
 
                 while (true) : (if (curr_id == script_component.mFirst) break) {
                     const asset_handle = curr_comp.mScriptAssetHandle;
-                    const script_file_data = try asset_handle.GetAsset(engine_context, FileMetaData);
+                    const script_file_data = asset_handle.GetFileMetaData();
 
                     const script_name = try std.fmt.allocPrint(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id });
 

@@ -175,19 +175,20 @@ pub fn RemoveScene(self: *SceneManager, engine_context: *EngineContext, destroy_
     try self.mECSManagerSC.DestroyEntity(engine_context.EngineAllocator(), destroy_scene.mSceneID);
 }
 
-pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, path: []const u8) !SceneLayer.Type {
+pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, abs_path: []const u8) !SceneLayer.Type {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    const scene_asset_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj);
 
-    const scene_basename = std.fs.path.basename(path);
+    //get the scene name from the file name
+    const scene_basename = std.fs.path.basename(abs_path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
 
+    //add name component to scene
     const new_scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try new_scene_name_component.mName.writer(new_scene_name_component.mAllocator).write(scene_name);
 
-    try SceneSerializer.DeSerializeSceneText(engine_context, scene_layer, scene_asset_handle);
+    try SceneSerializer.DeSerializeSceneText(engine_context, scene_layer, abs_path);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
@@ -217,26 +218,24 @@ pub fn ReloadAllScenes(self: *SceneManager, engine_context: *EngineContext) !voi
         const scene = self.GetSceneLayer(scene_id);
         const scene_component = scene.GetComponent(SceneComponent).?;
 
-        try SceneSerializer.SceneReloadText(engine_context, scene, scene_component.mSceneAssetHandle);
+        try SceneSerializer.SceneReloadText(engine_context, scene, scene_component);
     }
 }
 pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const frame_allocator = engine_context.FrameAllocator();
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
-    if (scene_component.mSceneAssetHandle.mID != AssetHandle.NullHandle) {
-        const file_data = try scene_component.mSceneAssetHandle.GetAsset(engine_context, FileMetaData);
-        const abs_path = try engine_context.mAssetManager.GetAbsPath(file_data.mRelPath.items, .Prj, frame_allocator);
-        try SceneSerializer.SerializeSceneText(scene_layer, abs_path, frame_allocator);
+
+    if (scene_component.mScenePath.items.len != 0) {
+        const abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath.items, .Prj);
+        try SceneSerializer.SerializeSceneText(frame_allocator, scene_layer, abs_path);
     } else {
-        var buffer: [260]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const abs_path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
+        const abs_path = try PlatformUtils.SaveFile(frame_allocator, ".imsc");
         if (abs_path.len > 0) {
-            try self.SaveSceneAs(scene_layer, abs_path, frame_allocator);
+            try self.SaveSceneAs(frame_allocator, scene_layer, abs_path);
         }
     }
 }
-pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
+pub fn SaveSceneAs(_: *SceneManager, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, abs_path: []const u8) !void {
     const scene_basename = std.fs.path.basename(abs_path);
     const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
     const scene_name = scene_basename[0..dot_location];
@@ -245,7 +244,7 @@ pub fn SaveSceneAs(_: *SceneManager, scene_layer: SceneLayer, abs_path: []const 
     scene_name_component.mName.clearAndFree(scene_name_component.mAllocator);
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write(scene_name);
 
-    try SceneSerializer.SerializeSceneText(scene_layer, abs_path, frame_allocator);
+    try SceneSerializer.SerializeSceneText(frame_allocator, scene_layer, abs_path);
 }
 
 pub fn MoveScene(self: *SceneManager, frame_allocator: std.mem.Allocator, scene_id: SceneLayer.Type, move_to_pos: usize) !void {

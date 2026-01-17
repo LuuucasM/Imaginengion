@@ -57,7 +57,7 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
         std.log.err("Unable to correctly compile script {s} exited with code {d}!", .{ rel_path, result.Exited });
         return error.ScriptAssetInitFail;
     }
-    std.log.debug("script {s} compile success!\n", .{rel_path});
+    std.log.info("script {s} compile success!\n", .{rel_path});
 
     //get the path of the newly create dyn lib and open it
     const dyn_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});

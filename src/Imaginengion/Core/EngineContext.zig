@@ -12,11 +12,11 @@ const Application = @import("../Core/Application.zig");
 const Tracy = @import("Tracy.zig");
 const EngineContext = @This();
 
-const internal_data = struct {
-    EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
+const InternalData = struct {
     EngineAllocator: std.mem.Allocator = undefined,
-    FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
     FrameAllocator: std.mem.Allocator = undefined,
+    EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
+    FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 };
 
 mDT: f32 = 0.0,
@@ -29,7 +29,7 @@ mSystemEventManager: SystemEventManager = .{},
 mInputManager: InputManager = .{},
 mRenderer: Renderer = .{},
 
-_internal: internal_data = .{},
+_internal: InternalData = .{},
 
 pub fn Init(self: *EngineContext, window: *Window, program: *Program, app: *Application) !void {
     const zone = Tracy.ZoneInit("EngineContext::Init", @src());
@@ -38,13 +38,14 @@ pub fn Init(self: *EngineContext, window: *Window, program: *Program, app: *Appl
     self._internal.EngineAllocator = self._internal.EngineGPA.allocator();
     self._internal.FrameAllocator = self._internal.FrameArena.allocator();
 
-    try self.mAssetManager.Init(self.EngineAllocator());
+    try self.mAssetManager.Init(self);
+    try self.mRenderer.Init(window, self);
+    try self.mAssetManager.Setup(self);
     try self.mAudioManager.Init();
     self.mGameEventManager.Init(program);
     self.mImguiEventManager.Init(program);
     self.mSystemEventManager.Init(app);
     self.mInputManager.Init(self.EngineAllocator());
-    try self.mRenderer.Init(window, self);
 }
 
 pub fn DeInit(self: *EngineContext) !void {
@@ -57,15 +58,13 @@ pub fn DeInit(self: *EngineContext) !void {
     self.mImguiEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
     self.mInputManager.Deinit();
-    self.mRenderer.Deinit(self.EngineAllocator());
+    self.mRenderer.Deinit(self);
 
     _ = self._internal.EngineGPA.deinit();
     self._internal.FrameArena.deinit();
 }
 
-pub fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
-    const zone = Tracy.ZoneInit("EngineContext::EngineAllocator", @src());
-    defer zone.Deinit();
+pub inline fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
         .vtable = &.{
@@ -77,9 +76,7 @@ pub fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
     };
 }
 
-pub fn FrameAllocator(self: *EngineContext) std.mem.Allocator {
-    const zone = Tracy.ZoneInit("EngineContext::FrameAllocator", @src());
-    defer zone.Deinit();
+pub inline fn FrameAllocator(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
         .vtable = &.{

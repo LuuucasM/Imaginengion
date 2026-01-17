@@ -103,7 +103,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     // Audio asset display with drag-drop target
     imgui.igSeparator();
     if (self.mAudioAsset.mID != AssetHandle.NullHandle) {
-        const file_data_asset = try self.mAudioAsset.GetAsset(engine_context, FileMetaData);
+        const file_data_asset = self.mAudioAsset.GetFileMetaData();
         const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
         const name_term = try frame_allocator.dupeZ(u8, name);
         imgui.igTextUnformatted("Audio Asset: ", null);

@@ -62,7 +62,7 @@ mCameraUniformBuffer: UniformBuffer = undefined,
 mModeBuffer: ModeData = std.mem.zeroes(ModeData),
 mModeUniformBuffer: UniformBuffer = undefined,
 
-mSDFShader: AssetHandle = .{},
+mSDFShader: ShaderAsset = undefined,
 
 pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
@@ -74,12 +74,16 @@ pub fn Init(self: *Renderer, window: *Window, engine_context: *EngineContext) !v
     self.mCameraUniformBuffer = UniformBuffer.Init(@sizeOf(CameraData));
     self.mModeUniformBuffer = UniformBuffer.Init(@sizeOf(ModeData));
 
-    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/shaders/SDFShader.program", .Eng);
+    const shader_rel_path = "assets/shaders/SDFShader.program";
+    const shader_abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), shader_rel_path, .Eng);
+    const shader_file = try engine_context.mAssetManager.OpenFile(shader_rel_path, .Eng);
+    try self.mSDFShader.Init(engine_context, shader_abs_path, shader_rel_path, shader_file);
 }
 
-pub fn Deinit(self: *Renderer, engine_allocator: std.mem.Allocator) void {
-    self.mR2D.Deinit(engine_allocator);
+pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
+    self.mR2D.Deinit(engine_context.EngineAllocator());
     self.mCameraUniformBuffer.Deinit();
+    try self.mSDFShader.Deinit(engine_context);
 }
 
 pub fn SwapBuffers(self: *Renderer) void {
@@ -134,15 +138,15 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
         try self.DrawShape(engine_context, shape_entity, &base_transform_component);
     }
 
-    try self.EndRendering(engine_context, camera_component);
+    try self.EndRendering(camera_component);
 }
 
 pub fn GetRenderStats(self: *Renderer) RenderStats {
     return self.mStats;
 }
 
-pub fn GetSDFShader(self: *Renderer, engine_context: *EngineContext) !*ShaderAsset {
-    return try self.mSDFShader.GetAsset(engine_context, ShaderAsset);
+pub fn GetSDFShader(self: *Renderer) *ShaderAsset {
+    return &self.mSDFShader;
 }
 
 fn UpdateCameraBuffer(self: *Renderer, camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
@@ -216,7 +220,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, pa
     }
 }
 
-fn EndRendering(self: *Renderer, engine_context: *EngineContext, camera_component: *CameraComponent) !void {
+fn EndRendering(self: *Renderer, camera_component: *CameraComponent) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
@@ -229,8 +233,7 @@ fn EndRendering(self: *Renderer, engine_context: *EngineContext, camera_componen
     camera_component.mViewportFrameBuffer.Bind();
     defer camera_component.mViewportFrameBuffer.Unbind();
 
-    const sdf_shader_asset = try self.mSDFShader.GetAsset(engine_context, ShaderAsset);
-    sdf_shader_asset.Bind();
+    self.mSDFShader.Bind();
 
     try self.mR2D.SetBuffers();
 

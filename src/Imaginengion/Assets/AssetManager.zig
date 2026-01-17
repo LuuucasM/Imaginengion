@@ -1,11 +1,16 @@
 const std = @import("std");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
+
 const Assets = @import("Assets.zig");
 const AssetMetaData = Assets.AssetMetaData;
 const FileMetaData = Assets.FileMetaData;
 const ScriptAsset = Assets.ScriptAsset;
 const TextAsset = Assets.TextAsset;
+const Texture2D = Assets.Texture2D;
+const ShaderAsset = Assets.ShaderAsset;
+const AudioAsset = Assets.AudioAsset;
+
 const AssetsList = Assets.AssetsList;
 const AssetHandle = @import("AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
@@ -26,13 +31,11 @@ pub const AssetType = u32;
 
 pub const ECSManagerAssets = ECSManager(AssetType, &AssetsList);
 
-const DefaultAssets = struct {
-    SceneAssetHandle: AssetHandle,
-    ScriptAssetHandle: AssetHandle,
-    TextAssetHandle: AssetHandle,
-    Texture2DAHandle: AssetHandle,
+const InternalData = struct {
+    DefaultTexture2D: Texture2D = .{},
+    DefaultTextAsset: TextAsset = .{},
+    DefaultAudioAsset: AudioAsset = .{},
 };
-
 mAssetECS: ECSManagerAssets = undefined,
 mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
 mPathToIDPrj: std.AutoHashMap(u64, AssetType) = undefined,
@@ -41,7 +44,11 @@ mCWDPath: std.ArrayList(u8) = .{},
 mProjectDirectory: ?std.fs.Dir = undefined,
 mProjectPath: std.ArrayList(u8) = .{},
 
-pub fn Init(self: *AssetManager, engine_allocator: std.mem.Allocator) !void {
+_internal: InternalData = .{},
+
+pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
+    const engine_allocator = engine_context.EngineAllocator();
+
     try self.mAssetECS.Init(engine_allocator);
     self.mPathToIDEng = std.AutoHashMap(u64, AssetType).init(engine_allocator);
     self.mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(engine_allocator);
@@ -53,19 +60,49 @@ pub fn Init(self: *AssetManager, engine_allocator: std.mem.Allocator) !void {
 
     const cwd_path = try std.fs.cwd().realpathAlloc(fba_allocator, ".");
     _ = try self.mCWDPath.writer(engine_allocator).write(cwd_path);
+}
 
-    //self.mDefaultHandle = self.GetAssetHandleRef(engine_allocator, "Default", .Eng);
+pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
+    const frame_allocator = engine_context.FrameAllocator();
+
+    //TEXTURE 2D =========================
+    const texture2d_rel_path = "assets/textures/DefaultTexture.png";
+    const texture2d_abs_path = try self.GetAbsPath(frame_allocator, texture2d_rel_path, .Eng);
+    const texture2d_file = try std.fs.openFileAbsolute(texture2d_abs_path, .{});
+    defer texture2d_file.close();
+    try self._internal.DefaultTexture2D.Init(engine_context, texture2d_abs_path, texture2d_rel_path, texture2d_file);
+
+    //TEXT ================================
+    const text_rel_path = "assets/fonts/default/static/ChironGoRoundTC-Regular.ttf";
+    const text_abs_path = try self.GetAbsPath(frame_allocator, text_rel_path, .Eng);
+    const text_file = try std.fs.openFileAbsolute(text_abs_path, .{});
+    defer text_file.close();
+    try self._internal.DefaultTextAsset.Init(engine_context, text_abs_path, text_rel_path, text_file);
+
+    //AUDIO =================================
+    const audio_rel_path = "assets/sounds/DefaultSound.mp3";
+    const audio_abs_path = try self.GetAbsPath(frame_allocator, audio_rel_path, .Eng);
+    const audio_file = try std.fs.openFileAbsolute(audio_abs_path, .{});
+    defer audio_file.close();
+    try self._internal.DefaultAudioAsset.Init(engine_context, audio_abs_path, audio_rel_path, audio_file);
 }
 
 pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
+    try self._internal.DefaultTexture2D.Deinit(engine_context);
+    try self._internal.DefaultTextAsset.Deinit(engine_context);
+    try self._internal.DefaultAudioAsset.Deinit(engine_context);
+
     try self.mAssetECS.Deinit(engine_context);
+
     self.mPathToIDEng.deinit();
     self.mPathToIDPrj.deinit();
+
     self.mCWD.close();
 
     if (self.mProjectDirectory) |*dir| {
         dir.close();
     }
+
     self.mCWDPath.deinit(engine_context.EngineAllocator());
     self.mProjectPath.deinit(engine_context.EngineAllocator());
 }
@@ -103,34 +140,29 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
     const zone = Tracy.ZoneInit("AssetManager::GetAsset", @src());
     defer zone.Deinit();
 
-    std.debug.assert(self.mAssetECS.HasComponent(FileMetaData, asset_id));
-    std.debug.assert(self.mAssetECS.HasComponent(AssetMetaData, asset_id));
+    _ValidateAssetType(asset_type);
 
-    if (asset_type == FileMetaData or asset_type == AssetMetaData) {
-        //this if statement allows filemetadata and assetmetadata to not require an Init function because compiler
-        //will do magic to ensure for those 2 asset types this branch is the only one that will exist
-        return self.mAssetECS.GetComponent(asset_type, asset_id).?;
-    }
+    if (asset_id != AssetHandle.NullHandle) {
+        if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
+            return asset;
+        } else {
+            const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
+            std.debug.assert(file_data.mRelPath.items.len > 0);
 
-    if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
-        return asset;
+            const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
+
+            const asset_file = try self.OpenFile(file_data.mRelPath.items, file_data.mPathType);
+            defer self.CloseFile(asset_file);
+
+            var asset_component = asset_type{};
+            asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file) catch |err| {
+                if (err == error.AssetInitFailed) return try self.GetDefaultAsset(asset_type) else return err;
+            };
+
+            return self.mAssetECS.AddComponent(asset_type, asset_id, asset_component);
+        }
     } else {
-        const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
-        std.debug.assert(file_data.mRelPath.items.len > 0);
-
-        var buffer: [260 * 2]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const fba_allocator = fba.allocator();
-
-        const abs_path = try self.GetAbsPath(file_data.mRelPath.items, file_data.mPathType, fba_allocator);
-
-        const asset_file = try self.OpenFile(file_data.mRelPath.items, file_data.mPathType);
-        defer self.CloseFile(asset_file);
-
-        var asset_component = asset_type{};
-        try asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file);
-
-        return self.mAssetECS.AddComponent(asset_type, asset_id, asset_component);
+        return try self.GetDefaultAsset(asset_type);
     }
 }
 
@@ -142,14 +174,13 @@ pub fn OnUpdate(self: *AssetManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("AssetManager OnUpdate", @src());
     defer zone.Deinit();
 
-    const engine_allocator = engine_context.EngineAllocator();
     const frame_allocator = engine_context.FrameAllocator();
 
     const group = try self.mAssetECS.GetGroup(frame_allocator, GroupQuery{ .Component = FileMetaData });
     for (group.items) |entity_id| {
         const file_data = self.mAssetECS.GetComponent(FileMetaData, entity_id).?;
         if (file_data.mSize == 0) {
-            try self.CheckAssetForDeletion(engine_allocator, entity_id);
+            try self.CheckAssetForDeletion(engine_context, entity_id);
             continue;
         }
         //then check if the asset path is still valid
@@ -227,7 +258,7 @@ pub fn GetFileStats(_: *AssetManager, file: std.fs.File) !std.fs.File.Stat {
     return file.stat();
 }
 
-pub fn GetAbsPath(self: *AssetManager, rel_path: []const u8, path_type: PathType, allocator: std.mem.Allocator) ![]const u8 {
+pub fn GetAbsPath(self: *AssetManager, allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) ![]const u8 {
     const zone = Tracy.ZoneInit("AssetManager GetAbsPath", @src());
     defer zone.Deinit();
 
@@ -249,6 +280,18 @@ pub fn GetRelPath(self: *AssetManager, abs_path: []const u8) []const u8 {
 
 pub fn ProcessDestroyedAssets(self: *AssetManager, engine_context: *EngineContext) !void {
     try self.mAssetECS.ProcessEvents(engine_context, .EC_RemoveObj);
+}
+
+fn GetDefaultAsset(self: *AssetManager, asset_type: type) !*asset_type {
+    if (asset_type != Texture2D and asset_type != TextAsset and asset_type != AudioAsset) {
+        return error.NoDefaultAsset;
+    }
+    return switch (asset_type) {
+        Texture2D => &self._internal.DefaultTexture2D,
+        TextAsset => &self._internal.DefaultTextAsset,
+        AudioAsset => &self._internal.DefaultAudioAsset,
+        else => @compileError("This should never happen! :)"),
+    };
 }
 
 fn GetFileStatsIfExists(self: *AssetManager, rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File.Stat {
@@ -366,32 +409,28 @@ fn UpdateAsset(self: *AssetManager, asset_id: AssetType, file: std.fs.File, fsta
     file_data.mSize = fstats.size;
 }
 
-fn CheckAssetForDeletion(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_id: AssetType) !void {
-    const zone = Tracy.ZoneInit("AssetManager CheckAssetForDelete", @src());
+fn CheckAssetForDeletion(self: *AssetManager, engine_context: *EngineContext, asset_id: AssetType) !void {
+    const zone = Tracy.ZoneInit("AssetManager::CheckAssetForDelete", @src());
     defer zone.Deinit();
 
     //check to see if we can recover the asset
-    if (try self.RetryAssetExists(asset_id)) return;
+    if (try self.RetryAssetExists(engine_context.FrameAllocator(), asset_id)) return;
 
     //if we cannot recover it automatically then delete it from AssetManager
     const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
     if (std.time.nanoTimestamp() - file_data.mLastModified > ASSET_DELETE_TIMEOUT_NS) {
-        try self.DeleteAsset(engine_allocator, asset_id);
+        try self.DeleteAsset(engine_context.EngineAllocator(), asset_id);
     }
 }
 
 //This function checks again to see if we can open the file maybe there was
 //some weird issue last frame but this frame the file is ok so we can recover it
-fn RetryAssetExists(self: *AssetManager, asset_id: AssetType) !bool {
-    const zone = Tracy.ZoneInit("AssetManager RetryAssetExists", @src());
+fn RetryAssetExists(self: *AssetManager, frame_allocator: std.mem.Allocator, asset_id: AssetType) !bool {
+    const zone = Tracy.ZoneInit("AssetManager::RetryAssetExists", @src());
     defer zone.Deinit();
     const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const fba_allocator = fba.allocator();
-
-    const abs_path = try self.GetAbsPath(file_data.mRelPath.items, file_data.mPathType, fba_allocator);
+    const abs_path = try self.GetAbsPath(frame_allocator, file_data.mRelPath.items, file_data.mPathType);
 
     const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
         if (err == error.FileNotFound) {
@@ -407,4 +446,12 @@ fn RetryAssetExists(self: *AssetManager, asset_id: AssetType) !bool {
     try self.UpdateAsset(asset_id, file, fstats);
 
     return true;
+}
+
+fn _ValidateAssetType(asset_type: type) void {
+    if (asset_type == FileMetaData or asset_type == AssetMetaData) {
+        //this if statement allows filemetadata and assetmetadata to not require an Init function because compiler
+        //will do magic to ensure for those 2 asset types this branch is the only one that will exist
+        @compileError("AssetMetaData/FileMetaData should not be acquired through this function, please call with GetFileMetaData");
+    }
 }

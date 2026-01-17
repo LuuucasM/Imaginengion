@@ -1,2 +1,1 @@
-- change all the components for all the ECS chagne the json parse functions replace the allocator param with engine context param
-- change all the asset handle member variables to not use ? because it takes extra memory so i should prefer using NullHandle/NullEntity/NullScene/etc.
+- fix bug with deleting scenes

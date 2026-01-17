@@ -316,7 +316,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
             std.log.err("Shader Compilation {s} Failure! {s}\n for file: {s}", .{ ShaderStrFromType(shader_type), info_log.items, rel_path });
 
-            return error.CreateAssetFail;
+            return error.AssetInitFailed;
         }
         glad.glAttachShader(shader_id, shader);
         try gl_shader_ids.append(allocator, shader);
@@ -346,7 +346,7 @@ fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []c
 
         std.log.err("Program failed to link! {s}\n for file {s}", .{ info_log.items, rel_path });
 
-        return error.CreateAssetFail;
+        return error.AssetInitFailed;
     }
 
     for (gl_shader_ids.items) |id| {

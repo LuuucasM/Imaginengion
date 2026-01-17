@@ -78,7 +78,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
             while (true) : (if (curr_id == scene_script_comp.mFirst) break) {
                 if (curr_script.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
                     const asset_handle = curr_script.mScriptAssetHandle;
-                    const script_file_data = try asset_handle.GetAsset(engine_context, FileMetaData);
+                    const script_file_data = asset_handle.GetFileMetaData();
 
                     const script_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id }, 0);
 

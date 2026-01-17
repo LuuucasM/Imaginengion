@@ -142,7 +142,7 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
         .mViewportHeight = self._ViewportPanel.mViewportHeight,
     };
 
-    const shader_asset = try engine_context.mRenderer.GetSDFShader(engine_context);
+    const shader_asset = engine_context.mRenderer.GetSDFShader();
     try new_camera_component.mViewportVertexBuffer.SetLayout(engine_allocator, shader_asset.GetLayout());
     new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
@@ -167,9 +167,8 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
         .mViewportIndexBuffer = undefined,
     };
 
-    const shader_asset_camera = try engine_context.mRenderer.GetSDFShader(engine_context);
-    try new_camera_component_camera.mViewportVertexBuffer.SetLayout(engine_allocator, shader_asset_camera.GetLayout());
-    new_camera_component_camera.mViewportVertexBuffer.SetStride(shader_asset_camera.GetStride());
+    try new_camera_component_camera.mViewportVertexBuffer.SetLayout(engine_allocator, shader_asset.GetLayout());
+    new_camera_component_camera.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
     var index_buffer_data_camera = [6]u32{ 0, 1, 2, 2, 3, 0 };
     new_camera_component_camera.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data_camera[0..], 6);
@@ -387,11 +386,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
         .ET_SaveSceneAsEvent => |e| {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.mAbsPath.len > 0) {
-                    const scene_component = scene_layer.GetComponent(SceneComponent).?;
-                    const rel_path = engine_context.mAssetManager.GetRelPath(e.mAbsPath);
-                    _ = try std.fs.createFileAbsolute(e.mAbsPath, .{});
-                    scene_component.mSceneAssetHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), rel_path, .Prj);
-                    try self.mGameSceneManager.SaveSceneAs(scene_layer, e.mAbsPath, engine_context.FrameAllocator());
+                    try self.mGameSceneManager.SaveSceneAs(engine_context.FrameAllocator(), scene_layer, e.mAbsPath);
                 }
             }
         },

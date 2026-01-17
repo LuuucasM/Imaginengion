@@ -19,7 +19,7 @@ pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 
 mShouldRender: bool = true,
-mTexture: AssetHandle = undefined,
+mTexture: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 

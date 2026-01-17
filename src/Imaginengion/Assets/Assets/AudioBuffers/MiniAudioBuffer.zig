@@ -27,7 +27,7 @@ pub fn Init(self: *MiniAudioBuffer, rel_path: []const u8, asset_file: std.fs.Fil
 
     if (ma.ma_decode_memory(file_data.items.ptr, file_data.items.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
         std.log.err("Failed to decode memory for MiniAudioBuffer for file {s}!\n", .{rel_path});
-        return error.CreateAssetFail;
+        return error.AssetInitFail;
     }
 
     self.mAudioConfig = ma.ma_audio_buffer_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);
