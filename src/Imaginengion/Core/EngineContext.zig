@@ -28,6 +28,7 @@ mImguiEventManager: ImguiEventManager = .{},
 mSystemEventManager: SystemEventManager = .{},
 mInputManager: InputManager = .{},
 mRenderer: Renderer = .{},
+mIsMinimized: bool = false,
 
 _internal: InternalData = .{},
 

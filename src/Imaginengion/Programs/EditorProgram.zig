@@ -198,7 +198,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
 //particles
 //handling the loading and unloading of assets and scene transitions
 //debug/profiling
-pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !void {
+pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Program OnUpdate", @src());
     defer zone.Deinit();
 
@@ -211,8 +211,8 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
 
         //Human Inputs
         self.mWindow.PollInputEvents();
-        engine_context.mInputManager.OnUpdate();
-        try engine_context.mSystemEventManager.ProcessEvents(.EC_Input);
+        try engine_context.mSystemEventManager.ProcessEvents(engine_context, .EC_Input);
+
         if (self._ToolbarPanel.mState == .Play) {
             _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateScript, &self.mGameSceneManager, .{});
         }
@@ -258,46 +258,47 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
     {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
+        if (engine_context.mIsMinimized == false) {
+            self.mImgui.Begin();
+            Dockspace.Begin();
 
-        self.mImgui.Begin();
-        Dockspace.Begin();
+            try self._ContentBrowserPanel.OnImguiRender(engine_context);
+            try self._AssetHandlePanel.OnImguiRender(engine_context);
 
-        try self._ContentBrowserPanel.OnImguiRender(engine_context);
-        try self._AssetHandlePanel.OnImguiRender(engine_context);
+            try self._ScenePanel.OnImguiRender(engine_context, &self.mGameSceneManager);
 
-        try self._ScenePanel.OnImguiRender(engine_context, &self.mGameSceneManager);
+            for (self._SceneSpecList.items) |*scene_spec_panel| {
+                try scene_spec_panel.OnImguiRender(engine_context);
+            }
+            try self._ComponentsPanel.OnImguiRender(engine_context);
+            try self._ScriptsPanel.OnImguiRender(engine_context);
+            try self._CSEditorPanel.OnImguiRender(engine_context);
 
-        for (self._SceneSpecList.items) |*scene_spec_panel| {
-            try scene_spec_panel.OnImguiRender(engine_context);
+            try self.RenderBuffers(engine_context);
+
+            try self._StatsPanel.OnImguiRender(engine_context.mDT, engine_context.mRenderer.GetRenderStats());
+
+            try self._ToolbarPanel.OnImguiRender(engine_context, &self.mGameSceneManager);
+
+            const opens = PanelOpen{
+                .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
+                .mCSEditorPanel = self._CSEditorPanel.mP_Open,
+                .mComponentsPanel = self._ComponentsPanel._P_Open,
+                .mContentBrowserPanel = self._ContentBrowserPanel.mIsVisible,
+                .mPreviewPanel = self._ViewportPanel.mP_OpenPlay,
+                .mScenePanel = self._ScenePanel.mIsVisible,
+                .mScriptsPanel = self._ScriptsPanel._P_Open,
+                .mStatsPanel = self._StatsPanel._P_Open,
+                .mViewportPanel = self._ViewportPanel.mP_OpenViewport,
+            };
+
+            try Dockspace.OnImguiRender(engine_context, opens);
+
+            try engine_context.mImguiEventManager.ProcessEvents(engine_context);
+
+            Dockspace.End();
+            self.mImgui.End();
         }
-        try self._ComponentsPanel.OnImguiRender(engine_context);
-        try self._ScriptsPanel.OnImguiRender(engine_context);
-        try self._CSEditorPanel.OnImguiRender(engine_context);
-
-        try self.RenderBuffers(engine_context);
-
-        try self._StatsPanel.OnImguiRender(dt, engine_context.mRenderer.GetRenderStats());
-
-        try self._ToolbarPanel.OnImguiRender(engine_context, &self.mGameSceneManager);
-
-        const opens = PanelOpen{
-            .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
-            .mCSEditorPanel = self._CSEditorPanel.mP_Open,
-            .mComponentsPanel = self._ComponentsPanel._P_Open,
-            .mContentBrowserPanel = self._ContentBrowserPanel.mIsVisible,
-            .mPreviewPanel = self._ViewportPanel.mP_OpenPlay,
-            .mScenePanel = self._ScenePanel.mIsVisible,
-            .mScriptsPanel = self._ScriptsPanel._P_Open,
-            .mStatsPanel = self._StatsPanel._P_Open,
-            .mViewportPanel = self._ViewportPanel.mP_OpenViewport,
-        };
-
-        try Dockspace.OnImguiRender(engine_context, opens);
-
-        try engine_context.mImguiEventManager.ProcessEvents(engine_context);
-
-        Dockspace.End();
-        self.mImgui.End();
     }
     //--------------Render End-------------------
 
@@ -324,7 +325,7 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         engine_context.mRenderer.SwapBuffers();
 
         //Process window events
-        try engine_context.mSystemEventManager.ProcessEvents(.EC_Window);
+        try engine_context.mSystemEventManager.ProcessEvents(engine_context, .EC_Window);
 
         //handle any closed scene spec panels
         self.CleanSceneSpecs(engine_context.EngineAllocator());
@@ -338,9 +339,9 @@ pub fn OnUpdate(self: *EditorProgram, dt: f32, engine_context: *EngineContext) !
         try self.mPlayerManager.ProcessDestroyedPlayers(engine_context);
 
         //end of frame resets
-        engine_context.mSystemEventManager.EventsReset(engine_allocator);
-        engine_context.mGameEventManager.EventsReset(engine_allocator);
-        engine_context.mImguiEventManager.EventsReset(engine_allocator);
+        engine_context.mSystemEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
+        engine_context.mGameEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
+        engine_context.mImguiEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
     }
     //-----------------End End of Frame-------------------
 

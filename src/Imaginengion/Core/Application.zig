@@ -19,7 +19,6 @@ const Tracy = @import("Tracy.zig");
 const Application: type = @This();
 
 mIsRunning: bool = true,
-mIsMinimized: bool = false,
 
 mWindow: Window = .{},
 mProgram: Program = .{},
@@ -75,7 +74,7 @@ pub fn Run(self: *Application) !void {
 
         self.mEngineContext.mDT = delta_time;
 
-        try self.mProgram.OnUpdate(delta_time, &self.mEngineContext);
+        try self.mProgram.OnUpdate(&self.mEngineContext);
 
         _ = self.mEngineContext._internal.FrameArena.reset(.free_all);
 
@@ -125,9 +124,9 @@ fn OnWindowClose(self: *Application) bool {
 /// - `true` to continue event propagation.
 fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
     if ((width == 0) or (height == 0)) {
-        self.mIsMinimized = true;
+        self.mEngineContext.mIsMinimized = true;
     } else {
-        self.mIsMinimized = false;
+        self.mEngineContext.mIsMinimized = false;
     }
 
     self.mWindow.OnWindowResize(width, height);

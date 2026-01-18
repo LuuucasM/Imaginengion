@@ -2,19 +2,13 @@
 	- likely to use mini audio
 	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform
 	- thats about all i know right now lol because i dont really know much about audio in general but i guess im about to learn :)
-- change asset manager
-	- make it so that each asset type has a "default asset" that is stored in the asset manager
-	- then when doing GetAsset it can actually never fail and instead we handle errors inside the asset manager
-	- if we encounter any error we can instead return the "default asset" for that type
-	- i will need to make a GetAssetHandleRef("default") or something like this because normally get asset handle ref takes in a path but for the default assets we can maybe just type default and then the asset labeled as default will have a component for every asset type which is the default asset of that specific type. then when we do GetAsset on a default handle we return one of those default assets
-	- then now that we have default, when doing GetAssetHandleRef for actual paths given, if we encounter any error we can instead return the asset for that type using the default handle instead and then of course print the error that was generated
-	- i have to ensure that the initialization of default is done successfully and asserted because it is a core part of the engine that needs to exist
-	- since AssetHandles will have a default handle they will also always be valid. so i can change assethandles so that instead of having to ask the asset manager to assign to a handle, I can add a function to asset handle like ChangeAsset() which will take in a path like GetAssetHandleRef (or "default") like it does right now and automatically releases the previous asset and gets a reference to the new asset by its self
-- change text system so that while making a text asset it also precomputes the signed distances because they will never change anyway and then also save that to a file
 - add physics
 - make pong
 - add a way to export the game into its standalone
 - add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
+- expose a way to use internal engine assets to the editor
+	- like for example if something is white texture and then i change it, i have no way of changing it back to white texture if i change my mind 
+	- i can either expose the engine assets OR add some X button that will return the value back to default but I think just exposing engine assets is better and who knows maybe in the future engine assets will contain a whole lots of nice goodies to make dev lives easier
 - read about vulkan
 	- using bindless textures in opengl prevents from using spirv, which prevents from using detailed performance profiling using nsight so i have no choice but to switch now
 	- start reading: https://vulkan-tutorial.com/en/Overview
@@ -37,9 +31,8 @@
 	- one for ECS
 	- platform utils (like native file dialog)
 	- window maker (like glfw)
-- make animation system
 - add entity picking in the editor
-- move away from "managed" structs. aka ones that keep reference to their own allocator, in favor of unmanaged and just passing around allocators more explicitly.
+- make animation system
 - i need to add components at some point:
 	- attribute component (multi)
 	- collider component (unique) (for this need to spawn child entity so that it has its own transform)
@@ -53,10 +46,8 @@
 - fix bug where if you minimize it crashes because imgui begin/end children dont match
 - does alt + f4 work natively with every program or does it need to be implemented?
 - make it so u cant make scenes or anything until you have a project selected first
-- Editor settings file
+- Editor settings config file that gets saved file
 - Add localization for Korean
+	- zig provides functions that allow you to store and read utf-8 strings (which is what i will need to support multiple languages)
 - add in reinforcement learning to the ECS for sorting components lists
-- expose a way to use internal engine assets to the editor
-	- like for example if something is white texture and then i change it, i have no way of changing it back to white texture if i change my mind 
-	- i can either expose the engine assets OR add some X button that will return the value back to default but I think just exposing engine assets is better and who knows maybe in the future engine assets will contain a whole lots of nice goodies to make dev lives easier
 - abstract away the ECS so I can start working on comparing my ECS with others to do research on heuristic functions when dealing with sorting component buckets

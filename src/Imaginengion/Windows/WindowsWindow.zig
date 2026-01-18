@@ -95,10 +95,6 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
     _ = mods;
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
-            engine_context.mInputManager.SetInputPressed(@enumFromInt(key)) catch |err| {
-                std.log.err("{}\n", .{err});
-                @panic("Cant set key pressed true in WindowsWindow::GLFWKeyCallback\n");
-            };
             break :blk SystemEvent{
                 .ET_InputPressed = .{
                     ._InputCode = @enumFromInt(key),
@@ -107,7 +103,6 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
             };
         },
         glfw.GLFW_RELEASE => blk: {
-            engine_context.mInputManager.SetInputReleased(@enumFromInt(key));
             break :blk SystemEvent{
                 .ET_InputReleased = .{
                     ._InputCode = @enumFromInt(key),
@@ -115,10 +110,6 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
             };
         },
         glfw.GLFW_REPEAT => blk: {
-            engine_context.mInputManager.SetInputPressed(@enumFromInt(key)) catch |err| {
-                std.log.err("{}\n", .{err});
-                @panic("Cant set key pressed true in WindowsWindow::GLFWKeyCallback\n");
-            };
             break :blk SystemEvent{
                 .ET_InputPressed = .{
                     ._InputCode = @enumFromInt(key),
@@ -140,10 +131,6 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
     _ = mods;
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
-            engine_context.mInputManager.SetInputPressed(@enumFromInt(button)) catch |err| {
-                std.log.err("{}\n", .{err});
-                @panic("Cant set mouse pressed true in WindowsWindow::GLFWMouseButtonCallback\n");
-            };
             break :blk SystemEvent{
                 .ET_InputPressed = .{
                     ._InputCode = @enumFromInt(button),
@@ -153,7 +140,6 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
         },
 
         glfw.GLFW_RELEASE => blk: {
-            engine_context.mInputManager.SetInputReleased(@enumFromInt(button));
             break :blk SystemEvent{
                 .ET_InputReleased = .{
                     ._InputCode = @enumFromInt(button),
@@ -171,7 +157,6 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
 export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
 
-    engine_context.mInputManager.SetMousePosition(Vec2f32{ @floatCast(xPos), @floatCast(yPos) });
     const new_event = SystemEvent{
         .ET_MouseMoved = .{
             ._MouseX = @floatCast(xPos),
@@ -186,7 +171,6 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
 
 export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
-    engine_context.mInputManager.SetMouseScrolled(Vec2f32{ @floatCast(xOffset), @floatCast(yOffset) });
     const new_event = SystemEvent{
         .ET_MouseScrolled = .{
             ._XOffset = @floatCast(xOffset),

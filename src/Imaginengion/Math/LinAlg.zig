@@ -12,6 +12,11 @@ pub const Mat4f32 = [4]Vec4f32;
 //indecies 0-3: {w, x, y, z}
 pub const Quatf32 = @Vector(4, f32);
 
+pub const Ray = struct {
+    Origin: Vec3f32,
+    Direction: Vec3f32,
+};
+
 pub fn Mat4Identity() Mat4f32 {
     return .{
         Vec4f32{ 1.0, 0.0, 0.0, 0.0 },

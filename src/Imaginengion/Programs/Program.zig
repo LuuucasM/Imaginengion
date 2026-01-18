@@ -19,8 +19,8 @@ pub fn Deinit(self: *Program, engine_context: *EngineContext) !void {
     try self._Impl.Deinit(engine_context);
 }
 
-pub fn OnUpdate(self: *Program, dt: f32, engine_context: *EngineContext) !void {
-    try self._Impl.OnUpdate(dt, engine_context);
+pub fn OnUpdate(self: *Program, engine_context: *EngineContext) !void {
+    try self._Impl.OnUpdate(engine_context);
 }
 
 pub fn OnWindowResize(self: *Program, width: usize, height: usize) !bool {

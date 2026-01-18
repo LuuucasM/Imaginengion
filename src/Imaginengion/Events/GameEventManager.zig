@@ -5,6 +5,7 @@ const GameEvent = @import("GameEvent.zig").GameEvent;
 const GameEventCategory = @import("GameEvent.zig").GameEventCategory;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const ClearMode = @import("SystemEventManager.zig").ClearMode;
 const GameEventManager = @This();
 
 mEndOfFramePool: std.ArrayList(GameEvent) = .{},
@@ -40,8 +41,16 @@ pub fn ProcessEvents(self: *GameEventManager, engine_context: *EngineContext, ev
     }
 }
 
-pub fn EventsReset(self: *GameEventManager, engine_allocator: std.mem.Allocator) void {
+pub fn EventsReset(self: *GameEventManager, engine_allocator: std.mem.Allocator, clear_mode: ClearMode) void {
     const zone = Tracy.ZoneInit("Game Event Reset", @src());
     defer zone.Deinit();
-    _ = self.mEndOfFramePool.clearAndFree(engine_allocator);
+
+    switch (clear_mode) {
+        .ClearAndFree => {
+            _ = self.mEndOfFramePool.clearAndFree(engine_allocator);
+        },
+        .ClearRetainingCapacity => {
+            _ = self.mEndOfFramePool.clearRetainingCapacity();
+        },
+    }
 }

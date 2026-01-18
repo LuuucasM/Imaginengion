@@ -3,6 +3,7 @@ const Program = @import("../Programs/Program.zig");
 const ImguiEvent = @import("ImguiEvent.zig").ImguiEvent;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const ClearMode = @import("SystemEventManager.zig").ClearMode;
 const ImguiEventManager = @This();
 
 mEventPool: std.ArrayList(ImguiEvent) = .{},
@@ -47,8 +48,16 @@ pub fn ProcessEvents(self: *ImguiEventManager, engine_context: *EngineContext) !
     }
 }
 
-pub fn EventsReset(self: *ImguiEventManager, engine_allocator: std.mem.Allocator) void {
+pub fn EventsReset(self: *ImguiEventManager, engine_allocator: std.mem.Allocator, clear_mode: ClearMode) void {
     const zone = Tracy.ZoneInit("Imgui Event Reset", @src());
     defer zone.Deinit();
-    self.mEventPool.clearAndFree(engine_allocator);
+
+    switch (clear_mode) {
+        .ClearAndFree => {
+            _ = self.mEventPool.clearAndFree(engine_allocator);
+        },
+        .ClearRetainingCapacity => {
+            _ = self.mEventPool.clearRetainingCapacity();
+        },
+    }
 }

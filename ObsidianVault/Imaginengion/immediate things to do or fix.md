@@ -1,1 +1,0 @@
-- fix bug with deleting scenes

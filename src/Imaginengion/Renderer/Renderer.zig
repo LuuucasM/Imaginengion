@@ -96,7 +96,7 @@ pub fn SwapBuffers(self: *Renderer) void {
 pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: *SceneManager, camera_component: *CameraComponent, camera_transform: *TransformComponent, mode: u32) !void {
     std.debug.assert(mode == 0b0 or mode == 0b1);
 
-    const zone = Tracy.ZoneInit("Renderer OnUpdate", @src());
+    const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
 
     self.mRenderContext.PushDebugGroup("Frame\x00");

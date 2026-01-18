@@ -14,10 +14,8 @@ pub const InputPress = struct {
 };
 
 _InputPressedSet: HashMap(InputCodes, u1) = undefined,
-_MousePositionNew: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-_MouseScrolledNew: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-_MousePositionOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
-_MouseScrolledOld: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MousePosition: Vec2f32 = Vec2f32{ 0.0, 0.0 },
+_MouseScrolled: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 _MousePositionDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 _MouseScrolledDelta: Vec2f32 = Vec2f32{ 0.0, 0.0 },
 
@@ -26,15 +24,6 @@ pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) void {
 }
 pub fn Deinit(self: *InputManager) void {
     self._InputPressedSet.deinit();
-}
-
-pub fn OnUpdate(self: *InputManager) void {
-    const zone = Tracy.ZoneInit("Input::OnUpdate", @src());
-    defer zone.Deinit();
-    self._MousePositionDelta = self._MousePositionNew - self._MousePositionOld;
-    self._MouseScrolledDelta = self._MouseScrolledNew - self._MouseScrolledOld;
-    self._MousePositionOld = self._MousePositionNew;
-    self._MouseScrolledOld = self._MouseScrolledNew;
 }
 
 pub fn IsInputPressed(self: *InputManager, key: InputCodes) bool {
@@ -47,13 +36,13 @@ pub fn IsInputRepeated(self: *InputManager, key: InputCodes) bool {
     return false;
 }
 pub fn GetMousePosition(self: *InputManager) Vec2f32 {
-    return self._MousePositionNew;
+    return self._MousePosition;
 }
 pub fn GetMousePositionDelta(self: *InputManager) Vec2f32 {
     return self._MousePositionDelta;
 }
 pub fn GetMouseScrolled(self: *InputManager) Vec2f32 {
-    return self._MouseScrolledNew;
+    return self._MouseScrolled;
 }
 pub fn GetMouseScrolledDelta(self: *InputManager) Vec2f32 {
     return self._MouseScrolledDelta;
@@ -72,9 +61,11 @@ pub fn SetInputReleased(self: *InputManager, input: InputCodes) void {
 }
 
 pub fn SetMousePosition(self: *InputManager, new_pos: Vec2f32) void {
-    self._MousePositionNew = new_pos;
+    self._MousePositionDelta = new_pos - self._MousePosition;
+    self._MousePosition = new_pos;
 }
 
 pub fn SetMouseScrolled(self: *InputManager, new_scrolled: Vec2f32) void {
-    self._MouseScrolledNew = new_scrolled;
+    self._MouseScrolledDelta = new_scrolled - self._MouseScrolled;
+    self._MouseScrolled = new_scrolled;
 }
