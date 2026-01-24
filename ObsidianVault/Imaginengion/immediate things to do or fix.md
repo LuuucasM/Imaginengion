@@ -1,0 +1,6 @@
+- add a step in \_CalculateWorldTransform and UpdateWorldTransforms to include a step which gets the scenes TransformComponent and does stuff with that
+- add collider and rigid body to entities
+- add function to editor program to start doing our bare bone physics
+- test to see if we get any like collision stuff when hitting the play button and that we dont crash from the other changes that were made
+- make visualizer for sphere collision and box collision
+- do phase 2 of physics engine making

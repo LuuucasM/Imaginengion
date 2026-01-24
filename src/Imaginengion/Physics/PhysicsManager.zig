@@ -20,29 +20,62 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
 
 const Collisions = @import("Collisions.zig");
+const Contact = Collisions.Contact;
 
 const PhysicsManager = @This();
 
-mPhysicsDT: f32 = 1 / 60,
-mAccumulator: f32 = 0,
+const InternalData = struct {
+    Accumulator: f32 = 0,
+    Contacts: std.ArrayList(Contact) = .{},
+};
+const PHYSICS_DT = 1 / 60;
+const PERCENT = 0.8;
+const SLOP = 0.01;
+const SOLVER_ITERS = 4;
+const SUB_STEPS = 2;
+const SUB_STEP_DT = PHYSICS_DT / SUB_STEPS;
+
+_InternalData: InternalData = .{},
 
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager, dt: f32) !void {
-    self.mAccumulator += dt;
+    self._InternalData.Accumulator += dt;
 
-    while (self.mAccumulator >= self.mPhysicsDT) : (self.mAccumulator -= self.mPhysicsDT) {
-        const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
+    const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
 
-        for (rigid_body_arr.items) |entity_id| {
-            const entity = scene_manager.GetEntity(entity_id);
-            const entity_rb = entity.GetComponent(RigidBodyComponent).?;
-            ApplyForces(entity, scene_manager, entity_rb);
-            IntegrateVelocities(entity_rb, dt);
+    while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
+        for (0..SUB_STEPS) |_| {
+            for (rigid_body_arr.items) |entity_id| {
+                const entity = scene_manager.GetEntity(entity_id);
+                const entity_rb = entity.GetComponent(RigidBodyComponent).?;
+
+                ApplyForces(entity, scene_manager, entity_rb);
+
+                IntegrateVelocities(entity_rb, SUB_STEP_DT);
+                IntegratePositions(entity, entity_rb, SUB_STEP_DT);
+            }
+
+            try self.DetectCollisions(engine_context, scene_manager);
+
+            for (0..SOLVER_ITERS) |_| {
+                for (self._InternalData.Contacts.items) |contact| {
+                    const entity_origin = contact.mOrigin;
+                    const entity_target = contact.mTarget;
+
+                    const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
+                    const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
+
+                    if (q_rb_origin) |rb_origin| {
+                        if (q_rb_target) |rb_target| {
+                            if (rb_origin.mInvMass == 0 and rb_target.mInvMass == 0) continue;
+
+                            ResolveCollisions(contact, rb_origin, rb_target);
+                            PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
+                        }
+                    }
+                }
+            }
+            self._InternalData.Contacts.clearRetainingCapacity();
         }
-        DetectCollisions(engine_context, scene_manager);
-
-        //TODO:
-        ResolveCollisions();
-        IntegratePositions();
     }
 }
 
@@ -97,61 +130,87 @@ fn ApplyForces(entity: Entity, scene_manager: *SceneManager, entity_rb: *RigidBo
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = scene_manager.GetSceneLayer(entity_scene_comp.SceneID);
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
-        entity_rb.mForce += physics_component.mGravity * entity_rb.mMass;
+        entity_rb.mForce += if (entity_rb.mInvMass != 0) physics_component.mGravity * entity_rb.mMass else 0;
     } else {
         entity_rb.mForce += 0 * entity_rb.mMass;
     }
 }
 
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
-    entity_rb.mVelocity = entity_rb.mForce * entity_rb.mInvMass * dt;
+    entity_rb.mVelocity += entity_rb.mForce * entity_rb.mInvMass * dt;
     entity_rb.mForce = std.mem.zeroes(Vec3f32);
 }
 
-fn DetectCollisions(engine_context: *EngineContext, scene_manager: *SceneManager) void {
+fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) void {
+    const transform = entity.GetComponent(EntityTransformComponent).?;
+    transform.Translation += entity_rb.mVelocity * dt;
+}
+
+fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
     const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
 
-    for (colliders_arr.items) |colliderid_origin| {
-        for (colliders_arr.items) |colliderid_target| {
-            const entity_origin = scene_manager.GetEntity(colliderid_origin);
-            const entity_target = scene_manager.GetEntity(colliderid_target);
+    for (0..colliders_arr.items.len) |i| {
+        const entity_origin = scene_manager.GetEntity(colliders_arr[i]);
+        for (i + 1..colliders_arr.items.len) |j| {
+            const entity_target = scene_manager.GetEntity(colliders_arr[j]);
 
             const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
             const collider_target = entity_target.GetComponent(ColliderComponent).?;
 
-            if (collider_origin.mColliderShape == .Sphere and collider_target.mColliderShape == .Sphere) {
-                if (Collisions.SphereSphere(
-                    collider_origin.AsSphere(),
-                    entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
-                    collider_target.AsSphere(),
-                    entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
-                )) |contact| {
-                    //set origin and target entities
-                    contact.mOrigin = entity_origin;
-                    contact.mTarget = entity_target;
-
-                    //add to some contact buffer
+            const contact: ?Contact = blk: {
+                if (collider_origin.mColliderShape == .Sphere and collider_target.mColliderShape == .Sphere) {
+                    break :blk Collisions.SphereSphere(
+                        collider_origin.AsSphere(),
+                        entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
+                        collider_target.AsSphere(),
+                        entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
+                    );
+                } else if (collider_origin.mColliderShape == .Box and collider_target.mColliderShape == .Box) {
+                    break :blk Collisions.BoxBox(
+                        collider_origin.AsBox(),
+                        entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
+                        collider_target.AsBox(),
+                        entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
+                    );
+                } else {
+                    std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mColliderShape), @tagName(collider_target.mColliderShape) });
+                    break :blk null;
                 }
-            } else if (collider_origin.mColliderShape == .Box and collider_target.mColliderShape == .Box) {
-                if (Collisions.BoxBox(
-                    collider_origin.AsBox(),
-                    entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
-                    collider_target.AsBox(),
-                    entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
-                )) |contact| {
-                    //set origin and target entities
-                    contact.mOrigin = entity_origin;
-                    contact.mTarget = entity_target;
+            };
 
-                    //add to some contact buffer
-                }
-            } else {
-                std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mColliderShape), @tagName(collider_target.mColliderShape) });
+            if (contact) |the_contact| {
+                the_contact.mOrigin = entity_origin;
+                the_contact.mTarget = entity_target;
+
+                self._InternalData.Contacts.append(engine_context.EngineAllocator(), the_contact);
             }
         }
     }
 }
 
-fn ResolveCollisions() void {}
+fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
+    const rv = rb_target.mVelocity - rb_origin.mVelocity;
 
-fn IntegratePositions() void {}
+    const vel_along_norm = LinAlg.VecDotVec(rv, contact.mNormal);
+    if (vel_along_norm > 0) return; //they are already moving apart
+
+    const e: f32 = 0.0; //coefficient of restitution
+
+    const j = (-(1.0 + e) * vel_along_norm) / (rb_origin.mInvMass + rb_target.mInvMass); //magnitude of the impulse
+
+    const impulse = contact.mNormal * @as(Vec3f32, @splat(j));
+
+    rb_origin.mVelocity -= impulse * rb_origin.mInvMass;
+    rb_target.mVelocity += impulse * rb_target.mInvMass;
+}
+
+fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
+    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin.mInvMass + rb_target.mInvMass) * PERCENT;
+    const correction = correction_mag * contact.mNormal;
+
+    const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
+    const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
+
+    transform_origin.Translation -= correction * rb_origin.mInvMass;
+    transform_target.Translation += correction * rb_target.mInvMass;
+}
