@@ -377,6 +377,7 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
             try DeSerializeEntityComponent(reader, entity, QuadComponent, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityTransformComponent, frame_allocator);
+            DeserializeTransformComponent(entity);
         } else if (std.mem.eql(u8, actual_value, "TextComponent")) {
             try DeSerializeEntityComponent(reader, entity, EntityTextComponent, frame_allocator);
             try DeserializeTextComponent(engine_context.EngineAllocator(), entity);
@@ -426,6 +427,12 @@ fn DeserializeTextComponent(engine_allocator: std.mem.Allocator, entity: Entity)
         text_component.mText.items = new_memory;
 
         text_component.mText.capacity = new_memory.len;
+    }
+}
+
+fn DeserializeTransformComponent(entity: Entity) void {
+    if (entity.GetComponent(EntityTransformComponent)) |transform| {
+        transform._CalculateWorldTransform();
     }
 }
 

@@ -10,6 +10,7 @@ const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @import("../Programs/Program.zig");
 const Application = @import("../Core/Application.zig");
 const Tracy = @import("Tracy.zig");
+const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const EngineContext = @This();
 
 const InternalData = struct {
@@ -28,6 +29,7 @@ mImguiEventManager: ImguiEventManager = .{},
 mSystemEventManager: SystemEventManager = .{},
 mInputManager: InputManager = .{},
 mRenderer: Renderer = .{},
+mPhysicsManager: PhysicsManager = .{},
 mIsMinimized: bool = false,
 
 _internal: InternalData = .{},

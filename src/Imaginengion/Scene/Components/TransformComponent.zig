@@ -19,19 +19,6 @@ Scale: Vec3f32 = .{ 1.0, 1.0, 1.0 },
 
 pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
 
-pub fn SetTranslation(self: *TransformComponent, new_pos: Vec3f32) void {
-    self.Translation = new_pos;
-}
-pub fn SetRotation(self: *TransformComponent, new_rot: Quatf32) void {
-    self.Rotation = new_rot;
-}
-pub fn SetScale(self: *TransformComponent, new_scale: Vec3f32) void {
-    self.Scale = new_scale;
-}
-pub fn GetLocalTransform(self: *TransformComponent) Mat4f32 {
-    return LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.Mat4MulMat4(LinAlg.QuatToMat4(self.Rotation), LinAlg.Scale(self.Scale)));
-}
-
 pub fn GetName(self: TransformComponent) []const u8 {
     _ = self;
     return "TransformComponent";

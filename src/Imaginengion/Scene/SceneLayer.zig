@@ -85,7 +85,8 @@ pub fn CreateEntityWithUUID(self: SceneLayer, engine_allocator: std.mem.Allocato
     const new_name_component = try e.AddComponent(EntityNameComponent, .{ .mAllocator = engine_allocator });
     _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
 
-    _ = try e.AddComponent(TransformComponent, null);
+    const new_transform = try e.AddComponent(TransformComponent, null);
+    new_transform._CalculateWorldTransform();
 
     return e;
 }

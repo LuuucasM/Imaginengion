@@ -1,5 +1,6 @@
 pub const IDComponent = @import("Components/IDComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
+pub const PhysicsComponent = @import("Components/PhysicsComponent.zig");
 pub const SceneComponent = @import("Components/SceneComponent.zig");
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 pub const StackPosComponent = @import("Components/StackPosComponent.zig");
@@ -11,6 +12,7 @@ pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
 pub const ComponentsList = [_]type{
     IDComponent,
     NameComponent,
+    PhysicsComponent,
     SceneComponent,
     ScriptComponent,
     StackPosComponent,
@@ -25,6 +27,7 @@ pub const ScriptList = [_]type{
 pub const EComponents = enum(u16) {
     IDComponent = IDComponent.Ind,
     NameComponent = NameComponent.Ind,
+    PhysicsComponent = PhysicsComponent.Ind,
     SceneComponent = SceneComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
     StackPosComponent = StackPosComponent.Ind,

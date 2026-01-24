@@ -128,9 +128,11 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
 
     const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     viewport_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
+    viewport_transform_component._CalculateWorldTransform();
 
     const camera_transform_component = self.mEditorEditorEntity.GetComponent(TransformComponent).?;
     camera_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
+    camera_transform_component._CalculateWorldTransform();
 
     //setup the viewport camera
     var new_camera_component = CameraComponent{
@@ -236,6 +238,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const game_logic_zone = Tracy.ZoneInit("Game Logic Section", @src());
         defer game_logic_zone.Deinit();
+
+        //Human game logic
+        //AI game logic
     }
     //-------------Game Logic End----------------
 
@@ -252,7 +257,16 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer assets_zone.Deinit();
         try engine_context.mAssetManager.OnUpdate(engine_context);
     }
-    //-------------End Assets Update
+    //-------------End Assets Update ------------------
+
+    //--------------World Transform Update --------------
+    {
+        const assets_zone = Tracy.ZoneInit("World Transform Update Section", @src());
+        defer assets_zone.Deinit();
+        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, self.mGameSceneManager);
+        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, self.mEditorSceneManager);
+    }
+    //---------------End World Transform Update ------------
 
     //---------Render Begin-------------
     {

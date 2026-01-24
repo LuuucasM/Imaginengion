@@ -106,18 +106,15 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
     self.UpdateModeBuffer(mode);
     self.BeginRendering(engine_context.EngineAllocator());
 
-    //get all the shapes minus the children because we will render them with the parents
+    //get all the shapes
     const shapes_ids = try scene_manager.GetEntityGroup(
         engine_context.FrameAllocator(),
         GroupQuery{
-            .Not = .{
-                .mFirst = GroupQuery{
-                    .Or = &[_]GroupQuery{
-                        GroupQuery{ .Component = QuadComponent },
-                        GroupQuery{ .Component = TextComponent },
-                    },
+            .mFirst = GroupQuery{
+                .Or = &[_]GroupQuery{
+                    GroupQuery{ .Component = QuadComponent },
+                    GroupQuery{ .Component = TextComponent },
                 },
-                .mSecond = GroupQuery{ .Component = EntityChildComponent },
             },
         },
     );
@@ -126,16 +123,9 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
     //TODO: culling
     //TODO: other optimizsations?
 
-    //draw the shapes
-    var base_transform_component = TransformComponent{};
-
     for (shapes_ids.items) |shape_id| {
-        base_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 0.0 });
-        base_transform_component.SetRotation(Quatf32{ 1.0, 0.0, 0.0, 0.0 });
-        base_transform_component.SetScale(Vec3f32{ 0.0, 0.0, 0.0 });
-
         const shape_entity = scene_manager.GetEntity(shape_id);
-        try self.DrawShape(engine_context, shape_entity, &base_transform_component);
+        try self.DrawShape(engine_context, shape_entity);
     }
 
     try self.EndRendering(camera_component);
@@ -150,8 +140,11 @@ pub fn GetSDFShader(self: *Renderer) *ShaderAsset {
 }
 
 fn UpdateCameraBuffer(self: *Renderer, camera_component: *CameraComponent, camera_transform: *TransformComponent) void {
-    self.mCameraBuffer.mRotation = [4]f32{ camera_transform.Rotation[0], camera_transform.Rotation[1], camera_transform.Rotation[2], camera_transform.Rotation[3] };
-    self.mCameraBuffer.mPosition = [3]f32{ camera_transform.Translation[0], camera_transform.Translation[1], camera_transform.Translation[2] };
+    const world_pos = camera_transform.GetWorldPosition();
+    const world_rot = camera_transform.GetWorldRotation();
+
+    self.mCameraBuffer.mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] };
+    self.mCameraBuffer.mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] };
     self.mCameraBuffer.mPerspectiveFar = camera_component.mPerspectiveFar;
     self.mCameraBuffer.mResolutionWidth = @floatFromInt(camera_component.mViewportWidth);
     self.mCameraBuffer.mResolutionHeight = @floatFromInt(camera_component.mViewportHeight);
@@ -178,7 +171,7 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
     self.mR2D.StartBatch(engine_allocator);
 }
 
-fn DrawChildren(self: *Renderer, engine_context: *EngineContext, entity: Entity, parent_transform: *TransformComponent) !void {
+fn DrawChildren(self: *Renderer, engine_context: *EngineContext, entity: Entity) !void {
     const zone = Tracy.ZoneInit("Renderer DrawChildren", @src());
     defer zone.Deinit();
 
@@ -189,34 +182,31 @@ fn DrawChildren(self: *Renderer, engine_context: *EngineContext, entity: Entity,
     while (true) : (if (curr_id == parent_component.mFirstChild) break) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-        try self.DrawShape(engine_context, child_entity, parent_transform);
+        try self.DrawShape(engine_context, child_entity);
 
         const child_component = child_entity.GetComponent(EntityChildComponent).?;
         curr_id = child_component.mNext;
     }
 }
 
-fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, parent_transform: *TransformComponent) anyerror!void {
+fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) anyerror!void {
     const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
     defer zone.Deinit();
 
     const transform_component = entity.GetComponent(TransformComponent).?;
-    parent_transform.Translation += transform_component.Translation;
-    parent_transform.Rotation = LinAlg.QuatMulQuat(parent_transform.Rotation, transform_component.Rotation);
-    parent_transform.Scale += transform_component.Scale;
 
     //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try self.mR2D.DrawQuad(engine_context, parent_transform, quad_component);
+        try self.mR2D.DrawQuad(engine_context, transform_component, quad_component);
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        try self.mR2D.DrawText(engine_context, parent_transform, text_component);
+        try self.mR2D.DrawText(engine_context, transform_component, text_component);
     }
 
     //check is if parent, if so draw children else nothing
     if (entity.GetComponent(EntityParentComponent)) |parent_component| {
         _ = parent_component;
-        try self.DrawChildren(engine_context, entity, parent_transform);
+        try self.DrawChildren(engine_context, entity);
     }
 }
 

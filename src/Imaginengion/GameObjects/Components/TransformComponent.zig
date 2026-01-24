@@ -14,6 +14,12 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const TransformComponent = @This();
 
+const InternalData = struct {
+    WorldPosition: Vec3f32 = .{ 0.0, 0.0, 0.0 },
+    WorldRotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
+    WorldScale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
+};
+
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 
@@ -21,23 +27,27 @@ Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
 Scale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
 
-WorldTranslation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
-WorldRotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
-WorldScale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
+_InternalData: InternalData = .{},
 
 pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
 
-pub fn SetTranslation(self: *TransformComponent, new_pos: Vec3f32) void {
-    self.Translation = new_pos;
+pub fn GetWorldPosition(self: TransformComponent) Vec3f32 {
+    return self._InternalData.WorldPosition;
 }
-pub fn SetRotation(self: *TransformComponent, new_rot: Quatf32) void {
-    self.Rotation = new_rot;
+pub fn SetWorldPosition(self: *TransformComponent, new_pos: Vec3f32) void {
+    self._InternalData.WorldPosition = new_pos;
 }
-pub fn SetScale(self: *TransformComponent, new_scale: Vec3f32) void {
-    self.Scale = new_scale;
+pub fn GetWorldRotation(self: TransformComponent) Vec3f32 {
+    return self._InternalData.WorldRotation;
 }
-pub fn GetLocalTransform(self: *TransformComponent) Mat4f32 {
-    return LinAlg.Mat4MulMat4(LinAlg.Translate(self.Translation), LinAlg.Mat4MulMat4(LinAlg.QuatToMat4(self.Rotation), LinAlg.Scale(self.Scale)));
+pub fn SetWorldRotation(self: *TransformComponent, new_rot: Vec3f32) void {
+    self._InternalData.WorldRotation = new_rot;
+}
+pub fn GetWorldScale(self: TransformComponent) Vec3f32 {
+    return self._InternalData.WorldScale;
+}
+pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3f32) void {
+    self._InternalData.WorldScale = new_scale;
 }
 
 pub fn GetName(self: TransformComponent) []const u8 {

@@ -13,8 +13,8 @@ pub const Box = struct {
 };
 
 pub const UColliderShape = union(enum(u8)) {
-    sphere = Sphere,
-    box = Box,
+    Sphere = Sphere,
+    Box = Box,
 };
 
 pub const Category: ComponentCategory = .Multiple;
@@ -39,3 +39,11 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn AsSphere(self: *ColliderComponent) *Sphere {
+    return &self.mColliderShape.Sphere;
+}
+
+pub fn AsBox(self: *ColliderComponent) *Box {
+    return &self.mColliderShape.Box;
+}

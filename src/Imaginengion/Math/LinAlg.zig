@@ -120,6 +120,17 @@ pub fn IsValidFloat(f: f32) bool {
     return !std.math.isNan(f) and !std.math.isInf(f);
 }
 
+pub fn Sign(f: anytype) @TypeOf(f) {
+    const T = @TypeOf(f);
+    const info = @typeInfo(T);
+    if (info != .float) {
+        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(T)});
+        @compileError("Sign must be called with a float type! instead found: " ++ type_name);
+    }
+
+    return if (f >= 0.0) 1.0 else -1.0;
+}
+
 pub fn IsValid4x4Array(m: [4][4]f32) bool {
     for (m) |row| {
         for (row) |col| {

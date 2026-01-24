@@ -144,10 +144,14 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
 
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
 
+    const world_pos = transform_component.GetWorldPosition();
+    const world_rot = transform_component.GetWorldRotation();
+    const world_scale = transform_component.GetWorldScale();
+
     try self.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
-        .Position = [3]f32{ transform_component.Translation[0], transform_component.Translation[1], transform_component.Translation[2] },
-        .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
-        .Scale = [3]f32{ transform_component.Scale[0], transform_component.Scale[1], transform_component.Scale[2] },
+        .Position = [3]f32{ world_pos[0], world_pos[1], world_pos[2] },
+        .Rotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] },
+        .Scale = [3]f32{ world_scale[0], world_scale[1], world_scale[2] },
         .TexOptions = TextureOptions{
             .Color = [4]f32{ quad_component.mTexOptions.mColor[0], quad_component.mTexOptions.mColor[1], quad_component.mTexOptions.mColor[2], quad_component.mTexOptions.mColor[3] },
             .TexCoords = [4]f32{ quad_component.mTexOptions.mTexCoords[0], quad_component.mTexOptions.mTexCoords[1], quad_component.mTexOptions.mTexCoords[2], quad_component.mTexOptions.mTexCoords[3] },
@@ -165,11 +169,13 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
     const atlas_asset = text_asset.mAtlas;
     const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
 
-    const left_bounds = transform_component.Translation[0] - text_component.mBounds[0];
-    const right_bounds = transform_component.Translation[0] + text_component.mBounds[1];
+    const world_pos = transform_component.GetWorldPosition();
+
+    const left_bounds = world_pos[0] - text_component.mBounds[0];
+    const right_bounds = world_pos[0] + text_component.mBounds[1];
 
     var pen_x = left_bounds;
-    var pen_y = transform_component.Translation[1];
+    var pen_y = world_pos[1];
 
     for (text_component.mText.items, 0..) |char, i| {
         const array_ind: usize = TextAsset.ToArrayIndex(char);
@@ -191,7 +197,7 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
         }
 
         try self.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
-            .Position = [3]f32{ pen_x, pen_y, transform_component.Translation[2] },
+            .Position = [3]f32{ pen_x, pen_y, world_pos[2] },
             .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
             .Scale = text_component.mFontSize,
             .TextureOptions = TextureOptions{
