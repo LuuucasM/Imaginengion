@@ -6,16 +6,10 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
-
 pub const Editable: bool = true;
-
-ID: u64 = std.math.maxInt(u64),
-
-pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
-
+pub const Name: []const u8 = "IDComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == IDComponent) {
@@ -24,15 +18,9 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetName(self: IDComponent) []const u8 {
-    _ = self;
-    return "IDComponent";
-}
+ID: u64 = std.math.maxInt(u64),
 
-pub fn GetInd(self: IDComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
+pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *IDComponent, _: *EngineContext) !void {
     var buff: [140]u8 = undefined;

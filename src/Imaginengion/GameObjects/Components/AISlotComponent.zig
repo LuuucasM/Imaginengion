@@ -5,10 +5,9 @@ const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AISlotComponent = @This();
 
-mAIEntity: Entity.Type = Entity.NullEntity,
-
-pub fn Deinit(_: *AISlotComponent, _: *EngineContext) !void {}
-
+pub const Category: ComponentCategory = .Unique;
+pub const Editable: bool = false;
+pub const Name: []const u8 = "AISlotComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == AISlotComponent) {
@@ -17,15 +16,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetInd(self: AISlotComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
+mAIEntity: Entity.Type = Entity.NullEntity,
 
-pub const Category: ComponentCategory = .Unique;
-
-pub const Editable: bool = false;
-
-pub fn GetName(_: AISlotComponent) []const u8 {
-    return "AISlotComponent";
-}
+pub fn Deinit(_: *AISlotComponent, _: *EngineContext) !void {}

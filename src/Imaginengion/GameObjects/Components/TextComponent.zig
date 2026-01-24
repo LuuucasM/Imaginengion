@@ -13,11 +13,10 @@ const TextComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
-
+pub const Name: []const u8 = "TextComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == TextComponent) {
@@ -25,14 +24,6 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-pub fn GetName(_: TextComponent) []const u8 {
-    return "TextComponent";
-}
-
-pub fn GetInd(_: TextComponent) u32 {
-    return @intCast(Ind);
-}
 
 mShouldRender: bool = true,
 mText: std.ArrayList(u8) = .{},

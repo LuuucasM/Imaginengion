@@ -8,19 +8,7 @@ const MicComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = false;
-
-mAudioBuffer: tAudioBuffer = tAudioBuffer.Init(),
-
-pub fn Deinit(_: *MicComponent, _: *EngineContext) !void {}
-
-pub fn GetName(_: MicComponent) []const u8 {
-    return "MicComponent";
-}
-
-pub fn GetInd(_: MicComponent) u32 {
-    return @intCast(Ind);
-}
-
+pub const Name: []const u8 = "MicComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == MicComponent) {
@@ -28,3 +16,7 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+mAudioBuffer: tAudioBuffer = tAudioBuffer.Init(),
+
+pub fn Deinit(_: *MicComponent, _: *EngineContext) !void {}

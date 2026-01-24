@@ -6,6 +6,14 @@ const RigidBodyComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
+pub const Name: []const u8 = "RigidBodyComponent";
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == RigidBodyComponent) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
 
 mMass: f32,
 mInvMass: f32,
@@ -15,18 +23,4 @@ mUseGravity: bool,
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) !void {}
 
-pub fn GetName(_: RigidBodyComponent) []const u8 {
-    return "RigidBodyComponent";
-}
-
-pub fn GetInd(_: RigidBodyComponent) u32 {
-    return @intCast(Ind);
-}
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == RigidBodyComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
+pub fn EditorRender(_: *RigidBodyComponent, _: *EngineContext) !void {}

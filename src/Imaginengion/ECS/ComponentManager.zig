@@ -271,33 +271,62 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         fn _InternalTypeValidation(comptime component_type: type) void {
-            const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
-            if (@hasDecl(component_type, "Ind") == false) {
-                @compileError("Component type does not have member \"Ind\"!" ++ type_name);
+            std.debug.assert(@hasDecl(component_type, "Editable"));
+            std.debug.assert(@hasDecl(component_type, "Category"));
+            std.debug.assert(@hasDecl(component_type, "Name"));
+            std.debug.assert(@hasDecl(component_type, "Ind"));
+            std.debug.assert(std.meta.hasFn(component_type, "Deinit"));
+
+            if (component_type.Editable) { //if it is editable ensure that the signature is correct
+                std.debug.assert(std.meta.hasFn(component_type, "EditorRender"));
+
+                const editorrender_info = @typeInfo(@TypeOf(component_type.EditorRender));
+                std.debug.assert(editorrender_info == .@"fn");
+
+                const fn_info = editorrender_info.@"fn";
+                std.debug.assert(fn_info.params.len == 2);
+
+                const first_param = fn_info.params[0].type.?;
+                std.debug.assert(first_param == *component_type);
+
+                const second_param = fn_info.params[1].type.?;
+                std.debug.assert(second_param == *EngineContext);
+
+                const return_type = fn_info.return_type.?;
+                const return_info = @typeInfo(return_type);
+                std.debug.assert(return_info == .error_union);
+
+                const payload_type = return_info.error_union.payload;
+                std.debug.assert(payload_type == void);
             }
-            if (component_type.Ind >= components_types.len + 2) {
-                @compileError("Component Type ind value is invalid!" ++ type_name);
+
+            if (component_type.Category == .Multiple) {
+                std.debug.assert(@hasField(component_type, "mParent"));
+                std.debug.assert(@hasField(component_type, "mFirst"));
+                std.debug.assert(@hasField(component_type, "mPrev"));
+                std.debug.assert(@hasField(component_type, "mNext"));
             }
-            if (@hasDecl(component_type, "Category") == false) {
-                @compileError("Component type does not contain a component category field" ++ type_name);
-            } else {
-                if (component_type.Category == .Multiple) {
-                    if (@hasField(component_type, "mParent") == false) {
-                        @compileError("Component of Category == .Multiple must contain mParent field" ++ type_name);
-                    }
-                    if (@hasField(component_type, "mFirst") == false) {
-                        @compileError("Component of Category == .Multiple must contain mFirst field" ++ type_name);
-                    }
-                    if (@hasField(component_type, "mPrev") == false) {
-                        @compileError("Component of Category == .Multiple must contain mPrev field" ++ type_name);
-                    }
-                    if (@hasField(component_type, "mNext") == false) {
-                        @compileError("Component of Category == .Multiple must contain mNext field" ++ type_name);
-                    }
-                }
-            }
-            if (std.meta.hasFn(component_type, "Deinit") == false) {
-                @compileError("Component type does not contain a Deinit function" ++ type_name);
+
+            { //checking the deinit function for correctness
+                const deinit_info = @typeInfo(@TypeOf(component_type.Deinit));
+                std.debug.assert(deinit_info == .@"fn");
+
+                const fn_info = deinit_info.@"fn";
+                std.debug.assert(fn_info.params.len == 2);
+
+                const first_param = fn_info.params[0].type.?;
+                std.debug.assert(first_param == *component_type);
+
+                const second_param = fn_info.params[1].type.?;
+                std.debug.assert(second_param == *EngineContext);
+
+                const return_type = fn_info.return_type.?;
+                const return_type_info = @typeInfo(return_type);
+
+                std.debug.assert(return_type_info == .error_union);
+
+                const payload_type = return_type_info.error_union.payload;
+                std.debug.assert(payload_type == void);
             }
         }
     };

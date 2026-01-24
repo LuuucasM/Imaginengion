@@ -1,6 +1,10 @@
-- add a step in \_CalculateWorldTransform and UpdateWorldTransforms to include a step which gets the scenes TransformComponent and does stuff with that
 - add collider and rigid body to entities
+	- Editor render 
+		- change all the components to follow the new format for components where they must have a Editable, Category, Name, Ind constant definition. No longer need GetName, GetInd, etc
+		- change editor window so when editor render is called on it, if the component is of category .Multiple (like audio component and collider component) then it will also get the transform component for said entity and render the transform component in the same window as the multi component (before the multi component)
+	- serialize
+	- deserialize
 - add function to editor program to start doing our bare bone physics
 - test to see if we get any like collision stuff when hitting the play button and that we dont crash from the other changes that were made
 - make visualizer for sphere collision and box collision
-- do phase 2 of physics engine making
+- do next phase of physics engine

@@ -12,7 +12,7 @@ pub const OnInputPressedScript = struct {
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnInputPressedScript, _: *EngineContext) !void {}
+    pub const Name: []const u8 = "OnInputPressedScript";
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnInputPressedScript) {
@@ -20,13 +20,7 @@ pub const OnInputPressedScript = struct {
             }
         }
     };
-    pub fn GetName(_: OnInputPressedScript) []const u8 {
-        return "OnInputPressedScript";
-    }
-
-    pub fn GetInd(_: OnInputPressedScript) u32 {
-        return @intCast(Ind);
-    }
+    pub fn Deinit(_: *OnInputPressedScript, _: *EngineContext) !void {}
 };
 
 pub const OnUpdateScript = struct {
@@ -34,7 +28,7 @@ pub const OnUpdateScript = struct {
     bit: u1 = 0,
     pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
-    pub fn Deinit(_: *OnUpdateScript, _: *EngineContext) !void {}
+    pub const Name: []const u8 = "OnUpdateScript";
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnUpdateScript) {
@@ -42,11 +36,5 @@ pub const OnUpdateScript = struct {
             }
         }
     };
-    pub fn GetName(_: OnUpdateScript) []const u8 {
-        return "OnUpdateScript";
-    }
-
-    pub fn GetInd(_: OnUpdateScript) u32 {
-        return @intCast(Ind);
-    }
+    pub fn Deinit(_: *OnUpdateScript, _: *EngineContext) !void {}
 };

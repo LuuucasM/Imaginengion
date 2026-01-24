@@ -4,7 +4,6 @@ const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 const GroupQuery = @import("ComponentManager.zig").GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
-const EditorWindow = @import("../Imgui/EditorWindow.zig");
 const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
 const EngineContext = @import("../Core/EngineContext.zig");
 

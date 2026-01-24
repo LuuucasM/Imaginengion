@@ -8,8 +8,6 @@ const FileMetaData = Assets.FileMetaData;
 
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
-
 const Entity = @import("../../GameObjects/Entity.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
@@ -25,23 +23,7 @@ mScriptAssetHandle: AssetHandle = .{},
 
 pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
-
-pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
-    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
-        self.mScriptAssetHandle.ReleaseAsset();
-    }
-}
-
-pub fn GetName(self: ScriptComponent) []const u8 {
-    _ = self;
-    return "ScriptComponent";
-}
-
-pub fn GetInd(self: ScriptComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
-
+pub const Name: []const u8 = "ScriptComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == ScriptComponent) {
@@ -49,6 +31,12 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
+    if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
+        self.mScriptAssetHandle.ReleaseAsset();
+    }
+}
 
 pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {
     try jw.beginObject();

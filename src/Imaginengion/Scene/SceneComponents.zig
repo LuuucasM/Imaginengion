@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const IDComponent = @import("Components/IDComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
 pub const PhysicsComponent = @import("Components/PhysicsComponent.zig");
@@ -16,7 +17,7 @@ pub const ComponentsList = [_]type{
     SceneComponent,
     ScriptComponent,
     StackPosComponent,
-    TransformComponent,
+    //    TransformComponent,
     OnSceneStartScript,
 };
 
@@ -31,6 +32,6 @@ pub const EComponents = enum(u16) {
     SceneComponent = SceneComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
     StackPosComponent = StackPosComponent.Ind,
-    TransformComponent = TransformComponent.Ind,
+    //    TransformComponent = TransformComponent.Ind,
     OnSceneStartScript = OnSceneStartScript.Ind,
 };

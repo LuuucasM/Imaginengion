@@ -8,11 +8,7 @@ const PlayerSlotComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = false;
-
-mPlayerEntity: Player.Type = Player.NullPlayer,
-
-pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) !void {}
-
+pub const Name: []const u8 = "AISlotComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == PlayerSlotComponent) {
@@ -21,11 +17,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetInd(self: PlayerSlotComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
+mPlayerEntity: Player.Type = Player.NullPlayer,
 
-pub fn GetName(_: PlayerSlotComponent) []const u8 {
-    return "AISlotComponent";
-}
+pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) !void {}

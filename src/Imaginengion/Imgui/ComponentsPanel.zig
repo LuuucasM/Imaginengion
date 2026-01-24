@@ -19,12 +19,17 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const AISlotComponent = EntityComponents.AISlotComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
+const ColliderComponent = EntityComponents.ColliderComponent;
+const MicComponent = EntityComponents.MicComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
+const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const AudioComponent = EntityComponents.AudioComponent;
+
+const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -220,11 +225,25 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, ent
             try new_text_component.mText.appendSlice(engine_allocator, "No Text");
         }
     }
-    if (entity.HasComponent(AudioComponent) == false) {
-        if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
+    if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
+        defer imgui.igCloseCurrentPopup();
+        const new_audio_component = try GameObjectUtils.AddMultiCompToEntity(AudioComponent, entity);
+        new_audio_component.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
+    }
+    if (entity.HasComponent(RigidBodyComponent) == false) {
+        if (imgui.igMenuItem_Bool("RigidBodyComponent", "", false, true)) {
             defer imgui.igCloseCurrentPopup();
-            const new_audio_component = try entity.AddComponent(AudioComponent, null);
-            new_audio_component.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
+            _ = try entity.AddComponent(RigidBodyComponent, null);
+        }
+    }
+    if (imgui.igMenuItem_Bool("ColliderComponent", "", false, true)) {
+        defer imgui.igCloseCurrentPopup();
+        _ = try GameObjectUtils.AddMultiCompToEntity(ColliderComponent, entity);
+    }
+    if (entity.HasComponent(MicComponent) == false) {
+        if (imgui.igMenuItem_Bool("MicComponent", "", false, true)) {
+            defer imgui.igCloseCurrentPopup();
+            _ = try entity.AddComponent(MicComponent, null);
         }
     }
 }

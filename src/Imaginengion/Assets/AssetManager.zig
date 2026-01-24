@@ -448,10 +448,7 @@ fn RetryAssetExists(self: *AssetManager, frame_allocator: std.mem.Allocator, ass
     return true;
 }
 
-fn _ValidateAssetType(asset_type: type) void {
-    if (asset_type == FileMetaData or asset_type == AssetMetaData) {
-        //this if statement allows filemetadata and assetmetadata to not require an Init function because compiler
-        //will do magic to ensure for those 2 asset types this branch is the only one that will exist
-        @compileError("AssetMetaData/FileMetaData should not be acquired through this function, please call with GetFileMetaData");
-    }
+inline fn _ValidateAssetType(asset_type: type) void {
+    std.debug.assert(asset_type != FileMetaData);
+    std.debug.assert(asset_type != AssetMetaData);
 }

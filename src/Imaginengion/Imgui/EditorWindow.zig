@@ -1,21 +1,26 @@
 const std = @import("std");
 const Entity = @import("../GameObjects/Entity.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const ComponentCategory = @import("../ECS/ECSManager.zig").ComponentCategory;
+const EntityComponentsList = @import("../GameObjects/Components.zig").ComponentsList;
+const SceneComponentsList = @import("../Scene/SceneComponents.zig").ComponentsList;
 const EditorWindow = @This();
 
 mEntity: Entity,
 mPtr: *anyopaque,
+mName: []const u8,
+mComponentID: u32,
+mComponentCategory: ComponentCategory,
 mVTable: *const VTab,
 
 const VTab = struct {
     EditorRender: *const fn (*anyopaque, *EngineContext) anyerror!void,
-    GetComponentName: *const fn (*anyopaque) []const u8,
-    GetComponentID: *const fn (*anyopaque) u32,
 };
 
 pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
+    _ValidateObj(Ptr);
     std.debug.assert(PtrInfo == .pointer);
     std.debug.assert(PtrInfo.pointer.size == .one);
     std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
@@ -25,24 +30,16 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
             const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
             try self.EditorRender(engine_context);
         }
-        fn GetComponentName(ptr: *anyopaque) []const u8 {
-            const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
-            return self.GetName();
-        }
-
-        fn GetComponentID(ptr: *anyopaque) u32 {
-            const self = @as(Ptr, @ptrCast(@alignCast(ptr)));
-            return @intCast(self.GetInd());
-        }
     };
 
     return EditorWindow{
         .mEntity = entity,
         .mPtr = obj,
+        .mName = Ptr.Name,
+        .mComponentID = Ptr.Ind,
+        .mComponentCategory = Ptr.Category,
         .mVTable = &.{
             .EditorRender = impl.EditorRender,
-            .GetComponentName = impl.GetComponentName,
-            .GetComponentID = impl.GetComponentID,
         },
     };
 }
@@ -52,9 +49,33 @@ pub fn EditorRender(self: EditorWindow, engine_context: *EngineContext) !void {
 }
 
 pub fn GetComponentName(self: EditorWindow) []const u8 {
-    return self.mVTable.GetComponentName(self.mPtr);
+    return self.mName;
 }
 
 pub fn GetComponentID(self: EditorWindow) u32 {
-    return self.mVTable.GetComponentID(self.mPtr);
+    return self.mComponentID;
+}
+
+pub fn GetComponentCategory(self: EditorWindow) ComponentCategory {
+    return self.mComponentCategory;
+}
+
+fn _ValidateObj(obj_type: type) void {
+    const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(obj_type)});
+    comptime var is_valid_type: bool = false;
+
+    inline for (EntityComponentsList) |comp_t| {
+        if (obj_type == comp_t) {
+            is_valid_type = true;
+        }
+    }
+
+    inline for (SceneComponentsList) |comp_t| {
+        if (obj_type == comp_t) {
+            is_valid_type = true;
+        }
+    }
+    if (is_valid_type == false) {
+        @compileError("that type can not be used EditorWindow. Type: " ++ type_name);
+    }
 }

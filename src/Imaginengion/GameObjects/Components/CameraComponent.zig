@@ -16,7 +16,6 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const ProjectionType = enum(u1) {
     Perspective = 0,
@@ -24,11 +23,17 @@ pub const ProjectionType = enum(u1) {
 };
 
 pub const Category: ComponentCategory = .Unique;
-
 pub const Editable: bool = true;
+pub const Name: []const u8 = "CameraComponent";
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == CameraComponent) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
 
 //viewport stuff
-//TODO: finish changing this to use the new framebuffer system
 mViewportWidth: usize = 1600,
 mViewportHeight: usize = 900,
 mAspectRatio: f32 = 0.0,
@@ -93,24 +98,6 @@ pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void
 
 fn RecalculateProjection(self: *CameraComponent) void {
     self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
-}
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == CameraComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
-pub fn GetName(self: CameraComponent) []const u8 {
-    _ = self;
-    return "CameraComponent";
-}
-
-pub fn GetInd(self: CameraComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
 }
 
 pub fn EditorRender(self: *CameraComponent, _: *EngineContext) !void {

@@ -27,7 +27,7 @@ pub fn SphereSphere(sphere_origin: *Sphere, world_pos_origin: Vec3f32, sphere_ta
 
     const penetration = radius_sum - dist;
 
-    const normal = std.mem.zeroes(Vec3f32);
+    var normal = std.mem.zeroes(Vec3f32);
 
     if (dist > 0.00001) {
         normal = delta / dist;
@@ -51,15 +51,15 @@ pub fn BoxBox(box_origin: *Box, world_pos_origin: Vec3f32, box_target: *Box, wor
     if (overlap_x <= 0 or overlap_y <= 0 or overlap_z <= 0) return null; //not a collision
 
     var penetration = overlap_x;
-    var normal = Vec3f32{ 1.0, 0.0, 0.0 } * @as(Vec3f32, @splat(LinAlg.Sign(delta[0])));
+    var normal = Vec3f32{ LinAlg.Sign(delta[0]), 0.0, 0.0 };
 
     if (overlap_y < penetration) {
         penetration = overlap_y;
-        normal = Vec3f32{ 0.0, 1.0, 0.0 } * @as(Vec3f32, @splat(LinAlg.Sign(delta[1])));
+        normal = Vec3f32{ 0.0, LinAlg.Sign(delta[1]), 0.0 };
     }
     if (overlap_z < penetration) {
         penetration = overlap_z;
-        normal = Vec3f32{ 0.0, 0.0, 1.0 } * @as(Vec3f32, @splat(LinAlg.Sign(delta[2])));
+        normal = Vec3f32{ 0.0, 0.0, LinAlg.Sign(delta[2]) };
     }
 
     return Contact{

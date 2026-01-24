@@ -13,10 +13,17 @@ const QuadComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
+pub const Name: []const u8 = "QuadComponent";
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == QuadComponent) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
 
 mShouldRender: bool = true,
 mTexture: AssetHandle = .{},
@@ -26,14 +33,6 @@ mEditTexCoords: bool = false,
 pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
     self.mTexture.ReleaseAsset();
 }
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == QuadComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
 
 pub fn GetName(self: QuadComponent) []const u8 {
     _ = self;

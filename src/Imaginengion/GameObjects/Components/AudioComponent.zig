@@ -24,6 +24,14 @@ pub const AudioType = enum(u8) {
 
 pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = true;
+pub const Name: []const u8 = "AudioComponent";
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == AudioComponent) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
 
 mParent: Entity.Type = Entity.NullEntity,
 mFirst: Entity.Type = Entity.NullEntity,
@@ -47,23 +55,6 @@ pub fn ReadFrames(self: *AudioComponent, engine_context: EngineContext, frames_o
 pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
     self.mAudioAsset.ReleaseAsset();
 }
-
-pub fn GetName(_: AudioComponent) []const u8 {
-    return "AudioComponent";
-}
-
-pub fn GetInd(_: AudioComponent) u32 {
-    return @intCast(Ind);
-}
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == AudioComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
 

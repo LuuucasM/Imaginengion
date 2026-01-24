@@ -6,11 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = false;
-
-SceneID: u128 = std.math.maxInt(u128),
-
-pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
-
+pub const Name: []const u8 = "IDComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == IDComponent) {
@@ -19,10 +15,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetName(_: IDComponent) []const u8 {
-    return "IDComponent";
-}
+SceneID: u128 = std.math.maxInt(u128),
 
-pub fn GetInd(_: IDComponent) u32 {
-    return @intCast(Ind);
-}
+pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}

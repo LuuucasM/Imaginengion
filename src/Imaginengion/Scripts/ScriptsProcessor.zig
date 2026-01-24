@@ -164,46 +164,36 @@ fn _GetFnInfo(comptime func_type_info: std.builtin.Type, comptime func_name: []c
 
 pub fn _ValidateScript(comptime script_type: type) void {
     const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
+    std.debug.assert(@hasDecl(script_type, "Run"));
+    std.debug.assert(@hasDecl(script_type, "GetScriptType"));
 
-    if (@hasDecl(script_type, "Run") == false) {
-        @compileError("Script requires a run function" ++ type_name);
-    } else {
-        // Check to ensure return type is bool
-        comptime {
-            const RunFn = @TypeOf(@field(script_type, "Run"));
-            const run_func_info = @typeInfo(RunFn);
-            const fn_info = _GetFnInfo(run_func_info, "Run", type_name);
+    //validate run function
+    const RunFn = @TypeOf(@field(script_type, "Run"));
+    const run_func_info = @typeInfo(RunFn);
+    const run_fn_info = _GetFnInfo(run_func_info, "Run", type_name);
 
-            if (fn_info.return_type) |return_type| {
-                if (return_type != bool) {
-                    @compileError("Run function must return bool" ++ type_name);
-                }
-            } else {
-                @compileError("Run function must return bool" ++ type_name);
-            }
+    if (run_fn_info.return_type) |return_type| {
+        if (return_type != bool) {
+            @compileError("Run function must return bool" ++ type_name);
         }
+    } else {
+        @compileError("Run function must return bool" ++ type_name);
     }
 
-    if (@hasDecl(script_type, "GetScriptType") == false) {
-        @compileError("Script requires a GetScriptType function" ++ type_name);
-    } else {
-        // Check to ensure it takes no parameters and it returns a ScriptType
-        comptime {
-            const GetScriptTypeFn = @TypeOf(@field(script_type, "GetScriptType"));
-            const get_script_type_func_info = @typeInfo(GetScriptTypeFn);
-            const fn_info = _GetFnInfo(get_script_type_func_info, "GetScriptType", type_name);
+    //validate GetScriptType
+    const GetScriptTypeFn = @TypeOf(@field(script_type, "GetScriptType"));
+    const get_script_type_func_info = @typeInfo(GetScriptTypeFn);
+    const type_fn_info = _GetFnInfo(get_script_type_func_info, "GetScriptType", type_name);
 
-            if (fn_info.params.len != 0) {
-                @compileError("GetScriptType function must take no parameters" ++ type_name);
-            }
-            if (fn_info.return_type) |return_type| {
-                if (return_type != ScriptType) {
-                    @compileError("GetScriptType function must return ScriptType" ++ type_name);
-                }
-            } else {
-                @compileError("GetScriptType function must return ScriptType" ++ type_name);
-            }
+    if (type_fn_info.params.len != 0) {
+        @compileError("GetScriptType function must take no parameters" ++ type_name);
+    }
+    if (type_fn_info.return_type) |return_type| {
+        if (return_type != ScriptType) {
+            @compileError("GetScriptType function must return ScriptType" ++ type_name);
         }
+    } else {
+        @compileError("GetScriptType function must return ScriptType" ++ type_name);
     }
 }
 

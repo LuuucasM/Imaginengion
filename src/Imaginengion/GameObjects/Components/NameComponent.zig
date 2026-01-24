@@ -6,19 +6,10 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Category: ComponentCategory = .Unique;
-
 pub const Editable: bool = true;
-
-mAllocator: std.mem.Allocator = undefined,
-mName: std.ArrayList(u8) = .{},
-
-pub fn Deinit(self: *NameComponent, _: *EngineContext) !void {
-    self.mName.deinit(self.mAllocator);
-}
-
+pub const Name: []const u8 = "NameComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == NameComponent) {
@@ -27,14 +18,11 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn GetName(self: NameComponent) []const u8 {
-    _ = self;
-    return "NameComponent";
-}
+mAllocator: std.mem.Allocator = undefined,
+mName: std.ArrayList(u8) = .{},
 
-pub fn GetInd(self: NameComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
+pub fn Deinit(self: *NameComponent, _: *EngineContext) !void {
+    self.mName.deinit(self.mAllocator);
 }
 
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {

@@ -6,7 +6,6 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
@@ -22,6 +21,14 @@ const InternalData = struct {
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
+pub const Name: []const u8 = "TransformComponent";
+pub const Ind: usize = blk: {
+    for (ComponentsList, 0..) |component_type, i| {
+        if (component_type == TransformComponent) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
 
 Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
@@ -48,16 +55,6 @@ pub fn GetWorldScale(self: TransformComponent) Vec3f32 {
 }
 pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3f32) void {
     self._InternalData.WorldScale = new_scale;
-}
-
-pub fn GetName(self: TransformComponent) []const u8 {
-    _ = self;
-    return "TransformComponent";
-}
-
-pub fn GetInd(self: TransformComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
 }
 
 pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
@@ -224,14 +221,6 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     }
     imgui.igPopItemWidth();
 }
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == TransformComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
 
 pub fn jsonStringify(self: *const TransformComponent, jw: anytype) !void {
     try jw.beginObject();
