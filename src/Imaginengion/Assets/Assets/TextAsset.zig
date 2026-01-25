@@ -1,6 +1,5 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const LinAlg = @import("../../Math/LinAlg.zig");
 const AssetHandle = @import("../AssetHandle.zig");
 const Vec4f32 = LinAlg.Vec4f32;
@@ -22,7 +21,6 @@ const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_
 
 const GYLPH_SET_SIZE = 2798; //note this comes from adding up all the characters from the charset.txt if that file change this number also needs to change
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "TextAsset";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

@@ -1,7 +1,6 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const FileMetaData = @This();
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const PathType = enum(u2) {
@@ -9,7 +8,6 @@ pub const PathType = enum(u2) {
     Prj = 1,
 };
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "FileMetaData";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

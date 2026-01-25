@@ -74,7 +74,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             _ = self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
         }
 
-        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) !void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
 
             // Remove all components from this entity
@@ -82,7 +82,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id, ecs_event_manager);
+                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
             }
 
             // Remove entity from skip field
@@ -157,21 +157,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             return internal_array.GetComponent(entityID);
         }
-
-        pub fn GetMultiData(self: Self, entity_id: entity_t, component_ind: usize) @Vector(4, entity_t) {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-            std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
-
-            return self.mComponentsArrays.items[component_ind].GetMultiData(entity_id);
-        }
-
-        pub fn SetMultiData(self: Self, entity_id: entity_t, component_ind: usize, multi_data: @Vector(4, entity_t)) void {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-            std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
-
-            self.mComponentsArrays.items[component_ind].SetMultiData(entity_id, multi_data);
-        }
-
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
             switch (query) {
                 .Component => |component_type| {

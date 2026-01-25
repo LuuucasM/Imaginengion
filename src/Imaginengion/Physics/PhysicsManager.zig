@@ -35,7 +35,6 @@ const SOLVER_ITERS: u32 = 4;
 const SUB_STEPS: u32 = 2;
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
 const MAX_PHYSICS_STEPS: u32 = 6;
-
 _InternalData: InternalData = .{},
 
 pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
@@ -48,7 +47,6 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
     const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
-        std.debug.print("infinite loop? ", .{});
         for (0..SUB_STEPS) |_| {
             for (rigid_body_arr.items) |entity_id| {
                 const entity = scene_manager.GetEntity(entity_id);
@@ -80,9 +78,8 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
                     }
                 }
             }
-            self._InternalData.Contacts.clearRetainingCapacity();
+            self._InternalData.Contacts.clearAndFree(engine_context.EngineAllocator());
         }
-        std.debug.print("yes sirrrrr\n", .{});
     }
 }
 
@@ -165,14 +162,14 @@ fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene
             const collider_target = entity_target.GetComponent(ColliderComponent).?;
 
             var contact: ?Contact = blk: {
-                if (collider_origin.mColliderShape == .Sphere and collider_target.mColliderShape == .Sphere) {
+                if (std.meta.activeTag(collider_origin.mColliderShape) == .Sphere and std.meta.activeTag(collider_target.mColliderShape) == .Sphere) {
                     break :blk Collisions.SphereSphere(
                         collider_origin.AsSphere(),
                         entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
                         collider_target.AsSphere(),
                         entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
                     );
-                } else if (collider_origin.mColliderShape == .Box and collider_target.mColliderShape == .Box) {
+                } else if (std.meta.activeTag(collider_origin.mColliderShape) == .Box and std.meta.activeTag(collider_target.mColliderShape) == .Box) {
                     break :blk Collisions.BoxBox(
                         collider_origin.AsBox(),
                         entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),

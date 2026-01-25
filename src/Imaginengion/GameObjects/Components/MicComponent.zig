@@ -2,11 +2,9 @@ const std = @import("std");
 const BUFFER_CAPACITY = @import("../../AudioManager/AudioManager.zig").BUFFER_CAPACITY;
 const TAudioBuffer = @import("../../AudioManager/AudioManager.zig").TAudioBuffer;
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const MicComponent = @This();
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = false;
 pub const Name: []const u8 = "MicComponent";
 pub const Ind: usize = blk: {

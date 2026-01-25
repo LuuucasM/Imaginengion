@@ -13,10 +13,8 @@ const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 const SceneLayer = @import("../SceneLayer.zig");
 const SceneType = @import("../SceneLayer.zig").Type;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-pub const Category: ComponentCategory = .Multiple;
 pub const Name: []const u8 = "ScriptComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

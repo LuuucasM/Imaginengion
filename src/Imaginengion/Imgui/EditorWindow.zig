@@ -1,7 +1,6 @@
 const std = @import("std");
 const Entity = @import("../GameObjects/Entity.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const ComponentCategory = @import("../ECS/ECSManager.zig").ComponentCategory;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntityComponentsList = EntityComponents.ComponentsList;
@@ -10,17 +9,15 @@ const EditorWindow = @This();
 
 mEntity: Entity,
 mPtr: *anyopaque,
-mEntityName: *EntityNameComponent,
 mComponentName: []const u8,
 mComponentID: u32,
-mComponentCategory: ComponentCategory,
 mVTable: *const VTab,
 
 const VTab = struct {
     EditorRender: *const fn (*anyopaque, *EngineContext) anyerror!void,
 };
 
-pub fn Init(obj: anytype, entity: Entity, entity_name_component: *EntityNameComponent) EditorWindow {
+pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
     std.debug.assert(PtrInfo == .pointer);
@@ -40,10 +37,8 @@ pub fn Init(obj: anytype, entity: Entity, entity_name_component: *EntityNameComp
     return EditorWindow{
         .mEntity = entity,
         .mPtr = obj,
-        .mEntityName = entity_name_component,
         .mComponentName = ObjT.Name,
         .mComponentID = ObjT.Ind,
-        .mComponentCategory = ObjT.Category,
         .mVTable = &.{
             .EditorRender = impl.EditorRender,
         },
@@ -55,7 +50,7 @@ pub fn EditorRender(self: EditorWindow, engine_context: *EngineContext) !void {
 }
 
 pub fn GetEntityName(self: EditorWindow) []const u8 {
-    return self.mEntityName.mName.items;
+    return self.mEntity.GetComponent(EntityNameComponent).?.*.mName.items;
 }
 
 pub fn GetComponentName(self: EditorWindow) []const u8 {
@@ -65,11 +60,6 @@ pub fn GetComponentName(self: EditorWindow) []const u8 {
 pub fn GetComponentID(self: EditorWindow) u32 {
     return self.mComponentID;
 }
-
-pub fn GetComponentCategory(self: EditorWindow) ComponentCategory {
-    return self.mComponentCategory;
-}
-
 fn _ValidateObj(obj_type: type) void {
     const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(obj_type)});
     comptime var is_valid_type: bool = false;

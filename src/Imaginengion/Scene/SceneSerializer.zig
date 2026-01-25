@@ -139,10 +139,7 @@ fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame
     try write_stream.beginObject();
 
     inline for (SceneComponents.SerializeList) |component_type| {
-        switch (component_type.Category) {
-            .Unique => try SerializeUniqueSceneComponent(write_stream, scene_layer, component_type, component_type.Name),
-            .Multiple => try SerializeMultiSceneComponents(write_stream, scene_layer, component_type, component_type.Name),
-        }
+        try SerializeUniqueSceneComponent(write_stream, scene_layer, component_type, component_type.Name);
     }
     try SerializeSceneEntities(write_stream, scene_layer, frame_allocator);
 
@@ -193,10 +190,7 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, f
 
 fn SerializeEntity(write_stream: *WriteStream, entity: Entity) !void {
     inline for (EntityComponents.SerializeList) |component_type| {
-        switch (component_type.Category) {
-            .Unique => try SerializeUniqueEntityComponent(write_stream, entity, component_type, component_type.Name),
-            .Multiple => try SerializeMultiEntityComponents(write_stream, entity, component_type, component_type.Name),
-        }
+        try SerializeUniqueEntityComponent(write_stream, entity, component_type, component_type.Name);
     }
     try SerializeParentComponent(write_stream, entity);
 }
@@ -205,35 +199,6 @@ fn SerializeUniqueEntityComponent(write_stream: *WriteStream, entity: Entity, co
     if (entity.GetComponent(component_type)) |component| {
         try write_stream.objectField(field_name);
         try write_stream.write(component);
-    }
-}
-
-fn SerializeMultiEntityComponents(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8) !void {
-    std.debug.assert(component_type.Category == .Multiple);
-
-    if (entity.GetComponent(component_type)) |parent_multi_component| {
-        var curr_id = parent_multi_component.mFirst;
-
-        while (true) : (if (curr_id == parent_multi_component.mFirst) break) {
-            const curr_comp_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
-
-            const component_component = curr_comp_entity.GetComponent(component_type).?;
-
-            try write_stream.objectField(field_name);
-            try write_stream.beginObject();
-
-            try SerializeUniqueEntityComponent(write_stream, curr_comp_entity, component_type, field_name);
-
-            inline for (EntityComponents.SerializeList) |possible_comp_type| {
-                if (possible_comp_type.Category == .Unique) {
-                    try SerializeUniqueEntityComponent(write_stream, curr_comp_entity, possible_comp_type, possible_comp_type.Name);
-                }
-            }
-
-            try write_stream.endObject();
-
-            curr_id = component_component.mNext;
-        }
     }
 }
 
@@ -343,10 +308,7 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
 
         inline for (EntityComponents.SerializeList) |component_type| {
             if (std.mem.eql(u8, actual_value, component_type.Name)) {
-                switch (component_type.Category) {
-                    .Unique => try DeSerializeUniqueComp(engine_context, component_type, reader, entity),
-                    .Multiple => try DeSerializeMultiComp(engine_context, component_type, reader, entity),
-                }
+                try DeSerializeUniqueComp(engine_context, component_type, reader, entity);
             }
         }
 
@@ -370,44 +332,6 @@ fn DeSerializeUniqueComp(engine_context: *EngineContext, comptime component_type
     }
     if (component_type == EntityNameComponent) {
         try DeserializeEntityNameComp(engine_context.EngineAllocator(), entity);
-    }
-}
-
-fn DeSerializeMultiComp(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, entity: Entity) !void {
-    std.debug.assert(component_type.Category == .Multiple);
-
-    try SkipToken(reader); //skip the begin object token
-    try SkipToken(reader); //this should be the object field for the actual multi component
-    try DeSerializeUniqueComp(engine_context, component_type, reader, entity); //so now we should be able to call this
-
-    //now get the entity that represents the multi component we just added
-    const parent_multi_comp = entity.GetComponent(component_type).?;
-    const first_multi_comp = entity.mECSManagerRef.GetComponent(component_type, parent_multi_comp.mFirst).?;
-
-    const prev_multi_entity = Entity{ .mEntityID = first_multi_comp.mPrev, .mECSManagerRef = entity.mECSManagerRef };
-
-    while (true) {
-        const token = try reader.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed);
-        const token_value = switch (token) {
-            .string => |value| value,
-            .allocated_string => |value| value,
-            .number => |value| value,
-            .allocated_number => |value| value,
-            .object_begin => continue,
-            .object_end => break,
-            .end_of_document => @panic("This shouldnt happen!"),
-            else => @panic("This shouldnt happen!"),
-        };
-
-        const actual_value = try engine_context.FrameAllocator().dupe(u8, token_value);
-
-        inline for (EntityComponents.SerializeList) |possible_comp_type| {
-            if (possible_comp_type.Category == .Unique) {
-                if (std.mem.eql(u8, actual_value, possible_comp_type.Name)) {
-                    try DeSerializeUniqueComp(engine_context, possible_comp_type, reader, prev_multi_entity);
-                }
-            }
-        }
     }
 }
 

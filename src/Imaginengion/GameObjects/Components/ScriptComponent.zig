@@ -11,7 +11,6 @@ const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const Entity = @import("../../GameObjects/Entity.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 mParent: Entity.Type = Entity.NullEntity,
@@ -21,7 +20,6 @@ mNext: Entity.Type = Entity.NullEntity,
 
 mScriptAssetHandle: AssetHandle = .{},
 
-pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = false;
 pub const Name: []const u8 = "ScriptComponent";
 pub const Ind: usize = blk: {

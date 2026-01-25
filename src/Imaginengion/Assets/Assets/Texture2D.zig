@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const LinAlg = @import("../../Math/LinAlg.zig");
@@ -20,7 +19,6 @@ const Impl = switch (builtin.os.tag) {
     else => @import("Texture2Ds/UnsupportedTexture2D.zig"),
 };
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "Texture2D";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

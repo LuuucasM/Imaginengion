@@ -1,6 +1,5 @@
 const std = @import("std");
 const Vec3f32 = @import("../../Math/LinAlg.zig").Vec3f32;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../Entity.zig");
@@ -23,7 +22,6 @@ pub const UColliderShape = union(enum) {
     Box: Box,
 };
 
-pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "ColliderComponent";
 pub const Ind: usize = blk: {

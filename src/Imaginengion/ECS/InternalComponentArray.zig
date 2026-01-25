@@ -1,7 +1,6 @@
 const std = @import("std");
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
-const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) type {
@@ -68,27 +67,6 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
             }
             return null;
         }
-        pub fn GetMultiData(self: Self, entity_id: entity_t) @Vector(4, entity_t) {
-            std.debug.assert(self.mComponents.HasSparse(entity_id));
-            if (component_type.Category == .Multiple) {
-                const component = self.mComponents.getValueBySparse(entity_id);
-                return @Vector(4, entity_t){ component.mParent, component.mFirst, component.mNext, component.mPrev };
-            } else {
-                return @Vector(4, entity_t){ 0, 0, 0, 0 };
-            }
-        }
-        // Conditionally include SetMultiData function based on component type
-        pub fn SetMultiData(self: Self, entity_id: entity_t, multi_data: @Vector(4, entity_t)) void {
-            std.debug.assert(self.mComponents.HasSparse(entity_id));
-            if (component_type.Category == .Multiple) {
-                const component = self.mComponents.getValueBySparse(entity_id);
-                component.mParent = multi_data[0];
-                component.mFirst = multi_data[1];
-                component.mNext = multi_data[2];
-                component.mPrev = multi_data[3];
-            }
-        }
-
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;
         }
@@ -104,28 +82,8 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
             }
             self.mComponents.clear();
         }
-        pub fn GetCategory(_: *Self) ComponentCategory {
-            return component_type.Category;
-        }
-        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t, ecs_event_manager: *ECSEventManager) anyerror!void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));
-
-            if (component_type.Category == .Multiple) {
-                const first_component = self.mComponents.getValueBySparse(entity_id);
-
-                var curr_id = first_component.mNext;
-                var curr_component = self.mComponents.getValueBySparse(curr_id);
-
-                //start fromt he second component in the list (if there is one) because we will manually
-                //delete the first component after iterating through (possible) children
-
-                while (curr_id != entity_id) {
-                    try ecs_event_manager.Insert(engine_context.EngineAllocator(), .{ .ET_CleanMultiEntity = .{ .mEntityID = curr_id } });
-
-                    curr_id = curr_component.mNext;
-                    curr_component = self.mComponents.getValueBySparse(curr_id);
-                }
-            }
             try self.RemoveComponent(engine_context, entity_id);
         }
     };

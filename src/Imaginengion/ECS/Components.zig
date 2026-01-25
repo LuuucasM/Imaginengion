@@ -1,28 +1,18 @@
 const std = @import("std");
-const ComponentCategory = @import("ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ParentComponent(entity_t: type) type {
     return struct {
         const Self = @This();
 
-        pub const Category: ComponentCategory = .Unique;
+        pub const Ind: usize = 0;
         pub const Editable: bool = false;
+        pub const Name: []const u8 = "ParentComponent";
 
-        mFirstChild: entity_t = std.math.maxInt(entity_t),
+        mFirstEntity: entity_t = std.math.maxInt(entity_t),
+        mFirstScript: entity_t = std.math.maxInt(entity_t),
 
         pub fn Deinit(_: *Self, _: *EngineContext) !void {}
-
-        pub fn GetName(_: Self) []const u8 {
-            return "ParentComponent";
-        }
-
-        pub fn GetInd(self: Self) u32 {
-            _ = self;
-            return @intCast(Ind);
-        }
-
-        pub const Ind: usize = 0;
     };
 }
 
@@ -30,8 +20,9 @@ pub fn ChildComponent(entity_t: type) type {
     return struct {
         const Self = @This();
 
-        pub const Category: ComponentCategory = .Unique;
         pub const Editable: bool = false;
+        pub const Ind: usize = 1;
+        pub const Name: []const u8 = "ChildComponent";
 
         mFirst: entity_t = std.math.maxInt(entity_t),
         mPrev: entity_t = std.math.maxInt(entity_t),
@@ -39,17 +30,5 @@ pub fn ChildComponent(entity_t: type) type {
         mParent: entity_t = std.math.maxInt(entity_t),
 
         pub fn Deinit(_: *Self, _: *EngineContext) !void {}
-
-        pub fn GetName(self: Self) []const u8 {
-            _ = self;
-            return "ChildComponent";
-        }
-
-        pub fn GetInd(self: Self) u32 {
-            _ = self;
-            return @intCast(Ind);
-        }
-
-        pub const Ind: usize = 1;
     };
 }

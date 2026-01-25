@@ -1,5 +1,4 @@
 const Vec3f32 = @import("../../Math/LinAlg.zig").Vec3f32;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PhysicsComponent = @This();
@@ -7,7 +6,6 @@ const PhysicsComponent = @This();
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "PhysicsComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

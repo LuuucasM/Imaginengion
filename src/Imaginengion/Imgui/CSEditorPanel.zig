@@ -64,16 +64,7 @@ pub fn OnImguiRender(self: *CSEditorPanel, engine_context: *EngineContext) !void
         var is_open = true;
         _ = imgui.igBegin(name.ptr, &is_open, 0);
         defer imgui.igEnd();
-
-        switch (editor_window.GetComponentCategory()) {
-            .Unique => try editor_window.EditorRender(engine_context),
-            .Multiple => {
-                if (editor_window.mEntity.GetComponent(TransformComponent)) |transform| {
-                    try transform.EditorRender(engine_context);
-                }
-                try editor_window.EditorRender(engine_context);
-            },
-        }
+        try editor_window.EditorRender(engine_context);
 
         if (is_open == false) {
             try to_remove.append(fba_allocator, id_name);

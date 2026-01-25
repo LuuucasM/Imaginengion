@@ -4,13 +4,11 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../GameObjects/Entity.zig");
 const InputPressedEvent = @import("../../Events/SystemEvent.zig").InputPressedEvent;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 //scripts
 pub const OnInputPressedScript = struct {
     pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const InputPressedEvent) callconv(.c) bool;
     bit: u1 = 0,
-    pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnInputPressedScript";
     pub const Ind: usize = blk: {
@@ -26,7 +24,6 @@ pub const OnInputPressedScript = struct {
 pub const OnUpdateScript = struct {
     pub const RunFuncSig = *const fn (*const EngineContext, *const Entity) callconv(.c) bool;
     bit: u1 = 0,
-    pub const Category: ComponentCategory = .Unique;
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnUpdateScript";
     pub const Ind: usize = blk: {

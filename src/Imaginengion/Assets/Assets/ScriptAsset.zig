@@ -1,7 +1,6 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const ScriptAsset = @This();
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const imgui = @import("../../Core/CImports.zig").imgui;
 
@@ -22,7 +21,6 @@ pub const ScriptType = enum(u8) {
     SceneSceneStart = 2,
 };
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "ScriptAsset";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

@@ -1,6 +1,5 @@
 const std = @import("std");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const ComponentsList = @import("../../GameObjects/Components.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
 const Vec4f32 = LinAlg.Vec4f32;
@@ -14,7 +13,6 @@ const TextComponent = @This();
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "TextComponent";
 pub const Ind: usize = blk: {

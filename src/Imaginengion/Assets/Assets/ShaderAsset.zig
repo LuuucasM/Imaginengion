@@ -2,7 +2,6 @@ const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const builtin = @import("builtin");
 const VertexBufferElement = @import("../../VertexBuffers/VertexBufferElement.zig");
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const Tracy = @import("../../Core/Tracy.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
@@ -56,7 +55,6 @@ pub fn StrToDataType(name: []const u8) ShaderDataType {
     if (std.mem.eql(u8, name, "float")) return ShaderDataType.Float;
 }
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "ShaderAsset";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {

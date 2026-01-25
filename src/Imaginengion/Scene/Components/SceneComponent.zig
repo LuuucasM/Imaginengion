@@ -3,7 +3,6 @@ const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
 const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const GameComponents = @import("../../GameObjects/Components.zig");
 const IDComponent = GameComponents.IDComponent;
@@ -18,7 +17,6 @@ pub const LayerType = enum(u1) {
     OverlayLayer = 1,
 };
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "SceneComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

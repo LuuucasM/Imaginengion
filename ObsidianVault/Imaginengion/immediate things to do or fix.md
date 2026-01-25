@@ -1,4 +1,21 @@
-- test to see if we get any like collision stuff when hitting the play button and that we dont crash from the other changes that were made
-- fix ReloadAllScenes not working it is getting a buffer underrun (thanks to the new system somehow)
+- remove the idea of multi components entirely
+	- change the entire script system 
+		- the parent component now has a mFirstEntity and mFirstScript
+		- scripts can now be directly added as children for the S in ECS
+		- for all the systems that do calculations for childrens i need to change it to do the new system. good thing is the children are ALL entities in a heirarchy so all my current code works i just need to do it for both entity and script now
+			- for example UpdateWorldTransforms does a child traversal
+			- serialization will need to be changed again too :')
+		- for imgui the scripts pane
+			- the name of the script that appears in the script panel can be the name of the child entity. 
+			- scripts will need to be able to be edited (like editor window) except a special editor window where it will display all 3, name + transform + script together 
+			- dragging scripts into the script window will create a new child and add script to child
+			- you can also right click on scripts panel to add new script which will just create a blank script with nothing
+- change components panel to not just display any and all components of an entity but do what i do for serialization and create another comptime list of types that are for displaying
+	- Limit components to 1 type per entity
+	- also change the add component popup menu
+		- I want to instead of being a button be a right click on the background of the panel
+		- Then i can condense it into an inline for like i will do for component displaying since entities can only have 1 type of each
+
+- fix ReloadAllScenes not working it is getting a buffer underrun (thanks to the new system deserializing somehow)
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

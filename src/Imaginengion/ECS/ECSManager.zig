@@ -7,9 +7,9 @@ const Tracy = @import("../Core/Tracy.zig");
 const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub const ComponentCategory = enum {
-    Unique,
-    Multiple,
+pub const ChildType = enum {
+    Entity,
+    Script,
 };
 
 pub fn ECSManager(entity_t: type, comptime components_types: []const type) type {
@@ -103,7 +103,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             try self.mComponentManager.EntityListIntersection(result, list2, allocator);
         }
 
-        pub fn AddChild(self: *Self, entity_id: entity_t) !entity_t {
+        pub fn AddChild(self: *Self, entity_id: entity_t, child_type: ChildType) !entity_t {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
 
             const zone = Tracy.ZoneInit("ECSM AddChild", @src());
@@ -112,7 +112,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const new_entity_id = try self.CreateEntity();
 
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
-                const first_child_entity_id = parent_component.mFirstChild;
+                const first_child_entity_id = switch (child_type) {
+                    .Entity => parent_component.mFirstEntity,
+                    .Script => parent_component.mFirstScript,
+                };
                 const first_child_component = self.GetComponent(ChildComponent, first_child_entity_id).?;
 
                 const last_child_entity_id = first_child_component.mPrev;
@@ -131,7 +134,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
                 first_child_component.mPrev = new_entity_id;
             } else {
-                const new_parent_component = ParentComponent{ .mFirstChild = new_entity_id };
+                const new_parent_component = switch (child_type) {
+                    .Entity => ParentComponent{ .mFirstEntity = new_entity_id },
+                    .Script => ParentComponent{ .mFirstScript = new_entity_id },
+                };
+
                 _ = try self.AddComponent(ParentComponent, entity_id, new_parent_component);
 
                 const new_child_component = ChildComponent{
@@ -154,53 +161,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
             defer zone.Deinit();
 
-            var new_type_component: component_type = if (new_component) |c| c else component_type{};
-
-            switch (component_type.Category) {
-                .Unique => {
-                    return try self.mComponentManager.AddComponent(component_type, entity_id, new_type_component);
-                },
-                .Multiple => {
-                    const new_component_entity_id = try self.CreateEntity();
-
-                    if (self.GetComponent(component_type, entity_id)) |component| {
-                        //entity already has a component_type
-
-                        const first_component = self.GetComponent(component_type, component.mFirst).?;
-
-                        const last_component = self.GetComponent(component_type, first_component.mPrev).?;
-
-                        //update new components linked list
-                        new_type_component.mFirst = first_component.mFirst;
-                        new_type_component.mNext = first_component.mFirst;
-                        new_type_component.mParent = first_component.mParent;
-                        new_type_component.mPrev = first_component.mPrev;
-
-                        //update previous of first one to be this one
-                        first_component.mPrev = new_component_entity_id;
-
-                        //update last components next, which is the new one
-                        last_component.mNext = new_component_entity_id;
-
-                        return try self.mComponentManager.AddComponent(component_type, new_component_entity_id, new_type_component);
-                    } else {
-                        var parent_component_type = component_type{};
-                        parent_component_type.mFirst = new_component_entity_id;
-                        parent_component_type.mNext = new_component_entity_id;
-                        parent_component_type.mParent = entity_id;
-                        parent_component_type.mPrev = new_component_entity_id;
-
-                        //entity does not have any of this component_type yet so add it directly to the entity
-                        new_type_component.mFirst = new_component_entity_id;
-                        new_type_component.mNext = new_component_entity_id;
-                        new_type_component.mParent = entity_id;
-                        new_type_component.mPrev = new_component_entity_id;
-
-                        _ = try self.mComponentManager.AddComponent(component_type, entity_id, parent_component_type);
-                        return try self.mComponentManager.AddComponent(component_type, new_component_entity_id, new_type_component);
-                    }
-                },
-            }
+            const new_type_component: component_type = if (new_component) |c| c else component_type{};
+            return try self.mComponentManager.AddComponent(component_type, entity_id, new_type_component);
         }
         pub fn RemoveComponent(self: *Self, engine_allocator: std.mem.Allocator, comptime component_type: type, entity_id: entity_t) !void {
             _ValidateType(component_type);
@@ -240,7 +202,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             while (iter.Next()) |event| {
                 switch (event) {
                     .ET_DestroyEntity => |e| try self._InternalDestroyEntity(engine_context, e.mEntityID),
-                    .ET_CleanMultiEntity => |e| try self._InternalDestroyMultiEntity(engine_context, e.mEntityID),
                     .ET_RemoveComponent => |e| try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd),
                     else => {
                         @panic("Default Events are not allowed!\n");
@@ -255,43 +216,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
             defer zone.Deinit();
-            const component_category = self.mComponentManager.mComponentsArrays.items[component_ind].GetCategory();
-            switch (component_category) {
-                .Unique => {
-                    //in this case the entity ID is just simply the entity we want to remove the component from
-                    try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
-                },
-                .Multiple => {
-                    //entity_id in this case refers to the entity id of the component we want to remove not the parent
-                    //multi components always have their own entity_id so we can just ensure linked list pointers are updated
-                    //and then destroy the entity
-                    //0 -> mParent, 1 -> mFirst, 2 -> mNext, 3 -> mPrev
-                    const removed_multidata = self.mComponentManager.GetMultiData(entity_id, component_ind);
-                    var parent_multidata = self.mComponentManager.GetMultiData(removed_multidata[0], component_ind);
-
-                    if (removed_multidata[2] == entity_id and removed_multidata[3] == entity_id) {
-                        //case: this is the only one of this type of component so we can fully remove from parent
-                        try self.mComponentManager.RemoveComponent(engine_context, removed_multidata[0], component_ind);
-                    } else {
-                        //case: there are multiples of this component
-                        var next_multidata = self.mComponentManager.GetMultiData(removed_multidata[2], component_ind);
-                        var prev_multidata = self.mComponentManager.GetMultiData(removed_multidata[3], component_ind);
-
-                        next_multidata[3] = removed_multidata[3];
-                        prev_multidata[2] = removed_multidata[2];
-
-                        self.mComponentManager.SetMultiData(removed_multidata[2], component_ind, next_multidata);
-                        self.mComponentManager.SetMultiData(removed_multidata[3], component_ind, prev_multidata);
-
-                        if (parent_multidata[1] == entity_id) {
-                            parent_multidata[1] = removed_multidata[2];
-                            self.mComponentManager.SetMultiData(removed_multidata[0], component_ind, parent_multidata);
-                        }
-                    }
-
-                    try self._InternalDestroyMultiEntity(engine_context, entity_id);
-                },
-            }
+            try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
         }
 
         fn _InternalDestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
@@ -300,16 +225,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             defer zone.Deinit();
             try self._InternalRemoveFromHierarchy(engine_context, entity_id);
             try self.mEntityManager.DestroyEntity(engine_context.EngineAllocator(), entity_id);
-            try self.mComponentManager.DestroyEntity(engine_context, entity_id, &self.mECSEventManager);
-        }
-
-        fn _InternalDestroyMultiEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
-            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
-            const zone = Tracy.ZoneInit("ECSM Internal Destroy MultiEntity", @src());
-            defer zone.Deinit();
-            try self._InternalRemoveFromHierarchy(engine_context, entity_id);
-            try self.mEntityManager.DestroyEntity(engine_context.EngineAllocator(), entity_id);
-            try self.mComponentManager.DestroyMultiEntity(engine_context, entity_id);
+            try self.mComponentManager.DestroyEntity(engine_context, entity_id);
         }
 
         fn _InternalRemoveFromHierarchy(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
@@ -356,9 +272,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             inline for (component_list) |component_type| {
                 const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
 
-                if (!@hasDecl(component_type, "Category")) {
-                    @compileError("Type needs 'Category' pub const declaration " ++ type_name);
-                }
                 if (!@hasDecl(component_type, "Name")) {
                     @compileError("Type needs 'Name' pub const declaration " ++ type_name);
                 }
@@ -367,21 +280,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 }
                 if (!std.meta.hasFn(component_type, "Deinit")) {
                     @compileError("Type needs 'Deinit' member function " ++ type_name);
-                }
-
-                if (component_type.Category == .Multiple) {
-                    if (!@hasField(component_type, "mParent")) {
-                        @compileError("Type needs 'mParent' member variable because component Category is multiple " ++ type_name);
-                    }
-                    if (!@hasField(component_type, "mFirst")) {
-                        @compileError("Type needs 'mFirst' member varaible because component Category is multiple " ++ type_name);
-                    }
-                    if (!@hasField(component_type, "mPrev")) {
-                        @compileError("Type needs 'mPrev' member variable because component Category is multiple " ++ type_name);
-                    }
-                    if (!@hasField(component_type, "mNext")) {
-                        @compileError("Type needs 'mNext' member variable because component Category is multiple " ++ type_name);
-                    }
                 }
 
                 { //checking the deinit function for correctness

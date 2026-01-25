@@ -1,7 +1,6 @@
 const std = @import("std");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
 const Assets = @import("../../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
@@ -22,7 +21,6 @@ pub const AudioType = enum(u8) {
     Audio3D = 1,
 };
 
-pub const Category: ComponentCategory = .Multiple;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "AudioComponent";
 pub const Ind: usize = blk: {

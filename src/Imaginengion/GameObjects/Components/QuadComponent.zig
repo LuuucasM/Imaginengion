@@ -7,14 +7,12 @@ const Texture2D = Assets.Texture2D;
 const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const QuadComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "QuadComponent";
 pub const Ind: usize = blk: {

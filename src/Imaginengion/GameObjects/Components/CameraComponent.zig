@@ -6,7 +6,6 @@ const VertexArray = @import("../../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const Entity = @import("../Entity.zig");
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const CameraComponent = @This();
@@ -22,7 +21,6 @@ pub const ProjectionType = enum(u1) {
     Orthographic = 1,
 };
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "CameraComponent";
 pub const Ind: usize = blk: {

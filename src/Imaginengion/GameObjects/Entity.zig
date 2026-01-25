@@ -13,6 +13,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
+const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -24,32 +25,12 @@ mECSManagerRef: *ECSManagerGameObj = undefined,
 pub fn AddComponent(self: Entity, comptime component_type: type, component: ?component_type) !*component_type {
     return try self.mECSManagerRef.AddComponent(component_type, self.mEntityID, component);
 }
-pub fn RemoveComponent(self: Entity, args: anytype) !void {
-    const t = @TypeOf(args);
-    const t_info = @typeInfo(t);
-
-    switch (t_info) {
-        .type => {
-            //this is for removing unique components directly on the entity
-            //where there is only 1 so we can remove it by component type
-            if (args.Category == .Unique) {
-                return try self.mECSManagerRef.RemoveComponent(self.mEntityID, args);
-            }
-        },
-        .@"struct" => |s| {
-            //this is for when removing multi components which a single entity can have multiple of
-            //Entity.RemoveComponent(.{id_of_specific_script_component, ScriptComponent});
-            //ECSManager will check internally that it is a multi-type component when removing and ensure removal is done correctly
-            if (s.is_tuple == true and s.fields.len == 2 and s.fields[0].type == Entity.Type and s.fields[1].type == type and s.fields[1].type.Category == .Multiple) {
-                return try self.mECSManagerRef.RemoveComponent(args[0], args[1]);
-            }
-        },
-        else => {},
-    }
-
-    @compileError("Entity.RemoveComponent can not be called with these arguments");
+pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
+    self.mECSManagerRef.RemoveComponent(engine_allocator, component_type, self.mEntityID);
 }
-
+pub fn AddChild(self: Entity, child_type: ChildType) !Entity {
+    return Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type), .mECSManagerRef = self.mECSManagerRef };
+}
 pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_type {
     return self.mECSManagerRef.GetComponent(component_type, self.mEntityID);
 }

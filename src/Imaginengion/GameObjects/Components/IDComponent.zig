@@ -1,13 +1,11 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const IDComponent = @This();
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "IDComponent";
 pub const Ind: usize = blk: {

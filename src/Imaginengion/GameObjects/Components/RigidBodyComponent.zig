@@ -1,5 +1,4 @@
 const Vec3f32 = @import("../../Math/LinAlg.zig").Vec3f32;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const RigidBodyComponent = @This();
@@ -7,7 +6,6 @@ const RigidBodyComponent = @This();
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "RigidBodyComponent";
 pub const Ind: usize = blk: {

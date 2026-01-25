@@ -1,6 +1,5 @@
 const Entity = @import("../../GameObjects/Entity.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const ControllerComponent = @This();
 
 mControlledEntityID: Entity.Type = Entity.NullEntity,
@@ -14,7 +13,5 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-pub const Category: ComponentCategory = .Unique;
 
 pub const Editable: bool = false;

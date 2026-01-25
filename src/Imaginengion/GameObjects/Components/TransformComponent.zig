@@ -1,7 +1,6 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 //imgui stuff
@@ -19,7 +18,6 @@ const InternalData = struct {
     WorldScale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
 };
 
-pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "TransformComponent";
 pub const Ind: usize = blk: {

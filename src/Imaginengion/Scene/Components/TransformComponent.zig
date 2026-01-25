@@ -1,7 +1,6 @@
 const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 //imgui stuff
@@ -13,7 +12,6 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const TransformComponent = @This();
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "TransformComponent";
 //pub const Ind: usize = blk: {
 //    for (ComponentsList, 0..) |component_type, i| {

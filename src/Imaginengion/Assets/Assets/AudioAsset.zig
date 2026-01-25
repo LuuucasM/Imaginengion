@@ -1,12 +1,10 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
-const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const AudioBuffer = @import("AudioBuffers/AudioBuffer.zig");
 const miniaudio = @import("../../Core/CImports.zig").miniaudio;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AudioAsset = @This();
 
-pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "AudioAsset";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
