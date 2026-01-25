@@ -6,6 +6,16 @@ const miniaudio = @import("../../Core/CImports.zig").miniaudio;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AudioAsset = @This();
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "AudioAsset";
+pub const Ind: usize = blk: {
+    for (AssetsList, 0..) |asset_type, i| {
+        if (asset_type == AudioAsset) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
+
 mAudioBuffer: AudioBuffer = .{},
 
 pub fn Init(self: *AudioAsset, _: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
@@ -19,13 +29,3 @@ pub fn Deinit(self: *AudioAsset, _: *EngineContext) !void {
 pub fn Setup(self: *AudioAsset) !void {
     try self.mAudioBuffer.Setup();
 }
-
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == AudioAsset) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
-pub const Category: ComponentCategory = .Unique;

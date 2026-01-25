@@ -14,7 +14,7 @@ pub const AUDIO_FORMAT = f32;
 pub const AUDIO_CHANNELS = 2;
 pub const SAMPLE_RATE = 48000;
 pub const BUFFER_CAPACITY = 8192; //sample rate * latency_seconds, but has to be power of 2
-pub const tAudioBuffer = SPSCRingBuffer.SPSCRingBuffer(f32, BUFFER_CAPACITY);
+pub const TAudioBuffer = SPSCRingBuffer.SPSCRingBuffer(f32, BUFFER_CAPACITY);
 
 pub const AudioStats = struct {
     mNum2DAudio: usize = 0,
@@ -34,7 +34,7 @@ pub fn Deinit(self: *AudioManager) void {
     self.mAudioContext.Deinit();
 }
 
-pub fn SetAudioBuffer(self: *AudioManager, buffer: *tAudioBuffer) void {
+pub fn SetAudioBuffer(self: *AudioManager, buffer: *TAudioBuffer) void {
     self.mAudioContext.SetAudioBuffer(buffer);
 }
 

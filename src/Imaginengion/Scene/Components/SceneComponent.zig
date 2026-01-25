@@ -7,7 +7,6 @@ const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 
 const GameComponents = @import("../../GameObjects/Components.zig");
 const IDComponent = GameComponents.IDComponent;
-const SceneIDComponent = GameComponents.SceneIDComponent;
 const NameComponent = GameComponents.NameComponent;
 const TransformComponent = GameComponents.TransformComponent;
 const CameraComponent = GameComponents.CameraComponent;
@@ -19,6 +18,8 @@ pub const LayerType = enum(u1) {
     OverlayLayer = 1,
 };
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "SceneComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == SceneComponent) {
@@ -27,23 +28,11 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub const Category: ComponentCategory = .Unique;
-
 mScenePath: std.ArrayList(u8) = .{},
 mLayerType: LayerType = undefined,
 
 pub fn Deinit(self: *SceneComponent, engine_context: *EngineContext) !void {
     self.mScenePath.deinit(engine_context.EngineAllocator());
-}
-
-pub fn GetInd(self: SceneComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
-
-pub fn GetName(self: SceneComponent) []const u8 {
-    _ = self;
-    return "SceneComponent";
 }
 
 pub fn jsonStringify(self: *const SceneComponent, jw: anytype) !void {

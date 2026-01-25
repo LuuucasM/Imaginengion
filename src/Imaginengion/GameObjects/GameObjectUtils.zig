@@ -25,25 +25,23 @@ pub fn AddScriptToEntity(engine_context: *EngineContext, entity: Entity, rel_pat
     const script_component_ptr = try entity.AddComponent(ScriptComponent, new_script_component);
 
     // Get the entity_id for the newest script added
-    const prev_script_entity_id = script_component_ptr.mPrev;
-    const prev_script_component = ecs.GetComponent(ScriptComponent, prev_script_entity_id).?;
-    const last_script_entity_id = prev_script_component.mNext;
-
-    std.debug.assert(ecs.GetComponent(ScriptComponent, last_script_entity_id).? == script_component_ptr);
+    const prev_script_component = ecs.GetComponent(ScriptComponent, script_component_ptr.mPrev).?;
+    const script_component_entity = Entity{ .mEntityID = prev_script_component.mNext, .mECSManagerRef = entity.mECSManagerRef };
+    std.debug.assert(script_component_entity.GetComponent(ScriptComponent).? == script_component_ptr); //for sanity to ensure we have the right entity
 
     // Add the appropriate script type component based on the script asset
     switch (script_asset.mScriptType) {
         .EntityInputPressed => {
-            _ = try ecs.AddComponent(OnInputPressedScript, last_script_entity_id, null);
+            _ = try script_component_entity.AddComponent(OnInputPressedScript, null);
         },
         .EntityOnUpdate => {
-            _ = try ecs.AddComponent(OnUpdateScript, last_script_entity_id, null);
+            _ = try script_component_entity.AddComponent(OnUpdateScript, null);
         },
         else => {},
     }
 }
 
-pub fn AddMultiCompToEntity(comptime component_type: type, entity: Entity) !component_type {
+pub fn AddMultiCompWTransform(comptime component_type: type, entity: Entity) !*component_type {
     const new_multi_component = try entity.AddComponent(component_type, null);
 
     // Get the entity_id for the newest multi component added
@@ -51,7 +49,7 @@ pub fn AddMultiCompToEntity(comptime component_type: type, entity: Entity) !comp
     const prev_script_component = entity.mECSManagerRef.GetComponent(component_type, prev_script_entity_id).?;
     const last_script_entity_id = prev_script_component.mNext;
 
-    try entity.mECSManagerRef.AddComponent(TransformComponent, last_script_entity_id, null);
+    _ = try entity.mECSManagerRef.AddComponent(TransformComponent, last_script_entity_id, null);
 
     return new_multi_component;
 }

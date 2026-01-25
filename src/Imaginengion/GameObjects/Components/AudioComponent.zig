@@ -114,3 +114,72 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
         imgui.igEndDragDropTarget();
     }
 }
+
+pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("AudioType");
+    try jw.write(self.mAudioType);
+
+    try jw.objectField("FilePath");
+    const asset_file_data = self.mAudioAsset.GetFileMetaData();
+    try jw.write(asset_file_data.mRelPath.items);
+
+    try jw.objectField("PathType");
+    try jw.write(asset_file_data.mPathType);
+
+    try jw.objectField("Volume");
+    try jw.write(self.mVolume);
+
+    try jw.objectField("Pitch");
+    try jw.write(self.mPitch);
+
+    try jw.objectField("Loop");
+    try jw.write(self.mLoop);
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AudioComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
+
+    var result: AudioComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, field_name, "AudioType")) {
+            result.mAudioType = try std.json.innerParse(AudioType, frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "FilePath")) {
+            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
+
+            try SkipToken(reader); //skip PathType object field
+
+            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
+
+            result.mAudioAsset = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
+                std.debug.panic("error: {}\n", .{err});
+            };
+        } else if (std.mem.eql(u8, field_name, "Volume")) {
+            result.mVolume = try std.json.innerParse(f32, frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "Pitch")) {
+            result.mPitch = try std.json.innerParse(f32, frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "Loop")) {
+            result.mLoop = try std.json.innerParse(bool, frame_allocator, reader, options);
+        }
+    }
+
+    return result;
+}
+
+fn SkipToken(reader: *std.json.Reader) !void {
+    _ = try reader.next();
+}

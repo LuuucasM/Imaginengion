@@ -37,8 +37,8 @@ const SUB_STEP_DT = PHYSICS_DT / SUB_STEPS;
 
 _InternalData: InternalData = .{},
 
-pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager, dt: f32) !void {
-    self._InternalData.Accumulator += dt;
+pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+    self._InternalData.Accumulator += engine_context.mDT;
 
     const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
 
@@ -126,38 +126,38 @@ fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3f32, rotation
     }
 }
 
-fn ApplyForces(entity: Entity, scene_manager: *SceneManager, entity_rb: *RigidBodyComponent) !void {
+fn ApplyForces(entity: Entity, scene_manager: *SceneManager, entity_rb: *RigidBodyComponent) void {
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = scene_manager.GetSceneLayer(entity_scene_comp.SceneID);
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
-        entity_rb.mForce += if (entity_rb.mInvMass != 0) physics_component.mGravity * entity_rb.mMass else 0;
+        entity_rb.mForce += if (entity_rb.mInvMass != 0) physics_component.mGravity * @as(Vec3f32, @splat(entity_rb.mMass)) else @as(Vec3f32, @splat(0));
     } else {
-        entity_rb.mForce += 0 * entity_rb.mMass;
+        entity_rb.mForce += @as(Vec3f32, @splat(0 * entity_rb.mMass));
     }
 }
 
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
-    entity_rb.mVelocity += entity_rb.mForce * entity_rb.mInvMass * dt;
+    entity_rb.mVelocity += entity_rb.mForce * @as(Vec3f32, @splat(entity_rb.mInvMass * dt));
     entity_rb.mForce = std.mem.zeroes(Vec3f32);
 }
 
 fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) void {
     const transform = entity.GetComponent(EntityTransformComponent).?;
-    transform.Translation += entity_rb.mVelocity * dt;
+    transform.Translation += entity_rb.mVelocity * @as(Vec3f32, @splat(dt));
 }
 
 fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
     const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
 
     for (0..colliders_arr.items.len) |i| {
-        const entity_origin = scene_manager.GetEntity(colliders_arr[i]);
+        const entity_origin = scene_manager.GetEntity(colliders_arr.items[i]);
         for (i + 1..colliders_arr.items.len) |j| {
-            const entity_target = scene_manager.GetEntity(colliders_arr[j]);
+            const entity_target = scene_manager.GetEntity(colliders_arr.items[j]);
 
             const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
             const collider_target = entity_target.GetComponent(ColliderComponent).?;
 
-            const contact: ?Contact = blk: {
+            var contact: ?Contact = blk: {
                 if (collider_origin.mColliderShape == .Sphere and collider_target.mColliderShape == .Sphere) {
                     break :blk Collisions.SphereSphere(
                         collider_origin.AsSphere(),
@@ -178,11 +178,11 @@ fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene
                 }
             };
 
-            if (contact) |the_contact| {
+            if (contact) |*the_contact| {
                 the_contact.mOrigin = entity_origin;
                 the_contact.mTarget = entity_target;
 
-                self._InternalData.Contacts.append(engine_context.EngineAllocator(), the_contact);
+                try self._InternalData.Contacts.append(engine_context.EngineAllocator(), the_contact.*);
             }
         }
     }
@@ -200,17 +200,17 @@ fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target
 
     const impulse = contact.mNormal * @as(Vec3f32, @splat(j));
 
-    rb_origin.mVelocity -= impulse * rb_origin.mInvMass;
-    rb_target.mVelocity += impulse * rb_target.mInvMass;
+    rb_origin.mVelocity -= impulse * @as(Vec3f32, @splat(rb_origin.mInvMass));
+    rb_target.mVelocity += impulse * @as(Vec3f32, @splat(rb_target.mInvMass));
 }
 
 fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
     const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin.mInvMass + rb_target.mInvMass) * PERCENT;
-    const correction = correction_mag * contact.mNormal;
+    const correction = @as(Vec3f32, @splat(correction_mag)) * contact.mNormal;
 
     const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
     const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
 
-    transform_origin.Translation -= correction * rb_origin.mInvMass;
-    transform_target.Translation += correction * rb_target.mInvMass;
+    transform_origin.Translation -= correction * @as(Vec3f32, @splat(rb_origin.mInvMass));
+    transform_target.Translation += correction * @as(Vec3f32, @splat(rb_target.mInvMass));
 }

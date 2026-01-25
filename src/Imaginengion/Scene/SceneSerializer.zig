@@ -104,9 +104,7 @@ pub fn SerializeEntityText(frame_allocator: std.mem.Allocator, entity: Entity, a
     try SerializeEntity(&write_stream, entity);
     try write_stream.endObject();
 
-    const file = try std.fs.createFileAbsolute(abs_path, .{ .read = false, .truncate = true });
-    defer file.close();
-    try file.writeAll(out.written());
+    try WriteToFile(abs_path, out.written());
 }
 
 pub fn DeSerializeEntityText(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
@@ -140,28 +138,15 @@ fn ReaderInit(engine_context: *EngineContext, scene_file: std.fs.File) !std.json
 fn SerializeSceneData(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
     try write_stream.beginObject();
 
-    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneIDComponent, "SceneID");
-    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneComponent, "SceneData");
-    try SerializeUniqueSceneComponent(write_stream, scene_layer, SceneTransformComponent, "Transform");
-    try SerializeMultiSceneComponents(write_stream, scene_layer, SceneScriptComponent, "SceneScript");
-
+    inline for (SceneComponents.SerializeList) |component_type| {
+        switch (component_type.Category) {
+            .Unique => try SerializeUniqueSceneComponent(write_stream, scene_layer, component_type, component_type.Name),
+            .Multiple => try SerializeMultiSceneComponents(write_stream, scene_layer, component_type, component_type.Name),
+        }
+    }
     try SerializeSceneEntities(write_stream, scene_layer, frame_allocator);
 
     try write_stream.endObject();
-}
-
-fn SerializeSceneMetaData(write_stream: *WriteStream, scene_layer: SceneLayer) !void {
-    try write_stream.objectField("SceneID");
-    const scene_id_component = scene_layer.GetComponent(SceneIDComponent).?;
-    try write_stream.write(scene_id_component);
-
-    try write_stream.objectField("SceneData");
-    const scene_component = scene_layer.GetComponent(SceneComponent).?;
-    try write_stream.write(scene_component);
-
-    try write_stream.objectField("Transform");
-    const scene_transform = scene_layer.GetComponent(SceneTransformComponent).?;
-    try write_stream.write(scene_transform);
 }
 
 fn SerializeUniqueSceneComponent(write_stream: *WriteStream, scene_layer: SceneLayer, comptime component_type: type, field_name: []const u8) !void {
@@ -173,14 +158,13 @@ fn SerializeUniqueSceneComponent(write_stream: *WriteStream, scene_layer: SceneL
 
 fn SerializeMultiSceneComponents(write_stream: *WriteStream, scene_layer: SceneLayer, comptime component_type: type, field_name: []const u8) !void {
     if (scene_layer.GetComponent(component_type)) |parent_multi_component| {
-        const ecs = scene_layer.mECSManagerSCRef;
         var curr_id = parent_multi_component.mFirst;
 
         while (true) : (if (curr_id == parent_multi_component.mFirst) break) {
-            const component_component = ecs.GetComponent(component_type, curr_id).?;
+            const curr_comp_scene = SceneLayer{ .mSceneID = curr_id, .mECSManagerGORef = scene_layer.mECSManagerGORef, .mECSManagerSCRef = scene_layer.mECSManagerSCRef };
+            const component_component = curr_comp_scene.GetComponent(component_type).?;
 
-            try write_stream.objectField(field_name);
-            try write_stream.write(component_component);
+            try SerializeUniqueSceneComponent(write_stream, curr_comp_scene, component_type, field_name);
 
             curr_id = component_component.mNext;
         }
@@ -208,16 +192,12 @@ fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, f
 }
 
 fn SerializeEntity(write_stream: *WriteStream, entity: Entity) !void {
-    try SerializeUniqueEntityComponent(write_stream, entity, CameraComponent, "CameraComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, AISlotComponent, "AISlotComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, PlayerSlotComponent, "PlayerSlotComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, EntityIDComponent, "EntityIDComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, EntityNameComponent, "EntityNameComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, EntityTransformComponent, "TransformComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, QuadComponent, "QuadComponent");
-    try SerializeUniqueEntityComponent(write_stream, entity, EntityTextComponent, "TextComponent");
-    try SerializeMultiEntityComponents(write_stream, entity, EntityScriptComponent, "EntityScript");
-
+    inline for (EntityComponents.SerializeList) |component_type| {
+        switch (component_type.Category) {
+            .Unique => try SerializeUniqueEntityComponent(write_stream, entity, component_type, component_type.Name),
+            .Multiple => try SerializeMultiEntityComponents(write_stream, entity, component_type, component_type.Name),
+        }
+    }
     try SerializeParentComponent(write_stream, entity);
 }
 
@@ -229,15 +209,28 @@ fn SerializeUniqueEntityComponent(write_stream: *WriteStream, entity: Entity, co
 }
 
 fn SerializeMultiEntityComponents(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8) !void {
+    std.debug.assert(component_type.Category == .Multiple);
+
     if (entity.GetComponent(component_type)) |parent_multi_component| {
-        const ecs = entity.mECSManagerRef;
         var curr_id = parent_multi_component.mFirst;
 
         while (true) : (if (curr_id == parent_multi_component.mFirst) break) {
-            const component_component = ecs.GetComponent(component_type, curr_id).?;
+            const curr_comp_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
+
+            const component_component = curr_comp_entity.GetComponent(component_type).?;
 
             try write_stream.objectField(field_name);
-            try write_stream.write(component_component);
+            try write_stream.beginObject();
+
+            try SerializeUniqueEntityComponent(write_stream, curr_comp_entity, component_type, field_name);
+
+            inline for (EntityComponents.SerializeList) |possible_comp_type| {
+                if (possible_comp_type.Category == .Unique) {
+                    try SerializeUniqueEntityComponent(write_stream, curr_comp_entity, possible_comp_type, possible_comp_type.Name);
+                }
+            }
+
+            try write_stream.endObject();
 
             curr_id = component_component.mNext;
         }
@@ -292,16 +285,12 @@ fn DeSerializeSceneData(engine_context: *EngineContext, reader: *std.json.Reader
         const actual_value = try frame_allocator.dupe(u8, token_value);
         defer frame_allocator.free(actual_value);
 
-        if (std.mem.eql(u8, actual_value, "SceneID")) {
-            try DeSerializeSceneComponent(reader, scene_layer, SceneIDComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "SceneData")) {
-            try DeSerializeSceneComponent(reader, scene_layer, SceneComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "Transform")) {
-            try DeSerializeSceneComponent(reader, scene_layer, SceneTransformComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "SceneScript")) {
-            std.debug.print("crash script\n", .{});
-            try DeSerializeSceneComponent(reader, scene_layer, SceneScriptComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "Entity")) {
+        inline for (SceneComponents.SerializeList) |component_type| {
+            if (std.mem.eql(u8, actual_value, component_type.Name)) {
+                try DeSerializeUniqueSceneComp(reader, scene_layer, component_type, frame_allocator);
+            }
+        }
+        if (std.mem.eql(u8, actual_value, "Entity")) {
             const new_entity = try scene_layer.CreateBlankEntity();
             try DeSerializeEntity(engine_context, reader, new_entity, scene_layer);
         }
@@ -337,7 +326,7 @@ fn DeSerializeSceneEntities(engine_context: *EngineContext, reader: *std.json.Re
     }
 }
 
-fn DeSerializeSceneComponent(reader: *std.json.Reader, scene_layer: SceneLayer, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
+fn DeSerializeUniqueSceneComp(reader: *std.json.Reader, scene_layer: SceneLayer, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
     const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, PARSE_OPTIONS);
     _ = try scene_layer.AddComponent(component_type, parsed_component);
 }
@@ -359,37 +348,74 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
         };
         const actual_value = try frame_allocator.dupe(u8, token_value);
 
-        if (std.mem.eql(u8, actual_value, "CameraComponent")) {
-            try DeSerializeEntityComponent(reader, entity, CameraComponent, frame_allocator);
-            try DeserializeCameraComponent(engine_context, entity);
-        } else if (std.mem.eql(u8, actual_value, "AISlotComponent")) {
-            try DeSerializeEntityComponent(reader, entity, AISlotComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "PlayerSlotComponent")) {
-            try DeSerializeEntityComponent(reader, entity, PlayerSlotComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "EntityIDComponent")) {
-            try DeSerializeEntityComponent(reader, entity, EntityIDComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "EntityNameComponent")) {
-            try DeSerializeEntityComponent(reader, entity, EntityNameComponent, frame_allocator);
-            try DeserializeEntityNameComp(engine_context.EngineAllocator(), entity);
-        } else if (std.mem.eql(u8, actual_value, "EntityScript")) {
-            try DeSerializeEntityComponent(reader, entity, EntityScriptComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "QuadComponent")) {
-            try DeSerializeEntityComponent(reader, entity, QuadComponent, frame_allocator);
-        } else if (std.mem.eql(u8, actual_value, "TransformComponent")) {
-            try DeSerializeEntityComponent(reader, entity, EntityTransformComponent, frame_allocator);
-            DeserializeTransformComponent(entity);
-        } else if (std.mem.eql(u8, actual_value, "TextComponent")) {
-            try DeSerializeEntityComponent(reader, entity, EntityTextComponent, frame_allocator);
-            try DeserializeTextComponent(engine_context.EngineAllocator(), entity);
-        } else if (std.mem.eql(u8, actual_value, "Entity")) {
+        inline for (EntityComponents.SerializeList) |component_type| {
+            if (std.mem.eql(u8, actual_value, component_type.Name)) {
+                switch (component_type.Category) {
+                    .Unique => try DeSerializeUniqueComp(engine_context, component_type, reader, entity),
+                    .Multiple => try DeSerializeMultiComp(engine_context, component_type, reader, entity),
+                }
+            }
+        }
+
+        if (std.mem.eql(u8, actual_value, "Entity")) {
             try DeSerializeParentComponent(engine_context, reader, entity, scene_layer);
         }
     }
 }
 
-fn DeSerializeEntityComponent(reader: *std.json.Reader, entity: Entity, comptime component_type: type, frame_allocator: std.mem.Allocator) !void {
-    const parsed_component = try std.json.innerParse(component_type, frame_allocator, reader, PARSE_OPTIONS);
+fn DeSerializeUniqueComp(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, entity: Entity) !void {
+    const parsed_component = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
     _ = try entity.AddComponent(component_type, parsed_component);
+    if (component_type == CameraComponent) {
+        try DeserializeCameraComponent(engine_context, entity);
+    }
+    if (component_type == EntityTextComponent) {
+        try DeserializeTextComponent(engine_context.EngineAllocator(), entity);
+    }
+    if (component_type == EntityTransformComponent) {
+        DeserializeTransformComponent(entity);
+    }
+    if (component_type == EntityNameComponent) {
+        try DeserializeEntityNameComp(engine_context.EngineAllocator(), entity);
+    }
+}
+
+fn DeSerializeMultiComp(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, entity: Entity) !void {
+    std.debug.assert(component_type.Category == .Multiple);
+
+    try SkipToken(reader); //skip the begin object token
+    try SkipToken(reader); //this should be the object field for the actual multi component
+    try DeSerializeUniqueComp(engine_context, component_type, reader, entity); //so now we should be able to call this
+
+    //now get the entity that represents the multi component we just added
+    const parent_multi_comp = entity.GetComponent(component_type).?;
+    const first_multi_comp = entity.mECSManagerRef.GetComponent(component_type, parent_multi_comp.mFirst).?;
+
+    const prev_multi_entity = Entity{ .mEntityID = first_multi_comp.mPrev, .mECSManagerRef = entity.mECSManagerRef };
+
+    while (true) {
+        const token = try reader.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed);
+        const token_value = switch (token) {
+            .string => |value| value,
+            .allocated_string => |value| value,
+            .number => |value| value,
+            .allocated_number => |value| value,
+            .object_begin => continue,
+            .object_end => break,
+            .end_of_document => @panic("This shouldnt happen!"),
+            else => @panic("This shouldnt happen!"),
+        };
+
+        const actual_value = try engine_context.FrameAllocator().dupe(u8, token_value);
+
+        inline for (EntityComponents.SerializeList) |possible_comp_type| {
+            if (possible_comp_type.Category == .Unique) {
+                if (std.mem.eql(u8, actual_value, possible_comp_type.Name)) {
+                    try DeSerializeUniqueComp(engine_context, possible_comp_type, reader, prev_multi_entity);
+                }
+            }
+        }
+    }
 }
 
 fn DeserializeCameraComponent(engine_context: *EngineContext, entity: Entity) !void {
@@ -431,9 +457,7 @@ fn DeserializeTextComponent(engine_allocator: std.mem.Allocator, entity: Entity)
 }
 
 fn DeserializeTransformComponent(entity: Entity) void {
-    if (entity.GetComponent(EntityTransformComponent)) |transform| {
-        transform._CalculateWorldTransform();
-    }
+    entity._CalculateWorldTransform();
 }
 
 fn DeserializeEntityNameComp(engine_allocator: std.mem.Allocator, entity: Entity) !void {

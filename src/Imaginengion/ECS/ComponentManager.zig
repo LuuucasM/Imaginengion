@@ -47,7 +47,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             try self.mComponentsArrays.append(engine_allocator, child_array);
 
             inline for (components_types) |component_type| {
-                _InternalTypeValidation(component_type);
                 const new_component_array = try ComponentArray(entity_t).Init(engine_allocator, component_type);
                 try self.mComponentsArrays.append(engine_allocator, new_component_array);
             }
@@ -268,66 +267,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
 
             result.shrinkAndFree(allocator, end_index);
-        }
-
-        fn _InternalTypeValidation(comptime component_type: type) void {
-            std.debug.assert(@hasDecl(component_type, "Editable"));
-            std.debug.assert(@hasDecl(component_type, "Category"));
-            std.debug.assert(@hasDecl(component_type, "Name"));
-            std.debug.assert(@hasDecl(component_type, "Ind"));
-            std.debug.assert(std.meta.hasFn(component_type, "Deinit"));
-
-            if (component_type.Editable) { //if it is editable ensure that the signature is correct
-                std.debug.assert(std.meta.hasFn(component_type, "EditorRender"));
-
-                const editorrender_info = @typeInfo(@TypeOf(component_type.EditorRender));
-                std.debug.assert(editorrender_info == .@"fn");
-
-                const fn_info = editorrender_info.@"fn";
-                std.debug.assert(fn_info.params.len == 2);
-
-                const first_param = fn_info.params[0].type.?;
-                std.debug.assert(first_param == *component_type);
-
-                const second_param = fn_info.params[1].type.?;
-                std.debug.assert(second_param == *EngineContext);
-
-                const return_type = fn_info.return_type.?;
-                const return_info = @typeInfo(return_type);
-                std.debug.assert(return_info == .error_union);
-
-                const payload_type = return_info.error_union.payload;
-                std.debug.assert(payload_type == void);
-            }
-
-            if (component_type.Category == .Multiple) {
-                std.debug.assert(@hasField(component_type, "mParent"));
-                std.debug.assert(@hasField(component_type, "mFirst"));
-                std.debug.assert(@hasField(component_type, "mPrev"));
-                std.debug.assert(@hasField(component_type, "mNext"));
-            }
-
-            { //checking the deinit function for correctness
-                const deinit_info = @typeInfo(@TypeOf(component_type.Deinit));
-                std.debug.assert(deinit_info == .@"fn");
-
-                const fn_info = deinit_info.@"fn";
-                std.debug.assert(fn_info.params.len == 2);
-
-                const first_param = fn_info.params[0].type.?;
-                std.debug.assert(first_param == *component_type);
-
-                const second_param = fn_info.params[1].type.?;
-                std.debug.assert(second_param == *EngineContext);
-
-                const return_type = fn_info.return_type.?;
-                const return_type_info = @typeInfo(return_type);
-
-                std.debug.assert(return_type_info == .error_union);
-
-                const payload_type = return_type_info.error_union.payload;
-                std.debug.assert(payload_type == void);
-            }
         }
     };
 }

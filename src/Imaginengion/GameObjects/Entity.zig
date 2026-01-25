@@ -112,7 +112,7 @@ pub fn Delete(self: Entity, engine_context: *EngineContext) !void {
     try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DeleteEntityEvent = .{ .mEntity = self } });
 }
 
-pub fn _CalculateWorldTransform(self: *Entity) void {
+pub fn _CalculateWorldTransform(self: Entity) void {
     const zone = Tracy.ZoneInit("Entity::_CalculateWorldTransform", @src());
     defer zone.Deinit();
 

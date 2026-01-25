@@ -6,8 +6,8 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 ID: u64 = std.math.maxInt(u64),
 
-pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
-
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "IDComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == IDComponent) {
@@ -16,4 +16,4 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub const Category: ComponentCategory = .Unique;
+pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}

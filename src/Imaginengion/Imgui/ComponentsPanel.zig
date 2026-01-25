@@ -128,24 +128,23 @@ fn EntityImguiRender(entity: Entity, engine_context: *EngineContext) !void {
 
 fn ComponentRender(comptime component_type: type, entity: Entity, engine_context: *EngineContext) !void {
     if (entity.HasComponent(component_type)) {
-        if (component_type.Category == .Unique) {
-            //single unique component so we can just get and display component
-            try PrintComponent(component_type, entity, engine_context);
-        } else {
-            //it is a multi component so we need to get the parents component and then
-            //get first and then we can iterate creating a selectable bool for each one
-            if (entity.GetComponent(component_type)) |component| {
-                var curr_id = component.mFirst;
-                //the : (stuff) gets evaluated at the end of the loop so its equivalent to a
-                //do-while loop
-                while (true) : (if (curr_id == component.mFirst) break) {
-                    const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
-                    try PrintComponent(component_type, component_entity, engine_context);
+        switch (component_type.Category) {
+            .Unique => try PrintComponent(component_type, entity, engine_context),
+            .Multiple => {
+                if (entity.GetComponent(component_type)) |component| {
+                    var curr_id = component.mFirst;
+                    //the : (stuff) gets evaluated at the end of the loop so its equivalent to a
+                    //do-while loop
+                    while (true) : (if (curr_id == component.mFirst) break) {
+                        const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-                    const curr_comp = component_entity.GetComponent(component_type).?;
-                    curr_id = curr_comp.mNext;
+                        try PrintComponent(component_type, component_entity, engine_context);
+
+                        const curr_comp = component_entity.GetComponent(component_type).?;
+                        curr_id = curr_comp.mNext;
+                    }
                 }
-            }
+            },
         }
     }
 }
@@ -227,7 +226,7 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, ent
     }
     if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
         defer imgui.igCloseCurrentPopup();
-        const new_audio_component = try GameObjectUtils.AddMultiCompToEntity(AudioComponent, entity);
+        const new_audio_component = try GameObjectUtils.AddMultiCompWTransform(AudioComponent, entity);
         new_audio_component.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
     }
     if (entity.HasComponent(RigidBodyComponent) == false) {
@@ -238,7 +237,7 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, ent
     }
     if (imgui.igMenuItem_Bool("ColliderComponent", "", false, true)) {
         defer imgui.igCloseCurrentPopup();
-        _ = try GameObjectUtils.AddMultiCompToEntity(ColliderComponent, entity);
+        _ = try GameObjectUtils.AddMultiCompWTransform(ColliderComponent, entity);
     }
     if (entity.HasComponent(MicComponent) == false) {
         if (imgui.igMenuItem_Bool("MicComponent", "", false, true)) {

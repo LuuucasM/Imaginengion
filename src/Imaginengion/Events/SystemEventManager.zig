@@ -1,5 +1,4 @@
 const std = @import("std");
-const assert = std.debug.assert;
 const Application = @import("../Core/Application.zig");
 const SystemEvent = @import("SystemEvent.zig").SystemEvent;
 const SystemEventCategory = @import("SystemEvent.zig").SystemEventCategory;

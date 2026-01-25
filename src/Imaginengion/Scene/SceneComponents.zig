@@ -5,7 +5,7 @@ pub const PhysicsComponent = @import("Components/PhysicsComponent.zig");
 pub const SceneComponent = @import("Components/SceneComponent.zig");
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 pub const StackPosComponent = @import("Components/StackPosComponent.zig");
-pub const TransformComponent = @import("Components/TransformComponent.zig");
+//pub const TransformComponent = @import("Components/TransformComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
@@ -19,6 +19,12 @@ pub const ComponentsList = [_]type{
     StackPosComponent,
     //    TransformComponent,
     OnSceneStartScript,
+};
+
+pub const SerializeList = [_]type{
+    PhysicsComponent,
+    SceneComponent,
+    ScriptComponent,
 };
 
 pub const ScriptList = [_]type{

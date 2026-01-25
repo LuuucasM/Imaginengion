@@ -24,6 +24,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         mECSEventManager: ECSEventManager = .{},
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
+            _ValidateCompList(components_types);
             const zone = Tracy.ZoneInit("ECSM Init", @src());
             defer zone.Deinit();
 
@@ -80,7 +81,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         //for getting groups of entities
         pub fn GetGroup(self: Self, allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(entity_t) {
-            _InternalCheckGroup(query);
+            _ValidateGroupQuery(query);
             const zone = Tracy.ZoneInit("ECSM GetGroup", @src());
             defer zone.Deinit();
             return try self.mComponentManager.GetGroup(query, allocator);
@@ -144,7 +145,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         //--------components related functions----------
         pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
-            _InternalTypeCheck(component_type);
+            _ValidateType(component_type);
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
             defer zone.Deinit();
@@ -198,7 +199,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             }
         }
         pub fn RemoveComponent(self: *Self, engine_allocator: std.mem.Allocator, comptime component_type: type, entity_id: entity_t) !void {
-            _InternalTypeCheck(component_type);
+            _ValidateType(component_type);
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
             defer zone.Deinit();
@@ -220,7 +221,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
-            _InternalTypeCheck(component_type);
+            _ValidateType(component_type);
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
 
             const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
@@ -347,7 +348,75 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             }
         }
 
-        fn _InternalTypeCheck(comptime component_type: type) void {
+        fn _ValidateCompList(comptime component_list: []const type) void {
+            inline for (component_list) |component_type| {
+                const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+
+                if (!@hasDecl(component_type, "Category")) {
+                    @compileError("Type needs 'Category' pub const declaration " ++ type_name);
+                }
+                if (!@hasDecl(component_type, "Name")) {
+                    @compileError("Type needs 'Name' pub const declaration " ++ type_name);
+                }
+                if (!@hasDecl(component_type, "Ind")) {
+                    @compileError("Type needs 'Ind' pub const declaration " ++ type_name);
+                }
+                if (!std.meta.hasFn(component_type, "Deinit")) {
+                    @compileError("Type needs 'Deinit' member function " ++ type_name);
+                }
+
+                if (component_type.Category == .Multiple) {
+                    if (!@hasField(component_type, "mParent")) {
+                        @compileError("Type needs 'mParent' member variable because component Category is multiple " ++ type_name);
+                    }
+                    if (!@hasField(component_type, "mFirst")) {
+                        @compileError("Type needs 'mFirst' member varaible because component Category is multiple " ++ type_name);
+                    }
+                    if (!@hasField(component_type, "mPrev")) {
+                        @compileError("Type needs 'mPrev' member variable because component Category is multiple " ++ type_name);
+                    }
+                    if (!@hasField(component_type, "mNext")) {
+                        @compileError("Type needs 'mNext' member variable because component Category is multiple " ++ type_name);
+                    }
+                }
+
+                { //checking the deinit function for correctness
+                    const deinit_info = @typeInfo(@TypeOf(component_type.Deinit));
+                    if (deinit_info != .@"fn") {
+                        @compileError(type_name ++ "'s Deinit must be a function ");
+                    }
+
+                    const fn_info = deinit_info.@"fn";
+                    if (fn_info.params.len != 2) {
+                        @compileError(type_name ++ "'s Deinit must have 2 parameters");
+                    }
+
+                    const first_param = fn_info.params[0].type.?;
+                    if (first_param != *component_type) {
+                        @compileError(type_name ++ "'s Deinit's first parameter must be *type right now it is " ++ @typeName(first_param));
+                    }
+
+                    const second_param = fn_info.params[1].type.?;
+                    if (second_param != *EngineContext) {
+                        @compileError(type_name ++ "'s Deinit's second parameter must be *EngineContext currently " ++ @typeName(second_param));
+                    }
+
+                    const return_type = fn_info.return_type.?;
+                    const return_type_info = @typeInfo(return_type);
+
+                    if (return_type_info != .error_union) {
+                        @compileError(type_name ++ "'s Deinit's return type must be error union");
+                    }
+
+                    const payload_type = return_type_info.error_union.payload;
+                    if (payload_type != void) {
+                        @compileError(type_name ++ "'s Deinit's return payload must be void, currently " ++ @typeName(payload_type));
+                    }
+                }
+            }
+        }
+
+        fn _ValidateType(comptime component_type: type) void {
             const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
             comptime var is_valid_type: bool = false;
             inline for (components_types) |comp_t| {
@@ -363,21 +432,21 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             }
         }
 
-        fn _InternalCheckGroup(comptime query: GroupQuery) void {
+        fn _ValidateGroupQuery(comptime query: GroupQuery) void {
             switch (query) {
                 .Component => |component_type| {
-                    _InternalTypeCheck(component_type);
+                    _ValidateType(component_type);
                 },
                 .Not => |not| {
-                    _InternalCheckGroup(not.mFirst);
-                    _InternalCheckGroup(not.mSecond);
+                    _ValidateGroupQuery(not.mFirst);
+                    _ValidateGroupQuery(not.mSecond);
                 },
                 .Or => |ors| {
                     if (ors.len == 0) {
                         @compileError("Must have 1 or more in ors group");
                     }
                     inline for (ors[1..]) |or_query| {
-                        _InternalCheckGroup(or_query);
+                        _ValidateGroupQuery(or_query);
                     }
                 },
                 .And => |ands| {
@@ -385,7 +454,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         @compileError("Must have 1 or more in ands group");
                     }
                     inline for (ands[1..]) |and_query| {
-                        _InternalCheckGroup(and_query);
+                        _ValidateGroupQuery(and_query);
                     }
                 },
             }

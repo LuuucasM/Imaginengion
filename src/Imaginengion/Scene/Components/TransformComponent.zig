@@ -13,23 +13,21 @@ const Mat4f32 = LinAlg.Mat4f32;
 
 const TransformComponent = @This();
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "TransformComponent";
+//pub const Ind: usize = blk: {
+//    for (ComponentsList, 0..) |component_type, i| {
+//        if (component_type == TransformComponent) {
+//            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+//        }
+//    }
+//};
+
 Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
 Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
 Scale: Vec3f32 = .{ 1.0, 1.0, 1.0 },
 
 pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
-
-pub fn GetName(self: TransformComponent) []const u8 {
-    _ = self;
-    return "TransformComponent";
-}
-
-pub fn GetInd(self: TransformComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
-
-pub const Category: ComponentCategory = .Unique;
 
 pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
     DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
@@ -195,11 +193,3 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     }
     imgui.igPopItemWidth();
 }
-
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == TransformComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};

@@ -20,6 +20,16 @@ const Impl = switch (builtin.os.tag) {
     else => @import("Texture2Ds/UnsupportedTexture2D.zig"),
 };
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "Texture2D";
+pub const Ind: usize = blk: {
+    for (AssetsList, 0..) |asset_type, i| {
+        if (asset_type == Texture2D) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
+
 mTexOptions: TexOptions = .{},
 _Impl: Impl = .{},
 
@@ -27,7 +37,7 @@ pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const 
     try self._Impl.Init(engine_context, abs_path, rel_path, asset_file);
 }
 
-pub fn Deinit(self: Texture2D, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *Texture2D, engine_context: *EngineContext) !void {
     try self._Impl.Deinit(engine_context);
 }
 
@@ -55,13 +65,3 @@ pub fn Bind(self: *Texture2D, slot: usize) void {
 pub fn Unbind(self: Texture2D, slot: usize) void {
     self._Impl.Unbind(slot);
 }
-
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == Texture2D) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
-pub const Category: ComponentCategory = .Unique;

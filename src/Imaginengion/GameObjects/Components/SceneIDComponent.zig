@@ -15,6 +15,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-SceneID: u128 = std.math.maxInt(u128),
+SceneID: u32 = std.math.maxInt(u32),
 
 pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}

@@ -22,6 +22,8 @@ const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_
 
 const GYLPH_SET_SIZE = 2798; //note this comes from adding up all the characters from the charset.txt if that file change this number also needs to change
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "TextAsset";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
         if (asset_type == TextAsset) {
@@ -29,8 +31,6 @@ pub const Ind: usize = blk: {
         }
     }
 };
-
-pub const Category: ComponentCategory = .Unique;
 
 mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = [_]GlyphInfo{GlyphInfo{}} ** GYLPH_SET_SIZE,
 mDistanceRange: u32 = 0,

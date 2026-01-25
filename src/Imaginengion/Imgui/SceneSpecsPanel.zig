@@ -5,7 +5,7 @@ const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
-const SceneTransformComponent = SceneComponents.TransformComponent;
+//const SceneTransformComponent = SceneComponents.TransformComponent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
@@ -53,8 +53,8 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     const scene_component = self.mSceneLayer.GetComponent(SceneComponent).?;
     imgui.igText(@tagName(scene_component.mLayerType));
 
-    const scene_transform = self.mSceneLayer.GetComponent(SceneTransformComponent).?;
-    try scene_transform.EditorRender(engine_context);
+    //const scene_transform = self.mSceneLayer.GetComponent(SceneTransformComponent).?;
+    //try scene_transform.EditorRender(engine_context);
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
     const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;

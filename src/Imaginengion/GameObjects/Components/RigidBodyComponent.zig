@@ -4,6 +4,9 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const RigidBodyComponent = @This();
 
+//IMGUI
+const imgui = @import("../../Core/CImports.zig").imgui;
+
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = true;
 pub const Name: []const u8 = "RigidBodyComponent";
@@ -15,12 +18,21 @@ pub const Ind: usize = blk: {
     }
 };
 
-mMass: f32,
-mInvMass: f32,
-mVelocity: Vec3f32,
-mForce: Vec3f32,
-mUseGravity: bool,
+mMass: f32 = 0.0,
+mInvMass: f32 = 0.0,
+mVelocity: Vec3f32 = Vec3f32{ 0.0, 0.0, 0.0 },
+mForce: Vec3f32 = Vec3f32{ 0.0, 0.0, 0.0 },
+mUseGravity: bool = false,
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) !void {}
 
-pub fn EditorRender(_: *RigidBodyComponent, _: *EngineContext) !void {}
+pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
+    if (imgui.igInputFloat("Mass", &self.mMass, 0.1, 1.0, "%.3f", 9)) {
+        if (self.mMass != 0.0) {
+            self.mInvMass = 1.0 / self.mMass;
+        } else {
+            self.mInvMass = 0.0;
+        }
+    }
+    _ = imgui.igCheckbox("Use Gravity", &self.mUseGravity);
+}

@@ -34,16 +34,6 @@ pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
     self.mTexture.ReleaseAsset();
 }
 
-pub fn GetName(self: QuadComponent) []const u8 {
-    _ = self;
-    return "QuadComponent";
-}
-
-pub fn GetInd(self: QuadComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
-}
-
 pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
     _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
 

@@ -6,6 +6,8 @@ const EditorWindow = @import("EditorWindow.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const EntityComponents = @import("../GameObjects/Components.zig");
+const TransformComponent = EntityComponents.TransformComponent;
 const CSEditorPanel = @This();
 
 mP_Open: bool = true,
@@ -62,7 +64,16 @@ pub fn OnImguiRender(self: *CSEditorPanel, engine_context: *EngineContext) !void
         var is_open = true;
         _ = imgui.igBegin(name.ptr, &is_open, 0);
         defer imgui.igEnd();
-        try editor_window.EditorRender(engine_context);
+
+        switch (editor_window.GetComponentCategory()) {
+            .Unique => try editor_window.EditorRender(engine_context),
+            .Multiple => {
+                if (editor_window.mEntity.GetComponent(TransformComponent)) |transform| {
+                    try transform.EditorRender(engine_context);
+                }
+                try editor_window.EditorRender(engine_context);
+            },
+        }
 
         if (is_open == false) {
             try to_remove.append(fba_allocator, id_name);

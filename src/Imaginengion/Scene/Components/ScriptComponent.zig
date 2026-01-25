@@ -16,6 +16,8 @@ const SceneType = @import("../SceneLayer.zig").Type;
 const ComponentCategory = @import("../../ECS/ECSManager.zig").ComponentCategory;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
+pub const Category: ComponentCategory = .Multiple;
+pub const Name: []const u8 = "ScriptComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == ScriptComponent) {
@@ -30,22 +32,10 @@ mNext: SceneType = SceneLayer.NullScene,
 mParent: SceneType = SceneLayer.NullScene,
 mScriptAssetHandle: AssetHandle = .{},
 
-pub const Category: ComponentCategory = .Multiple;
-
 pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
     if (self.mScriptAssetHandle.mID != AssetHandle.NullHandle) {
         self.mScriptAssetHandle.ReleaseAsset();
     }
-}
-
-pub fn GetName(self: ScriptComponent) []const u8 {
-    _ = self;
-    return "ScriptComponent";
-}
-
-pub fn GetInd(self: ScriptComponent) u32 {
-    _ = self;
-    return @intCast(Ind);
 }
 
 pub fn jsonStringify(self: *const ScriptComponent, jw: anytype) !void {

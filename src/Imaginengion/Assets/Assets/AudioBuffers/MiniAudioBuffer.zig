@@ -34,6 +34,7 @@ pub fn Init(self: *MiniAudioBuffer, rel_path: []const u8, asset_file: std.fs.Fil
 }
 
 pub fn Deinit(self: *MiniAudioBuffer) !void {
+    std.debug.assert(self.mPcmFrames != null);
     ma.ma_free(self.mPcmFrames, null);
 }
 

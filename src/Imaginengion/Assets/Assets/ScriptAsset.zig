@@ -22,6 +22,16 @@ pub const ScriptType = enum(u8) {
     SceneSceneStart = 2,
 };
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "ScriptAsset";
+pub const Ind: usize = blk: {
+    for (AssetsList, 0..) |asset_type, i| {
+        if (asset_type == ScriptAsset) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
+
 mLib: std.DynLib = undefined,
 mScriptType: ScriptType = undefined,
 mRunFunc: *anyopaque = undefined,
@@ -82,16 +92,6 @@ pub fn Deinit(self: *ScriptAsset, _: *EngineContext) !void {
 pub fn Run(self: *ScriptAsset, comptime script_type: type, args: anytype) bool {
     return @call(.auto, @as(script_type.RunFuncSig, @ptrCast(self.mRunFunc)), args);
 }
-
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == ScriptAsset) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
-pub const Category: ComponentCategory = .Unique;
 
 pub fn EditorRender(self: *ScriptAsset) !void {
     _ = self;

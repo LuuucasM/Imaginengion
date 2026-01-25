@@ -30,7 +30,7 @@ pub fn SphereSphere(sphere_origin: *Sphere, world_pos_origin: Vec3f32, sphere_ta
     var normal = std.mem.zeroes(Vec3f32);
 
     if (dist > 0.00001) {
-        normal = delta / dist;
+        normal = delta / @as(Vec3f32, @splat(dist));
     } else {
         normal[0] = 1;
     }

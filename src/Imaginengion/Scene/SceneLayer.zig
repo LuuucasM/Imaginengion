@@ -78,15 +78,15 @@ pub fn CreateEntity(self: SceneLayer, engine_allocator: std.mem.Allocator) !Enti
 }
 
 pub fn CreateEntityWithUUID(self: SceneLayer, engine_allocator: std.mem.Allocator, uuid: u64) !Entity {
-    const e = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
+    var e = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
     _ = try e.AddComponent(EntityIDComponent, .{ .ID = uuid });
     _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
     const new_name_component = try e.AddComponent(EntityNameComponent, .{ .mAllocator = engine_allocator });
     _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
 
-    const new_transform = try e.AddComponent(TransformComponent, null);
-    new_transform._CalculateWorldTransform();
+    _ = try e.AddComponent(TransformComponent, null);
+    e._CalculateWorldTransform();
 
     return e;
 }

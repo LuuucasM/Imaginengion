@@ -30,7 +30,7 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
             const right_dir = GetRightDirection(rotation);
             const up_dir = GetUpDirection(rotation);
             translation = translation - right_dir * @as(Vec3f32, @splat(mouse_delta[0] * PanSpeed)) + (up_dir * @as(Vec3f32, @splat(mouse_delta[1] * PanSpeed)));
-            transform_component.SetTranslation(translation);
+            transform_component.Translation = translation;
         } else if (input_context.IsInputPressed(.MouseButtonLeft) == true) {
             //const up_dir = GetUpDirection(rotation); //yaw
             const up_dir = Vec3f32{ 0.0, 1.0, 0.0 }; //yaw
@@ -39,11 +39,11 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
             const yaw = LinAlg.QuatAngleAxis(-mouse_delta[0] * RotateSpeed, up_dir);
             const pitch = LinAlg.QuatAngleAxis(-mouse_delta[1] * RotateSpeed, right_dir);
             rotation = LinAlg.QuatMulQuat(LinAlg.QuatMulQuat(yaw, rotation), pitch);
-            transform_component.SetRotation(rotation);
+            transform_component.Rotation = rotation;
         } else if (input_context.IsInputPressed(.MouseButtonRight) == true) {
             const forward_dir = GetForwardDirection(rotation);
             translation += forward_dir * @as(Vec3f32, @splat(mouse_delta[1] * ZoomSpeed));
-            transform_component.SetTranslation(translation);
+            transform_component.Translation = translation;
         }
     }
 

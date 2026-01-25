@@ -127,12 +127,12 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     self.mEditorViewportEntity = try self.mGameScene.CreateEntity(engine_allocator);
 
     const viewport_transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
-    viewport_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
-    viewport_transform_component._CalculateWorldTransform();
+    viewport_transform_component.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    self.mEditorViewportEntity._CalculateWorldTransform();
 
     const camera_transform_component = self.mEditorEditorEntity.GetComponent(TransformComponent).?;
-    camera_transform_component.SetTranslation(Vec3f32{ 0.0, 0.0, 15.0 });
-    camera_transform_component._CalculateWorldTransform();
+    camera_transform_component.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    self.mEditorEditorEntity._CalculateWorldTransform();
 
     //setup the viewport camera
     var new_camera_component = CameraComponent{
@@ -231,6 +231,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const physics_zone = Tracy.ZoneInit("Physics Section", @src());
         defer physics_zone.Deinit();
+        if (self._ToolbarPanel.mState == .Play) {
+            try engine_context.mPhysicsManager.OnUpdate(engine_context, &self.mGameSceneManager);
+        }
     }
     //-------------Physics End-------------------
 
@@ -263,8 +266,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const assets_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer assets_zone.Deinit();
-        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, self.mGameSceneManager);
-        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, self.mEditorSceneManager);
+        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, &self.mGameSceneManager);
+        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, &self.mEditorSceneManager);
     }
     //---------------End World Transform Update ------------
 

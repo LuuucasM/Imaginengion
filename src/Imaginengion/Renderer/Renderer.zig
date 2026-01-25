@@ -110,11 +110,9 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
     const shapes_ids = try scene_manager.GetEntityGroup(
         engine_context.FrameAllocator(),
         GroupQuery{
-            .mFirst = GroupQuery{
-                .Or = &[_]GroupQuery{
-                    GroupQuery{ .Component = QuadComponent },
-                    GroupQuery{ .Component = TextComponent },
-                },
+            .Or = &[_]GroupQuery{
+                GroupQuery{ .Component = QuadComponent },
+                GroupQuery{ .Component = TextComponent },
             },
         },
     );

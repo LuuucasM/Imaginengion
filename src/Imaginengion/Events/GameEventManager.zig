@@ -1,5 +1,4 @@
 const std = @import("std");
-const assert = std.debug.assert;
 const Program = @import("../Programs/Program.zig");
 const GameEvent = @import("GameEvent.zig").GameEvent;
 const GameEventCategory = @import("GameEvent.zig").GameEventCategory;

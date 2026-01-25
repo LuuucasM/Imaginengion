@@ -5,20 +5,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const PhysicsComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
-pub const Editable: bool = true;
-
-mGravity: Vec3f32,
-
-pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) !void {}
-
-pub fn GetName(_: PhysicsComponent) []const u8 {
-    return "PhysicsComponent";
-}
-
-pub fn GetInd(_: PhysicsComponent) u32 {
-    return @intCast(Ind);
-}
-
+pub const Name: []const u8 = "PhysicsComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == PhysicsComponent) {
@@ -26,3 +13,7 @@ pub const Ind: usize = blk: {
         }
     }
 };
+
+mGravity: Vec3f32 = Vec3f32{ 0.0, -9.81, 0.0 },
+
+pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) !void {}

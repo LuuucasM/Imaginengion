@@ -74,7 +74,7 @@ pub fn Init(self: *OpenGLTexture2D, engine_context: *EngineContext, _: []const u
     self.mARBHandle = arb_handle;
 }
 
-pub fn Deinit(self: OpenGLTexture2D, _: *EngineContext) !void {
+pub fn Deinit(self: *OpenGLTexture2D, _: *EngineContext) !void {
     glad.glDeleteTextures(1, &self._TextureID);
 }
 pub fn GetWidth(self: OpenGLTexture2D) usize {

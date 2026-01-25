@@ -20,10 +20,12 @@ const VTab = struct {
 pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
-    _ValidateObj(Ptr);
     std.debug.assert(PtrInfo == .pointer);
     std.debug.assert(PtrInfo.pointer.size == .one);
     std.debug.assert(@typeInfo(PtrInfo.pointer.child) == .@"struct");
+
+    const ObjT = PtrInfo.pointer.child;
+    _ValidateObj(ObjT);
 
     const impl = struct {
         fn EditorRender(ptr: *anyopaque, engine_context: *EngineContext) !void {
@@ -35,9 +37,9 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     return EditorWindow{
         .mEntity = entity,
         .mPtr = obj,
-        .mName = Ptr.Name,
-        .mComponentID = Ptr.Ind,
-        .mComponentCategory = Ptr.Category,
+        .mName = ObjT.Name,
+        .mComponentID = ObjT.Ind,
+        .mComponentCategory = ObjT.Category,
         .mVTable = &.{
             .EditorRender = impl.EditorRender,
         },

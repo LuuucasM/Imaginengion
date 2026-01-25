@@ -9,6 +9,16 @@ pub const PathType = enum(u2) {
     Prj = 1,
 };
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "FileMetaData";
+pub const Ind: usize = blk: {
+    for (AssetsList, 0..) |asset_type, i| {
+        if (asset_type == FileMetaData) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
+
 mRelPath: std.ArrayList(u8) = .{},
 mLastModified: i128 = 0,
 mSize: u64 = 0,
@@ -18,13 +28,3 @@ mPathType: PathType = .Eng,
 pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) !void {
     self.mRelPath.deinit(engine_context.EngineAllocator());
 }
-
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == FileMetaData) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
-pub const Category: ComponentCategory = .Unique;

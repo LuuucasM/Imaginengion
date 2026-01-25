@@ -44,10 +44,10 @@ pub fn GetWorldPosition(self: TransformComponent) Vec3f32 {
 pub fn SetWorldPosition(self: *TransformComponent, new_pos: Vec3f32) void {
     self._InternalData.WorldPosition = new_pos;
 }
-pub fn GetWorldRotation(self: TransformComponent) Vec3f32 {
+pub fn GetWorldRotation(self: TransformComponent) Quatf32 {
     return self._InternalData.WorldRotation;
 }
-pub fn SetWorldRotation(self: *TransformComponent, new_rot: Vec3f32) void {
+pub fn SetWorldRotation(self: *TransformComponent, new_rot: Quatf32) void {
     self._InternalData.WorldRotation = new_rot;
 }
 pub fn GetWorldScale(self: TransformComponent) Vec3f32 {

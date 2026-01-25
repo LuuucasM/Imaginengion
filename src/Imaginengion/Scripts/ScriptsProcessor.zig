@@ -18,7 +18,6 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
-const EntitySceneComponent = EntityComponents.SceneIDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 
 const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptList;

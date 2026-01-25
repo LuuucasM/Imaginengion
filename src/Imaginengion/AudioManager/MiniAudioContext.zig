@@ -1,16 +1,15 @@
 const std = @import("std");
 const ma = @import("../Core/CImports.zig").miniaudio;
-const SPSCRingBuffer = @import("../Core/SPSCRingBuffer.zig");
 const MiniAudioContext = @This();
 
 const AUDIO_FORMAT = @import("AudioManager.zig").AUDIO_FORMAT;
 const AUDIO_CHANNELS = @import("AudioManager.zig").AUDIO_CHANNELS;
 const SAMPLE_RATE = @import("AudioManager.zig").SAMPLE_RATE;
 const BUFFER_CAPACITY = @import("AudioManager.zig").BUFFER_CAPACITY;
-const tAudioBuffer = @import("AudioManager.zig").tAudioBuffer;
+const TAudioBuffer = @import("AudioManager.zig").TAudioBuffer;
 
 pub const DeviceContext = struct {
-    mUserData: std.atomic.Value(?*tAudioBuffer) = std.atomic.Value(?*tAudioBuffer).init(null),
+    mUserData: std.atomic.Value(?*TAudioBuffer) = std.atomic.Value(?*TAudioBuffer).init(null),
 };
 
 mDevice: ma.ma_device = undefined,
@@ -37,7 +36,7 @@ pub fn Deinit(self: *MiniAudioContext) void {
     ma.ma_device_uninit(&self.mDevice);
 }
 
-pub fn SetAudioBuffer(self: *MiniAudioContext, buffer: *tAudioBuffer) void {
+pub fn SetAudioBuffer(self: *MiniAudioContext, buffer: *TAudioBuffer) void {
     self.mAudioContext.mUserData.store(buffer, .acquire);
 }
 pub fn RemoveAudioBuffer(self: *MiniAudioContext) void {
@@ -51,7 +50,7 @@ fn DataCallback(device: [*c]ma.struct_ma_device, output: ?*anyopaque, input: ?*c
     const needed_samples = frame_count * AUDIO_CHANNELS;
     const audio_context = @as(*DeviceContext, @ptrCast(@alignCast(device.*.pUserData.?)));
     if (audio_context.mUserData.load(.acquire)) |user_data| {
-        const frames_buffer: *tAudioBuffer = @ptrCast(@alignCast(user_data));
+        const frames_buffer: *TAudioBuffer = @ptrCast(@alignCast(user_data));
 
         const out_slice = out_ptr[0..needed_samples];
 

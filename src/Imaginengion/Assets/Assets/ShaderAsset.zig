@@ -56,6 +56,16 @@ pub fn StrToDataType(name: []const u8) ShaderDataType {
     if (std.mem.eql(u8, name, "float")) return ShaderDataType.Float;
 }
 
+pub const Category: ComponentCategory = .Unique;
+pub const Name: []const u8 = "ShaderAsset";
+pub const Ind: usize = blk: {
+    for (AssetsList, 0..) |asset_type, i| {
+        if (asset_type == ShaderAsset) {
+            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+        }
+    }
+};
+
 mImpl: Impl = .{},
 
 pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
@@ -139,18 +149,3 @@ pub fn SetUniform_Mat4(self: ShaderAsset, name: []const u8, value: Mat4f32) void
     defer zone.Deinit();
     self.mImpl.SetUniform_Mat4(name, value);
 }
-
-//pub fn EditorRender(self: *ShaderAsset) !void {
-//    _ = self;
-//    imgui.igText("Nothing for now!", "");
-//}
-
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == ShaderAsset) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
-        }
-    }
-};
-
-pub const Category: ComponentCategory = .Unique;

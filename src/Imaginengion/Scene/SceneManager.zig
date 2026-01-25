@@ -36,7 +36,7 @@ const SceneComponent = SceneComponents.SceneComponent;
 const SceneIDComponent = SceneComponents.IDComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneStackPos = SceneComponents.StackPosComponent;
-const SceneTransformComponent = SceneComponents.TransformComponent;
+//const SceneTransformComponent = SceneComponents.TransformComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 
 const Assets = @import("../Assets/Assets.zig");
@@ -135,7 +135,7 @@ pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, layer_type:
     const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("Unsaved Scene");
 
-    _ = try scene_layer.AddComponent(SceneTransformComponent, null);
+    //_ = try scene_layer.AddComponent(SceneTransformComponent, null);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
