@@ -1,4 +1,4 @@
-- add function to editor program to start doing our bare bone physics
 - test to see if we get any like collision stuff when hitting the play button and that we dont crash from the other changes that were made
+- fix ReloadAllScenes not working it is getting a buffer underrun (thanks to the new system somehow)
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

@@ -11,7 +11,7 @@ pub fn Init(self: StatsPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: StatsPanel, dt: f64, render_stats: RenderStats) !void {
+pub fn OnImguiRender(self: StatsPanel, dt: f32, render_stats: RenderStats) !void {
     const zone = Tracy.ZoneInit("StatsPanel OIR", @src());
     defer zone.Deinit();
 
@@ -29,6 +29,9 @@ pub fn OnImguiRender(self: StatsPanel, dt: f64, render_stats: RenderStats) !void
     const us_time = std.time.us_per_s * dt;
     const us_text = try std.fmt.allocPrint(allocator, "\tDelta time in micro seconds: {d:.0}\n", .{us_time});
     imgui.igTextUnformatted(us_text.ptr, us_text.ptr + us_text.len);
+
+    const s_text = try std.fmt.allocPrint(allocator, "\tDelta time in seconds: {d:.5}\n", .{dt});
+    imgui.igTextUnformatted(s_text.ptr, s_text.ptr + s_text.len);
 
     const fps = 1.0 / dt;
     const fps_text = try std.fmt.allocPrint(allocator, "\tFPS: {d:.0}\n", .{fps});

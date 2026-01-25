@@ -512,14 +512,14 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         try self.mGameSceneManager.SaveAllScenes(engine_context);
         _ = try ScriptsProcessor.RunSceneScript(engine_context, OnSceneStartScript, &self.mGameSceneManager, .{});
     } else { //stop
-        try self.mGameSceneManager.ReloadAllScenes(engine_context);
-
         self._ScenePanel.OnSelectEntityEvent(null);
         self._ComponentsPanel.OnSelectEntityEvent(null);
         self._ScriptsPanel.OnSelectEntityEvent(null);
         self._ViewportPanel.OnSelectEntityEvent(null);
 
         self._ToolbarPanel.mStartEntity = null;
+
+        try self.mGameSceneManager.ReloadAllScenes(engine_context);
     }
 }
 

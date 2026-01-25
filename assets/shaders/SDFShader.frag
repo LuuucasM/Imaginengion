@@ -2,7 +2,7 @@
 #extension GL_ARB_bindless_texture : require
 #extension GL_ARB_gpu_shader_int64 : require
 
-#define MAX_STEPS 128
+#define MAX_STEPS 512
 #define SURF_DIST 0.00099
 
 layout(location = 0) out vec4 oFragColor;
@@ -80,19 +80,17 @@ void ExcludeShape(uint shape_type, uint shape_index) {
 #define SHAPE_QUAD 1
 #define SHAPE_GLYPH 2
 
-struct TextureOptions {
-    vec4 Color;
-    vec4 TexCoords;
-    float TilingFactor;
-};
-
 //========quads=========
 #define QUAD_THICKNESS 0.001
 struct QuadData {
     vec3 Position;
     vec4 Rotation;
     vec3 Scale;
-    TextureOptions TexOptions;
+    
+    float TilingFactor;
+    vec4 Color;
+    vec4 TexCoords;
+
     uint64_t TexIndex;
 };
 layout (std430, binding = 0) buffer QuadsSSBO {
@@ -108,9 +106,13 @@ struct GlyphData {
     vec3 Position;
     float Scale;
     vec4 Rotation;
+
+    float TilingFactor;
+    vec4 Color;
+    vec4 TexCoords;
+
     vec4 AtlasBounds;
     vec4 PlaneBounds;
-    TextureOptions TexOptions;
     uint64_t AtlasIndex;
     uint64_t TexIndex;
 };
@@ -194,14 +196,14 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
 
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0){
             // Apply tiling factor to UV coordinates
-            vec2 tiled_uv = texture_uv * quad.TexOptions.TilingFactor;
+            vec2 tiled_uv = texture_uv * quad.TilingFactor;
             
             // Remap UV coordinates from quad local space to texture atlas space
-            vec2 atlas_uv = mix(quad.TexOptions.TexCoords.xy, quad.TexOptions.TexCoords.zw, tiled_uv);
+            vec2 atlas_uv = mix(quad.TexCoords.xy, quad.TexCoords.zw, tiled_uv);
             
             sampler2D tex = sampler2D(quad.TexIndex);
             vec4 texture_color = texture(tex, atlas_uv);
-            return (quad.TexOptions.Color * texture_color);
+            return (quad.Color * texture_color);
         }
     }
     if (shape_type == SHAPE_GLYPH){
@@ -215,15 +217,15 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
             if (msd >= 0.5){
                 float alpha = smoothstep(0.4, 0.6, msd);
 
-                vec2 tiled_uv = texture_uv * glyph.TexOptions.TilingFactor;
+                vec2 tiled_uv = texture_uv * glyph.TilingFactor;
 
-                vec2 atlas_uv = mix(glyph.TexOptions.TexCoords.xy, glyph.TexOptions.TexCoords.zw, tiled_uv);
+                vec2 atlas_uv = mix(glyph.TexCoords.xy, glyph.TexCoords.zw, tiled_uv);
 
                 sampler2D tex = sampler2D(glyph.TexIndex);
 
                 vec4 texture_color = texture(tex, atlas_uv);
 
-                return (vec4(glyph.TexOptions.Color.rgb, alpha * glyph.TexOptions.Color.a) * texture_color);
+                return (vec4(glyph.Color.rgb, alpha * glyph.Color.a) * texture_color);
             }
         }
     }
@@ -291,7 +293,6 @@ DistData ShortestDistance(vec3 p){
                 shape_type = SHAPE_QUAD;
                 shape_index = i;
             };
-        if (min_dist < SURF_DIST) return DistData(min_dist, shape_type, shape_index);
     }
     //========end for quads============
 
@@ -307,13 +308,14 @@ DistData ShortestDistance(vec3 p){
                 shape_type = SHAPE_GLYPH;
                 shape_index = i;
             };
-        if (min_dist < SURF_DIST) return DistData(min_dist, shape_type, shape_index);
     }
     //======end for glyphs===============
 
     return DistData(min_dist, shape_type, shape_index);
 }
 vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
+    gExclusionCount = 0;
+    gExclusionInd = 0;
     vec3 out_color = vec3(0.0);
     float out_alpha = 0.0;
     float dist_origin = 0.0;

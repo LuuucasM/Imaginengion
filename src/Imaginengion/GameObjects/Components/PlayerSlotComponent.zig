@@ -8,7 +8,7 @@ const PlayerSlotComponent = @This();
 
 pub const Category: ComponentCategory = .Unique;
 pub const Editable: bool = false;
-pub const Name: []const u8 = "AISlotComponent";
+pub const Name: []const u8 = "PlayerSlotComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == PlayerSlotComponent) {

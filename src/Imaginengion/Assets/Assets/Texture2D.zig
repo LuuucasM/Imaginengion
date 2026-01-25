@@ -30,7 +30,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-mTexOptions: TexOptions = .{},
 _Impl: Impl = .{},
 
 pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {

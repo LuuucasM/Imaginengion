@@ -234,8 +234,6 @@ fn SerializeMultiEntityComponents(write_stream: *WriteStream, entity: Entity, co
 
             curr_id = component_component.mNext;
         }
-
-        try write_stream.endObject();
     }
 }
 
@@ -275,7 +273,7 @@ fn DeSerializeSceneData(engine_context: *EngineContext, reader: *std.json.Reader
         const token_value = try switch (token) {
             .end_of_document => break,
             .object_begin => continue,
-            .object_end => continue,
+            .object_end => break,
             .string => |value| value,
             .number => |value| value,
 
@@ -301,19 +299,14 @@ fn DeSerializeSceneEntities(engine_context: *EngineContext, reader: *std.json.Re
     const frame_allocator = engine_context.FrameAllocator();
     while (true) {
         const token = try reader.next();
-        const token_value = switch (token) {
+        const token_value = try switch (token) {
             .end_of_document => break,
             .object_begin => continue,
-            .object_end => continue,
-            .array_begin => continue,
-            .array_end => continue,
+            .object_end => break,
             .string => |value| value,
             .number => |value| value,
 
-            else => {
-                std.debug.print("Unexpected token: {s}\n", .{@tagName(token)});
-                return error.NotExpected;
-            },
+            else => error.NotExpected,
         };
 
         const actual_value = try frame_allocator.dupe(u8, token_value);

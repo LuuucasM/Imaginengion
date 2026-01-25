@@ -32,6 +32,7 @@ pub const AssetType = u32;
 pub const ECSManagerAssets = ECSManager(AssetType, &AssetsList);
 
 const InternalData = struct {
+    DefaultFileMetaData: FileMetaData = .{},
     DefaultTexture2D: Texture2D = .{},
     DefaultTextAsset: TextAsset = .{},
     DefaultAudioAsset: AudioAsset = .{},
@@ -65,6 +66,9 @@ pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
 pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
+    //FILE META DATA =======================
+    _ = try self._internal.DefaultFileMetaData.mRelPath.writer(engine_context.EngineAllocator()).write("default");
+
     //TEXTURE 2D =========================
     const texture2d_rel_path = "assets/textures/DefaultTexture.png";
     const texture2d_abs_path = try self.GetAbsPath(frame_allocator, texture2d_rel_path, .Eng);
@@ -91,6 +95,7 @@ pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
     try self._internal.DefaultTexture2D.Deinit(engine_context);
     try self._internal.DefaultTextAsset.Deinit(engine_context);
     try self._internal.DefaultAudioAsset.Deinit(engine_context);
+    self._internal.DefaultFileMetaData.mRelPath.deinit(engine_context.EngineAllocator());
 
     try self.mAssetECS.Deinit(engine_context);
 
@@ -109,6 +114,13 @@ pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
 
 pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !AssetHandle {
     std.debug.assert(rel_path.len != 0);
+
+    if (std.mem.eql(u8, rel_path, "default") and path_type == .Eng) {
+        return AssetHandle{
+            .mID = AssetHandle.NullHandle,
+            .mAssetManager = self,
+        };
+    }
 
     const path_hash = ComputePathHash(rel_path);
 
@@ -142,7 +154,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
 
     _ValidateAssetType(asset_type);
 
-    if (asset_id != AssetHandle.NullHandle) {
+    if (self.mAssetECS.IsActiveEntityID(asset_id)) {
         if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
             return asset;
         } else {
@@ -167,7 +179,11 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
 }
 
 pub fn GetFileMetaData(self: *AssetManager, id: AssetType) *FileMetaData {
-    return self.mAssetECS.GetComponent(FileMetaData, id).?;
+    if (self.mAssetECS.IsActiveEntityID(id)) {
+        return self.mAssetECS.GetComponent(FileMetaData, id).?;
+    } else {
+        return &self._internal.DefaultFileMetaData;
+    }
 }
 
 pub fn OnUpdate(self: *AssetManager, engine_context: *EngineContext) !void {

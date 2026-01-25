@@ -55,6 +55,7 @@ pub fn DeInit(self: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EngineContext::Deinit", @src());
     defer zone.Deinit();
 
+    self.mPhysicsManager.Deinit(self.EngineAllocator());
     try self.mAssetManager.Deinit(self);
     self.mAudioManager.Deinit();
     self.mGameEventManager.Deinit(self.EngineAllocator());

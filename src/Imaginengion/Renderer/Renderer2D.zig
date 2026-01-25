@@ -44,22 +44,34 @@ pub const TextureOptions = extern struct {
 };
 
 pub const QuadData = extern struct {
+    //transform data
     Position: [3]f32,
     _padding0: f32 = 0.0,
     Rotation: [4]f32,
     Scale: [3]f32,
-    _padding1: f32 = 0.0,
-    TexOptions: TextureOptions = .{},
+
+    //texture data
+    TilingFactor: f32 = 1.0,
+    Color: [4]f32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
+    TexCoords: [4]f32 = [4]f32{ 0, 0, 1, 1 },
     TexIndex: u64, // 8-byte aligned naturally here
+    _padding1: [2]f32 = [2]f32{ 0.0, 0.0 },
 };
 
 pub const GlyphData = extern struct {
+    //transofmr data
     Position: [3]f32,
     Scale: f32, // Moved here to fill the vec3 padding
     Rotation: [4]f32,
+
+    //texture data
+    TilingFactor: f32 = 1.0,
+    _padding1: [3]f32 = [3]f32{ 0.0, 0.0, 0.0 },
+    Color: [4]f32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
+    TexCoords: [4]f32 = [4]f32{ 0, 0, 1, 1 },
+
     AtlasBounds: [4]f32,
     PlaneBounds: [4]f32,
-    TextureOptions: TextureOptions,
     AtlasIndex: u64, // 8-byte aligned
     TexIndex: u64, // 8-byte aligned
 };
@@ -87,6 +99,8 @@ pub fn Init(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
     self.mGlyphBuffer = SSBO.Init(@sizeOf(GlyphData) * 100);
     self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_allocator, 100);
     self.mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint));
+
+    std.debug.print("size of Glyph struct: {}\n", .{@sizeOf(GlyphData)});
 }
 
 pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
@@ -152,12 +166,10 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
         .Position = [3]f32{ world_pos[0], world_pos[1], world_pos[2] },
         .Rotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] },
         .Scale = [3]f32{ world_scale[0], world_scale[1], world_scale[2] },
-        .TexOptions = TextureOptions{
-            .Color = [4]f32{ quad_component.mTexOptions.mColor[0], quad_component.mTexOptions.mColor[1], quad_component.mTexOptions.mColor[2], quad_component.mTexOptions.mColor[3] },
-            .TexCoords = [4]f32{ quad_component.mTexOptions.mTexCoords[0], quad_component.mTexOptions.mTexCoords[1], quad_component.mTexOptions.mTexCoords[2], quad_component.mTexOptions.mTexCoords[3] },
-            .TilingFactor = quad_component.mTexOptions.mTilingFactor,
-        },
         .TexIndex = texture_asset.GetBindlessID(),
+        .Color = [4]f32{ quad_component.mTexOptions.mColor[0], quad_component.mTexOptions.mColor[1], quad_component.mTexOptions.mColor[2], quad_component.mTexOptions.mColor[3] },
+        .TexCoords = [4]f32{ quad_component.mTexOptions.mTexCoords[0], quad_component.mTexOptions.mTexCoords[1], quad_component.mTexOptions.mTexCoords[2], quad_component.mTexOptions.mTexCoords[3] },
+        .TilingFactor = quad_component.mTexOptions.mTilingFactor,
     });
 }
 
@@ -200,15 +212,13 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
             .Position = [3]f32{ pen_x, pen_y, world_pos[2] },
             .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
             .Scale = text_component.mFontSize,
-            .TextureOptions = TextureOptions{
-                .Color = [4]f32{ text_component.mTexOptions.mColor[0], text_component.mTexOptions.mColor[1], text_component.mTexOptions.mColor[2], text_component.mTexOptions.mColor[3] },
-                .TexCoords = [4]f32{ text_component.mTexOptions.mTexCoords[0], text_component.mTexOptions.mTexCoords[1], text_component.mTexOptions.mTexCoords[2], text_component.mTexOptions.mTexCoords[3] },
-                .TilingFactor = text_component.mTexOptions.mTilingFactor,
-            },
             .AtlasBounds = [4]f32{ glyph_atlas_bounds[0], glyph_atlas_bounds[1], glyph_atlas_bounds[2], glyph_atlas_bounds[3] },
             .PlaneBounds = [4]f32{ glyph_plane_bounds[0], glyph_plane_bounds[1], glyph_plane_bounds[2], glyph_plane_bounds[3] },
             .AtlasIndex = atlas_asset.GetBindlessID(),
             .TexIndex = texture_asset.GetBindlessID(),
+            .Color = [4]f32{ text_component.mTexOptions.mColor[0], text_component.mTexOptions.mColor[1], text_component.mTexOptions.mColor[2], text_component.mTexOptions.mColor[3] },
+            .TexCoords = [4]f32{ text_component.mTexOptions.mTexCoords[0], text_component.mTexOptions.mTexCoords[1], text_component.mTexOptions.mTexCoords[2], text_component.mTexOptions.mTexCoords[3] },
+            .TilingFactor = text_component.mTexOptions.mTilingFactor,
         });
 
         var move_dist = glyph_width;

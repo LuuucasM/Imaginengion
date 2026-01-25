@@ -28,14 +28,19 @@ const InternalData = struct {
     Accumulator: f32 = 0,
     Contacts: std.ArrayList(Contact) = .{},
 };
-const PHYSICS_DT = 1 / 60;
-const PERCENT = 0.8;
-const SLOP = 0.01;
-const SOLVER_ITERS = 4;
-const SUB_STEPS = 2;
-const SUB_STEP_DT = PHYSICS_DT / SUB_STEPS;
+const PHYSICS_DT: f32 = 1.0 / 60.0;
+const PERCENT: f32 = 0.8;
+const SLOP: f32 = 0.01;
+const SOLVER_ITERS: u32 = 4;
+const SUB_STEPS: u32 = 2;
+const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
+const MAX_PHYSICS_STEPS: u32 = 6;
 
 _InternalData: InternalData = .{},
+
+pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
+    self._InternalData.Contacts.deinit(engine_allocator);
+}
 
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
     self._InternalData.Accumulator += engine_context.mDT;
@@ -43,6 +48,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
     const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
+        std.debug.print("infinite loop? ", .{});
         for (0..SUB_STEPS) |_| {
             for (rigid_body_arr.items) |entity_id| {
                 const entity = scene_manager.GetEntity(entity_id);
@@ -76,6 +82,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
             }
             self._InternalData.Contacts.clearRetainingCapacity();
         }
+        std.debug.print("yes sirrrrr\n", .{});
     }
 }
 

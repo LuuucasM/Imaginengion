@@ -116,10 +116,13 @@ pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
 
 fn EntityImguiRender(entity: Entity, engine_context: *EngineContext) !void {
     try ComponentRender(EntityIDComponent, entity, engine_context);
+    try ComponentRender(AudioComponent, entity, engine_context);
     try ComponentRender(EntityNameComponent, entity, engine_context);
     try ComponentRender(TransformComponent, entity, engine_context);
     try ComponentRender(CameraComponent, entity, engine_context);
+    try ComponentRender(ColliderComponent, entity, engine_context);
     try ComponentRender(QuadComponent, entity, engine_context);
+    try ComponentRender(RigidBodyComponent, entity, engine_context);
     try ComponentRender(AISlotComponent, entity, engine_context);
     try ComponentRender(PlayerSlotComponent, entity, engine_context);
     try ComponentRender(TextComponent, entity, engine_context);
@@ -129,7 +132,7 @@ fn EntityImguiRender(entity: Entity, engine_context: *EngineContext) !void {
 fn ComponentRender(comptime component_type: type, entity: Entity, engine_context: *EngineContext) !void {
     if (entity.HasComponent(component_type)) {
         switch (component_type.Category) {
-            .Unique => try PrintComponent(component_type, entity, engine_context),
+            .Unique => try PrintComponent(engine_context, component_type, entity, entity.GetComponent(EntityNameComponent).?),
             .Multiple => {
                 if (entity.GetComponent(component_type)) |component| {
                     var curr_id = component.mFirst;
@@ -138,7 +141,7 @@ fn ComponentRender(comptime component_type: type, entity: Entity, engine_context
                     while (true) : (if (curr_id == component.mFirst) break) {
                         const component_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-                        try PrintComponent(component_type, component_entity, engine_context);
+                        try PrintComponent(engine_context, component_type, component_entity, entity.GetComponent(EntityNameComponent).?);
 
                         const curr_comp = component_entity.GetComponent(component_type).?;
                         curr_id = curr_comp.mNext;
@@ -149,11 +152,11 @@ fn ComponentRender(comptime component_type: type, entity: Entity, engine_context
     }
 }
 
-fn PrintComponent(comptime component_type: type, entity: Entity, engine_context: *EngineContext) !void {
+fn PrintComponent(engine_context: *EngineContext, comptime component_type: type, entity: Entity, entity_name_component: *EntityNameComponent) !void {
     if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
         if (component_type.Editable == true) {
             try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
-                .ET_SelectComponentEvent = .{ .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity) },
+                .ET_SelectComponentEvent = .{ .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity, entity_name_component) },
             });
         }
     }

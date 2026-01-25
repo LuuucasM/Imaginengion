@@ -4,6 +4,9 @@ const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PhysicsComponent = @This();
 
+//imgui stuff
+const imgui = @import("../../Core/CImports.zig").imgui;
+
 pub const Category: ComponentCategory = .Unique;
 pub const Name: []const u8 = "PhysicsComponent";
 pub const Ind: usize = blk: {
@@ -17,3 +20,7 @@ pub const Ind: usize = blk: {
 mGravity: Vec3f32 = Vec3f32{ 0.0, -9.81, 0.0 },
 
 pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) !void {}
+
+pub fn EditorRender(self: *PhysicsComponent, _: *EngineContext) !void {
+    _ = imgui.igInputFloat3("Gravity", &self.mGravity[0], "%.3f", 0);
+}

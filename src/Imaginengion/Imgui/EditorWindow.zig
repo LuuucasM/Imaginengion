@@ -2,13 +2,16 @@ const std = @import("std");
 const Entity = @import("../GameObjects/Entity.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ComponentCategory = @import("../ECS/ECSManager.zig").ComponentCategory;
-const EntityComponentsList = @import("../GameObjects/Components.zig").ComponentsList;
+const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityNameComponent = EntityComponents.NameComponent;
+const EntityComponentsList = EntityComponents.ComponentsList;
 const SceneComponentsList = @import("../Scene/SceneComponents.zig").ComponentsList;
 const EditorWindow = @This();
 
 mEntity: Entity,
 mPtr: *anyopaque,
-mName: []const u8,
+mEntityName: *EntityNameComponent,
+mComponentName: []const u8,
 mComponentID: u32,
 mComponentCategory: ComponentCategory,
 mVTable: *const VTab,
@@ -17,7 +20,7 @@ const VTab = struct {
     EditorRender: *const fn (*anyopaque, *EngineContext) anyerror!void,
 };
 
-pub fn Init(obj: anytype, entity: Entity) EditorWindow {
+pub fn Init(obj: anytype, entity: Entity, entity_name_component: *EntityNameComponent) EditorWindow {
     const Ptr = @TypeOf(obj);
     const PtrInfo = @typeInfo(Ptr);
     std.debug.assert(PtrInfo == .pointer);
@@ -37,7 +40,8 @@ pub fn Init(obj: anytype, entity: Entity) EditorWindow {
     return EditorWindow{
         .mEntity = entity,
         .mPtr = obj,
-        .mName = ObjT.Name,
+        .mEntityName = entity_name_component,
+        .mComponentName = ObjT.Name,
         .mComponentID = ObjT.Ind,
         .mComponentCategory = ObjT.Category,
         .mVTable = &.{
@@ -50,8 +54,12 @@ pub fn EditorRender(self: EditorWindow, engine_context: *EngineContext) !void {
     try self.mVTable.EditorRender(self.mPtr, engine_context);
 }
 
+pub fn GetEntityName(self: EditorWindow) []const u8 {
+    return self.mEntityName.mName.items;
+}
+
 pub fn GetComponentName(self: EditorWindow) []const u8 {
-    return self.mName;
+    return self.mComponentName;
 }
 
 pub fn GetComponentID(self: EditorWindow) u32 {

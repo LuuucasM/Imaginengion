@@ -51,26 +51,40 @@ pub fn AsBox(self: *ColliderComponent) *Box {
 }
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
-    const shape_names = [_][]const u8{ "Box", "Sphere" };
-    var current_shape: i32 = @intFromEnum(self.mColliderShape);
-    const preview_text: []const u8 = shape_names[@as(usize, @intCast(current_shape))];
-    var preview_buf: [16]u8 = undefined;
+    const shape_names = [_][]const u8{ "Sphere", "Box" };
+
+    const current_tag = @as(std.meta.Tag(UColliderShape), self.mColliderShape);
+    const current_index = @intFromEnum(current_tag);
+
+    const preview_text = shape_names[current_index];
+    var preview_buf: [32]u8 = undefined;
     const preview_cstr = try std.fmt.bufPrintZ(&preview_buf, "{s}", .{preview_text});
 
-    if (imgui.igBeginCombo("Audio Type", @ptrCast(preview_cstr.ptr), imgui.ImGuiComboFlags_None)) {
+    if (imgui.igBeginCombo("Collider Type", @ptrCast(preview_cstr.ptr), 0)) {
         defer imgui.igEndCombo();
 
         for (shape_names, 0..) |name, i| {
-            var name_buf: [16]u8 = undefined;
+            var name_buf: [32]u8 = undefined;
             const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{name});
-            const is_selected = (current_shape == @as(i32, @intCast(i)));
+            const is_selected = (current_index == i);
+
             if (imgui.igSelectable_Bool(name_cstr.ptr, is_selected, 0, .{ .x = 0, .y = 0 })) {
-                current_shape = @as(i32, @intCast(i));
-                self.mColliderShape = @enumFromInt(@as(u8, @intCast(current_shape)));
+                const new_tag: std.meta.Tag(UColliderShape) = @enumFromInt(i);
+                self.mColliderShape = switch (new_tag) {
+                    .Sphere => .{ .Sphere = .{} },
+                    .Box => .{ .Box = .{} },
+                };
             }
-            if (is_selected) {
-                imgui.igSetItemDefaultFocus();
-            }
+            if (is_selected) imgui.igSetItemDefaultFocus();
         }
+    }
+
+    switch (self.mColliderShape) {
+        .Sphere => |*collider| {
+            _ = imgui.igInputFloat("Radius", &collider.mRadius, 0.1, 1.0, "%.3f", 0);
+        },
+        .Box => |*collider| {
+            _ = imgui.igInputFloat3("Half Extents", &collider.mHalfExtents[0], "%.3f", 0);
+        },
     }
 }

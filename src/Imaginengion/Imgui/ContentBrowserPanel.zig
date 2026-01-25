@@ -314,7 +314,7 @@ fn RenderImageButton(entry_name: []const u8, id: c_uint, thumbnail_size: f32) !v
     );
 }
 
-fn DragDropSourceBase(self: ContentBrowserPanel, engine_context: *EngineContext, entry_name: []const u8, payload_type: []const u8) !void {
+fn DragDropSourceBase(self: ContentBrowserPanel, _: *EngineContext, entry_name: []const u8, payload_type: []const u8) !void {
     const zone = Tracy.ZoneInit("ContentBrowser DragDrop Base", @src());
     defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -325,9 +325,7 @@ fn DragDropSourceBase(self: ContentBrowserPanel, engine_context: *EngineContext,
 
         const abs_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items, entry_name });
 
-        const rel_path = engine_context.mAssetManager.GetRelPath(abs_path);
-
-        _ = imgui.igSetDragDropPayload(payload_type.ptr, rel_path.ptr, rel_path.len, 0);
+        _ = imgui.igSetDragDropPayload(payload_type.ptr, abs_path.ptr, abs_path.len, 0);
     }
 }
 

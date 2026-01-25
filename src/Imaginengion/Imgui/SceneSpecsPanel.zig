@@ -5,6 +5,7 @@ const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
+const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 //const SceneTransformComponent = SceneComponents.TransformComponent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
@@ -47,6 +48,14 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     }
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
+        if (imgui.igBeginMenu("New Scene Component", true) == true) {
+            defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("Physics Component", "", false, true)) {
+                if (!self.mSceneLayer.HasComponent(ScenePhysicsComponent)) {
+                    _ = try self.mSceneLayer.AddComponent(ScenePhysicsComponent, null);
+                }
+            }
+        }
         try ImguiUtils.SceneScriptPopupMenu(engine_context);
     }
     //scene layer type
@@ -55,6 +64,10 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
 
     //const scene_transform = self.mSceneLayer.GetComponent(SceneTransformComponent).?;
     //try scene_transform.EditorRender(engine_context);
+
+    if (self.mSceneLayer.GetComponent(ScenePhysicsComponent)) |scene_physics| {
+        try scene_physics.EditorRender(engine_context);
+    }
 
     //TODO: print all the scripts. scripts since they cant hold data they dont really have a render so just need to print they exist
     const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;

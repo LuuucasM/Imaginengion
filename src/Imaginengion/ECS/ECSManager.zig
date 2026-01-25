@@ -79,6 +79,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return new_entity_id;
         }
 
+        pub fn IsActiveEntityID(self: *Self, entity_id: entity_t) bool {
+            return self.mEntityManager._IDsInUse.contains(entity_id);
+        }
+
         //for getting groups of entities
         pub fn GetGroup(self: Self, allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(entity_t) {
             _ValidateGroupQuery(query);

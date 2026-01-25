@@ -50,7 +50,7 @@ pub fn OnImguiRender(self: *CSEditorPanel, engine_context: *EngineContext) !void
         const id_name = entry.key_ptr.*;
         const editor_window = entry.value_ptr;
 
-        const entity_name = editor_window.mEntity.GetName();
+        const entity_name = editor_window.GetEntityName();
         const component_name = editor_window.GetComponentName();
 
         const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len; // Find first null byte or use full length
