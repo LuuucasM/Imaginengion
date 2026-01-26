@@ -73,7 +73,3 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
 
     return result;
 }
-
-fn SkipToken(reader: *std.json.Reader) !void {
-    _ = try reader.next();
-}

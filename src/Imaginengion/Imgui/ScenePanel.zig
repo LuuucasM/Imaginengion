@@ -321,9 +321,9 @@ fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entit
 }
 fn RenderChildEntities(self: *ScenePanel, engine_context: *EngineContext, parent_entity: Entity, scene_layer: SceneLayer, already_popup: *bool) anyerror!void {
     if (parent_entity.GetComponent(EntityParentComponent)) |parent_component| {
-        var curr_id = parent_component.mFirstChild;
+        var curr_id = parent_component.mFirstEntity;
 
-        while (true) : (if (curr_id == parent_component.mFirstChild) break) {
+        while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
             const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
 
             try self.RenderEntity(engine_context, child_entity, scene_layer, already_popup);

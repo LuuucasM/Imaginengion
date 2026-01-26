@@ -6,6 +6,8 @@ const SceneComponents = @import("SceneComponents.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const SceneIDComponent = SceneComponents.IDComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
+const SceneComponent = SceneComponents.SceneComponent;
+const SceneNameComponent = SceneComponents.NameComponent;
 const EntityIDComponent = EntityComponents.IDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntitySceneComponent = EntityComponents.SceneIDComponent;
@@ -49,6 +51,27 @@ pub fn Duplicate(self: SceneLayer) !SceneLayer {
     return try self.mECSManagerSCRef.DuplicateEntity(self.mSceneID);
 }
 
+pub fn AddBlankChild(self: *SceneLayer, child_type: ChildType) !SceneLayer {
+    return SceneLayer{
+        .mSceneID = try self.mECSManagerSCRef.AddChild(self.mSceneID, child_type),
+        .mECSManagerGORef = self.mECSManagerGORef,
+        .mECSManagerSCRef = self.mECSManagerSCRef,
+    };
+}
+
+pub fn AddChild(self: *SceneLayer, engine_context: *EngineContext, child_type: ChildType) !SceneLayer {
+    const child_scene = SceneLayer{
+        .mSceneID = try self.mECSManagerSCRef.AddChild(self.mSceneID, child_type),
+        .mECSManagerGORef = self.mECSManagerGORef,
+        .mECSManagerSCRef = self.mECSManagerSCRef,
+    };
+
+    _ = try child_scene.AddComponent(SceneComponent, null);
+    _ = try child_scene.AddComponent(SceneIDComponent, SceneIDComponent{ .ID = try GenUUID() });
+    const scene_name_component = try child_scene.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
+    _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
+}
+
 //for the entities in the scenes
 pub fn CreateBlankEntity(self: SceneLayer) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
@@ -67,7 +90,7 @@ pub fn CreateEntityWithUUID(self: SceneLayer, engine_allocator: std.mem.Allocato
     _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
 
     const new_name_component = try e.AddComponent(EntityNameComponent, .{ .mAllocator = engine_allocator });
-    _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
+    _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
 
     _ = try e.AddComponent(TransformComponent, null);
     e._CalculateWorldTransform();

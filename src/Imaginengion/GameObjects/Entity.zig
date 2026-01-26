@@ -47,10 +47,10 @@ pub fn GetCameraEntity(self: Entity) ?Entity {
     const zone = Tracy.ZoneInit("Entity GetCameraEntity", @src());
     defer zone.Deinit();
     if (self.GetComponent(EntityParentComponent)) |parent_component| {
-        var curr_id = parent_component.mFirstChild;
+        var curr_id = parent_component.mFirstEntity;
 
-        while (true) : (if (curr_id == parent_component.mFirstChild) break) {
-            const child_entity = Entity{ .mEntityID = parent_component.mFirstChild, .mECSManagerRef = self.mECSManagerRef };
+        while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
+            const child_entity = Entity{ .mEntityID = parent_component.mFirstEntity, .mECSManagerRef = self.mECSManagerRef };
 
             if (child_entity.HasComponent(CameraComponent)) {
                 return child_entity;

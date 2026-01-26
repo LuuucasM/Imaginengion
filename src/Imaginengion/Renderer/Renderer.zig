@@ -175,9 +175,9 @@ fn DrawChildren(self: *Renderer, engine_context: *EngineContext, entity: Entity)
 
     const parent_component = entity.GetComponent(EntityParentComponent).?;
 
-    var curr_id = parent_component.mFirstChild;
+    var curr_id = parent_component.mFirstEntity;
 
-    while (true) : (if (curr_id == parent_component.mFirstChild) break) {
+    while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
         try self.DrawShape(engine_context, child_entity);

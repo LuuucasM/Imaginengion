@@ -214,12 +214,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         //Human Inputs
         self.mWindow.PollInputEvents();
         try engine_context.mSystemEventManager.ProcessEvents(engine_context, .EC_Input);
-
-        if (self._ToolbarPanel.mState == .Play) {
-            _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateScript, &self.mGameSceneManager, .{});
-        }
-        _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnUpdateScript, &self.mEditorSceneManager, &self.mGameScene, .{});
-
         //for debugging uncomment this
         //_ = try ScriptsProcessor.RunEntityScript(&self.mEditorSceneManager, OnUpdateInputScript, .{}, engine_context);
 
@@ -242,8 +236,10 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         const game_logic_zone = Tracy.ZoneInit("Game Logic Section", @src());
         defer game_logic_zone.Deinit();
 
-        //Human game logic
-        //AI game logic
+        if (self._ToolbarPanel.mState == .Play) {
+            _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateScript, &self.mGameSceneManager, .{});
+        }
+        _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnUpdateScript, &self.mEditorSceneManager, &self.mGameScene, .{});
     }
     //-------------Game Logic End----------------
 

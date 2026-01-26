@@ -3,6 +3,9 @@ const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const IDComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
+//IMGUI
+const imgui = @import("../../Core/CImports.zig").imgui;
+
 ID: u64 = std.math.maxInt(u64),
 
 pub const Name: []const u8 = "IDComponent";
@@ -15,3 +18,9 @@ pub const Ind: usize = blk: {
 };
 
 pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
+
+pub fn EditorRender(self: *IDComponent, _: *EngineContext) !void {
+    var buff: [140]u8 = undefined;
+    const text = try std.fmt.bufPrintZ(&buff, "{d}\n", .{self.ID});
+    _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);
+}

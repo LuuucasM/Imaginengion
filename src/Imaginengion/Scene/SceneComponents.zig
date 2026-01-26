@@ -22,6 +22,8 @@ pub const ComponentsList = [_]type{
 };
 
 pub const SerializeList = [_]type{
+    IDComponent,
+    NameComponent,
     PhysicsComponent,
     SceneComponent,
     ScriptComponent,

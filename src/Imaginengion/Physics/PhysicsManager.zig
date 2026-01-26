@@ -22,6 +22,8 @@ const Quatf32 = LinAlg.Quatf32;
 const Collisions = @import("Collisions.zig");
 const Contact = Collisions.Contact;
 
+const Tracy = @import("../Core/Tracy.zig");
+
 const PhysicsManager = @This();
 
 const InternalData = struct {
@@ -38,10 +40,14 @@ const MAX_PHYSICS_STEPS: u32 = 6;
 _InternalData: InternalData = .{},
 
 pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
+    const zone = Tracy.ZoneInit("PhysicsManager::Deinit", @src());
+    defer zone.Deinit();
     self._InternalData.Contacts.deinit(engine_allocator);
 }
 
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+    const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
+    defer zone.Deinit();
     self._InternalData.Accumulator += engine_context.mDT;
 
     const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
@@ -57,6 +63,8 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
                 IntegrateVelocities(entity_rb, SUB_STEP_DT);
                 IntegratePositions(entity, entity_rb, SUB_STEP_DT);
             }
+
+            try self.UpdateWorldTransforms(engine_context, scene_manager);
 
             try self.DetectCollisions(engine_context, scene_manager);
 
@@ -77,6 +85,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
                         }
                     }
                 }
+                try self.UpdateWorldTransforms(engine_context, scene_manager);
             }
             self._InternalData.Contacts.clearAndFree(engine_context.EngineAllocator());
         }
@@ -84,6 +93,8 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
 }
 
 pub fn UpdateWorldTransforms(_: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+    const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransform", @src());
+    defer zone.Deinit();
     const transforms_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Not = .{ .mFirst = .{ .Component = EntityTransformComponent }, .mSecond = .{ .Component = ChildComponent } } });
 
     for (transforms_arr.items) |entity_id| {
@@ -105,9 +116,9 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, engine_context: *EngineContext,
 fn CalculateChildren(parent_entity: Entity, position_acc: Vec3f32, rotation_acc: Quatf32, scale_acc: Vec3f32) void {
     const parent_component = parent_entity.GetComponent(ParentComponent).?;
 
-    var curr_id = parent_component.mFirstChild;
+    var curr_id = parent_component.mFirstEntity;
 
-    while (true) : (if (curr_id == parent_component.mFirstChild) break) {
+    while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
         const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
 
         CalculateChildTransform(child_entity, position_acc, rotation_acc, scale_acc);
@@ -131,6 +142,8 @@ fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3f32, rotation
 }
 
 fn ApplyForces(entity: Entity, scene_manager: *SceneManager, entity_rb: *RigidBodyComponent) void {
+    const zone = Tracy.ZoneInit("PhysicsManager::ApplyForces", @src());
+    defer zone.Deinit();
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = scene_manager.GetSceneLayer(entity_scene_comp.SceneID);
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
@@ -141,16 +154,22 @@ fn ApplyForces(entity: Entity, scene_manager: *SceneManager, entity_rb: *RigidBo
 }
 
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
+    const zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
+    defer zone.Deinit();
     entity_rb.mVelocity += entity_rb.mForce * @as(Vec3f32, @splat(entity_rb.mInvMass * dt));
     entity_rb.mForce = std.mem.zeroes(Vec3f32);
 }
 
 fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) void {
+    const zone = Tracy.ZoneInit("PhysicsManager::IntegratePositions", @src());
+    defer zone.Deinit();
     const transform = entity.GetComponent(EntityTransformComponent).?;
     transform.Translation += entity_rb.mVelocity * @as(Vec3f32, @splat(dt));
 }
 
 fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+    const zone = Tracy.ZoneInit("PhysicsManager::DetectCollisions", @src());
+    defer zone.Deinit();
     const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
 
     for (0..colliders_arr.items.len) |i| {
@@ -193,6 +212,8 @@ fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene
 }
 
 fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
+    const zone = Tracy.ZoneInit("PhysicsManager::ResolveCollisions", @src());
+    defer zone.Deinit();
     const rv = rb_target.mVelocity - rb_origin.mVelocity;
 
     const vel_along_norm = LinAlg.VecDotVec(rv, contact.mNormal);
@@ -209,6 +230,8 @@ fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target
 }
 
 fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
+    const zone = Tracy.ZoneInit("PhysicsManager::PositionCorrection", @src());
+    defer zone.Deinit();
     const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin.mInvMass + rb_target.mInvMass) * PERCENT;
     const correction = @as(Vec3f32, @splat(correction_mag)) * contact.mNormal;
 

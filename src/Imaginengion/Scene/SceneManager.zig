@@ -79,34 +79,34 @@ pub fn Deinit(self: *SceneManager, engine_context: *EngineContext) !void {
 }
 
 pub fn CreateEntity(self: *SceneManager, engine_allocator: std.mem.Allocator, scene_id: SceneLayer.Type) !Entity {
-    const zone = Tracy.ZoneInit("SceneManager CreateEntity", @src());
+    const zone = Tracy.ZoneInit("SceneManager::CreateEntity", @src());
     defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     return scene_layer.CreateEntity(engine_allocator);
 }
 pub fn CreateEntityWithUUID(self: *SceneManager, engine_allocator: std.mem.Allocator, uuid: u128, scene_id: SceneLayer.Type) !Entity {
-    const zone = Tracy.ZoneInit("SceneManager CreateEntityWithUUID", @src());
+    const zone = Tracy.ZoneInit("SceneManager::CreateEntityWithUUID", @src());
     defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     return scene_layer.CreateEntityWithUUID(engine_allocator, uuid);
 }
 
 pub fn DestroyEntity(self: *SceneManager, engine_allocator: std.mem.Allocator, destroy_entity: Entity) !void {
-    const zone = Tracy.ZoneInit("SceneManager DestroyEntity", @src());
+    const zone = Tracy.ZoneInit("SceneManager::DestroyEntity", @src());
     defer zone.Deinit();
 
     try self.mECSManagerGO.DestroyEntity(engine_allocator, destroy_entity.mEntityID);
 }
 
 pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneLayer.Type) !Entity {
-    const zone = Tracy.ZoneInit("SceneManager DuplicateEntity", @src());
+    const zone = Tracy.ZoneInit("SceneManager::DuplicateEntity", @src());
     defer zone.Deinit();
     const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     scene_layer.DuplicateEntity(original_entity);
 }
 
 pub fn OnViewportResize(self: *SceneManager, frame_allocator: std.mem.Allocator, viewport_width: usize, viewport_height: usize) !void {
-    const zone = Tracy.ZoneInit("SceneManager OnViewportResize", @src());
+    const zone = Tracy.ZoneInit("SceneManager::OnViewportResize", @src());
     defer zone.Deinit();
     self.mViewportWidth = viewport_width;
     self.mViewportHeight = viewport_height;
@@ -125,15 +125,12 @@ pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, layer_type:
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 
-    const new_scene_component = SceneComponent{
-        .mLayerType = layer_type,
-    };
-    _ = try scene_layer.AddComponent(SceneComponent, new_scene_component);
+    _ = try scene_layer.AddComponent(SceneComponent, null);
 
     _ = try scene_layer.AddComponent(SceneIDComponent, .{ .ID = try GenUUID() });
 
     const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
-    _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("Unsaved Scene");
+    _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
 
     //_ = try scene_layer.AddComponent(SceneTransformComponent, null);
 
@@ -229,22 +226,14 @@ pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_laye
         const abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath.items, .Prj);
         try SceneSerializer.SerializeSceneText(frame_allocator, scene_layer, abs_path);
     } else {
-        const abs_path = try PlatformUtils.SaveFile(frame_allocator, ".imsc");
-        if (abs_path.len > 0) {
-            try self.SaveSceneAs(frame_allocator, scene_layer, abs_path);
-        }
+        try self.SaveSceneAs(frame_allocator, scene_layer);
     }
 }
-pub fn SaveSceneAs(_: *SceneManager, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, abs_path: []const u8) !void {
-    const scene_basename = std.fs.path.basename(abs_path);
-    const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
-    const scene_name = scene_basename[0..dot_location];
-
-    const scene_name_component = scene_layer.GetComponent(SceneNameComponent).?;
-    scene_name_component.mName.clearAndFree(scene_name_component.mAllocator);
-    _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write(scene_name);
-
-    try SceneSerializer.SerializeSceneText(frame_allocator, scene_layer, abs_path);
+pub fn SaveSceneAs(_: *SceneManager, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer) !void {
+    const abs_path = try PlatformUtils.SaveFile(frame_allocator, ".imsc");
+    if (abs_path.len > 0) {
+        try SceneSerializer.SerializeSceneText(frame_allocator, scene_layer, abs_path);
+    }
 }
 
 pub fn MoveScene(self: *SceneManager, frame_allocator: std.mem.Allocator, scene_id: SceneLayer.Type, move_to_pos: usize) !void {
