@@ -73,7 +73,9 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext) !voi
         }
         if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            try self.AddComponentPopupMenu(engine_context, entity);
+            inline for (EntityComponents.ComponentsList) |component_type| {
+                try self.AddComponentPopupMenu(engine_context, component_type, entity);
+            }
         }
         try EntityImguiRender(entity, engine_context);
     }
@@ -144,82 +146,63 @@ fn PrintComponent(engine_context: *EngineContext, comptime component_type: type,
     }
 }
 
-fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, entity: Entity) !void {
+fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, component_type: type, entity: Entity) !void {
+    if (!entity.HasComponent(component_type)) {
+        if (imgui.igMenuItem_Bool(component_type.Name.ptr, "", false, true)) {
+            defer imgui.igCloseCurrentPopup();
+
+            _ = try entity.AddComponent(component_type, null);
+
+            if (component_type == CameraComponent) {
+                try AddCameraComponent(engine_context, entity);
+            } else if (component_type == QuadComponent) {
+                AddQuadComponent(engine_context, entity);
+            } else if (component_type == TextComponent) {
+                try AddTextComponent(engine_context, entity);
+            } else if (component_type == AudioComponent) {
+                AddAudioComponent(engine_context, entity);
+            }
+        }
+    }
+}
+
+fn AddCameraComponent(engine_context: *EngineContext, entity: Entity) !void {
     const engine_allocator = engine_context.EngineAllocator();
-    if (entity.HasComponent(CameraComponent) == false) {
-        if (imgui.igMenuItem_Bool("CameraComponent", "", false, true) == true) {
-            defer imgui.igCloseCurrentPopup();
+    const new_camera_component = entity.GetComponent(CameraComponent).?;
 
-            var new_camera_component = CameraComponent{
-                .mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
-                .mViewportVertexArray = VertexArray.Init(),
-                .mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32)),
-                .mViewportIndexBuffer = undefined,
-            };
+    new_camera_component.mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
+    new_camera_component.mViewportVertexArray = VertexArray.Init();
+    new_camera_component.mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
+    new_camera_component.mViewportIndexBuffer = undefined;
 
-            const shader_asset = engine_context.mRenderer.GetSDFShader();
-            try new_camera_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
-            new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
+    const shader_asset = engine_context.mRenderer.GetSDFShader();
+    try new_camera_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
+    new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
 
-            var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
-            new_camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
+    var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
+    new_camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
 
-            var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
-            new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-            try new_camera_component.mViewportVertexArray.AddVertexBuffer(engine_allocator, new_camera_component.mViewportVertexBuffer);
-            new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
+    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
+    new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
+    try new_camera_component.mViewportVertexArray.AddVertexBuffer(engine_allocator, new_camera_component.mViewportVertexBuffer);
+    new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
 
-            new_camera_component.SetViewportSize(1600, 900);
-            _ = try entity.AddComponent(CameraComponent, new_camera_component);
-        }
-    }
-    if (entity.HasComponent(AISlotComponent) == false) {
-        if (imgui.igMenuItem_Bool("AISlotComponent", "", false, true) == true) {
-            defer imgui.igCloseCurrentPopup();
-            _ = try entity.AddComponent(AISlotComponent, null);
-        }
-    }
-    if (entity.HasComponent(PlayerSlotComponent) == false) {
-        if (imgui.igMenuItem_Bool("PlayerSlotComponent", "", false, true) == true) {
-            defer imgui.igCloseCurrentPopup();
-            _ = try entity.AddComponent(PlayerSlotComponent, null);
-        }
-    }
-    if (entity.HasComponent(QuadComponent) == false) {
-        if (imgui.igMenuItem_Bool("QuadComponent", "", false, true) == true) {
-            defer imgui.igCloseCurrentPopup();
-            const new_quad_component = try entity.AddComponent(QuadComponent, null);
-            new_quad_component.mTexture.mAssetManager = &engine_context.mAssetManager;
-        }
-    }
-    if (entity.HasComponent(TextComponent) == false) {
-        if (imgui.igMenuItem_Bool("TextComponent", "", false, true)) {
-            defer imgui.igCloseCurrentPopup();
-            const new_text_component = try entity.AddComponent(TextComponent, null);
-            new_text_component.mTextAssetHandle.mAssetManager = &engine_context.mAssetManager;
-            new_text_component.mTexHandle.mAssetManager = &engine_context.mAssetManager;
-            try new_text_component.mText.appendSlice(engine_allocator, "No Text");
-        }
-    }
-    if (imgui.igMenuItem_Bool("AudioComponent", "", false, true)) {
-        defer imgui.igCloseCurrentPopup();
-        const new_audio_component = try GameObjectUtils.AddMultiCompWTransform(AudioComponent, entity);
-        new_audio_component.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
-    }
-    if (entity.HasComponent(RigidBodyComponent) == false) {
-        if (imgui.igMenuItem_Bool("RigidBodyComponent", "", false, true)) {
-            defer imgui.igCloseCurrentPopup();
-            _ = try entity.AddComponent(RigidBodyComponent, null);
-        }
-    }
-    if (imgui.igMenuItem_Bool("ColliderComponent", "", false, true)) {
-        defer imgui.igCloseCurrentPopup();
-        _ = try GameObjectUtils.AddMultiCompWTransform(ColliderComponent, entity);
-    }
-    if (entity.HasComponent(MicComponent) == false) {
-        if (imgui.igMenuItem_Bool("MicComponent", "", false, true)) {
-            defer imgui.igCloseCurrentPopup();
-            _ = try entity.AddComponent(MicComponent, null);
-        }
-    }
+    new_camera_component.SetViewportSize(1600, 900);
+}
+
+fn AddQuadComponent(engine_context: *EngineContext, entity: Entity) void {
+    const new_quad_component = entity.GetComponent(QuadComponent).?;
+    new_quad_component.mTexture.mAssetManager = &engine_context.mAssetManager;
+}
+
+fn AddTextComponent(engine_context: *EngineContext, entity: Entity) !void {
+    const new_text_component = entity.GetComponent(TextComponent).?;
+    new_text_component.mTextAssetHandle.mAssetManager = &engine_context.mAssetManager;
+    new_text_component.mTexHandle.mAssetManager = &engine_context.mAssetManager;
+    try new_text_component.mText.appendSlice(engine_context.EngineAllocator(), "No Text");
+}
+
+fn AddAudioComponent(engine_context: *EngineContext, entity: Entity) void {
+    const new_audio_component = entity.GetComponent(AudioComponent).?;
+    new_audio_component.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
 }

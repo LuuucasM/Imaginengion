@@ -121,7 +121,7 @@ pub fn OnViewportResize(self: *SceneManager, frame_allocator: std.mem.Allocator,
     }
 }
 
-pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, layer_type: LayerType) !SceneLayer {
+pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, _: LayerType) !SceneLayer {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
 
@@ -131,8 +131,6 @@ pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, layer_type:
 
     const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
-
-    //_ = try scene_layer.AddComponent(SceneTransformComponent, null);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 

@@ -17,6 +17,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const EngineContext = @import("../Core/EngineContext.zig");
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
+const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(SceneLayer.Type);
 
 pub const Type = u32;
 pub const NullScene: Type = std.math.maxInt(Type);
@@ -51,7 +52,7 @@ pub fn Duplicate(self: SceneLayer) !SceneLayer {
     return try self.mECSManagerSCRef.DuplicateEntity(self.mSceneID);
 }
 
-pub fn AddBlankChild(self: *SceneLayer, child_type: ChildType) !SceneLayer {
+pub fn AddBlankChild(self: SceneLayer, child_type: ChildType) !SceneLayer {
     return SceneLayer{
         .mSceneID = try self.mECSManagerSCRef.AddChild(self.mSceneID, child_type),
         .mECSManagerGORef = self.mECSManagerGORef,
@@ -59,7 +60,7 @@ pub fn AddBlankChild(self: *SceneLayer, child_type: ChildType) !SceneLayer {
     };
 }
 
-pub fn AddChild(self: *SceneLayer, engine_context: *EngineContext, child_type: ChildType) !SceneLayer {
+pub fn AddChild(self: SceneLayer, engine_context: *EngineContext, child_type: ChildType) !SceneLayer {
     const child_scene = SceneLayer{
         .mSceneID = try self.mECSManagerSCRef.AddChild(self.mSceneID, child_type),
         .mECSManagerGORef = self.mECSManagerGORef,
@@ -70,6 +71,8 @@ pub fn AddChild(self: *SceneLayer, engine_context: *EngineContext, child_type: C
     _ = try child_scene.AddComponent(SceneIDComponent, SceneIDComponent{ .ID = try GenUUID() });
     const scene_name_component = try child_scene.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
+
+    return child_scene;
 }
 
 //for the entities in the scenes
@@ -103,31 +106,16 @@ pub fn Delete(self: SceneLayer, engine_context: *EngineContext) !void {
     try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DeleteSceneEvent = .{ .mScene = self } });
 }
 
-pub fn AddBlankChildEntity(self: SceneLayer, parent_entity: Entity, child_type: ChildType) !Entity {
-    const child_entity = parent_entity.AddChild(child_type);
-
-    _ = try child_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
-
-    return child_entity;
+pub fn AddBlankChildEntity(_: SceneLayer, parent_entity: Entity, child_type: ChildType) !Entity {
+    return parent_entity.AddBlankChild(child_type);
 }
 
-pub fn AddChildEntity(self: SceneLayer, engine_allocator: std.mem.Allocator, parent_entity: Entity, child_type: ChildType) !Entity {
-    const child_entity = parent_entity.AddChild(child_type);
-
-    _ = try child_entity.AddComponent(EntityIDComponent, .{ .ID = try GenUUID() });
-    _ = try child_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
-
-    const new_name_component = try child_entity.AddComponent(EntityNameComponent, .{ .mAllocator = engine_allocator });
-    _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("Unnamed Entity");
-
-    _ = try child_entity.AddComponent(TransformComponent, null);
-
-    return child_entity;
+pub fn AddChildEntity(_: SceneLayer, engine_allocator: std.mem.Allocator, parent_entity: Entity, child_type: ChildType) !Entity {
+    return try parent_entity.AddChild(engine_allocator, child_type);
 }
 
-pub fn DuplicateEntity(self: SceneLayer, original_entity: Entity) !Entity {
-    const new_entity = Entity{ .mEntityID = try self.mECSManagerGORef.DuplicateEntity(original_entity.mEntityID), .mSceneLayerRef = self.mECSManagerGORef };
-    return new_entity;
+pub fn DuplicateEntity(_: SceneLayer, original_entity: Entity) !Entity {
+    return original_entity.Duplicate();
 }
 
 pub fn FilterEntityByScene(self: SceneLayer, list_allocator: std.mem.Allocator, entity_result_list: *std.ArrayList(Entity.Type)) void {
@@ -156,9 +144,10 @@ pub fn FilterEntityScriptsByScene(self: SceneLayer, list_allocator: std.mem.Allo
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_script_component = self.mECSManagerGORef.GetComponent(EntityScriptComponent, scripts_result_list.items[i]).?;
-        const parent_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_script_component.mParent).?;
-        if (parent_scene_component.SceneID != self.mSceneID) {
+        const script_entity = Entity{ .mEntityID = scripts_result_list.items[i], .mECSManagerRef = self.mECSManagerGORef };
+        const scene_component = script_entity.GetComponent(EntitySceneComponent).?;
+
+        if (scene_component.SceneID != self.mSceneID) {
             scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
             end_index -= 1;
         } else {
@@ -176,8 +165,11 @@ pub fn FilterSceneScriptsByScene(self: SceneLayer, list_allocator: std.mem.Alloc
     var i: usize = 0;
 
     while (i < end_index) {
-        const scene_script_component = self.mECSManagerSCRef.GetComponent(SceneScriptComponent, scripts_result_list.items[i]).?;
-        if (scene_script_component.mParent != self.mSceneID) {
+        const script_scene_layer = SceneLayer{ .mSceneID = scripts_result_list.items[i], .mECSManagerGORef = self.mECSManagerGORef, .mECSManagerSCRef = self.mECSManagerSCRef };
+        std.debug.assert(script_scene_layer.HasComponent(SceneChildComponent));
+
+        const script_scene_component = script_scene_layer.GetComponent(SceneChildComponent).?;
+        if (script_scene_component.mParent != self.mSceneID) {
             scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
             end_index -= 1;
         } else {

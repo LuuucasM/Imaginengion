@@ -137,7 +137,7 @@ fn ReaderInit(engine_context: *EngineContext, scene_file: std.fs.File) !std.json
     var io_reader = std.io.Reader.fixed(scene_contents.items);
     return std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
 }
-fn SerializeScene(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+fn SerializeScene(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) anyerror!void {
     try write_stream.beginObject();
 
     inline for (SceneComponents.SerializeList) |component_type| {
@@ -159,39 +159,37 @@ fn SerializeUniqueSceneComponent(write_stream: *WriteStream, scene_layer: SceneL
 }
 
 fn SerializeSceneParentComp(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
-    if (scene_layer.GetComponent(SceneParentComponent)) {
-        if (scene_layer.GetComponent(SceneParentComponent)) |parent_component| {
-            if (parent_component.mFirstEntity != Entity.NullEntity) {
-                var curr_id = parent_component.mFirstEntity;
+    if (scene_layer.GetComponent(SceneParentComponent)) |parent_component| {
+        if (parent_component.mFirstEntity != Entity.NullEntity) {
+            var curr_id = parent_component.mFirstEntity;
 
-                while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-                    const child_entity = SceneLayer{ .mSceneID = curr_id, .mECSManagerGORef = scene_layer.mECSManagerGORef, .mECSManagerSCRef = scene_layer.mECSManagerSCRef };
+            while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
+                const child_entity = SceneLayer{ .mSceneID = curr_id, .mECSManagerGORef = scene_layer.mECSManagerGORef, .mECSManagerSCRef = scene_layer.mECSManagerSCRef };
 
-                    try write_stream.objectField("ChildEntity");
+                try write_stream.objectField("ChildEntity");
 
-                    try write_stream.beginObject();
-                    try SerializeScene(write_stream, child_entity);
-                    try write_stream.endObject();
+                try write_stream.beginObject();
+                try SerializeScene(write_stream, child_entity, frame_allocator);
+                try write_stream.endObject();
 
-                    const child_component = child_entity.GetComponent(EntityChildComponent).?;
-                    curr_id = child_component.mNext;
-                }
+                const child_component = child_entity.GetComponent(EntityChildComponent).?;
+                curr_id = child_component.mNext;
             }
-            if (parent_component.mFirstScript != Entity.NullEntity) {
-                var curr_id = parent_component.mFirstScript;
+        }
+        if (parent_component.mFirstScript != Entity.NullEntity) {
+            var curr_id = parent_component.mFirstScript;
 
-                while (true) : (if (curr_id == parent_component.mFirstScript) break) {
-                    const script_entity = SceneLayer{ .mSceneID = curr_id, .mECSManagerGORef = scene_layer.mECSManagerGORef, .mECSManagerSCRef = scene_layer.mECSManagerSCRef };
+            while (true) : (if (curr_id == parent_component.mFirstScript) break) {
+                const script_entity = SceneLayer{ .mSceneID = curr_id, .mECSManagerGORef = scene_layer.mECSManagerGORef, .mECSManagerSCRef = scene_layer.mECSManagerSCRef };
 
-                    try write_stream.objectField("ScriptEntity");
+                try write_stream.objectField("ScriptEntity");
 
-                    try write_stream.beginObject();
-                    try SerializeScene(write_stream, script_entity, frame_allocator);
-                    try write_stream.endObject();
+                try write_stream.beginObject();
+                try SerializeScene(write_stream, script_entity, frame_allocator);
+                try write_stream.endObject();
 
-                    const child_component = script_entity.GetComponent(EntityChildComponent).?;
-                    curr_id = child_component.mNext;
-                }
+                const child_component = script_entity.GetComponent(EntityChildComponent).?;
+                curr_id = child_component.mNext;
             }
         }
     }

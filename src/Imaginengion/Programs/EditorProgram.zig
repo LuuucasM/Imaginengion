@@ -400,7 +400,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
         .ET_SaveSceneAsEvent => |e| {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.mAbsPath.len > 0) {
-                    try self.mGameSceneManager.SaveSceneAs(engine_context.FrameAllocator(), scene_layer, e.mAbsPath);
+                    try self.mGameSceneManager.SaveSceneAs(engine_context.FrameAllocator(), scene_layer);
                 }
             }
         },

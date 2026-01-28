@@ -283,7 +283,7 @@ fn RenderParentEntity(self: *ScenePanel, engine_context: *EngineContext, entity:
         try self.SelectEntity(engine_context, entity, scene_layer);
     }
 
-    try self.HandleEntityContextMenu(engine_context, entity, entity_name, scene_layer, already_popup);
+    try self.HandleEntityContextMenu(engine_context, entity, entity_name, already_popup);
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
@@ -296,7 +296,7 @@ fn RenderLeafEntity(self: *ScenePanel, engine_context: *EngineContext, entity: E
         try self.SelectEntity(engine_context, entity, scene_layer);
     }
 
-    try self.HandleEntityContextMenu(engine_context, entity, entity_name, scene_layer, already_popup);
+    try self.HandleEntityContextMenu(engine_context, entity, entity_name, already_popup);
 }
 
 fn SelectEntity(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, scene_layer: SceneLayer) !void {
@@ -304,14 +304,14 @@ fn SelectEntity(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, 
     try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 }
 
-fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, entity_name: [*:0]const u8, scene_layer: SceneLayer, already_popup: *bool) !void {
+fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, entity_name: [*:0]const u8, already_popup: *bool) !void {
     //if item is right clicked open up menu that will allow you to add an entity to the scene
     if (!already_popup.* and imgui.igBeginPopupContextItem(entity_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try scene_layer.AddChildEntity(engine_context.EngineAllocator(), entity);
+            _ = try entity.AddChild(engine_context.EngineAllocator(), .Entity);
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {

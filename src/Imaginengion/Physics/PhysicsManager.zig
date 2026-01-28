@@ -107,8 +107,9 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, engine_context: *EngineContext,
         transform.SetWorldScale(transform.Scale);
 
         if (entity.GetComponent(ParentComponent)) |parent_component| {
-            _ = parent_component;
-            CalculateChildren(entity, transform.GetWorldPosition(), transform.GetWorldRotation(), transform.GetWorldScale());
+            if (parent_component.mFirstEntity != Entity.NullEntity) {
+                CalculateChildren(entity, transform.GetWorldPosition(), transform.GetWorldRotation(), transform.GetWorldScale());
+            }
         }
     }
 }

@@ -86,10 +86,9 @@ pub fn OnImguiRender(engine_context: *EngineContext, panel_opens: PanelOpen) !vo
                 try engine_context.mImguiEventManager.Insert(engine_allocator, new_event);
             }
             if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
-                const abs_path = try PlatformUtils.SaveFile(engine_allocator, ".imsc");
                 const new_event = ImguiEvent{
                     .ET_SaveSceneAsEvent = .{
-                        .mAbsPath = abs_path,
+                        .mAbsPath = "",
                         .mAllocator = engine_allocator,
                     },
                 };

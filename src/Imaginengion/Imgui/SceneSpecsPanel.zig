@@ -62,9 +62,6 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     const scene_component = self.mSceneLayer.GetComponent(SceneComponent).?;
     imgui.igText(@tagName(scene_component.mLayerType));
 
-    //const scene_transform = self.mSceneLayer.GetComponent(SceneTransformComponent).?;
-    //try scene_transform.EditorRender(engine_context);
-
     if (self.mSceneLayer.GetComponent(ScenePhysicsComponent)) |scene_physics| {
         try scene_physics.EditorRender(engine_context);
     }

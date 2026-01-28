@@ -2,13 +2,13 @@ const std = @import("std");
 const EngineContext = @import("IM").EngineContext;
 const Entity = @import("IM").Entity;
 const ScriptType = @import("IM").ScriptType;
-const OnUpdateInputScript = @This();
+const EntityOnUpdateScript = @This();
 
 /// Function that gets executed every frame after polling inputs and input events
 /// if this function returns true it allows the event to be propegated to other layers/systems
 /// if it returns false it will stop at this layer
 pub export fn Run(engine_context: *EngineContext, self: *const Entity) callconv(.c) bool {
-    _ValidateScript(OnUpdateInputScript);
+    _ValidateScript(EntityOnUpdateScript);
     _ = engine_context;
     _ = self;
     //your code goes here

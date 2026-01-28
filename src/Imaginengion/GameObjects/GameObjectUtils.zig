@@ -15,12 +15,14 @@ pub fn AddScriptToEntity(engine_context: *EngineContext, entity: Entity, rel_pat
     var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), rel_path_script, path_type);
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
+    std.debug.assert(script_asset.mScriptType == .EntityInputPressed or script_asset.mScriptType == .EntityOnUpdate);
+
     // Create the script component with the asset handle
     const new_script_component = ScriptComponent{
         .mScriptAssetHandle = new_script_handle,
     };
 
-    const new_script_entity = try entity.AddChild(.Script);
+    const new_script_entity = try entity.AddChild(engine_context.EngineAllocator(), .Script);
 
     _ = try new_script_entity.AddComponent(ScriptComponent, new_script_component);
 
@@ -32,6 +34,6 @@ pub fn AddScriptToEntity(engine_context: *EngineContext, entity: Entity, rel_pat
         .EntityOnUpdate => {
             _ = try new_script_entity.AddComponent(OnUpdateScript, null);
         },
-        else => {},
+        else => @panic("this shouldnt happen!\n"),
     }
 }

@@ -7,7 +7,7 @@ const Quatf32 = @import("IM").Quatf32;
 const Vec2f32 = @import("IM").Vec2f32;
 const ScriptType = @import("IM").ScriptType;
 const TransformComponent = @import("IM").EntityComponents.TransformComponent;
-const OnUpdateInputTemplate = @This();
+const OnUpdateTemplate = @This();
 
 /// Function that gets executed every frame after polling inputs and input events
 /// if this function returns true it allows the event to be propegated to other layers/systems

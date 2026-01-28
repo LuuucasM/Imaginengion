@@ -2,6 +2,7 @@ const std = @import("std");
 const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj;
 const Components = @import("Components.zig");
 const IDComponent = Components.IDComponent;
+const SceneIDComponent = Components.SceneIDComponent;
 const NameComponent = Components.NameComponent;
 const CameraComponent = Components.CameraComponent;
 const TransformComponent = Components.TransformComponent;
@@ -14,6 +15,8 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
+const EntityComponents = @import("Components.zig");
+const GenUUID = @import("../Core/UUID.zig").GenUUID;
 
 pub const Type = u32;
 pub const NullEntity: Type = std.math.maxInt(Type);
@@ -28,8 +31,19 @@ pub fn AddComponent(self: Entity, comptime component_type: type, component: ?com
 pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     self.mECSManagerRef.RemoveComponent(engine_allocator, component_type, self.mEntityID);
 }
-pub fn AddChild(self: Entity, child_type: ChildType) !Entity {
-    return Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type), .mECSManagerRef = self.mECSManagerRef };
+pub fn AddBlankChild(self: Entity, child_type: ChildType) !Entity {
+    const new_child = Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type) };
+    _ = try new_child.AddComponent(SceneIDComponent, self.GetComponent(SceneIDComponent).?.*);
+    return new_child;
+}
+pub fn AddChild(self: Entity, engine_allocator: std.mem.Allocator, child_type: ChildType) !Entity {
+    const new_child = Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type), .mECSManagerRef = self.mECSManagerRef };
+    _ = try new_child.AddComponent(IDComponent, .{ .ID = try GenUUID() });
+    _ = try new_child.AddComponent(SceneIDComponent, self.GetComponent(SceneIDComponent).?.*);
+    const new_name_component = try new_child.AddComponent(NameComponent, .{ .mAllocator = engine_allocator });
+    _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
+    if (child_type == .Entity) _ = try new_child.AddComponent(TransformComponent, null);
+    return new_child;
 }
 pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_type {
     return self.mECSManagerRef.GetComponent(component_type, self.mEntityID);
@@ -86,7 +100,7 @@ pub fn GetPossessable(self: Entity) ?Entity {
 }
 
 pub fn Duplicate(self: Entity) !Entity {
-    return try self.mECSManagerRef.DuplicateEntity(self.mEntityID);
+    return Entity{ .mEntityID = try self.mECSManagerRef.DuplicateEntity(self.mEntityID), .mECSManagerRef = self.mECSManagerRef };
 }
 pub fn Delete(self: Entity, engine_context: *EngineContext) !void {
     try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroyEntityEvent = .{ .mEntity = self } });
