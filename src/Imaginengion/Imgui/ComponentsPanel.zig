@@ -16,17 +16,9 @@ const TextureFormat = FrameBuffer.TextureFormat;
 const ComponentsPanel = @This();
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const AISlotComponent = EntityComponents.AISlotComponent;
-const EntityIDComponent = EntityComponents.IDComponent;
 const CameraComponent = EntityComponents.CameraComponent;
-const ColliderComponent = EntityComponents.ColliderComponent;
-const MicComponent = EntityComponents.MicComponent;
-const EntityNameComponent = EntityComponents.NameComponent;
-const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const QuadComponent = EntityComponents.QuadComponent;
-const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const TextComponent = EntityComponents.TextComponent;
-const TransformComponent = EntityComponents.TransformComponent;
 const AudioComponent = EntityComponents.AudioComponent;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
@@ -69,7 +61,7 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext) !voi
         }
         if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            inline for (EntityComponents.ComponentsList) |component_type| {
+            inline for (EntityComponents.ComponentPanelList) |component_type| {
                 try self.AddComponentPopupMenu(engine_context, component_type, entity);
             }
         }
@@ -113,7 +105,7 @@ pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
 }
 
 fn EntityImguiRender(entity: Entity, engine_context: *EngineContext) !void {
-    inline for (EntityComponents.ComponentsList) |component_type| {
+    inline for (EntityComponents.ComponentPanelList) |component_type| {
         try ComponentRender(engine_context, component_type, entity);
     }
 }

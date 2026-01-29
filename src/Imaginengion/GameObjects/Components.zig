@@ -21,6 +21,7 @@ pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
 pub const OnUpdateScript = TagComponents.OnUpdateScript;
 
 pub const ComponentsList = [_]type{
+    //components
     AISlotComponent,
     AudioComponent,
     CameraComponent,
@@ -34,6 +35,8 @@ pub const ComponentsList = [_]type{
     SceneIDComponent,
     TextComponent,
     TransformComponent,
+
+    //scripts
     ScriptComponent,
     OnInputPressedScript,
     OnUpdateScript,
@@ -53,6 +56,21 @@ pub const SerializeList = [_]type{
     TextComponent,
     TransformComponent,
     ScriptComponent,
+};
+
+pub const ComponentPanelList = [_]type{
+    AISlotComponent,
+    AudioComponent,
+    CameraComponent,
+    ColliderComponent,
+    IDComponent,
+    MicComponent,
+    NameComponent,
+    PlayerSlotComponent,
+    QuadComponent,
+    RigidBodyComponent,
+    TextComponent,
+    TransformComponent,
 };
 
 pub const ScriptList = [_]type{
