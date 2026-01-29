@@ -99,8 +99,6 @@ pub fn Init(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
     self.mGlyphBuffer = SSBO.Init(@sizeOf(GlyphData) * 100);
     self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_allocator, 100);
     self.mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint));
-
-    std.debug.print("size of Glyph struct: {}\n", .{@sizeOf(GlyphData)});
 }
 
 pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {

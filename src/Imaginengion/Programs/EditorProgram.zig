@@ -205,7 +205,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     const engine_allocator = engine_context.EngineAllocator();
-
     //-------------Inputs Begin------------------
     {
         const input_zone = Tracy.ZoneInit("Inputs Section", @src());
@@ -277,22 +276,19 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             try self._ContentBrowserPanel.OnImguiRender(engine_context);
             try self._AssetHandlePanel.OnImguiRender(engine_context);
-
             try self._ScenePanel.OnImguiRender(engine_context, &self.mGameSceneManager);
-
             for (self._SceneSpecList.items) |*scene_spec_panel| {
                 try scene_spec_panel.OnImguiRender(engine_context);
             }
+
             try self._ComponentsPanel.OnImguiRender(engine_context);
             try self._ScriptsPanel.OnImguiRender(engine_context);
             try self._CSEditorPanel.OnImguiRender(engine_context);
-
             try self.RenderBuffers(engine_context);
 
             try self._StatsPanel.OnImguiRender(engine_context.mDT, engine_context.mRenderer.GetRenderStats());
 
             try self._ToolbarPanel.OnImguiRender(engine_context, &self.mGameSceneManager);
-
             const opens = PanelOpen{
                 .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
                 .mCSEditorPanel = self._CSEditorPanel.mP_Open,

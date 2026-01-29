@@ -106,11 +106,9 @@ fn RenderScenes(self: *ScenePanel, engine_context: *EngineContext, scene_manager
 
     //sort the scenes so we can display them in the correct order which matters for handling events and stuff
     std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
-
     for (stack_pos_scenes.items) |scene_id| {
         //setting up variables to be used later
         const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
-
         try self.RenderScene(engine_context, scene_layer, scene_manager, name_entities, already_popup);
     }
 }
@@ -122,7 +120,6 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent).?;
 
     const scene_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ scene_name_component.mName.items, scene_id }, 0);
-
     //push ID so that each scene can have their unique display
     imgui.igPushID_Str(scene_name.ptr);
     defer imgui.igPopID();
@@ -146,11 +143,8 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
     }
 
     try self.HandleScenePopupContext(engine_context, scene_layer, scene_name, already_popup);
-
     self.DrawSceneBorder(scene_component.mLayerType);
-
     try self.HandleSceneDragDrop(engine_context, scene_layer);
-
     if (is_tree_open) {
         defer imgui.igTreePop();
         try self.RenderSceneEntities(engine_context, scene_manager, name_entities, scene_layer, already_popup);

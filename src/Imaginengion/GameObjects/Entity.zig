@@ -32,7 +32,7 @@ pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, compti
     self.mECSManagerRef.RemoveComponent(engine_allocator, component_type, self.mEntityID);
 }
 pub fn AddBlankChild(self: Entity, child_type: ChildType) !Entity {
-    const new_child = Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type) };
+    const new_child = Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type), .mECSManagerRef = self.mECSManagerRef };
     _ = try new_child.AddComponent(SceneIDComponent, self.GetComponent(SceneIDComponent).?.*);
     return new_child;
 }

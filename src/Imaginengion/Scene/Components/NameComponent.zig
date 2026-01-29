@@ -5,7 +5,6 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
 
 pub const Name: []const u8 = "NameComponent";
 pub const Ind: usize = blk: {
@@ -47,10 +46,12 @@ pub fn jsonStringify(self: *const NameComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!NameComponent {
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!NameComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
     var result: NameComponent = .{};
+
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
     while (true) {
         const token = try reader.next();
@@ -62,9 +63,9 @@ pub fn jsonParse(allocator: std.mem.Allocator, reader: anytype, options: std.jso
         };
 
         if (std.mem.eql(u8, field_name, "Name")) {
-            const name = try std.json.innerParse([]const u8, allocator, reader, options);
-            result.mAllocator = allocator;
-            result.mName.appendSlice(result.mAllocator, name) catch {
+            const name = try std.json.innerParse([]const u8, frame_allocator, reader, options);
+            result.mAllocator = engine_context.EngineAllocator();
+            result.mName.appendSlice(engine_context.EngineAllocator(), name) catch {
                 @panic("error appending slice, error out of memory");
             };
         }

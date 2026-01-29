@@ -170,24 +170,15 @@ pub fn RemoveScene(self: *SceneManager, engine_context: *EngineContext, destroy_
     try self.mECSManagerSC.DestroyEntity(engine_context.EngineAllocator(), destroy_scene.mSceneID);
 }
 
-pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, abs_path: []const u8) !SceneLayer.Type {
+pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, abs_path: []const u8) !SceneLayer {
     const new_scene_id = try self.mECSManagerSC.CreateEntity();
     const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-
-    //get the scene name from the file name
-    const scene_basename = std.fs.path.basename(abs_path);
-    const dot_location = std.mem.indexOf(u8, scene_basename, ".") orelse 0;
-    const scene_name = scene_basename[0..dot_location];
-
-    //add name component to scene
-    const new_scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
-    _ = try new_scene_name_component.mName.writer(new_scene_name_component.mAllocator).write(scene_name);
 
     try SceneSerializer.DeSerializeSceneText(engine_context, scene_layer, abs_path);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
-    return new_scene_id;
+    return scene_layer;
 }
 
 pub fn SaveAllScenes(self: *SceneManager, engine_context: *EngineContext) !void {

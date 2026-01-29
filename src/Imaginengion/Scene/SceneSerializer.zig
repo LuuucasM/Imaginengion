@@ -36,7 +36,7 @@ const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(SceneLayer.Type);
 const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(SceneLayer.Type);
-const SceneTransformComponent = SceneComponents.TransformComponent;
+const SceneNameComponent = SceneComponents.NameComponent;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
@@ -66,7 +66,12 @@ pub fn SerializeSceneText(frame_allocator: std.mem.Allocator, scene_layer: Scene
 pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
     const scene_file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
 
-    var json_reader = try ReaderInit(engine_context, scene_file);
+    const scene_contents = try GetSceneContents(engine_context, scene_file);
+
+    var io_reader = std.io.Reader.fixed(scene_contents.items);
+    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
+
+    try SkipToken(&json_reader); //skip the very first begin object at the top level of the file
 
     try DeSerializeScene(engine_context, &json_reader, scene_layer);
 
@@ -77,7 +82,12 @@ pub fn DeSerializeSceneText(engine_context: *EngineContext, scene_layer: SceneLa
 pub fn SceneReloadText(engine_context: *EngineContext, scene_layer: SceneLayer, scene_component: *SceneComponent) !void {
     const scene_file = try engine_context.mAssetManager.OpenFile(scene_component.mScenePath.items, .Prj);
 
-    var json_reader = try ReaderInit(engine_context, scene_file);
+    const scene_contents = try GetSceneContents(engine_context, scene_file);
+
+    var io_reader = std.io.Reader.fixed(scene_contents.items);
+    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
+
+    try SkipToken(&json_reader); //skip the very first begin object at the top level of the file
 
     try DeSerializeSceneEntities(engine_context, &json_reader, scene_layer);
 }
@@ -127,16 +137,15 @@ pub fn DeSerializeEntityText(scene_layer: SceneLayer, abs_path: []const u8, fram
     try DeSerializeEntity(&reader, new_entity, scene_layer, frame_allocator);
 }
 
-fn ReaderInit(engine_context: *EngineContext, scene_file: std.fs.File) !std.json.Reader {
-    //read contents
+fn GetSceneContents(engine_context: *EngineContext, scene_file: std.fs.File) !std.ArrayList(u8) {
     const file_size = try scene_file.getEndPos();
     var scene_contents = try std.ArrayList(u8).initCapacity(engine_context.FrameAllocator(), file_size);
     try scene_contents.resize(engine_context.FrameAllocator(), file_size);
     _ = try scene_file.readAll(scene_contents.items);
 
-    var io_reader = std.io.Reader.fixed(scene_contents.items);
-    return std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
+    return scene_contents;
 }
+
 fn SerializeScene(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) anyerror!void {
     try write_stream.beginObject();
 
