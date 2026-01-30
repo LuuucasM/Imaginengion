@@ -1,13 +1,13 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const IDComponent = @This();
+const EntitySceneComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const Editable: bool = false;
-pub const Name: []const u8 = "IDComponent";
+pub const Name: []const u8 = "EntitySceneComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == IDComponent) {
+        if (component_type == EntitySceneComponent) {
             break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
@@ -15,4 +15,4 @@ pub const Ind: usize = blk: {
 
 SceneID: u32 = std.math.maxInt(u32),
 
-pub fn Deinit(_: *IDComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *EntitySceneComponent, _: *EngineContext) !void {}

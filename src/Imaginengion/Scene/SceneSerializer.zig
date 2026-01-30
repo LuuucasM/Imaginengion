@@ -7,15 +7,10 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Mat4f32 = LinAlg.Mat4f32;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const AISlotComponent = EntityComponents.AISlotComponent;
 const CameraComponent = EntityComponents.CameraComponent;
-const EntityIDComponent = EntityComponents.IDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
-const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
-const QuadComponent = EntityComponents.QuadComponent;
-const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
-const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityTextComponent = EntityComponents.TextComponent;
@@ -31,7 +26,6 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const Renderer = @import("../Renderer/Renderer.zig");
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
-const SceneIDComponent = SceneComponents.IDComponent;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(SceneLayer.Type);

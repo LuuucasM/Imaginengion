@@ -15,7 +15,5 @@ pub const OnSceneStartScript = struct {
             }
         }
     };
-
-    bit: u1 = 0,
     pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) !void {}
 };

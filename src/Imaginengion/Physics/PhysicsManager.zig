@@ -7,7 +7,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
-const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
@@ -34,9 +34,8 @@ const PHYSICS_DT: f32 = 1.0 / 60.0;
 const PERCENT: f32 = 0.8;
 const SLOP: f32 = 0.01;
 const SOLVER_ITERS: u32 = 4;
-const SUB_STEPS: u32 = 2;
+const SUB_STEPS: u32 = 4;
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
-const MAX_PHYSICS_STEPS: u32 = 6;
 _InternalData: InternalData = .{},
 
 pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {

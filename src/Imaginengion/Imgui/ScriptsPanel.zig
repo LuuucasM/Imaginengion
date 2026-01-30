@@ -9,6 +9,8 @@ const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const ScriptAsset = Assets.ScriptAsset;
 const Components = @import("../GameObjects/Components.zig");
+const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const OnUpdateInputScript = Components.OnUpdateInputScript;
 
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
@@ -27,8 +29,6 @@ pub fn Init(self: ScriptsPanel) void {
 pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
     defer zone.Deinit();
-
-    const frame_allocator = engine_context.FrameAllocator();
 
     if (self._P_Open == false) return;
     _ = imgui.igBegin("Scripts", null, 0);
@@ -49,30 +49,27 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
         if (self.mSelectedEntity) |entity| {
-            if (entity.GetComponent(EntityScriptComponent)) |script_component| {
-                const ecs = entity.mECSManagerRef;
+            if (entity.GetComponent(EntityParentComponent)) |parent_component| {
+                if (parent_component.mFirstScript != Entity.NullEntity) {
+                    var curr_id = parent_component.mFirstScript;
+                    while (true) : (if (curr_id == parent_component.mFirstScript) break) {
+                        const script_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
 
-                var curr_id = script_component.mFirst;
-                var curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
+                        const script_name = script_entity.GetName();
 
-                while (true) : (if (curr_id == script_component.mFirst) break) {
-                    const asset_handle = curr_comp.mScriptAssetHandle;
-                    const script_file_data = asset_handle.GetFileMetaData();
+                        if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
 
-                    const script_name = try std.fmt.allocPrint(frame_allocator, "{s}###{d}", .{ std.fs.path.basename(script_file_data.mRelPath.items), curr_id });
+                        if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+                            defer imgui.igEndPopup();
 
-                    if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
-
-                    if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
-                        defer imgui.igEndPopup();
-
-                        if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mEntityID = curr_id, .mComponentType = .ScriptComponent } });
+                            if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
+                                try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroyEntityEvent = .{ .mEntity = script_entity } });
+                            }
                         }
-                    }
 
-                    curr_id = curr_comp.mNext;
-                    curr_comp = ecs.GetComponent(EntityScriptComponent, curr_id).?;
+                        const child_component = script_entity.GetComponent(EntityChildComponent).?;
+                        curr_id = child_component.mNext;
+                    }
                 }
             }
         }

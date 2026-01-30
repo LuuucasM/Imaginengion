@@ -1,8 +1,8 @@
 const std = @import("std");
 const ECSManagerGameObj = @import("../Scene/SceneManager.zig").ECSManagerGameObj;
 const Components = @import("Components.zig");
-const IDComponent = Components.IDComponent;
-const SceneIDComponent = Components.SceneIDComponent;
+const UUIDComponent = Components.UUIDComponent;
+const EntitySceneComponent = Components.EntitySceneComponent;
 const NameComponent = Components.NameComponent;
 const CameraComponent = Components.CameraComponent;
 const TransformComponent = Components.TransformComponent;
@@ -33,13 +33,13 @@ pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, compti
 }
 pub fn AddBlankChild(self: Entity, child_type: ChildType) !Entity {
     const new_child = Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type), .mECSManagerRef = self.mECSManagerRef };
-    _ = try new_child.AddComponent(SceneIDComponent, self.GetComponent(SceneIDComponent).?.*);
+    _ = try new_child.AddComponent(EntitySceneComponent, self.GetComponent(EntitySceneComponent).?.*);
     return new_child;
 }
 pub fn AddChild(self: Entity, engine_allocator: std.mem.Allocator, child_type: ChildType) !Entity {
     const new_child = Entity{ .mEntityID = try self.mECSManagerRef.AddChild(self.mEntityID, child_type), .mECSManagerRef = self.mECSManagerRef };
-    _ = try new_child.AddComponent(IDComponent, .{ .ID = try GenUUID() });
-    _ = try new_child.AddComponent(SceneIDComponent, self.GetComponent(SceneIDComponent).?.*);
+    _ = try new_child.AddComponent(UUIDComponent, .{ .ID = try GenUUID() });
+    _ = try new_child.AddComponent(EntitySceneComponent, self.GetComponent(EntitySceneComponent).?.*);
     const new_name_component = try new_child.AddComponent(NameComponent, .{ .mAllocator = engine_allocator });
     _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
     if (child_type == .Entity) _ = try new_child.AddComponent(TransformComponent, null);
@@ -52,7 +52,7 @@ pub fn HasComponent(self: Entity, comptime component_type: type) bool {
     return self.mECSManagerRef.HasComponent(component_type, self.mEntityID);
 }
 pub fn GetUUID(self: Entity) u128 {
-    return self.mECSManagerRef.GetComponent(IDComponent, self.mEntityID).?.*.ID;
+    return self.mECSManagerRef.GetComponent(UUIDComponent, self.mEntityID).?.*.ID;
 }
 pub fn GetName(self: Entity) []const u8 {
     return self.mECSManagerRef.GetComponent(NameComponent, self.mEntityID).?.*.mName.items;

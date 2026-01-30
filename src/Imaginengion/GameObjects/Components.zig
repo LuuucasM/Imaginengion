@@ -5,13 +5,13 @@ pub const AISlotComponent = @import("Components/AISlotComponent.zig");
 pub const AudioComponent = @import("Components/AudioComponent.zig");
 pub const CameraComponent = @import("Components/CameraComponent.zig");
 pub const ColliderComponent = @import("Components/ColliderComponent.zig");
-pub const IDComponent = @import("Components/IDComponent.zig");
+pub const UUIDComponent = @import("Components/UUIDComponent.zig");
 pub const MicComponent = @import("Components/MicComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
 pub const PlayerSlotComponent = @import("Components/PlayerSlotComponent.zig");
 pub const QuadComponent = @import("Components/QuadComponent.zig");
 pub const RigidBodyComponent = @import("Components/RigidBodyComponent.zig");
-pub const SceneIDComponent = @import("Components/SceneIDComponent.zig");
+pub const EntitySceneComponent = @import("Components/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Components/TransformComponent.zig");
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 pub const TextComponent = @import("Components/TextComponent.zig");
@@ -26,13 +26,13 @@ pub const ComponentsList = [_]type{
     AudioComponent,
     CameraComponent,
     ColliderComponent,
-    IDComponent,
+    UUIDComponent,
     MicComponent,
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
-    SceneIDComponent,
+    EntitySceneComponent,
     TextComponent,
     TransformComponent,
 
@@ -47,7 +47,7 @@ pub const SerializeList = [_]type{
     AudioComponent,
     CameraComponent,
     ColliderComponent,
-    IDComponent,
+    UUIDComponent,
     MicComponent,
     NameComponent,
     PlayerSlotComponent,
@@ -63,7 +63,7 @@ pub const ComponentPanelList = [_]type{
     AudioComponent,
     CameraComponent,
     ColliderComponent,
-    IDComponent,
+    UUIDComponent,
     MicComponent,
     NameComponent,
     PlayerSlotComponent,
@@ -83,13 +83,13 @@ pub const EComponents = enum(u16) {
     AudioComponent = AudioComponent.Ind,
     CameraComponent = CameraComponent.Ind,
     ColliderComponent = ColliderComponent.Ind,
-    IDComponent = IDComponent.Ind,
+    UUIDComponent = UUIDComponent.Ind,
     MicComponent = MicComponent.Ind,
     NameComponent = NameComponent.Ind,
     PlayerSlotComponent = PlayerSlotComponent.Ind,
     QuadComponent = QuadComponent.Ind,
     RigidBodyComponent = RigidBodyComponent.Ind,
-    SceneIDComponent = SceneIDComponent.Ind,
+    EntitySceneComponent = EntitySceneComponent.Ind,
     TextComponent = TextComponent.Ind,
     TransformComponent = TransformComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,

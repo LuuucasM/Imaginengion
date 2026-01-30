@@ -20,11 +20,10 @@ const EEntityComponents = EntityComponents.EComponents;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const CameraComponent = EntityComponents.CameraComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
-const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityAISlotComponent = EntityComponents.AISlotComponent;
-const EntityIDComponent = EntityComponents.IDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntityPlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const EntityQuadComponent = EntityComponents.QuadComponent;
@@ -33,7 +32,7 @@ const SceneComponents = @import("SceneComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
 const ESceneComponents = SceneComponents.EComponents;
 const SceneComponent = SceneComponents.SceneComponent;
-const SceneIDComponent = SceneComponents.IDComponent;
+const SceneUUIDComponent = SceneComponents.UUIDComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneStackPos = SceneComponents.StackPosComponent;
 //const SceneTransformComponent = SceneComponents.TransformComponent;
@@ -127,7 +126,7 @@ pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, _: LayerTyp
 
     _ = try scene_layer.AddComponent(SceneComponent, null);
 
-    _ = try scene_layer.AddComponent(SceneIDComponent, .{ .ID = try GenUUID() });
+    _ = try scene_layer.AddComponent(SceneUUIDComponent, .{ .ID = try GenUUID() });
 
     const scene_name_component = try scene_layer.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");

@@ -4,11 +4,6 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const ECSManagerScenes = @import("../SceneManager.zig").ECSManagerScenes;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
-const GameComponents = @import("../../GameObjects/Components.zig");
-const IDComponent = GameComponents.IDComponent;
-const NameComponent = GameComponents.NameComponent;
-const TransformComponent = GameComponents.TransformComponent;
-const CameraComponent = GameComponents.CameraComponent;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const SceneComponent = @This();
 

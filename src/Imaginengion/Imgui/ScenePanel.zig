@@ -19,7 +19,7 @@ const SceneStackPos = SceneComponents.StackPosComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const EntitySceneComponent = EntityComponents.SceneIDComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);

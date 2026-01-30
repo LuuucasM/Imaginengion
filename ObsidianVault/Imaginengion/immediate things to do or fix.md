@@ -1,13 +1,6 @@
-- I need to take a look at how/if/when scripts are removed
-- change components panel to not just display any and all components of an entity but do what i do for serialization and create another comptime list of types that are for displaying
-	- Limit components to 1 type per entity
-	- also change the add component popup menu
-		- I want to instead of being a button be a right click on the background of the panel
-		- Then i can condense it into an inline for like i will do for component displaying since entities can only have 1 type of each
-- change the name of some of the components to make more sense
-	- change the entity to scene id component, right now called SceneIDComponent -> EntitySceneComponent.
-	- change IDComponent to EntityUUIDComponent and SceneUUIDComponent instead to make it more clear
-
-- fix ReloadAllScenes not working it is getting a buffer underrun (thanks to the new system deserializing somehow)
+- fix ReloadAllScenes making textures break
+	- probably something to do with getting asset handles and relesaing asset handles?
+- change physics collider to use the build in entity transform rather than right now where the enum value is a struct "box" and struct "sphere". that way I can align the colliders with more how the rendering system works
+	- this is so for the next TODO to visualize colliders i can simply follow my sdf logic to implement it
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

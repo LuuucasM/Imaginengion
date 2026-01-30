@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const IDComponent = @import("Components/IDComponent.zig");
+pub const UUIDComponent = @import("Components/UUIDComponent.zig");
 pub const NameComponent = @import("Components/NameComponent.zig");
 pub const PhysicsComponent = @import("Components/PhysicsComponent.zig");
 pub const SceneComponent = @import("Components/SceneComponent.zig");
@@ -11,7 +11,7 @@ const TagComponents = @import("Components/TagComponents.zig");
 pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
 
 pub const ComponentsList = [_]type{
-    IDComponent,
+    UUIDComponent,
     NameComponent,
     PhysicsComponent,
     SceneComponent,
@@ -22,7 +22,7 @@ pub const ComponentsList = [_]type{
 };
 
 pub const SerializeList = [_]type{
-    IDComponent,
+    UUIDComponent,
     NameComponent,
     PhysicsComponent,
     SceneComponent,
@@ -34,7 +34,7 @@ pub const ScriptList = [_]type{
 };
 
 pub const EComponents = enum(u16) {
-    IDComponent = IDComponent.Ind,
+    UUIDComponent = UUIDComponent.Ind,
     NameComponent = NameComponent.Ind,
     PhysicsComponent = PhysicsComponent.Ind,
     SceneComponent = SceneComponent.Ind,

@@ -271,9 +271,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             if (self.GetComponent(ChildComponent, entity_id)) |child_component| {
                 const parent_entity: entity_t = child_component.mParent;
                 if (self.GetComponent(ParentComponent, parent_entity)) |parent_component| {
-                    // If this is the only child, remove the ParentComponent from the parent
+                    // If this is the only child see if theres any scripts and remove / invalidate depending
                     if (child_component.mNext == entity_id and child_component.mPrev == entity_id) {
-                        try self.RemoveComponent(engine_context.EngineAllocator(), ParentComponent, parent_entity);
+                        if (parent_component.mFirstScript == std.math.maxInt(entity_t)) {
+                            try self.RemoveComponent(engine_context.EngineAllocator(), ParentComponent, parent_entity);
+                        } else {
+                            parent_component.mFirstEntity = std.math.maxInt(entity_t);
+                        }
                     } else {
                         // Relink siblings around this child
                         const next_comp = self.GetComponent(ChildComponent, child_component.mNext).?;
@@ -291,6 +295,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         fn _InternalRemoveScripts(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
+                if (parent_component.mFirstScript == std.math.maxInt(entity_t)) return;
                 var curr_id = parent_component.mFirstScript;
                 var curr_component = self.GetComponent(ChildComponent, curr_id).?;
 
