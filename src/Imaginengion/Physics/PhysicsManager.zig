@@ -57,7 +57,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
                 const entity = scene_manager.GetEntity(entity_id);
                 const entity_rb = entity.GetComponent(RigidBodyComponent).?;
 
-                ApplyForces(entity, scene_manager, entity_rb);
+                ApplyForces(entity, entity_rb);
 
                 IntegrateVelocities(entity_rb, SUB_STEP_DT);
                 IntegratePositions(entity, entity_rb, SUB_STEP_DT);
@@ -141,11 +141,11 @@ fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3f32, rotation
     }
 }
 
-fn ApplyForces(entity: Entity, scene_manager: *SceneManager, entity_rb: *RigidBodyComponent) void {
+fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("PhysicsManager::ApplyForces", @src());
     defer zone.Deinit();
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
-    const scene_layer = scene_manager.GetSceneLayer(entity_scene_comp.SceneID);
+    const scene_layer = entity_scene_comp.mScene;
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
         entity_rb.mForce += if (entity_rb.mInvMass != 0) physics_component.mGravity * @as(Vec3f32, @splat(entity_rb.mMass)) else @as(Vec3f32, @splat(0));
     } else {

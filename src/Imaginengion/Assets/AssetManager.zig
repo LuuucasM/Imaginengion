@@ -130,6 +130,7 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocato
     };
 
     if (entity_id) |id| {
+        std.debug.assert(self.mAssetECS.HasComponent(AssetMetaData, id));
         self.mAssetECS.GetComponent(AssetMetaData, id).?.mRefs += 1;
         return AssetHandle{ .mID = id, .mAssetManager = self };
     } else {
@@ -171,7 +172,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
                 if (err == error.AssetInitFailed) return try self.GetDefaultAsset(asset_type) else return err;
             };
 
-            return self.mAssetECS.AddComponent(asset_type, asset_id, asset_component);
+            return self.mAssetECS.AddComponent(asset_id, asset_component);
         }
     } else {
         return try self.GetDefaultAsset(asset_type);
@@ -361,10 +362,8 @@ fn CreateAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_pat
         .mID = try self.mAssetECS.CreateEntity(),
         .mAssetManager = self,
     };
-    _ = try self.mAssetECS.AddComponent(AssetMetaData, new_handle.mID, .{
-        .mRefs = 0,
-    });
-    const file_meta_data = try self.mAssetECS.AddComponent(FileMetaData, new_handle.mID, .{
+    _ = try self.mAssetECS.AddComponent(new_handle.mID, AssetMetaData{ .mRefs = 0 });
+    const file_meta_data = try self.mAssetECS.AddComponent(new_handle.mID, FileMetaData{
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,

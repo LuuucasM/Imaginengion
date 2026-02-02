@@ -1,8 +1,12 @@
+- add physics
 - add sound
 	- likely to use mini audio
 	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform
 	- thats about all i know right now lol because i dont really know much about audio in general but i guess im about to learn :)
-- add physics
+- Add an input component to Player
+	- this will create the layer between the raw hardware input and the game input
+	- This is the same as in unreal engine saying like "AttackInput" and then assigning it to a specific key
+	- This decouples the hardware from the intent of the input which easily allows things like key rebinding, it also allows multiple input sources (keyboard, controller, etc) as you can map "AttackInput" to a specific key if the player is using keyboard, or map it to a different input if player is using controller and then games can natively support input switching in runtime without worrying
 - make pong
 - add a way to export the game into its standalone
 - add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component

@@ -89,21 +89,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             _ = self.mEntitySkipField.remove(entity_id);
         }
 
-        pub fn DestroyMultiEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-
-            // Remove all components from this entity
-            const entity_skipfield = self.mEntitySkipField.getValueBySparse(entity_id);
-
-            var field_iter = entity_skipfield.Iterator();
-            while (field_iter.Next()) |comp_arr_ind| {
-                try self.mComponentsArrays.items[comp_arr_ind].RemoveComponent(engine_context, entity_id);
-            }
-
-            // Remove entity from skip field
-            _ = self.mEntitySkipField.remove(entity_id);
-        }
-
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
             std.debug.assert(self.mEntitySkipField.HasSparse(original_entity_id));
             std.debug.assert(self.mEntitySkipField.HasSparse(new_entity_id));
@@ -118,14 +103,15 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn AddComponent(self: *Self, comptime component_type: type, entityID: entity_t, component: component_type) !*component_type {
+        pub fn AddComponent(self: *Self, entityID: entity_t, component: anytype) !*@TypeOf(component) {
+            const component_t = @TypeOf(component);
             std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-            std.debug.assert(!self.HasComponent(component_type, entityID));
+            std.debug.assert(!self.HasComponent(component_t, entityID));
 
-            self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_type.Ind);
+            self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_t.Ind);
 
-            const internal_array_t = InternalComponentArray(entity_t, component_type);
-            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+            const internal_array_t = InternalComponentArray(entity_t, component_t);
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
 
             return try internal_array.AddComponent(entityID, component);
         }
@@ -157,6 +143,16 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             return internal_array.GetComponent(entityID);
         }
+
+        pub fn ResetComponent(self: Self, entity_id: entity_t, component: anytype) void {
+            const component_t = @TypeOf(component);
+            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
+            std.debug.assert(self.HasComponent(component_t, entity_id));
+
+            const internal_array_t = InternalComponentArray(entity_t, component_t);
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
+        }
+
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
             switch (query) {
                 .Component => |component_type| {

@@ -130,7 +130,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         .mPrev = last_child_entity_id,
                     };
 
-                    _ = try self.AddComponent(ChildComponent, new_entity_id, new_child_component);
+                    _ = try self.AddComponent(new_entity_id, new_child_component);
 
                     last_child_component.mNext = new_entity_id;
 
@@ -148,7 +148,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         .mPrev = new_entity_id,
                     };
 
-                    _ = try self.AddComponent(ChildComponent, new_entity_id, new_child_component);
+                    _ = try self.AddComponent(new_entity_id, new_child_component);
                 }
             } else {
                 const new_parent_component = switch (child_type) {
@@ -156,7 +156,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     .Script => ParentComponent{ .mFirstScript = new_entity_id },
                 };
 
-                _ = try self.AddComponent(ParentComponent, entity_id, new_parent_component);
+                _ = try self.AddComponent(entity_id, new_parent_component);
 
                 const new_child_component = ChildComponent{
                     .mFirst = new_entity_id,
@@ -165,21 +165,22 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     .mPrev = new_entity_id,
                 };
 
-                _ = try self.AddComponent(ChildComponent, new_entity_id, new_child_component);
+                _ = try self.AddComponent(new_entity_id, new_child_component);
             }
 
             return new_entity_id;
         }
 
         //--------components related functions----------
-        pub fn AddComponent(self: *Self, comptime component_type: type, entity_id: entity_t, new_component: ?component_type) !*component_type {
-            _ValidateType(component_type);
-            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+        pub fn AddComponent(self: *Self, entity_id: entity_t, new_component: anytype) !*@TypeOf(new_component) {
             const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
             defer zone.Deinit();
+            const component_t = @TypeOf(new_component);
+            _ValidateType(component_t);
 
-            const new_type_component: component_type = if (new_component) |c| c else component_type{};
-            return try self.mComponentManager.AddComponent(component_type, entity_id, new_type_component);
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+
+            return try self.mComponentManager.AddComponent(entity_id, new_component);
         }
         pub fn RemoveComponent(self: *Self, engine_allocator: std.mem.Allocator, comptime component_type: type, entity_id: entity_t) !void {
             _ValidateType(component_type);
@@ -210,6 +211,16 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const zone = Tracy.ZoneInit("ECSM GetComponent", @src());
             defer zone.Deinit();
             return self.mComponentManager.GetComponent(component_type, entity_id);
+        }
+        pub fn ResetComponent(self: *Self, entity_id: entity_t, component: anytype) void {
+            const zone = Tracy.ZoneInit("ECSM::ResetComponent", @src());
+            defer zone.Deinit();
+            const component_t = @typeInfo(component);
+            _ValidateType(component_t);
+
+            std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
+
+            self.mComponentManager.ResetComponent(entity_id, component);
         }
 
         pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventCategory) !void {
@@ -296,6 +307,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         fn _InternalRemoveScripts(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
                 if (parent_component.mFirstScript == std.math.maxInt(entity_t)) return;
+
                 var curr_id = parent_component.mFirstScript;
                 var curr_component = self.GetComponent(ChildComponent, curr_id).?;
 
@@ -361,6 +373,12 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         fn _ValidateType(comptime component_type: type) void {
             const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+
+            const type_info = @typeInfo(component_type);
+            if (type_info != .@"struct") {
+                @compileError(type_name ++ "must be of type struct");
+            }
+
             comptime var is_valid_type: bool = false;
             inline for (components_types) |comp_t| {
                 if (component_type == comp_t) {
@@ -371,7 +389,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 is_valid_type = true;
             }
             if (is_valid_type == false) {
-                @compileError("that type can not be used with this ECS" ++ type_name);
+                @compileError(type_name ++ " can not be used with this ECS");
             }
         }
 

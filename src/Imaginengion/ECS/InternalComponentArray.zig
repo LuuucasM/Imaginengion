@@ -3,7 +3,7 @@ const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetMan
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) type {
+pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: type) type {
     return struct {
         const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
         const Self = @This();
@@ -44,13 +44,9 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
         pub fn AddComponent(self: *Self, entityID: entity_t, component: component_type) !*component_type {
             std.debug.assert(!self.mComponents.HasSparse(entityID));
 
-            const dense_ind = self.mComponents.add(entityID);
+            const dense_ind = self.mComponents.addValue(entityID, component);
 
-            const new_component = self.mComponents.getValueByDense(dense_ind);
-
-            new_component.* = component;
-
-            return new_component;
+            return self.mComponents.getValueByDense(dense_ind);
         }
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) !void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
@@ -66,6 +62,9 @@ pub fn ComponentArray(comptime entity_t: type, comptime component_type: type) ty
                 return self.mComponents.getValueBySparse(entityID);
             }
             return null;
+        }
+        pub fn ResetComponent(self: *Self, entity_id: entity_t, component: component_type) void {
+            self.mComponents.getValueBySparse(entity_id).* = component;
         }
         pub fn NumOfComponents(self: *Self) usize {
             return self.mComponents.dense_count;

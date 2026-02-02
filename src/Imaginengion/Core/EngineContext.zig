@@ -11,6 +11,7 @@ const Program = @import("../Programs/Program.zig");
 const Application = @import("../Core/Application.zig");
 const Tracy = @import("Tracy.zig");
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
+const SceneSerializer = @import("../Scene/SceneSerializer.zig");
 const EngineContext = @This();
 
 const InternalData = struct {
@@ -30,6 +31,7 @@ mSystemEventManager: SystemEventManager = .{},
 mInputManager: InputManager = .{},
 mRenderer: Renderer = .{},
 mPhysicsManager: PhysicsManager = .{},
+mSceneSerializer: SceneSerializer = .{},
 mIsMinimized: bool = false,
 
 _internal: InternalData = .{},
@@ -49,6 +51,7 @@ pub fn Init(self: *EngineContext, window: *Window, program: *Program, app: *Appl
     self.mImguiEventManager.Init(program);
     self.mSystemEventManager.Init(app);
     self.mInputManager.Init(self.EngineAllocator());
+    self.mSceneSerializer.Init();
 }
 
 pub fn DeInit(self: *EngineContext) !void {
@@ -63,6 +66,7 @@ pub fn DeInit(self: *EngineContext) !void {
     self.mSystemEventManager.Deinit(self.EngineAllocator());
     self.mInputManager.Deinit();
     self.mRenderer.Deinit(self);
+    self.mSceneSerializer.Deinit();
 
     _ = self._internal.EngineGPA.deinit();
     self._internal.FrameArena.deinit();

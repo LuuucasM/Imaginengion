@@ -1,5 +1,24 @@
-- fix ReloadAllScenes making textures break
-	- probably something to do with getting asset handles and relesaing asset handles?
+- Move SceneUtils and PlayerUtils into the SceneLayer/Player objects
+	- idk why i created a new stateless file with functions for it when it makes it easier and more sense if its part of the Entity/SceneLayer/Player
+- Add utility functions to scene for adding UUID component so that it adds the UUID to world_id map in the scene serializer
+- change all the adding UUID components for both scripts and entities to use the new speicalized functions for adding UUID
+- change toolbar panel so that it looks for spawn components on any of the scenes and lets you choose one of those with the dropdown bar instead of how it is now
+	- this means that when you press play it will spawn a player (maybe more than one in the future) and follow the spawn logic of that spawn component 
+- still need to change the serializer, specifically for de-serializing scene/entity references I should do something like they will be serialized as "EntityRef" and "SceneRef" and write that objects UUID
+- when deserializing I have to check for this specific string but when I do that I know I can make a ResolveUUID object for the UUID we deserialize after Entity/Scene Ref and then after deserializing the scene I can attempt to resolve references
+	- i was thinking at first if it can not be resolved then it can be done just lazily like the next time the ocmponent tries to use the reference it will try to resolve it then but I dont really like the idea of this because it means if one scene heavily references stuff from another scene then if they are not loaded in the correct order there will have to be a lot of lazy evaluation
+	- but now i am wondering if I can leverage the event system so that when things are serialized the objects who have dangling references can get a like deserialized event and try again
+		- note i thought about keeping around ResolveUUID requests but then if an entity is deleted then that means i must go through that list and ensure all the requests this entity made get deleted, but this is a bit of an abitrary situation so i would have to do it for every entity deleted and that would definately be a performance cut in the long run
+- fix going from PIE -> stop editor state
+	- create a new component for scenes called like "spawn point component"
+		- this will be set as an entry into this scene so when loading from nothing to having a player (could also be used for multiplayer as you need to spawn additional players for split screen) you know where the player will possess
+	- change the scene serializer to a new UUID system
+		- on deserialization
+			- objects that have references will submit a like resolve request to the scene serializer for defered resolving of turning uuid's into world_id's
+			- objects that have UUID components while deserializing will add its self to a map of UUID -> world_id where the UUID is the component and the world_id is the new id for the entity/scene
+			- we do then defered resolution of UUID references
+				- if we can not resolve right away then its ok, set the reference to some invalid state so that if that object is used, it can lazyly retry to resolve the reference at a later time.
+	- finish writing the new on change editor state event to use new serialization system and new scene spawn component
 - change physics collider to use the build in entity transform rather than right now where the enum value is a struct "box" and struct "sphere". that way I can align the colliders with more how the rendering system works
 	- this is so for the next TODO to visualize colliders i can simply follow my sdf logic to implement it
 - make visualizer for sphere collision and box collision

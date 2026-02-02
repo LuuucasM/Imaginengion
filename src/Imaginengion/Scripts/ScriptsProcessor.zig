@@ -18,7 +18,6 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
-const CameraComponent = EntityComponents.CameraComponent;
 
 const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptList;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
@@ -110,7 +109,7 @@ pub fn RunEntityScriptEditor(engine_context: *EngineContext, comptime script_typ
     const ecs_manager_go = scene_manager.mECSManagerGO;
     const frame_allocator = engine_context.FrameAllocator();
 
-    var scene_scripts = try ecs_manager_go.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
+    var scene_scripts = try scene_manager.GetEntityGroup(frame_allocator, GroupQuery{ .Component = script_type });
     scene_manager.FilterEntityScriptsByScene(engine_context.FrameAllocator(), &scene_scripts, editor_scene_layer.mSceneID);
 
     for (scene_scripts.items) |script_id| {

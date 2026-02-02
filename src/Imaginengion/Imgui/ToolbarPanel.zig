@@ -8,7 +8,6 @@ const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const SceneManager = @import("../Scene/SceneManager.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const EntityComponents = @import("../GameObjects/Components.zig");
-const CameraComponent = EntityComponents.CameraComponent;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const EntityChildComponent = EntityComponents.ChildComponent;
 const Entity = @import("../GameObjects/Entity.zig");
@@ -119,22 +118,18 @@ pub fn OnImguiRender(self: *ToolbarPanel, engine_context: *EngineContext, game_s
             self.mStartEntity = null;
         }
 
-        const camera_entities = try game_scene_manager.GetEntityGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = CameraComponent });
+        const player_entities = try game_scene_manager.GetEntityGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = PlayerSlotComponent });
 
-        for (camera_entities.items) |entity_id| {
+        for (player_entities.items) |entity_id| {
             const entity = game_scene_manager.GetEntity(entity_id);
-
-            if (entity.GetPossessable()) |possess_entity| {
-                var name_buf: [128]u8 = undefined;
-                const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{possess_entity.GetName()});
-                if (self.mStartEntity) |start_entity| {
-                    if (imgui.igSelectable_Bool(name_cstr, start_entity.mEntityID == possess_entity.mEntityID, 0, .{ .x = 0, .y = 0 })) {
-                        self.mStartEntity = possess_entity;
-                    }
-                } else {
-                    if (imgui.igSelectable_Bool(name_cstr, false, 0, .{ .x = 0, .y = 0 })) {
-                        self.mStartEntity = possess_entity;
-                    }
+            const name_cstr = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}\x00", .{entity.GetName()});
+            if (self.mStartEntity) |start_entity| {
+                if (imgui.igSelectable_Bool(name_cstr, start_entity.mEntityID == entity.mEntityID, 0, .{ .x = 0, .y = 0 })) {
+                    self.mStartEntity = entity;
+                }
+            } else {
+                if (imgui.igSelectable_Bool(name_cstr, false, 0, .{ .x = 0, .y = 0 })) {
+                    self.mStartEntity = entity;
                 }
             }
         }

@@ -52,7 +52,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
             defer imgui.igEndMenu();
             if (imgui.igMenuItem_Bool("Physics Component", "", false, true)) {
                 if (!self.mSceneLayer.HasComponent(ScenePhysicsComponent)) {
-                    _ = try self.mSceneLayer.AddComponent(ScenePhysicsComponent, null);
+                    _ = try self.mSceneLayer.AddComponent(ScenePhysicsComponent{});
                 }
             }
         }

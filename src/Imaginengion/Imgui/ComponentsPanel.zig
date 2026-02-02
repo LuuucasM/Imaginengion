@@ -16,7 +16,6 @@ const TextureFormat = FrameBuffer.TextureFormat;
 const ComponentsPanel = @This();
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const CameraComponent = EntityComponents.CameraComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const AudioComponent = EntityComponents.AudioComponent;
@@ -139,11 +138,9 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, com
         if (imgui.igMenuItem_Bool(component_type.Name.ptr, "", false, true)) {
             defer imgui.igCloseCurrentPopup();
 
-            _ = try entity.AddComponent(component_type, null);
+            _ = try entity.AddComponent(component_type{});
 
-            if (component_type == CameraComponent) {
-                try AddCameraComponent(engine_context, entity);
-            } else if (component_type == QuadComponent) {
+            if (component_type == QuadComponent) {
                 AddQuadComponent(engine_context, entity);
             } else if (component_type == TextComponent) {
                 try AddTextComponent(engine_context, entity);
@@ -152,30 +149,6 @@ fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, com
             }
         }
     }
-}
-
-fn AddCameraComponent(engine_context: *EngineContext, entity: Entity) !void {
-    const engine_allocator = engine_context.EngineAllocator();
-    const new_camera_component = entity.GetComponent(CameraComponent).?;
-
-    new_camera_component.mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
-    new_camera_component.mViewportVertexArray = VertexArray.Init();
-    new_camera_component.mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
-    new_camera_component.mViewportIndexBuffer = undefined;
-
-    const shader_asset = engine_context.mRenderer.GetSDFShader();
-    try new_camera_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
-    new_camera_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
-
-    var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_camera_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
-
-    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
-    new_camera_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_camera_component.mViewportVertexArray.AddVertexBuffer(engine_allocator, new_camera_component.mViewportVertexBuffer);
-    new_camera_component.mViewportVertexArray.SetIndexBuffer(new_camera_component.mViewportIndexBuffer);
-
-    new_camera_component.SetViewportSize(1600, 900);
 }
 
 fn AddQuadComponent(engine_context: *EngineContext, entity: Entity) void {

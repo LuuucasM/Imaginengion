@@ -22,10 +22,10 @@ pub fn AddScriptToScene(engine_context: *EngineContext, scene_layer: SceneLayer,
 
     const new_script_entity = try scene_layer.AddChild(engine_context, .Script);
 
-    _ = try new_script_entity.AddComponent(SceneScriptComponent, new_script_component);
+    _ = try new_script_entity.AddComponent(new_script_component);
 
     _ = switch (script_asset.mScriptType) {
-        .SceneSceneStart => try new_script_entity.AddComponent(OnSceneStartScript, null),
+        .SceneSceneStart => try new_script_entity.AddComponent(OnSceneStartScript{}),
         else => @panic("This shouldnt happen!"),
     };
 }

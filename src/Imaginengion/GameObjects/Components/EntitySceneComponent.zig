@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EntitySceneComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
+const SceneLayer = @import("../../Scene/SceneLayer.zig");
 
 pub const Editable: bool = false;
 pub const Name: []const u8 = "EntitySceneComponent";
@@ -13,6 +14,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-SceneID: u32 = std.math.maxInt(u32),
+mScene: SceneLayer = undefined,
 
 pub fn Deinit(_: *EntitySceneComponent, _: *EngineContext) !void {}

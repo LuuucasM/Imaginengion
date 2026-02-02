@@ -9,7 +9,6 @@ const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
-const EntityCameraComponent = EntityComponents.CameraComponent;
 const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 
@@ -17,8 +16,12 @@ const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
 const Mat4f32 = LinAlg.Mat4f32;
+const Vec4f32 = LinAlg.Vec4f32;
 
-const ProjectionType = @import("../GameObjects/Components.zig").CameraComponent.ProjectionType;
+const PlayerComponents = @import("../Players/Components.zig");
+const LensComponent = PlayerComponents.LensComponent;
+
+const ProjectionType = LensComponent.ProjectionType;
 
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -54,11 +57,11 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, camera_components: std.ArrayList(*EntityCameraComponent), camera_transforms: std.ArrayList(*EntityTransformComponent)) !void {
-    _ = camera_transforms;
-
+pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
+
+    std.debug.assert(frame_buffers.items.len == area_rects.items.len);
 
     if (self.mP_OpenViewport == false) return;
 
@@ -85,13 +88,10 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
     //get if the window is focused or not
     self.mIsFocusedViewport = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
-    try OnImguiRender(camera_components, viewport_size);
-
-    //TODO: entity picking for selected entity
-    //TODO: gizmos to drag around entities in the viewport
+    try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, camera_components: std.ArrayList(*EntityCameraComponent)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -120,21 +120,20 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, c
     //get if the window is focused or not
     self.mIsFocusedPlay = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
-    try OnImguiRender(camera_components, viewport_size);
+    try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-fn OnImguiRender(camera_components: std.ArrayList(*EntityCameraComponent), viewport_size: imgui.struct_ImVec2) !void {
+fn OnImguiRender(frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 
     var viewport_pos: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
     imgui.igGetCursorScreenPos(&viewport_pos);
 
-    for (camera_components.items, 0..) |camera_component, i| {
-        _ = i;
-        const rect = camera_component.mAreaRect;
-        const fb = camera_component.mViewportFrameBuffer;
-        const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, fb.GetColorAttachmentID(0))));
+    for (0..frame_buffers.items.len) |i| {
+        const rect = area_rects.items[i];
+        const frame_buffer = frame_buffers.items[i];
+        const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, frame_buffer.GetColorAttachmentID(0))));
 
         const x = viewport_pos.x + rect[0] * viewport_size.x;
         const y = viewport_pos.y + rect[1] * viewport_size.y;

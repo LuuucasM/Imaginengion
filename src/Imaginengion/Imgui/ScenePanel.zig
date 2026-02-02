@@ -176,7 +176,7 @@ fn SelectScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
 
     if (self.mSelectedEntity) |selected_entity| {
         const entity_scene_component = selected_entity.GetComponent(EntitySceneComponent).?;
-        if (entity_scene_component.SceneID != scene_id) {
+        if (entity_scene_component.mScene.mSceneID != scene_id) {
             try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_SelectEntityEvent = .{ .SelectedEntity = null } });
         }
     }

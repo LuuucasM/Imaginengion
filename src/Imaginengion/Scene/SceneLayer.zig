@@ -28,8 +28,8 @@ mECSManagerGORef: *ECSManagerGameObj = undefined,
 mECSManagerSCRef: *ECSManagerScenes = undefined,
 
 //for the scenes themselves
-pub fn AddComponent(self: SceneLayer, comptime component_type: type, component: ?component_type) !*component_type {
-    return try self.mECSManagerSCRef.AddComponent(component_type, self.mSceneID, component);
+pub fn AddComponent(self: SceneLayer, new_component: anytype) !*@typeInfo(new_component) {
+    return try self.mECSManagerSCRef.AddComponent(self.mSceneID, new_component);
 }
 pub fn RemoveComponent(self: SceneLayer, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     try self.mECSManagerSCRef.RemoveComponent(engine_allocator, component_type, self.mSceneID);
@@ -67,18 +67,18 @@ pub fn AddChild(self: SceneLayer, engine_context: *EngineContext, child_type: Ch
         .mECSManagerSCRef = self.mECSManagerSCRef,
     };
 
-    _ = try child_scene.AddComponent(SceneComponent, null);
-    _ = try child_scene.AddComponent(SceneUUIDComponent, SceneUUIDComponent{ .ID = try GenUUID() });
-    const scene_name_component = try child_scene.AddComponent(SceneNameComponent, .{ .mAllocator = engine_context.EngineAllocator() });
+    _ = try child_scene.AddComponent(SceneComponent{});
+    _ = try child_scene.AddComponent(SceneUUIDComponent{ .ID = try GenUUID() });
+    const scene_name_component = try child_scene.AddComponent(SceneNameComponent{ .mAllocator = engine_context.EngineAllocator() });
     _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
 
     return child_scene;
 }
 
 //for the entities in the scenes
-pub fn CreateBlankEntity(self: SceneLayer) !Entity {
+pub fn CreateBlankEntity(self: *SceneLayer) !Entity {
     const new_entity = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
-    _ = try new_entity.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
+    _ = try new_entity.AddComponent(EntitySceneComponent{ .mScene = self });
 
     return new_entity;
 }
@@ -87,15 +87,15 @@ pub fn CreateEntity(self: SceneLayer, engine_allocator: std.mem.Allocator) !Enti
     return self.CreateEntityWithUUID(engine_allocator, try GenUUID());
 }
 
-pub fn CreateEntityWithUUID(self: SceneLayer, engine_allocator: std.mem.Allocator, uuid: u64) !Entity {
+pub fn CreateEntityWithUUID(self: *SceneLayer, engine_allocator: std.mem.Allocator, uuid: u64) !Entity {
     var e = Entity{ .mEntityID = try self.mECSManagerGORef.CreateEntity(), .mECSManagerRef = self.mECSManagerGORef };
-    _ = try e.AddComponent(EntityUUIDComponent, .{ .ID = uuid });
-    _ = try e.AddComponent(EntitySceneComponent, .{ .SceneID = self.mSceneID });
+    _ = try e.AddComponent(EntityUUIDComponent{ .ID = uuid });
+    _ = try e.AddComponent(EntitySceneComponent{ .mScene = self });
 
-    const new_name_component = try e.AddComponent(EntityNameComponent, .{ .mAllocator = engine_allocator });
+    const new_name_component = try e.AddComponent(EntityNameComponent{ .mAllocator = engine_allocator });
     _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
 
-    _ = try e.AddComponent(TransformComponent, null);
+    _ = try e.AddComponent(TransformComponent{});
     e._CalculateWorldTransform();
 
     return e;
@@ -125,8 +125,10 @@ pub fn FilterEntityByScene(self: SceneLayer, list_allocator: std.mem.Allocator, 
     var i: usize = 0;
 
     while (i < end_index) {
-        const entity_scene_component = self.mECSManagerGORef.GetComponent(EntitySceneComponent, entity_result_list.items[i]).?;
-        if (entity_scene_component.SceneID != self.mSceneID) {
+        const script_entity = Entity{ .mEntityID = entity_result_list.items[i], .mECSManagerRef = self.mECSManagerGORef };
+        const scene_component = script_entity.GetComponent(EntitySceneComponent).?;
+
+        if (scene_component.mScene.mSceneID != self.mSceneID) {
             entity_result_list.items[i] = entity_result_list.items[end_index - 1];
             end_index -= 1;
         } else {
@@ -135,27 +137,6 @@ pub fn FilterEntityByScene(self: SceneLayer, list_allocator: std.mem.Allocator, 
     }
 
     entity_result_list.shrinkAndFree(list_allocator, end_index);
-}
-
-pub fn FilterEntityScriptsByScene(self: SceneLayer, list_allocator: std.mem.Allocator, scripts_result_list: *std.ArrayList(Entity.Type)) void {
-    if (scripts_result_list.items.len == 0) return;
-
-    var end_index: usize = scripts_result_list.items.len;
-    var i: usize = 0;
-
-    while (i < end_index) {
-        const script_entity = Entity{ .mEntityID = scripts_result_list.items[i], .mECSManagerRef = self.mECSManagerGORef };
-        const scene_component = script_entity.GetComponent(EntitySceneComponent).?;
-
-        if (scene_component.SceneID != self.mSceneID) {
-            scripts_result_list.items[i] = scripts_result_list.items[end_index - 1];
-            end_index -= 1;
-        } else {
-            i += 1;
-        }
-    }
-
-    scripts_result_list.shrinkAndFree(list_allocator, end_index);
 }
 
 pub fn FilterSceneScriptsByScene(self: SceneLayer, list_allocator: std.mem.Allocator, scripts_result_list: *std.ArrayList(Entity.Type)) void {

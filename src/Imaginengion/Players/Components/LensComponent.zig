@@ -7,25 +7,20 @@ const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const Entity = @import("../Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
-
-const CameraComponent = @This();
-
 const LinAlg = @import("../../Math/LinAlg.zig");
+const Vec3f32 = LinAlg.Vec3f32;
+const Quatf32 = LinAlg.Quatf32;
 const Mat4f32 = LinAlg.Mat4f32;
+
+const LensComponent = @This();
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const ProjectionType = enum(u1) {
-    Perspective = 0,
-    Orthographic = 1,
-};
-
-pub const Editable: bool = true;
-pub const Name: []const u8 = "CameraComponent";
+pub const Name: []const u8 = "LensComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == CameraComponent) {
+        if (component_type == LensComponent) {
             break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
@@ -36,10 +31,10 @@ mViewportWidth: usize = 1600,
 mViewportHeight: usize = 900,
 mAspectRatio: f32 = 0.0,
 
-mViewportFrameBuffer: FrameBuffer = undefined,
-mViewportVertexArray: VertexArray = undefined,
-mViewportVertexBuffer: VertexBuffer = undefined,
-mViewportIndexBuffer: IndexBuffer = undefined,
+mFrameBuffer: FrameBuffer = undefined,
+mVertexArray: VertexArray = undefined,
+mVertexBuffer: VertexBuffer = undefined,
+mIndexBuffer: IndexBuffer = undefined,
 
 mProjection: Mat4f32 = LinAlg.Mat4Identity(),
 
@@ -49,42 +44,34 @@ mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 mAreaRect: Vec4f32 = Vec4f32{ 0.0, 0.0, 1.0, 1.0 },
 
-pub fn Deinit(self: *CameraComponent, engine_context: *EngineContext) !void {
-    self.mViewportFrameBuffer.Deinit(engine_context.EngineAllocator());
-    self.mViewportVertexArray.Deinit(engine_context.EngineAllocator());
-    self.mViewportVertexBuffer.Deinit(engine_context.EngineAllocator());
-    self.mViewportIndexBuffer.Deinit();
+//offsets
+OffsetPosition: Vec3f32 = .{ 0.0, 0.0, 0.0 },
+OffsetRotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
+
+pub fn Deinit(self: *LensComponent, engine_context: *EngineContext) !void {
+    self.mFrameBuffer.Deinit(engine_context.EngineAllocator());
+    self.mVertexArray.Deinit(engine_context.EngineAllocator());
+    self.mVertexBuffer.Deinit(engine_context.EngineAllocator());
+    self.mIndexBuffer.Deinit();
 }
 
-pub fn SetOrthographic(self: *CameraComponent, size: f32, near_clip: f32, far_clip: f32) void {
-    self.mOrthographicSize = size;
-    self.mOrthographicNear = near_clip;
-    self.mOrthographicFar = far_clip;
-    self.RecalculateProjection();
-}
-
-pub fn SetPerspective(self: *CameraComponent, fov_radians: f32, near_clip: f32, far_clip: f32) void {
+pub fn SetPerspective(self: *LensComponent, fov_radians: f32, near_clip: f32, far_clip: f32) void {
     self.mPerspectiveFOVRad = fov_radians;
     self.mPerspectiveNear = near_clip;
     self.mPerspectiveFar = far_clip;
     self.RecalculateProjection();
 }
 
-pub fn SetProjectionType(self: *CameraComponent, new_projection_type: ProjectionType) void {
-    self.mProjectionType = new_projection_type;
-    self.RecalculateProjection();
-}
-
-pub fn SetAreaRect(self: *CameraComponent, new_area: Vec4f32) void {
+pub fn SetAreaRect(self: *LensComponent, new_area: Vec4f32) void {
     self.mAreaRect = new_area;
-    self.mViewportFrameBuffer.Resize(@intFromFloat(@as(f32, @floatFromInt(self.mViewportWidth)) * self.mAreaRect[2]), @intFromFloat(@as(f32, @floatFromInt(self.mViewportHeight)) * self.mAreaRect[3]));
+    self.mFrameBuffer.Resize(@intFromFloat(@as(f32, @floatFromInt(self.mViewportWidth)) * self.mAreaRect[2]), @intFromFloat(@as(f32, @floatFromInt(self.mViewportHeight)) * self.mAreaRect[3]));
 }
 
-pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void {
+pub fn SetViewportSize(self: *LensComponent, width: usize, height: usize) void {
     self.mViewportWidth = width;
     self.mViewportHeight = height;
 
-    self.mViewportFrameBuffer.Resize(@intFromFloat(@as(f32, @floatFromInt(self.mViewportWidth)) * self.mAreaRect[2]), @intFromFloat(@as(f32, @floatFromInt(self.mViewportHeight)) * self.mAreaRect[3]));
+    self.mFrameBuffer.Resize(@intFromFloat(@as(f32, @floatFromInt(self.mViewportWidth)) * self.mAreaRect[2]), @intFromFloat(@as(f32, @floatFromInt(self.mViewportHeight)) * self.mAreaRect[3]));
 
     if (height > 0) {
         self.mAspectRatio = @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height));
@@ -94,11 +81,11 @@ pub fn SetViewportSize(self: *CameraComponent, width: usize, height: usize) void
     self.RecalculateProjection();
 }
 
-fn RecalculateProjection(self: *CameraComponent) void {
+fn RecalculateProjection(self: *LensComponent) void {
     self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
 }
 
-pub fn EditorRender(self: *CameraComponent, _: *EngineContext) !void {
+pub fn EditorRender(self: *LensComponent, _: *EngineContext) !void {
 
     //aspect ratio
     _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
@@ -125,7 +112,7 @@ pub fn EditorRender(self: *CameraComponent, _: *EngineContext) !void {
     }
 }
 
-pub fn jsonStringify(self: *const CameraComponent, jw: anytype) !void {
+pub fn jsonStringify(self: *const LensComponent, jw: anytype) !void {
     try jw.beginObject();
 
     try jw.objectField("IsFixedAspectRatio");
@@ -146,10 +133,10 @@ pub fn jsonStringify(self: *const CameraComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!CameraComponent {
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!LensComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
-    var result: CameraComponent = .{};
+    var result: LensComponent = .{};
 
     while (true) {
         const token = try reader.next();
