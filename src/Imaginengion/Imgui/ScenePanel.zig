@@ -43,9 +43,15 @@ pub fn Init(self: ScenePanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+pub fn OnImguiRender(self: *ScenePanel, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("ScenePanel OIR", @src());
     defer zone.Deinit();
+
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
 
     if (!self.mIsVisible) return;
 
@@ -61,7 +67,12 @@ pub fn OnImguiRender(self: *ScenePanel, engine_context: *EngineContext, scene_ma
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         defer imgui.igEndChild();
 
-        try self.RenderScenes(engine_context, scene_manager, &already_popup);
+        const scene_stack_ids = try scene_manager.GetSceneStackIDs(engine_context.FrameAllocator());
+
+        for (scene_stack_ids.items) |scene_id| {
+            const scene_layer = scene_manager.GetSceneLayer(scene_id);
+            self.RenderScene(engine_context, scene_layer, &already_popup);
+        }
     }
     try self.HandlePanelContextMenu(engine_context, already_popup);
     try self.HandlePanelDragDrop(engine_context);
@@ -95,26 +106,9 @@ pub fn OnDeleteScene(self: *ScenePanel, delete_scene: SceneLayer) void {
     }
 }
 
-fn RenderScenes(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager, already_popup: *bool) !void {
+fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: SceneLayer, already_popup: *bool) !void {
     const frame_allocator = engine_context.FrameAllocator();
-    //getting all the scenes and entities ahead of time to use later
-    const name_entities = try scene_manager.mECSManagerGO.GetGroup(frame_allocator, GroupQuery{ .Not = .{
-        .mFirst = GroupQuery{ .Component = EntityNameComponent },
-        .mSecond = GroupQuery{ .Component = EntityChildComponent },
-    } });
-    const stack_pos_scenes = try scene_manager.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
 
-    //sort the scenes so we can display them in the correct order which matters for handling events and stuff
-    std.sort.insertion(SceneType, stack_pos_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
-    for (stack_pos_scenes.items) |scene_id| {
-        //setting up variables to be used later
-        const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
-        try self.RenderScene(engine_context, scene_layer, scene_manager, name_entities, already_popup);
-    }
-}
-
-fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: SceneLayer, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), already_popup: *bool) !void {
-    const frame_allocator = engine_context.FrameAllocator();
     const scene_id = scene_layer.mSceneID;
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     const scene_name_component = scene_layer.GetComponent(SceneNameComponent).?;
@@ -147,7 +141,20 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
     try self.HandleSceneDragDrop(engine_context, scene_layer);
     if (is_tree_open) {
         defer imgui.igTreePop();
-        try self.RenderSceneEntities(engine_context, scene_manager, name_entities, scene_layer, already_popup);
+        const scene_entities = try scene_layer.GetEntityGroup(
+            engine_context.FrameAllocator(),
+            .{
+                .Not = .{
+                    .mFirst = .{ .Component = EntitySceneComponent },
+                    .mSecond = .{ .Component = EntityChildComponent },
+                },
+            },
+        );
+
+        for (scene_entities) |entity_id| {
+            const entity = scene_layer.GetEntity(entity_id);
+            self.RenderEntity(engine_context, entity, scene_layer, already_popup);
+        }
     }
 }
 
@@ -232,20 +239,6 @@ fn HandleSceneDragDrop(_: *ScenePanel, engine_context: *EngineContext, scene_lay
                 },
             });
         }
-    }
-}
-
-fn RenderSceneEntities(self: *ScenePanel, engine_context: *EngineContext, scene_manager: *SceneManager, name_entities: std.ArrayList(Entity.Type), scene_layer: SceneLayer, already_popup: *bool) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-
-    var scene_name_entities = try name_entities.clone(frame_allocator);
-    defer scene_name_entities.deinit(frame_allocator);
-
-    scene_manager.FilterEntityByScene(frame_allocator, &scene_name_entities, scene_layer.mSceneID);
-
-    for (scene_name_entities.items) |entity_id| {
-        const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = &scene_manager.mECSManagerGO };
-        try self.RenderEntity(engine_context, entity, scene_layer, already_popup);
     }
 }
 

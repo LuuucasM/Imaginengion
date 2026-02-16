@@ -110,8 +110,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_t.Ind);
 
-            const internal_array_t = InternalComponentArray(entity_t, component_t);
-            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
+            const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
 
             return try internal_array.AddComponent(entityID, component);
         }
@@ -151,6 +150,8 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             const internal_array_t = InternalComponentArray(entity_t, component_t);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
+
+            internal_array.ResetComponent(entity_id, component);
         }
 
         pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {

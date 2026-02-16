@@ -91,7 +91,6 @@ _ViewportPanel: ViewportPanel = .{},
 _SceneSpecList: std.ArrayList(SceneSpecPanel) = .{},
 
 //editor stuff
-mEditorSceneManager: SceneManager = .{},
 mOverlayScene: SceneLayer = .{},
 mGameScene: SceneLayer = .{},
 mEditorEditorEntity: Entity = .{},
@@ -101,32 +100,27 @@ mEditorViewportPlayer: Player = .{},
 mEditorFont: AssetHandle = .{},
 
 //not editor stuff
-mWindow: *Window = undefined,
 mImgui: ImGui = .{},
-mGameSceneManager: SceneManager = .{},
-mPlaySceneManager: SceneManager = .{},
-mActiveSceneManager: *SceneManager = undefined,
-mPlayerManager: PlayerManager = .{},
-
+mActiveWindowWorld: *SceneManager = undefined,
+mActiveViewportWorld: *SceneManager = undefined,
+mActiveSimulateWorld: *SceneManager = undefined,
 const EditorProgram = @This();
 
-pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContext) !void {
+pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
-    self.mWindow = window;
+    try self.mEditorSceneManager.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight(), engine_allocator);
+    self.mActiveWindowWorld = engine_context.mEditorWorld;
+    self.mActiveViewportWorld = engine_context.mGameWorld;
+    self.mActiveSimulateWorld = engine_context.mSimulateWorld;
 
-    try self.mEditorSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
-    try self.mGameSceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
-    try self.mPlaySceneManager.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight(), engine_allocator);
-    self.mActiveSceneManager = &self.mGameSceneManager;
-
-    try self.mImgui.Init(self.mWindow);
+    try self.mImgui.Init(engine_context.mAppWindow);
 
     self._ComponentsPanel.Init();
     try self._ContentBrowserPanel.Init(engine_context);
     self._CSEditorPanel.Init(engine_allocator);
     try self._ToolbarPanel.Init(engine_context);
-    self._ViewportPanel.Init(self.mWindow.GetWidth(), self.mWindow.GetHeight());
+    self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
 
     self.mOverlayScene = try self.mEditorSceneManager.NewScene(engine_context, .OverlayLayer);
     self.mGameScene = try self.mEditorSceneManager.NewScene(engine_context, .GameLayer);
@@ -134,7 +128,7 @@ pub fn Init(self: *EditorProgram, window: *Window, engine_context: *EngineContex
     self.mEditorEditorEntity = try self.mGameScene.CreateEntity(engine_allocator);
     self.mEditorViewportEntity = try self.mGameScene.CreateEntity(engine_allocator);
 
-    try GameObjectUtils.AddScriptToEntity(engine_context, self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
+    try self.mEditorViewportEntity.AddComponentScript(engine_context, self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
 
     self.mEditorViewportPlayer = self.mEditorSceneManager.CreatePlayer(engine_context);
     self.mEditorEditorPlayer = self.mEditorSceneManager.CreatePlayer(engine_context);
@@ -154,9 +148,6 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
     defer zone.Deinit();
 
-    try self.mGameSceneManager.Deinit(engine_context);
-    try self.mPlaySceneManager.Deinit(engine_context);
-    try self.mEditorSceneManager.Deinit(engine_context);
     self._ContentBrowserPanel.Deinit(engine_context);
     self._CSEditorPanel.Deinit();
     self.mImgui.Deinit();
@@ -172,13 +163,21 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     const engine_allocator = engine_context.EngineAllocator();
+
+    //--------------Incoming network packets
+    {
+        const input_zone = Tracy.ZoneInit("Incoming Network Section", @src());
+        defer input_zone.Deinit();
+    }
+    //==============End Incoming Network packets
+
     //-------------Inputs Begin------------------
     {
         const input_zone = Tracy.ZoneInit("Inputs Section", @src());
         defer input_zone.Deinit();
 
         //Human Inputs
-        self.mWindow.PollInputEvents();
+        engine_context.mAppWindow.PollInputEvents();
         try engine_context.mSystemEventManager.ProcessEvents(engine_context, .EC_Input);
 
         //AI Inputs
@@ -190,7 +189,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         const physics_zone = Tracy.ZoneInit("Physics Section", @src());
         defer physics_zone.Deinit();
         if (self._ToolbarPanel.mState == .Play) {
-            try engine_context.mPhysicsManager.OnUpdate(engine_context, &self.mPlaySceneManager);
+            try engine_context.mPhysicsManager.OnUpdate(engine_context, .Simulate);
         }
     }
     //-------------Physics End-------------------
@@ -201,9 +200,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer game_logic_zone.Deinit();
 
         if (self._ToolbarPanel.mState == .Play) {
-            _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateScript, &self.mPlaySceneManager, .{});
+            _ = try ScriptsProcessor.RunEntityScript(OnUpdateScript, .Simulate, engine_context, .{});
         }
-        _ = try ScriptsProcessor.RunEntityScript(engine_context, OnUpdateScript, &self.mEditorSceneManager, .{});
+        _ = try ScriptsProcessor.RunEntityScript(OnUpdateScript, .Editor, engine_context, .{});
     }
     //-------------Game Logic End----------------
 
@@ -226,10 +225,10 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const assets_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer assets_zone.Deinit();
-        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, &self.mGameSceneManager);
-        try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, &self.mEditorSceneManager);
+        try engine_context.mPhysicsManager.UpdateWorldTransforms(.Game, engine_context);
+        try engine_context.mPhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
         if (self._ToolbarPanel.mState == .Play) {
-            try engine_context.mPhysicsManager.UpdateWorldTransforms(engine_context, &self.mPlaySceneManager);
+            try engine_context.mPhysicsManager.UpdateWorldTransforms(.Simulate, engine_context);
         }
     }
     //---------------End World Transform Update ------------
@@ -244,7 +243,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             try self._ContentBrowserPanel.OnImguiRender(engine_context);
             try self._AssetHandlePanel.OnImguiRender(engine_context);
-            try self._ScenePanel.OnImguiRender(engine_context, self.mActiveSceneManager);
+            try self._ScenePanel.OnImguiRender(.Editor, engine_context);
             for (self._SceneSpecList.items) |*scene_spec_panel| {
                 try scene_spec_panel.OnImguiRender(engine_context);
             }
@@ -254,11 +253,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self._CSEditorPanel.OnImguiRender(engine_context);
 
             try self.RenderPlayerLens(engine_context);
-            try self.ViewportPlayRender(engine_context);
+            try self.ScreenRender(engine_context);
 
             try self._StatsPanel.OnImguiRender(engine_context.mDT, engine_context.mRenderer.GetRenderStats());
 
-            try self._ToolbarPanel.OnImguiRender(engine_context, &self.mGameSceneManager);
+            try self._ToolbarPanel.OnImguiRender(.Game, engine_context);
             const opens = PanelOpen{
                 .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
                 .mCSEditorPanel = self._CSEditorPanel.mP_Open,
@@ -288,12 +287,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //--------------Audio End--------------------
 
-    //--------------Networking Begin-------------
+    //--------------Outgoing Networking Begin-------------
     {
-        const networking_zone = Tracy.ZoneInit("Networking Section", @src());
+        const networking_zone = Tracy.ZoneInit("Outgoing Network Section", @src());
         defer networking_zone.Deinit();
     }
-    //--------------Networking End---------------
+    //--------------Outgoing Networking End---------------
 
     //-----------------Start End of Frame-----------------
     {
@@ -312,8 +311,10 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         //handle deleted objects this frame
         try engine_context.mGameEventManager.ProcessEvents(engine_context, .EC_EndOfFrame);
 
-        try self.mGameSceneManager.ProcessRemovedObj(engine_context);
-        try self.mEditorSceneManager.ProcessRemovedObj(engine_context);
+        try engine_context.mGameWorld.ProcessRemovedObj(engine_context);
+        try engine_context.mEditorWorld.ProcessRemovedObj(engine_context);
+        try engine_context.mSimulateWorld.ProcessRemovedObj(engine_context);
+
         try engine_context.mAssetManager.ProcessDestroyedAssets(engine_context);
 
         //end of frame resets
@@ -453,7 +454,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
 pub fn OnGameEvent(self: *EditorProgram, engine_context: *EngineContext, event: *GameEvent) !void {
     switch (event.*) {
         .ET_DestroyEntityEvent => |e| {
-            try self.mGameSceneManager.DestroyEntity(engine_context.EngineAllocator(), e.mEntity);
+            e.mEntity.Delete(engine_context);
         },
         .ET_DestroySceneEvent => |e| {
             const scene = self.mGameSceneManager.GetSceneLayer(e.mSceneID);
@@ -473,17 +474,10 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     if (event.mEditorState == .Play) { //the play button was pressed
         try self.mGameSceneManager.Copy(engine_context, self.mPlaySceneManager);
         const new_player = try self.mPlaySceneManager.CreatePlayer(engine_context);
-        const start_entity = self._ToolbarPanel.mStartEntity.?;
-        const start_entity_uuid = start_entity.GetComponent(EntityUUIDComponent);
-    } else { //stop button was pressed
-        self._ScenePanel.OnSelectEntityEvent(null);
-        self._ComponentsPanel.OnSelectEntityEvent(null);
-        self._ScriptsPanel.OnSelectEntityEvent(null);
-        self._ViewportPanel.OnSelectEntityEvent(null);
-
-        self._ToolbarPanel.mStartEntity = null;
-
-        try self.mGameSceneManager.ReloadAllScenes(engine_context);
+        self._ToolbarPanel.mStartDescriptor.?.Possess(new_player);
+    } else {
+        //stop button was pressed
+        self.mPlaySceneManager.Deinit(engine_context);
     }
 }
 
@@ -534,6 +528,7 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext) !void 
     var lens_components = try std.ArrayList(*PlayerLens).initCapacity(frame_allocator, 1);
     var transform_components = try std.ArrayList(*TransformComponent).initCapacity(frame_allocator, 1);
 
+    //for the viewport
     lens_components.append(frame_allocator, self.mEditorViewportPlayer.GetComponent(PlayerLens).?);
     transform_components.append(frame_allocator, self.mEditorViewportEntity.GetComponent(TransformComponent).?);
 
@@ -581,7 +576,7 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext) !void 
     }
 }
 
-fn ViewportPlayRender(self: *EditorProgram, engine_context: *EngineContext) !void {
+fn ScreenRender(self: *EditorProgram, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
     var viewport_framebuffers = std.ArrayList(FrameBuffer){};

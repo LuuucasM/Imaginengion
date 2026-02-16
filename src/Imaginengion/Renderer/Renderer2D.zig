@@ -116,24 +116,41 @@ pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mGlyphBufferBase.clearAndFree(engine_allocator);
 }
 
-pub fn SetBuffers(self: *Renderer2D) !void {
+pub fn SetBuffers(self: *Renderer2D, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
     defer zone.Deinit();
+
     //quads
-    if (self.mQuadBufferBase.items.len > 0) {
-        self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, self.mQuadBufferBase.items.len * @sizeOf(QuadData), 0);
-    }
     var quad_count: c_int = @intCast(self.mQuadBufferBase.items.len);
+    if (quad_count > 0) {
+        self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, quad_count * @sizeOf(QuadData), 0);
+    }
     self.mQuadCountUB.SetData(@ptrCast(&quad_count), @sizeOf(c_uint), 0);
 
     //glyphs
-    if (self.mGlyphBufferBase.items.len > 0) {
-        self.mGlyphBuffer.SetData(self.mGlyphBufferBase.items.ptr, self.mGlyphBufferBase.items.len * @sizeOf(GlyphData), 0);
-    }
     var glyph_count: c_int = @intCast(self.mGlyphBufferBase.items.len);
+    if (glyph_count > 0) {
+        self.mGlyphBuffer.SetData(self.mGlyphBufferBase.items.ptr, glyph_count * @sizeOf(GlyphData), 0);
+    }
     self.mGlyphCountUB.SetData(@ptrCast(&glyph_count), @sizeOf(c_uint), 0);
 
     //more shapes
+
+    //fill out stats
+    switch (world_type) {
+        .Game => {
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.FinalQuadNum = quad_count;
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.FinalGlyphNum = glyph_count;
+        },
+        .Editor => {
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.FinalQuadNum = quad_count;
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.FinalGlyphNum = glyph_count;
+        },
+        .Simulate => {
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.FinalQuadNum = quad_count;
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.FinalGlyphNum = glyph_count;
+        },
+    }
 }
 
 pub fn BindBuffers(self: *Renderer2D) void {

@@ -12,6 +12,7 @@ const GenUUID = @import("../Core/UUID.zig").GenUUID;
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const Entity = @import("../GameObjects/Entity.zig");
+const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityComponentsArray = EntityComponents.ComponentsList;
@@ -25,6 +26,7 @@ const EntityAISlotComponent = EntityComponents.AISlotComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntityPlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const EntityQuadComponent = EntityComponents.QuadComponent;
+const EntityUUIDComponent = EntityComponents.UUIDComponent;
 
 const SceneComponents = @import("SceneComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
@@ -54,6 +56,8 @@ const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent
 
 const Tracy = @import("../Core/Tracy.zig");
 
+const NewSceneConfig = SceneLayer.NewSceneConfig;
+
 const SceneManager = @This();
 
 pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
@@ -66,6 +70,9 @@ pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents.Component
 mECSManagerGO: ECSManagerGameObj = .{},
 mECSManagerSC: ECSManagerScenes = .{},
 mECSManagerPL: ECSManagerPlayer = .{},
+mSceneUUIDToWorldID: std.AutoHashMapUnmanaged(u64, SceneLayer.Type) = .{},
+mEntityUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Entity.Type) = .{},
+
 mGameLayerInsertIndex: usize = 0,
 mNumofLayers: usize = 0,
 
@@ -85,69 +92,21 @@ pub fn Deinit(self: *SceneManager, engine_context: *EngineContext) !void {
     try self.mECSManagerGO.Deinit(engine_context);
     try self.mECSManagerSC.Deinit(engine_context);
     try self.mECSManagerPL.Deinit(engine_context);
-}
 
-//===============================ECS MANAGER GO==============================================
-pub fn CreateEntity(self: *SceneManager, engine_allocator: std.mem.Allocator, scene_id: SceneLayer.Type) !Entity {
-    const zone = Tracy.ZoneInit("SceneManager::CreateEntity", @src());
-    defer zone.Deinit();
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    return scene_layer.CreateEntity(engine_allocator);
+    self.mSceneUUIDToWorldID.deinit(engine_context.EngineAllocator());
+    self.mEntityUUIDToWorldID.deinit(engine_context.EngineAllocator());
 }
-pub fn CreateEntityWithUUID(self: *SceneManager, engine_allocator: std.mem.Allocator, uuid: u128, scene_id: SceneLayer.Type) !Entity {
-    const zone = Tracy.ZoneInit("SceneManager::CreateEntityWithUUID", @src());
-    defer zone.Deinit();
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    return scene_layer.CreateEntityWithUUID(engine_allocator, uuid);
-}
-
-pub fn DestroyEntity(self: *SceneManager, engine_allocator: std.mem.Allocator, destroy_entity: Entity) !void {
-    const zone = Tracy.ZoneInit("SceneManager::DestroyEntity", @src());
-    defer zone.Deinit();
-
-    try self.mECSManagerGO.DestroyEntity(engine_allocator, destroy_entity.mEntityID);
-}
-
-pub fn DuplicateEntity(self: *SceneManager, original_entity: Entity, scene_id: SceneLayer.Type) !Entity {
-    const zone = Tracy.ZoneInit("SceneManager::DuplicateEntity", @src());
-    defer zone.Deinit();
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.DuplicateEntity(original_entity);
-}
-
-pub fn RmEntityComp(self: *SceneManager, engine_allocator: std.mem.Allocator, entity_id: Entity.Type, component_ind: EEntityComponents) !void {
-    try self.mECSManagerGO.RemoveComponentInd(engine_allocator, entity_id, @intFromEnum(component_ind));
-}
-
-pub fn GetEntityGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Entity.Type) {
-    const zone = Tracy.ZoneInit("SceneManager GetEntityGroup", @src());
-    defer zone.Deinit();
-    return try self.mECSManagerGO.GetGroup(frame_allocator, query);
-}
-//===============================END ECS MANAGER GO==============================================
 
 //===============================ECS MANAGER SC==============================================
-pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, _: LayerType) !SceneLayer {
-    const new_scene_id = try self.mECSManagerSC.CreateEntity();
-    const scene_layer = SceneLayer{ .mSceneID = new_scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-
+pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, _: LayerType, new_scene_config: NewSceneConfig) !SceneLayer {
+    const scene_layer = SceneLayer{ .mSceneID = try self.mECSManagerSC.CreateEntity(), .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
     _ = try scene_layer.AddComponent(SceneComponent{});
 
-    _ = try scene_layer.AddComponent(SceneUUIDComponent{ .ID = try GenUUID() });
-
-    const scene_name_component = try scene_layer.AddComponent(SceneNameComponent{ .mAllocator = engine_context.EngineAllocator() });
-    _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
+    self.CreateSceneConfig(engine_context.EngineAllocator(), scene_layer, new_scene_config);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
     return scene_layer;
-}
-
-pub fn NewBlankScene(self: *SceneManager, engine_context: *EngineContext, _: LayerType) !SceneLayer {
-    const scene_layer = SceneLayer{ .mSceneID = try self.mECSManagerSC.CreateEntity(), .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    _ = try scene_layer.AddComponent(SceneComponent{});
-
-    try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 }
 
 pub fn DestroyScene(self: *SceneManager, engine_context: *EngineContext, destroy_scene: SceneLayer) !void {
@@ -155,7 +114,16 @@ pub fn DestroyScene(self: *SceneManager, engine_context: *EngineContext, destroy
 
     const frame_allocator = engine_context.FrameAllocator();
 
-    engine_context.mSceneSerializer.DestroyScene(frame_allocator, destroy_scene);
+    //remove all the UUIDs in the UUID map
+    const uuid_entities = try destroy_scene.GetEntityGroup(frame_allocator, EntityUUIDComponent);
+    for (uuid_entities.items) |entity_id| {
+        const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = destroy_scene.mECSManagerGORef };
+        const uuid_component = entity.GetComponent(EntityUUIDComponent).?;
+        _ = self.mEntityUUIDToWorldID.remove(uuid_component.ID);
+    }
+
+    const scene_uuid = destroy_scene.GetComponent(SceneUUIDComponent).?;
+    _ = self.mSceneUUIDToWorldID.remove(scene_uuid.ID);
 
     //remove all the entities from the scene
     const entity_scene_entities = try destroy_scene.GetEntityGroup(frame_allocator, EntitySceneComponent);
@@ -172,9 +140,19 @@ pub fn DestroyScene(self: *SceneManager, engine_context: *EngineContext, destroy
 }
 
 pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, abs_path: []const u8) !SceneLayer {
-    const scene_layer = self.NewBlankScene(engine_context, .GameLayer);
+    const scene_layer = try self.NewBlankScene(engine_context, .GameLayer);
 
     try engine_context.mSceneSerializer.DeSerializeSceneText(engine_context, scene_layer, abs_path);
+
+    const scene_uuid_comp = scene_layer.GetComponent(SceneUUIDComponent).?;
+    self.mSceneUUIDToWorldID.put(engine_context.EngineAllocator(), scene_uuid_comp.ID, scene_layer.mSceneID);
+
+    const entity_uuids = try scene_layer.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntityUUIDComponent });
+    for (entity_uuids) |entity_id| {
+        const entity = self.GetEntity(entity_id);
+        const entity_uuid = entity.GetComponent(EntityUUIDComponent).?;
+        self.mEntityUUIDToWorldID.put(engine_context.EngineAllocator(), entity_uuid.ID, entity.mEntityID);
+    }
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
@@ -195,17 +173,6 @@ pub fn Serialize(self: *SceneManager, engine_context: *EngineContext) !void {
     }
 }
 
-pub fn ReloadAllScenes(self: *SceneManager, engine_context: *EngineContext) !void {
-    self.mECSManagerGO.clearAndFree(engine_context);
-
-    const all_scenes = try self.mECSManagerSC.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = SceneStackPos });
-
-    for (all_scenes.items) |scene_id| {
-        const scene = self.GetSceneLayer(scene_id);
-
-        try engine_context.mSceneSerializer.SceneReloadText(engine_context, scene);
-    }
-}
 pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const frame_allocator = engine_context.FrameAllocator();
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
@@ -217,6 +184,7 @@ pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_laye
         try self.SaveSceneAs(engine_context, scene_layer);
     }
 }
+
 pub fn SaveSceneAs(_: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imsc");
     if (abs_path.len > 0) {
@@ -274,6 +242,26 @@ pub fn GetSceneGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, qu
     return try self.mECSManagerSC.GetGroup(frame_allocator, query);
 }
 
+pub fn GetSceneStackIDs(self: *SceneManager, frame_allocator: std.mem.Allocator) !std.ArrayList(SceneLayer.Type) {
+    const stack_pos_scenes = try self.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+    std.sort.insertion(SceneLayer.Type, stack_pos_scenes.items, self.mECSManagerSC, SceneManager.SortScenesFunc);
+    return stack_pos_scenes;
+}
+
+pub fn GetSceneByUUID(self: SceneManager, scene_uuid: u64) ?SceneLayer {
+    if (self.mSceneUUIDToWorldID.get(scene_uuid)) |world_id| {
+        return SceneLayer{ .mSceneID = world_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    }
+    return null;
+}
+
+fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: SceneLayer.Type) bool {
+    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
+    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b).?;
+
+    return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
+}
+
 //===============================ECS MANAGER SC END==============================================
 
 //===============================ECS MANAGER Player==============================================
@@ -293,6 +281,15 @@ pub fn GetPlayerGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, q
     return try self.mECSManagerPL.GetGroup(frame_allocator, query);
 }
 //===============================ECS MANAGER Player END==============================================
+
+//===============================ECS MANAGER Entity==============================================
+pub fn GetEntityByUUID(self: SceneManager, entity_uuid: u64) ?Entity {
+    if (self.mEntityUUIDToWorldID.get(entity_uuid)) |world_id| {
+        return Entity{ .mEntityID = world_id, .mECSManagerRef = &self.mECSManagerGO };
+    }
+    return null;
+}
+//===============================ECS MANAGER Entity==============================================
 
 pub fn OnViewportResize(self: *SceneManager, frame_allocator: std.mem.Allocator, viewport_width: usize, viewport_height: usize) !void {
     const zone = Tracy.ZoneInit("SceneManager::OnViewportResize", @src());
@@ -319,27 +316,6 @@ pub fn SaveEntity(self: *SceneManager, frame_allocator: std.mem.Allocator, entit
 
 pub fn SaveEntityAs(_: *SceneManager, engine_context: *EngineContext, entity: Entity, abs_path: []const u8) !void {
     try engine_context.mSceneSerializer.SerializeEntityText(engine_context.FrameAllocator(), entity, abs_path);
-}
-
-pub fn FilterEntityByScene(self: *SceneManager, list_allocator: std.mem.Allocator, entity_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type) void {
-    const zone = Tracy.ZoneInit("SceneManager::FilterEntityByScene", @src());
-    defer zone.Deinit();
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.FilterEntityByScene(list_allocator, entity_result_list);
-}
-
-pub fn FilterSceneScriptsByScene(self: *SceneManager, list_allocator: std.mem.Allocator, scripts_result_list: *std.ArrayList(Entity.Type), scene_id: SceneLayer.Type) void {
-    const zone = Tracy.ZoneInit("SceneManager::FilterSceneScriptsByScene", @src());
-    defer zone.Deinit();
-    const scene_layer = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    scene_layer.FilterSceneScriptsByScene(list_allocator, scripts_result_list);
-}
-
-pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: SceneLayer.Type) bool {
-    const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
-    const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b).?;
-
-    return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }
 
 pub fn GetEntity(self: *SceneManager, entity_id: Entity.Type) Entity {
@@ -371,9 +347,7 @@ pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *S
         const scene_component = scene.GetComponent(SceneComponent).?;
         const scene_abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath, .Prj);
 
-        const new_scene = try other_scene.NewBlankScene(engine_context, .GameLayer);
-
-        engine_context.mSceneSerializer.DeSerializeSceneText(engine_context, new_scene, scene_abs_path);
+        other_scene.LoadScene(engine_context, scene_abs_path);
     }
 }
 

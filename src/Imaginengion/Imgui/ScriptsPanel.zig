@@ -63,7 +63,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
                             defer imgui.igEndPopup();
 
                             if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                                try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroyEntityEvent = .{ .mEntity = script_entity } });
+                                //try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroyEntityEvent = .{ .mEntity = script_entity } });
                             }
                         }
 

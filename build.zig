@@ -44,6 +44,19 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    const run_step = b.step("run", "Run the app");
+    const run_step = b.step("run", "Run Engine");
     run_step.dependOn(&run_cmd.step);
+
+    //tests
+    const test_step = b.step("test", "Test Engine");
+
+    //skip field tests
+    const skip_field_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Core/SkipField.zig" } },
+    }) });
+    const run_skip_field_tests = b.addRunArtifact(skip_field_tests);
+
+    test_step.dependOn(&run_skip_field_tests.step);
 }

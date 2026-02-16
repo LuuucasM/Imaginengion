@@ -121,7 +121,6 @@ pub const NewScriptEvent = struct {
 
 pub const ChangeEditorStateEvent = struct {
     mEditorState: EditorState,
-    mStartEntity: ?Entity,
 };
 
 pub const OpenSceneSpecEvent = struct {

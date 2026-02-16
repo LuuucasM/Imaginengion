@@ -1,7 +1,3 @@
-- Move SceneUtils and PlayerUtils into the SceneLayer/Player objects
-	- idk why i created a new stateless file with functions for it when it makes it easier and more sense if its part of the Entity/SceneLayer/Player
-- Add utility functions to scene for adding UUID component so that it adds the UUID to world_id map in the scene serializer
-- change all the adding UUID components for both scripts and entities to use the new speicalized functions for adding UUID
 - change toolbar panel so that it looks for spawn components on any of the scenes and lets you choose one of those with the dropdown bar instead of how it is now
 	- this means that when you press play it will spawn a player (maybe more than one in the future) and follow the spawn logic of that spawn component 
 - still need to change the serializer, specifically for de-serializing scene/entity references I should do something like they will be serialized as "EntityRef" and "SceneRef" and write that objects UUID

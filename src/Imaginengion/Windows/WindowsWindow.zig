@@ -16,6 +16,7 @@ _Width: usize = 1600,
 _Height: usize = 900,
 _IsVSync: bool = true,
 _Window: ?*glfw.struct_GLFWwindow = null,
+mIsMinimized: bool = false,
 
 pub fn Init(self: *WindowsWindow, engine_context: *EngineContext) void {
     _ = glfw.glfwSetErrorCallback(GLFWErrorCallback);
@@ -75,6 +76,8 @@ pub fn GetNativeWindow(self: WindowsWindow) *anyopaque {
 pub fn OnWindowResize(self: *WindowsWindow, width: usize, height: usize) void {
     self._Width = width;
     self._Height = height;
+
+    if (self._Width == 0 or self._Height == 0) self.mIsMinimized = true else self.mIsMinimized = false;
 }
 
 pub fn PollInputEvents(self: WindowsWindow) void {
@@ -82,6 +85,10 @@ pub fn PollInputEvents(self: WindowsWindow) void {
     defer zone.Deinit();
     _ = self;
     glfw.glfwPollEvents();
+}
+
+pub fn IsMinimized(self: WindowsWindow) bool {
+    return self.mIsMinimized;
 }
 
 export fn GLFWErrorCallback(err: c_int, msg: [*c]const u8) callconv(.c) void {

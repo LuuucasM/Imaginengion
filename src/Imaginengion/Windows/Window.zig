@@ -45,3 +45,7 @@ pub fn OnWindowResize(self: *Window, width: usize, height: usize) void {
 pub fn PollInputEvents(self: Window) void {
     self._Impl.PollInputEvents();
 }
+
+pub fn IsMinimized(self: Window) bool {
+    return self._Impl.IsMinimized();
+}

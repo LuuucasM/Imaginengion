@@ -19,8 +19,6 @@ const Tracy = @import("Tracy.zig");
 const Application: type = @This();
 
 mIsRunning: bool = true,
-
-mWindow: Window = .{},
 mProgram: Program = .{},
 mEngineContext: EngineContext = .{},
 
@@ -33,13 +31,8 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
-    self.mWindow.Init(&self.mEngineContext);
-
     try self.mEngineContext.Init(&self.mWindow, &self.mProgram, self);
-
     try self.mProgram.Init(&self.mWindow, &self.mEngineContext);
-
-    self.mWindow.SetVSync(false);
 }
 
 /// Shuts down the application and cleans up resources.
@@ -53,7 +46,6 @@ pub fn Deinit(self: *Application) !void {
     const zone = Tracy.ZoneInit("Application::Deinit", @src());
     defer zone.Deinit();
     try self.mProgram.Deinit(&self.mEngineContext);
-    self.mWindow.Deinit();
     try self.mEngineContext.DeInit();
 }
 
@@ -65,18 +57,16 @@ pub fn Deinit(self: *Application) !void {
 /// Returns:
 /// - `!void` if an update loop iteration fails return the error else return nothing.
 pub fn Run(self: *Application) !void {
-    var timer = try std.time.Timer.start();
-    var delta_time: f32 = 0;
+    var frame_timer = std.time.Timer.start();
 
-    while (self.mIsRunning) : (delta_time = @as(f32, @floatFromInt(timer.lap())) / std.time.ns_per_s) {
+    while (self.mIsRunning) : (self.mEngineContext.mDT = @as(f32, @floatFromInt(frame_timer.lap())) / std.time.ns_per_s) {
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
-
-        self.mEngineContext.mDT = delta_time;
 
         try self.mProgram.OnUpdate(&self.mEngineContext);
 
         _ = self.mEngineContext._internal.FrameArena.reset(.free_all);
+        self.mEngineContext.mEngineStats.ResetStats();
 
         Tracy.FrameMark();
     }

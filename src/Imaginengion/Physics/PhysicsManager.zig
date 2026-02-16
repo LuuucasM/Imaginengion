@@ -44,12 +44,18 @@ pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
     self._InternalData.Contacts.deinit(engine_allocator);
 }
 
-pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime world_type: EngineContext.WorldType) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
     self._InternalData.Accumulator += engine_context.mDT;
 
     const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
+    const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
         for (0..SUB_STEPS) |_| {
@@ -63,9 +69,9 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
                 IntegratePositions(entity, entity_rb, SUB_STEP_DT);
             }
 
-            try self.UpdateWorldTransforms(engine_context, scene_manager);
+            try self.UpdateWorldTransforms(world_type, engine_context);
 
-            try self.DetectCollisions(engine_context, scene_manager);
+            try self.DetectCollisions(engine_context, colliders_arr);
 
             for (0..SOLVER_ITERS) |_| {
                 for (self._InternalData.Contacts.items) |contact| {
@@ -84,16 +90,23 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, scene_man
                         }
                     }
                 }
-                try self.UpdateWorldTransforms(engine_context, scene_manager);
+                try self.UpdateWorldTransforms(world_type, engine_context);
             }
             self._InternalData.Contacts.clearAndFree(engine_context.EngineAllocator());
         }
     }
 }
 
-pub fn UpdateWorldTransforms(_: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransform", @src());
     defer zone.Deinit();
+
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
+
     const transforms_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Not = .{ .mFirst = .{ .Component = EntityTransformComponent }, .mSecond = .{ .Component = ChildComponent } } });
 
     for (transforms_arr.items) |entity_id| {
@@ -167,10 +180,15 @@ fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) v
     transform.Translation += entity_rb.mVelocity * @as(Vec3f32, @splat(dt));
 }
 
-fn DetectCollisions(self: *PhysicsManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, colliders_arr: std.ArrayList(Entity.Type)) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::DetectCollisions", @src());
     defer zone.Deinit();
-    const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
+
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
 
     for (0..colliders_arr.items.len) |i| {
         const entity_origin = scene_manager.GetEntity(colliders_arr.items[i]);

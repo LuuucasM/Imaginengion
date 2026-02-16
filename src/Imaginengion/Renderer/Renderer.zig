@@ -33,11 +33,6 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const Renderer = @This();
 
-pub const RenderStats = struct {
-    mQuadNum: usize = 0,
-    mGlyphNum: usize = 0,
-};
-
 const CameraData = extern struct {
     mRotation: [4]f32, // 16 bytes ← 16-byte boundary
     mPosition: [3]f32, // 12 bytes
@@ -59,7 +54,6 @@ const ModeData = extern struct {
 };
 
 mRenderContext: RenderContext = undefined,
-mStats: RenderStats = .{},
 
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
@@ -101,11 +95,17 @@ pub fn SwapBuffers(self: *Renderer) void {
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: *SceneManager, camera_data: CameraData, camera_buffers: CameraBuffers, mode: u32) !void {
+pub fn OnUpdate(self: *Renderer, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_data: CameraData, camera_buffers: CameraBuffers, mode: u32) !void {
     std.debug.assert(mode == 0b0 or mode == 0b1);
 
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
+
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
 
     self.mRenderContext.PushDebugGroup("Frame\x00");
     defer self.mRenderContext.PopDebugGroup();
@@ -125,8 +125,14 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
         },
     );
 
-    //TODO: sorting
+    switch (world_type) {
+        .Game => engine_context.mEngineStats.GameWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
+        .Editor => engine_context.mEngineStats.EditorWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
+        .Simulate => engine_context.mEngineStats.SimulateWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
+    }
+
     //TODO: culling
+    //TODO: sorting
     //TODO: other optimizsations?
 
     for (shapes_ids.items) |shape_id| {
@@ -134,11 +140,7 @@ pub fn OnUpdate(self: *Renderer, engine_context: *EngineContext, scene_manager: 
         try self.DrawShape(engine_context, shape_entity);
     }
 
-    try self.EndRendering(camera_buffers);
-}
-
-pub fn GetRenderStats(self: *Renderer) RenderStats {
-    return self.mStats;
+    try self.EndRendering(world_type, engine_context, camera_buffers);
 }
 
 pub fn GetSDFShader(self: *Renderer) *ShaderAsset {
@@ -162,8 +164,6 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
 
     self.mCameraUniformBuffer.SetData(&self.mCameraBuffer, @sizeOf(CameraData), 0);
     self.mModeUniformBuffer.SetData(&self.mModeBuffer, @sizeOf(ModeData), 0);
-
-    self.mStats = std.mem.zeroes(RenderStats);
 
     self.mR2D.StartBatch(engine_allocator);
 }
@@ -207,12 +207,9 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
     }
 }
 
-fn EndRendering(self: *Renderer, camera_buffers: *CameraBuffers) !void {
+fn EndRendering(self: *Renderer, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_buffers: *CameraBuffers) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
-
-    self.mStats.mQuadNum = self.mR2D.mQuadBufferBase.items.len;
-    self.mStats.mGlyphNum = self.mR2D.mGlyphBufferBase.items.len;
 
     self.mRenderContext.PushDebugGroup("End Rendering\x00");
     defer self.mRenderContext.PopDebugGroup();
@@ -222,7 +219,7 @@ fn EndRendering(self: *Renderer, camera_buffers: *CameraBuffers) !void {
 
     self.mSDFShader.Bind();
 
-    try self.mR2D.SetBuffers();
+    try self.mR2D.SetBuffers(world_type, engine_context);
 
     //UBOs
     self.mCameraUniformBuffer.Bind(0);

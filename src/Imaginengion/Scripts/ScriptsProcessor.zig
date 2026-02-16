@@ -35,27 +35,32 @@ const Entity = @import("../GameObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
-pub fn RunEntityScript(engine_context: *EngineContext, comptime script_type: type, scene_manager: *SceneManager, args: anytype) !bool {
+pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, args: anytype) !bool {
     _ValidateEntityType(script_type);
     const zone = Tracy.ZoneInit("RunEntityScript", @src());
     defer zone.Deinit();
 
-    const ecs_manager_sc = scene_manager.mECSManagerSC;
-    const ecs_manager_go = scene_manager.mECSManagerGO;
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
+
     const frame_allocator = engine_context.FrameAllocator();
 
-    const scene_stack_scenes = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
-    std.sort.insertion(SceneType, scene_stack_scenes.items, ecs_manager_sc, SceneManager.SortScenesFunc);
+    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
+    std.sort.insertion(SceneType, scene_stack_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
 
     var cont_bool = true;
     for (scene_stack_scenes.items) |scene_id| {
         if (cont_bool == false) break;
+        const scene_layer = scene_manager.GetSceneLayer(scene_id);
 
-        var scene_scripts = try ecs_manager_go.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
-        scene_manager.FilterEntityScriptsByScene(frame_allocator, &scene_scripts, scene_id);
+        const scene_entity_scripts = try scene_layer.GetEntityGroup(frame_allocator, .{ .Component = script_type });
+        for (scene_entity_scripts.items) |script_id| {
+            const script_entity = scene_layer.GetEntity(script_id);
 
-        for (scene_scripts.items) |script_id| {
-            if (ecs_manager_go.GetComponent(EntityScriptComponent, script_id)) |script_component| {
+            if (script_entity.GetComponent(EntityScriptComponent)) |script_component| {
                 if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
                 const asset_handle = script_component.mScriptAssetHandle;
                 const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
@@ -70,24 +75,33 @@ pub fn RunEntityScript(engine_context: *EngineContext, comptime script_type: typ
     return cont_bool;
 }
 
-pub fn RunSceneScript(engine_context: *EngineContext, comptime script_type: type, scene_manager: *SceneManager, args: anytype) !bool {
+pub fn RunSceneScript(comptime script_type: type, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, args: anytype) !bool {
     _ValidateSceneType(script_type);
+    const zone = Tracy.ZoneInit("RunSceneScript", @src());
+    defer zone.Deinit();
 
-    const ecs_manager_sc = scene_manager.mECSManagerSC;
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
+
     const frame_allocator = engine_context.FrameAllocator();
 
-    const scene_stack_scenes = try scene_manager.mECSManagerSC.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
+    const scene_stack_scenes = try scene_manager.GetSceneGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
     std.sort.insertion(SceneType, scene_stack_scenes.items, scene_manager.mECSManagerSC, SceneManager.SortScenesFunc);
 
     var cont_bool = true;
     for (scene_stack_scenes.items) |scene_id| {
         if (cont_bool == false) break;
 
-        var scene_scripts = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
-        scene_manager.FilterSceneScriptsByScene(frame_allocator, &scene_scripts, scene_id);
+        const scene_layer = scene_manager.GetSceneLayer(scene_id);
+
+        const scene_scripts = scene_layer.GetSceneGroup(frame_allocator, GroupQuery{ .Component = script_type });
 
         for (scene_scripts.items) |script_id| {
-            if (ecs_manager_sc.GetComponent(SceneScriptComponent, script_id)) |script_component| {
+            const script_scene = scene_manager.GetSceneLayer(script_id);
+            if (script_scene.GetComponent(SceneScriptComponent)) |script_component| {
                 if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
                 const asset_handle = script_component.mScriptAssetHandle;
                 const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
@@ -101,56 +115,6 @@ pub fn RunSceneScript(engine_context: *EngineContext, comptime script_type: type
         }
     }
     return cont_bool;
-}
-
-pub fn RunEntityScriptEditor(engine_context: *EngineContext, comptime script_type: type, scene_manager: *SceneManager, editor_scene_layer: *SceneLayer, args: anytype) !bool {
-    _ValidateEntityType(script_type);
-
-    const ecs_manager_go = scene_manager.mECSManagerGO;
-    const frame_allocator = engine_context.FrameAllocator();
-
-    var scene_scripts = try scene_manager.GetEntityGroup(frame_allocator, GroupQuery{ .Component = script_type });
-    scene_manager.FilterEntityScriptsByScene(engine_context.FrameAllocator(), &scene_scripts, editor_scene_layer.mSceneID);
-
-    for (scene_scripts.items) |script_id| {
-        if (ecs_manager_go.GetComponent(EntityScriptComponent, script_id)) |script_component| {
-            if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
-            const asset_handle = script_component.mScriptAssetHandle;
-            const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
-
-            var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
-
-            const combined_args = .{ engine_context, &entity } ++ args;
-
-            _ = script_asset.Run(script_type, combined_args);
-        }
-    }
-    return true;
-}
-
-pub fn RunSceneScriptEditor(engine_context: *EngineContext, comptime script_type: type, scene_manager: *SceneManager, editor_scene_layer: *SceneLayer, args: anytype) !bool {
-    _ValidateSceneType(script_type);
-
-    const ecs_manager_sc = scene_manager.mECSManagerSC;
-    const frame_allocator = engine_context.FrameAllocator();
-
-    var scene_scripts = try ecs_manager_sc.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
-    scene_manager.FilterSceneScriptsByScene(&scene_scripts, editor_scene_layer.mSceneID);
-
-    for (scene_scripts.items) |script_id| {
-        if (ecs_manager_sc.GetComponent(SceneScriptComponent, script_id)) |script_component| {
-            if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
-            const asset_handle = script_component.mScriptAssetHandle;
-            const script_asset = try asset_handle.GetAsset(ScriptAsset);
-
-            var scene = SceneLayer{ .mSceneID = editor_scene_layer.mSceneID, .mECSManagerGORef = &scene_manager.mECSManagerGO, .mECSManagerSCRef = &scene_manager.mECSManagerSC };
-
-            const combined_args = .{ engine_context, &scene } ++ args;
-
-            script_asset.Run(script_type, combined_args);
-        }
-    }
-    return true;
 }
 
 fn _GetFnInfo(comptime func_type_info: std.builtin.Type, comptime func_name: []const u8, comptime type_name: []const u8) std.builtin.Type.Fn {

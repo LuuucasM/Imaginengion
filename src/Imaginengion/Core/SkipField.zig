@@ -30,6 +30,9 @@ pub fn StaticSkipField(size: usize) type {
     return struct {
         const Self = @This();
         pub const SkipFieldType = std.math.IntFittingRange(0, size);
+        const AllSkipArr: [size]SkipFieldType = AllSkipFn(size, SkipFieldType);
+        const NoSkipArr: [size]SkipFieldType = std.mem.zeroes([size]SkipFieldType);
+
         const InitOption = enum(u1) {
             AllSkip = 0,
             NoSkip = 1,
@@ -51,7 +54,7 @@ pub fn StaticSkipField(size: usize) type {
             }
         };
 
-        mSkipField: [size]SkipFieldType = std.mem.zeroes([size]SkipFieldType),
+        mSkipField: [size]SkipFieldType = NoSkipArr,
 
         /// Initializes a new skip field instance with the given option.
         ///
@@ -75,14 +78,9 @@ pub fn StaticSkipField(size: usize) type {
         ///  - Nothing
         pub fn Reset(self: *Self, option: InitOption) void {
             if (option == .AllSkip) {
-                self.mSkipField[0] = size;
-                self.mSkipField[size - 1] = size;
-                var j: SkipFieldType = 1;
-                while (j < size - 1) : (j += 1) {
-                    self.mSkipField[j] = j + 1;
-                }
+                self.mSkipField = AllSkipArr;
             } else { //NoSkip option
-                self.mSkipField = std.mem.zeroes([size]SkipFieldType);
+                self.mSkipField = NoSkipArr;
             }
         }
 
@@ -122,29 +120,26 @@ pub fn StaticSkipField(size: usize) type {
             }
             //only left is non-zero
             else if (left_non_zero and !right_non_zero) {
-                const left_value = self.mSkipField[index - 1];
-                self.mSkipField[index] = 1 + left_value;
-                self.mSkipField[index - left_value] = self.mSkipField[index];
+                const left_val = self.mSkipField[index - 1];
+                const new_value = left_val + 1;
+                self.mSkipField[index] = new_value;
+                self.mSkipField[index - left_val] = new_value;
             }
             //only right is non-zero
             else if (!left_non_zero and right_non_zero) {
-                const right_value = self.mSkipField[index + 1];
-                self.mSkipField[index] = right_value + 1;
-                var i: SkipFieldType = 1;
-                while (i <= right_value and index + i < size) : (i += 1) {
-                    self.mSkipField[index + i] = i + 1;
-                }
+                const right_val = self.mSkipField[index + 1];
+                const new_value = right_val + 1;
+                self.mSkipField[index] = new_value;
+                self.mSkipField[index + right_val] = new_value;
             }
             //both left and right are non-zero
             else {
-                const left_value = self.mSkipField[index - 1];
-                const right_value = self.mSkipField[index + 1];
-                const new_value = left_value + right_value + 1;
-                self.mSkipField[index - left_value] = new_value;
-                var i: SkipFieldType = 0;
-                while (i <= right_value and index + i < size) : (i += 1) {
-                    self.mSkipField[index + i] = left_value + i + 1;
-                }
+                const left_val = self.mSkipField[index - 1];
+                const right_val = self.mSkipField[index + 1];
+                const new_value = left_val + right_val + 1;
+                self.mSkipField[index - left_val] = new_value;
+                self.mSkipField[index + right_val] = new_value;
+                self.mSkipField[index] = 1;
             }
         }
 
@@ -172,41 +167,192 @@ pub fn StaticSkipField(size: usize) type {
 
             //left and right are zero
             if (!left_non_zero and !right_non_zero) {
-                self.mSkipField[index] = 0;
+                //we dont have to do anything because we will make it 0 at the end anyway
             }
             //only left is non-zero
             else if (left_non_zero and !right_non_zero) {
-                const current_value = self.mSkipField[index];
-                self.mSkipField[index + 1 - current_value] = current_value - 1;
-                self.mSkipField[index] = 0;
+                const new_value = self.mSkipField[index] - 1;
+                self.mSkipField[index - new_value] = new_value;
+                self.mSkipField[index - 1] = new_value;
             }
             //only right is non-zero
             else if (!left_non_zero and right_non_zero) {
-                const current_value = self.mSkipField[index];
-                self.mSkipField[index] = 0;
-                self.mSkipField[index + 1] = current_value - 1;
-
-                var i: SkipFieldType = 2;
-                while (i < current_value and index + i < size) : (i += 1) {
-                    self.mSkipField[index + i] = i;
-                }
+                const new_value = self.mSkipField[index] - 1;
+                self.mSkipField[index + new_value] = new_value;
+                self.mSkipField[index + 1] = new_value;
             }
             //both left and right are non-zero
             else {
-                const current_value = self.mSkipField[index];
-                const left_start = index - (current_value - 1);
-                const new_left_value = current_value - 1;
-                const new_right_value = self.mSkipField[left_start] - current_value;
+                var start_ind = index;
+                while (start_ind > 0 and self.mSkipField[start_ind - 1] != 0) : (start_ind -= 1) {}
 
-                self.mSkipField[left_start] = new_left_value;
-                self.mSkipField[index] = 0;
-                self.mSkipField[index + 1] = new_right_value;
+                var end_ind = index;
+                while (end_ind < size - 1 and self.mSkipField[end_ind + 1] != 0) : (end_ind += 1) {}
 
-                var i: SkipFieldType = 2;
-                while (i <= new_right_value and index + i < size) : (i += 1) {
-                    self.mSkipField[index + i] = i;
-                }
+                const left_len = index - start_ind;
+                const right_len = end_ind - index;
+
+                self.mSkipField[start_ind] = left_len;
+                self.mSkipField[index - 1] = left_len;
+
+                self.mSkipField[index + 1] = right_len;
+                self.mSkipField[end_ind] = right_len;
             }
+            self.mSkipField[index] = 0;
         }
     };
+}
+
+fn AllSkipFn(comptime size: usize, comptime field_type: type) [size]field_type {
+    var arr: [size]field_type = std.mem.zeroes([size]field_type);
+    arr[0] = size;
+    arr[size - 1] = size;
+    return arr;
+}
+
+test "Init Small Field" {
+    const FieldSize = 1;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.AllSkip);
+    try std.testing.expect(field.mSkipField[0] == FieldSize);
+
+    field = SkipFieldT.Init(.NoSkip);
+    try std.testing.expect(field.mSkipField[0] == 0);
+}
+
+test "Small Change To UnSkip" {
+    const FieldSize = 1;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.AllSkip);
+    try std.testing.expect(field.mSkipField[0] == 1);
+
+    field.ChangeToUnskipped(0);
+    try std.testing.expect(field.mSkipField[0] == 0);
+}
+
+test "Small Change To Skip" {
+    const FieldSize = 1;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.NoSkip);
+    try std.testing.expect(field.mSkipField[0] == 0);
+
+    field.ChangeToSkipped(0);
+    try std.testing.expect(field.mSkipField[0] == 1);
+}
+
+test "Init Large Field" {
+    const FieldSize = 10;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.AllSkip);
+    try std.testing.expect(field.mSkipField[0] == FieldSize);
+    try std.testing.expect(field.mSkipField[FieldSize - 1] == FieldSize);
+    for (1..FieldSize - 2) |i| {
+        try std.testing.expect(field.mSkipField[i] == 0);
+    }
+
+    field = SkipFieldT.Init(.NoSkip);
+    for (field.mSkipField) |index| {
+        try std.testing.expect(index == 0);
+    }
+}
+
+test "Large Change To Skip" {
+    const FieldSize = 10;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.NoSkip);
+
+    field.ChangeToSkipped(4);
+    try std.testing.expect(field.mSkipField[4] == 1);
+
+    field.ChangeToSkipped(0);
+    try std.testing.expect(field.mSkipField[0] == 1);
+
+    field.ChangeToSkipped(3);
+    try std.testing.expect(field.mSkipField[3] == 2);
+    try std.testing.expect(field.mSkipField[4] == 2);
+
+    field.ChangeToSkipped(1);
+    try std.testing.expect(field.mSkipField[0] == 2);
+    try std.testing.expect(field.mSkipField[1] == 2);
+
+    field.ChangeToSkipped(2);
+    try std.testing.expect(field.mSkipField[0] == 5);
+    try std.testing.expect(field.mSkipField[4] == 5);
+    try std.testing.expect(field.mSkipField[2] == 1);
+}
+
+test "Large Change To UnSkip" {
+    const FieldSize = 10;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.NoSkip);
+
+    field.ChangeToSkipped(4);
+    field.ChangeToSkipped(0);
+    field.ChangeToSkipped(3);
+    field.ChangeToSkipped(1);
+    field.ChangeToSkipped(2);
+
+    field.ChangeToUnskipped(4);
+    try std.testing.expect(field.mSkipField[0] == 4);
+    try std.testing.expect(field.mSkipField[3] == 4);
+
+    field.ChangeToUnskipped(0);
+    try std.testing.expect(field.mSkipField[1] == 3);
+    try std.testing.expect(field.mSkipField[3] == 3);
+
+    field.ChangeToUnskipped(2);
+    try std.testing.expect(field.mSkipField[1] == 1);
+    try std.testing.expect(field.mSkipField[3] == 1);
+}
+
+test "Iterating Skipfield 1" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.NoSkip);
+
+    field.ChangeToSkipped(4);
+    field.ChangeToSkipped(0);
+
+    var iter = field.Iterator();
+    while (iter.Next()) |i| {
+        try std.testing.expect(i == 1 or i == 2 or i == 3);
+    }
+}
+
+test "Iterating Skipfield 2" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.NoSkip);
+
+    field.ChangeToSkipped(4);
+    field.ChangeToSkipped(3);
+
+    var iter = field.Iterator();
+    while (iter.Next()) |i| {
+        try std.testing.expect(i == 0 or i == 1 or i == 2);
+    }
+}
+
+test "Iterating Skipfield 3" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.NoSkip);
+
+    field.ChangeToSkipped(4);
+    field.ChangeToSkipped(2);
+    field.ChangeToSkipped(3);
+
+    var iter = field.Iterator();
+    while (iter.Next()) |i| {
+        try std.testing.expect(i == 0 or i == 1);
+    }
 }
