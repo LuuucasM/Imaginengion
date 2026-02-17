@@ -63,7 +63,7 @@ const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
-
+const EditorProgram = @This();
 const Tracy = @import("../Core/Tracy.zig");
 
 pub const PanelOpen = struct {
@@ -90,29 +90,25 @@ _ToolbarPanel: ToolbarPanel = .{},
 _ViewportPanel: ViewportPanel = .{},
 _SceneSpecList: std.ArrayList(SceneSpecPanel) = .{},
 
-//editor stuff
-mOverlayScene: SceneLayer = .{},
-mGameScene: SceneLayer = .{},
-mEditorEditorEntity: Entity = .{},
-mEditorEditorPlayer: Player = .{},
+//editor UI stuff
+mEditorUIScene: SceneLayer = .{},
+mEditorUIEntity: Entity = .{},
+mEditorUIPlayer: Player = .{},
+
+//Editor viewport stuff
+mEditorViewportScene: SceneLayer = .{},
 mEditorViewportEntity: Entity = .{},
 mEditorViewportPlayer: Player = .{},
-mEditorFont: AssetHandle = .{},
 
-//not editor stuff
+//misc stuff
+mEditorFont: AssetHandle = .{},
 mImgui: ImGui = .{},
 mActiveWindowWorld: *SceneManager = undefined,
 mActiveViewportWorld: *SceneManager = undefined,
 mActiveSimulateWorld: *SceneManager = undefined,
-const EditorProgram = @This();
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
-
-    try self.mEditorSceneManager.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight(), engine_allocator);
-    self.mActiveWindowWorld = engine_context.mEditorWorld;
-    self.mActiveViewportWorld = engine_context.mGameWorld;
-    self.mActiveSimulateWorld = engine_context.mSimulateWorld;
 
     try self.mImgui.Init(engine_context.mAppWindow);
 
@@ -122,26 +118,33 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self._ToolbarPanel.Init(engine_context);
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
 
-    self.mOverlayScene = try self.mEditorSceneManager.NewScene(engine_context, .OverlayLayer);
-    self.mGameScene = try self.mEditorSceneManager.NewScene(engine_context, .GameLayer);
+    self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer);
+    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_allocator);
+    self.mEditorUIPlayer = engine_context.mEditorWorld.CreatePlayer(engine_context);
 
-    self.mEditorEditorEntity = try self.mGameScene.CreateEntity(engine_allocator);
-    self.mEditorViewportEntity = try self.mGameScene.CreateEntity(engine_allocator);
+    self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer);
+    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_allocator);
+    self.mEditorViewportPlayer = engine_context.mEditorWorld.CreatePlayer(engine_context);
+
+    self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
 
     try self.mEditorViewportEntity.AddComponentScript(engine_context, self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
 
-    self.mEditorViewportPlayer = self.mEditorSceneManager.CreatePlayer(engine_context);
-    self.mEditorEditorPlayer = self.mEditorSceneManager.CreatePlayer(engine_context);
-
-    self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
-    self.mEditorEditorEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
-
-    self.mEditorEditorPlayer.GetComponent(PlayerLens).?.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
-    self.mEditorViewportPlayer.GetComponent(PlayerLens).?.SetViewportSize(self.mWindow.GetWidth(), self.mWindow.GetHeight());
+    self.mEditorUIPlayer.GetComponent(PlayerLens).?.SetViewportSize(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
+    self.mEditorViewportPlayer.GetComponent(PlayerLens).?.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
 
     try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent{});
     self.mEditorViewportEntity.Possess(self.mEditorViewportPlayer);
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
+
+    try self.mEditorUIEntity.AddComponent(PlayerSlotComponent{});
+    self.mEditorUIEntity.Possess(self.mEditorUIPlayer);
+    self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
+
+    self.mActiveWindowWorld = &engine_context.mEditorWorld;
+    self.mActiveViewportWorld = &engine_context.mGameWorld;
+    self.mActiveSimulateWorld = &engine_context.mSimulateWorld;
 }
 
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
@@ -252,8 +255,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self._ScriptsPanel.OnImguiRender(engine_context);
             try self._CSEditorPanel.OnImguiRender(engine_context);
 
-            try self.RenderPlayerLens(engine_context);
-            try self.ScreenRender(engine_context);
+            try self.RenderViewportSimLens(engine_context);
+            try self.DisplayViewSimPort(engine_context);
 
             try self._StatsPanel.OnImguiRender(engine_context.mDT, engine_context.mRenderer.GetRenderStats());
 
@@ -356,30 +359,27 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
             }
         },
         .ET_NewSceneEvent => |e| {
-            _ = try self.mGameSceneManager.NewScene(engine_context, e.mLayerType);
+            _ = try engine_context.mGameWorld.NewScene(engine_context, e.mLayerType);
         },
         .ET_SaveSceneEvent => {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                try self.mGameSceneManager.SaveScene(engine_context, scene_layer);
+                try engine_context.mGameWorld.SaveScene(engine_context, scene_layer);
             }
         },
         .ET_SaveSceneAsEvent => |e| {
             if (self._ScenePanel.mSelectedScene) |scene_layer| {
                 if (e.mAbsPath.len > 0) {
-                    try self.mGameSceneManager.SaveSceneAs(engine_context.FrameAllocator(), scene_layer);
+                    try engine_context.mGameWorld.SaveSceneAs(engine_context.FrameAllocator(), scene_layer);
                 }
             }
         },
         .ET_OpenSceneEvent => |e| {
             if (e.mAbsPath.len > 0) {
-                _ = try self.mGameSceneManager.LoadScene(engine_context, e.mAbsPath);
+                _ = try engine_context.mGameWorld.LoadScene(engine_context, e.mAbsPath);
             }
         },
         .ET_MoveSceneEvent => |e| {
-            try self.mGameSceneManager.MoveScene(engine_context.FrameAllocator(), e.SceneID, e.NewPos);
-        },
-        .ET_NewEntityEvent => |e| {
-            _ = try self.mGameSceneManager.CreateEntity(engine_allocator, e.SceneID);
+            try engine_context.mGameWorld.MoveScene(engine_context.FrameAllocator(), e.SceneID, e.NewPos);
         },
         .ET_SelectSceneEvent => |e| {
             self._ScenePanel.OnSelectSceneEvent(e.SelectedScene);
@@ -398,18 +398,10 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
             try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
         },
         .ET_ViewportResizeEvent => |e| {
-            self.mEditorViewportPlayer.GetComponent(PlayerLens).?.SetViewportSize(e.mWidth, e.mHeight);
-
-            //we must also resize the in game cameras to match the viewport since we are not using the play panel
-            if (!self._ViewportPanel.mP_OpenPlay) {
-                try self.mGameSceneManager.OnViewportResize(engine_context.FrameAllocator(), e.mWidth, e.mHeight);
-            }
+            self.mActiveViewportWorld.OnViewportResize(engine_context.FrameAllocator(), e.mWidth, e.mHeight);
         },
         .ET_PlayPanelResizeEvent => |e| {
-            //we dont need to check if play panel is being used or not because if the panel was resized its has to be open i think?
-            if (self._ViewportPanel.mP_OpenPlay) {
-                try self.mGameSceneManager.OnViewportResize(engine_context.FrameAllocator(), e.mWidth, e.mHeight);
-            }
+            self.mActiveSimulateWorld.OnViewportResize(engine_context.FrameAllocator(), e.mWidth, e.mHeight);
         },
         .ET_NewScriptEvent => |e| {
             try self._ContentBrowserPanel.OnNewScriptEvent(engine_context, e);
@@ -423,13 +415,13 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
         },
         .ET_SaveEntityEvent => {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
-                try self.mGameSceneManager.SaveEntity(engine_context.FrameAllocator(), selected_entity);
+                try engine_context.mGameWorld.SaveEntity(engine_context.FrameAllocator(), selected_entity);
             }
         },
         .ET_SaveEntityAsEvent => |e| {
             if (self._ScenePanel.mSelectedEntity) |selected_entity| {
                 if (e.mAbsPath.len > 0) {
-                    try self.mGameSceneManager.SaveEntityAs(engine_context.FrameAllocator(), selected_entity, e.mAbsPath);
+                    try engine_context.mGameWorld.SaveEntityAs(engine_context.FrameAllocator(), selected_entity, e.mAbsPath);
                 }
             }
         },
@@ -451,53 +443,31 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
     }
 }
 
-pub fn OnGameEvent(self: *EditorProgram, engine_context: *EngineContext, event: *GameEvent) !void {
-    switch (event.*) {
-        .ET_DestroyEntityEvent => |e| {
-            e.mEntity.Delete(engine_context);
-        },
-        .ET_DestroySceneEvent => |e| {
-            const scene = self.mGameSceneManager.GetSceneLayer(e.mSceneID);
-            try self.mGameSceneManager.RemoveScene(engine_context, scene);
-        },
-        .ET_RmEntityCompEvent => |e| {
-            try self.mGameSceneManager.RmEntityComp(engine_context.EngineAllocator(), e.mEntityID, e.mComponentType);
-        },
-        .ET_RmSceneCompEvent => |e| {
-            try self.mGameSceneManager.RmSceneComp(engine_context.EngineAllocator(), e.mSceneID, e.mComponentType);
-        },
-        else => std.debug.print("This event has not been handled by editor program yet!\n", .{}),
-    }
-}
-
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext, event: ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play) { //the play button was pressed
-        try self.mGameSceneManager.Copy(engine_context, self.mPlaySceneManager);
-        const new_player = try self.mPlaySceneManager.CreatePlayer(engine_context);
+        try engine_context.mGameWorld.Copy(engine_context, engine_context.mSimulateWorld);
+        const new_player = try engine_context.mSimulateWorld.CreatePlayer(engine_context);
         self._ToolbarPanel.mStartDescriptor.?.Possess(new_player);
+
+        self.mActiveViewportWorld = &engine_context.mSimulateWorld;
+        self.mActiveSimulateWorld = &engine_context.mGameWorld;
     } else {
         //stop button was pressed
-        self.mPlaySceneManager.Deinit(engine_context);
+        self.mActiveViewportWorld = &engine_context.mGameWorld;
+        self.mActiveSimulateWorld = &engine_context.mSimulateWorld;
     }
 }
 
 pub fn OnInputPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: InputPressedEvent) !bool {
-    var cont_bool = true;
+    _ = try ScriptsProcessor.RunEntityScript(OnInputPressedEvent, .Editor, engine_context, .{&e});
+    //scene on input script probably need to add TODO
+
     if (self._ToolbarPanel.mState == .Play) {
-        cont_bool = cont_bool and try ScriptsProcessor.RunEntityScript(engine_context, OnInputPressedScript, &self.mGameSceneManager, .{&e});
+        _ = try ScriptsProcessor.RunEntityScript(OnInputPressedScript, .Simulate, engine_context, .{&e});
     }
 
-    cont_bool = cont_bool and self._ViewportPanel.OnInputPressedEvent(e);
+    _ = self._ViewportPanel.OnInputPressedEvent(e);
 
-    _ = try ScriptsProcessor.RunEntityScriptEditor(engine_context, OnInputPressedScript, &self.mEditorSceneManager, &self.mGameScene, .{&e});
-
-    //for quick debugging uncomment
-    //_ = try ScriptsProcessor.RunEntityScript(engine_context, OnInputPressedScript, &self.mGameSceneManager, .{&e});
-    return cont_bool;
-}
-
-pub fn OnWindowResize(self: *EditorProgram, width: usize, height: usize) !bool {
-    self.mEditorEditorPlayer.GetComponent(PlayerLens).?.SetViewportSize(width, height);
     return true;
 }
 
@@ -518,33 +488,76 @@ fn CleanSceneSpecs(self: *EditorProgram, engine_allocator: std.mem.Allocator) vo
     self._SceneSpecList.shrinkAndFree(engine_allocator, end_index);
 }
 
-fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext) !void {
+fn RenderViewportSimLens(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("RenderViewportSimLens", @src());
+    defer zone.Deinit();
+    if (self._ViewportPanel.mP_OpenPlay) {
+        self.RenderViewportLens(engine_context);
+        if (self._ToolbarPanel.mState == .Stop) {
+            self.RenderPlayerLens(.Game, engine_context);
+        } else {
+            self.RenderPlayerLens(.Simulate, engine_context);
+        }
+    } else { //only have the viewport panel no simulate panel
+        if (self._ToolbarPanel.mState == .Stop) {
+            self.RenderViewportLens(engine_context);
+        } else {
+            self.RenderPlayerLens(.Simulate, engine_context);
+        }
+    }
+}
+
+fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const lens_component = self.mEditorViewportPlayer.GetComponent(PlayerLens).?;
+    const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
+    const world_rot = transform_component.GetWorldRotation();
+    const world_pos = transform_component.GetWorldPosition();
+    const lens_offset_pos = lens_component.OffsetPosition;
+    const lens_offset_rot = lens_component.OffsetRotation;
+    const final_rot = LinAlg.QuatMulQuat(world_rot, lens_offset_rot);
+    const final_pos = Vec3f32{ world_pos[0] + lens_offset_pos[0], world_pos[1] + lens_offset_pos[1], world_pos[2] + lens_offset_pos[2] };
+
+    try engine_context.mRenderer.OnUpdate(
+        .Game,
+        engine_context,
+        .{
+            .mRotation = [4]f32{ final_rot[0], final_rot[1], final_rot[2], final_rot[3] }, //this is in (w, x, y, z) format
+            .mPosition = [3]f32{ final_pos[0], final_pos[1], final_pos[2] }, //this is in (x, y, z) format
+            .mPerspectiveFar = lens_component.mPerspectiveFar,
+            .mResolutionWidth = @floatFromInt(lens_component.mViewportWidth),
+            .mResolutionHeight = @floatFromInt(lens_component.mViewportHeight),
+            .mAspectRatio = lens_component.mAspectRatio,
+            .mFOV = lens_component.mPerspectiveFOVRad,
+        },
+        .{
+            .FrameBuffer = lens_component.mViewportFrameBuffer,
+            .VertexArray = lens_component.mViewportVertexArray,
+            .VertexBuffer = lens_component.mViewportVertexBuffer,
+        },
+        0b1,
+    );
+}
+
+fn RenderPlayerLens(_: *EditorProgram, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Render Bufferss", @src());
     defer zone.Deinit();
 
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
+
     const frame_allocator = engine_context.FrameAllocator();
 
-    //get all the active lens components with their entities transform component
-    var lens_components = try std.ArrayList(*PlayerLens).initCapacity(frame_allocator, 1);
-    var transform_components = try std.ArrayList(*TransformComponent).initCapacity(frame_allocator, 1);
+    const player_slot_entities = scene_manager.GetEntityGroup(frame_allocator, .{ .Component = PlayerSlotComponent });
+    FilterPossessedEntities(frame_allocator, player_slot_entities, scene_manager);
 
-    //for the viewport
-    lens_components.append(frame_allocator, self.mEditorViewportPlayer.GetComponent(PlayerLens).?);
-    transform_components.append(frame_allocator, self.mEditorViewportEntity.GetComponent(TransformComponent).?);
-
-    const player_slot_entites = self.mPlaySceneManager.GetEntityGroup(frame_allocator, .{ .Component = PlayerSlotComponent });
-    for (player_slot_entites.items) |entity_id| {
-        const entity = self.mPlaySceneManager.GetEntity(entity_id);
-        const player_slot_component = entity.GetComponent(PlayerSlotComponent).?;
-        if (player_slot_component.mPlayerEntity.mPlayerID != Player.NullPlayer) {
-            lens_components.append(frame_allocator, player_slot_component.mPlayerEntity.GetComponent(PlayerLens).?);
-            transform_components.append(frame_allocator, entity.GetComponent(TransformComponent).?);
-        }
-    }
-
-    for (0..lens_components.items.len) |i| {
-        const lens_component = lens_components.items[i];
-        const transform_component = transform_components.items[i];
+    for (player_slot_entities) |entity_id| {
+        const entity = scene_manager.GetEntity(entity_id);
+        const slot_component = entity.GetComponent(PlayerSlotComponent).?;
+        const lens_component = slot_component.mPlayerEntity.?.GetComponent(PlayerLens).?;
+        const transform_component = entity.GetComponent(TransformComponent).?;
 
         const world_rot = transform_component.GetWorldRotation();
         const world_pos = transform_component.GetWorldPosition();
@@ -556,7 +569,7 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext) !void 
 
         try engine_context.mRenderer.OnUpdate(
             engine_context,
-            &self.mGameSceneManager,
+            scene_manager,
             .{
                 .mRotation = [4]f32{ final_rot[0], final_rot[1], final_rot[2], final_rot[3] }, //this is in (w, x, y, z) format
                 .mPosition = [3]f32{ final_pos[0], final_pos[1], final_pos[2] }, //this is in (x, y, z) format
@@ -576,51 +589,87 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext) !void 
     }
 }
 
-fn ScreenRender(self: *EditorProgram, engine_context: *EngineContext) !void {
+fn DisplayViewSimPort(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("DisplayViewSimPort", @src());
+    defer zone.Deinit();
     const frame_allocator = engine_context.FrameAllocator();
-
     var viewport_framebuffers = std.ArrayList(FrameBuffer){};
     var viewport_area_rects = std.ArrayList(Vec4f32){};
+    if (self._ViewportPanel.mP_OpenPlay) {
+        if (self._ToolbarPanel.mState == .Stop) {
+            self.DisplayViewportBuffs(frame_allocator, viewport_framebuffers, viewport_area_rects);
+            self._ViewportPanel.OnImguiRenderViewport(engine_context, viewport_framebuffers, viewport_area_rects);
 
-    if (self._ToolbarPanel.mState == .Stop) {
-        const lens_component = self.mEditorViewportPlayer.GetComponent(PlayerLens).?;
+            viewport_framebuffers.clearRetainingCapacity();
+            viewport_area_rects.clearRetainingCapacity();
+
+            self.DisplayPlayerBuffs(.Game, engine_context, viewport_framebuffers, viewport_area_rects);
+            self._ViewportPanel.OnImguiRenderPlay(engine_context, viewport_framebuffers, viewport_area_rects);
+        } else {
+            self.DisplayPlayerBuffs(.Simulate, engine_context, viewport_framebuffers, viewport_area_rects);
+            self._ViewportPanel.OnImguiRenderViewport(engine_context, viewport_framebuffers, viewport_area_rects);
+
+            viewport_framebuffers.clearRetainingCapacity();
+            viewport_area_rects.clearRetainingCapacity();
+
+            self.DisplayViewportBuffs(frame_allocator, viewport_framebuffers, viewport_area_rects);
+            self._ViewportPanel.OnImguiRenderPlay(engine_context, viewport_framebuffers, viewport_area_rects);
+        }
+    } else {
+        if (self._ToolbarPanel.mState == .Stop) {
+            self.DisplayViewportBuffs(frame_allocator, viewport_framebuffers, viewport_area_rects);
+            self._ViewportPanel.OnImguiRenderViewport(engine_context, viewport_framebuffers, viewport_area_rects);
+        } else {
+            self.DisplayPlayerBuffs(.Simulate, engine_context, viewport_framebuffers, viewport_area_rects);
+            self._ViewportPanel.OnImguiRenderViewport(engine_context, viewport_framebuffers, viewport_area_rects);
+        }
+    }
+}
+
+fn DisplayViewportBuffs(self: *EditorProgram, frame_allocator: std.mem.Allocator, viewport_framebuffers: *std.ArrayList(FrameBuffer), viewport_area_rects: *std.ArrayList(Vec4f32)) !void {
+    const lens_component = self.mEditorViewportPlayer.GetComponent(PlayerLens).?;
+    viewport_framebuffers.append(frame_allocator, lens_component.mFrameBuffer);
+    viewport_area_rects.append(frame_allocator, lens_component.mAreaRect);
+}
+
+fn DisplayPlayerBuffs(_: *EditorProgram, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, viewport_framebuffers: *std.ArrayList(FrameBuffer), viewport_area_rects: *std.ArrayList(Vec4f32)) !void {
+    const frame_allocator = engine_context.FrameAllocator();
+    const scene_manager = switch (world_type) {
+        .Game => engine_context.mGameWorld,
+        .Editor => engine_context.mEditorWorld,
+        .Simulate => engine_context.mSimulateWorld,
+    };
+    const player_slot_entities = scene_manager.GetEntityGroup(frame_allocator, .{ .Component = PlayerSlotComponent });
+    FilterPossessedEntities(frame_allocator, player_slot_entities, scene_manager);
+    for (player_slot_entities) |entity_id| {
+        const entity = scene_manager.GetEntity(entity_id);
+        const slot_component = entity.GetComponent(PlayerSlotComponent).?;
+        const player = slot_component.mPlayerEntity.?;
+        const lens_component = player.GetComponent(PlayerLens);
         viewport_framebuffers.append(frame_allocator, lens_component.mFrameBuffer);
         viewport_area_rects.append(frame_allocator, lens_component.mAreaRect);
-    } else { //Toolbar panel is in play mode
-        const player_ids = self.mPlaySceneManager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
-        for (player_ids.items) |player_id| {
-            const player = self.mPlayerManager.GetPlayer(player_id);
-            const possess_component = player.GetComponent(PossessComponent);
-            if (possess_component.mPossessedEntity) {
-                const lens_component = player.GetComponent(PlayerLens);
-                viewport_framebuffers.append(frame_allocator, lens_component.mFrameBuffer);
-                viewport_area_rects.append(frame_allocator, lens_component.mAreaRect);
+    }
+}
+
+fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entities: *std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
+    var start: usize = 0;
+    var end: usize = 0;
+
+    while (start < end) {
+        const entity = scene_manager.GetEntity(player_slot_entities.items[start]);
+        const player_slot_component = entity.GetComponent(PlayerSlotComponent).?;
+        if (player_slot_component.mPlayerEntity) |player| {
+            if (player.mEntityID != Player.NullPlayer) {
+                start += 1;
+            } else {
+                player_slot_entities.items[start] = player_slot_entities.items[end - 1];
+                end -= 1;
             }
+        } else {
+            player_slot_entities.items[start] = player_slot_entities.items[end - 1];
+            end -= 1;
         }
     }
 
-    self._ViewportPanel.OnImguiRenderViewport(engine_context, viewport_framebuffers, viewport_area_rects);
-
-    if (self._ViewportPanel.mP_OpenPlay) {
-        var play_framebuffers = std.ArrayList(FrameBuffer){};
-        var play_area_rects = std.ArrayList(Vec4f32){};
-
-        if (self._ToolbarPanel.mState == .Stop) {
-            if (self._ToolbarPanel.mStartEntity) |entity| {
-                if (entity.GetComponent(PlayerSlotComponent)) |slot_component| {
-                    if (slot_component.mPlayerEntity) |player| {
-                        const lens_component = player.GetComponent(PlayerLens);
-                        play_framebuffers.append(frame_allocator, lens_component.mFrameBuffer);
-                        play_area_rects.append(frame_allocator, lens_component.mAreaRect);
-                    }
-                }
-            }
-        } else { //Toolbar panel is in play mode
-            const lens_component = self.mEditorViewportPlayer.GetComponent(PlayerLens).?;
-            viewport_framebuffers.append(frame_allocator, lens_component.mFrameBuffer);
-            viewport_area_rects.append(frame_allocator, lens_component.mAreaRect);
-        }
-
-        self._ViewportPanel.OnImguiRenderPlay(engine_context, viewport_framebuffers, viewport_area_rects);
-    }
+    player_slot_entities.shrinkAndFree(frame_allocator, end);
 }

@@ -25,9 +25,9 @@ const Player = @import("../Players/Player.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 
 pub const NewEntityConfig = struct {
-    bAddUUID: bool,
-    bAddName: bool,
-    bAddTransform: bool,
+    bAddUUID: bool = true,
+    bAddName: bool = true,
+    bAddTransform: bool = true,
 };
 
 pub const EntityRef = struct {
@@ -40,7 +40,7 @@ pub const EntityRef = struct {
         } else {
             if (self.mEntity.mSceneManager.GetEntityByUUID(self.mUUID)) |entity| {
                 self.mEntity = entity;
-                return entity;
+                return self.mEntity;
             }
         }
     }

@@ -14,9 +14,9 @@ pub const ChildType = enum {
 
 pub fn ECSManager(entity_t: type, comptime components_types: []const type) type {
     return struct {
-        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
-        const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
-        const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
+        pub const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
+        pub const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
+        pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t) = .{},
@@ -189,6 +189,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             defer zone.Deinit();
             try self.mECSEventManager.Insert(engine_allocator, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
         }
+
         pub fn RemoveComponentInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.mEntityManager._IDsInUse.contains(entity_id));
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
@@ -223,14 +224,19 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mComponentManager.ResetComponent(entity_id, component);
         }
 
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventCategory) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventCategory, callback_obj: anytype, callback_fn: fn (@TypeOf(callback_obj), ECSEventManager.ECSEvent) void) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
             var iter = self.mECSEventManager.GetEventsIteartor(event_category);
             while (iter.Next()) |event| {
+                callback_fn(callback_obj, event);
                 switch (event) {
-                    .ET_DestroyEntity => |e| try self._InternalDestroyEntity(engine_context, e.mEntityID),
-                    .ET_RemoveComponent => |e| try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd),
+                    .ET_DestroyEntity => |e| {
+                        try self._InternalDestroyEntity(engine_context, e.mEntityID);
+                    },
+                    .ET_RemoveComponent => |e| {
+                        try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd);
+                    },
                     else => {
                         @panic("Default Events are not allowed!\n");
                     },

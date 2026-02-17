@@ -41,7 +41,7 @@ pub const StartDescriptor = struct {
                     player.Possess(entity);
                 } else {
                     const possess_component = player.GetComponent(PossessComponent);
-                    possess_component.mPossessedEntity = Entity.EntityRef{ .UUID = .{ .mID = entity_uuid, .mSceneManager = scene_manager } };
+                    possess_component.mPossessedEntity = Entity.EntityRef{ .UUID = entity_uuid, .mEntity = .{ .mID = Entity.NullEntity, .mSceneManager = scene_manager } };
                 }
             },
         }

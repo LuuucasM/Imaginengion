@@ -24,7 +24,7 @@ pub fn AddComponent(self: Player, new_component: anytype) !*@TypeOf(new_componen
 pub fn RemoveComponent(self: Player, comptime component_type: type) !void {
     try self.mScenemanager.mECSManagerPL.RemoveComponent(component_type, self.mEntityID);
 }
-pub fn GetComponent(self: Player, comptime component_type: type) *component_type {
+pub fn GetComponent(self: Player, comptime component_type: type) ?*component_type {
     return self.mScenemanager.mECSManagerPL.GetComponent(component_type, self.mEntityID);
 }
 pub fn HasComponent(self: Player, comptime component_type: type) bool {
@@ -37,7 +37,7 @@ pub fn Delete(self: Player, engine_context: *EngineContext) !void {
     self.mScenemanager.mECSManagerPL.DestroyEntity(engine_context.EngineAllocator(), self.mEntityID);
 }
 pub fn Possess(self: Player, entity: Entity) void {
-    self.GetComponent(PossessComponent).?.mPossessedEntity = .{ .Entity = entity };
+    self.GetComponent(PossessComponent).?.mPossessedEntity = Entity.EntityRef{ .mUUID = 0, .mEntity = entity };
 }
 
 pub fn AddLensComponent(self: Player, engine_context: *EngineContext) LensComponent {

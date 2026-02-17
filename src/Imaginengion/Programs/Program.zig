@@ -23,10 +23,6 @@ pub fn OnUpdate(self: *Program, engine_context: *EngineContext) !void {
     try self._Impl.OnUpdate(engine_context);
 }
 
-pub fn OnWindowResize(self: *Program, width: usize, height: usize) !bool {
-    return try self._Impl.OnWindowResize(width, height);
-}
-
 pub fn OnInputPressedEvent(self: *Program, engine_context: *EngineContext, e: InputPressedEvent) !bool {
     return self._Impl.OnInputPressedEvent(engine_context, e);
 }

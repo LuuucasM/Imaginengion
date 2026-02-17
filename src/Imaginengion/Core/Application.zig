@@ -117,9 +117,8 @@ fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
         self.mEngineContext.mIsMinimized = true;
     } else {
         self.mEngineContext.mIsMinimized = false;
+        self.mEngineContext.mAppWindow.OnWindowResize(width, height);
+        self.mEngineContext.mEditorWorld.OnViewportResize(self.mEngineContext.FrameAllocator(), width, height);
     }
-
-    self.mWindow.OnWindowResize(width, height);
-    _ = try self.mProgram.OnWindowResize(width, height);
     return true;
 }

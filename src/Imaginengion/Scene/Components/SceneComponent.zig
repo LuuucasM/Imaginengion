@@ -21,7 +21,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-mScenePath: std.ArrayList(u8) = .{},
+mScenePath: std.ArrayList(u8) = .{}, //NOTE THIS IS THE RELATIVE PATH
 mLayerType: LayerType = .GameLayer,
 
 pub fn Deinit(self: *SceneComponent, engine_context: *EngineContext) !void {

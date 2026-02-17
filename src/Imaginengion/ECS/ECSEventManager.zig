@@ -5,7 +5,7 @@ const Tracy = @import("../Core/Tracy.zig");
 pub fn ECSEventManager(entity_t: type) type {
     return struct {
         const Self = @This();
-        const ECSEvent = @import("ECSEvent.zig").ECSEvent(entity_t);
+        pub const ECSEvent = @import("ECSEvent.zig").ECSEvent(entity_t);
 
         pub const Iterator = struct {
             mList: std.ArrayList(ECSEvent),

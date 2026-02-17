@@ -30,7 +30,6 @@ pub const ImguiEvent = union(enum) {
     ET_SaveSceneAsEvent: SaveSceneAsEvent,
     ET_OpenSceneEvent: OpenSceneEvent,
     ET_MoveSceneEvent: MoveSceneEvent,
-    ET_NewEntityEvent: NewEntityEvent,
     ET_SelectSceneEvent: SelectSceneEvent,
     ET_SelectEntityEvent: SelectEntityEvent,
     ET_SelectComponentEvent: SelectComponentEvent,
@@ -81,12 +80,8 @@ pub const OpenSceneEvent = struct {
 };
 
 pub const MoveSceneEvent = struct {
-    SceneID: SceneType,
+    Scene: SceneLayer,
     NewPos: usize,
-};
-
-pub const NewEntityEvent = struct {
-    SceneID: SceneType,
 };
 
 pub const SelectSceneEvent = struct {

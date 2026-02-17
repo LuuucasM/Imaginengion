@@ -61,9 +61,7 @@ const NewSceneConfig = SceneLayer.NewSceneConfig;
 const SceneManager = @This();
 
 pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
-
 pub const ECSManagerScenes = ECSManager(SceneLayer.Type, &SceneComponentsList);
-
 pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents.ComponentsList);
 
 //scene stuff
@@ -255,6 +253,10 @@ pub fn GetSceneByUUID(self: SceneManager, scene_uuid: u64) ?SceneLayer {
     return null;
 }
 
+pub fn SceneECSCallback(self: SceneManager, event: ECSManagerScenes.ECSEventManager.ECSEvent) !void {
+    _ = self;
+    _ = event;
+}
 fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: SceneLayer.Type) bool {
     const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
     const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b).?;
@@ -280,6 +282,10 @@ pub fn GetPlayerGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, q
     defer zone.Deinit();
     return try self.mECSManagerPL.GetGroup(frame_allocator, query);
 }
+pub fn PlayerECSCallback(self: SceneManager, event: ECSManagerPlayer.ECSEventManager.ECSEvent) !void {
+    _ = self;
+    _ = event;
+}
 //===============================ECS MANAGER Player END==============================================
 
 //===============================ECS MANAGER Entity==============================================
@@ -288,6 +294,13 @@ pub fn GetEntityByUUID(self: SceneManager, entity_uuid: u64) ?Entity {
         return Entity{ .mEntityID = world_id, .mECSManagerRef = &self.mECSManagerGO };
     }
     return null;
+}
+pub fn EntityECSCallback(self: *SceneManager, event: ECSManagerGameObj.ECSEventManager.ECSEvent) !void {
+    _ = self;
+    _ = event;
+}
+pub fn GetEntityGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) std.ArrayList(Entity.Type) {
+    return self.mECSManagerGO.GetGroup(frame_allocator, query);
 }
 //===============================ECS MANAGER Entity==============================================
 
@@ -331,9 +344,9 @@ pub fn RmSceneComp(self: *SceneManager, engine_allocator: std.mem.Allocator, sce
 }
 
 pub fn ProcessRemovedObj(self: *SceneManager, engine_context: *EngineContext) !void {
-    try self.mECSManagerGO.ProcessEvents(engine_context, .EC_RemoveObj);
-    try self.mECSManagerSC.ProcessEvents(engine_context, .EC_RemoveObj);
-    try self.mECSManagerPL.ProcessEvents(engine_context, .EC_RemoveObj);
+    try self.mECSManagerGO.ProcessEvents(engine_context, .EC_RemoveObj, self, EntityECSCallback);
+    try self.mECSManagerSC.ProcessEvents(engine_context, .EC_RemoveObj, self, SceneECSCallback);
+    try self.mECSManagerPL.ProcessEvents(engine_context, .EC_RemoveObj, self, PlayerECSCallback);
 }
 
 pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *SceneManager) !void {
