@@ -321,13 +321,11 @@ pub fn OnViewportResize(self: *SceneManager, frame_allocator: std.mem.Allocator,
 }
 
 pub fn SaveEntity(self: *SceneManager, frame_allocator: std.mem.Allocator, entity: Entity) !void {
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const abs_path = try PlatformUtils.SaveFile(fba.allocator(), ".imsc");
-    try self.SaveEntityAs(frame_allocator, entity, abs_path);
+    try self.SaveEntityAs(frame_allocator, entity);
 }
 
-pub fn SaveEntityAs(_: *SceneManager, engine_context: *EngineContext, entity: Entity, abs_path: []const u8) !void {
+pub fn SaveEntityAs(_: *SceneManager, engine_context: *EngineContext, entity: Entity) !void {
+    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imfab");
     try engine_context.mSceneSerializer.SerializeEntityText(engine_context.FrameAllocator(), entity, abs_path);
 }
 

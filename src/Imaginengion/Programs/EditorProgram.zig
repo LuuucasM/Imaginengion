@@ -11,6 +11,8 @@ const PlayerManager = @import("../Players/PlayerManager.zig");
 const Player = @import("../Players/Player.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
+const imgui = @import("../Core/CImports.zig").imgui;
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const Assets = @import("../Assets/Assets.zig");
 const AudioAsset = Assets.AudioAsset;
@@ -261,19 +263,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self._StatsPanel.OnImguiRender(engine_context.mDT, engine_context.mRenderer.GetRenderStats());
 
             try self._ToolbarPanel.OnImguiRender(.Game, engine_context);
-            const opens = PanelOpen{
-                .mAssetHandlePanel = self._AssetHandlePanel._P_Open,
-                .mCSEditorPanel = self._CSEditorPanel.mP_Open,
-                .mComponentsPanel = self._ComponentsPanel._P_Open,
-                .mContentBrowserPanel = self._ContentBrowserPanel.mIsVisible,
-                .mPreviewPanel = self._ViewportPanel.mP_OpenPlay,
-                .mScenePanel = self._ScenePanel.mIsVisible,
-                .mScriptsPanel = self._ScriptsPanel._P_Open,
-                .mStatsPanel = self._StatsPanel._P_Open,
-                .mViewportPanel = self._ViewportPanel.mP_OpenViewport,
-            };
 
-            try Dockspace.OnImguiRender(engine_context, opens);
+            try self.DockspaceOnImguiRender(engine_context, self);
 
             try engine_context.mImguiEventManager.ProcessEvents(engine_context);
 
@@ -330,54 +321,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 }
 
 pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *EngineContext) !void {
-    const engine_allocator = engine_context.EngineAllocator();
     switch (event.*) {
-        .ET_TogglePanelEvent => |e| {
-            switch (e._PanelType) {
-                .AssetHandles => self._AssetHandlePanel.OnTogglePanelEvent(),
-                .Components => self._ComponentsPanel.OnTogglePanelEvent(),
-                .ContentBrowser => self._ContentBrowserPanel.OnTogglePanelEvent(),
-                .CSEditor => self._CSEditorPanel.OnTogglePanelEvent(),
-                .Scene => self._ScenePanel.OnTogglePanelEvent(),
-                .Scripts => self._ScriptsPanel.OnTogglePanelEvent(),
-                .Stats => self._StatsPanel.OnTogglePanelEvent(),
-                .Viewport => self._ViewportPanel.OnTogglePanelEventViewport(),
-                .PlayPanel => self._ViewportPanel.OnTogglePanelEventPlay(),
-                else => @panic("This event has not been handled by this type of panel yet!\n"),
-            }
-        },
-        .ET_NewProjectEvent => |e| {
-            if (e.mAbsPath.len > 0) {
-                try self._ContentBrowserPanel.OnNewProjectEvent(engine_allocator, e.mAbsPath);
-                try engine_context.mAssetManager.OnNewProjectEvent(engine_allocator, e.mAbsPath);
-            }
-        },
-        .ET_OpenProjectEvent => |e| {
-            if (e.mAbsPath.len > 0) {
-                try self._ContentBrowserPanel.OnOpenProjectEvent(engine_allocator, e.mAbsPath);
-                try engine_context.mAssetManager.OnOpenProjectEvent(engine_allocator, e.mAbsPath);
-            }
-        },
-        .ET_NewSceneEvent => |e| {
-            _ = try engine_context.mGameWorld.NewScene(engine_context, e.mLayerType);
-        },
-        .ET_SaveSceneEvent => {
-            if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                try engine_context.mGameWorld.SaveScene(engine_context, scene_layer);
-            }
-        },
-        .ET_SaveSceneAsEvent => |e| {
-            if (self._ScenePanel.mSelectedScene) |scene_layer| {
-                if (e.mAbsPath.len > 0) {
-                    try engine_context.mGameWorld.SaveSceneAs(engine_context.FrameAllocator(), scene_layer);
-                }
-            }
-        },
-        .ET_OpenSceneEvent => |e| {
-            if (e.mAbsPath.len > 0) {
-                _ = try engine_context.mGameWorld.LoadScene(engine_context, e.mAbsPath);
-            }
-        },
         .ET_MoveSceneEvent => |e| {
             try engine_context.mGameWorld.MoveScene(engine_context.FrameAllocator(), e.SceneID, e.NewPos);
         },
@@ -391,20 +335,11 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
             self._ScriptsPanel.OnSelectEntityEvent(e.SelectedEntity);
             self._ViewportPanel.OnSelectEntityEvent(e.SelectedEntity);
         },
-        .ET_SelectComponentEvent => |e| {
-            try self._CSEditorPanel.OnSelectComponentEvent(e.mEditorWindow);
-        },
-        .ET_SelectScriptEvent => |e| {
-            try self._CSEditorPanel.OnSelectScriptEvent(e.mEditorWindow);
-        },
         .ET_ViewportResizeEvent => |e| {
             self.mActiveViewportWorld.OnViewportResize(engine_context.FrameAllocator(), e.mWidth, e.mHeight);
         },
         .ET_PlayPanelResizeEvent => |e| {
             self.mActiveSimulateWorld.OnViewportResize(engine_context.FrameAllocator(), e.mWidth, e.mHeight);
-        },
-        .ET_NewScriptEvent => |e| {
-            try self._ContentBrowserPanel.OnNewScriptEvent(engine_context, e);
         },
         .ET_ChangeEditorStateEvent => |e| {
             try self.OnChangeEditorStateEvent(engine_context, e);
@@ -412,18 +347,6 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
         .ET_OpenSceneSpecEvent => |e| {
             const new_scene_spec_panel = try SceneSpecPanel.Init(e.mSceneLayer);
             try self._SceneSpecList.append(engine_context.EngineAllocator(), new_scene_spec_panel);
-        },
-        .ET_SaveEntityEvent => {
-            if (self._ScenePanel.mSelectedEntity) |selected_entity| {
-                try engine_context.mGameWorld.SaveEntity(engine_context.FrameAllocator(), selected_entity);
-            }
-        },
-        .ET_SaveEntityAsEvent => |e| {
-            if (self._ScenePanel.mSelectedEntity) |selected_entity| {
-                if (e.mAbsPath.len > 0) {
-                    try engine_context.mGameWorld.SaveEntityAs(engine_context.FrameAllocator(), selected_entity, e.mAbsPath);
-                }
-            }
         },
         .ET_DeleteEntityEvent => |e| {
             self._ScenePanel.OnDeleteEntity(e.mEntity);
@@ -434,10 +357,6 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
         .ET_DeleteSceneEvent => |e| {
             self._ScenePanel.OnDeleteScene(e.mScene);
             self._ComponentsPanel.OnDeleteScene(e.mScene);
-        },
-        .ET_RmEntityCompEvent => |e| {
-            //if the component has an editor window open close it
-            try self._CSEditorPanel.RmEntityComp(e.mComponent_ptr);
         },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
@@ -672,4 +591,115 @@ fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entit
     }
 
     player_slot_entities.shrinkAndFree(frame_allocator, end);
+}
+
+pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("Dockspace OIR", @src());
+    defer zone.Deinit();
+
+    const engine_allocator = engine_context.EngineAllocator();
+
+    const my_null_ptr: ?*anyopaque = null;
+    if (imgui.igBeginMenuBar() == true) {
+        defer imgui.igEndMenuBar();
+        if (imgui.igBeginMenu("File", true) == true) {
+            defer imgui.igEndMenu();
+            if (imgui.igBeginMenu("New Scene", true) == true) {
+                defer imgui.igEndMenu();
+                if (imgui.igMenuItem_Bool("New Game Scene", "", false, true) == true) {
+                    _ = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer);
+                }
+                if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true) {
+                    _ = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer);
+                }
+            }
+            if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {
+                const path = try PlatformUtils.OpenFile(engine_allocator, ".imsc");
+                if (path > 0) {
+                    _ = try engine_context.mGameWorld.LoadScene(engine_context, path);
+                }
+            }
+            if (imgui.igMenuItem_Bool("Save Scene", "", false, true) == true) {
+                if (self._ScenePanel.mSelectedScene) |scene_layer| {
+                    try engine_context.mGameWorld.SaveScene(engine_context, scene_layer);
+                }
+            }
+            if (imgui.igMenuItem_Bool("Save Scene As...", "", false, true) == true) {
+                if (self._ScenePanel.mSelectedScene) |scene_layer| {
+                    try engine_context.mGameWorld.SaveSceneAs(engine_context.FrameAllocator(), scene_layer);
+                }
+            }
+            imgui.igSeparator();
+            if (imgui.igMenuItem_Bool("Save Entity", "", false, true)) {
+                if (self._ScenePanel.mSelectedEntity) |selected_entity| {
+                    try engine_context.mGameWorld.SaveEntity(engine_context.FrameAllocator(), selected_entity);
+                }
+            }
+            if (imgui.igMenuItem_Bool("Save Entity As...", "", false, true)) {
+                if (self._ScenePanel.mSelectedEntity) |selected_entity| {
+                    try engine_context.mGameWorld.SaveEntityAs(engine_context.FrameAllocator(), selected_entity);
+                }
+            }
+            imgui.igSeparator();
+            if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
+                const abs_path = try PlatformUtils.OpenFolder(engine_context.FrameAllocator());
+                if (abs_path > 0) {
+                    try self._ContentBrowserPanel.OnNewProjectEvent(engine_allocator, abs_path);
+                    try engine_context.mAssetManager.OnNewProjectEvent(engine_allocator, abs_path);
+                }
+            }
+            if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
+                const abs_path = try PlatformUtils.OpenFile(engine_context.EngineAllocator(), ".imprj");
+                if (abs_path > 0) {
+                    try self._ContentBrowserPanel.OnOpenProjectEvent(engine_allocator, abs_path);
+                    try engine_context.mAssetManager.OnOpenProjectEvent(engine_allocator, abs_path);
+                }
+            }
+            imgui.igSeparator();
+            if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
+                const new_event = SystemEvent{
+                    .ET_WindowClose = .{},
+                };
+                try engine_context.mSystemEventManager.Insert(engine_allocator, new_event);
+            }
+        }
+        if (imgui.igBeginMenu("Window", true) == true) {
+            defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("Asset Handles", @ptrCast(@alignCast(my_null_ptr)), self._AssetHandlePanel._P_Open, true) == true) {
+                const new_event = ImguiEvent{
+                    .ET_TogglePanelEvent = .{
+                        ._PanelType = .AssetHandles,
+                    },
+                };
+                try engine_context.mImguiEventManager.Insert(engine_allocator, new_event);
+            }
+            if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), self._ComponentsPanel._P_Open, true) == true) {
+                self._ComponentsPanel._P_Open = !self._ComponentsPanel._P_Open;
+            }
+            if (imgui.igMenuItem_Bool("Content Browser", @ptrCast(@alignCast(my_null_ptr)), self._ContentBrowserPanel.mIsVisible, true) == true) {
+                self._ContentBrowserPanel.mIsVisible = !self._ContentBrowserPanel.mIsVisible;
+            }
+            if (imgui.igMenuItem_Bool("Component/Script Editor", @ptrCast(@alignCast(my_null_ptr)), self._CSEditorPanel.mP_Open, true) == true) {
+                self._CSEditorPanel.mP_Open = !self._CSEditorPanel.mP_Open;
+            }
+            if (imgui.igMenuItem_Bool("Scene", @ptrCast(@alignCast(my_null_ptr)), self._ScenePanel.mIsVisible, true) == true) {
+                self._ScenePanel.mIsVisible = !self._ScenePanel.mIsVisible;
+            }
+            if (imgui.igMenuItem_Bool("Scripts", @ptrCast(@alignCast(my_null_ptr)), self._ScriptsPanel._P_Open, true) == true) {
+                self._ScriptsPanel._P_Open = !self._ScriptsPanel._P_Open;
+            }
+            if (imgui.igMenuItem_Bool("Stats", @ptrCast(@alignCast(my_null_ptr)), self._StatsPanel._P_Open, true) == true) {
+                self._StatsPanel._P_Open = !self._StatsPanel._P_Open;
+            }
+            if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenViewport, true) == true) {
+                self._ViewportPanel.mP_OpenViewport = !self._ViewportPanel.mP_OpenViewport;
+            }
+        }
+        if (imgui.igBeginMenu("Editor", true) == true) {
+            defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("Use Preview Panel", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenPlay, true) == true) {
+                self._ViewportPanel.mP_OpenPlay = !self._ViewportPanel.mP_OpenPlay;
+            }
+        }
+    }
 }

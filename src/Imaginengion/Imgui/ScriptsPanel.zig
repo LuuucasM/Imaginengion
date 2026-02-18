@@ -31,19 +31,21 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     if (self._P_Open == false) return;
-    _ = imgui.igBegin("Scripts", null, 0);
+
+    if (self.mSelectedEntity) |entity| {
+        const entity_name = entity.GetName();
+        const name_len = std.mem.indexOf(u8, entity_name, &.{0}) orelse entity_name.len;
+        const trimmed_name = entity_name[0..name_len];
+        const name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "Scripts - {s}###Scripts\x00", .{trimmed_name}, 0);
+
+        _ = imgui.igBegin(name.ptr, null, 0);
+    } else {
+        _ = imgui.igBegin("Scripts - No Entity###Scripts\x00", null, 0);
+    }
     defer imgui.igEnd();
 
     var available_region: imgui.ImVec2 = undefined;
     imgui.igGetContentRegionAvail(&available_region);
-
-    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
-        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
-    }
-    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
-        defer imgui.igEndPopup();
-        try ImguiUtils.EntityScriptPopupMenu(engine_context);
-    }
 
     //making a child so that drag drop target will tae the entire available region
     if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
@@ -62,8 +64,8 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
                         if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                             defer imgui.igEndPopup();
 
-                            if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-                                //try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_DestroyEntityEvent = .{ .mEntity = script_entity } });
+                            if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
+                                script_entity.Delete(engine_context);
                             }
                         }
 

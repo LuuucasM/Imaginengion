@@ -2,9 +2,6 @@ const std = @import("std");
 const Window = @import("../Windows/Window.zig");
 const AssetManager = @import("../Assets/AssetManager.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
-const GameEventManager = @import("../Events/GameEventManager.zig");
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
-const SystemEventManager = @import("../Events/SystemEventManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @import("../Programs/Program.zig");
@@ -14,6 +11,15 @@ const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig").EngineStats;
+
+const WindowEventData = @import("../Events/WindowEventData.zig");
+const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData.EventCategories, WindowEventData.Event);
+
+const ImguiEventData = @import("../Events/ImguiEventData.zig");
+const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData.EventCategories, ImguiEventData.Event);
+
+const GameEventData = @import("../Events/GameEventData.zig");
+const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData.EventCategories, GameEventData.Event);
 
 const InternalData = struct {
     EngineAllocator: std.mem.Allocator = undefined,
@@ -40,7 +46,7 @@ mPhysicsManager: PhysicsManager = .{},
 
 mGameEventManager: GameEventManager = .{},
 mImguiEventManager: ImguiEventManager = .{},
-mSystemEventManager: SystemEventManager = .{},
+mSystemEventManager: WindowEventManager = .{},
 
 mGameWorld: SceneManager = .{},
 mEditorWorld: SceneManager = .{},
@@ -52,7 +58,7 @@ mIsMinimized: bool = false,
 
 _Internal: InternalData = .{},
 
-pub fn Init(self: *EngineContext, program: *Program, app: *Application) !void {
+pub fn Init(self: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EngineContext::Init", @src());
     defer zone.Deinit();
 
@@ -62,10 +68,6 @@ pub fn Init(self: *EngineContext, program: *Program, app: *Application) !void {
     self._Internal.FrameAllocator = self._Internal.FrameArena.allocator();
 
     self.mAppWindow.Init(self);
-
-    self.mGameEventManager.Init(program);
-    self.mImguiEventManager.Init(program);
-    self.mSystemEventManager.Init(app);
 
     try self.mAssetManager.Init(self);
     try self.mRenderer.Init(self.mApplicationWindow, self);

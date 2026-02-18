@@ -40,24 +40,6 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
     _ = imgui.igBegin(scene_name, &self.mPOpen, 0);
     defer imgui.igEnd();
 
-    var available_region: imgui.ImVec2 = undefined;
-    imgui.igGetContentRegionAvail(&available_region);
-
-    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
-        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
-    }
-    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
-        defer imgui.igEndPopup();
-        if (imgui.igBeginMenu("New Scene Component", true) == true) {
-            defer imgui.igEndMenu();
-            if (imgui.igMenuItem_Bool("Physics Component", "", false, true)) {
-                if (!self.mSceneLayer.HasComponent(ScenePhysicsComponent)) {
-                    _ = try self.mSceneLayer.AddComponent(ScenePhysicsComponent{});
-                }
-            }
-        }
-        try ImguiUtils.SceneScriptPopupMenu(engine_context);
-    }
     //scene layer type
     const scene_component = self.mSceneLayer.GetComponent(SceneComponent).?;
     imgui.igText(@tagName(scene_component.mLayerType));
@@ -105,5 +87,23 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
                 curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id).?;
             }
         }
+    }
+}
+
+fn RightClickPopup(self: *SceneSpecsPanel, engine_context: EngineContext) void {
+    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
+        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
+    }
+    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
+        defer imgui.igEndPopup();
+        if (imgui.igBeginMenu("New Scene Component", true) == true) {
+            defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("Physics Component", "", false, true)) {
+                if (!self.mSceneLayer.HasComponent(ScenePhysicsComponent)) {
+                    _ = try self.mSceneLayer.AddComponent(ScenePhysicsComponent{});
+                }
+            }
+        }
+        try ImguiUtils.SceneScriptPopupMenu(engine_context);
     }
 }

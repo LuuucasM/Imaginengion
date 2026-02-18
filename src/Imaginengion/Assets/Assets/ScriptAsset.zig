@@ -14,11 +14,13 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const ScriptType = enum(u8) {
     //Game object scripts
-    EntityInputPressed = 0,
-    EntityOnUpdate = 1,
+    EntityInputPressed,
+    EntityOnUpdate,
 
     //Scene Scripts
-    SceneSceneStart = 2,
+    SceneSceneStart,
+    SceneInputPressed,
+    SceneOnUpdate,
 };
 
 pub const Name: []const u8 = "ScriptAsset";

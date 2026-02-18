@@ -65,7 +65,7 @@ pub const ComponentPanelList = [_]type{
     TransformComponent,
 };
 
-pub const ScriptList = [_]type{
+pub const ScriptsList = [_]type{
     OnInputPressedScript,
     OnUpdateScript,
 };
@@ -130,6 +130,13 @@ comptime {
             if (payload_type != void) {
                 @compileError("Type's EditorRender payload must be void " ++ type_name);
             }
+        }
+    }
+
+    for (ScriptsList) |script_type| {
+        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
+        if (!@hasDecl(script_type, "Scripttype")) {
+            @compileError("Type must have 'Scripttype' pub const declaration " ++ type_name);
         }
     }
 }

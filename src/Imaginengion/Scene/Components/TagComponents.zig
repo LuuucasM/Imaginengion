@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const SceneLayer = @import("../SceneLayer.zig");
+const ScriptType = @import("../../Assets/Assets/ScriptAsset.zig").ScriptType;
 
 //scripts
 pub const OnSceneStartScript = struct {
@@ -15,5 +16,36 @@ pub const OnSceneStartScript = struct {
             }
         }
     };
+    pub const Scripttype: ScriptType = .SceneSceneStart;
     pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) !void {}
+};
+
+pub const OnUpdateScript = struct {
+    pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
+
+    pub const Name: []const u8 = "OnUpdateScript";
+    pub const Ind: usize = blk: {
+        for (ComponentsList, 0..) |component_type, i| {
+            if (component_type == OnUpdateScript) {
+                break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            }
+        }
+    };
+    pub const Scripttype: ScriptType = .SceneOnUpdate;
+    pub fn Deinit(_: *OnUpdateScript, _: *EngineContext) !void {}
+};
+
+pub const InputPressedScript = struct {
+    pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
+
+    pub const Name: []const u8 = "InputPressedScript";
+    pub const Ind: usize = blk: {
+        for (ComponentsList, 0..) |component_type, i| {
+            if (component_type == InputPressedScript) {
+                break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            }
+        }
+    };
+    pub const Scripttype: ScriptType = .SceneInputPressed;
+    pub fn Deinit(_: *InputPressedScript, _: *EngineContext) !void {}
 };

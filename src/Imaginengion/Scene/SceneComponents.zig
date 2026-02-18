@@ -10,6 +10,8 @@ pub const StackPosComponent = @import("Components/StackPosComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
+pub const OnUpdateScript = TagComponents.OnUpdateScript;
+pub const InputPressedScript = TagComponents.InputPressedScript;
 
 pub const ComponentsList = [_]type{
     //SceneLayer
@@ -23,6 +25,15 @@ pub const ComponentsList = [_]type{
     //Scripts
     ScriptComponent,
     OnSceneStartScript,
+    OnUpdateScript,
+    InputPressedScript,
+};
+
+pub const PanelList = [_]type{
+    UUIDComponent,
+    NameComponent,
+    PhysicsComponent,
+    SpawnPossComponent,
 };
 
 pub const SerializeList = [_]type{
@@ -35,8 +46,10 @@ pub const SerializeList = [_]type{
     ScriptComponent,
 };
 
-pub const ScriptList = [_]type{
+pub const ScriptsList = [_]type{
     OnSceneStartScript,
+    OnUpdateScript,
+    InputPressedScript,
 };
 
 pub const EComponents = enum(u16) {
@@ -47,6 +60,8 @@ pub const EComponents = enum(u16) {
     ScriptComponent = ScriptComponent.Ind,
     SpawnPossComponent = SpawnPossComponent.Ind,
     StackPosComponent = StackPosComponent.Ind,
-    //    TransformComponent = TransformComponent.Ind,
+
     OnSceneStartScript = OnSceneStartScript.Ind,
+    OnUpdateScript = OnUpdateScript.Ind,
+    InputPressedScript = InputPressedScript.Ind,
 };

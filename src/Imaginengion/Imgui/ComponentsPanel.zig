@@ -1,6 +1,5 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const EditorWindow = @import("EditorWindow.zig");
 const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
@@ -20,12 +19,12 @@ const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const AudioComponent = EntityComponents.AudioComponent;
 
-const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
-
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
+
+const ImguiUtils = @import("ImguiUtils.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -52,17 +51,14 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext) !voi
         _ = imgui.igBegin("Components - No Entity###Components\x00", null, 0);
     }
     defer imgui.igEnd();
+
     if (self.mSelectedEntity) |entity| {
-        var region_size: imgui.ImVec2 = .{ .x = 0, .y = 0 };
-        imgui.igGetContentRegionAvail(&region_size);
-        if (imgui.igButton("Add Component", .{ .x = region_size.x, .y = 20 }) == true) {
-            imgui.igOpenPopup_Str("AddComponent", imgui.ImGuiPopupFlags_None);
+        if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
+            imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
         }
-        if (imgui.igBeginPopup("AddComponent", imgui.ImGuiWindowFlags_None) == true) {
+        if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            inline for (EntityComponents.ComponentPanelList) |component_type| {
-                try self.AddComponentPopupMenu(engine_context, component_type, entity);
-            }
+            ImguiUtils.NewEntityComponentPopup(engine_context, entity);
         }
         try EntityImguiRender(entity, engine_context);
     }
@@ -105,65 +101,26 @@ pub fn OnDeleteScene(self: *ComponentsPanel, delete_scene: SceneLayer) void {
 
 fn EntityImguiRender(entity: Entity, engine_context: *EngineContext) !void {
     inline for (EntityComponents.ComponentPanelList) |component_type| {
-        try ComponentRender(engine_context, component_type, entity);
-    }
-}
-
-fn ComponentRender(engine_context: *EngineContext, comptime component_type: type, entity: Entity) !void {
-    if (entity.HasComponent(component_type)) {
-        try PrintComponent(engine_context, component_type, entity);
+        if (entity.HasComponent(component_type)) {
+            try PrintComponent(engine_context, component_type, entity);
+        }
     }
 }
 
 fn PrintComponent(engine_context: *EngineContext, comptime component_type: type, entity: Entity) !void {
-    if (imgui.igSelectable_Bool(@typeName(component_type), false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 }) == true) {
-        if (component_type.Editable == true) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
-                .ET_SelectComponentEvent = .{ .mEditorWindow = EditorWindow.Init(entity.GetComponent(component_type).?, entity) },
-            });
-        }
-    }
+    const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
+    const is_tree_open = imgui.igTreeNodeEx_Str(@typeName(component_type), tree_flags);
     if (imgui.igBeginPopupContextItem(@typeName(component_type), imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mEntityID = entity.mEntityID, .mComponentType = @enumFromInt(component_type.Ind) } });
             try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
+            entity.RemoveComponent(engine_context.EngineAllocator(), component_type);
         }
     }
-}
-
-fn AddComponentPopupMenu(_: ComponentsPanel, engine_context: *EngineContext, component_type: type, entity: Entity) !void {
-    if (!entity.HasComponent(component_type)) {
-        if (imgui.igMenuItem_Bool(component_type.Name.ptr, "", false, true)) {
-            defer imgui.igCloseCurrentPopup();
-
-            _ = try entity.AddComponent(component_type{});
-
-            if (component_type == QuadComponent) {
-                AddQuadComponent(engine_context, entity);
-            } else if (component_type == TextComponent) {
-                try AddTextComponent(engine_context, entity);
-            } else if (component_type == AudioComponent) {
-                AddAudioComponent(engine_context, entity);
-            }
-        }
+    if (is_tree_open) {
+        defer imgui.igTreePop();
+        const component_ptr = entity.GetComponent(component_type).?;
+        try component_ptr.EditorRender(engine_context);
     }
-}
-
-fn AddQuadComponent(engine_context: *EngineContext, entity: Entity) void {
-    const new_quad_component = entity.GetComponent(QuadComponent).?;
-    new_quad_component.mTexture.mAssetManager = &engine_context.mAssetManager;
-}
-
-fn AddTextComponent(engine_context: *EngineContext, entity: Entity) !void {
-    const new_text_component = entity.GetComponent(TextComponent).?;
-    new_text_component.mTextAssetHandle.mAssetManager = &engine_context.mAssetManager;
-    new_text_component.mTexHandle.mAssetManager = &engine_context.mAssetManager;
-    try new_text_component.mText.appendSlice(engine_context.EngineAllocator(), "No Text");
-}
-
-fn AddAudioComponent(engine_context: *EngineContext, entity: Entity) void {
-    const new_audio_component = entity.GetComponent(AudioComponent).?;
-    new_audio_component.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
 }

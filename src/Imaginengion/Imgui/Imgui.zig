@@ -6,12 +6,9 @@ const glfw = @import("../Core/CImports.zig").glfw;
 const Tracy = @import("../Core/Tracy.zig");
 const Imgui = @This();
 
-mWindow: *Window = undefined,
-
-pub fn Init(self: *Imgui, window: *Window) !void {
+pub fn Init(window: *Window) !void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
-    self.mWindow = window;
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
     io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard;
@@ -33,14 +30,14 @@ pub fn Init(self: *Imgui, window: *Window) !void {
     _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window.GetNativeWindow()), true);
     _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
 }
-pub fn Deinit(_: *Imgui) void {
+pub fn Deinit() void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
     defer zone.Deinit();
     imgui.ImGui_ImplOpenGL3_Shutdown();
     imgui.ImGui_ImplGlfw_Shutdown();
     imgui.igDestroyContext(null);
 }
-pub fn Begin(_: *Imgui) void {
+pub fn Begin() void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
     defer zone.Deinit();
     imgui.ImGui_ImplOpenGL3_NewFrame();
@@ -48,13 +45,12 @@ pub fn Begin(_: *Imgui) void {
     imgui.igNewFrame();
     imgui.ImGuizmo_BeginFrame();
 }
-pub fn End(self: *Imgui) void {
+pub fn End(window: *Window) void {
     const zone = Tracy.ZoneInit("ImguiEnd ", @src());
     defer zone.Deinit();
 
     const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
-    const window: *Window = self.mWindow;
 
     io.DisplaySize = .{ .x = @floatFromInt(window.GetWidth()), .y = @floatFromInt(window.GetHeight()) };
 

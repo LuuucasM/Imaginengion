@@ -330,15 +330,20 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         fn _ValidateCompList(comptime component_list: []const type) void {
             inline for (component_list) |component_type| {
                 const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+                const type_info = @typeInfo(component_type);
+                switch (type_info) {
+                    .@"struct" => {},
+                    else => @compileError(type_name ++ "component must be a struct!"),
+                }
 
                 if (!@hasDecl(component_type, "Name")) {
-                    @compileError("Type needs 'Name' pub const declaration " ++ type_name);
+                    @compileError(type_name ++ "Type needs 'Name' pub const declaration ");
                 }
                 if (!@hasDecl(component_type, "Ind")) {
-                    @compileError("Type needs 'Ind' pub const declaration " ++ type_name);
+                    @compileError(type_name ++ "Type needs 'Ind' pub const declaration ");
                 }
                 if (!std.meta.hasFn(component_type, "Deinit")) {
-                    @compileError("Type needs 'Deinit' member function " ++ type_name);
+                    @compileError(type_name ++ "Type needs 'Deinit' member function ");
                 }
 
                 { //checking the deinit function for correctness
@@ -409,7 +414,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     _ValidateGroupQuery(not.mSecond);
                 },
                 .Or => |ors| {
-                    if (ors.len == 0) {
+                    if (ors.len < 1) {
                         @compileError("Must have 1 or more in ors group");
                     }
                     inline for (ors[1..]) |or_query| {
@@ -417,7 +422,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     }
                 },
                 .And => |ands| {
-                    if (ands.len == 0) {
+                    if (ands.len < 1) {
                         @compileError("Must have 1 or more in ands group");
                     }
                     inline for (ands[1..]) |and_query| {
