@@ -103,36 +103,32 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
             break :blk WindowEvent{
-                .InputEvent = .{
-                    .InputPressed = .{
-                        ._InputCode = @enumFromInt(key),
-                        ._Repeat = 0,
-                    },
+                .InputPressed = .{
+                    ._InputCode = @enumFromInt(key),
+                    ._Repeat = 0,
                 },
             };
         },
         glfw.GLFW_RELEASE => blk: {
             break :blk WindowEvent{
-                .InputEvent = .{
-                    .InputReleased = .{
-                        ._InputCode = @enumFromInt(key),
-                    },
+                .InputReleased = .{
+                    ._InputCode = @enumFromInt(key),
                 },
             };
         },
         glfw.GLFW_REPEAT => blk: {
             break :blk WindowEvent{
-                .InputEvent = .{
-                    .InputPressed = .{
-                        ._InputCode = @enumFromInt(key),
-                        ._Repeat = 1,
-                    },
+                .InputPressed = .{
+                    ._InputCode = @enumFromInt(key),
+                    ._Repeat = 1,
                 },
             };
         },
         else => @panic("Unknown glfw action in Windowswindow::GLFWKeyCallback\n"),
     };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
+        .InputEvent = new_event,
+    }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWKeyCallback\n");
     };
@@ -145,27 +141,25 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
             break :blk WindowEvent{
-                .InputEvent = .{
-                    .InputPressed = .{
-                        ._InputCode = @enumFromInt(button),
-                        ._Repeat = 0,
-                    },
+                .InputPressed = .{
+                    ._InputCode = @enumFromInt(button),
+                    ._Repeat = 0,
                 },
             };
         },
 
         glfw.GLFW_RELEASE => blk: {
             break :blk WindowEvent{
-                .InputEvent = .{
-                    .InputReleased = .{
-                        ._InputCode = @enumFromInt(button),
-                    },
+                .InputReleased = .{
+                    ._InputCode = @enumFromInt(button),
                 },
             };
         },
         else => @panic("Unknown glfw action in Windowswindow::GLFWMouseButtonCallback\n"),
     };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), new_event) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
+        .InputEvent = new_event,
+    }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseButtonCallback\n");
     };

@@ -1,5 +1,5 @@
 const std = @import("std");
-const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
+const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const InternalComponentArray = @import("InternalComponentArray.zig").ComponentArray;
+const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ComponentArray(entity_t: type) type {

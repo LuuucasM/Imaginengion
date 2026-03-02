@@ -6,8 +6,8 @@ const Program = @This();
 const Impl = @import("EditorProgram.zig");
 _Impl: Impl = .{},
 
-pub fn Init(self: *Program, window: *Window, engine_context: *EngineContext) !void {
-    try self._Impl.Init(window, engine_context);
+pub fn Init(self: *Program, engine_context: *EngineContext) !void {
+    try self._Impl.Init(engine_context);
 }
 
 pub fn Deinit(self: *Program, engine_context: *EngineContext) !void {

@@ -32,7 +32,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
             self.mEntityManager.Init(engine_allocator);
             try self.mComponentManager.Init(engine_allocator);
-            try self.mECSEventManager.Init();
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
@@ -81,7 +80,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return new_entity_id;
         }
 
-        pub fn IsActiveEntityID(self: *Self, entity_id: entity_t) bool {
+        pub fn IsActiveEntityID(self: Self, entity_id: entity_t) bool {
             return self.mEntityManager._IDsInUse.contains(entity_id);
         }
 
@@ -342,7 +341,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         fn _ValidateCompList(comptime component_list: []const type) void {
             inline for (component_list) |component_type| {
-                const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+                const type_name = std.fmt.comptimePrint(" {s}", .{@typeName(component_type)});
                 const type_info = @typeInfo(component_type);
                 switch (type_info) {
                     .@"struct" => {},

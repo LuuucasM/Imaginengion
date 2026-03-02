@@ -30,7 +30,7 @@ mEngineContext: EngineContext = .{},
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
     try self.mEngineContext.Init();
-    try self.mProgram.Init(&self.mWindow, &self.mEngineContext);
+    try self.mProgram.Init(&self.mEngineContext);
 }
 
 /// Shuts down the application and cleans up resources.

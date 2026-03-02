@@ -18,7 +18,7 @@ pub const OnInputPressedScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnInputPressedScript) {
-                break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + 3; // add 2 because 0 is parent component and 1 is child component provided by the ECS
             }
         }
     };
@@ -34,7 +34,7 @@ pub const OnUpdateScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnUpdateScript) {
-                break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + 3; // add 2 because 0 is parent component and 1 is child component provided by the ECS
             }
         }
     };

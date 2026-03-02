@@ -1,16 +1,17 @@
 const Entity = @import("../../GameObjects/Entity.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
+const EngineContext = @import("../../Core/EngineContext.zig");
 const PossessComponent = @This();
 
 pub const Name: []const u8 = "PossessComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == PossessComponent) {
-            break :blk i + 2; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            break :blk i + 3; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
 };
 
 mPossessedEntity: Entity.EntityRef = undefined,
 
-pub fn Deinit(_: *PossessComponent) !void {}
+pub fn Deinit(_: *PossessComponent, _: *EngineContext) !void {}

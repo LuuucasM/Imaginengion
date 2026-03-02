@@ -103,12 +103,9 @@ mEditorViewportPlayer: Player = .{},
 
 //misc stuff
 mEditorFont: AssetHandle = .{},
-mImgui: ImGui = .{},
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
-
-    try self.mImgui.Init(engine_context.mAppWindow);
 
     self._ComponentsPanel.Init();
     try self._ContentBrowserPanel.Init(engine_context);
