@@ -7,7 +7,6 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
-const PlayerManager = @import("../Players/PlayerManager.zig");
 const Player = @import("../Players/Player.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
@@ -28,7 +27,15 @@ const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
-const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
+
+const WindowEventData = @import("../Events/WindowEventData.zig");
+const WindowEvent = WindowEventData.Event;
+
+const GameEventData = @import("../Events/GameEventData.zig");
+const GameEvent = GameEventData.Event;
+
+const ImguiEventData = @import("../Events/ImguiEventData.zig");
+const ImguiEvent = ImguiEventData;
 
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
@@ -37,14 +44,6 @@ const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 const PlayerComponents = @import("../Players/Components.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerLens = PlayerComponents.LensComponent;
-
-const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
-const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
-const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
-const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
-const ChangeEditorStateEvent = @import("../Events/ImguiEvent.zig").ChangeEditorStateEvent;
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -105,9 +104,6 @@ mEditorViewportPlayer: Player = .{},
 //misc stuff
 mEditorFont: AssetHandle = .{},
 mImgui: ImGui = .{},
-mActiveWindowWorld: *SceneManager = undefined,
-mActiveViewportWorld: *SceneManager = undefined,
-mActiveSimulateWorld: *SceneManager = undefined,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
@@ -143,10 +139,6 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mEditorUIEntity.AddComponent(PlayerSlotComponent{});
     self.mEditorUIEntity.Possess(self.mEditorUIPlayer);
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
-
-    self.mActiveWindowWorld = &engine_context.mEditorWorld;
-    self.mActiveViewportWorld = &engine_context.mGameWorld;
-    self.mActiveSimulateWorld = &engine_context.mSimulateWorld;
 }
 
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
@@ -320,7 +312,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
 }
 
-pub fn OnSystemEvent(self: *EditorProgram, engine_context: *EngineContext, event: SystemEvent) !void {
+pub fn OnSystemEvent(self: *EditorProgram, engine_context: *EngineContext, event: WindowEvent) !void {
     switch (event.*) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| try OnWindowResize(engine_context, e._Width, e._Height),
@@ -346,7 +338,7 @@ pub fn OnGameEvent(self: *EditorProgram, engine_context: *EngineContext, event: 
     _ = event;
 }
 
-pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *EngineContext) !void {
+pub fn OnImguiEvent(self: *EditorProgram, engine_context: *EngineContext, event: ImguiEvent) !void {
     switch (event.*) {
         .ET_MoveSceneEvent => |e| {
             try engine_context.mGameWorld.MoveScene(engine_context.FrameAllocator(), e.SceneID, e.NewPos);
@@ -388,7 +380,7 @@ pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *E
     }
 }
 
-pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext, event: ChangeEditorStateEvent) !void {
+pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext, event: ImguiEventData.ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play) { //the play button was pressed
         try engine_context.mGameWorld.Copy(engine_context, engine_context.mSimulateWorld);
         const new_player = try engine_context.mSimulateWorld.CreatePlayer(engine_context);
@@ -403,7 +395,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     }
 }
 
-pub fn OnInputPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: InputPressedEvent) !bool {
+pub fn OnInputPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.InputPressedEvent) !bool {
     _ = try ScriptsProcessor.RunEntityScript(OnInputPressedEvent, .Editor, engine_context, .{&e});
     //scene on input script probably need to add TODO
 

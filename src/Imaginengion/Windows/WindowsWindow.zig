@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
-const WindowEvent = @import("../Core/EngineContext.zig").WindowEventData.Event;
+const WindowEvent = @import("../Events/WindowEventData.zig").Event;
 
 const glfw = @import("../Core/CImports.zig").glfw;
 

@@ -1,15 +1,23 @@
 - add physics
+- add entity picking in the viewport/playport using ray tracing
+	- after this is implemented then I can start making UI elements
+	- This means I can start making the UI for Pong which consists of
+		- start button
+		- quit button
+		- bgm
+		- background image
 - add sound
 	- likely to use mini audio
 	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform
 	- thats about all i know right now lol because i dont really know much about audio in general but i guess im about to learn :)
+- make animation system
+- make pong
+- add a way to export the game into its standalone
+- add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
 - Add an input component to Player
 	- this will create the layer between the raw hardware input and the game input
 	- This is the same as in unreal engine saying like "AttackInput" and then assigning it to a specific key
 	- This decouples the hardware from the intent of the input which easily allows things like key rebinding, it also allows multiple input sources (keyboard, controller, etc) as you can map "AttackInput" to a specific key if the player is using keyboard, or map it to a different input if player is using controller and then games can natively support input switching in runtime without worrying
-- make pong
-- add a way to export the game into its standalone
-- add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
 - expose a way to use internal engine assets to the editor
 	- like for example if something is white texture and then i change it, i have no way of changing it back to white texture if i change my mind 
 	- i can either expose the engine assets OR add some X button that will return the value back to default but I think just exposing engine assets is better and who knows maybe in the future engine assets will contain a whole lots of nice goodies to make dev lives easier
@@ -35,23 +43,17 @@
 	- one for ECS
 	- platform utils (like native file dialog)
 	- window maker (like glfw)
-- add entity picking in the editor
-- make animation system
 - i need to add components at some point:
 	- attribute component (multi)
-	- collider component (unique) (for this need to spawn child entity so that it has its own transform)
-	- rigid body component (unique)
 	- particle component (dont know yet its so far away)
-- make event manager clear and free / clear retaining capacity an option in the editor. give it some default of like 10 or something but then make it 
 - maybe in the future i can introduce like saved editor states where you can like hotkey or save specific scene setups so you can use later that way you can hot swap like if you want to start a game from the main menu screen after working on some other scene you can quick load the main menu setup and play from there and when it ends you can quick load back to the setup that ur editing currently
-- add a function to scene_layer to "spawn player" which is an entity which has a component like PlayerComponent which contains the data related to the player. 
-	- then i can for example on scene_layer.OnSceneStart I can spawn a player -> then somehow take control of an entity with a controller component, and then 
-	- Then in scene scripts like OnSceneStart you can spawn a player and then set that players "ToControlEntity" to a specified entity
 - fix bug where if you minimize it crashes because imgui begin/end children dont match
+	- maybe this bug will be fixed by abandoning imgui in favor of built in UI
 - does alt + f4 work natively with every program or does it need to be implemented?
 - make it so u cant make scenes or anything until you have a project selected first
 - Editor settings config file that gets saved file
 - Add localization for Korean
 	- zig provides functions that allow you to store and read utf-8 strings (which is what i will need to support multiple languages)
+	- ill need to change literally everything to utf-8 including entity names, and anything that is displayed onto the screen
 - add in reinforcement learning to the ECS for sorting components lists
 - abstract away the ECS so I can start working on comparing my ECS with others to do research on heuristic functions when dealing with sorting component buckets

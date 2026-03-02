@@ -10,8 +10,6 @@ const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const SceneUtils = @import("../Scene/SceneUtils.zig");
 const ImguiUtils = @import("../Imgui/ImguiUtils.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -56,7 +54,7 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
         if (imgui.igAcceptDragDropPayload("SceneScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            try SceneUtils.AddScriptToScene(engine_context, self.mSceneLayer, path, .Prj);
+            self.mSceneLayer.AddComponentScript(engine_context, path, .Prj);
         }
     }
     if (is_tree_open == true) {
@@ -108,6 +106,6 @@ fn RightClickPopup(self: *SceneSpecsPanel, engine_context: EngineContext) void {
                 }
             }
         }
-        try ImguiUtils.SceneScriptPopupMenu(engine_context);
+        try ImguiUtils.NewSceneScriptPopup(engine_context);
     }
 }

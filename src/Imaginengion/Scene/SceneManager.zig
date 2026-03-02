@@ -50,9 +50,6 @@ const PlayerComponents = @import("../Players/Components.zig").ComponentsList;
 const PlayerLens = PlayerComponents.LensComponent;
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerMic = PlayerComponents.MicComponent;
-const PlayerUtils = @import("../Players/PlayerUtils.zig");
-
-const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -62,7 +59,7 @@ const SceneManager = @This();
 
 pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
 pub const ECSManagerScenes = ECSManager(SceneLayer.Type, &SceneComponentsList);
-pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents.ComponentsList);
+pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents);
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj = .{},
@@ -271,7 +268,7 @@ pub fn CreatePlayer(self: *SceneManager, engine_context: *EngineContext) !Player
     const new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(), .mECSManagerRef = &self.mPlayerManager };
     new_player.AddComponent(PossessComponent{});
     new_player.AddComponent(PlayerMic{});
-    PlayerUtils.AddLensComponent(engine_context, new_player);
+    new_player.AddComponentLens(engine_context, new_player);
     return new_player;
 }
 pub fn GetPlayer(self: *SceneManager, player_id: Player.Type) Player {

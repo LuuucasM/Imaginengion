@@ -10,7 +10,7 @@ const Tracy = @import("Tracy.zig");
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EngineContext = @This();
-const EngineStats = @import("EngineStats.zig").EngineStats;
+const EngineStats = @import("EngineStats.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData.EventCategories, WindowEventData.Event);
@@ -63,7 +63,7 @@ pub fn Init(self: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EngineContext::Init", @src());
     defer zone.Deinit();
 
-    self.mEngineStats.AppTimer = std.time.Timer.start();
+    self.mEngineStats.AppTimer = try std.time.Timer.start();
 
     self._Internal.EngineAllocator = self._Internal.EngineGPA.allocator();
     self._Internal.FrameAllocator = self._Internal.FrameArena.allocator();

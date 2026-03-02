@@ -1,4 +1,10 @@
-
+- debug all the billion changes i made already
+	- compile debug
+	- runtime debug
+	- ensure that hitting the play button AND stop button both work with the physics box test
+	- ensure that deleting entities and scenes works
+- remove CS EditorPanel
+	- move the component editing into the components panel where each component is now a tree node and when it is expanded it does the EditorRender
 - change physics collider to use the build in entity transform rather than right now where the enum value is a struct "box" and struct "sphere". that way I can align the colliders with more how the rendering system works
 	- this is so for the next TODO to visualize colliders i can simply follow my sdf logic to implement it
 - make visualizer for sphere collision and box collision

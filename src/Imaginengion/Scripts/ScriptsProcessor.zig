@@ -9,10 +9,6 @@ const ECSManagerGameObj = SceneManager.ECSManagerGameObj;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
-const GameEvent = @import("../Events/GameEvent.zig");
-const SystemEvent = @import("../Events/SystemEvent.zig");
-const InputPressedEvent = SystemEvent.InputPressedEvent;
-
 const EntityScriptList = @import("../GameObjects/Components.zig").ScriptList;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;

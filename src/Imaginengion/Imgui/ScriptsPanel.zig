@@ -1,6 +1,5 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
 const ImguiUtils = @import("ImguiUtils.zig");
@@ -11,9 +10,6 @@ const ScriptAsset = Assets.ScriptAsset;
 const Components = @import("../GameObjects/Components.zig");
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
-const OnUpdateInputScript = Components.OnUpdateInputScript;
-
-const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -83,7 +79,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
             const path_len = payload.*.DataSize;
             const rel_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             if (self.mSelectedEntity) |entity| {
-                try GameObjectUtils.AddScriptToEntity(engine_context, entity, rel_path, .Prj);
+                entity.AddComponentScript(engine_context, rel_path, .Prj);
             }
         }
     }

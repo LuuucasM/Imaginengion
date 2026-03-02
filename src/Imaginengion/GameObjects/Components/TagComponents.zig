@@ -3,8 +3,10 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../GameObjects/Entity.zig");
-const InputPressedEvent = @import("../../Events/SystemEvent.zig").InputPressedEvent;
 const ScriptType = @import("../../Assets/Assets/ScriptAsset.zig").ScriptType;
+
+const WindowEventData = @import("../../Events/WindowEventData.zig");
+const InputPressedEvent = WindowEventData.InputPressedEvent;
 
 //scripts
 pub const OnInputPressedScript = struct {

@@ -40,7 +40,7 @@ pub fn Possess(self: Player, entity: Entity) void {
     self.GetComponent(PossessComponent).?.mPossessedEntity.mEntity = entity;
 }
 
-pub fn AddLensComponent(self: Player, engine_context: *EngineContext) LensComponent {
+pub fn AddComponentLens(self: Player, engine_context: *EngineContext) LensComponent {
     var new_lens_component = LensComponent{};
     const engine_allocator = engine_context.EngineAllocator();
 

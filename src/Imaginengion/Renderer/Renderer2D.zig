@@ -139,16 +139,16 @@ pub fn SetBuffers(self: *Renderer2D, comptime world_type: EngineContext.WorldTyp
     //fill out stats
     switch (world_type) {
         .Game => {
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.FinalQuadNum = quad_count;
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.FinalGlyphNum = glyph_count;
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = quad_count;
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = glyph_count;
         },
         .Editor => {
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.FinalQuadNum = quad_count;
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.FinalGlyphNum = glyph_count;
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = quad_count;
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = glyph_count;
         },
         .Simulate => {
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.FinalQuadNum = quad_count;
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.FinalGlyphNum = glyph_count;
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = quad_count;
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = glyph_count;
         },
     }
 }

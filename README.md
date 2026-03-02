@@ -19,8 +19,7 @@ I haven't written a proper introduction yet ^_^
 ###### GPU:
 	- NVIDIA: GTX 700 series (2013) and newer
 	- AMD: R9 200 series (2013) and newer
-	- Intel: Arc series (2022) - avoid older Intel GPUs
-
+	- Intel: Arc series (2022) and newer
 ## Instillation<a name="Inst"></a>
 1. Have this repo downloaded and extracted into a folder
 2. Have the correct version of the zig compiler downloaded

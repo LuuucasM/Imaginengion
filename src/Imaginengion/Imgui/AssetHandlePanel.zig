@@ -1,6 +1,5 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -27,13 +26,6 @@ pub fn OnImguiRender(self: AssetHandlePanel, engine_context: *EngineContext) !vo
         const file_data = engine_context.mAssetManager.GetFileMetaData(asset_id);
         const text = try std.fmt.allocPrint(frame_allocator, "Handle # {d}: \n\tPath: {s}\n", .{ asset_id, file_data.mRelPath.items });
         imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
-    }
-}
-
-pub fn OnImguiEvent(self: *AssetHandlePanel, event: *ImguiEvent) void {
-    switch (event.*) {
-        .ET_TogglePanelEvent => self.OnTogglePanelOpen(),
-        else => @panic("This event has not been handled yet in ViewportPanel!\n"),
     }
 }
 

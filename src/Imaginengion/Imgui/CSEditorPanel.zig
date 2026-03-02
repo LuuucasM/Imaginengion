@@ -1,6 +1,5 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const EditorWindow = @import("EditorWindow.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
@@ -73,13 +72,6 @@ pub fn OnImguiRender(self: *CSEditorPanel, engine_context: *EngineContext) !void
 
     for (to_remove.items) |id| {
         _ = self.mEditorWindows.orderedRemove(id);
-    }
-}
-
-pub fn OnImguiEvent(self: *CSEditorPanel, event: *ImguiEvent) void {
-    switch (event.*) {
-        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
-        else => @panic("This event isnt handled yet in Component/Scripts Editor Panel!\n"),
     }
 }
 

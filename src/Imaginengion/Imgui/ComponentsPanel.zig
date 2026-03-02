@@ -1,6 +1,5 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 
@@ -61,13 +60,6 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext) !voi
             ImguiUtils.NewEntityComponentPopup(engine_context, entity);
         }
         try EntityImguiRender(entity, engine_context);
-    }
-}
-
-pub fn OnImguiEvent(self: *ComponentsPanel, event: *ImguiEvent) void {
-    switch (event.*) {
-        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
-        else => @panic("Response to that event has not been implemented yet in ComponentsPanel!\n"),
     }
 }
 

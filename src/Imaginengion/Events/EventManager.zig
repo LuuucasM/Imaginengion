@@ -22,7 +22,8 @@ fn CategoryTaggedEventUnion(EventCategories: type, EventUnion: type) type {
     }
 
     const phase_fields = std.meta.fields(EventCategories);
-    comptime var union_fields: [phase_fields.len]builtin.Type.UnionField = undefined;
+
+    comptime var union_fields: [phase_fields.len]std.builtin.Type.UnionField = undefined;
     inline for (phase_fields, 0..) |f, i| {
         union_fields[i] = .{
             .name = f.name,

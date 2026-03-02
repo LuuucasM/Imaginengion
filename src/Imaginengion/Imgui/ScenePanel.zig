@@ -1,6 +1,5 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneType = SceneLayer.Type;
 const ECSManagerScenes = SceneManager.ECSManagerScenes;
@@ -8,7 +7,6 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ScenePanel = @This();
 
@@ -133,7 +131,11 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
 
     //if this scene is double clicked open up its scene specs window
     if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{ .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer } });
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+            .RenderEnd = .{
+                .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer },
+            },
+        });
     }
 
     try self.HandleScenePopupContext(engine_context, scene_layer, scene_name, already_popup);
@@ -232,10 +234,12 @@ fn HandleSceneDragDrop(_: *ScenePanel, engine_context: *EngineContext, scene_lay
         if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
             const payload_scene_id = @as(*SceneType, @ptrCast(@alignCast(payload.*.Data))).*;
             const new_pos = scene_layer.GetComponent(SceneStackPos).?.mPosition;
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
-                .ET_MoveSceneEvent = .{
-                    .SceneID = payload_scene_id,
-                    .NewPos = new_pos,
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+                .RenderEnd = .{
+                    .ET_MoveSceneEvent = .{
+                        .SceneID = payload_scene_id,
+                        .NewPos = new_pos,
+                    },
                 },
             });
         }

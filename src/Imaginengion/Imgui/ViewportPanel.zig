@@ -2,14 +2,10 @@ const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
 
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
-const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 
 const LinAlg = @import("../Math/LinAlg.zig");
@@ -21,10 +17,11 @@ const Vec4f32 = LinAlg.Vec4f32;
 const PlayerComponents = @import("../Players/Components.zig");
 const LensComponent = PlayerComponents.LensComponent;
 
-const ProjectionType = LensComponent.ProjectionType;
-
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+
+const WindowEventData = @import("../Events/WindowEventData.zig");
+const InputPressedEvent = WindowEventData.InputPressedEvent;
 
 const ViewportPanel = @This();
 
@@ -74,13 +71,14 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
-        const new_imgui_event = ImguiEvent{
-            .ET_ViewportResizeEvent = .{
-                .mWidth = @intFromFloat(viewport_size.x),
-                .mHeight = @intFromFloat(viewport_size.y),
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+            .RenderEnd = .{
+                .ViewportResizeEvent = .{
+                    .mWidth = @intFromFloat(viewport_size.x),
+                    .mHeight = @intFromFloat(viewport_size.y),
+                },
             },
-        };
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_imgui_event);
+        });
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
     }
@@ -106,13 +104,14 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, f
     if (viewport_size.x != @as(f32, @floatFromInt(self.mPlayWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mPlayHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
-        const new_imgui_event = ImguiEvent{
-            .ET_PlayPanelResizeEvent = .{
-                .mWidth = @intFromFloat(viewport_size.x),
-                .mHeight = @intFromFloat(viewport_size.y),
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+            .RenderEnd = .{
+                .PlayPanelResizeEvent = .{
+                    .mWidth = @intFromFloat(viewport_size.x),
+                    .mHeight = @intFromFloat(viewport_size.y),
+                },
             },
-        };
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_imgui_event);
+        });
         self.mPlayWidth = @intFromFloat(viewport_size.x);
         self.mPlayHeight = @intFromFloat(viewport_size.y);
     }

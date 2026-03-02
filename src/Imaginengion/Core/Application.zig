@@ -10,7 +10,6 @@
 //! via the appropriate `Run` method for the editor or game.
 
 const std = @import("std");
-const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
 const Window = @import("../Windows/Window.zig");
 const Program = @import("../Programs/Program.zig");
 const EngineContext = @import("EngineContext.zig");
@@ -30,7 +29,7 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
-    try self.mEngineContext.Init(&self.mWindow, &self.mProgram, self);
+    try self.mEngineContext.Init();
     try self.mProgram.Init(&self.mWindow, &self.mEngineContext);
 }
 

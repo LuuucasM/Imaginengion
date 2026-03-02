@@ -1,7 +1,5 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
-const ImguiEventManager = @import("../Events/ImguiEventManager.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ImguiManager = @import("Imgui.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
@@ -119,13 +117,17 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
         imgui.ImGuiButtonFlags_None,
     ) == true) {
         if (self.mStartDescriptor != null and self.mState == .Stop) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
-                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+                .RenderEnd = .{
+                    .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
+                },
             });
             self.mState = .Play;
         } else if (self.mState == .Play) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), ImguiEvent{
-                .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop },
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+                .RenderEnd = .{
+                    .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop },
+                },
             });
             self.mState = .Stop;
         }

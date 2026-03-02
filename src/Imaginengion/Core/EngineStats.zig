@@ -1,19 +1,19 @@
 const std = @import("std");
 const EngineStats = @This();
 
-const RenderStats = struct {
+pub const RenderStats = struct {
     TotalObjects: usize = 0,
-    FinalQuadNum: usize = 0,
-    FinalGlyphNum: usize = 0,
+    OutputQuadNum: usize = 0,
+    OutputGlyphNum: usize = 0,
 
     pub fn ResetStats(self: *RenderStats) void {
         self.TotalObjects = 0;
-        self.FinalQuadNum = 0;
-        self.FinalGlyphNum = 0;
+        self.OutputQuadNum = 0;
+        self.OutputGlyphNum = 0;
     }
 };
 
-const ECSStats = struct {
+pub const ECSStats = struct {
     TotalEntities: usize = 0,
 
     pub fn ResetStats(self: *ECSStats) void {
@@ -22,8 +22,8 @@ const ECSStats = struct {
 };
 
 pub const WorldStats = struct {
-    mRenderStats: RenderStats,
-    mECSStats: ECSStats,
+    mRenderStats: RenderStats = .{},
+    mECSStats: ECSStats = .{},
 
     pub fn ResetStats(self: *WorldStats) void {
         self.mRenderStats.ResetStats();

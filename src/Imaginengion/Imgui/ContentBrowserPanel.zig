@@ -1,19 +1,17 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEvents = @import("../Events/ImguiEvent.zig");
-const ImguiEvent = ImguiEvents.ImguiEvent;
-const NewProjectEvent = ImguiEvents.NewProjectEvent;
-const OpenProjectEvent = ImguiEvents.OpenProjectEvent;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ContentBrowserPanel = @This();
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
 const ScriptAsset = Assets.ScriptAsset;
 const ImguiUtils = @import("ImguiUtils.zig");
-const NewScriptEvent = @import("../Events/ImguiEvent.zig").NewScriptEvent;
 const Tracy = @import("../Core/Tracy.zig");
 const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
 const EngineContext = @import("../Core/EngineContext.zig");
+
+const ImguiEventData = @import("../Events/ImguiEventData.zig");
+const NewScriptEvent = ImguiEventData.NewScriptEvent;
 
 const MAX_PATH_LEN = 260;
 
@@ -95,15 +93,6 @@ pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext)
 
     try self.RenderBackButton(engine_context, thumbnail_size);
     try self.RenderDirectoryContents(engine_context, thumbnail_size);
-}
-
-pub fn OnImguiEvent(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator, event: *ImguiEvent) !void {
-    switch (event.*) {
-        .ET_TogglePanelEvent => self.OnTogglePanelEvent(),
-        .ET_NewProjectEvent => |e| try self.OnNewProjectEvent(engine_allocator, e),
-        .ET_OpenProjectEvent => |e| try self.OnOpenProjectEvent(engine_allocator, e),
-        else => @panic("That event has not been implemented yet for ContentBrowserPanel!\n"),
-    }
 }
 
 fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !void {

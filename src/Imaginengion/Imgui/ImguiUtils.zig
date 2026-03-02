@@ -1,6 +1,5 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -61,10 +60,11 @@ pub fn NewEntityScriptPopup(engine_context: *EngineContext) !void {
 
         inline for (EntityComponents.ScriptsList) |script_type| {
             if (imgui.igMenuItem_Bool(script_type.Name.ptr, "", false, true)) {
-                const new_script_event = ImguiEvent{ .ET_NewScriptEvent = .{
-                    .mScriptType = script_type.Scripttype,
-                } };
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_script_event);
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+                    .RenderEnd = .{
+                        .NewScriptEvent = .{ .mScriptType = script_type.Scripttype },
+                    },
+                });
             }
         }
     }
@@ -76,10 +76,11 @@ pub fn NewSceneScriptPopup(engine_context: *EngineContext) !void {
 
         inline for (SceneComponents.ScriptsList) |script_type| {
             if (imgui.igMenuItem_Bool(script_type.Name.ptr, "", false, true)) {
-                const new_script_event = ImguiEvent{ .ET_NewScriptEvent = .{
-                    .mScriptType = script_type.Scripttype,
-                } };
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), new_script_event);
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
+                    .RenderEnd = .{
+                        .NewScriptEvent = .{ .mScriptType = script_type.Scripttype },
+                    },
+                });
             }
         }
     }
