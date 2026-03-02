@@ -183,7 +183,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
         //Human Inputs
         engine_context.mAppWindow.PollInputEvents();
-        try engine_context.mSystemEventManager.ProcessEvents(engine_context, .EC_Input);
+        try engine_context.mSystemEventManager.ProcessCategory(.InputEvent, engine_context, self, OnSystemEvent);
 
         //AI Inputs
     }
@@ -297,13 +297,13 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         engine_context.mRenderer.SwapBuffers();
 
         //Process window events
-        try engine_context.mSystemEventManager.ProcessEvents(engine_context, .EC_Window);
+        try engine_context.mSystemEventManager.ProcessCategory(.WindowEvent, engine_context, self, OnSystemEvent);
 
         //handle any closed scene spec panels
         self.CleanSceneSpecs(engine_context.EngineAllocator());
 
         //handle deleted objects this frame
-        try engine_context.mGameEventManager.ProcessEvents(engine_context, .EC_EndOfFrame);
+        try engine_context.mGameEventManager.ProcessCategory(.FrameEnd, engine_context, self, OnGameEvent);
 
         try engine_context.mGameWorld.ProcessRemovedObj(engine_context);
         try engine_context.mEditorWorld.ProcessRemovedObj(engine_context);
@@ -318,6 +318,32 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //-----------------End End of Frame-------------------
 
+}
+
+pub fn OnSystemEvent(self: *EditorProgram, engine_context: *EngineContext, event: SystemEvent) !void {
+    switch (event.*) {
+        .ET_WindowClose => self.OnWindowClose(),
+        .ET_WindowResize => |e| try OnWindowResize(engine_context, e._Width, e._Height),
+        .ET_InputPressed => |e| try self.OnInputPressedEvent(engine_context, e),
+        else => {},
+    }
+}
+
+fn OnWindowClose(self: *EditorProgram) bool {
+    self.mIsRunning = false;
+    return false;
+}
+
+fn OnWindowResize(engine_context: *EngineContext, width: usize, height: usize) !bool {
+    engine_context.mAppWindow.OnWindowResize(width, height);
+    engine_context.mEditorWorld.OnViewportResize(engine_context.FrameAllocator(), width, height);
+    return true;
+}
+
+pub fn OnGameEvent(self: *EditorProgram, engine_context: *EngineContext, event: GameEvent) !void {
+    _ = self;
+    _ = engine_context;
+    _ = event;
 }
 
 pub fn OnImguiEvent(self: *EditorProgram, event: *ImguiEvent, engine_context: *EngineContext) !void {
@@ -366,7 +392,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     if (event.mEditorState == .Play) { //the play button was pressed
         try engine_context.mGameWorld.Copy(engine_context, engine_context.mSimulateWorld);
         const new_player = try engine_context.mSimulateWorld.CreatePlayer(engine_context);
-        self._ToolbarPanel.mStartDescriptor.?.Possess(new_player);
+        self._ToolbarPanel.mStartDescriptor.?.Possess(new_player, engine_context.mSimulateWorld);
 
         self.mActiveViewportWorld = &engine_context.mSimulateWorld;
         self.mActiveSimulateWorld = &engine_context.mGameWorld;
@@ -657,10 +683,11 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
-                const new_event = SystemEvent{
-                    .ET_WindowClose = .{},
-                };
-                try engine_context.mSystemEventManager.Insert(engine_allocator, new_event);
+                try engine_context.mSystemEventManager.Insert(engine_allocator, .{
+                    .WindowEvent = .{
+                        .WindowClose = .{},
+                    },
+                });
             }
         }
         if (imgui.igBeginMenu("Window", true) == true) {

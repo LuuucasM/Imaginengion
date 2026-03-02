@@ -36,10 +36,9 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         }
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(original_entity_id));
-            std.debug.assert(!self.mComponents.HasSparse(new_entity_id));
+            std.debug.assert(self.mComponents.HasSparse(new_entity_id));
 
-            const new_dense_ind = self.mComponents.add(new_entity_id);
-            self.mComponents.getValueByDense(new_dense_ind).* = self.mComponents.getValueBySparse(original_entity_id).*;
+            self.mComponents.getValueBySparse(new_entity_id).* = self.mComponents.getValueBySparse(original_entity_id).*;
         }
         pub fn AddComponent(self: *Self, entityID: entity_t, component: component_type) !*component_type {
             std.debug.assert(!self.mComponents.HasSparse(entityID));

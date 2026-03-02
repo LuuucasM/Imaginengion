@@ -78,7 +78,11 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
                     if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                         defer imgui.igEndPopup();
                         if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmSceneCompEvent = .{ .mSceneID = self.mSceneLayer.mSceneID, .mComponentType = .ScriptComponent } });
+                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{
+                                .FrameEnd = .{
+                                    .RmSceneCompEvent = .{ .mScene = self.mSceneLayer, .mComponentType = .ScriptComponent },
+                                },
+                            });
                         }
                     }
                 }

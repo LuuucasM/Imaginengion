@@ -152,6 +152,13 @@ pub fn GetEntity(self: SceneLayer, entity_id: Entity.Type) Entity {
     return Entity{ .mEntityID = entity_id, .mECSManagerRef = self.mSceneManager.mECSManagerGO };
 }
 
+pub fn GetEntityByUUID(self: SceneLayer, entity_uuid: u64) ?Entity {
+    if (self.mSceneManager.mEntityUUIDToWorldID.get(entity_uuid)) |world_id| {
+        return Entity{ .mEntityID = world_id, .mECSManagerRef = &self.mECSManagerGO };
+    }
+    return null;
+}
+
 pub fn GetEntityGroup(self: SceneLayer, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
     var entity_list = try self.mSceneManager.mECSManagerGO.GetGroup(frame_allocator, query);
     self.FilterEntityByScene(frame_allocator, &entity_list);

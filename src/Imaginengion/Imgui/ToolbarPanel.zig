@@ -30,18 +30,18 @@ pub const StartKind = union(enum) {
 };
 
 pub const StartDescriptor = struct {
-    mSceneUUID: u64,
+    mScene: SceneLayer,
     mStartKind: StartKind,
 
-    pub fn Possess(self: StartDescriptor, player: Player, scene_manager: *SceneManager) !void {
+    pub fn Possess(self: StartDescriptor, player: Player) !void {
         switch (self.mStartKind) {
             .PossessEntity => |entity_uuid| {
-                if (scene_manager.GetEntityByUUID(entity_uuid)) |entity| {
+                if (self.mScene.GetEntityByUUID(entity_uuid)) |entity| {
                     entity.Possess(player);
                     player.Possess(entity);
                 } else {
-                    const possess_component = player.GetComponent(PossessComponent);
-                    possess_component.mPossessedEntity = Entity.EntityRef{ .UUID = entity_uuid, .mEntity = .{ .mID = Entity.NullEntity, .mSceneManager = scene_manager } };
+                    const possess_component = player.GetComponent(PossessComponent).?;
+                    possess_component.mPossessedEntity = Entity.EntityRef{ .UUID = entity_uuid, .mEntity = .{ .mID = Entity.NullEntity, .mSceneManager = self.mScene.mSceneManager } };
                 }
             },
         }
@@ -161,7 +161,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
                 const entity = scene_manager.GetEntity(spawn_entity_id);
                 const name_cstr = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}\x00", .{entity.GetName()});
                 if (imgui.igSelectable_Bool(name_cstr, false, 0, .{ .x = 0, .y = 0 })) {
-                    self.mStartDescriptor = StartDescriptor{
+                    self.mStartDescriptor = .{
                         .mScene = scene_layer,
                         .mStartKind = .{ .PossessEntity = entity },
                     };

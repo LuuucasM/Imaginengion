@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
-const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
+const WindowEvent = @import("../Core/EngineContext.zig").WindowEventData.Event;
 
 const glfw = @import("../Core/CImports.zig").glfw;
 
@@ -102,25 +102,31 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
     _ = mods;
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
-            break :blk SystemEvent{
-                .ET_InputPressed = .{
-                    ._InputCode = @enumFromInt(key),
-                    ._Repeat = 0,
+            break :blk WindowEvent{
+                .InputEvent = .{
+                    .InputPressed = .{
+                        ._InputCode = @enumFromInt(key),
+                        ._Repeat = 0,
+                    },
                 },
             };
         },
         glfw.GLFW_RELEASE => blk: {
-            break :blk SystemEvent{
-                .ET_InputReleased = .{
-                    ._InputCode = @enumFromInt(key),
+            break :blk WindowEvent{
+                .InputEvent = .{
+                    .InputReleased = .{
+                        ._InputCode = @enumFromInt(key),
+                    },
                 },
             };
         },
         glfw.GLFW_REPEAT => blk: {
-            break :blk SystemEvent{
-                .ET_InputPressed = .{
-                    ._InputCode = @enumFromInt(key),
-                    ._Repeat = 1,
+            break :blk WindowEvent{
+                .InputEvent = .{
+                    .InputPressed = .{
+                        ._InputCode = @enumFromInt(key),
+                        ._Repeat = 1,
+                    },
                 },
             };
         },
@@ -138,18 +144,22 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
     _ = mods;
     const new_event = switch (action) {
         glfw.GLFW_PRESS => blk: {
-            break :blk SystemEvent{
-                .ET_InputPressed = .{
-                    ._InputCode = @enumFromInt(button),
-                    ._Repeat = 0,
+            break :blk WindowEvent{
+                .InputEvent = .{
+                    .InputPressed = .{
+                        ._InputCode = @enumFromInt(button),
+                        ._Repeat = 0,
+                    },
                 },
             };
         },
 
         glfw.GLFW_RELEASE => blk: {
-            break :blk SystemEvent{
-                .ET_InputReleased = .{
-                    ._InputCode = @enumFromInt(button),
+            break :blk WindowEvent{
+                .InputEvent = .{
+                    .InputReleased = .{
+                        ._InputCode = @enumFromInt(button),
+                    },
                 },
             };
         },
@@ -164,13 +174,14 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
 export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
 
-    const new_event = SystemEvent{
-        .ET_MouseMoved = .{
-            ._MouseX = @floatCast(xPos),
-            ._MouseY = @floatCast(yPos),
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
+        .InputEvent = .{
+            .MouseMoved = .{
+                ._MouseX = @floatCast(xPos),
+                ._MouseY = @floatCast(yPos),
+            },
         },
-    };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), new_event) catch |err| {
+    }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseMovedCallback");
     };
@@ -178,13 +189,14 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
 
 export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
-    const new_event = SystemEvent{
-        .ET_MouseScrolled = .{
-            ._XOffset = @floatCast(xOffset),
-            ._YOffset = @floatCast(yOffset),
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
+        .InputEvent = .{
+            .MouseScrolled = .{
+                ._XOffset = @floatCast(xOffset),
+                ._YOffset = @floatCast(yOffset),
+            },
         },
-    };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), new_event) catch |err| {
+    }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseScrolledCallback\n");
     };
@@ -192,10 +204,12 @@ export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f
 
 export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
-    const new_event = SystemEvent{
-        .ET_WindowClose = .{},
-    };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), new_event) catch |err| {
+
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
+        .WindowEvent = .{
+            .WindowClose = .{},
+        },
+    }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWWindowCloseCallback\n");
     };
@@ -203,13 +217,14 @@ export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.c)
 
 export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
-    const new_event = SystemEvent{
-        .ET_WindowResize = .{
-            ._Width = @intCast(width),
-            ._Height = @intCast(height),
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
+        .WindowEvent = .{
+            .WindowResize = .{
+                ._Width = @intCast(width),
+                ._Height = @intCast(height),
+            },
         },
-    };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), new_event) catch |err| {
+    }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWWindowResizeCallback\n");
     };

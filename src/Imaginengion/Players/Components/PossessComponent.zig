@@ -11,6 +11,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-mPossessedEntity: ?Entity.EntityRef = null,
+mPossessedEntity: Entity.EntityRef = undefined,
 
 pub fn Deinit(_: *PossessComponent) !void {}

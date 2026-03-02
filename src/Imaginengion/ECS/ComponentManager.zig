@@ -6,6 +6,7 @@ const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseS
 const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
 
 pub const GroupQuery = union(enum) {
     And: []const GroupQuery,
@@ -19,25 +20,16 @@ pub const GroupQuery = union(enum) {
 
 pub fn ComponentManager(entity_t: type, comptime components_types: []const type) type {
     return struct {
-        const ECSEventManager = @import("ECSEventManager.zig").ECSEventManager(entity_t);
-        const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
-        const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
-        const SkipFieldT = StaticSkipField(components_types.len + 2);
-        const SpraseSkipFieldT = SparseSet(.{
-            .SparseT = entity_t,
-            .DenseT = entity_t,
-            .ValueT = SkipFieldT,
-            .value_layout = .InternalArrayOfStructs,
-            .allow_resize = .ResizeAllowed,
-        });
+        pub const ECSEventManager = @import("../Events/EventManager.zig").EventManager(ECSEventData.EventCategories, ECSEventData.EventT(entity_t));
+        pub const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
+        pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
+        pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types);
 
         const Self = @This();
 
         mComponentsArrays: std.ArrayList(ComponentArray(entity_t)) = .{},
-        mEntitySkipField: SpraseSkipFieldT = undefined,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
-            self.mEntitySkipField = try SpraseSkipFieldT.init(engine_allocator, 20, 10);
 
             //add the components for entity hiearchy
             const parent_array = try ComponentArray(entity_t).Init(engine_allocator, ParentComponent);
@@ -45,6 +37,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             const child_array = try ComponentArray(entity_t).Init(engine_allocator, ChildComponent);
             try self.mComponentsArrays.append(engine_allocator, child_array);
+
+            const skip_array = try ComponentArray(entity_t).Init(engine_allocator, SkipFieldComponent);
+            try self.mComponentsArrays.append(engine_allocator, skip_array);
 
             inline for (components_types) |component_type| {
                 const new_component_array = try ComponentArray(entity_t).Init(engine_allocator, component_type);
@@ -59,43 +54,34 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
 
             self.mComponentsArrays.deinit(engine_context.EngineAllocator());
-            self.mEntitySkipField.deinit();
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponentsArrays.items) |component_array| {
                 component_array.clearAndFree(engine_context);
             }
-            self.mEntitySkipField.clear();
         }
 
         pub fn CreateEntity(self: *Self, entity_id: entity_t) !void {
-            std.debug.assert(!self.mEntitySkipField.HasSparse(entity_id));
-            _ = self.mEntitySkipField.addValue(entity_id, SkipFieldT.Init(.AllSkip));
+            _ = self.AddComponent(entity_id, SkipFieldComponent.Init(.AllSkip));
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
-
             // Remove all components from this entity
-            const entity_skipfield = self.mEntitySkipField.getValueBySparse(entity_id);
+            const entity_skipfield_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
+            const entity_skipfield = entity_skipfield_comp.mSkipField;
 
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
                 try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
             }
-
-            // Remove entity from skip field
-            _ = self.mEntitySkipField.remove(entity_id);
         }
 
-        pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
-            std.debug.assert(self.mEntitySkipField.HasSparse(original_entity_id));
-            std.debug.assert(self.mEntitySkipField.HasSparse(new_entity_id));
+        pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) !void {
+            self.CreateEntity(new_entity_id);
 
-            const original_skipfield = self.mEntitySkipField.getValueBySparse(original_entity_id);
-            const new_skipfield = self.mEntitySkipField.getValueBySparse(new_entity_id);
-            @memcpy(&new_skipfield.mSkipField, &original_skipfield.mSkipField);
+            const original_skipfield_comp = self.GetComponent(SkipFieldComponent, original_entity_id).?;
+            const original_skipfield = original_skipfield_comp.mSkipField;
 
             var field_iter = original_skipfield.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
@@ -103,31 +89,29 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn AddComponent(self: *Self, entityID: entity_t, component: anytype) !*@TypeOf(component) {
+        pub fn AddComponent(self: *Self, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
             const component_t = @TypeOf(component);
-            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-            std.debug.assert(!self.HasComponent(component_t, entityID));
+            std.debug.assert(!self.HasComponent(component_t, entity_id));
 
-            self.mEntitySkipField.getValueBySparse(entityID).ChangeToUnskipped(component_t.Ind);
+            const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?;
+            entity_skipfield.mSkipField.ChangeToUnskipped(component_t.Ind);
 
             const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
 
-            return try internal_array.AddComponent(entityID, component);
+            return try internal_array.AddComponent(entity_id, component);
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
-            std.debug.assert(component_ind <= std.math.maxInt(SkipFieldT.SkipFieldType));
+            std.debug.assert(component_ind < components_types.len + 3);
 
-            self.mEntitySkipField.getValueBySparse(entity_id).ChangeToSkipped(@intCast(component_ind));
+            const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id);
+            entity_skipfield.mSkipField.ChangeToSkipped(@intCast(component_ind));
 
             try self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-
             const internal_array_t = InternalComponentArray(entity_t, component_type);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
 
@@ -135,8 +119,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) ?*component_type {
-            std.debug.assert(self.mEntitySkipField.HasSparse(entityID));
-
             const internal_array_t = InternalComponentArray(entity_t, component_type);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
 
@@ -145,7 +127,6 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn ResetComponent(self: Self, entity_id: entity_t, component: anytype) void {
             const component_t = @TypeOf(component);
-            std.debug.assert(self.mEntitySkipField.HasSparse(entity_id));
             std.debug.assert(self.HasComponent(component_t, entity_id));
 
             const internal_array_t = InternalComponentArray(entity_t, component_t);
@@ -154,13 +135,46 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             internal_array.ResetComponent(entity_id, component);
         }
 
-        pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
+        pub fn GetGroupMask(self: Self, comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
+            switch (query) {
+                .Component => |component_type| {
+                    var result = SkipFieldComponent.StaticSkipFieldT.NoSkipArr;
+                    result[component_type.Ind] = 1;
+                    return result;
+                },
+                .Not => |not| {
+                    return self.GetGroupMask(not.mFirst);
+                },
+                .Or => |ors| {
+                    var result = self.GetGroupMask(ors[0]);
+                    inline for (ors[1..]) |or_query| {
+                        const intermediate = self.GetGroupMask(or_query);
+                        result = result & intermediate;
+                    }
+                    return result;
+                },
+                .And => |ands| {
+                    var result = self.GetGroupMask(ands[0]);
+                    inline for (ands[1..]) |and_query| {
+                        const intermediate = self.GetGroupMask(and_query);
+                        result = result | intermediate;
+                    }
+                    return result;
+                },
+            }
+        }
+
+        pub fn GetGroup(self: Self, comptime query: GroupQuery, mask: *SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
             switch (query) {
                 .Component => |component_type| {
                     const internal_array_t = InternalComponentArray(entity_t, component_type);
                     const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
 
-                    return try internal_array.GetAllEntities(allocator);
+                    var result = try internal_array.GetAllEntities(allocator);
+
+                    try self.EntityListMask(&result, mask, allocator);
+
+                    return result;
                 },
                 .Not => |not| {
                     var result = try self.GetGroup(not.mFirst, allocator);
@@ -188,6 +202,29 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     return result;
                 },
             }
+        }
+
+        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !void {
+            const zone = Tracy.ZoneInit("CompMan EntityListMask", @src());
+            defer zone.Deinit();
+
+            if (@reduce(.Or, mask.*) == 0) return;
+            if (result.items.len == 0) return;
+
+            var end_index: usize = result.items.len;
+            var i: usize = 0;
+            while (i < end_index) {
+                const entity_id = result.items[i];
+                const skip_comp = self.GetComponent(SkipFieldComponent, entity_id);
+                if (!skip_comp.mSkipField.TestZerosMask(mask)) {
+                    result.items[i] = result.items[end_index - 1];
+                    end_index -= 1;
+                } else {
+                    i += 1;
+                }
+            }
+
+            result.shrinkAndFree(allocator, end_index);
         }
 
         pub fn EntityListDifference(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {

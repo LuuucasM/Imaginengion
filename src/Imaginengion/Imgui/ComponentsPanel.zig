@@ -114,7 +114,6 @@ fn PrintComponent(engine_context: *EngineContext, comptime component_type: type,
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_RmEntityCompEvent = .{ .mComponent_ptr = entity.GetComponent(component_type).? } });
             entity.RemoveComponent(engine_context.EngineAllocator(), component_type);
         }
     }

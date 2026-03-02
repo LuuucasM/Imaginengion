@@ -37,7 +37,7 @@ pub fn Delete(self: Player, engine_context: *EngineContext) !void {
     self.mScenemanager.mECSManagerPL.DestroyEntity(engine_context.EngineAllocator(), self.mEntityID);
 }
 pub fn Possess(self: Player, entity: Entity) void {
-    self.GetComponent(PossessComponent).?.mPossessedEntity = Entity.EntityRef{ .mUUID = 0, .mEntity = entity };
+    self.GetComponent(PossessComponent).?.mPossessedEntity.mEntity = entity;
 }
 
 pub fn AddLensComponent(self: Player, engine_context: *EngineContext) LensComponent {

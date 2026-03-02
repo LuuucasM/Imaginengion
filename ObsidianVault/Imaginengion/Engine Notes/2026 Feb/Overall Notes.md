@@ -1,0 +1,14 @@
+- change toolbar panel so that it looks for spawn components on any of the scenes and lets you choose one of those with the dropdown bar instead of how it is now
+	- this means that when you press play it will spawn a player (maybe more than one in the future) and follow the spawn logic of that spawn component 
+- still need to change the serializer, specifically for de-serializing scene/entity references I should do something like they will be serialized as "EntityRef" and "SceneRef" and write that objects UUID
+- when deserializing if it is an EntityRef field then I can check the scene manager to see if I can match a UUID to a world ID. if not then EntityRef will stay undefined. later in the program if an EntityRef still does not contain a proper world id then it will recheck the scene manager to see if it can resolve the UUID to world ID. if it can then continue to using the entity as normal, if not then skip computation with that entity
+- fix going from PIE -> stop editor state
+	- create a new component for scenes called like "spawn point component"
+		- this will be set as an entry into this scene so when loading from nothing to having a player (could also be used for multiplayer as you need to spawn additional players for split screen) you know where the player will possess
+	- change the scene serializer to a new UUID system
+		- on deserialization
+			- objects that have references will submit a like resolve request to the scene serializer for defered resolving of turning uuid's into world_id's
+			- objects that have UUID components while deserializing will add its self to a map of UUID -> world_id where the UUID is the component and the world_id is the new id for the entity/scene
+			- we do then defered resolution of UUID references
+				- if we can not resolve right away then its ok, set the reference to some invalid state so that if that object is used, it can lazyly retry to resolve the reference at a later time.
+	- finish writing the new on change editor state event to use new serialization system and new scene spawn component

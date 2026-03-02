@@ -29,9 +29,11 @@ const std = @import("std");
 pub fn StaticSkipField(size: usize) type {
     return struct {
         const Self = @This();
+        pub const SkipFieldSize = size;
         pub const SkipFieldType = std.math.IntFittingRange(0, size);
-        const AllSkipArr: [size]SkipFieldType = AllSkipFn(size, SkipFieldType);
-        const NoSkipArr: [size]SkipFieldType = std.mem.zeroes([size]SkipFieldType);
+        pub const SkipFieldVector = @Vector(size, SkipFieldType);
+        pub const AllSkipArr: SkipFieldVector = AllSkipFn(size, SkipFieldType);
+        pub const NoSkipArr: SkipFieldVector = std.mem.zeroes(SkipFieldVector);
 
         const InitOption = enum(u1) {
             AllSkip = 0,
@@ -43,7 +45,7 @@ pub fn StaticSkipField(size: usize) type {
             mI: usize,
 
             pub fn Next(self: *FieldIterator) ?usize {
-                if (self.mI >= self.mSkipFieldRef.mSkipField.len) return null;
+                if (self.mI >= size) return null;
 
                 const current_index = self.mI;
 
@@ -54,7 +56,7 @@ pub fn StaticSkipField(size: usize) type {
             }
         };
 
-        mSkipField: [size]SkipFieldType = NoSkipArr,
+        mSkipField: SkipFieldVector = NoSkipArr,
 
         /// Initializes a new skip field instance with the given option.
         ///
@@ -103,7 +105,7 @@ pub fn StaticSkipField(size: usize) type {
         /// Returns:
         /// - Nothing
         pub fn ChangeToSkipped(self: *Self, index: SkipFieldType) void {
-            std.debug.assert(self.mSkipField.len > index);
+            std.debug.assert(size > index);
             if (size < 2) {
                 self.mSkipField[0] = 1;
                 return;
@@ -154,7 +156,7 @@ pub fn StaticSkipField(size: usize) type {
         /// Returns:
         /// - Nothing
         pub fn ChangeToUnskipped(self: *Self, index: SkipFieldType) void {
-            std.debug.assert(self.mSkipField.len > index);
+            std.debug.assert(size > index);
             if (size < 2) {
                 self.mSkipField[0] = 0;
                 return;
@@ -200,11 +202,17 @@ pub fn StaticSkipField(size: usize) type {
             }
             self.mSkipField[index] = 0;
         }
+        pub fn TestZerosMask(self: Self, mask: *SkipFieldVector) bool {
+            return @reduce(.Or, self.mSkipField & mask.*) == 0;
+        }
     };
 }
 
 fn AllSkipFn(comptime size: usize, comptime field_type: type) [size]field_type {
     var arr: [size]field_type = std.mem.zeroes([size]field_type);
+    for (0..size) |i| {
+        arr[i] = 1;
+    }
     arr[0] = size;
     arr[size - 1] = size;
     return arr;
@@ -251,13 +259,11 @@ test "Init Large Field" {
     try std.testing.expect(field.mSkipField[0] == FieldSize);
     try std.testing.expect(field.mSkipField[FieldSize - 1] == FieldSize);
     for (1..FieldSize - 2) |i| {
-        try std.testing.expect(field.mSkipField[i] == 0);
+        try std.testing.expect(field.mSkipField[i] == 1);
     }
 
     field = SkipFieldT.Init(.NoSkip);
-    for (field.mSkipField) |index| {
-        try std.testing.expect(index == 0);
-    }
+    try std.testing.expect(@reduce(.Or, field.mSkipField) == 0);
 }
 
 test "Large Change To Skip" {
@@ -290,7 +296,7 @@ test "Large Change To UnSkip" {
     const FieldSize = 10;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.NoSkip);
+    var field = SkipFieldT.Init(.AllSkip);
 
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(0);
@@ -355,4 +361,26 @@ test "Iterating Skipfield 3" {
     while (iter.Next()) |i| {
         try std.testing.expect(i == 0 or i == 1);
     }
+}
+
+test "Test Zeros Mask" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field = SkipFieldT.Init(.AllSkip);
+    var mask = SkipFieldT.NoSkipArr;
+
+    field.ChangeToUnskipped(1);
+
+    mask[1] = 1;
+
+    try std.testing.expect(field.TestZerosMask(&mask));
+
+    mask[3] = 1;
+
+    try std.testing.expect(!field.TestZerosMask(&mask));
+
+    field.ChangeToUnskipped(3);
+
+    try std.testing.expect(field.TestZerosMask(&mask));
 }

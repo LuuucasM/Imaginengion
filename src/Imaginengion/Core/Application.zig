@@ -18,7 +18,6 @@ const Tracy = @import("Tracy.zig");
 
 const Application: type = @This();
 
-mIsRunning: bool = true,
 mProgram: Program = .{},
 mEngineContext: EngineContext = .{},
 
@@ -57,9 +56,11 @@ pub fn Deinit(self: *Application) !void {
 /// Returns:
 /// - `!void` if an update loop iteration fails return the error else return nothing.
 pub fn Run(self: *Application) !void {
-    var frame_timer = std.time.Timer.start();
+    var frame_timer = try std.time.Timer.start();
 
-    while (self.mIsRunning) : (self.mEngineContext.mDT = @as(f32, @floatFromInt(frame_timer.lap())) / std.time.ns_per_s) {
+    while (self.mEngineContext.mIsRunning) : (self.mEngineContext.mDT = @as(f32, @floatFromInt(frame_timer.lap())) / std.time.ns_per_s) {
+        defer Tracy.FrameMark();
+
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
 
@@ -67,58 +68,5 @@ pub fn Run(self: *Application) !void {
 
         _ = self.mEngineContext._internal.FrameArena.reset(.free_all);
         self.mEngineContext.mEngineStats.ResetStats();
-
-        Tracy.FrameMark();
     }
-}
-
-/// Propagates system-level events such as window and input events.
-///
-/// Parameters:
-/// - `self`: A pointer to the `Application`.
-/// - `event`: A pointer to the `SystemEvent` to process.
-///
-/// Returns:
-/// - `!void` if event propagation fails return the error else return nothing.
-pub fn OnEvent(self: *Application, event: *SystemEvent) !void {
-    var cont_bool = true;
-
-    cont_bool = cont_bool and switch (event.*) {
-        .ET_WindowClose => self.OnWindowClose(),
-        .ET_WindowResize => |e| try self.OnWindowResize(e._Width, e._Height),
-        .ET_InputPressed => |e| try self.mProgram.OnInputPressedEvent(&self.mEngineContext, e),
-        else => true,
-    };
-}
-
-/// Handles the window close event.
-///
-/// Parameters:
-/// - `self`: The application instance.
-///
-/// Returns:
-/// - `false` to stop further propagation of the event.
-fn OnWindowClose(self: *Application) bool {
-    self.mIsRunning = false;
-    return false;
-}
-
-/// Handles window resize events.
-///
-/// Parameters:
-/// - `self`: The application instance.
-/// - `width`: The new width of the window.
-/// - `height`: The new height of the window.
-///
-/// Returns:
-/// - `true` to continue event propagation.
-fn OnWindowResize(self: *Application, width: usize, height: usize) !bool {
-    if ((width == 0) or (height == 0)) {
-        self.mEngineContext.mIsMinimized = true;
-    } else {
-        self.mEngineContext.mIsMinimized = false;
-        self.mEngineContext.mAppWindow.OnWindowResize(width, height);
-        self.mEngineContext.mEditorWorld.OnViewportResize(self.mEngineContext.FrameAllocator(), width, height);
-    }
-    return true;
 }

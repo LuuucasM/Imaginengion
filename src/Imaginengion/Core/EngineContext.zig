@@ -54,6 +54,7 @@ mSimulateWorld: SceneManager = .{},
 
 mEngineStats: EngineStats = .{},
 
+mIsRunning: bool = true,
 mIsMinimized: bool = false,
 
 _Internal: InternalData = .{},

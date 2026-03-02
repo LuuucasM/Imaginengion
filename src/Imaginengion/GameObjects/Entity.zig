@@ -31,7 +31,7 @@ pub const NewEntityConfig = struct {
 };
 
 pub const EntityRef = struct {
-    mUUID: u64,
+    mUUID: u64 = undefined,
     mEntity: Entity,
 
     pub fn GetEntity(self: *EntityRef) ?Entity {

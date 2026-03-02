@@ -2,7 +2,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const EEntityComponents = @import("../GameObjects/Components.zig").EComponents;
 
 const SceneLayer = @import("SceneLayer.zig");
-const ESceneComponents = @import("SceneComponents.zig").EComponents;
+const ESceneComponents = @import("../Scene/SceneComponents.zig").EComponents;
 
 pub const EventCategories = enum {
     FrameEnd,

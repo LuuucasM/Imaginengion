@@ -58,13 +58,13 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
             self.mEventsArray.deinit(engine_allocator);
         }
 
-        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, phase_event: TaggedUnionT) !void {
-            try self.mEventsArray.append(engine_allocator, phase_event);
+        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, event: TaggedUnionT) !void {
+            try self.mEventsArray.append(engine_allocator, event);
         }
 
         /// Process events for a specific phase.
         /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
-        pub fn ProcessPhase(
+        pub fn ProcessCategory(
             self: *Self,
             phase: EventCategoriesT,
             engine_context: *EngineContext,
