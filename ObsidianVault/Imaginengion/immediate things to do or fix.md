@@ -3,8 +3,11 @@
 	- runtime debug
 	- ensure that hitting the play button AND stop button both work with the physics box test
 	- ensure that deleting entities and scenes works
-- remove CS EditorPanel
+- remove CSEditorPanel, remove scripts panel, rename scene panel to WorldPanel, make new ScenePanel
 	- move the component editing into the components panel where each component is now a tree node and when it is expanded it does the EditorRender
+	- since before the point of scripts panel being separate is you could click on it and put it into the scripts editor panel to directly edit it but since im getting rid of CSEditorPanel i dont think it needs its own panel anymore
+	- instead i can move scripts into the Components Panel and maybe rename components panel to like EntityPanel and the EntityPanel will first display all the components, and then all the scripts. Scripts can be behind a tree node named Scripts which can be opened to view all the scripts
+	- Then with 2 panels remove, I can add a ScenePanel (maybe i can rename current ScenPanel to WorldPanel) which is basically the same thing as the EntityPanel but for scenes (since scenes are just entites in their own ECS world)
 - change physics collider to use the build in entity transform rather than right now where the enum value is a struct "box" and struct "sphere". that way I can align the colliders with more how the rendering system works
 	- this is so for the next TODO to visualize colliders i can simply follow my sdf logic to implement it
 - make visualizer for sphere collision and box collision

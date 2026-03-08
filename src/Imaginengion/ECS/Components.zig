@@ -43,7 +43,7 @@ pub fn SkipFieldComponent(comptime components_types: []const type) type {
         pub const Ind: usize = 2;
         pub const Name: []const u8 = "SkipFieldComponent";
         pub const StaticSkipFieldT = StaticSkipField(components_types.len + 3);
-        mSkipField: StaticSkipFieldT = .{}, // +3 because 0 is parent component, 1 is child component, and 2 is skip field component
+        mSkipField: StaticSkipFieldT = StaticSkipFieldT.Init(.AllSkip), // +3 because 0 is parent component, 1 is child component, and 2 is skip field component
 
         pub fn Deinit(_: *Self, _: *EngineContext) !void {}
     };

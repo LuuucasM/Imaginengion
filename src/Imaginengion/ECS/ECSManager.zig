@@ -19,10 +19,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         pub const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
         pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
         pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types);
+        pub const ComponentManagerT = ComponentManager(entity_t, components_types);
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t) = .{},
-        mComponentManager: ComponentManager(entity_t, components_types) = .{},
+        mComponentManager: ComponentManagerT = .{},
         mECSEventManager: ECSEventManager = .{},
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
@@ -84,8 +85,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return self.mEntityManager._IDsInUse.contains(entity_id);
         }
 
-        pub fn GetGroupMask(self: Self, comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
-            return self.mComponentManager.GetGroupMask(query);
+        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
+            _ValidateGroupQuery(query);
+            return ComponentManagerT.GetGroupMask(query);
         }
 
         //for getting groups of entities
@@ -94,7 +96,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const zone = Tracy.ZoneInit("ECSM GetGroup", @src());
             defer zone.Deinit();
 
-            const mask = self.mComponentManager.GetGroupMask(query);
+            const mask = ComponentManagerT.GetGroupMask(query);
             return try self.mComponentManager.GetGroup(query, &mask, allocator);
         }
 

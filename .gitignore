@@ -3,3 +3,4 @@
 .vscode/
 zig-out
 GameEngine.exe
+.cursor/

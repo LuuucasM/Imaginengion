@@ -10,6 +10,9 @@ const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
 
 const SceneComponents = @import("../../Scene/SceneComponents.zig");
 const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
+const SceneOnUpdateScript = SceneComponents.OnUpdateScript;
+const SceneInputPressedScript = SceneComponents.InputPressedScript;
+
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 pub const ScriptType = enum(u8) {
@@ -82,6 +85,8 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
         .EntityInputPressed => @constCast(self.mLib.lookup(EntityInputPressedScript.RunFuncSig, "Run").?),
         .EntityOnUpdate => @constCast(self.mLib.lookup(EntityOnUpdateScript.RunFuncSig, "Run").?),
         .SceneSceneStart => @constCast(self.mLib.lookup(SceneSceneStartScript.RunFuncSig, "Run").?),
+        .SceneInputPressed => @constCast(self.mLib.lookup(SceneInputPressedScript.RunFuncSig, "Run").?),
+        .SceneOnUpdate => @constCast(self.mLib.lookup(SceneOnUpdateScript.RunFuncSig, "Run").?),
     };
 }
 

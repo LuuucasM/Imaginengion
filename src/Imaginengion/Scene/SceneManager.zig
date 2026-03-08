@@ -46,7 +46,7 @@ const FileMetaData = Assets.FileMetaData;
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const Player = @import("../Players/Player.zig");
-const PlayerComponents = @import("../Players/Components.zig").ComponentsList;
+const PlayerComponents = @import("../Players/Components.zig");
 const PlayerLens = PlayerComponents.LensComponent;
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerMic = PlayerComponents.MicComponent;
@@ -59,7 +59,7 @@ const SceneManager = @This();
 
 pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
 pub const ECSManagerScenes = ECSManager(SceneLayer.Type, &SceneComponentsList);
-pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents);
+pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents.ComponentsList);
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj = .{},
@@ -94,10 +94,10 @@ pub fn Deinit(self: *SceneManager, engine_context: *EngineContext) !void {
 
 //===============================ECS MANAGER SC==============================================
 pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, _: LayerType, new_scene_config: NewSceneConfig) !SceneLayer {
-    const scene_layer = SceneLayer{ .mSceneID = try self.mECSManagerSC.CreateEntity(), .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
+    var scene_layer = SceneLayer{ .mSceneID = try self.mECSManagerSC.CreateEntity(), .mSceneManager = self };
     _ = try scene_layer.AddComponent(SceneComponent{});
 
-    self.CreateSceneConfig(engine_context.EngineAllocator(), scene_layer, new_scene_config);
+    try scene_layer.CreateSceneConfig(engine_context.EngineAllocator(), scene_layer, new_scene_config);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
@@ -265,10 +265,10 @@ fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: Scene
 
 //===============================ECS MANAGER Player==============================================
 pub fn CreatePlayer(self: *SceneManager, engine_context: *EngineContext) !Player {
-    const new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(), .mECSManagerRef = &self.mPlayerManager };
-    new_player.AddComponent(PossessComponent{});
-    new_player.AddComponent(PlayerMic{});
-    new_player.AddComponentLens(engine_context, new_player);
+    const new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(), .mScenemanager = self };
+    _ = try new_player.AddComponent(PossessComponent{});
+    _ = try new_player.AddComponent(PlayerMic{});
+    _ = try new_player.AddComponentLens(engine_context);
     return new_player;
 }
 pub fn GetPlayer(self: *SceneManager, player_id: Player.Type) Player {
@@ -296,8 +296,8 @@ pub fn EntityECSCallback(self: *SceneManager, event: ECSManagerGameObj.ECSEventM
     _ = self;
     _ = event;
 }
-pub fn GetEntityGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) std.ArrayList(Entity.Type) {
-    return self.mECSManagerGO.GetGroup(frame_allocator, query);
+pub fn GetEntityGroup(self: *const SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
+    return try self.mECSManagerGO.GetGroup(frame_allocator, query);
 }
 //===============================ECS MANAGER Entity==============================================
 

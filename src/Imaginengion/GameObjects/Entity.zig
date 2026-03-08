@@ -73,6 +73,10 @@ pub fn GetName(self: Entity) []const u8 {
     return self.mSceneManager.mECSManagerGO.GetComponent(NameComponent, self.mEntityID).?.*.mName.items;
 }
 
+pub fn CreateChild(self: Entity, child_type: ChildType) !Entity {
+    return Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
+}
+
 pub fn Duplicate(self: Entity) !Entity {
     return Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.DuplicateEntity(self.mEntityID), .mECSManagerRef = self.mECSManagerRef };
 }
@@ -97,7 +101,7 @@ pub fn AddComponentScript(self: *Entity, engine_context: *EngineContext, rel_pat
         .mScriptAssetHandle = new_script_handle,
     };
 
-    const new_script_entity = try self.AddChild(engine_context.EngineAllocator(), .Script);
+    const new_script_entity = try self.CreateChild(.Script);
 
     _ = try new_script_entity.AddComponent(new_script_component);
 
@@ -144,14 +148,14 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
 pub fn CreateEntityConfig(self: Entity, engine_allocator: std.mem.Allocator, config: NewEntityConfig) !void {
     if (config.bAddUUID) {
-        const new_uuid_component = UUIDComponent{ .ID = GenUUID() };
+        const new_uuid_component = UUIDComponent{ .ID = try GenUUID() };
         _ = try self.AddComponent(new_uuid_component);
-        self.mSceneManager.mEntityUUIDToWorldID.put(new_uuid_component.ID);
+        try self.mSceneManager.mEntityUUIDToWorldID.put(engine_allocator, new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {
-        const new_name_component = NameComponent{ .mAllocator = engine_allocator };
+        var new_name_component = NameComponent{ .mAllocator = engine_allocator };
         _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
-        self.AddComponent(new_name_component);
+        _ = try self.AddComponent(new_name_component);
     }
     if (config.bAddTransform) {
         _ = try self.AddComponent(TransformComponent{});

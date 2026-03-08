@@ -63,7 +63,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn CreateEntity(self: *Self, entity_id: entity_t) !void {
-            _ = self.AddComponent(entity_id, SkipFieldComponent.Init(.AllSkip));
+            _ = try self.AddComponent(entity_id, SkipFieldComponent{});
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
@@ -135,7 +135,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             internal_array.ResetComponent(entity_id, component);
         }
 
-        pub fn GetGroupMask(self: Self, comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
+        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
             switch (query) {
                 .Component => |component_type| {
                     var result = SkipFieldComponent.StaticSkipFieldT.NoSkipArr;
@@ -143,20 +143,20 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     return result;
                 },
                 .Not => |not| {
-                    return self.GetGroupMask(not.mFirst);
+                    return GetGroupMask(not.mFirst);
                 },
                 .Or => |ors| {
-                    var result = self.GetGroupMask(ors[0]);
+                    var result = GetGroupMask(ors[0]);
                     inline for (ors[1..]) |or_query| {
-                        const intermediate = self.GetGroupMask(or_query);
+                        const intermediate = GetGroupMask(or_query);
                         result = result & intermediate;
                     }
                     return result;
                 },
                 .And => |ands| {
-                    var result = self.GetGroupMask(ands[0]);
+                    var result = GetGroupMask(ands[0]);
                     inline for (ands[1..]) |and_query| {
-                        const intermediate = self.GetGroupMask(and_query);
+                        const intermediate = GetGroupMask(and_query);
                         result = result | intermediate;
                     }
                     return result;
@@ -164,7 +164,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn GetGroup(self: Self, comptime query: GroupQuery, mask: *SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
+        pub fn GetGroup(self: Self, comptime query: GroupQuery, mask: *const SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
             switch (query) {
                 .Component => |component_type| {
                     const internal_array_t = InternalComponentArray(entity_t, component_type);
@@ -204,7 +204,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !void {
+        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("CompMan EntityListMask", @src());
             defer zone.Deinit();
 
@@ -215,7 +215,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             var i: usize = 0;
             while (i < end_index) {
                 const entity_id = result.items[i];
-                const skip_comp = self.GetComponent(SkipFieldComponent, entity_id);
+                const skip_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
                 if (!skip_comp.mSkipField.TestZerosMask(mask)) {
                     result.items[i] = result.items[end_index - 1];
                     end_index -= 1;

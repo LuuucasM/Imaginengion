@@ -113,27 +113,27 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self._ToolbarPanel.Init(engine_context);
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
 
-    self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer);
-    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_allocator);
-    self.mEditorUIPlayer = engine_context.mEditorWorld.CreatePlayer(engine_context);
+    self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
+    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_allocator, .{});
+    self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context);
 
-    self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer);
-    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_allocator);
-    self.mEditorViewportPlayer = engine_context.mEditorWorld.CreatePlayer(engine_context);
+    self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
+    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_allocator, .{});
+    self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context);
 
     self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
     self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
 
-    try self.mEditorViewportEntity.AddComponentScript(engine_context, self.mEditorViewportEntity, "assets/scripts/EditorCameraInput.zig", .Eng);
+    try self.mEditorViewportEntity.AddComponentScript(engine_context, "assets/scripts/EditorCameraInput.zig", .Eng);
 
     self.mEditorUIPlayer.GetComponent(PlayerLens).?.SetViewportSize(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     self.mEditorViewportPlayer.GetComponent(PlayerLens).?.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
 
-    try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent{});
+    _ = try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent{});
     self.mEditorViewportEntity.Possess(self.mEditorViewportPlayer);
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
 
-    try self.mEditorUIEntity.AddComponent(PlayerSlotComponent{});
+    _ = try self.mEditorUIEntity.AddComponent(PlayerSlotComponent{});
     self.mEditorUIEntity.Possess(self.mEditorUIPlayer);
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
 }
@@ -309,13 +309,14 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
 }
 
-pub fn OnSystemEvent(self: *EditorProgram, engine_context: *EngineContext, event: WindowEvent) !void {
-    switch (event.*) {
+pub fn OnSystemEvent(self: *EditorProgram, engine_context: *EngineContext, event: WindowEvent) anyerror!bool {
+    switch (event) {
         .ET_WindowClose => self.OnWindowClose(),
         .ET_WindowResize => |e| try OnWindowResize(engine_context, e._Width, e._Height),
         .ET_InputPressed => |e| try self.OnInputPressedEvent(engine_context, e),
         else => {},
     }
+    return true;
 }
 
 fn OnWindowClose(self: *EditorProgram) bool {

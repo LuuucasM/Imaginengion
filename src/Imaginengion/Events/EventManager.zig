@@ -41,40 +41,38 @@ fn CategoryTaggedEventUnion(EventCategories: type, EventUnion: type) type {
 }
 
 pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
-    const TaggedUnionType = CategoryTaggedEventUnion(EventCategoriesType, EventUnionType);
-
     return struct {
-        pub const ClearMode = struct {
-            .ClearAndFree,
-            .ClearRetainingCapacity,
+        pub const ClearMode = enum {
+            ClearAndFree,
+            ClearRetainingCapacity,
         };
-        const Self = @This();
-        pub const EventCategoriesT = EventCategoriesType;
-        pub const EventT = EventUnionType;
-        pub const TaggedUnionT = TaggedUnionType;
 
-        mEventsArray: std.MultiArrayList(TaggedUnionType) = .{},
+        const Self = @This();
+        pub const EventsArrayT = std.EnumArray(EventCategoriesType, std.ArrayList(EventUnionType));
+
+        mEventsArray: EventsArrayT = EventsArrayT.initFill(.{}),
 
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
-            self.mEventsArray.deinit(engine_allocator);
+            var iter = self.mEventsArray.iterator();
+            while (iter.next()) |entry| {
+                entry.value.deinit(engine_allocator);
+            }
         }
 
-        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, event: TaggedUnionT) !void {
-            try self.mEventsArray.append(engine_allocator, event);
+        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, comptime category: EventCategoriesType, event: EventUnionType) !void {
+            try self.mEventsArray.getPtr(category).append(engine_allocator, event);
         }
 
         /// Process events for a specific phase.
         /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
         pub fn ProcessCategory(
             self: *Self,
-            phase: EventCategoriesT,
+            comptime category: EventCategoriesType,
             engine_context: *EngineContext,
             callback_context: anytype,
-            callback_fn: fn (@TypeOf(callback_context), *EngineContext, EventT) anyerror!bool,
+            callback_fn: fn (@TypeOf(callback_context), *EngineContext, EventUnionType) anyerror!bool,
         ) !void {
-            const slices = self.mEventsArray.slice();
-
-            const events = slices.items(phase);
+            const events = self.mEventsArray.get(category).items;
 
             for (events) |event| {
                 _ = try callback_fn(callback_context, engine_context, event);
@@ -82,9 +80,12 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
         }
 
         pub fn EventsReset(self: *Self, engine_allocator: std.mem.Allocator, clear_mode: ClearMode) void {
-            switch (clear_mode) {
-                .ClearAndFree => self.mEventsArray.clearAndFree(engine_allocator),
-                .ClearRetainingCapacity => self.mEventsArray.clearRetainingCapacity(),
+            var iter = self.mEventsArray.iterator();
+            while (iter.next()) |entry| {
+                switch (clear_mode) {
+                    .ClearAndFree => entry.value.clearAndFree(engine_allocator),
+                    .ClearRetainingCapacity => entry.value.clearRetainingCapacity(),
+                }
             }
         }
     };

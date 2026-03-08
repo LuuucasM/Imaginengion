@@ -56,7 +56,7 @@ pub fn StaticSkipField(size: usize) type {
             }
         };
 
-        mSkipField: SkipFieldVector = NoSkipArr,
+        mSkipField: SkipFieldVector = AllSkipArr,
 
         /// Initializes a new skip field instance with the given option.
         ///
@@ -66,9 +66,10 @@ pub fn StaticSkipField(size: usize) type {
         /// Returns:
         /// - A new `Self` instance with its skip field initialized accordingly.
         pub fn Init(option: InitOption) Self {
-            var new_skipfield = Self{};
-            if (option == .AllSkip) new_skipfield.Reset(option);
-            return new_skipfield;
+            return switch (option) {
+                .AllSkip => Self{ .mSkipField = AllSkipArr },
+                .NoSkip => Self{ .mSkipField = NoSkipArr },
+            };
         }
 
         /// Resets the skip field based on the specified option.
@@ -202,7 +203,7 @@ pub fn StaticSkipField(size: usize) type {
             }
             self.mSkipField[index] = 0;
         }
-        pub fn TestZerosMask(self: Self, mask: *SkipFieldVector) bool {
+        pub fn TestZerosMask(self: Self, mask: *const SkipFieldVector) bool {
             return @reduce(.Or, self.mSkipField & mask.*) == 0;
         }
     };

@@ -70,23 +70,21 @@ pub fn Duplicate(self: *SceneLayer) !SceneLayer {
 
 pub fn AddChild(self: *SceneLayer, engine_allocator: std.mem.Allocator, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
     const child_scene = SceneLayer{ .mSceneID = self.mSceneManager.mECSManagerSC.AddChild(self.mSceneID, child_type), .mSceneManager = self };
-    self.CreateSceneConfig(engine_allocator, child_scene, new_scene_config);
+    child_scene.CreateSceneConfig(engine_allocator, child_scene, new_scene_config);
     return child_scene;
 }
 
 pub fn CreateSceneConfig(self: *SceneLayer, engine_allocator: std.mem.Allocator, scene_layer: SceneLayer, config: NewSceneConfig) !void {
     if (config.bAddSceneUUID) {
-        const uuid_component = SceneUUIDComponent{ .ID = GenUUID() };
+        const uuid_component = SceneUUIDComponent{ .ID = try GenUUID() };
         _ = try scene_layer.AddComponent(uuid_component);
-        self.mSceneUUIDToWorldID.put(engine_allocator, uuid_component.ID, scene_layer.mSceneID);
+        try self.mSceneManager.mSceneUUIDToWorldID.put(engine_allocator, uuid_component.ID, scene_layer.mSceneID);
     }
     if (config.bAddSceneName) {
-        const scene_name_component = SceneNameComponent{
-            .mAllocator = engine_allocator,
-        };
-        scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
+        var scene_name_component = SceneNameComponent{ .mAllocator = engine_allocator };
+        _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
 
-        scene_layer.AddComponent(scene_name_component);
+        _ = try scene_layer.AddComponent(scene_name_component);
     }
 }
 
@@ -135,16 +133,16 @@ fn FilterSceneByScene(self: SceneLayer, list_allocator: std.mem.Allocator, scene
 
 //======================for the entities in the scenes=====================================
 pub fn CreateEntity(self: SceneLayer, engine_allocator: std.mem.Allocator, new_entity_config: NewEntityConfig) !Entity {
-    var new_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.CreateEntity(), .mECSManagerRef = self.mSceneManager.mECSManagerGO };
-    new_entity.CreateEntityConfig(engine_allocator, new_entity_config);
-    new_entity.AddComponent(EntitySceneComponent{ .mScene = self });
+    var new_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.CreateEntity(), .mSceneManager = self.mSceneManager };
+    try new_entity.CreateEntityConfig(engine_allocator, new_entity_config);
+    _ = try new_entity.AddComponent(EntitySceneComponent{ .mScene = self });
     return new_entity;
 }
 
 pub fn CreateChildEntity(self: SceneLayer, engine_allocator: std.mem.Allocator, parent_entity: Entity, child_type: ChildType, new_entity_config: NewEntityConfig) !Entity {
-    const child_entity = try parent_entity.AddChild(engine_allocator, child_type, new_entity_config);
-    child_entity.CreateEntityConfig(engine_allocator, new_entity_config);
-    child_entity.AddComponent(EntitySceneComponent{ .mScene = self });
+    const child_entity = try parent_entity.CreateChild(child_type);
+    try child_entity.CreateEntityConfig(engine_allocator, new_entity_config);
+    _ = try child_entity.AddComponent(EntitySceneComponent{ .mScene = self });
     return child_entity;
 }
 

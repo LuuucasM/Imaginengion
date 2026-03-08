@@ -40,27 +40,27 @@ pub fn Possess(self: Player, entity: Entity) void {
     self.GetComponent(PossessComponent).?.mPossessedEntity.mEntity = entity;
 }
 
-pub fn AddComponentLens(self: Player, engine_context: *EngineContext) LensComponent {
+pub fn AddComponentLens(self: Player, engine_context: *EngineContext) !*LensComponent {
     var new_lens_component = LensComponent{};
     const engine_allocator = engine_context.EngineAllocator();
 
-    new_lens_component.mViewportFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
-    new_lens_component.mViewportVertexArray = VertexArray.Init();
-    new_lens_component.mViewportVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
-    new_lens_component.mViewportIndexBuffer = undefined;
+    new_lens_component.mFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
+    new_lens_component.mVertexArray = VertexArray.Init();
+    new_lens_component.mVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
+    new_lens_component.mIndexBuffer = undefined;
 
     const shader_asset = engine_context.mRenderer.GetSDFShader();
-    try new_lens_component.mViewportVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
-    new_lens_component.mViewportVertexBuffer.SetStride(shader_asset.GetStride());
+    try new_lens_component.mVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
+    new_lens_component.mVertexBuffer.SetStride(shader_asset.GetStride());
 
     var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_lens_component.mViewportIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
+    new_lens_component.mIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
 
     var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
-    new_lens_component.mViewportVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_lens_component.mViewportVertexArray.AddVertexBuffer(engine_allocator, new_lens_component.mViewportVertexBuffer);
-    new_lens_component.mViewportVertexArray.SetIndexBuffer(new_lens_component.mViewportIndexBuffer);
+    new_lens_component.mVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
+    try new_lens_component.mVertexArray.AddVertexBuffer(engine_allocator, new_lens_component.mVertexBuffer);
+    new_lens_component.mVertexArray.SetIndexBuffer(new_lens_component.mIndexBuffer);
 
     new_lens_component.SetViewportSize(1600, 900);
-    self.AddComponent(new_lens_component);
+    return try self.AddComponent(new_lens_component);
 }

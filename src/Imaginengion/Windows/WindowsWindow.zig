@@ -126,9 +126,7 @@ export fn GLFWKeyCallback(window: ?*glfw.struct_GLFWwindow, key: c_int, scancode
         },
         else => @panic("Unknown glfw action in Windowswindow::GLFWKeyCallback\n"),
     };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
-        .InputEvent = new_event,
-    }) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .InputEvent, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWKeyCallback\n");
     };
@@ -157,9 +155,7 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
         },
         else => @panic("Unknown glfw action in Windowswindow::GLFWMouseButtonCallback\n"),
     };
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
-        .InputEvent = new_event,
-    }) catch |err| {
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .InputEvent, new_event) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWMouseButtonCallback\n");
     };
@@ -168,12 +164,10 @@ export fn GLFWMouseButtonCallback(window: ?*glfw.struct_GLFWwindow, button: c_in
 export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yPos: f64) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
 
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
-        .InputEvent = .{
-            .MouseMoved = .{
-                ._MouseX = @floatCast(xPos),
-                ._MouseY = @floatCast(yPos),
-            },
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .InputEvent, .{
+        .MouseMoved = .{
+            ._MouseX = @floatCast(xPos),
+            ._MouseY = @floatCast(yPos),
         },
     }) catch |err| {
         std.debug.print("{}\n", .{err});
@@ -183,12 +177,10 @@ export fn GLFWMouseMovedCallback(window: ?*glfw.struct_GLFWwindow, xPos: f64, yP
 
 export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f64, yOffset: f64) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
-        .InputEvent = .{
-            .MouseScrolled = .{
-                ._XOffset = @floatCast(xOffset),
-                ._YOffset = @floatCast(yOffset),
-            },
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .InputEvent, .{
+        .MouseScrolled = .{
+            ._XOffset = @floatCast(xOffset),
+            ._YOffset = @floatCast(yOffset),
         },
     }) catch |err| {
         std.debug.print("{}\n", .{err});
@@ -199,10 +191,8 @@ export fn GLFWMouseScrolledCallback(window: ?*glfw.struct_GLFWwindow, xOffset: f
 export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
 
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
-        .WindowEvent = .{
-            .WindowClose = .{},
-        },
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .WindowEvent, .{
+        .WindowClose = .{},
     }) catch |err| {
         std.debug.print("{}\n", .{err});
         @panic("Could not insert event into queue in Windowswindow::GLFWWindowCloseCallback\n");
@@ -211,12 +201,10 @@ export fn GLFWWindowCloseCallback(window: ?*glfw.struct_GLFWwindow) callconv(.c)
 
 export fn GLFWWindowResizeCallback(window: ?*glfw.struct_GLFWwindow, width: c_int, height: c_int) callconv(.c) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(glfw.glfwGetWindowUserPointer(window)));
-    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .{
-        .WindowEvent = .{
-            .WindowResize = .{
-                ._Width = @intCast(width),
-                ._Height = @intCast(height),
-            },
+    engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .WindowEvent, .{
+        .WindowResize = .{
+            ._Width = @intCast(width),
+            ._Height = @intCast(height),
         },
     }) catch |err| {
         std.debug.print("{}\n", .{err});

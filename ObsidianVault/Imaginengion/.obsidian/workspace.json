@@ -34,9 +34,21 @@
               "icon": "lucide-file",
               "title": "longer term things to do or fix"
             }
+          },
+          {
+            "id": "9e61a00140897ba9",
+            "type": "leaf",
+            "state": {
+              "type": "release-notes",
+              "state": {
+                "currentVersion": "1.12.4"
+              },
+              "icon": "lucide-book-up",
+              "title": "Release Notes 1.12.4"
+            }
           }
         ],
-        "currentTab": 1
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -184,7 +196,7 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "9574b18e43d58b0c",
+  "active": "9e61a00140897ba9",
   "lastOpenFiles": [
     "immediate things to do or fix.md",
     "longer term things to do or fix.md",
