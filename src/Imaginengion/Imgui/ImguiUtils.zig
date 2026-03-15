@@ -9,7 +9,7 @@ const TextComponent = EntityComponents.TextComponent;
 const AudioComponent = EntityComponents.AudioComponent;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 
-pub fn NewAllScriptPopup(engine_context: *EngineContext) !void {
+pub fn NewAllScriptsPopup(engine_context: *EngineContext) !void {
     if (imgui.igBeginMenu("All Scripts", true) == true) {
         defer imgui.igEndMenu();
         try NewEntityScriptPopup(engine_context);
@@ -60,11 +60,7 @@ pub fn NewEntityScriptPopup(engine_context: *EngineContext) !void {
 
         inline for (EntityComponents.ScriptsList) |script_type| {
             if (imgui.igMenuItem_Bool(script_type.Name.ptr, "", false, true)) {
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-                    .RenderEnd = .{
-                        .NewScriptEvent = .{ .mScriptType = script_type.Scripttype },
-                    },
-                });
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewScriptEvent = .{ .mScriptType = script_type.Scripttype } });
             }
         }
     }
@@ -76,11 +72,7 @@ pub fn NewSceneScriptPopup(engine_context: *EngineContext) !void {
 
         inline for (SceneComponents.ScriptsList) |script_type| {
             if (imgui.igMenuItem_Bool(script_type.Name.ptr, "", false, true)) {
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-                    .RenderEnd = .{
-                        .NewScriptEvent = .{ .mScriptType = script_type.Scripttype },
-                    },
-                });
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewScriptEvent = .{ .mScriptType = script_type.Scripttype } });
             }
         }
     }

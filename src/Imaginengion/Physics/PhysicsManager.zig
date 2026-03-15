@@ -47,7 +47,7 @@ pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime world_type: EngineContext.WorldType) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
-    const scene_manager = switch (world_type) {
+    var scene_manager = switch (world_type) {
         .Game => engine_context.mGameWorld,
         .Editor => engine_context.mEditorWorld,
         .Simulate => engine_context.mSimulateWorld,
@@ -71,7 +71,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
             try self.UpdateWorldTransforms(world_type, engine_context);
 
-            try self.DetectCollisions(engine_context, colliders_arr);
+            try self.DetectCollisions(world_type, engine_context, colliders_arr);
 
             for (0..SOLVER_ITERS) |_| {
                 for (self._InternalData.Contacts.items) |contact| {
@@ -101,7 +101,7 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineCont
     const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransform", @src());
     defer zone.Deinit();
 
-    const scene_manager = switch (world_type) {
+    var scene_manager = switch (world_type) {
         .Game => engine_context.mGameWorld,
         .Editor => engine_context.mEditorWorld,
         .Simulate => engine_context.mSimulateWorld,
@@ -132,7 +132,7 @@ fn CalculateChildren(parent_entity: Entity, position_acc: Vec3f32, rotation_acc:
     var curr_id = parent_component.mFirstEntity;
 
     while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-        const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
+        const child_entity = Entity{ .mEntityID = curr_id, .mSceneManager = parent_entity.mSceneManager };
 
         CalculateChildTransform(child_entity, position_acc, rotation_acc, scale_acc);
 
@@ -184,7 +184,7 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
     const zone = Tracy.ZoneInit("PhysicsManager::DetectCollisions", @src());
     defer zone.Deinit();
 
-    const scene_manager = switch (world_type) {
+    var scene_manager = switch (world_type) {
         .Game => engine_context.mGameWorld,
         .Editor => engine_context.mEditorWorld,
         .Simulate => engine_context.mSimulateWorld,

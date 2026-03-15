@@ -33,16 +33,11 @@ const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(Scen
 const SceneNameComponent = SceneComponents.NameComponent;
 const SceneUUIDComponent = SceneComponents.UUIDComponent;
 
-const GameObjectUtils = @import("../GameObjects/GameObjectUtils.zig");
-
 const Assets = @import("../Assets/Assets.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const FileMetaData = Assets.FileMetaData;
 const SceneManager = @import("SceneManager.zig");
-const SceneType = SceneManager.SceneType;
 const AssetType = @import("../Assets/AssetManager.zig").AssetType;
-const SceneAsset = Assets.SceneAsset;
-const SceneUtils = @import("../Scene/SceneUtils.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const WriteStream = std.json.Stringify;
@@ -289,15 +284,15 @@ fn DeSerializeScene(engine_context: *EngineContext, reader: *std.json.Reader, sc
         }
 
         if (std.mem.eql(u8, actual_value, "Entity")) {
-            const new_entity = try scene_layer.CreateBlankEntity();
+            const new_entity = try scene_layer.CreateEntity(engine_context.EngineAllocator(), .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
             try DeSerializeEntity(engine_context, reader, new_entity, scene_layer);
         }
         if (std.mem.eql(u8, actual_value, "ChildEntity")) {
-            const new_scene = try scene_layer.AddBlankChild(.Entity);
+            const new_scene = try scene_layer.AddChild(engine_context.EngineAllocator(), .Entity, .{ .bAddSceneName = false, .bAddSceneUUID = false });
             try DeSerializeScene(engine_context, reader, new_scene);
         }
         if (std.mem.eql(u8, actual_value, "ScriptEntity")) {
-            const new_scene = try scene_layer.AddBlankChild(.Script);
+            const new_scene = try scene_layer.AddChild(engine_context.EngineAllocator(), .Script, .{ .bAddSceneName = false, .bAddSceneUUID = false });
             try DeSerializeScene(engine_context, reader, new_scene);
         }
     }
@@ -332,11 +327,11 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
         }
 
         if (std.mem.eql(u8, actual_value, "ChildEntity")) {
-            const new_entity = try scene_layer.AddBlankChildEntity(entity, .Entity);
+            const new_entity = try entity.CreateChild(engine_context.EngineAllocator(), .Entity, .{});
             try DeSerializeEntity(engine_context, reader, new_entity, scene_layer);
         }
         if (std.mem.eql(u8, actual_value, "ScriptEntity")) {
-            const new_script = try scene_layer.AddBlankChildEntity(entity, .Script);
+            const new_script = try entity.CreateChild(engine_context.EngineAllocator(), .Script, .{ .bAddUUID = false, .bAddName = false, .bAddTransform = false });
             try DeSerializeEntity(engine_context, reader, new_script, scene_layer);
         }
     }

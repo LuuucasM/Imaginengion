@@ -144,7 +144,6 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     self._ContentBrowserPanel.Deinit(engine_context);
     self._CSEditorPanel.Deinit();
-    self.mImgui.Deinit();
 }
 
 //Note other systems to consider in the on update loop
@@ -160,8 +159,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     //--------------Incoming network packets
     {
-        const input_zone = Tracy.ZoneInit("Incoming Network Section", @src());
-        defer input_zone.Deinit();
+        const incoming_zone = Tracy.ZoneInit("Incoming Network Section", @src());
+        defer incoming_zone.Deinit();
     }
     //==============End Incoming Network packets
 
@@ -172,7 +171,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
         //Human Inputs
         engine_context.mAppWindow.PollInputEvents();
-        try engine_context.mSystemEventManager.ProcessCategory(.InputEvent, engine_context, self, OnSystemEvent);
+        const this_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent, .mPrev = null };
+        try engine_context.mSystemEventManager.ProcessCategory(.InputEvent, engine_context, &this_event_callback);
 
         //AI Inputs
     }
@@ -232,7 +232,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
         if (engine_context.mIsMinimized == false) {
-            self.mImgui.Begin();
+            ImGui.Begin();
             Dockspace.Begin();
 
             try self._ContentBrowserPanel.OnImguiRender(engine_context);
@@ -253,12 +253,13 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             try self._ToolbarPanel.OnImguiRender(.Game, engine_context);
 
-            try self.DockspaceOnImguiRender(engine_context, self);
+            try self.OnImguiRender(engine_context);
 
-            try engine_context.mImguiEventManager.ProcessEvents(engine_context);
+            const imgui_event_callback = engine_context.ImguiEventCallback{ .mCtx = self, .mCallbackFn = OnImguiEvent, .mPrev = null };
+            try engine_context.mImguiEventManager.ProcessCategory(.RenderEnd, engine_context, imgui_event_callback);
 
             Dockspace.End();
-            self.mImgui.End();
+            ImGui.End(engine_context.mAppWindow);
         }
     }
     //--------------Render End-------------------
@@ -286,13 +287,15 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         engine_context.mRenderer.SwapBuffers();
 
         //Process window events
-        try engine_context.mSystemEventManager.ProcessCategory(.WindowEvent, engine_context, self, OnSystemEvent);
+        const system_event_callback = engine_context.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent, .mPrev = null };
+        try engine_context.mSystemEventManager.ProcessCategory(.WindowEvent, engine_context, &system_event_callback);
 
         //handle any closed scene spec panels
         self.CleanSceneSpecs(engine_context.EngineAllocator());
 
         //handle deleted objects this frame
-        try engine_context.mGameEventManager.ProcessCategory(.FrameEnd, engine_context, self, OnGameEvent);
+        const game_event_callback = engine_context.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnGameEvent, .mPrev = null };
+        try engine_context.mGameEventManager.ProcessCategory(.FrameEnd, engine_context, &game_event_callback);
 
         try engine_context.mGameWorld.ProcessRemovedObj(engine_context);
         try engine_context.mEditorWorld.ProcessRemovedObj(engine_context);
@@ -309,34 +312,37 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
 }
 
-pub fn OnSystemEvent(self: *EditorProgram, engine_context: *EngineContext, event: WindowEvent) anyerror!bool {
+pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: WindowEvent) anyerror!bool {
+    const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     switch (event) {
-        .ET_WindowClose => self.OnWindowClose(),
-        .ET_WindowResize => |e| try OnWindowResize(engine_context, e._Width, e._Height),
-        .ET_InputPressed => |e| try self.OnInputPressedEvent(engine_context, e),
+        .WindowClose => _ = self.OnWindowClose(engine_context),
+        .WindowResize => |e| _ = try OnWindowResize(engine_context, e._Width, e._Height),
+        .InputPressed => |e| _ = try self.OnInputPressedEvent(engine_context, e),
         else => {},
     }
     return true;
 }
 
-fn OnWindowClose(self: *EditorProgram) bool {
-    self.mIsRunning = false;
+fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
+    engine_context.mIsRunning = false;
     return false;
 }
 
 fn OnWindowResize(engine_context: *EngineContext, width: usize, height: usize) !bool {
     engine_context.mAppWindow.OnWindowResize(width, height);
-    engine_context.mEditorWorld.OnViewportResize(engine_context.FrameAllocator(), width, height);
+    try engine_context.mEditorWorld.OnViewportResize(engine_context.FrameAllocator(), width, height);
     return true;
 }
 
-pub fn OnGameEvent(self: *EditorProgram, engine_context: *EngineContext, event: GameEvent) !void {
+pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: GameEvent) !void {
+    const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     _ = self;
     _ = engine_context;
     _ = event;
 }
 
-pub fn OnImguiEvent(self: *EditorProgram, engine_context: *EngineContext, event: ImguiEvent) !void {
+pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: ImguiEvent) !void {
+    const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     switch (event.*) {
         .ET_MoveSceneEvent => |e| {
             try engine_context.mGameWorld.MoveScene(engine_context.FrameAllocator(), e.SceneID, e.NewPos);
@@ -394,7 +400,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
 }
 
 pub fn OnInputPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.InputPressedEvent) !bool {
-    _ = try ScriptsProcessor.RunEntityScript(OnInputPressedEvent, .Editor, engine_context, .{&e});
+    _ = try ScriptsProcessor.RunEntityScript(OnInputPressedScript, .Editor, engine_context, .{&e});
     //scene on input script probably need to add TODO
 
     if (self._ToolbarPanel.mState == .Play) {

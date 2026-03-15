@@ -14,12 +14,15 @@ const EngineStats = @import("EngineStats.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData.EventCategories, WindowEventData.Event);
+pub const WindowEventCallback = WindowEventManager.EventCallback;
 
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData.EventCategories, ImguiEventData.Event);
+pub const ImguiEventCallback = ImguiEventManager.EventCallback;
 
 const GameEventData = @import("../Events/GameEventData.zig");
 const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData.EventCategories, GameEventData.Event);
+pub const GameEventCallback = GameEventManager.EventCallback;
 
 const InternalData = struct {
     EngineAllocator: std.mem.Allocator = undefined,

@@ -9,13 +9,13 @@ const ECSManagerGameObj = SceneManager.ECSManagerGameObj;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
-const EntityScriptList = @import("../GameObjects/Components.zig").ScriptList;
+const EntityScriptList = @import("../GameObjects/Components.zig").ScriptsList;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
 
-const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptList;
+const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptsList;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const StackPosComponent = SceneComponents.StackPosComponent;
@@ -35,8 +35,7 @@ pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineCo
     _ValidateEntityType(script_type);
     const zone = Tracy.ZoneInit("RunEntityScript", @src());
     defer zone.Deinit();
-
-    const scene_manager = switch (world_type) {
+    var scene_manager = switch (world_type) {
         .Game => engine_context.mGameWorld,
         .Editor => engine_context.mEditorWorld,
         .Simulate => engine_context.mSimulateWorld,
@@ -61,7 +60,7 @@ pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineCo
                 const asset_handle = script_component.mScriptAssetHandle;
                 const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
 
-                var entity = Entity{ .mEntityID = script_component.mParent, .mECSManagerRef = &scene_manager.mECSManagerGO };
+                var entity = scene_manager.GetEntity(script_component.mParent);
 
                 const combined_args = .{ engine_context, &entity } ++ args;
                 cont_bool = cont_bool and script_asset.Run(script_type, combined_args);

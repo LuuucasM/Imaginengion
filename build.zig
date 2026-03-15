@@ -9,8 +9,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const enable_tracy = b.option(bool, "enable_tracy", "Enable the CPU profiler tracy");
-    const enable_nsight = b.option(bool, "enable_nsight", "Enable the GPU profiler nvidia nsight");
+    const enable_tracy = b.option(bool, "enable-tracy", "Enable the CPU profiler tracy");
+    const enable_nsight = b.option(bool, "enable-nsight", "Enable the GPU profiler nvidia nsight");
+    const no_bin = b.option(bool, "no-bin", "skip emitting compiler binary") orelse false;
     //function builds the entire engine lib including the dependencies and all
     const engine_lib = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight);
 
@@ -30,24 +31,27 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    //var options = b.addOptions();
-    //options.addOption(bool, "enable_profiler", false);
-    //editor_exe.root_module.addOptions("build_options", options);
-
-    b.installArtifact(editor_exe);
-    const run_cmd = b.addRunArtifact(editor_exe);
-    run_cmd.step.dependOn(b.getInstallStep());
+    if (no_bin) {
+        b.getInstallStep().dependOn(&editor_exe.step);
+    } else {
+        b.installArtifact(editor_exe);
+    }
 
     // This allows the user to pass arguments to the application in the build
     // command itself, like this: `zig build run -- arg1 arg2 etc`
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    //if (b.args) |args| {
+    //    run_cmd.addArgs(args);
+    //}
+
+    //================================================RUN STEP=======================================
+    const run_cmd = b.addRunArtifact(editor_exe);
+    run_cmd.step.dependOn(b.getInstallStep());
 
     const run_step = b.step("run", "Run Engine");
     run_step.dependOn(&run_cmd.step);
+    //=========================================END RUN STEP====================================
 
-    //tests
+    //=========================================TEST STEP=========================================
     const test_step = b.step("test", "Test Engine");
 
     //skip field tests
@@ -59,4 +63,5 @@ pub fn build(b: *std.Build) void {
     const run_skip_field_tests = b.addRunArtifact(skip_field_tests);
 
     test_step.dependOn(&run_skip_field_tests.step);
+    //=========================================END TEST STEP==================================================
 }

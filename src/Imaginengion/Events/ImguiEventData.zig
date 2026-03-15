@@ -2,6 +2,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const ScriptType = @import("../Assets/Assets/ScriptAsset.zig").ScriptType;
+const LayerType = @import("../Scene/Components/SceneComponent.zig").LayerType;
 
 pub const EventCategories = enum {
     RenderEnd,
@@ -19,6 +20,7 @@ pub const Event = union(enum) {
     DeleteEntityEvent: DeleteEntityEvent,
     DeleteSceneEvent: DeleteSceneEvent,
     NewScriptEvent: NewScriptEvent,
+    NewSceneEvent: NewSceneEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -64,4 +66,8 @@ pub const DeleteSceneEvent = struct {
 
 pub const NewScriptEvent = struct {
     mScriptType: ScriptType,
+};
+
+pub const NewSceneEvent = struct {
+    mLayerType: LayerType,
 };

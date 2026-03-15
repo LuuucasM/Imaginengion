@@ -1,6 +1,6 @@
 pub const ECSEventCategory = enum(u8) {
-    EC_Default,
-    EC_Remove,
+    Default,
+    Remove,
 };
 
 pub fn ECSEvent(entity_t: type) type {

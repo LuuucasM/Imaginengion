@@ -47,6 +47,12 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
             ClearRetainingCapacity,
         };
 
+        pub const EventCallback = struct {
+            mCtx: *anyopaque,
+            mCallbackFn: *const fn (*anyopaque, *EngineContext, EventUnionType) anyerror!bool,
+            mPrev: ?*const EventCallback,
+        };
+
         const Self = @This();
         pub const EventsArrayT = std.EnumArray(EventCategoriesType, std.ArrayList(EventUnionType));
 
@@ -65,17 +71,15 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
 
         /// Process events for a specific phase.
         /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
-        pub fn ProcessCategory(
-            self: *Self,
-            comptime category: EventCategoriesType,
-            engine_context: *EngineContext,
-            callback_context: anytype,
-            callback_fn: fn (@TypeOf(callback_context), *EngineContext, EventUnionType) anyerror!bool,
-        ) !void {
+        pub fn ProcessCategory(self: *Self, comptime category: EventCategoriesType, engine_context: *EngineContext, event_callback: *const EventCallback) !void {
             const events = self.mEventsArray.get(category).items;
 
-            for (events) |event| {
-                _ = try callback_fn(callback_context, engine_context, event);
+            var current_callback: ?*const EventCallback = event_callback;
+            while (current_callback) |cb| {
+                current_callback = cb.mPrev;
+                for (events) |event| {
+                    _ = try cb.mCallbackFn(cb.mCtx, engine_context, event);
+                }
             }
         }
 

@@ -4,7 +4,6 @@ const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 const GroupQuery = @import("ComponentManager.zig").GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
-const ECSEventCategory = @import("ECSEvent.zig").ECSEventCategory;
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 
@@ -20,6 +19,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
         pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types);
         pub const ComponentManagerT = ComponentManager(entity_t, components_types);
+        pub const ECSEventCallback = ECSEventManager.EventCallback;
 
         const Self = @This();
         mEntityManager: EntityManager(entity_t) = .{},
@@ -63,7 +63,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.IsActiveEntityID(entity_id));
             const zone = Tracy.ZoneInit("ECSM DestroyEntity", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .{ .ET_DestroyEntity = .{ .mEntityID = entity_id } });
+            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
         }
 
         pub fn GetAllEntities(self: Self) ArraySet(entity_t) {
@@ -200,7 +200,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.IsActiveEntityID(entity_id));
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
+            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
         }
 
         pub fn RemoveComponentInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
@@ -208,7 +208,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM RemoveComponentInd", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entity_id: entity_t) bool {
@@ -237,25 +237,29 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mComponentManager.ResetComponent(entity_id, component);
         }
 
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventCategory, callback_obj: anytype, callback_fn: fn (@TypeOf(callback_obj), ECSEventManager.ECSEvent) void) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventData.EventCategories, event_callback: ?*ECSEventCallback) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
-            var iter = self.mECSEventManager.GetEventsIteartor(event_category);
-            while (iter.Next()) |event| {
-                callback_fn(callback_obj, event);
-                switch (event) {
-                    .ET_DestroyEntity => |e| {
-                        try self._InternalDestroyEntity(engine_context, e.mEntityID);
-                    },
-                    .ET_RemoveComponent => |e| {
-                        try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd);
-                    },
-                    else => {
-                        @panic("Default Events are not allowed!\n");
-                    },
-                }
+
+            const this_event_callback = if (event_callback) |callback| ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent, .mPrev = callback } else ECSEventManager.EventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent, .mPrev = null };
+            self.mECSEventManager.ProcessCategory(event_category, engine_context, this_event_callback);
+
+            self.mECSEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
+        }
+
+        pub fn OnECSEvent(ecs_manager: *anyopaque, engine_context: *EngineContext, event: ECSEventData.EventT(entity_t)) bool {
+            const self: *Self = @ptrCast(ecs_manager);
+            switch (event) {
+                .DestroyEntity => |e| {
+                    try self._InternalDestroyEntity(engine_context, e.mEntityID);
+                },
+                .RemoveComponent => |e| {
+                    try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd);
+                },
+                else => {
+                    @panic("Default Events are not allowed!\n");
+                },
             }
-            self.mECSEventManager.ClearEvents(engine_context.EngineAllocator(), event_category);
         }
 
         fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {

@@ -177,25 +177,25 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     return result;
                 },
                 .Not => |not| {
-                    var result = try self.GetGroup(not.mFirst, allocator);
-                    var second = try self.GetGroup(not.mSecond, allocator);
+                    var result = try self.GetGroup(not.mFirst, mask, allocator);
+                    var second = try self.GetGroup(not.mSecond, mask, allocator);
                     defer second.deinit(allocator);
                     try self.EntityListDifference(&result, second, allocator);
                     return result;
                 },
                 .Or => |ors| {
-                    var result = try self.GetGroup(ors[0], allocator);
+                    var result = try self.GetGroup(ors[0], mask, allocator);
                     inline for (ors[1..]) |or_query| {
-                        var intermediate = try self.GetGroup(or_query, allocator);
+                        var intermediate = try self.GetGroup(or_query, mask, allocator);
                         defer intermediate.deinit(allocator);
                         try self.EntityListUnion(&result, intermediate, allocator);
                     }
                     return result;
                 },
                 .And => |ands| {
-                    var result = try self.GetGroup(ands[0], allocator);
+                    var result = try self.GetGroup(ands[0], mask, allocator);
                     inline for (ands[1..]) |and_query| {
-                        var intermediate = try self.GetGroup(and_query, allocator);
+                        var intermediate = try self.GetGroup(and_query, mask, allocator);
                         defer intermediate.deinit(allocator);
                         try self.EntityListIntersection(&result, intermediate, allocator);
                     }

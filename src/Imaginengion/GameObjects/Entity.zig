@@ -73,8 +73,10 @@ pub fn GetName(self: Entity) []const u8 {
     return self.mSceneManager.mECSManagerGO.GetComponent(NameComponent, self.mEntityID).?.*.mName.items;
 }
 
-pub fn CreateChild(self: Entity, child_type: ChildType) !Entity {
-    return Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
+pub fn CreateChild(self: Entity, engine_allocator: std.mem.Allocator, child_type: ChildType, config: NewEntityConfig) !Entity {
+    const child_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
+    try child_entity.CreateEntityConfig(engine_allocator, config);
+    return child_entity;
 }
 
 pub fn Duplicate(self: Entity) !Entity {
@@ -101,7 +103,7 @@ pub fn AddComponentScript(self: *Entity, engine_context: *EngineContext, rel_pat
         .mScriptAssetHandle = new_script_handle,
     };
 
-    const new_script_entity = try self.CreateChild(.Script);
+    const new_script_entity = try self.CreateChild(engine_context.EngineAllocator(), .Script, .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
 
     _ = try new_script_entity.AddComponent(new_script_component);
 
@@ -129,7 +131,7 @@ pub fn _CalculateWorldTransform(self: Entity) void {
         var child_component = self.GetComponent(EntityChildComponent);
 
         while (child_component != null) {
-            const parent_entity = Entity{ .mEntityID = child_component.?.mParent, .mECSManagerRef = self.mECSManagerRef };
+            const parent_entity = Entity{ .mEntityID = child_component.?.mParent, .mSceneManager = self.mSceneManager };
 
             if (parent_entity.GetComponent(TransformComponent)) |parent_transform| {
                 translation_out += parent_transform.Translation;

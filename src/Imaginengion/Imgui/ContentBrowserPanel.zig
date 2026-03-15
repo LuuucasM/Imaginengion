@@ -102,7 +102,7 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
         }
         try ImguiUtils.NewAllScriptsPopup(engine_context);
     }

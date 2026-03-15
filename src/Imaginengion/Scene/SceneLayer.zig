@@ -56,7 +56,7 @@ pub fn GetUUID(self: SceneLayer) u128 {
 }
 
 pub fn Delete(self: SceneLayer, engine_context: *EngineContext) !void {
-    self.mSceneManager.mECSManagerSC.DestroyEntity(engine_context.EngineAllocator(), self.mSceneID);
+    try self.mSceneManager.mECSManagerSC.DestroyEntity(engine_context.EngineAllocator(), self.mSceneID);
 }
 
 pub fn GetSceneGroup(self: SceneLayer, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(SceneLayer.Type) {
@@ -68,9 +68,9 @@ pub fn Duplicate(self: *SceneLayer) !SceneLayer {
     return try self.mSceneManager.mECSManagerSC.DuplicateEntity(self.mSceneID);
 }
 
-pub fn AddChild(self: *SceneLayer, engine_allocator: std.mem.Allocator, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
-    const child_scene = SceneLayer{ .mSceneID = self.mSceneManager.mECSManagerSC.AddChild(self.mSceneID, child_type), .mSceneManager = self };
-    child_scene.CreateSceneConfig(engine_allocator, child_scene, new_scene_config);
+pub fn AddChild(self: SceneLayer, engine_allocator: std.mem.Allocator, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
+    var child_scene = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.AddChild(self.mSceneID, child_type), .mSceneManager = self.mSceneManager };
+    try child_scene.CreateSceneConfig(engine_allocator, child_scene, new_scene_config);
     return child_scene;
 }
 
@@ -147,12 +147,12 @@ pub fn CreateChildEntity(self: SceneLayer, engine_allocator: std.mem.Allocator, 
 }
 
 pub fn GetEntity(self: SceneLayer, entity_id: Entity.Type) Entity {
-    return Entity{ .mEntityID = entity_id, .mECSManagerRef = self.mSceneManager.mECSManagerGO };
+    return Entity{ .mEntityID = entity_id, .mSceneManager = self.mSceneManager };
 }
 
 pub fn GetEntityByUUID(self: SceneLayer, entity_uuid: u64) ?Entity {
     if (self.mSceneManager.mEntityUUIDToWorldID.get(entity_uuid)) |world_id| {
-        return Entity{ .mEntityID = world_id, .mECSManagerRef = &self.mECSManagerGO };
+        return Entity{ .mEntityID = world_id, .mSceneManager = self.mSceneManager };
     }
     return null;
 }
@@ -170,7 +170,7 @@ fn FilterEntityByScene(self: SceneLayer, list_allocator: std.mem.Allocator, enti
     var i: usize = 0;
 
     while (i < end_index) {
-        const script_entity = Entity{ .mEntityID = entity_result_list.items[i], .mECSManagerRef = self.mECSManagerGORef };
+        const script_entity = self.GetEntity(entity_result_list.items[i]);
         const scene_component = script_entity.GetComponent(EntitySceneComponent).?;
 
         if (scene_component.mScene.mSceneID != self.mSceneID) {

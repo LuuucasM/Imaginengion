@@ -1,3 +1,5 @@
+- zig build --watch -fincremental -Dno-bin
+- zig build --watch --error-style verbose_clear -fincremental -Dno-bin
 - add physics
 - add entity picking in the viewport/playport using ray tracing
 	- after this is implemented then I can start making UI elements
@@ -57,3 +59,4 @@
 	- ill need to change literally everything to utf-8 including entity names, and anything that is displayed onto the screen
 - add in reinforcement learning to the ECS for sorting components lists
 - abstract away the ECS so I can start working on comparing my ECS with others to do research on heuristic functions when dealing with sorting component buckets
+- make a game where its kind of just a big world that you can walk/run/fly around where you can visualize the profiling of the game engine. since I may need to introduce more game engine specific profiling (so dedicated proifling tool) to the engine one day especially for memory, maybe it would be fun to put that into a like a game where you can move around 

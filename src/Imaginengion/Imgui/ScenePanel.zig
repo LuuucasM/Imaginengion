@@ -45,7 +45,7 @@ pub fn OnImguiRender(self: *ScenePanel, comptime world_type: EngineContext.World
     const zone = Tracy.ZoneInit("ScenePanel OIR", @src());
     defer zone.Deinit();
 
-    const scene_manager = switch (world_type) {
+    var scene_manager = switch (world_type) {
         .Game => engine_context.mGameWorld,
         .Editor => engine_context.mEditorWorld,
         .Simulate => engine_context.mSimulateWorld,
@@ -69,7 +69,7 @@ pub fn OnImguiRender(self: *ScenePanel, comptime world_type: EngineContext.World
 
         for (scene_stack_ids.items) |scene_id| {
             const scene_layer = scene_manager.GetSceneLayer(scene_id);
-            self.RenderScene(engine_context, scene_layer, &already_popup);
+            try self.RenderScene(engine_context, scene_layer, &already_popup);
         }
     }
     try self.HandlePanelContextMenu(engine_context, already_popup);
@@ -131,11 +131,7 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
 
     //if this scene is double clicked open up its scene specs window
     if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-            .RenderEnd = .{
-                .ET_OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer },
-            },
-        });
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .OpenSceneSpecEvent = .{ .mSceneLayer = scene_layer } });
     }
 
     try self.HandleScenePopupContext(engine_context, scene_layer, scene_name, already_popup);
@@ -153,9 +149,9 @@ fn RenderScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: S
             },
         );
 
-        for (scene_entities) |entity_id| {
+        for (scene_entities.items) |entity_id| {
             const entity = scene_layer.GetEntity(entity_id);
-            self.RenderEntity(engine_context, entity, scene_layer, already_popup);
+            try self.RenderEntity(engine_context, entity, scene_layer, already_popup);
         }
     }
 }
@@ -181,12 +177,12 @@ fn PopSceneTextStyle(_: *ScenePanel, is_selected: bool) void {
 fn SelectScene(self: *ScenePanel, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const scene_id = scene_layer.mSceneID;
 
-    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 
     if (self.mSelectedEntity) |selected_entity| {
         const entity_scene_component = selected_entity.GetComponent(EntitySceneComponent).?;
         if (entity_scene_component.mScene.mSceneID != scene_id) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_SelectEntityEvent = .{ .SelectedEntity = null } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .SelectEntityEvent = .{ .SelectedEntity = null } });
         }
     }
 }
@@ -213,7 +209,7 @@ fn HandleScenePopupContext(_: *ScenePanel, engine_context: *EngineContext, scene
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try scene_layer.CreateEntity(engine_context.EngineAllocator());
+            _ = try scene_layer.CreateEntity(engine_context.EngineAllocator(), .{});
         }
 
         if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
@@ -234,14 +230,8 @@ fn HandleSceneDragDrop(_: *ScenePanel, engine_context: *EngineContext, scene_lay
         if (imgui.igAcceptDragDropPayload("SceneMove", imgui.ImGuiDragDropFlags_None)) |payload| {
             const payload_scene_id = @as(*SceneType, @ptrCast(@alignCast(payload.*.Data))).*;
             const new_pos = scene_layer.GetComponent(SceneStackPos).?.mPosition;
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-                .RenderEnd = .{
-                    .ET_MoveSceneEvent = .{
-                        .SceneID = payload_scene_id,
-                        .NewPos = new_pos,
-                    },
-                },
-            });
+            const scene_move = SceneLayer{ .mSceneID = payload_scene_id, .mSceneManager = scene_layer.mSceneManager };
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .MoveSceneEvent = .{ .Scene = scene_move, .NewPos = new_pos } });
         }
     }
 }
@@ -291,8 +281,8 @@ fn RenderLeafEntity(self: *ScenePanel, engine_context: *EngineContext, entity: E
 }
 
 fn SelectEntity(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, scene_layer: SceneLayer) !void {
-    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_SelectEntityEvent = .{ .SelectedEntity = entity } });
-    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_SelectSceneEvent = .{ .SelectedScene = scene_layer } });
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .SelectEntityEvent = .{ .SelectedEntity = entity } });
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .SelectSceneEvent = .{ .SelectedScene = scene_layer } });
 }
 
 fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entity: Entity, entity_name: [*:0]const u8, already_popup: *bool) !void {
@@ -302,7 +292,7 @@ fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entit
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try entity.AddChild(engine_context.EngineAllocator(), .Entity);
+            _ = try entity.CreateChild(engine_context.EngineAllocator(), .Entity, .{});
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
@@ -315,7 +305,7 @@ fn RenderChildEntities(self: *ScenePanel, engine_context: *EngineContext, parent
         var curr_id = parent_component.mFirstEntity;
 
         while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-            const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = parent_entity.mECSManagerRef };
+            const child_entity = scene_layer.GetEntity(curr_id);
 
             try self.RenderEntity(engine_context, child_entity, scene_layer, already_popup);
 
@@ -330,13 +320,8 @@ fn HandlePanelDragDrop(_: *ScenePanel, engine_context: *EngineContext) !void {
         defer imgui.igEndDragDropTarget();
         if (imgui.igAcceptDragDropPayload("IMSCLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-                .ET_OpenSceneEvent = .{
-                    .mAbsPath = try engine_context.EngineAllocator().dupe(u8, path),
-                    .mAllocator = engine_context.EngineAllocator(),
-                },
-            });
+            const abs_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
+            _ = try engine_context.mGameWorld.LoadScene(engine_context, abs_path);
         }
     }
 }
@@ -346,10 +331,10 @@ fn HandlePanelContextMenu(_: *ScenePanel, engine_context: *EngineContext, alread
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("New Game Scene", "", false, true)) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_NewSceneEvent = .{ .mLayerType = .GameLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewSceneEvent = .{ .mLayerType = .GameLayer } });
         }
         if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true)) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{ .ET_NewSceneEvent = .{ .mLayerType = .OverlayLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewSceneEvent = .{ .mLayerType = .OverlayLayer } });
         }
     }
 }
