@@ -1,3 +1,13 @@
+- change to a freelist system for my ECS and then i can remove the "removeIDS list"
+	- making my own SparseSet implementation
+		- Things I need to finish:
+		- validate that index_t type is less bits than entity_t
+		- compute the type for generation_t
+		- complete the function for GetIndexFrom
+		- complete the function for GetGenFrom
+		- fix that when removing an entity, the id's generation is increased in the DenseToSparse array
+		- add a function to get the next free entity id
+- add generations to ECS to safely reuse IDs
 - debug all the billion changes i made already
 	- compile debug
 	- runtime debug
