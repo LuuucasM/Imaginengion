@@ -200,8 +200,9 @@
   },
   "active": "9e61a00140897ba9",
   "lastOpenFiles": [
-    "longer term things to do or fix.md",
+    "Engine Notes/2026 March/2026.03.22.md",
     "immediate things to do or fix.md",
+    "longer term things to do or fix.md",
     "Engine Notes/2026 Feb/Overall Notes.md",
     "Engine Notes/2026 March/2026.3.2.md",
     "Engine Notes/2026 Feb/2026.2.2.md",
@@ -228,7 +229,6 @@
     "Application.md",
     "Component Manager.md",
     "Viewport Panel.md",
-    "Scripts.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

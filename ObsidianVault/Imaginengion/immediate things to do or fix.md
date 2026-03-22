@@ -1,13 +1,7 @@
-- change to a freelist system for my ECS and then i can remove the "removeIDS list"
-	- making my own SparseSet implementation
-		- Things I need to finish:
-		- validate that index_t type is less bits than entity_t
-		- compute the type for generation_t
-		- complete the function for GetIndexFrom
-		- complete the function for GetGenFrom
-		- fix that when removing an entity, the id's generation is increased in the DenseToSparse array
-		- add a function to get the next free entity id
-- add generations to ECS to safely reuse IDs
+- need to ensure that when creating scenes and entities that if they have a uuid that it gets properly added to Serializer's UUID map
+	- currently it is still on the old system where the SceneManager held the UUIDs
+- change all the calls to GetUUID to use the new function attached to Serializer instead
+- Then I can continue working on components that require serialization that have references to different entities as i shouldnt have to worry about a complicated system for resolving those IDs anymore
 - debug all the billion changes i made already
 	- compile debug
 	- runtime debug

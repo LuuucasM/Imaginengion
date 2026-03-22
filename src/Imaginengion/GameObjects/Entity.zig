@@ -163,3 +163,7 @@ pub fn CreateEntityConfig(self: Entity, engine_allocator: std.mem.Allocator, con
         _ = try self.AddComponent(TransformComponent{});
     }
 }
+
+pub fn IsActive(self: Entity) bool {
+    return self.mSceneManager.mECSManagerGO.IsActiveEntity(self.mEntityID);
+}

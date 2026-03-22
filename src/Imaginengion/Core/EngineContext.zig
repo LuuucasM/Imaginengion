@@ -11,6 +11,7 @@ const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig");
+const Serializer = @import("../Serializer/Serializer.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData.EventCategories, WindowEventData.Event);
@@ -54,6 +55,8 @@ mSystemEventManager: WindowEventManager = .{},
 mGameWorld: SceneManager = .{},
 mEditorWorld: SceneManager = .{},
 mSimulateWorld: SceneManager = .{},
+
+mSerializer: Serializer = .empty,
 
 mEngineStats: EngineStats = .{},
 

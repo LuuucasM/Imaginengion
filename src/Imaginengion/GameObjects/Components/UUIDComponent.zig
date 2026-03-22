@@ -18,7 +18,9 @@ pub const Ind: usize = blk: {
 
 ID: u64 = std.math.maxInt(u64),
 
-pub fn Deinit(_: *UUIDComponent, _: *EngineContext) !void {}
+pub fn Deinit(self: *UUIDComponent, engine_context: *EngineContext) !void {
+    engine_context.mSerializer.RemoveUUID(self.ID);
+}
 
 pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
     var buff: [140]u8 = undefined;

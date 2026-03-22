@@ -48,7 +48,7 @@ pub fn ComponentArray(entity_t: type) type {
             };
 
             const new_component_array = try engine_allocator.create(internal_type);
-            new_component_array.* = try internal_type.Init(engine_allocator);
+            new_component_array.* = .{};
 
             return Self{
                 .mPtr = new_component_array,

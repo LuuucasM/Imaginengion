@@ -2,7 +2,6 @@ const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
-const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -69,9 +68,8 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             // Remove all components from this entity
             const entity_skipfield_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
-            const entity_skipfield = entity_skipfield_comp.mSkipField;
 
-            var field_iter = entity_skipfield.Iterator();
+            var field_iter = entity_skipfield_comp.mSkipField.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
                 try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
             }
@@ -81,15 +79,14 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.CreateEntity(new_entity_id);
 
             const original_skipfield_comp = self.GetComponent(SkipFieldComponent, original_entity_id).?;
-            const original_skipfield = original_skipfield_comp.mSkipField;
 
-            var field_iter = original_skipfield.Iterator();
+            var field_iter = original_skipfield_comp.mSkipField.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
                 self.mComponentsArrays.items[comp_arr_ind].DuplicateEntity(original_entity_id, new_entity_id);
             }
         }
 
-        pub fn AddComponent(self: *Self, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
+        pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component: anytype) !*@TypeOf(component) {
             const component_t = @TypeOf(component);
             std.debug.assert(!self.HasComponent(component_t, entity_id));
 
@@ -98,7 +95,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
             const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
 
-            return try internal_array.AddComponent(entity_id, component);
+            return try internal_array.AddComponent(engine_allocator, entity_id, component);
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
@@ -125,14 +122,27 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return internal_array.GetComponent(entityID);
         }
 
-        pub fn ResetComponent(self: Self, entity_id: entity_t, component: anytype) void {
+        pub fn ResetComponent(self: Self, engine_context: *EngineContext, entity_id: entity_t, component: anytype) void {
             const component_t = @TypeOf(component);
             std.debug.assert(self.HasComponent(component_t, entity_id));
 
             const internal_array_t = InternalComponentArray(entity_t, component_t);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
 
-            internal_array.ResetComponent(entity_id, component);
+            internal_array.ResetComponent(engine_context, entity_id, component);
+        }
+
+        pub fn HasFreeEntity(self: Self) ?entity_t {
+            const internal_array_t = InternalComponentArray(entity_t, SkipFieldComponent.StaticSkipFieldT);
+            const skipfield_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
+            return skipfield_array.mComponents.HasFreeEntity();
+        }
+
+        pub fn IsActiveEntity(self: Self, entity_id: entity_t) bool {
+            const internal_array_t = InternalComponentArray(entity_t, SkipFieldComponent.StaticSkipFieldT);
+            const skipfield_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
+
+            return skipfield_array.mComponents.HasSparse(entity_id);
         }
 
         pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {

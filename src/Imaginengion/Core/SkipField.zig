@@ -35,7 +35,10 @@ pub fn StaticSkipField(size: usize) type {
         pub const AllSkipArr: SkipFieldVector = AllSkipFn(size, SkipFieldType);
         pub const NoSkipArr: SkipFieldVector = std.mem.zeroes(SkipFieldVector);
 
-        const InitOption = enum(u1) {
+        pub const AllSkip: Self = .{ .mSkipField = AllSkipArr };
+        pub const NoSkip: Self = .{ .mSkipField = NoSkipArr };
+
+        const ResetOption = enum(u1) {
             AllSkip = 0,
             NoSkip = 1,
         };
@@ -58,20 +61,6 @@ pub fn StaticSkipField(size: usize) type {
 
         mSkipField: SkipFieldVector = AllSkipArr,
 
-        /// Initializes a new skip field instance with the given option.
-        ///
-        /// Parameters:
-        /// - `option`: Whether to set the field to "all skipped" or "none skipped" for initialization.
-        ///
-        /// Returns:
-        /// - A new `Self` instance with its skip field initialized accordingly.
-        pub fn Init(option: InitOption) Self {
-            return switch (option) {
-                .AllSkip => Self{ .mSkipField = AllSkipArr },
-                .NoSkip => Self{ .mSkipField = NoSkipArr },
-            };
-        }
-
         /// Resets the skip field based on the specified option.
         ///
         /// Parameters:
@@ -79,7 +68,7 @@ pub fn StaticSkipField(size: usize) type {
         ///             If `NoSkip`, all indices are marked as unskipped.
         /// Returns:
         ///  - Nothing
-        pub fn Reset(self: *Self, option: InitOption) void {
+        pub fn Reset(self: *Self, option: ResetOption) void {
             if (option == .AllSkip) {
                 self.mSkipField = AllSkipArr;
             } else { //NoSkip option

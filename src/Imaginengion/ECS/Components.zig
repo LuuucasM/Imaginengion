@@ -35,15 +35,16 @@ pub fn ChildComponent(entity_t: type) type {
     };
 }
 
-pub fn SkipFieldComponent(comptime components_types: []const type) type {
+pub fn SkipFieldComponent(comptime components_len: comptime_int) type {
     return struct {
         const Self = @This();
 
         pub const Editable: bool = false;
         pub const Ind: usize = 2;
         pub const Name: []const u8 = "SkipFieldComponent";
-        pub const StaticSkipFieldT = StaticSkipField(components_types.len + 3);
-        mSkipField: StaticSkipFieldT = StaticSkipFieldT.Init(.AllSkip), // +3 because 0 is parent component, 1 is child component, and 2 is skip field component
+        pub const StaticSkipFieldT = StaticSkipField(components_len + 3); // +3 because 0 is parent component, 1 is child component, and 2 is skip field component
+
+        mSkipField: StaticSkipFieldT = .AllSkip,
 
         pub fn Deinit(_: *Self, _: *EngineContext) !void {}
     };

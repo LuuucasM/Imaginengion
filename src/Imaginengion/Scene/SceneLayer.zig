@@ -129,6 +129,10 @@ fn FilterSceneByScene(self: SceneLayer, list_allocator: std.mem.Allocator, scene
     scene_result_list.shrinkAndFree(list_allocator, end_index);
 }
 
+pub fn IsActive(self: SceneLayer) bool {
+    self.mSceneManager.mECSManagerSC.IsActiveEntity(self.mSceneID);
+}
+
 //===================END for the scenes==============================================
 
 //======================for the entities in the scenes=====================================

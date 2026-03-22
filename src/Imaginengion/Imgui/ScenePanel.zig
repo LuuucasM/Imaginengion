@@ -5,7 +5,6 @@ const SceneType = SceneLayer.Type;
 const ECSManagerScenes = SceneManager.ECSManagerScenes;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
-const SparseSet = @import("../Vendor/zig-sparse-set/src/sparse_set.zig").SparseSet;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const EngineContext = @import("../Core/EngineContext.zig");
 const ScenePanel = @This();
