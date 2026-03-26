@@ -25,7 +25,7 @@ pub fn jsonStringify(self: *const SpawnPossComponent, jw: anytype) !void {
     try jw.beginObject();
 
     //serialize entityRef
-    if (self.mEntity.mEntityID != Entity.NullEntity) {
+    if (self.mEntity.IsActive()) {
         const uuid_component = self.mEntity.GetComponent(EntityUUIDComponent).?;
         jw.objectField("EntityRef");
         jw.write(uuid_component.ID);

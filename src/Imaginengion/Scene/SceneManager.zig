@@ -7,7 +7,7 @@ const Mat4f32 = LinAlg.Mat4f32;
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = @import("Components/SceneComponent.zig").LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
-const GenUUID = @import("../Core/UUID.zig").GenUUID;
+const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
@@ -67,8 +67,6 @@ pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents.Component
 mECSManagerGO: ECSManagerGameObj = .{},
 mECSManagerSC: ECSManagerScenes = .{},
 mECSManagerPL: ECSManagerPlayer = .{},
-mSceneUUIDToWorldID: std.AutoHashMapUnmanaged(u64, SceneLayer.Type) = .{},
-mEntityUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Entity.Type) = .{},
 
 mGameLayerInsertIndex: usize = 0,
 mNumofLayers: usize = 0,
@@ -116,11 +114,11 @@ pub fn DestroyScene(self: *SceneManager, engine_context: *EngineContext, destroy
     for (uuid_entities.items) |entity_id| {
         const entity = Entity{ .mEntityID = entity_id, .mECSManagerRef = destroy_scene.mECSManagerGORef };
         const uuid_component = entity.GetComponent(EntityUUIDComponent).?;
-        _ = self.mEntityUUIDToWorldID.remove(uuid_component.ID);
+        engine_context.mSerializer.mUUIDToWorldID.remove(uuid_component.ID);
     }
 
     const scene_uuid = destroy_scene.GetComponent(SceneUUIDComponent).?;
-    _ = self.mSceneUUIDToWorldID.remove(scene_uuid.ID);
+    engine_context.mSerializer.mUUIDToWorldID.remove(scene_uuid.ID);
 
     //remove all the entities from the scene
     const entity_scene_entities = try destroy_scene.GetEntityGroup(frame_allocator, EntitySceneComponent);
@@ -139,17 +137,7 @@ pub fn DestroyScene(self: *SceneManager, engine_context: *EngineContext, destroy
 pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, abs_path: []const u8) !SceneLayer {
     const scene_layer = try self.NewScene(engine_context, .GameLayer, .{ .bAddSceneName = false, .bAddSceneUUID = false });
 
-    try SceneSerializer.DeSerializeSceneText(engine_context, scene_layer, abs_path);
-
-    const scene_uuid_comp = scene_layer.GetComponent(SceneUUIDComponent).?;
-    try self.mSceneUUIDToWorldID.put(engine_context.EngineAllocator(), scene_uuid_comp.ID, scene_layer.mSceneID);
-
-    const entity_uuids = try scene_layer.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntityUUIDComponent });
-    for (entity_uuids.items) |entity_id| {
-        const entity = self.GetEntity(entity_id);
-        const entity_uuid = entity.GetComponent(EntityUUIDComponent).?;
-        try self.mEntityUUIDToWorldID.put(engine_context.EngineAllocator(), entity_uuid.ID, entity.mEntityID);
-    }
+    engine_context.mSerializer.DeserializeScene(engine_context, scene_layer, abs_path, .Text);
 
     try self.InsertScene(engine_context.FrameAllocator(), scene_layer);
 
@@ -245,13 +233,6 @@ pub fn GetSceneStackIDs(self: *SceneManager, frame_allocator: std.mem.Allocator)
     return stack_pos_scenes;
 }
 
-pub fn GetSceneByUUID(self: SceneManager, scene_uuid: u64) ?SceneLayer {
-    if (self.mSceneUUIDToWorldID.get(scene_uuid)) |world_id| {
-        return SceneLayer{ .mSceneID = world_id, .mECSManagerGORef = &self.mECSManagerGO, .mECSManagerSCRef = &self.mECSManagerSC };
-    }
-    return null;
-}
-
 pub fn SceneECSCallback(self: SceneManager, event: ECSManagerScenes.ECSEventManager.ECSEvent) !void {
     _ = self;
     _ = event;
@@ -288,12 +269,6 @@ pub fn PlayerECSCallback(self: SceneManager, event: ECSManagerPlayer.ECSEventMan
 //===============================ECS MANAGER Player END==============================================
 
 //===============================ECS MANAGER Entity==============================================
-pub fn GetEntityByUUID(self: SceneManager, entity_uuid: u64) ?Entity {
-    if (self.mEntityUUIDToWorldID.get(entity_uuid)) |world_id| {
-        return Entity{ .mEntityID = world_id, .mECSManagerRef = &self.mECSManagerGO };
-    }
-    return null;
-}
 pub fn EntityECSCallback(self: *SceneManager, event: ECSManagerGameObj.ECSEventManager.ECSEvent) !void {
     _ = self;
     _ = event;

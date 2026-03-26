@@ -20,7 +20,7 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const EntityComponents = @import("Components.zig");
-const GenUUID = @import("../Core/UUID.zig").GenUUID;
+const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
 const Player = @import("../Players/Player.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 
@@ -28,22 +28,6 @@ pub const NewEntityConfig = struct {
     bAddUUID: bool = true,
     bAddName: bool = true,
     bAddTransform: bool = true,
-};
-
-pub const EntityRef = struct {
-    mUUID: u64 = undefined,
-    mEntity: Entity,
-
-    pub fn GetEntity(self: *EntityRef) ?Entity {
-        if (self.mEntity.mEntityID != NullEntity) {
-            return self.mEntity;
-        } else {
-            if (self.mEntity.mSceneManager.GetEntityByUUID(self.mUUID)) |entity| {
-                self.mEntity = entity;
-                return self.mEntity;
-            }
-        }
-    }
 };
 
 pub const Type = u32;
@@ -73,9 +57,9 @@ pub fn GetName(self: Entity) []const u8 {
     return self.mSceneManager.mECSManagerGO.GetComponent(NameComponent, self.mEntityID).?.*.mName.items;
 }
 
-pub fn CreateChild(self: Entity, engine_allocator: std.mem.Allocator, child_type: ChildType, config: NewEntityConfig) !Entity {
+pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: NewEntityConfig) !Entity {
     const child_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
-    try child_entity.CreateEntityConfig(engine_allocator, config);
+    try child_entity.CreateEntityConfig(engine_context, config);
     return child_entity;
 }
 
@@ -148,14 +132,14 @@ pub fn _CalculateWorldTransform(self: Entity) void {
     }
 }
 
-pub fn CreateEntityConfig(self: Entity, engine_allocator: std.mem.Allocator, config: NewEntityConfig) !void {
+pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: NewEntityConfig) !void {
     if (config.bAddUUID) {
         const new_uuid_component = UUIDComponent{ .ID = try GenUUID() };
         _ = try self.AddComponent(new_uuid_component);
-        try self.mSceneManager.mEntityUUIDToWorldID.put(engine_allocator, new_uuid_component.ID, self.mEntityID);
+        engine_context.mSerializer.mUUIDToWorldID.put(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {
-        var new_name_component = NameComponent{ .mAllocator = engine_allocator };
+        var new_name_component = NameComponent{ .mAllocator = engine_context.EngineAllocator() };
         _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
         _ = try self.AddComponent(new_name_component);
     }
@@ -165,5 +149,13 @@ pub fn CreateEntityConfig(self: Entity, engine_allocator: std.mem.Allocator, con
 }
 
 pub fn IsActive(self: Entity) bool {
-    return self.mSceneManager.mECSManagerGO.IsActiveEntity(self.mEntityID);
+    return self.IsValid() and self.mSceneManager.mECSManagerGO.IsActiveEntity(self.mEntityID);
+}
+
+pub fn Invalidate(self: *Entity) void {
+    self.mEntityID = NullEntity;
+}
+
+pub fn IsValid(self: Entity) bool {
+    return if (self.mEntityID != NullEntity) true else false;
 }

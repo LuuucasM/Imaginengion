@@ -23,34 +23,11 @@ pub const EditorState = enum(u2) {
     Stop = 1,
 };
 
-pub const StartKind = union(enum) {
-    PossessEntityUUID: u64,
-};
-
-pub const StartDescriptor = struct {
-    mScene: SceneLayer,
-    mStartKind: StartKind,
-
-    pub fn Possess(self: StartDescriptor, player: Player) !void {
-        switch (self.mStartKind) {
-            .PossessEntity => |entity_uuid| {
-                if (self.mScene.GetEntityByUUID(entity_uuid)) |entity| {
-                    entity.Possess(player);
-                    player.Possess(entity);
-                } else {
-                    const possess_component = player.GetComponent(PossessComponent).?;
-                    possess_component.mPossessedEntity = Entity.EntityRef{ .UUID = entity_uuid, .mEntity = .{ .mID = Entity.NullEntity, .mSceneManager = self.mScene.mSceneManager } };
-                }
-            },
-        }
-    }
-};
-
 mP_Open: bool = true,
 mState: EditorState = .Stop,
 mPlayIcon: AssetHandle = undefined,
 mStopIcon: AssetHandle = undefined,
-mStartDescriptor: ?StartDescriptor = null,
+mStartEntity: ?Entity = null,
 
 pub fn Init(self: *ToolbarPanel, engine_context: *EngineContext) !void {
     self.mPlayIcon = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/play.png", .Eng);
@@ -116,7 +93,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
         .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         imgui.ImGuiButtonFlags_None,
     ) == true) {
-        if (self.mStartDescriptor != null and self.mState == .Stop) {
+        if (self.mStartEntity != null and self.mState == .Stop) {
             try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
                 .RenderEnd = .{
                     .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
@@ -140,18 +117,15 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
     imgui.igPushItemWidth(combo_width); // combo_width should be wide enough, e.g., 120.0 or more
 
     var combo_text: []const u8 = "None\x00";
-    if (self.mStartDescriptor) |start_descriptor| {
+    if (self.mStartEntity) |start_entity| {
         // Ensure null-terminated string for ImGui
-        if (std.meta.activeTag(start_descriptor.mStartKind) == .PossessEntity) {
-            const entity = start_descriptor.mStartKind.PossessEntity;
-            combo_text = try std.fmt.allocPrint(engine_context.FrameAllocator(), "PossessEntity - {s}\x00", .{entity.GetName()});
-        }
+        combo_text = try std.fmt.allocPrint(engine_context.FrameAllocator(), "Start Entity - {s}\x00", .{start_entity.GetName()});
     }
     if (imgui.igBeginCombo("##PlayLocation", @ptrCast(combo_text.ptr), imgui.ImGuiComboFlags_None)) {
         defer imgui.igEndCombo();
 
         if (imgui.igSelectable_Bool("None\x00", self.mStartEntity == null, 0, .{ .x = 0, .y = 0 })) {
-            self.mStartDescriptor = null;
+            self.mStartEntity = null;
         }
 
         const spaw_poss = try scene_manager.GetSceneGroup(engine_context.FrameAllocator(), .{ .Component = SpawnPossComponent });
@@ -163,10 +137,7 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
                 const entity = scene_manager.GetEntity(spawn_entity_id);
                 const name_cstr = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}\x00", .{entity.GetName()});
                 if (imgui.igSelectable_Bool(name_cstr, false, 0, .{ .x = 0, .y = 0 })) {
-                    self.mStartDescriptor = .{
-                        .mScene = scene_layer,
-                        .mStartKind = .{ .PossessEntity = entity },
-                    };
+                    self.mStartEntity = entity;
                 }
             }
         }

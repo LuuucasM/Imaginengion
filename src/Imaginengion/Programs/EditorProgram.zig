@@ -23,7 +23,6 @@ const Vec4f32 = LinAlg.Vec4f32;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
