@@ -11,10 +11,10 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         mComponents: SparseSet(entity_t, u20, component_type) = .empty,
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            for (self.mComponents.mValues.items) |component| {
-                component.Deinit(engine_context);
+            for (self.mComponents.mValues.items) |*component| {
+                try component.Deinit(engine_context);
             }
-            self.mComponents.deinit();
+            self.mComponents.Deinit(engine_context.EngineAllocator());
         }
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(original_entity_id));
@@ -59,10 +59,10 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             return entity_set;
         }
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
-            for (self.mComponents.mValues.items) |component| {
+            for (self.mComponents.mValues.items) |*component| {
                 try component.Deinit(engine_context);
             }
-            self.mComponents.clearAndFree();
+            self.mComponents.clearAndFree(engine_context.EngineAllocator());
         }
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));

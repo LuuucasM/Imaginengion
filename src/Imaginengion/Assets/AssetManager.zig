@@ -154,7 +154,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
 
     _ValidateAssetType(asset_type);
 
-    if (self.mAssetECS.IsActiveEntityID(asset_id)) {
+    if (self.mAssetECS.IsActiveEntity(asset_id)) {
         if (self.mAssetECS.GetComponent(asset_type, asset_id)) |asset| {
             return asset;
         } else {
@@ -171,7 +171,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
                 if (err == error.AssetInitFailed) return try self.GetDefaultAsset(asset_type) else return err;
             };
 
-            return self.mAssetECS.AddComponent(asset_id, asset_component);
+            return self.mAssetECS.AddComponent(engine_context.EngineAllocator(), asset_id, asset_component);
         }
     } else {
         return try self.GetDefaultAsset(asset_type);
@@ -358,11 +358,11 @@ fn CreateAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_pat
     defer zone.Deinit();
 
     const new_handle = AssetHandle{
-        .mID = try self.mAssetECS.CreateEntity(),
+        .mID = try self.mAssetECS.CreateEntity(engine_allocator),
         .mAssetManager = self,
     };
-    _ = try self.mAssetECS.AddComponent(new_handle.mID, AssetMetaData{ .mRefs = 0 });
-    const file_meta_data = try self.mAssetECS.AddComponent(new_handle.mID, FileMetaData{
+    _ = try self.mAssetECS.AddComponent(engine_allocator, new_handle.mID, AssetMetaData{ .mRefs = 0 });
+    const file_meta_data = try self.mAssetECS.AddComponent(engine_allocator, new_handle.mID, FileMetaData{
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,

@@ -45,7 +45,7 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
             try self.mDenseToSparse.append(allocator, entity_id);
             try self.mValues.append(allocator, value);
 
-            self.mSparseToDense.items[index] = dense_ind;
+            self.mSparseToDense.items[index] = @intCast(dense_ind);
 
             return &self.mValues.items[self.mValues.items.len - 1];
         }
@@ -88,9 +88,9 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
 
             const freelist = self.mDenseToSparse.unusedCapacitySlice();
             std.debug.assert(freelist.len > 0);
-            freelist[0] = (gen << index_bits) | @as(entity_t, @intCast(index));
+            freelist[0] = (@as(entity_t, @intCast(gen)) << index_bits) | @as(entity_t, @intCast(index));
 
-            self.mSparseToDense.items[index] = self.mDenseToSparse.items.len;
+            self.mSparseToDense.items[index] = @intCast(self.mDenseToSparse.items.len);
         }
 
         pub fn GetValueBySparse(self: Self, entity_id: entity_t) *value_t {
@@ -102,10 +102,10 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
             return &self.mValues.items[dense_ind];
         }
 
-        pub fn clearAndFree(self: Self, engine_allocator: std.mem.Allocator) void {
-            self.mDenseToSparse.clearAndFree(engine_allocator);
-            self.mSparseToDense.clearAndFree(engine_allocator);
-            self.mValues.clearAndFree(engine_allocator);
+        pub fn clearAndFree(self: *Self, allocator: std.mem.Allocator) void {
+            self.mDenseToSparse.clearAndFree(allocator);
+            self.mSparseToDense.clearAndFree(allocator);
+            self.mValues.clearAndFree(allocator);
         }
 
         fn GetIndexFrom(entity_id: entity_t) index_t {

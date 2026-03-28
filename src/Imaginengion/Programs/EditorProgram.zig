@@ -23,6 +23,7 @@ const Vec4f32 = LinAlg.Vec4f32;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
+const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
@@ -113,11 +114,11 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
 
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
-    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_allocator, .{});
+    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context);
 
     self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
-    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_allocator, .{});
+    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
     self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context);
 
     self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
@@ -128,11 +129,11 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorUIPlayer.GetComponent(PlayerLens).?.SetViewportSize(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     self.mEditorViewportPlayer.GetComponent(PlayerLens).?.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
 
-    _ = try self.mEditorViewportEntity.AddComponent(PlayerSlotComponent{});
+    _ = try self.mEditorViewportEntity.AddComponent(engine_allocator, PlayerSlotComponent{});
     self.mEditorViewportEntity.Possess(self.mEditorViewportPlayer);
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
 
-    _ = try self.mEditorUIEntity.AddComponent(PlayerSlotComponent{});
+    _ = try self.mEditorUIEntity.AddComponent(engine_allocator, PlayerSlotComponent{});
     self.mEditorUIEntity.Possess(self.mEditorUIPlayer);
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
 }
@@ -154,6 +155,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Program OnUpdate", @src());
     defer zone.Deinit();
 
+    var callback_list: std.DoublyLinkedList = .{};
+
     const engine_allocator = engine_context.EngineAllocator();
 
     //--------------Incoming network packets
@@ -170,8 +173,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
         //Human Inputs
         engine_context.mAppWindow.PollInputEvents();
-        const this_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent, .mPrev = null };
-        try engine_context.mSystemEventManager.ProcessCategory(.InputEvent, engine_context, &this_event_callback);
+
+        const window_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent };
+        callback_list.append(&window_event_callback.mNode);
+        try engine_context.mSystemEventManager.ProcessCategory(.InputEvent, engine_context, callback_list);
+        callback_list.first = null;
+        callback_list.last = null;
 
         //AI Inputs
     }
@@ -254,8 +261,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             try self.OnImguiRender(engine_context);
 
-            const imgui_event_callback = engine_context.ImguiEventCallback{ .mCtx = self, .mCallbackFn = OnImguiEvent, .mPrev = null };
-            try engine_context.mImguiEventManager.ProcessCategory(.RenderEnd, engine_context, imgui_event_callback);
+            const imgui_event_callback = EngineContext.ImguiEventCallback{ .mCtx = self, .mCallbackFn = OnImguiEvent };
+            callback_list.append(&imgui_event_callback.mNode);
+            try engine_context.mImguiEventManager.ProcessCategory(.RenderEnd, engine_context, callback_list);
+            callback_list.first = null;
+            callback_list.last = null;
 
             Dockspace.End();
             ImGui.End(engine_context.mAppWindow);
@@ -286,15 +296,21 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         engine_context.mRenderer.SwapBuffers();
 
         //Process window events
-        const system_event_callback = engine_context.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent, .mPrev = null };
-        try engine_context.mSystemEventManager.ProcessCategory(.WindowEvent, engine_context, &system_event_callback);
+        const system_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent };
+        callback_list.append(system_event_callback);
+        try engine_context.mSystemEventManager.ProcessCategory(.WindowEvent, engine_context, callback_list);
+        callback_list.first = null;
+        callback_list.last = null;
 
         //handle any closed scene spec panels
         self.CleanSceneSpecs(engine_context.EngineAllocator());
 
         //handle deleted objects this frame
-        const game_event_callback = engine_context.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnGameEvent, .mPrev = null };
-        try engine_context.mGameEventManager.ProcessCategory(.FrameEnd, engine_context, &game_event_callback);
+        const game_event_callback = engine_context.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnGameEvent };
+        callback_list.append(game_event_callback);
+        try engine_context.mGameEventManager.ProcessCategory(.FrameEnd, engine_context, callback_list);
+        callback_list.first = null;
+        callback_list.last = null;
 
         try engine_context.mGameWorld.ProcessRemovedObj(engine_context);
         try engine_context.mEditorWorld.ProcessRemovedObj(engine_context);
@@ -386,15 +402,18 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext, event: ImguiEventData.ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play) { //the play button was pressed
         try engine_context.mGameWorld.Copy(engine_context, engine_context.mSimulateWorld);
-        const new_player = try engine_context.mSimulateWorld.CreatePlayer(engine_context);
-        self._ToolbarPanel.mStartDescriptor.?.Possess(new_player, engine_context.mSimulateWorld);
 
-        self.mActiveViewportWorld = &engine_context.mSimulateWorld;
-        self.mActiveSimulateWorld = &engine_context.mGameWorld;
+        const new_player = try engine_context.mSimulateWorld.CreatePlayer(engine_context);
+
+        const start_entity_uuid_comp = self._ToolbarPanel.mStartEntity.?.GetComponent(EntityUUIDComponent).?;
+
+        const entity_world_id = engine_context.mSerializer.GetWorldID(.Simulate, start_entity_uuid_comp.ID);
+
+        const start_entity = engine_context.mSimulateWorld.GetEntity(entity_world_id);
+
+        new_player.Possess(start_entity);
     } else {
-        //stop button was pressed
-        self.mActiveViewportWorld = &engine_context.mGameWorld;
-        self.mActiveSimulateWorld = &engine_context.mSimulateWorld;
+        engine_context.mSimulateWorld.clearAndFree();
     }
 }
 

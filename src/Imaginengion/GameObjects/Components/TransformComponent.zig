@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const LinAlg = @import("../../Math/LinAlg.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Entity = @import("../Entity.zig");
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -259,4 +260,8 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
     }
 
     return result;
+}
+
+pub fn PostParse(_: TransformComponent, owning_entity: Entity) !void {
+    owning_entity._CalculateWorldTransform();
 }

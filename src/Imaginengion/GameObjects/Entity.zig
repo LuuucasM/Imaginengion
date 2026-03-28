@@ -37,8 +37,8 @@ const Entity = @This();
 mEntityID: Type = NullEntity,
 mSceneManager: *SceneManager = undefined,
 
-pub fn AddComponent(self: Entity, new_component: anytype) !*@TypeOf(new_component) {
-    return try self.mSceneManager.mECSManagerGO.AddComponent(self.mEntityID, new_component);
+pub fn AddComponent(self: Entity, engine_allocator: std.mem.Allocator, new_component: anytype) !*@TypeOf(new_component) {
+    return try self.mSceneManager.mECSManagerGO.AddComponent(engine_allocator, self.mEntityID, new_component);
 }
 pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     self.mSceneManager.mECSManagerGO.RemoveComponent(engine_allocator, component_type, self.mEntityID);
@@ -50,7 +50,7 @@ pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_typ
 pub fn HasComponent(self: Entity, comptime component_type: type) bool {
     return self.mSceneManager.mECSManagerGO.HasComponent(component_type, self.mEntityID);
 }
-pub fn GetUUID(self: Entity) u128 {
+pub fn GetUUID(self: Entity) u64 {
     return self.mSceneManager.mECSManagerGO.GetComponent(UUIDComponent, self.mEntityID).?.*.ID;
 }
 pub fn GetName(self: Entity) []const u8 {
@@ -58,7 +58,7 @@ pub fn GetName(self: Entity) []const u8 {
 }
 
 pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: NewEntityConfig) !Entity {
-    const child_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
+    const child_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(engine_context.EngineAllocator(), self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
     try child_entity.CreateEntityConfig(engine_context, config);
     return child_entity;
 }
@@ -87,17 +87,17 @@ pub fn AddComponentScript(self: *Entity, engine_context: *EngineContext, rel_pat
         .mScriptAssetHandle = new_script_handle,
     };
 
-    const new_script_entity = try self.CreateChild(engine_context.EngineAllocator(), .Script, .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
+    const new_script_entity = try self.CreateChild(engine_context, .Script, .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
 
-    _ = try new_script_entity.AddComponent(new_script_component);
+    _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), new_script_component);
 
     // Add the appropriate script type component based on the script asset
     switch (script_asset.mScriptType) {
         .EntityInputPressed => {
-            _ = try new_script_entity.AddComponent(OnInputPressedScript{});
+            _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), OnInputPressedScript{});
         },
         .EntityOnUpdate => {
-            _ = try new_script_entity.AddComponent(OnUpdateScript{});
+            _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), OnUpdateScript{});
         },
         else => @panic("this shouldnt happen!\n"),
     }
@@ -134,17 +134,17 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
 pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: NewEntityConfig) !void {
     if (config.bAddUUID) {
-        const new_uuid_component = UUIDComponent{ .ID = try GenUUID() };
-        _ = try self.AddComponent(new_uuid_component);
-        engine_context.mSerializer.mUUIDToWorldID.put(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+        const new_uuid_component = UUIDComponent{ .ID = GenUUID() };
+        _ = try self.AddComponent(engine_context.EngineAllocator(), new_uuid_component);
+        try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {
         var new_name_component = NameComponent{ .mAllocator = engine_context.EngineAllocator() };
         _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
-        _ = try self.AddComponent(new_name_component);
+        _ = try self.AddComponent(engine_context.EngineAllocator(), new_name_component);
     }
     if (config.bAddTransform) {
-        _ = try self.AddComponent(TransformComponent{});
+        _ = try self.AddComponent(engine_context.EngineAllocator(), TransformComponent{});
     }
 }
 

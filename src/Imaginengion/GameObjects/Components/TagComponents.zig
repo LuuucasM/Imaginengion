@@ -11,7 +11,7 @@ const InputPressedEvent = WindowEventData.InputPressedEvent;
 //scripts
 pub const OnInputPressedScript = struct {
     pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const InputPressedEvent) callconv(.c) bool;
-    //bit: u1 = 0,
+    bit: u1 = 0,
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnInputPressedScript";
     pub const Scripttype: ScriptType = .EntityInputPressed;
@@ -27,7 +27,7 @@ pub const OnInputPressedScript = struct {
 
 pub const OnUpdateScript = struct {
     pub const RunFuncSig = *const fn (*const EngineContext, *const Entity) callconv(.c) bool;
-    //bit: u1 = 0,
+    bit: u1 = 0,
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnUpdateScript";
     pub const Scripttype: ScriptType = .EntityOnUpdate;

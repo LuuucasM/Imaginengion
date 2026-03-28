@@ -38,8 +38,8 @@ mSceneID: Type = NullScene,
 mSceneManager: *SceneManager = undefined,
 
 //===================for the scenes==============================================
-pub fn AddComponent(self: SceneLayer, new_component: anytype) !*@TypeOf(new_component) {
-    return try self.mSceneManager.mECSManagerSC.AddComponent(self.mSceneID, new_component);
+pub fn AddComponent(self: SceneLayer, engine_allocator: std.mem.Allocator, new_component: anytype) !*@TypeOf(new_component) {
+    return try self.mSceneManager.mECSManagerSC.AddComponent(engine_allocator, self.mSceneID, new_component);
 }
 pub fn RemoveComponent(self: SceneLayer, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     try self.mSceneManager.mECSManagerSC.RemoveComponent(engine_allocator, component_type, self.mSceneID);
@@ -76,15 +76,15 @@ pub fn AddChild(self: SceneLayer, engine_allocator: std.mem.Allocator, child_typ
 
 pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, config: NewSceneConfig) !void {
     if (config.bAddSceneUUID) {
-        const uuid_component = SceneUUIDComponent{ .ID = try GenUUID() };
-        _ = try self.AddComponent(uuid_component);
-        engine_context.mSerializer.mUUIDToWorldID.put(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
+        const uuid_component = SceneUUIDComponent{ .ID = GenUUID() };
+        _ = try self.AddComponent(engine_context.EngineAllocator(), uuid_component);
+        try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
     }
     if (config.bAddSceneName) {
         var scene_name_component = SceneNameComponent{ .mAllocator = engine_context.EngineAllocator() };
         _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
 
-        _ = try self.AddComponent(scene_name_component);
+        _ = try self.AddComponent(engine_context.EngineAllocator(), scene_name_component);
     }
 }
 
@@ -136,10 +136,10 @@ pub fn IsActive(self: SceneLayer) bool {
 //===================END for the scenes==============================================
 
 //======================for the entities in the scenes=====================================
-pub fn CreateEntity(self: SceneLayer, engine_allocator: std.mem.Allocator, new_entity_config: NewEntityConfig) !Entity {
-    var new_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.CreateEntity(), .mSceneManager = self.mSceneManager };
-    try new_entity.CreateEntityConfig(engine_allocator, new_entity_config);
-    _ = try new_entity.AddComponent(EntitySceneComponent{ .mScene = self });
+pub fn CreateEntity(self: SceneLayer, engine_context: *EngineContext, new_entity_config: NewEntityConfig) !Entity {
+    var new_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.CreateEntity(engine_context.EngineAllocator()), .mSceneManager = self.mSceneManager };
+    try new_entity.CreateEntityConfig(engine_context, new_entity_config);
+    _ = try new_entity.AddComponent(engine_context.EngineAllocator(), EntitySceneComponent{ .mScene = self });
     return new_entity;
 }
 

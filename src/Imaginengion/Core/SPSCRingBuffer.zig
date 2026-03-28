@@ -14,13 +14,15 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
         const Self = @This();
         const mask = size - 1;
 
-        mBuffer: [size]T = std.mem.zeroes([size]T),
-        mWriteIndex: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
-        mReadIndex: std.atomic.Value(usize) = std.atomic.Value(usize).init(0),
+        mBuffer: [size]T,
+        mWriteIndex: std.atomic.Value(usize),
+        mReadIndex: std.atomic.Value(usize),
 
-        pub fn Init() Self {
-            return Self{};
-        }
+        pub const default: Self = .{
+            .mBuffer = std.mem.zeroes([size]T),
+            .mWriteIndex = std.atomic.Value(usize).init(0),
+            .mReadIndex = std.atomic.Value(usize).init(0),
+        };
 
         pub fn Push(self: *Self, item: T) bool {
             const write = self.mWriteIndex.load(.monotonic);

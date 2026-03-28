@@ -15,7 +15,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-mEntity: Entity = .{},
+mEntityRef: Entity = .{},
 
 pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext) !void {
     //deinit stuff
@@ -25,8 +25,8 @@ pub fn jsonStringify(self: *const SpawnPossComponent, jw: anytype) !void {
     try jw.beginObject();
 
     //serialize entityRef
-    if (self.mEntity.IsActive()) {
-        const uuid_component = self.mEntity.GetComponent(EntityUUIDComponent).?;
+    if (self.mEntityRef.IsActive()) {
+        const uuid_component = self.mEntityRef.GetComponent(EntityUUIDComponent).?;
         jw.objectField("EntityRef");
         jw.write(uuid_component.ID);
     }
@@ -37,7 +37,7 @@ pub fn jsonStringify(self: *const SpawnPossComponent, jw: anytype) !void {
 pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!SpawnPossComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
 
-    var result: SpawnPossComponent = .{};
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
     while (true) {
         const token = try reader.next();
@@ -50,9 +50,14 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
         //deserialize spawn poss comp
         if (std.mem.eql(u8, field_name, "EntityRef")) {
-            result.mLayerType = try std.json.innerParse(LayerType, frame_allocator, reader, options);
+            const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
+            std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Scene);
+            const scene_layer = engine_context.mSerializer.mCurrDeserialize.requester.Scene;
+            const component_ptr: SpawnPossComponent = @ptrCast(@alignCast(engine_context.mSerializer.mCurrDeserialize.component_ptr));
+
+            engine_context.mSerializer.AddResolveUUID(engine_context.EngineAllocator(), .{ .Requester = .{ .Scene = scene_layer }, .UUID = entity_uuid, .SetLoc = &component_ptr.mEntityRef });
         }
     }
 
-    return result;
+    return SpawnPossComponent{};
 }

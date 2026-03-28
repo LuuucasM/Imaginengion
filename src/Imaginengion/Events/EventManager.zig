@@ -47,16 +47,20 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
             ClearRetainingCapacity,
         };
 
+        pub const CallbackList = std.DoublyLinkedList;
+
         pub const EventCallback = struct {
             mCtx: *anyopaque,
             mCallbackFn: *const fn (*anyopaque, *EngineContext, EventUnionType) anyerror!bool,
-            mPrev: ?*const EventCallback,
+            mNode: CallbackList.Node = .{},
         };
+
+        pub const EventType = EventUnionType;
 
         const Self = @This();
         pub const EventsArrayT = std.EnumArray(EventCategoriesType, std.ArrayList(EventUnionType));
 
-        mEventsArray: EventsArrayT = EventsArrayT.initFill(.{}),
+        mEventsArray: EventsArrayT = EventsArrayT.initFill(.empty),
 
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
             var iter = self.mEventsArray.iterator();
@@ -71,14 +75,14 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
 
         /// Process events for a specific phase.
         /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
-        pub fn ProcessCategory(self: *Self, comptime category: EventCategoriesType, engine_context: *EngineContext, event_callback: *const EventCallback) !void {
+        pub fn ProcessCategory(self: *Self, comptime category: EventCategoriesType, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
             const events = self.mEventsArray.get(category).items;
 
-            var current_callback: ?*const EventCallback = event_callback;
-            while (current_callback) |cb| {
-                current_callback = cb.mPrev;
+            var iter = callback_list.first;
+            while (iter) |node| : (iter = node.next) {
+                const event_callback: EventCallback = @fieldParentPtr("mNode", node);
                 for (events) |event| {
-                    _ = try cb.mCallbackFn(cb.mCtx, engine_context, event);
+                    _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, event);
                 }
             }
         }

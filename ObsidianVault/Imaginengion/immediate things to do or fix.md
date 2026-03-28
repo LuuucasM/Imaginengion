@@ -1,6 +1,3 @@
-- need to ensure that when creating scenes and entities that if they have a uuid that it gets properly added to Serializer's UUID map
-	- currently it is still on the old system where the SceneManager held the UUIDs
-- change all the calls to GetUUID to use the new function attached to Serializer instead
 - Then I can continue working on components that require serialization that have references to different entities as i shouldnt have to worry about a complicated system for resolving those IDs anymore
 - debug all the billion changes i made already
 	- compile debug

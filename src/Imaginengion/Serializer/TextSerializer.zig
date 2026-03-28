@@ -235,7 +235,7 @@ fn DeSerializeSceneLayer(engine_context: *EngineContext, reader: *std.json.Reade
 
         if (std.mem.eql(u8, actual_value, "Entity")) {
             const new_entity = try scene_layer.CreateEntity(engine_context.EngineAllocator(), .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
-            try DeSerializeEntity(engine_context, reader, new_entity, scene_layer);
+            try DeserializeThisEntity(engine_context, reader, new_entity, scene_layer);
         }
         if (std.mem.eql(u8, actual_value, "ChildEntity")) {
             const new_scene = try scene_layer.AddChild(engine_context.EngineAllocator(), .Entity, .{ .bAddSceneName = false, .bAddSceneUUID = false });
@@ -249,14 +249,12 @@ fn DeSerializeSceneLayer(engine_context: *EngineContext, reader: *std.json.Reade
 }
 
 fn DeSerializeSceneComp(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, scene_layer: SceneLayer) !void {
-    const parsed_component = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
-    const new_component = try scene_layer.AddComponent(parsed_component);
-    if (component_type == SceneUUIDComponent) {
-        engine_context.mSerializer.AddUUID(new_component.ID, scene_layer.mSceneID);
-    }
+    const new_component = try scene_layer.AddComponent(component_type{});
+    engine_context.mSerializer.mCurrDeserialize = .{ .requester = .{ .Scene = scene_layer }, .component_ptr = new_component };
+    new_component.* = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
 }
 
-fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, entity: Entity, scene_layer: SceneLayer) !void {
+fn DeserializeThisEntity(engine_context: *EngineContext, reader: *std.json.Reader, entity: Entity, scene_layer: SceneLayer) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
     while (true) {
@@ -281,25 +279,25 @@ fn DeSerializeEntity(engine_context: *EngineContext, reader: *std.json.Reader, e
 
         if (std.mem.eql(u8, actual_value, "ChildEntity")) {
             const new_entity = try entity.CreateChild(engine_context.EngineAllocator(), .Entity, .{});
-            try DeSerializeEntity(engine_context, reader, new_entity, scene_layer);
+            try DeserializeThisEntity(engine_context, reader, new_entity, scene_layer);
         }
         if (std.mem.eql(u8, actual_value, "ScriptEntity")) {
             const new_script = try entity.CreateChild(engine_context.EngineAllocator(), .Script, .{ .bAddUUID = false, .bAddName = false, .bAddTransform = false });
-            try DeSerializeEntity(engine_context, reader, new_script, scene_layer);
+            try DeserializeThisEntity(engine_context, reader, new_script, scene_layer);
         }
     }
 }
 
 fn DeserializeEntityComponent(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, entity: Entity) !void {
-    const parsed_component = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
-    const new_component = try entity.AddComponent(parsed_component);
-    if (component_type == EntityTransformComponent) {
-        entity._CalculateWorldTransform();
-    } else if (component_type == EntityUUIDComponent) {
-        engine_context.mSerializer.AddUUID(new_component.ID, entity.mEntityID);
+    const new_component = try entity.AddComponent(component_type{});
+    engine_context.mSerializer.mCurrDeserialize = .{ .requester = .{ .Entity = entity }, .component_ptr = new_component };
+    new_component.* = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
+    if (@hasDecl(component_type, "PostParse")) {
+        new_component.PostParse(entity);
     }
 }
 
+//note: this function is for deserializing prefabs, not to be confused with DeserializeThisEntity which actually deserializes an entity
 pub fn DeserializeEntity(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
     const file = try std.fs.openFileAbsolute(abs_path, .{});
     defer file.close();
@@ -315,7 +313,7 @@ pub fn DeserializeEntity(scene_layer: SceneLayer, abs_path: []const u8, frame_al
     defer reader.deinit();
 
     const new_entity = try scene_layer.CreateBlankEntity();
-    try DeSerializeEntity(&reader, new_entity, scene_layer, frame_allocator);
+    try DeserializeThisEntity(&reader, new_entity, scene_layer, frame_allocator);
 }
 
 //======================================================= END DESERIALIZING ==============================================================

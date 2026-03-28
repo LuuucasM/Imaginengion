@@ -15,7 +15,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-mAudioBuffer: TAudioBuffer = TAudioBuffer.Init(),
+mAudioBuffer: TAudioBuffer = .default,
 
 pub fn Deinit(_: *MicComponent, _: *EngineContext) !void {}
 

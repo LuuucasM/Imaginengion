@@ -13,13 +13,15 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
+const EntityComponents = @import("../GameObjects/Components.zig");
+const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const Player = @This();
 
 mEntityID: Type = NullPlayer,
 mScenemanager: *SceneManager = undefined,
 
-pub fn AddComponent(self: Player, new_component: anytype) !*@TypeOf(new_component) {
-    return try self.mScenemanager.mECSManagerPL.AddComponent(self.mEntityID, new_component);
+pub fn AddComponent(self: Player, engine_allocator: std.mem.Allocator, new_component: anytype) !*@TypeOf(new_component) {
+    return try self.mScenemanager.mECSManagerPL.AddComponent(engine_allocator, self.mEntityID, new_component);
 }
 pub fn RemoveComponent(self: Player, comptime component_type: type) !void {
     try self.mScenemanager.mECSManagerPL.RemoveComponent(component_type, self.mEntityID);
@@ -37,7 +39,12 @@ pub fn Delete(self: Player, engine_context: *EngineContext) !void {
     self.mScenemanager.mECSManagerPL.DestroyEntity(engine_context.EngineAllocator(), self.mEntityID);
 }
 pub fn Possess(self: Player, entity: Entity) void {
-    self.GetComponent(PossessComponent).?.mPossessedEntity.mEntity = entity;
+    if (entity.GetComponent(PlayerSlotComponent)) |ps_component| {
+        self.GetComponent(PossessComponent).?.mPossessedEntity.mEntity = entity;
+        ps_component.mPlayerEntity = self;
+    } else {
+        std.log.warn("Player {d} could not possess entity {d}", .{ self.mEntityID, entity.mEntityID });
+    }
 }
 
 pub fn AddComponentLens(self: Player, engine_context: *EngineContext) !*LensComponent {
@@ -62,5 +69,13 @@ pub fn AddComponentLens(self: Player, engine_context: *EngineContext) !*LensComp
     new_lens_component.mVertexArray.SetIndexBuffer(new_lens_component.mIndexBuffer);
 
     new_lens_component.SetViewportSize(1600, 900);
-    return try self.AddComponent(new_lens_component);
+    return try self.AddComponent(engine_allocator, new_lens_component);
+}
+
+pub fn IsActive(self: Player) bool {
+    return self.IsValidID() and self.mScenemanager.mECSManagerPL.IsActiveEntity(self.mEntityID);
+}
+
+pub fn IsValidID(self: Player) bool {
+    return self.mEntityID != NullPlayer;
 }

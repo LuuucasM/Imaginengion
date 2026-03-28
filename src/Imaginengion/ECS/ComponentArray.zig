@@ -8,7 +8,7 @@ pub fn ComponentArray(entity_t: type) type {
         DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
         RemoveComponent: *const fn (*anyopaque, *EngineContext, entity_t) anyerror!void,
-        clearAndFree: *const fn (*anyopaque, *EngineContext) void,
+        clearAndFree: *const fn (*anyopaque, *EngineContext) anyerror!void,
         DestroyEntity: *const fn (*anyopaque, *EngineContext, entity_t) anyerror!void,
     };
     return struct {
@@ -37,9 +37,9 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.RemoveComponent(engine_context, entityID);
                 }
-                fn clearAndFree(ptr: *anyopaque, engine_context: *EngineContext) void {
+                fn clearAndFree(ptr: *anyopaque, engine_context: *EngineContext) !void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.clearAndFree(engine_context);
+                    try self.clearAndFree(engine_context);
                 }
                 fn DestroyEntity(ptr: *anyopaque, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));

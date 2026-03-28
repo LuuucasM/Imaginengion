@@ -22,7 +22,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         pub const ECSEventManager = @import("../Events/EventManager.zig").EventManager(ECSEventData.EventCategories, ECSEventData.EventT(entity_t));
         pub const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
         pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
-        pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types);
+        pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types.len);
 
         const Self = @This();
 
@@ -61,8 +61,8 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn CreateEntity(self: *Self, entity_id: entity_t) !void {
-            _ = try self.AddComponent(entity_id, SkipFieldComponent{});
+        pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
+            _ = try self.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {

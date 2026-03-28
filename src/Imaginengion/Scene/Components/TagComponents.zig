@@ -7,7 +7,7 @@ const ScriptType = @import("../../Assets/Assets/ScriptAsset.zig").ScriptType;
 //scripts
 pub const OnSceneStartScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
-
+    bit: u1 = 0,
     pub const Name: []const u8 = "OnSceneStartScript";
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
@@ -22,7 +22,7 @@ pub const OnSceneStartScript = struct {
 
 pub const OnUpdateScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
-
+    bit: u1 = 0,
     pub const Name: []const u8 = "OnUpdateScript";
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
@@ -37,7 +37,7 @@ pub const OnUpdateScript = struct {
 
 pub const InputPressedScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
-
+    bit: u1 = 0,
     pub const Name: []const u8 = "InputPressedScript";
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {

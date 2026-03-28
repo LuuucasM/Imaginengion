@@ -15,6 +15,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-mPlayerEntity: ?Player = null,
+mPlayerEntity: Player = .{},
 
 pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) !void {}

@@ -5,17 +5,11 @@ const ImguiManager = @import("Imgui.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const SceneManager = @import("../Scene/SceneManager.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const EntityComponents = @import("../GameObjects/Components.zig");
-const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const Entity = @import("../GameObjects/Entity.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const SpawnPossComponent = SceneComponents.SpawnPossComponent;
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const Player = @import("../Players/Player.zig");
-const PlayerComponents = @import("../Players/Components.zig");
-const PossessComponent = PlayerComponents.PossessComponent;
 const ToolbarPanel = @This();
 
 pub const EditorState = enum(u2) {

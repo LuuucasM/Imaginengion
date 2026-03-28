@@ -18,6 +18,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
         pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types.len);
         pub const ComponentManagerT = ComponentManager(entity_t, components_types);
+        pub const ECSCallbackList = ECSEventManager.CallbackList;
         pub const ECSEventCallback = ECSEventManager.EventCallback;
 
         const Self = @This();
@@ -47,14 +48,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         //---------------EntityManager--------------
-        pub fn CreateEntity(self: *Self) !entity_t {
+        pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
             const zone = Tracy.ZoneInit("ECSM CreateEntity", @src());
             defer zone.Deinit();
 
             const new_entity_id = if (self.mComponentManager.HasFreeEntity()) |entity_id| entity_id else self.mNextID;
             if (new_entity_id == self.mNextID) self.mNextID += 1;
 
-            try self.mComponentManager.CreateEntity(new_entity_id);
+            try self.mComponentManager.CreateEntity(engine_allocator, new_entity_id);
 
             return new_entity_id;
         }
@@ -116,13 +117,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             try self.mComponentManager.EntityListIntersection(result, list2, allocator);
         }
 
-        pub fn AddChild(self: *Self, entity_id: entity_t, child_type: ChildType) !entity_t {
-            std.debug.assert(self.IsActiveEntityID(entity_id));
+        pub fn AddChild(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, child_type: ChildType) !entity_t {
+            std.debug.assert(self.IsActiveEntity(entity_id));
 
             const zone = Tracy.ZoneInit("ECSM AddChild", @src());
             defer zone.Deinit();
 
-            const new_entity_id = try self.CreateEntity();
+            const new_entity_id = try self.CreateEntity(engine_allocator);
 
             if (self.GetComponent(ParentComponent, entity_id)) |parent_component| {
                 const first_child_entity_id = switch (child_type) {
@@ -143,7 +144,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         .mPrev = last_child_entity_id,
                     };
 
-                    _ = try self.AddComponent(new_entity_id, new_child_component);
+                    _ = try self.AddComponent(engine_allocator, new_entity_id, new_child_component);
 
                     last_child_component.mNext = new_entity_id;
 
@@ -161,7 +162,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         .mPrev = new_entity_id,
                     };
 
-                    _ = try self.AddComponent(new_entity_id, new_child_component);
+                    _ = try self.AddComponent(engine_allocator, new_entity_id, new_child_component);
                 }
             } else {
                 const new_parent_component = switch (child_type) {
@@ -169,7 +170,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     .Script => ParentComponent{ .mFirstScript = new_entity_id },
                 };
 
-                _ = try self.AddComponent(entity_id, new_parent_component);
+                _ = try self.AddComponent(engine_allocator, entity_id, new_parent_component);
 
                 const new_child_component = ChildComponent{
                     .mFirst = new_entity_id,
@@ -178,14 +179,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     .mPrev = new_entity_id,
                 };
 
-                _ = try self.AddComponent(new_entity_id, new_child_component);
+                _ = try self.AddComponent(engine_allocator, new_entity_id, new_child_component);
             }
 
             return new_entity_id;
         }
 
         //--------components related functions----------
-        pub fn AddComponent(self: *Self, entity_id: entity_t, new_component: anytype) !*@TypeOf(new_component) {
+        pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, new_component: anytype) !*@TypeOf(new_component) {
             const zone = Tracy.ZoneInit("ECSM AddComponent", @src());
             defer zone.Deinit();
             const component_t = @TypeOf(new_component);
@@ -193,7 +194,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
             std.debug.assert(self.IsActiveEntity(entity_id));
 
-            return try self.mComponentManager.AddComponent(entity_id, new_component);
+            return try self.mComponentManager.AddComponent(engine_allocator, entity_id, new_component);
         }
         pub fn RemoveComponent(self: *Self, engine_allocator: std.mem.Allocator, comptime component_type: type, entity_id: entity_t) !void {
             _ValidateType(component_type);
@@ -237,12 +238,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mComponentManager.ResetComponent(entity_id, component);
         }
 
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventData.EventCategories, event_callback: ?*ECSEventCallback) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventData.EventCategories, callback_list: ECSCallbackList) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
 
-            const this_event_callback = if (event_callback) |callback| ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent, .mPrev = callback } else ECSEventManager.EventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent, .mPrev = null };
-            self.mECSEventManager.ProcessCategory(event_category, engine_context, this_event_callback);
+            const event_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent };
+            callback_list.append(&event_callback.mNode);
+            self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list);
 
             self.mECSEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
         }

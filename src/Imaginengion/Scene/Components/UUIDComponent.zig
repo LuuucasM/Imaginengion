@@ -24,3 +24,41 @@ pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
     const text = try std.fmt.bufPrintZ(&buff, "{d}\n", .{self.ID});
     _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);
 }
+
+pub fn jsonStringify(self: *const UUIDComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    jw.objectField("UUID");
+    jw.write(self.ID);
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!UUIDComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
+
+    var result: UUIDComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        //deserialize UUID
+        if (std.mem.eql(u8, field_name, "UUID")) {
+            const scene_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
+            std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Scene);
+            const scene_layer = engine_context.mSerializer.mCurrDeserialize.requester.Scene;
+            try scene_layer.mSceneManager.AddUUID(engine_context.EngineAllocator(), scene_uuid, scene_layer.mSceneID);
+            result.ID = scene_uuid;
+        }
+    }
+
+    return result;
+}
