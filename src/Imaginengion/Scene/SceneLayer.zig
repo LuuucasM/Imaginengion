@@ -68,9 +68,9 @@ pub fn Duplicate(self: *SceneLayer) !SceneLayer {
     return try self.mSceneManager.mECSManagerSC.DuplicateEntity(self.mSceneID);
 }
 
-pub fn AddChild(self: SceneLayer, engine_allocator: std.mem.Allocator, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
-    var child_scene = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.AddChild(self.mSceneID, child_type), .mSceneManager = self.mSceneManager };
-    try child_scene.CreateSceneConfig(engine_allocator, new_scene_config);
+pub fn AddChild(self: SceneLayer, engine_context: *EngineContext, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
+    var child_scene = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.AddChild(engine_context.EngineAllocator(), self.mSceneID, child_type), .mSceneManager = self.mSceneManager };
+    try child_scene.CreateSceneConfig(engine_context, new_scene_config);
     return child_scene;
 }
 
@@ -98,12 +98,12 @@ pub fn AddComponentScript(self: *SceneLayer, engine_context: *EngineContext, scr
         .mScriptAssetHandle = new_script_handle,
     };
 
-    const new_script_entity = try self.AddChild(engine_context, .Script);
+    const new_script_entity = try self.AddChild(engine_context, .Script, .{ .bAddSceneUUID = false });
 
-    _ = try new_script_entity.AddComponent(new_script_component);
+    _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), new_script_component);
 
     _ = switch (script_asset.mScriptType) {
-        .SceneSceneStart => try new_script_entity.AddComponent(OnSceneStartScript{}),
+        .SceneSceneStart => try new_script_entity.AddComponent(engine_context.EngineAllocator(), OnSceneStartScript{}),
         else => @panic("This shouldnt happen!"),
     };
 }
@@ -130,7 +130,7 @@ fn FilterSceneByScene(self: SceneLayer, list_allocator: std.mem.Allocator, scene
 }
 
 pub fn IsActive(self: SceneLayer) bool {
-    self.mSceneManager.mECSManagerSC.IsActiveEntity(self.mSceneID);
+    return self.mSceneManager.mECSManagerSC.IsActiveEntity(self.mSceneID);
 }
 
 //===================END for the scenes==============================================

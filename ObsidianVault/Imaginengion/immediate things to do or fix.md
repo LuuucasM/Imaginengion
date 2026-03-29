@@ -1,3 +1,4 @@
+- Create a copy of std.once as its going away in 0.16
 - Then I can continue working on components that require serialization that have references to different entities as i shouldnt have to worry about a complicated system for resolving those IDs anymore
 - debug all the billion changes i made already
 	- compile debug

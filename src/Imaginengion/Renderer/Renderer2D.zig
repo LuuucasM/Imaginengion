@@ -123,14 +123,14 @@ pub fn SetBuffers(self: *Renderer2D, comptime world_type: EngineContext.WorldTyp
     //quads
     var quad_count: c_int = @intCast(self.mQuadBufferBase.items.len);
     if (quad_count > 0) {
-        self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, quad_count * @sizeOf(QuadData), 0);
+        self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, @as(usize, @intCast(quad_count)) * @sizeOf(QuadData), 0);
     }
     self.mQuadCountUB.SetData(@ptrCast(&quad_count), @sizeOf(c_uint), 0);
 
     //glyphs
     var glyph_count: c_int = @intCast(self.mGlyphBufferBase.items.len);
     if (glyph_count > 0) {
-        self.mGlyphBuffer.SetData(self.mGlyphBufferBase.items.ptr, glyph_count * @sizeOf(GlyphData), 0);
+        self.mGlyphBuffer.SetData(self.mGlyphBufferBase.items.ptr, @as(usize, @intCast(glyph_count)) * @sizeOf(GlyphData), 0);
     }
     self.mGlyphCountUB.SetData(@ptrCast(&glyph_count), @sizeOf(c_uint), 0);
 
@@ -139,16 +139,16 @@ pub fn SetBuffers(self: *Renderer2D, comptime world_type: EngineContext.WorldTyp
     //fill out stats
     switch (world_type) {
         .Game => {
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = quad_count;
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = glyph_count;
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = @intCast(quad_count);
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = @intCast(glyph_count);
         },
         .Editor => {
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = quad_count;
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = glyph_count;
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = @intCast(quad_count);
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = @intCast(glyph_count);
         },
         .Simulate => {
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = quad_count;
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = glyph_count;
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = @intCast(quad_count);
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = @intCast(glyph_count);
         },
     }
 }

@@ -28,8 +28,8 @@ pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
 pub fn jsonStringify(self: *const UUIDComponent, jw: anytype) !void {
     try jw.beginObject();
 
-    jw.objectField("UUID");
-    jw.write(self.ID);
+    try jw.objectField("UUID");
+    try jw.write(self.ID);
 
     try jw.endObject();
 }

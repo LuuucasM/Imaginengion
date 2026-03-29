@@ -42,7 +42,6 @@ pub const SerializeList = [_]type{
     PhysicsComponent,
     SceneComponent,
     SpawnPossComponent,
-    StackPosComponent,
     ScriptComponent,
 };
 

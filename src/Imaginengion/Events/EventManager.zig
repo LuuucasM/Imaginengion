@@ -80,7 +80,7 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
 
             var iter = callback_list.first;
             while (iter) |node| : (iter = node.next) {
-                const event_callback: EventCallback = @fieldParentPtr("mNode", node);
+                const event_callback: *EventCallback = @fieldParentPtr("mNode", node);
                 for (events) |event| {
                     _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, event);
                 }

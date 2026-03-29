@@ -6,6 +6,8 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Renderer = @import("../Renderer/Renderer.zig");
 
+const once = @import("../Core/Once.zig").once;
+
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldType = EngineContext.WorldType;
 
@@ -17,9 +19,8 @@ const SceneManager = @import("../Scene/SceneManager.zig");
 
 const TextSerializer = @import("TextSerializer.zig");
 const BinarySerializer = @import("BinarySerializer.zig");
-
 var prng: std.Random.Xoshiro256 = undefined;
-var random_init_once = std.once(random_init);
+var random_init_once = once(random_init);
 
 const Serializer = @This();
 
@@ -55,16 +56,16 @@ mCurrDeserialize: DeserializeContext,
 pub fn Deinit(_: Serializer, _: std.mem.Allocator) void {}
 
 pub fn SerializeScene(_: Serializer, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
-    TextSerializer.SerializeScene(frame_allocator, scene_layer, abs_path);
+    try TextSerializer.SerializeScene(frame_allocator, scene_layer, abs_path);
 }
 
 pub fn SerializeEntity(_: Serializer, frame_allocator: std.mem.Allocator, entity: Entity, abs_path: []const u8, _: SerializeType) !void {
-    TextSerializer.SerializeEntity(frame_allocator, entity, abs_path);
+    try TextSerializer.SerializeEntity(frame_allocator, entity, abs_path);
 }
 
 pub fn DeserializeScene(self: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
-    TextSerializer.DeserializeScene(engine_context, scene_layer, abs_path);
-    self.ResolveUUIDs(engine_context.EngineAllocator());
+    try TextSerializer.DeserializeScene(engine_context, scene_layer, abs_path);
+    self.ResolveUUIDs(engine_context.EngineAllocator(), scene_layer.mSceneManager);
 }
 
 pub fn DeserializeEntity(_: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
@@ -103,11 +104,11 @@ pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, scene_ma
             switch (request.Requester) {
                 .Entity => {
                     const set_loc: *Entity.Type = @ptrCast(@alignCast(request.SetLoc));
-                    set_loc.* = world_id;
+                    set_loc.* = @intCast(world_id);
                 },
                 .Scene => {
                     const set_loc: *SceneLayer.Type = @ptrCast(@alignCast(request.SetLoc));
-                    set_loc.* = world_id;
+                    set_loc.* = @intCast(world_id);
                 },
             }
         }

@@ -29,8 +29,8 @@ pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
 pub fn jsonStringify(self: *const UUIDComponent, jw: anytype) !void {
     try jw.beginObject();
 
-    jw.objectField("UUID");
-    jw.write(self.ID);
+    try jw.objectField("UUID");
+    try jw.write(self.ID);
 
     try jw.endObject();
 }
@@ -56,7 +56,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
             const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
             std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Entity);
             const entity = engine_context.mSerializer.mCurrDeserialize.requester.Entity;
-            entity.mSceneManager.AddUUID(engine_context.EngineAllocator(), entity_uuid, entity.mEntityID);
+            entity.mSceneManager.AddUUID(engine_context.EngineAllocator(), entity_uuid, entity.mEntityID) catch @panic("this failed");
             result.ID = entity_uuid;
         }
     }

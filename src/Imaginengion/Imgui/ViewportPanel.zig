@@ -71,12 +71,10 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-            .RenderEnd = .{
-                .ViewportResizeEvent = .{
-                    .mWidth = @intFromFloat(viewport_size.x),
-                    .mHeight = @intFromFloat(viewport_size.y),
-                },
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+            .ViewportResizeEvent = .{
+                .mWidth = @intFromFloat(viewport_size.x),
+                .mHeight = @intFromFloat(viewport_size.y),
             },
         });
         self.mViewportWidth = @intFromFloat(viewport_size.x);
@@ -104,12 +102,10 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, f
     if (viewport_size.x != @as(f32, @floatFromInt(self.mPlayWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mPlayHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-            .RenderEnd = .{
-                .PlayPanelResizeEvent = .{
-                    .mWidth = @intFromFloat(viewport_size.x),
-                    .mHeight = @intFromFloat(viewport_size.y),
-                },
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+            .PlayPanelResizeEvent = .{
+                .mWidth = @intFromFloat(viewport_size.x),
+                .mHeight = @intFromFloat(viewport_size.y),
             },
         });
         self.mPlayWidth = @intFromFloat(viewport_size.x);

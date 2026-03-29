@@ -22,7 +22,7 @@ pub fn Init(self: ScriptsPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
+pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
     defer zone.Deinit();
 
@@ -51,7 +51,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
                 if (parent_component.mFirstScript != Entity.NullEntity) {
                     var curr_id = parent_component.mFirstScript;
                     while (true) : (if (curr_id == parent_component.mFirstScript) break) {
-                        const script_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
+                        const script_entity = Entity{ .mEntityID = curr_id, .mSceneManager = entity.mSceneManager };
 
                         const script_name = script_entity.GetName();
 
@@ -61,7 +61,7 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
                             defer imgui.igEndPopup();
 
                             if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                                script_entity.Delete(engine_context);
+                                try script_entity.Delete(engine_context);
                             }
                         }
 
@@ -78,8 +78,8 @@ pub fn OnImguiRender(self: ScriptsPanel, engine_context: *EngineContext) !void {
         if (imgui.igAcceptDragDropPayload("GameObjectScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const rel_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            if (self.mSelectedEntity) |entity| {
-                entity.AddComponentScript(engine_context, rel_path, .Prj);
+            if (self.mSelectedEntity) |*entity| {
+                try entity.AddComponentScript(engine_context, rel_path, .Prj);
             }
         }
     }

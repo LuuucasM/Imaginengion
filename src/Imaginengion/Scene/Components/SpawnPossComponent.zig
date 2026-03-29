@@ -27,8 +27,8 @@ pub fn jsonStringify(self: *const SpawnPossComponent, jw: anytype) !void {
     //serialize entityRef
     if (self.mEntityRef.IsActive()) {
         const uuid_component = self.mEntityRef.GetComponent(EntityUUIDComponent).?;
-        jw.objectField("EntityRef");
-        jw.write(uuid_component.ID);
+        try jw.objectField("EntityRef");
+        try jw.write(uuid_component.ID);
     }
 
     try jw.endObject();
@@ -53,9 +53,8 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
             const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
             std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Scene);
             const scene_layer = engine_context.mSerializer.mCurrDeserialize.requester.Scene;
-            const component_ptr: SpawnPossComponent = @ptrCast(@alignCast(engine_context.mSerializer.mCurrDeserialize.component_ptr));
-
-            engine_context.mSerializer.AddResolveUUID(engine_context.EngineAllocator(), .{ .Requester = .{ .Scene = scene_layer }, .UUID = entity_uuid, .SetLoc = &component_ptr.mEntityRef });
+            const component_ptr: *SpawnPossComponent = @ptrCast(@alignCast(engine_context.mSerializer.mCurrDeserialize.component_ptr));
+            scene_layer.mSceneManager.AddResolveUUID(engine_context.EngineAllocator(), .{ .Requester = .{ .Scene = scene_layer }, .UUID = entity_uuid, .SetLoc = &component_ptr.mEntityRef }) catch @panic("this failed");
         }
     }
 

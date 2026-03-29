@@ -32,6 +32,7 @@ pub fn GetComponent(self: Player, comptime component_type: type) ?*component_typ
 pub fn HasComponent(self: Player, comptime component_type: type) bool {
     return self.mScenemanager.mECSManagerPL.HasComponent(component_type, self.mEntityID);
 }
+
 pub fn Duplicate(self: Player) !Player {
     return try self.mScenemanager.mECSManagerPL.DuplicateEntity(self.mEntityID);
 }
@@ -40,7 +41,7 @@ pub fn Delete(self: Player, engine_context: *EngineContext) !void {
 }
 pub fn Possess(self: Player, entity: Entity) void {
     if (entity.GetComponent(PlayerSlotComponent)) |ps_component| {
-        self.GetComponent(PossessComponent).?.mPossessedEntity.mEntity = entity;
+        self.GetComponent(PossessComponent).?.mPossessedEntity = entity;
         ps_component.mPlayerEntity = self;
     } else {
         std.log.warn("Player {d} could not possess entity {d}", .{ self.mEntityID, entity.mEntityID });

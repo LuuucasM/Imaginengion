@@ -54,13 +54,13 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
         if (imgui.igAcceptDragDropPayload("SceneScriptLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            self.mSceneLayer.AddComponentScript(engine_context, path, .Prj);
+            try self.mSceneLayer.AddComponentScript(engine_context, path, .Prj);
         }
     }
     if (is_tree_open == true) {
         defer imgui.igTreePop();
         if (self.mSceneLayer.GetComponent(SceneScriptComponent)) |scene_script_comp| {
-            const scene_ecs = self.mSceneLayer.mECSManagerSCRef;
+            const scene_ecs = &self.mSceneLayer.mSceneManager.mECSManagerSC;
 
             var curr_id = scene_script_comp.mFirst;
             var curr_script = scene_ecs.GetComponent(SceneScriptComponent, curr_id).?;
@@ -76,10 +76,8 @@ pub fn OnImguiRender(self: *SceneSpecsPanel, engine_context: *EngineContext) !vo
                     if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
                         defer imgui.igEndPopup();
                         if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .{
-                                .FrameEnd = .{
-                                    .RmSceneCompEvent = .{ .mScene = self.mSceneLayer, .mComponentType = .ScriptComponent },
-                                },
+                            try engine_context.mGameEventManager.Insert(engine_context.EngineAllocator(), .FrameEnd, .{
+                                .RmSceneCompEvent = .{ .mScene = self.mSceneLayer, .mComponentType = .ScriptComponent },
                             });
                         }
                     }

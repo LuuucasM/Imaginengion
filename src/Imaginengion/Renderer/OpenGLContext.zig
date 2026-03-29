@@ -53,7 +53,7 @@ pub fn GetMaxTextureImageSlots(self: OpenGLContext) usize {
     return @intCast(num);
 }
 
-pub fn DrawIndexed(self: OpenGLContext, vertex_array: VertexArray, index_count: usize) void {
+pub fn DrawIndexed(self: OpenGLContext, vertex_array: *const VertexArray, index_count: usize) void {
     _ = self;
     vertex_array.Bind();
 

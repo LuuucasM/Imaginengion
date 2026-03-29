@@ -38,9 +38,9 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
     defer zone.Deinit();
 
     const scene_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
     };
 
     if (self.mP_Open == false) return;
@@ -88,17 +88,13 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
         imgui.ImGuiButtonFlags_None,
     ) == true) {
         if (self.mStartEntity != null and self.mState == .Stop) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-                .RenderEnd = .{
-                    .ET_ChangeEditorStateEvent = .{ .mEditorState = .Play },
-                },
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                .ChangeEditorStateEvent = .{ .mEditorState = .Play },
             });
             self.mState = .Play;
         } else if (self.mState == .Play) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .{
-                .RenderEnd = .{
-                    .ET_ChangeEditorStateEvent = .{ .mEditorState = .Stop },
-                },
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                .ChangeEditorStateEvent = .{ .mEditorState = .Stop },
             });
             self.mState = .Stop;
         }
@@ -127,10 +123,10 @@ pub fn OnImguiRender(self: *ToolbarPanel, world_type: EngineContext.WorldType, e
         for (spaw_poss.items) |scene_id| {
             const scene_layer = scene_manager.GetSceneLayer(scene_id);
             const spawn_poss = scene_layer.GetComponent(SpawnPossComponent).?;
-            if (spawn_poss.mEntity) |spawn_entity_id| {
-                const entity = scene_manager.GetEntity(spawn_entity_id);
+            if (spawn_poss.mEntityRef.IsActive()) {
+                const entity = spawn_poss.mEntityRef;
                 const name_cstr = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}\x00", .{entity.GetName()});
-                if (imgui.igSelectable_Bool(name_cstr, false, 0, .{ .x = 0, .y = 0 })) {
+                if (imgui.igSelectable_Bool(name_cstr.ptr, false, 0, .{ .x = 0, .y = 0 })) {
                     self.mStartEntity = entity;
                 }
             }

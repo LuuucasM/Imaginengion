@@ -130,7 +130,7 @@ pub fn DestroyScene(self: *SceneManager, engine_context: *EngineContext, destroy
 pub fn LoadScene(self: *SceneManager, engine_context: *EngineContext, abs_path: []const u8) !SceneLayer {
     const scene_layer = try self.NewScene(engine_context, .GameLayer, .{ .bAddSceneName = false, .bAddSceneUUID = false });
 
-    engine_context.mSerializer.DeserializeScene(engine_context, scene_layer, abs_path, .Text);
+    try engine_context.mSerializer.DeserializeScene(engine_context, scene_layer, abs_path, .Text);
 
     try self.InsertScene(engine_context, scene_layer);
 
@@ -157,7 +157,7 @@ pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_laye
 
     if (scene_component.mScenePath.items.len != 0) {
         const abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath.items, .Prj);
-        try engine_context.mSceneSerializer.SerializeSceneText(frame_allocator, scene_layer, abs_path);
+        try engine_context.mSerializer.SerializeScene(frame_allocator, scene_layer, abs_path, .Text);
     } else {
         try self.SaveSceneAs(engine_context, scene_layer);
     }
@@ -166,16 +166,16 @@ pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_laye
 pub fn SaveSceneAs(_: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imsc");
     if (abs_path.len > 0) {
-        try engine_context.mSceneSerializer.SerializeSceneText(engine_context.FrameAllocator(), scene_layer, abs_path);
+        try engine_context.mSerializer.SerializeScene(engine_context.FrameAllocator(), scene_layer, abs_path, .Text);
         const scene_component = scene_layer.GetComponent(SceneComponent).?;
         scene_component.mScenePath.clearAndFree(engine_context.EngineAllocator());
-        scene_component.mScenePath.writer(engine_context.EngineAllocator()).write(engine_context.mAssetManager.GetRelPath(abs_path));
+        try scene_component.mScenePath.print(engine_context.EngineAllocator(), "{s}", .{engine_context.mAssetManager.GetRelPath(abs_path)});
     }
 }
 
-pub fn MoveScene(self: *SceneManager, frame_allocator: std.mem.Allocator, scene_id: SceneLayer.Type, move_to_pos: usize) !void {
-    const scene_component = self.mECSManagerSC.GetComponent(SceneComponent, scene_id).?;
-    const stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id).?;
+pub fn MoveScene(self: *SceneManager, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, move_to_pos: usize) !void {
+    const scene_component = scene_layer.GetComponent(SceneComponent).?;
+    const stack_pos_component = scene_layer.GetComponent(SceneStackPos).?;
     const current_pos = stack_pos_component.mPosition;
 
     var new_pos: usize = 0;
@@ -325,13 +325,13 @@ pub fn clearAndFree(self: *SceneManager, engine_context: *EngineContext) !void {
     self.mViewportHeight = 0;
 }
 
-pub fn SaveEntity(self: *SceneManager, frame_allocator: std.mem.Allocator, entity: Entity) !void {
-    try self.SaveEntityAs(frame_allocator, entity);
+pub fn SaveEntity(self: *SceneManager, engine_context: *EngineContext, entity: Entity) !void {
+    try self.SaveEntityAs(engine_context, entity);
 }
 
 pub fn SaveEntityAs(_: *SceneManager, engine_context: *EngineContext, entity: Entity) !void {
     const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imfab");
-    try engine_context.mSceneSerializer.SerializeEntityText(engine_context.FrameAllocator(), entity, abs_path);
+    try engine_context.mSerializer.SerializeEntity(engine_context.FrameAllocator(), entity, abs_path, .Text);
 }
 
 pub fn GetEntity(self: *SceneManager, entity_id: Entity.Type) Entity {

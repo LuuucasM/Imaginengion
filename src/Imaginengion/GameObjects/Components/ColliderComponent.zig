@@ -14,7 +14,7 @@ pub const Sphere = struct {
 };
 
 pub const Box = struct {
-    mHalfExtents: Vec3f32 = Vec3f32{ 0.5, 0.5, 0.5 },
+    mHalfExtents: Vec3f32 = Vec3f32{ 1, 1, 1 },
 };
 
 pub const UColliderShape = union(enum) {
@@ -32,10 +32,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-mParent: Entity.Type = Entity.NullEntity,
-mFirst: Entity.Type = Entity.NullEntity,
-mPrev: Entity.Type = Entity.NullEntity,
-mNext: Entity.Type = Entity.NullEntity,
 mColliderShape: UColliderShape = .{ .Sphere = .{} },
 
 pub fn Deinit(_: *ColliderComponent, _: *EngineContext) !void {}
@@ -85,4 +81,36 @@ pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
             _ = imgui.igInputFloat3("Half Extents", &collider.mHalfExtents[0], "%.3f", 0);
         },
     }
+}
+
+pub fn jsonStringify(self: *const ColliderComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("Shape");
+    try jw.write(self.mColliderShape);
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ColliderComponent {
+    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+
+    var result: ColliderComponent = .{};
+
+    while (true) {
+        const token = try reader.next();
+
+        const field_name = switch (token) {
+            .object_end => break,
+            .string => |v| v,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, field_name, "Shape")) {
+            const shape = try std.json.innerParse(UColliderShape, frame_allocator, reader, options);
+            result.mColliderShape = shape;
+        }
+    }
+
+    return result;
 }

@@ -61,7 +61,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         pub fn DestroyEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            std.debug.assert(self.IsActiveEntityID(entity_id));
+            std.debug.assert(self.IsActiveEntity(entity_id));
             const zone = Tracy.ZoneInit("ECSM DestroyEntity", @src());
             defer zone.Deinit();
             try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
@@ -74,7 +74,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         }
 
         pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t) !entity_t {
-            std.debug.assert(self.IsActiveEntityID(original_entity_id));
+            std.debug.assert(self.IsActiveEntity(original_entity_id));
             const zone = Tracy.ZoneInit("ECSM DuplicateEntity", @src());
             defer zone.Deinit();
             const new_entity_id = try self.CreateEntity();
@@ -201,7 +201,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.IsActiveEntity(entity_id));
             const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
+            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
         }
 
         pub fn RemoveComponentInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
@@ -209,7 +209,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(self.mComponentManager.mComponentsArrays.items.len > component_ind);
             const zone = Tracy.ZoneInit("ECSM RemoveComponentInd", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .ET_RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entity_id: entity_t) bool {

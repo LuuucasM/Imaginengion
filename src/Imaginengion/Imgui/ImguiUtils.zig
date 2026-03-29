@@ -25,18 +25,18 @@ pub fn NewEntityComponentPopup(engine_context: *EngineContext, entity: Entity) !
 
                 if (component_type == QuadComponent) {
                     const new_quad_component = QuadComponent{ .mTexture = .{ .mAssetManager = &engine_context.mAssetManager } };
-                    _ = try entity.AddComponent(new_quad_component);
+                    _ = try entity.AddComponent(engine_context.EngineAllocator(), new_quad_component);
                 } else if (component_type == TextComponent) {
                     const new_text_component = TextComponent{
                         .mTextAssetHandle = .{ .mAssetManager = &engine_context.mAssetManager },
                         .mTexHandle = .{ .mAssetManager = &engine_context.mAssetManager },
                     };
-                    _ = try entity.AddComponent(new_text_component);
+                    _ = try entity.AddComponent(engine_context.EngineAllocator(), new_text_component);
                 } else if (component_type == AudioComponent) {
                     const new_audio_component = AudioComponent{ .mAudioAsset = .{ .mAssetManager = &engine_context.mAssetManager } };
-                    _ = try entity.AddComponent(new_audio_component);
+                    _ = try entity.AddComponent(engine_context.EngineAllocator(), new_audio_component);
                 } else {
-                    _ = try entity.AddComponent(component_type{});
+                    _ = try entity.AddComponent(engine_context.EngineAllocator(), component_type{});
                 }
             }
         }

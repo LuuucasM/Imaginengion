@@ -44,9 +44,9 @@ const CameraData = extern struct {
 };
 
 const CameraBuffers = struct {
-    FrameBuffer: FrameBuffer,
-    VertexArray: VertexArray,
-    VertexBuffer: VertexBuffer,
+    FrameBuffer: *const FrameBuffer,
+    VertexArray: *const VertexArray,
+    VertexBuffer: *const VertexBuffer,
 };
 
 const ModeData = extern struct {
@@ -102,9 +102,9 @@ pub fn OnUpdate(self: *Renderer, comptime world_type: EngineContext.WorldType, e
     defer zone.Deinit();
 
     const scene_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
     };
 
     self.mRenderContext.PushDebugGroup("Frame\x00");
@@ -177,7 +177,7 @@ fn DrawChildren(self: *Renderer, engine_context: *EngineContext, entity: Entity)
     var curr_id = parent_component.mFirstEntity;
 
     while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-        const child_entity = Entity{ .mEntityID = curr_id, .mECSManagerRef = entity.mECSManagerRef };
+        const child_entity = Entity{ .mEntityID = curr_id, .mSceneManager = entity.mSceneManager };
 
         try self.DrawShape(engine_context, child_entity);
 
@@ -207,7 +207,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
     }
 }
 
-fn EndRendering(self: *Renderer, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_buffers: *CameraBuffers) !void {
+fn EndRendering(self: *Renderer, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_buffers: CameraBuffers) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
@@ -228,6 +228,6 @@ fn EndRendering(self: *Renderer, comptime world_type: EngineContext.WorldType, e
     self.mR2D.BindBuffers();
 
     self.mRenderContext.PushDebugGroup("Draw Indexed\x00");
-    self.mRenderContext.DrawIndexed(camera_buffers.VertexArray, camera_buffers.VertexBuffer.GetCount());
+    self.mRenderContext.DrawIndexed(camera_buffers.VertexArray, camera_buffers.VertexArray.GetIndexBuffer().GetCount());
     self.mRenderContext.PopDebugGroup();
 }

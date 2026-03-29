@@ -11,7 +11,7 @@ pub fn Init(self: StatsPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: StatsPanel, engine_context: EngineContext) !void {
+pub fn OnImguiRender(self: StatsPanel, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("StatsPanel OIR", @src());
     defer zone.Deinit();
 
@@ -43,17 +43,17 @@ pub fn OnImguiRender(self: StatsPanel, engine_context: EngineContext) !void {
     //WORLD STATS
     const game_world_text = try std.fmt.allocPrint(frame_allocator, "Game World Data: \n", .{});
     imgui.igTextUnformatted(game_world_text.ptr, game_world_text.ptr + game_world_text.len);
-    RenderWorldStats(frame_allocator, engine_stats.GameWorldStats);
+    try RenderWorldStats(frame_allocator, engine_stats.GameWorldStats);
     imgui.igSeparator();
 
     const sim_world_text = try std.fmt.allocPrint(frame_allocator, "Simulate World Data: \n", .{});
     imgui.igTextUnformatted(sim_world_text.ptr, sim_world_text.ptr + sim_world_text.len);
-    RenderWorldStats(frame_allocator, engine_stats.SimulateWorldStats);
+    try RenderWorldStats(frame_allocator, engine_stats.SimulateWorldStats);
     imgui.igSeparator();
 
     const editor_world_text = try std.fmt.allocPrint(frame_allocator, "Editor World Data: \n", .{});
     imgui.igTextUnformatted(editor_world_text.ptr, editor_world_text.ptr + editor_world_text.len);
-    RenderWorldStats(frame_allocator, engine_stats.EditorWorldStats);
+    try RenderWorldStats(frame_allocator, engine_stats.EditorWorldStats);
 }
 pub fn OnTogglePanelEvent(self: *StatsPanel) void {
     self._P_Open = !self._P_Open;
@@ -62,11 +62,11 @@ pub fn OnTogglePanelEvent(self: *StatsPanel) void {
 fn RenderWorldStats(frame_allocator: std.mem.Allocator, world_stats: EngineStats.WorldStats) !void {
     const render_render_Text = try std.fmt.allocPrint(frame_allocator, "\tRender Data: \n", .{});
     imgui.igTextUnformatted(render_render_Text.ptr, render_render_Text.ptr + render_render_Text.len);
-    RenderRenderStats(frame_allocator, world_stats.mRenderStats);
+    try RenderRenderStats(frame_allocator, world_stats.mRenderStats);
 
     const render_ecs_stats = try std.fmt.allocPrint(frame_allocator, "\tECS Data: \n", .{});
     imgui.igTextUnformatted(render_ecs_stats.ptr, render_ecs_stats.ptr + render_ecs_stats.len);
-    RenderECSStats(frame_allocator, world_stats.mECSStats);
+    try RenderECSStats(frame_allocator, world_stats.mECSStats);
 }
 
 fn RenderRenderStats(frame_allocator: std.mem.Allocator, render_stats: EngineStats.RenderStats) !void {

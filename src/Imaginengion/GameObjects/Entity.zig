@@ -41,7 +41,7 @@ pub fn AddComponent(self: Entity, engine_allocator: std.mem.Allocator, new_compo
     return try self.mSceneManager.mECSManagerGO.AddComponent(engine_allocator, self.mEntityID, new_component);
 }
 pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
-    self.mSceneManager.mECSManagerGO.RemoveComponent(engine_allocator, component_type, self.mEntityID);
+    try self.mSceneManager.mECSManagerGO.RemoveComponent(engine_allocator, component_type, self.mEntityID);
 }
 
 pub fn GetComponent(self: Entity, comptime component_type: type) ?*component_type {

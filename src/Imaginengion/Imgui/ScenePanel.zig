@@ -208,7 +208,7 @@ fn HandleScenePopupContext(_: *ScenePanel, engine_context: *EngineContext, scene
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try scene_layer.CreateEntity(engine_context.EngineAllocator(), .{});
+            _ = try scene_layer.CreateEntity(engine_context, .{});
         }
 
         if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
@@ -291,7 +291,7 @@ fn HandleEntityContextMenu(_: *ScenePanel, engine_context: *EngineContext, entit
         already_popup.* = true;
 
         if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-            _ = try entity.CreateChild(engine_context.EngineAllocator(), .Entity, .{});
+            _ = try entity.CreateChild(engine_context, .Entity, .{});
         }
 
         if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {

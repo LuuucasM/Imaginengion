@@ -57,7 +57,7 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext) !voi
         }
         if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
             defer imgui.igEndPopup();
-            ImguiUtils.NewEntityComponentPopup(engine_context, entity);
+            try ImguiUtils.NewEntityComponentPopup(engine_context, entity);
         }
         try EntityImguiRender(entity, engine_context);
     }
@@ -106,7 +106,7 @@ fn PrintComponent(engine_context: *EngineContext, comptime component_type: type,
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            entity.RemoveComponent(engine_context.EngineAllocator(), component_type);
+            try entity.RemoveComponent(engine_context.EngineAllocator(), component_type);
         }
     }
     if (is_tree_open) {

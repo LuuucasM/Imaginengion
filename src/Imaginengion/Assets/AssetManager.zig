@@ -179,7 +179,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
 }
 
 pub fn GetFileMetaData(self: *AssetManager, id: AssetType) *FileMetaData {
-    if (self.mAssetECS.IsActiveEntityID(id)) {
+    if (self.mAssetECS.IsActiveEntity(id)) {
         return self.mAssetECS.GetComponent(FileMetaData, id).?;
     } else {
         return &self._internal.DefaultFileMetaData;
