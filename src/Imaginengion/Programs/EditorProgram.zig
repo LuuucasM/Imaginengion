@@ -103,6 +103,7 @@ mEditorViewportPlayer: Player = .{},
 
 //misc stuff
 mEditorFont: AssetHandle = .{},
+mActiveWorld: *SceneManager = undefined,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
@@ -136,6 +137,8 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     _ = try self.mEditorUIEntity.AddComponent(engine_allocator, PlayerSlotComponent{});
     self.mEditorUIEntity.Possess(self.mEditorUIPlayer);
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
+
+    self.mActiveWorld = &engine_context.mGameWorld;
 }
 
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
@@ -407,17 +410,19 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext, event: ImguiEventData.ChangeEditorStateEvent) !void {
     if (event.mEditorState == .Play) { //the play button was pressed
         try engine_context.mGameWorld.Copy(engine_context, engine_context.mSimulateWorld);
+        self.mActiveWorld = &engine_context.mSimulateWorld;
 
         const new_player = try engine_context.mSimulateWorld.CreatePlayer(engine_context);
 
         const start_entity_uuid_comp = self._ToolbarPanel.mStartEntity.?.GetComponent(EntityUUIDComponent).?;
 
-        const entity_world_id = engine_context.mSerializer.GetWorldID(.Simulate, start_entity_uuid_comp.ID);
+        const entity_world_id = engine_context.mSimulateWorld.GetWorldID(.Simulate, start_entity_uuid_comp.ID).?;
 
-        const start_entity = engine_context.mSimulateWorld.GetEntity(entity_world_id);
+        const start_entity = engine_context.mSimulateWorld.GetEntity(@intCast(entity_world_id));
 
         new_player.Possess(start_entity);
     } else {
+        self.mActiveWorld = &engine_context.mGameWorld;
         engine_context.mSimulateWorld.clearAndFree();
     }
 }
@@ -455,6 +460,18 @@ fn CleanSceneSpecs(self: *EditorProgram, engine_allocator: std.mem.Allocator) vo
 fn RenderLenses(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Render Lenses", @src());
     defer zone.Deinit();
+
+    if (!self._ViewportPanel.mP_OpenPlay) {
+        if (self._ToolbarPanel.mState == .Play) {
+            //render only from the in game perspective to only the viewportpanel_viewport
+        } else {
+            //render from only the editor perspective only to the viewportpanel_viewport
+        }
+    } else {
+        //render the editor perspective to the viewportpanel_viewport
+        //if there is a valid in game camera selected
+        //  render from game perspective to viewportpanel_play
+    }
 }
 
 fn RenderViewportSimLens(self: *EditorProgram, engine_context: *EngineContext) !void {
@@ -476,7 +493,7 @@ fn RenderViewportSimLens(self: *EditorProgram, engine_context: *EngineContext) !
     }
 }
 
-fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext) !void {
+fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, world_type: EngineContext.WorldType, viewport_type: ViewportType) !void {
     const lens_component = self.mEditorViewportPlayer.GetComponent(PlayerLens).?;
     const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     const world_rot = transform_component.GetWorldRotation();
@@ -487,7 +504,7 @@ fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext) !voi
     const final_pos = Vec3f32{ world_pos[0] + lens_offset_pos[0], world_pos[1] + lens_offset_pos[1], world_pos[2] + lens_offset_pos[2] };
 
     try engine_context.mRenderer.OnUpdate(
-        .Game,
+        world_type,
         engine_context,
         .{
             .mRotation = [4]f32{ final_rot[0], final_rot[1], final_rot[2], final_rot[3] }, //this is in (w, x, y, z) format
