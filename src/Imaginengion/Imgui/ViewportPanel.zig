@@ -37,7 +37,6 @@ mP_OpenViewport: bool = true,
 mIsFocusedViewport: bool = false,
 mViewportWidth: usize = 0,
 mViewportHeight: usize = 0,
-mSelectedEntity: ?Entity = null,
 mGizmoType: GizmoType = .None,
 
 //for play window

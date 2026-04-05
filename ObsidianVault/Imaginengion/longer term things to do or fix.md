@@ -1,6 +1,7 @@
 - zig build --watch -fincremental -Dno-bin
 - zig build --watch --error-style verbose_clear -fincremental -Dno-bin
-- add physics
+- change windowing/renderer/input to SDL3
+- add more physics
 - add entity picking in the viewport/playport using ray tracing
 	- after this is implemented then I can start making UI elements
 	- This means I can start making the UI for Pong which consists of
@@ -15,6 +16,10 @@
 - make animation system
 - make pong
 - add a way to export the game into its standalone
+- make an "game" (program) where you can select a project or create a new project at a specific place
+	- This is like a metaprogram for the engine because actually I want to change the editor to be run like "zig build --watch -fincremental -Dno-bin" instead of a static exe
+	- this way I can get the very developed filewatcher to do the file watching for assets instead, and also scripts dont have to be dynamically compiled and loaded rather just hot-reloaded as part of the watch system.
+	- 
 - add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
 - Add an input component to Player
 	- this will create the layer between the raw hardware input and the game input

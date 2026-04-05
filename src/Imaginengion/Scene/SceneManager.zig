@@ -38,6 +38,9 @@ const SceneStackPos = SceneComponents.StackPosComponent;
 //const SceneTransformComponent = SceneComponents.TransformComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 
+const GameMode = @import("../GameModes/GameMode.zig");
+const GameModeComponentsList = @import("../GameModes/Components.zig").ComponentsList;
+
 const Serializer = @import("../Serializer/Serializer.zig");
 const ResolveReq = Serializer.ResolveReq;
 
@@ -60,14 +63,23 @@ const NewSceneConfig = SceneLayer.NewSceneConfig;
 
 const SceneManager = @This();
 
+pub const ECSType = enum {
+    GameObj,
+    Scenes,
+    Players,
+    GameModes,
+};
+
 pub const ECSManagerGameObj = ECSManager(Entity.Type, &EntityComponentsArray);
 pub const ECSManagerScenes = ECSManager(SceneLayer.Type, &SceneComponentsList);
 pub const ECSManagerPlayer = ECSManager(Player.Type, &PlayerComponents.ComponentsList);
+pub const ECSManagerGameMode = ECSManager(GameMode.Type, &GameModeComponentsList);
 
 //scene stuff
 mECSManagerGO: ECSManagerGameObj = .{},
 mECSManagerSC: ECSManagerScenes = .{},
 mECSManagerPL: ECSManagerPlayer = .{},
+mECSManagerGM: ECSManagerGameMode = .{},
 
 mGameLayerInsertIndex: usize = 0,
 mNumofLayers: usize = 0,
@@ -83,6 +95,7 @@ pub fn Init(self: *SceneManager, width: usize, height: usize, engine_allocator: 
     try self.mECSManagerGO.Init(engine_allocator);
     try self.mECSManagerSC.Init(engine_allocator);
     try self.mECSManagerPL.Init(engine_allocator);
+    try self.mECSManagerGM.Init(engine_allocator);
     self.mViewportWidth = width;
     self.mViewportHeight = height;
 }
@@ -91,6 +104,7 @@ pub fn Deinit(self: *SceneManager, engine_context: *EngineContext) !void {
     try self.mECSManagerGO.Deinit(engine_context);
     try self.mECSManagerSC.Deinit(engine_context);
     try self.mECSManagerPL.Deinit(engine_context);
+    try self.mECSManagerGM.Deinit(engine_context);
 
     self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
     self.mResolveUUIDList.deinit(engine_context.EngineAllocator());
@@ -281,6 +295,12 @@ pub fn GetEntityGroup(self: *const SceneManager, frame_allocator: std.mem.Alloca
 }
 //===============================ECS MANAGER Entity END==============================================
 
+//==================================ECS MANAGER GAME MODE START===========================================
+pub fn GetGameModeGroup(self: *const SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameMode.Type) {
+    return try self.mECSManagerGM.GetGroup(frame_allocator, query);
+}
+//========================================ECS MANAGER GAME MODE END=========================================
+
 pub fn AddUUID(self: *SceneManager, engine_allocator: std.mem.Allocator, uuid: u64, world_id: usize) !void {
     try self.mUUIDToWorldID.put(engine_allocator, uuid, world_id);
 }
@@ -368,7 +388,7 @@ pub fn ProcessRemovedObj(self: *SceneManager, engine_context: *EngineContext) !v
     try self.mECSManagerPL.ProcessEvents(engine_context, .Remove, player_event_callback);
 }
 
-pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *SceneManager) !void {
+pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *const SceneManager) !void {
     self.SaveAllScenes(engine_context);
     const frame_allocator = engine_context.FrameAllocator();
 

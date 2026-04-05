@@ -55,6 +55,10 @@ pub fn GetUUID(self: SceneLayer) u128 {
     return self.mSceneManager.mECSManagerSC.GetComponent(SceneUUIDComponent, self.mSceneID).?.*.ID;
 }
 
+pub fn GetName(self: SceneLayer) []const u8 {
+    return self.mSceneManager.mECSManagerGO.GetComponent(SceneNameComponent, self.mSceneID).?.*.mName.items;
+}
+
 pub fn Delete(self: SceneLayer, engine_context: *EngineContext) !void {
     try self.mSceneManager.mECSManagerSC.DestroyEntity(engine_context.EngineAllocator(), self.mSceneID);
 }

@@ -2,6 +2,8 @@ const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
+const EntityTagComponent = @import("Components.zig").EntityTagComponent;
+const ScriptTagComponent = @import("Components.zig").ScriptTagComponent;
 const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -63,6 +65,12 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
             _ = try self.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+            _ = try self.AddComponent(engine_allocator, entity_id, EntityTagComponent{});
+        }
+
+        pub fn CreateScript(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
+            _ = try self.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+            _ = try self.AddComponent(engine_allocator, entity_id, ScriptTagComponent{});
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
@@ -145,29 +153,31 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return skipfield_array.mComponents.HasSparse(entity_id);
         }
 
+        //provides a mask for a group query where if index[i] == 1 then it is skipped and if index[i] == 0 then it is included
         pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
+            const ones: SkipFieldComponent.StaticSkipFieldT.SkipFieldVector = @splat(1);
             switch (query) {
                 .Component => |component_type| {
-                    var result = SkipFieldComponent.StaticSkipFieldT.NoSkipArr;
-                    result[component_type.Ind] = 1;
+                    var result = ones;
+                    result[component_type.Ind] = 0;
                     return result;
                 },
                 .Not => |not| {
-                    return GetGroupMask(not.mFirst);
+                    var result = GetGroupMask(not.mFirst);
+                    result = result | (~GetGroupMask(not.mSecond));
+                    return result;
                 },
                 .Or => |ors| {
                     var result = GetGroupMask(ors[0]);
                     inline for (ors[1..]) |or_query| {
-                        const intermediate = GetGroupMask(or_query);
-                        result = result & intermediate;
+                        result &= GetGroupMask(or_query);
                     }
                     return result;
                 },
                 .And => |ands| {
                     var result = GetGroupMask(ands[0]);
                     inline for (ands[1..]) |and_query| {
-                        const intermediate = GetGroupMask(and_query);
-                        result = result | intermediate;
+                        result |= GetGroupMask(and_query);
                     }
                     return result;
                 },
@@ -226,7 +236,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             while (i < end_index) {
                 const entity_id = result.items[i];
                 const skip_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
-                if (!skip_comp.mSkipField.TestZerosMask(mask)) {
+                if (!skip_comp.mSkipField.MatchesMask(mask)) {
                     result.items[i] = result.items[end_index - 1];
                     end_index -= 1;
                 } else {

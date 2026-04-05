@@ -6,6 +6,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../GameObjects/Entity.zig");
 const PlayerComponents = @import("Components.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
+const PlayerNameComponent = PlayerComponents.NameComponent;
 const LensComponent = PlayerComponents.LensComponent;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
@@ -31,6 +32,10 @@ pub fn GetComponent(self: Player, comptime component_type: type) ?*component_typ
 }
 pub fn HasComponent(self: Player, comptime component_type: type) bool {
     return self.mScenemanager.mECSManagerPL.HasComponent(component_type, self.mEntityID);
+}
+
+pub fn GetName(self: Entity) []const u8 {
+    return self.mSceneManager.mECSManagerGO.GetComponent(PlayerNameComponent, self.mEntityID).?.*.mName.items;
 }
 
 pub fn Duplicate(self: Player) !Player {

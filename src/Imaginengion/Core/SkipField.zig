@@ -151,7 +151,7 @@ pub fn StaticSkipField(size: usize) type {
                 self.mSkipField[0] = 0;
                 return;
             }
-            //alreday a skipped index
+            //alreday an unskipped index
             if (self.mSkipField[index] == 0) return;
 
             const left_non_zero = index > 0 and self.mSkipField[index - 1] > 0;
@@ -192,8 +192,76 @@ pub fn StaticSkipField(size: usize) type {
             }
             self.mSkipField[index] = 0;
         }
-        pub fn TestZerosMask(self: Self, mask: *const SkipFieldVector) bool {
-            return @reduce(.Or, self.mSkipField & mask.*) == 0;
+
+        pub fn Union(self: *Self, other: *const Self) void {
+            const zero_vec = @as(SkipFieldVector, @splat(0));
+
+            const v1_zeros = self.mSkipField == zero_vec;
+            const v2_zeros = other.mSkipField == zero_vec;
+
+            const same_zeros = v1_zeros == v2_zeros;
+
+            for (0..size) |i| {
+                if (!same_zeros[i]) {
+                    self.ChangeToSkipped(@intCast(i));
+                }
+            }
+        }
+
+        pub fn Intersect(self: *Self, other: *const Self) void {
+            const zero_vec = @as(SkipFieldVector, @splat(0));
+
+            const v1_zeros = self.mSkipField == zero_vec;
+            const v2_zeros = other.mSkipField == zero_vec;
+
+            const same_zeros = v1_zeros == v2_zeros;
+
+            for (0..size) |i| {
+                if (!same_zeros[i]) {
+                    self.ChangeToUnskipped(@intCast(i));
+                }
+            }
+        }
+
+        pub fn Difference(self: *Self, other: *const Self) void {
+            const zero_vec = @as(SkipFieldVector, @splat(0));
+
+            const v1_zeros = self.mSkipField == zero_vec;
+            const v2_zeros = other.mSkipField == zero_vec;
+
+            const same_zeros = v1_zeros == v2_zeros;
+
+            for (0..size) |i| {
+                if (same_zeros[i]) {
+                    self.ChangeToSkipped(@intCast(i));
+                }
+            }
+        }
+
+        pub fn IndexIsUnskipped(self: Self, index: SkipFieldType) bool {
+            return self.mSkipField[index] == 0;
+        }
+
+        pub fn HasSameUnskipped(self: Self, other: *const Self) bool {
+            const zero_vec = @as(SkipFieldVector, @splat(0));
+
+            const v1_zeros = self.mSkipField == zero_vec;
+            const v2_zeros = other.mSkipField == zero_vec;
+
+            const same_zeros = v1_zeros == v2_zeros;
+
+            return @reduce(.And, same_zeros);
+        }
+
+        pub fn MatchesMask(self: Self, mask: *const SkipFieldVector) bool {
+            const zero: SkipFieldVector = @splat(0);
+            const one: SkipFieldVector = @splat(1);
+
+            const entity_is_skipped = @select(u32, self.mSkipField > zero, one, zero);
+
+            const matches = entity_is_skipped == mask.*;
+
+            return @reduce(.And, matches);
         }
     };
 }
@@ -212,10 +280,10 @@ test "Init Small Field" {
     const FieldSize = 1;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.AllSkip);
+    var field: SkipFieldT = .AllSkip;
     try std.testing.expect(field.mSkipField[0] == FieldSize);
 
-    field = SkipFieldT.Init(.NoSkip);
+    field = .NoSkip;
     try std.testing.expect(field.mSkipField[0] == 0);
 }
 
@@ -223,7 +291,7 @@ test "Small Change To UnSkip" {
     const FieldSize = 1;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.AllSkip);
+    var field: SkipFieldT = .AllSkip;
     try std.testing.expect(field.mSkipField[0] == 1);
 
     field.ChangeToUnskipped(0);
@@ -234,7 +302,7 @@ test "Small Change To Skip" {
     const FieldSize = 1;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.NoSkip);
+    var field: SkipFieldT = .NoSkip;
     try std.testing.expect(field.mSkipField[0] == 0);
 
     field.ChangeToSkipped(0);
@@ -245,14 +313,14 @@ test "Init Large Field" {
     const FieldSize = 10;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.AllSkip);
+    var field: SkipFieldT = .AllSkip;
     try std.testing.expect(field.mSkipField[0] == FieldSize);
     try std.testing.expect(field.mSkipField[FieldSize - 1] == FieldSize);
     for (1..FieldSize - 2) |i| {
         try std.testing.expect(field.mSkipField[i] == 1);
     }
 
-    field = SkipFieldT.Init(.NoSkip);
+    field = .NoSkip;
     try std.testing.expect(@reduce(.Or, field.mSkipField) == 0);
 }
 
@@ -260,7 +328,7 @@ test "Large Change To Skip" {
     const FieldSize = 10;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.NoSkip);
+    var field: SkipFieldT = .NoSkip;
 
     field.ChangeToSkipped(4);
     try std.testing.expect(field.mSkipField[4] == 1);
@@ -286,7 +354,7 @@ test "Large Change To UnSkip" {
     const FieldSize = 10;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.AllSkip);
+    var field: SkipFieldT = .AllSkip;
 
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(0);
@@ -311,7 +379,7 @@ test "Iterating Skipfield 1" {
     const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.NoSkip);
+    var field: SkipFieldT = .AllSkip;
 
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(0);
@@ -326,7 +394,7 @@ test "Iterating Skipfield 2" {
     const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.NoSkip);
+    var field: SkipFieldT = .AllSkip;
 
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(3);
@@ -341,7 +409,7 @@ test "Iterating Skipfield 3" {
     const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.NoSkip);
+    var field: SkipFieldT = .AllSkip;
 
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(2);
@@ -357,20 +425,98 @@ test "Test Zeros Mask" {
     const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
-    var field = SkipFieldT.Init(.AllSkip);
-    var mask = SkipFieldT.NoSkipArr;
+    var field: SkipFieldT = .AllSkip;
+    var mask: SkipFieldT = .AllSkip;
 
     field.ChangeToUnskipped(1);
+    mask.ChangeToUnskipped(1);
 
-    mask[1] = 1;
+    try std.testing.expect(field.HasSameUnskipped(&mask));
 
-    try std.testing.expect(field.TestZerosMask(&mask));
+    mask.ChangeToUnskipped(3);
 
-    mask[3] = 1;
-
-    try std.testing.expect(!field.TestZerosMask(&mask));
+    try std.testing.expect(!field.HasSameUnskipped(&mask));
 
     field.ChangeToUnskipped(3);
 
-    try std.testing.expect(field.TestZerosMask(&mask));
+    try std.testing.expect(field.HasSameUnskipped(&mask));
+}
+
+test "Test Union" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field: SkipFieldT = .AllSkip;
+    var mask: SkipFieldT = .AllSkip;
+
+    field.ChangeToUnskipped(1);
+    mask.ChangeToUnskipped(1);
+
+    field.Union(&mask);
+
+    try std.testing.expect(field.IndexIsUnskipped(1));
+
+    mask.ChangeToSkipped(1);
+
+    field.Union(&mask);
+
+    try std.testing.expect(!field.IndexIsUnskipped(1));
+}
+
+test "Test Intersection" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field: SkipFieldT = .AllSkip;
+    var mask: SkipFieldT = .AllSkip;
+
+    field.ChangeToUnskipped(1);
+    mask.ChangeToUnskipped(2);
+
+    field.Intersect(&mask);
+
+    try std.testing.expect(field.IndexIsUnskipped(1));
+    try std.testing.expect(field.IndexIsUnskipped(2));
+
+    field.ChangeToUnskipped(3);
+
+    field.Intersect(&mask);
+
+    try std.testing.expect(field.IndexIsUnskipped(3));
+}
+
+test "Test Difference" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field: SkipFieldT = .AllSkip;
+    var mask: SkipFieldT = .AllSkip;
+
+    field.ChangeToUnskipped(1);
+    mask.ChangeToUnskipped(1);
+
+    field.Difference(&mask);
+
+    try std.testing.expect(!field.IndexIsUnskipped(1));
+}
+
+test "Matches Mask" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field: SkipFieldT = .AllSkip;
+    var mask: SkipFieldT.SkipFieldVector = @splat(1);
+
+    field.ChangeToUnskipped(1);
+    mask[1] = 0;
+
+    try std.testing.expect(field.MatchesMask(&mask));
+
+    mask[2] = 0;
+
+    try std.testing.expect(!field.MatchesMask(&mask));
+
+    field.ChangeToUnskipped(2);
+
+    try std.testing.expect(field.MatchesMask(&mask));
 }

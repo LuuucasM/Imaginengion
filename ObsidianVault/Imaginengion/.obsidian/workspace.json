@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "immediate things to do or fix.md",
+                "file": "longer term things to do or fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "immediate things to do or fix"
+              "title": "longer term things to do or fix"
             }
           },
           {
@@ -49,8 +49,7 @@
               "title": "longer term things to do or fix"
             }
           }
-        ],
-        "currentTab": 2
+        ]
       }
     ],
     "direction": "vertical"
@@ -198,17 +197,21 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "9e61a00140897ba9",
+  "active": "e839352918761b3f",
   "lastOpenFiles": [
     "immediate things to do or fix.md",
+    "Engine Notes/2026 4 April/2026.04.05.md",
+    "Engine Notes/2026 4 April/2026.04.04.md",
     "longer term things to do or fix.md",
-    "Engine Notes/2026 March/2026.03.28.md",
-    "Engine Notes/2026 March/2026.3.2.md",
-    "Engine Notes/2026 March/2026.03.22.md",
-    "Engine Notes/2026 Feb/Overall Notes.md",
-    "Engine Notes/2026 Feb/2026.2.2.md",
-    "Engine Notes/2026 March",
-    "Engine Notes/2026 Feb",
+    "Engine Notes/2026 3 March/2026.03.28.md",
+    "Engine Notes/2026 4 April",
+    "Engine Notes/2026 April.md",
+    "Engine Notes/2026 3 March/2026.3.2.md",
+    "Engine Notes/2026 3 March/2026.03.22.md",
+    "Engine Notes/2026 2 Feb/Overall Notes.md",
+    "Engine Notes/2026 2 Feb/2026.2.2.md",
+    "Engine Notes/2026 3 March",
+    "Engine Notes/2026 2 Feb",
     "Weekly Notes/2025.09.01-07.md",
     "Weekly Notes/2025.08.25-31.md",
     "Engine Notes",
@@ -226,9 +229,6 @@
     "Renderer.md",
     "Static SkipField.md",
     "Adding new scripts to engine.md",
-    "Inputs.md",
-    "Application.md",
-    "Component Manager.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

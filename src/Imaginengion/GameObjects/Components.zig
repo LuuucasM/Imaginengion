@@ -13,6 +13,8 @@ pub const EntitySceneComponent = @import("Components/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Components/TransformComponent.zig");
 pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 pub const TextComponent = @import("Components/TextComponent.zig");
+pub const ViewpointComponent = @import("Components/ViewpointComponent.zig");
+pub const RenderTargetComponent = @import("Components/RenderTargetComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
@@ -31,6 +33,8 @@ pub const ComponentsList = [_]type{
     EntitySceneComponent,
     TextComponent,
     TransformComponent,
+    ViewpointComponent,
+    RenderTargetComponent,
 
     //scripts
     ScriptComponent,
@@ -43,6 +47,7 @@ pub const SerializeList = [_]type{
     AudioComponent,
     ColliderComponent,
     UUIDComponent,
+    RenderTargetComponent,
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
@@ -50,6 +55,7 @@ pub const SerializeList = [_]type{
     TextComponent,
     TransformComponent,
     ScriptComponent,
+    ViewpointComponent,
 };
 
 pub const ComponentPanelList = [_]type{
@@ -57,12 +63,14 @@ pub const ComponentPanelList = [_]type{
     AudioComponent,
     ColliderComponent,
     UUIDComponent,
+    RenderTargetComponent,
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
     TextComponent,
     TransformComponent,
+    ViewpointComponent,
 };
 
 pub const ScriptsList = [_]type{
@@ -85,6 +93,8 @@ pub const EComponents = enum(u16) {
     ScriptComponent = ScriptComponent.Ind,
     OnInputPressedScript = OnInputPressedScript.Ind,
     OnUpdateScript = OnUpdateScript.Ind,
+    ViewpointComponent = ViewpointComponent.Ind,
+    RenderTargetComponent = RenderTargetComponent.Ind,
 };
 
 comptime {

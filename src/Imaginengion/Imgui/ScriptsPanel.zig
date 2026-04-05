@@ -16,7 +16,6 @@ const Tracy = @import("../Core/Tracy.zig");
 const ScriptsPanel = @This();
 
 _P_Open: bool = true,
-mSelectedEntity: ?Entity = null,
 
 pub fn Init(self: ScriptsPanel) void {
     _ = self;

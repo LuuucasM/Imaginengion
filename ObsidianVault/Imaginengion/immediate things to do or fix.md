@@ -1,5 +1,7 @@
-- Create a copy of std.once as its going away in 0.16
-- Then I can continue working on components that require serialization that have references to different entities as i shouldnt have to worry about a complicated system for resolving those IDs anymore
+- I made it to RenderViewportLens (line 470) but still need to change the rest of EditorProgram
+	- Because I changed the camera system to separating the view from the gpu resources, I need to modify the rendering to  use the new system
+- for changing editorprogram::onimguirender, since our selection is shared between all ecs objects instead I can grey out (not selectable) options that can not currently be done
+	- for example if I want to save a scene but my current selection is on an entity then 'Save Scene' top bar option should be not available
 - debug all the billion changes i made already
 	- compile debug
 	- runtime debug

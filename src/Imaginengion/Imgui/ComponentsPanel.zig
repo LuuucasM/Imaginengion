@@ -28,8 +28,6 @@ const ImguiUtils = @import("ImguiUtils.zig");
 const Tracy = @import("../Core/Tracy.zig");
 
 _P_Open: bool = true,
-mSelectedScene: ?SceneLayer = null,
-mSelectedEntity: ?Entity = null,
 
 pub fn Init(_: *ComponentsPanel) void {}
 
