@@ -1,6 +1,5 @@
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const EditorState = @import("../Imgui/ToolbarPanel.zig").EditorState;
 const ScriptType = @import("../Assets/Assets/ScriptAsset.zig").ScriptType;
 const LayerType = @import("../Scene/Components/SceneComponent.zig").LayerType;
 
@@ -15,7 +14,6 @@ pub const Event = union(enum) {
     SelectEntityEvent: SelectEntityEvent,
     ViewportResizeEvent: ViewportResizeEvent,
     PlayPanelResizeEvent: PlayPanelResizeEvent,
-    ChangeEditorStateEvent: ChangeEditorStateEvent,
     OpenSceneSpecEvent: OpenSceneSpecEvent,
     DeleteEntityEvent: DeleteEntityEvent,
     DeleteSceneEvent: DeleteSceneEvent,
@@ -46,10 +44,6 @@ pub const ViewportResizeEvent = struct {
 pub const PlayPanelResizeEvent = struct {
     mWidth: usize,
     mHeight: usize,
-};
-
-pub const ChangeEditorStateEvent = struct {
-    mEditorState: EditorState,
 };
 
 pub const OpenSceneSpecEvent = struct {

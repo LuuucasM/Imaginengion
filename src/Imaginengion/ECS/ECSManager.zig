@@ -5,6 +5,8 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
+pub const EntityTagComponent = @import("Components.zig").EntityTagComponent;
+pub const ScriptTagComponent = @import("Components.zig").ScriptTagComponent;
 
 pub const ChildType = enum {
     Entity,
@@ -433,7 +435,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     is_valid_type = true;
                 }
             }
-            if (component_type == ParentComponent or component_type == ChildComponent) {
+            if (component_type == ParentComponent or component_type == ChildComponent or component_type == EntityTagComponent or component_type == ScriptTagComponent) {
                 is_valid_type = true;
             }
             if (is_valid_type == false) {

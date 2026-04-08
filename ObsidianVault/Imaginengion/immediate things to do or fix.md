@@ -1,17 +1,12 @@
-- I made it to RenderViewportLens (line 470) but still need to change the rest of EditorProgram
-	- Because I changed the camera system to separating the view from the gpu resources, I need to modify the rendering to  use the new system
-- for changing editorprogram::onimguirender, since our selection is shared between all ecs objects instead I can grey out (not selectable) options that can not currently be done
-	- for example if I want to save a scene but my current selection is on an entity then 'Save Scene' top bar option should be not available
+
 - debug all the billion changes i made already
 	- compile debug
 	- runtime debug
 	- ensure that hitting the play button AND stop button both work with the physics box test
 	- ensure that deleting entities and scenes works
-- remove CSEditorPanel, remove scripts panel, rename scene panel to WorldPanel, make new ScenePanel
-	- move the component editing into the components panel where each component is now a tree node and when it is expanded it does the EditorRender
-	- since before the point of scripts panel being separate is you could click on it and put it into the scripts editor panel to directly edit it but since im getting rid of CSEditorPanel i dont think it needs its own panel anymore
-	- instead i can move scripts into the Components Panel and maybe rename components panel to like EntityPanel and the EntityPanel will first display all the components, and then all the scripts. Scripts can be behind a tree node named Scripts which can be opened to view all the scripts
-	- Then with 2 panels remove, I can add a ScenePanel (maybe i can rename current ScenPanel to WorldPanel) which is basically the same thing as the EntityPanel but for scenes (since scenes are just entites in their own ECS world)
+- for changing editorprogram::onimguirender, since our selection is shared between all ecs objects instead I can grey out (not selectable) options that can not currently be done
+	- for example if I want to save a scene but my current selection is on an entity then 'Save Scene' top bar option should be not available
+	- this can be easily done since the selected object is just 1 union enum that we can check and greying out invalid options will prevent having to chase down doing checks when eventually i want to grey out the options anyway
 - change physics collider to use the build in entity transform rather than right now where the enum value is a struct "box" and struct "sphere". that way I can align the colliders with more how the rendering system works
 	- this is so for the next TODO to visualize colliders i can simply follow my sdf logic to implement it
 - make visualizer for sphere collision and box collision

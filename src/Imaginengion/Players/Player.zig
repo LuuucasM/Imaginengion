@@ -7,11 +7,11 @@ const Entity = @import("../GameObjects/Entity.zig");
 const PlayerComponents = @import("Components.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerNameComponent = PlayerComponents.NameComponent;
-const LensComponent = PlayerComponents.LensComponent;
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
 const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
+const RenderTargetComponent = PlayerComponents.RenderTargetComponent;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
@@ -53,29 +53,29 @@ pub fn Possess(self: Player, entity: Entity) void {
     }
 }
 
-pub fn AddComponentLens(self: Player, engine_context: *EngineContext) !*LensComponent {
-    var new_lens_component = LensComponent{};
+pub fn AddRenderTarget(self: Player, engine_context: *EngineContext) !*RenderTargetComponent {
+    var new_render_comp = RenderTargetComponent{};
     const engine_allocator = engine_context.EngineAllocator();
 
-    new_lens_component.mFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
-    new_lens_component.mVertexArray = VertexArray.Init();
-    new_lens_component.mVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
-    new_lens_component.mIndexBuffer = undefined;
+    new_render_comp.mFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
+    new_render_comp.mVertexArray = VertexArray.Init();
+    new_render_comp.mVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
+    new_render_comp.mIndexBuffer = undefined;
 
     const shader_asset = engine_context.mRenderer.GetSDFShader();
-    try new_lens_component.mVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
-    new_lens_component.mVertexBuffer.SetStride(shader_asset.GetStride());
+    try new_render_comp.mVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
+    new_render_comp.mVertexBuffer.SetStride(shader_asset.GetStride());
 
     var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_lens_component.mIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
+    new_render_comp.mIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
 
     var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
-    new_lens_component.mVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_lens_component.mVertexArray.AddVertexBuffer(engine_allocator, new_lens_component.mVertexBuffer);
-    new_lens_component.mVertexArray.SetIndexBuffer(new_lens_component.mIndexBuffer);
+    new_render_comp.mVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
+    try new_render_comp.mVertexArray.AddVertexBuffer(engine_allocator, new_render_comp.mVertexBuffer);
+    new_render_comp.mVertexArray.SetIndexBuffer(new_render_comp.mIndexBuffer);
 
-    new_lens_component.SetViewportSize(1600, 900);
-    return try self.AddComponent(engine_allocator, new_lens_component);
+    new_render_comp.SetViewportSize(1600, 900);
+    return try self.AddComponent(engine_allocator, new_render_comp);
 }
 
 pub fn IsActive(self: Player) bool {

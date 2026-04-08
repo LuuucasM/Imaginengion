@@ -30,7 +30,7 @@ pub const Name: []const u8 = "ScriptAsset";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
         if (asset_type == ScriptAsset) {
-            break :blk i + 3; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
 };

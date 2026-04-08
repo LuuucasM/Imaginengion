@@ -26,7 +26,7 @@ pub fn Init(self: ECSDisplayPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, comptime world_type: EngineContext.WorldType, comptime ecs_type: SceneManager.ECSType) !void {
+pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, world_type: EngineContext.WorldType, comptime ecs_type: SceneManager.ECSType) !void {
     const zone = Tracy.ZoneInit("AssetHandle OIR", @src());
     defer zone.Deinit();
 
@@ -55,10 +55,10 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, comp
         defer imgui.igEndChild();
 
         switch (ecs_type) {
-            .GameObj => RenderObjects(Entity, engine_context, scene_manager, &already_popup),
-            .Scenes => RenderObjects(SceneLayer, engine_context, scene_manager, &already_popup),
-            .Players => RenderObjects(Player, engine_context, scene_manager, &already_popup),
-            .GameModes => RenderObjects(GameMode, engine_context, scene_manager, &already_popup),
+            .GameObj => try RenderObjects(Entity, engine_context, scene_manager, &already_popup),
+            .Scenes => try RenderObjects(SceneLayer, engine_context, scene_manager, &already_popup),
+            .Players => try RenderObjects(Player, engine_context, scene_manager, &already_popup),
+            .GameModes => try RenderObjects(GameMode, engine_context, scene_manager, &already_popup),
         }
     }
 }
@@ -71,19 +71,19 @@ fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, scen
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
-    const objects_list = try Traits.GetGroupFn(scene_manager, frame_allocator, .{ .Not = .{ .mFirst = EntityTagComponent, .mSecond = Traits.ChildComponent } });
+    const objects_list = try Traits.GetGroupFn(scene_manager, frame_allocator, .{ .Not = .{ .mFirst = .{ .Component = EntityTagComponent }, .mSecond = .{ .Component = Traits.ChildComponent } } });
     for (objects_list.items) |object_id| {
         const object = Traits.GetObject(object_id, scene_manager);
-        RenderObject(ObjectType, engine_context, object, already_popup);
+        try RenderObject(ObjectType, engine_context, object, already_popup);
     }
 }
 
 fn RenderObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, already_popup: *bool) !void {
     const Traits = ObjectTraits(ObjectType);
     if (object.HasComponent(Traits.ParentComponent)) {
-        try RenderParentObject(ObjectType, engine_context, object, already_popup);
+        try try RenderParentObject(ObjectType, engine_context, object, already_popup);
     } else {
-        try RenderLeafObject(ObjectType, engine_context, object, already_popup);
+        try try RenderLeafObject(ObjectType, engine_context, object, already_popup);
     }
 }
 
@@ -124,7 +124,7 @@ fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, o
 }
 
 fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, already_popup: *bool) !void {
-    if (parent_object.GetIterator(.Child)) |iter| {
+    if (parent_object.GetIterator(.Child)) |*iter| {
         while (iter.next()) |child_object| {
             try RenderObject(ObjectType, engine_context, child_object, already_popup);
         }
@@ -165,7 +165,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn HandleDragDropSource(entity: Entity) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                     defer imgui.igEndDragDropSource();
-                    _ = imgui.igSetDragDropPayload("EntityRef", entity, @sizeOf(Entity), 0);
+                    _ = imgui.igSetDragDropPayload("EntityRef", &entity, @sizeOf(Entity), 0);
                 }
             }
         };

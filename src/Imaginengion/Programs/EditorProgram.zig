@@ -28,6 +28,7 @@ const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnInputPressedScript = EntityComponents.OnInputPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const ViewpointComponent = EntityComponents.ViewpointComponent;
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEvent = WindowEventData.Event;
@@ -353,7 +354,6 @@ fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
 
 fn OnWindowResize(engine_context: *EngineContext, width: usize, height: usize) !bool {
     engine_context.mAppWindow.OnWindowResize(width, height);
-    try engine_context.mEditorWorld.OnViewportResize(engine_context.FrameAllocator(), width, height);
     return true;
 }
 
@@ -385,12 +385,12 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
             }
         },
         .ViewportResizeEvent => |e| {
-            //i dont know if i need this
-            _ = e;
+            self._ViewportPanel.mViewportWidth = e.mWidth;
+            self._ViewportPanel.mViewportHeight = e.mHeight;
         },
         .PlayPanelResizeEvent => |e| {
-            //i dont think i need this instead i will resize at the time of rendering instead
-            _ = e;
+            self._ViewportPanel.mPlayWidth = e.mWidth;
+            self._ViewportPanel.mPlayHeight = e.mHeight;
         },
         .ChangeEditorStateEvent => |e| {
             try self.OnChangeEditorStateEvent(engine_context, e);
@@ -468,39 +468,41 @@ fn RenderLenses(self: *EditorProgram, engine_context: *EngineContext) !void {
 }
 
 fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
-    const lens_component = self.mEditorViewportPlayer.GetComponent(PlayerLens).?;
+    const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
+    const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
     const world_rot = transform_component.GetWorldRotation();
     const world_pos = transform_component.GetWorldPosition();
-    const lens_offset_pos = lens_component.OffsetPosition;
-    const lens_offset_rot = lens_component.OffsetRotation;
-    const final_rot = LinAlg.QuatMulQuat(world_rot, lens_offset_rot);
-    const final_pos = Vec3f32{ world_pos[0] + lens_offset_pos[0], world_pos[1] + lens_offset_pos[1], world_pos[2] + lens_offset_pos[2] };
+
+    switch (viewport_type) {
+        .ViewportPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+        .PlayPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+    }
 
     try engine_context.mRenderer.OnUpdate(
         self.mActiveWorldType,
         engine_context,
         .{
-            .mRotation = [4]f32{ final_rot[0], final_rot[1], final_rot[2], final_rot[3] }, //this is in (w, x, y, z) format
-            .mPosition = [3]f32{ final_pos[0], final_pos[1], final_pos[2] }, //this is in (x, y, z) format
-            .mPerspectiveFar = lens_component.mPerspectiveFar,
-            .mResolutionWidth = @floatFromInt(lens_component.mViewportWidth),
-            .mResolutionHeight = @floatFromInt(lens_component.mViewportHeight),
-            .mAspectRatio = lens_component.mAspectRatio,
-            .mFOV = lens_component.mPerspectiveFOVRad,
+            .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
+            .mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] }, //this is in (x, y, z) format
+            .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
+            .mResolutionWidth = @floatFromInt(viewpoint_component.mViewportWidth),
+            .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
+            .mAspectRatio = viewpoint_component.mAspectRatio,
+            .mFOV = viewpoint_component.mPerspectiveFOVRad,
         },
         .{
-            .FrameBuffer = &lens_component.mFrameBuffer,
-            .VertexArray = &lens_component.mVertexArray,
-            .VertexBuffer = &lens_component.mVertexBuffer,
+            .FrameBuffer = &render_component.mFrameBuffer,
+            .VertexArray = &render_component.mVertexArray,
+            .VertexBuffer = &render_component.mVertexBuffer,
         },
         0b1,
     );
-    var frame_buffers = std.ArrayList(FrameBuffer).init(engine_context.FrameAllocator());
-    var area_rects = std.ArrayList(Vec4f32).init(engine_context.FrameAllocator());
+    var frame_buffers: std.ArrayList(*FrameBuffer) = .empty;
+    var area_rects: std.ArrayList(Vec4f32) = .empty;
 
-    frame_buffers.append(lens_component.mFrameBuffer);
-    area_rects.append(lens_component.mAreaRect);
+    frame_buffers.append(&render_component.mFrameBuffer);
+    area_rects.append(viewpoint_component.mAreaRect);
 
     switch (viewport_type) {
         .ViewportPanel => {
@@ -520,48 +522,49 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewpo
 
     const frame_allocator = engine_context.FrameAllocator();
 
-    var frame_buffers = std.ArrayList(FrameBuffer).init(engine_context.FrameAllocator());
-    var area_rects = std.ArrayList(Vec4f32).init(engine_context.FrameAllocator());
+    var frame_buffers: std.ArrayList(*FrameBuffer) = .empty;
+    var area_rects: std.ArrayList(Vec4f32) = .empty;
 
-    var player_slot_entities = try scene_manager.GetEntityGroup(frame_allocator, .{ .Component = PlayerSlotComponent });
-    try FilterPossessedEntities(frame_allocator, &player_slot_entities, scene_manager);
+    var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
+    try FilterPossessedPlayers(frame_allocator, &player_entites, scene_manager);
 
-    for (player_slot_entities.items) |entity_id| {
-        const entity = scene_manager.GetEntity(entity_id);
-        const slot_component = entity.GetComponent(PlayerSlotComponent).?;
-        const lens_component = slot_component.mPlayerEntity.GetComponent(PlayerLens).?;
-        const transform_component = entity.GetComponent(TransformComponent).?;
+    for (player_entites.items) |player_id| {
+        const player = scene_manager.GetPlayer(player_id);
+        const possess_component = player.GetComponent(PossessComponent).?;
+        const render_component = player.GetComponent(PlayerRenderComponent).?;
+        const transform_component = possess_component.mPossessedEntity.GetComponent(TransformComponent).?;
+        const viewpoint_component = possess_component.mPossessedEntity.GetComponent(ViewpointComponent).?;
 
         const world_rot = transform_component.GetWorldRotation();
         const world_pos = transform_component.GetWorldPosition();
-        const lens_offset_pos = lens_component.OffsetPosition;
-        const lens_offset_rot = lens_component.OffsetRotation;
 
-        const final_rot = LinAlg.QuatMulQuat(world_rot, lens_offset_rot);
-        const final_pos = Vec3f32{ world_pos[0] + lens_offset_pos[0], world_pos[1] + lens_offset_pos[1], world_pos[2] + lens_offset_pos[2] };
+        switch (viewport_type) {
+            .ViewportPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+            .PlayPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+        }
 
         try engine_context.mRenderer.OnUpdate(
             self.mActiveWorldType,
             engine_context,
             .{
-                .mRotation = [4]f32{ final_rot[0], final_rot[1], final_rot[2], final_rot[3] }, //this is in (w, x, y, z) format
-                .mPosition = [3]f32{ final_pos[0], final_pos[1], final_pos[2] }, //this is in (x, y, z) format
-                .mPerspectiveFar = lens_component.mPerspectiveFar,
-                .mResolutionWidth = @floatFromInt(lens_component.mViewportWidth),
-                .mResolutionHeight = @floatFromInt(lens_component.mViewportHeight),
-                .mAspectRatio = lens_component.mAspectRatio,
-                .mFOV = lens_component.mPerspectiveFOVRad,
+                .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
+                .mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] }, //this is in (x, y, z) format
+                .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
+                .mResolutionWidth = @floatFromInt(viewpoint_component.mViewportWidth),
+                .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
+                .mAspectRatio = viewpoint_component.mAspectRatio,
+                .mFOV = viewpoint_component.mPerspectiveFOVRad,
             },
             .{
-                .FrameBuffer = &lens_component.mFrameBuffer,
-                .VertexArray = &lens_component.mVertexArray,
-                .VertexBuffer = &lens_component.mVertexBuffer,
+                .FrameBuffer = &render_component.mFrameBuffer,
+                .VertexArray = &render_component.mVertexArray,
+                .VertexBuffer = &render_component.mVertexBuffer,
             },
             0b1,
         );
 
-        frame_buffers.append(lens_component.mFrameBuffer);
-        area_rects.append(lens_component.mAreaRect);
+        frame_buffers.append(&render_component.mFrameBuffer);
+        area_rects.append(viewpoint_component.mAreaRect);
     }
 
     switch (viewport_type) {
@@ -572,6 +575,24 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewpo
             try self._ViewportPanel.OnImguiRenderPlay(engine_context, frame_buffers, area_rects);
         },
     }
+}
+
+fn FilterPossessedPlayers(frame_allocator: std.mem.Allocator, player_entities: *std.ArrayList(Player.Type), scene_manager: *SceneManager) !void {
+    var start: usize = 0;
+    var end: usize = 0;
+
+    while (start < end) {
+        const player = scene_manager.GetPlayer(player_entities.items[start]);
+        const possess_component = player.GetComponent(PossessComponent).?;
+        if (possess_component.mPossessedEntity.IsActive()) {
+            start += 1;
+        } else {
+            player_entities.items[start] = player_entities.items[end - 1];
+            end -= 1;
+        }
+    }
+
+    player_entities.shrinkAndFree(frame_allocator, end);
 }
 
 fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entities: *std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {

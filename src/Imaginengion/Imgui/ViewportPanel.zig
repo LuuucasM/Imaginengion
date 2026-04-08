@@ -53,7 +53,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
 
@@ -67,26 +67,20 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
     //update viewport size if needed
     var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
     imgui.igGetContentRegionAvail(&viewport_size);
+
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
-            .ViewportResizeEvent = .{
-                .mWidth = @intFromFloat(viewport_size.x),
-                .mHeight = @intFromFloat(viewport_size.y),
-            },
-        });
         self.mViewportWidth = @intFromFloat(viewport_size.x);
         self.mViewportHeight = @intFromFloat(viewport_size.y);
     }
 
     //get if the window is focused or not
     self.mIsFocusedViewport = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
-
     try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -101,12 +95,6 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, f
     if (viewport_size.x != @as(f32, @floatFromInt(self.mPlayWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mPlayHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
-            .PlayPanelResizeEvent = .{
-                .mWidth = @intFromFloat(viewport_size.x),
-                .mHeight = @intFromFloat(viewport_size.y),
-            },
-        });
         self.mPlayWidth = @intFromFloat(viewport_size.x);
         self.mPlayHeight = @intFromFloat(viewport_size.y);
     }

@@ -9,8 +9,6 @@ const PathType = FileMetaData.PathType;
 
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
-const EditorWindow = @import("../../Imgui/EditorWindow.zig");
-
 const SceneLayer = @import("../SceneLayer.zig");
 const SceneType = @import("../SceneLayer.zig").Type;
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -19,7 +17,7 @@ pub const Name: []const u8 = "ScriptComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == ScriptComponent) {
-            break :blk i + 3; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
 };

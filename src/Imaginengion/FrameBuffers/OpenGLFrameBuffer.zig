@@ -57,7 +57,7 @@ pub fn OpenGLFrameBuffer(comptime color_texture_formats: []const TextureFormat, 
             glad.glBindFramebuffer(glad.GL_FRAMEBUFFER, 0);
         }
         pub fn Resize(self: *Self, width: usize, height: usize) void {
-            if (width < 1 or height < 1 or width > 8192 or height > 8192) return;
+            if (width < 1 or height < 1 or width > 8192 or height > 8192 or width != self.mWidth or height != self.mHeight) return;
             self.mWidth = width;
             self.mHeight = height;
             self.Invalidate();

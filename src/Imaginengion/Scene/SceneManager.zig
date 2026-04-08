@@ -53,7 +53,6 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 const Player = @import("../Players/Player.zig");
 const PlayerComponents = @import("../Players/Components.zig");
-const PlayerLens = PlayerComponents.LensComponent;
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerMic = PlayerComponents.MicComponent;
 
@@ -262,7 +261,7 @@ pub fn CreatePlayer(self: *SceneManager, engine_context: *EngineContext) !Player
     const new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
     _ = try new_player.AddComponent(engine_context.EngineAllocator(), PossessComponent{});
     _ = try new_player.AddComponent(engine_context.EngineAllocator(), PlayerMic{});
-    _ = try new_player.AddComponentLens(engine_context);
+    _ = try new_player.AddRenderTarget(engine_context);
     return new_player;
 }
 pub fn GetPlayer(self: *SceneManager, player_id: Player.Type) Player {
@@ -315,22 +314,6 @@ pub fn GetWorldID(self: SceneManager, uuid: u64) ?usize {
 
 pub fn AddResolveUUID(self: *SceneManager, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
     try self.mResolveUUIDList.append(engine_allocator, resolve_req);
-}
-
-pub fn OnViewportResize(self: *SceneManager, frame_allocator: std.mem.Allocator, viewport_width: usize, viewport_height: usize) !void {
-    const zone = Tracy.ZoneInit("SceneManager::OnViewportResize", @src());
-    defer zone.Deinit();
-    self.mViewportWidth = viewport_width;
-    self.mViewportHeight = viewport_height;
-
-    const lens_group = try self.mECSManagerPL.GetGroup(frame_allocator, .{ .Component = PlayerLens });
-    for (lens_group.items) |player_id| {
-        const player = Player{ .mEntityID = player_id, .mScenemanager = self };
-        const camera_component = player.GetComponent(PlayerLens).?;
-        if (camera_component.mIsFixedAspectRatio == false) {
-            camera_component.SetViewportSize(viewport_width, viewport_height);
-        }
-    }
 }
 
 pub fn clearAndFree(self: *SceneManager, engine_context: *EngineContext) !void {

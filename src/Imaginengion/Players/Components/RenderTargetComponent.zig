@@ -13,7 +13,7 @@ pub const Name: []const u8 = "RenderTargetComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == RenderTargetComponent) {
-            break :blk i + 3; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
 };
@@ -30,7 +30,7 @@ pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !voi
     self.mIndexBuffer.Deinit();
 }
 
-pub fn SetViewportSize(self: *RenderTargetComponent, width: usize, height: usize) !void {
+pub fn SetViewportSize(self: *RenderTargetComponent, width: usize, height: usize) void {
     self.mFrameBuffer.Resize(width, height);
 }
 
