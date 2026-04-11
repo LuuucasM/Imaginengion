@@ -29,7 +29,7 @@ pub const ComponentsList = [_]type{
     InputPressedScript,
 };
 
-pub const PanelList = [_]type{
+pub const ComponentsPanelList = [_]type{
     UUIDComponent,
     NameComponent,
     PhysicsComponent,

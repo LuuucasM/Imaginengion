@@ -53,7 +53,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
 
@@ -80,7 +80,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buff
     try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -105,7 +105,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers:
     try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-fn OnImguiRender(frame_buffers: std.ArrayList(FrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
+fn OnImguiRender(frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 

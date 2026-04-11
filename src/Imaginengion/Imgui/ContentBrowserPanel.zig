@@ -5,10 +5,14 @@ const ContentBrowserPanel = @This();
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
 const ScriptAsset = Assets.ScriptAsset;
-const ImguiUtils = @import("ImguiUtils.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
 const EngineContext = @import("../Core/EngineContext.zig");
+
+const Entity = @import("../GameObjects/Entity.zig");
+const SceneLayer = @import("../Scene/SceneLayer.zig");
+const Player = @import("../Players/Player.zig");
+const GameMode = @import("../GameModes/GameMode.zig");
 
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const NewScriptEvent = ImguiEventData.NewScriptEvent;
@@ -104,7 +108,26 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
         if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
             try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
         }
-        try ImguiUtils.NewAllScriptsPopup(engine_context);
+        if (imgui.igBeginMenu("Scripts", true) == true) {
+            defer imgui.igEndMenu();
+
+            if (imgui.igBeginMenu("New Entity Script", true) == true) {
+                defer imgui.igEndMenu();
+                try NewObjectScriptPopup(Entity, engine_context);
+            }
+            if (imgui.igBeginMenu("New Scene Script", true) == true) {
+                defer imgui.igEndMenu();
+                try NewObjectScriptPopup(SceneLayer, engine_context);
+            }
+            if (imgui.igBeginMenu("New Player Script", true) == true) {
+                defer imgui.igEndMenu();
+                try NewObjectScriptPopup(Player, engine_context);
+            }
+            if (imgui.igBeginMenu("New GameMode Script", true) == true) {
+                defer imgui.igEndMenu();
+                try NewObjectScriptPopup(GameMode, engine_context);
+            }
+        }
     }
 }
 
@@ -346,4 +369,40 @@ fn NextColumn(entry_name: []const u8) void {
     defer zone.Deinit();
     imgui.igTextWrapped(@ptrCast(entry_name));
     imgui.igNextColumn();
+}
+
+fn NewObjectScriptPopup(comptime ObjectType: type, engine_context: *EngineContext) !void {
+    const traits = ObjectTraits(ObjectType);
+    inline for (traits.ScriptsList) |script_type| {
+        if (imgui.igMenuItem_Bool(script_type.Name.ptr, "", false, true)) {
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewScriptEvent = .{ .mScriptType = script_type.Scripttype } });
+        }
+    }
+}
+
+fn ObjectTraits(comptime T: type) type {
+    if (T == Entity) {
+        const EntityComponents = @import("../GameObjects/Components.zig");
+
+        return struct {
+            const ScriptsList = EntityComponents.ScriptsList;
+        };
+    } else if (T == SceneLayer) {
+        const SceneComponents = @import("../Scene/SceneComponents.zig");
+        return struct {
+            const ScriptsList = SceneComponents.ScriptsList;
+        };
+    } else if (T == Player) {
+        const PlayerComponents = @import("../Players/Components.zig");
+        return struct {
+            const ScriptsList = PlayerComponents.ScriptsList;
+        };
+    } else if (T == GameMode) {
+        const GameModeComponents = @import("../GameModes/Components.zig");
+        return struct {
+            const ScriptsList = GameModeComponents.ScriptsList;
+        };
+    } else {
+        @compileError(@typeName(T) ++ "This type is not supported currently");
+    }
 }

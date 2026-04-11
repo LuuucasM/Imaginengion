@@ -43,10 +43,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mECSEventManager.Deinit(engine_context.EngineAllocator());
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
-            self.mComponentManager.clearAndFree(engine_context);
+            try self.mComponentManager.clearAndFree(engine_context);
         }
 
         //---------------EntityManager--------------
@@ -255,19 +255,21 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mComponentManager.ResetComponent(entity_id, component);
         }
 
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, event_category: ECSEventData.EventCategories, callback_list: ECSCallbackList) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, comptime event_category: ECSEventData.EventCategories, callback_list: ECSCallbackList) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
 
-            const event_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent };
-            callback_list.append(&event_callback.mNode);
-            self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list);
+            var callbacks = callback_list;
+
+            var event_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent };
+            callbacks.append(&event_callback.mNode);
+            try self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list);
 
             self.mECSEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
         }
 
-        pub fn OnECSEvent(ecs_manager: *anyopaque, engine_context: *EngineContext, event: ECSEventData.EventT(entity_t)) bool {
-            const self: *Self = @ptrCast(ecs_manager);
+        pub fn OnECSEvent(ecs_manager: *anyopaque, engine_context: *EngineContext, event: ECSEventData.EventT(entity_t)) anyerror!bool {
+            const self: *Self = @ptrCast(@alignCast(ecs_manager));
             switch (event) {
                 .DestroyEntity => |e| {
                     try self._InternalDestroyEntity(engine_context, e.mEntityID);
@@ -279,6 +281,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     @panic("Default Events are not allowed!\n");
                 },
             }
+            return true;
         }
 
         fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {

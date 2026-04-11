@@ -93,9 +93,9 @@ pub fn DeInit(self: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EngineContext::Deinit", @src());
     defer zone.Deinit();
 
-    self.mGameWorld.Deinit(self);
-    self.mEditorWorld.Deinit(self);
-    self.mSimulateWorld.Deinit(self);
+    try self.mGameWorld.Deinit(self);
+    try self.mEditorWorld.Deinit(self);
+    try self.mSimulateWorld.Deinit(self);
 
     self.mPhysicsManager.Deinit(self.EngineAllocator());
     self.mInputManager.Deinit();

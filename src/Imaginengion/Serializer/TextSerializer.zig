@@ -238,18 +238,18 @@ fn DeSerializeSceneLayer(engine_context: *EngineContext, reader: *std.json.Reade
             try DeserializeThisEntity(engine_context, reader, new_entity, scene_layer);
         }
         if (std.mem.eql(u8, actual_value, "ChildEntity")) {
-            const new_scene = try scene_layer.AddChild(engine_context, .Entity, .{ .bAddSceneName = false, .bAddSceneUUID = false });
+            const new_scene = try scene_layer.CreateChild(engine_context, .Entity, .{ .bAddSceneName = false, .bAddSceneUUID = false });
             try DeSerializeSceneLayer(engine_context, reader, new_scene);
         }
         if (std.mem.eql(u8, actual_value, "ScriptEntity")) {
-            const new_scene = try scene_layer.AddChild(engine_context, .Script, .{ .bAddSceneName = false, .bAddSceneUUID = false });
+            const new_scene = try scene_layer.CreateChild(engine_context, .Script, .{ .bAddSceneName = false, .bAddSceneUUID = false });
             try DeSerializeSceneLayer(engine_context, reader, new_scene);
         }
     }
 }
 
 fn DeSerializeSceneComp(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, scene_layer: SceneLayer) !void {
-    const new_component = try scene_layer.AddComponent(engine_context.EngineAllocator(), component_type{});
+    const new_component = try scene_layer.AddComponent(engine_context, component_type{});
     engine_context.mSerializer.mCurrDeserialize = .{ .requester = .{ .Scene = scene_layer }, .component_ptr = new_component };
     new_component.* = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
 }
@@ -289,7 +289,7 @@ fn DeserializeThisEntity(engine_context: *EngineContext, reader: *std.json.Reade
 }
 
 fn DeserializeEntityComponent(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, entity: Entity) !void {
-    const new_component = try entity.AddComponent(engine_context.EngineAllocator(), component_type{});
+    const new_component = try entity.AddComponent(engine_context, component_type{});
     engine_context.mSerializer.mCurrDeserialize = .{ .requester = .{ .Entity = entity }, .component_ptr = new_component };
     new_component.* = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
     if (@hasDecl(component_type, "PostParse")) {

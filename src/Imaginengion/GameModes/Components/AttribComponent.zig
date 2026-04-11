@@ -9,9 +9,11 @@ pub const ValueTypes = union(enum) {
     int32: i32,
     float32: f32,
     bool: bool,
+
+    pub const default: ValueTypes = .{ .uint32 = 0 };
 };
 
-mData: ValueTypes,
+mData: ValueTypes = .default,
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "AttribComponent";
@@ -51,7 +53,7 @@ pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
 
     switch (self.mData) {
         .uint32 => |*v| {
-            var temp: i32 = @intCast(v);
+            var temp: i32 = @intCast(v.*);
             if (imgui.igInputInt("Value", &temp, 1, 10, 0)) {
                 if (temp >= 0) {
                     v.* = @intCast(temp);

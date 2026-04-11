@@ -116,7 +116,7 @@ pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mGlyphBufferBase.clearAndFree(engine_allocator);
 }
 
-pub fn SetBuffers(self: *Renderer2D, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
     defer zone.Deinit();
 

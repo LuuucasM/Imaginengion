@@ -1,0 +1,2 @@
+        const new_uuid_component = try self.AddComponent(engine_context.EngineAllocator(), UUIDComponent{ .ID = GenUUID() });
+        try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);

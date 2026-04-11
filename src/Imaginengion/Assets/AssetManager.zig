@@ -295,7 +295,7 @@ pub fn GetRelPath(self: *AssetManager, abs_path: []const u8) []const u8 {
 }
 
 pub fn ProcessDestroyedAssets(self: *AssetManager, engine_context: *EngineContext) !void {
-    try self.mAssetECS.ProcessEvents(engine_context, .Remove, null);
+    try self.mAssetECS.ProcessEvents(engine_context, .Remove, ECSManagerAssets.ECSCallbackList{});
 }
 
 fn GetDefaultAsset(self: *AssetManager, asset_type: type) !*asset_type {

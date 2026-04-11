@@ -17,7 +17,8 @@ const Entity = @import("../GameObjects/Entity.zig");
 const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
 const EngineContext = @import("../Core/EngineContext.zig");
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
-const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(SceneLayer.Type);
+const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
+const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const PathType = @import("../Assets/Assets/FileMetaData.zig").PathType;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
@@ -30,6 +31,33 @@ pub const NewSceneConfig = struct {
     bAddSceneName: bool = true,
 };
 
+pub const Iterator = struct {
+    pub const IterType = enum {
+        Child,
+        Script,
+    };
+    _CurrentScene: SceneLayer,
+    _FirstID: Type,
+    _IsFirst: bool = true,
+
+    pub fn next(self: *Iterator) ?SceneLayer {
+        if (self._IsFirst) {
+            @branchHint(.cold);
+            self._IsFirst = false;
+        } else {
+            if (self._CurrentScene.mSceneID == self._FirstID) return null;
+        }
+
+        const scene = self._CurrentScene;
+
+        const scene_child_component = scene.GetComponent(SceneChildComponent).?;
+
+        self._CurrentScene = SceneLayer{ .mSceneID = scene_child_component.mNext, .mSceneManager = scene.mSceneManager };
+
+        return scene;
+    }
+};
+
 pub const Type = u32;
 pub const NullScene: Type = std.math.maxInt(Type);
 const SceneLayer = @This();
@@ -38,8 +66,8 @@ mSceneID: Type = NullScene,
 mSceneManager: *SceneManager = undefined,
 
 //===================for the scenes==============================================
-pub fn AddComponent(self: SceneLayer, engine_allocator: std.mem.Allocator, new_component: anytype) !*@TypeOf(new_component) {
-    return try self.mSceneManager.mECSManagerSC.AddComponent(engine_allocator, self.mSceneID, new_component);
+pub fn AddComponent(self: SceneLayer, engine_context: *EngineContext, new_component: anytype) !*@TypeOf(new_component) {
+    return try self.mSceneManager.mECSManagerSC.AddComponent(engine_context.EngineAllocator(), self.mSceneID, new_component);
 }
 pub fn RemoveComponent(self: SceneLayer, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     try self.mSceneManager.mECSManagerSC.RemoveComponent(engine_allocator, component_type, self.mSceneID);
@@ -51,12 +79,12 @@ pub fn HasComponent(self: SceneLayer, comptime component_type: type) bool {
     return self.mSceneManager.mECSManagerSC.HasComponent(component_type, self.mSceneID);
 }
 
-pub fn GetUUID(self: SceneLayer) u128 {
+pub fn GetUUID(self: SceneLayer) u64 {
     return self.mSceneManager.mECSManagerSC.GetComponent(SceneUUIDComponent, self.mSceneID).?.*.ID;
 }
 
 pub fn GetName(self: SceneLayer) []const u8 {
-    return self.mSceneManager.mECSManagerGO.GetComponent(SceneNameComponent, self.mSceneID).?.*.mName.items;
+    return self.mSceneManager.mECSManagerSC.GetComponent(SceneNameComponent, self.mSceneID).?.*.mName.items;
 }
 
 pub fn Delete(self: SceneLayer, engine_context: *EngineContext) !void {
@@ -72,7 +100,7 @@ pub fn Duplicate(self: *SceneLayer) !SceneLayer {
     return try self.mSceneManager.mECSManagerSC.DuplicateEntity(self.mSceneID);
 }
 
-pub fn AddChild(self: SceneLayer, engine_context: *EngineContext, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
+pub fn CreateChild(self: SceneLayer, engine_context: *EngineContext, child_type: ChildType, new_scene_config: NewSceneConfig) !SceneLayer {
     var child_scene = SceneLayer{ .mSceneID = try self.mSceneManager.mECSManagerSC.AddChild(engine_context.EngineAllocator(), self.mSceneID, child_type), .mSceneManager = self.mSceneManager };
     try child_scene.CreateSceneConfig(engine_context, new_scene_config);
     return child_scene;
@@ -81,33 +109,31 @@ pub fn AddChild(self: SceneLayer, engine_context: *EngineContext, child_type: Ch
 pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, config: NewSceneConfig) !void {
     if (config.bAddSceneUUID) {
         const uuid_component = SceneUUIDComponent{ .ID = GenUUID() };
-        _ = try self.AddComponent(engine_context.EngineAllocator(), uuid_component);
+        _ = try self.AddComponent(engine_context, uuid_component);
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
     }
     if (config.bAddSceneName) {
         var scene_name_component = SceneNameComponent{ .mAllocator = engine_context.EngineAllocator() };
         _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
 
-        _ = try self.AddComponent(engine_context.EngineAllocator(), scene_name_component);
+        _ = try self.AddComponent(engine_context, scene_name_component);
     }
 }
 
-pub fn AddComponentScript(self: *SceneLayer, engine_context: *EngineContext, script_asset_path: []const u8, path_type: PathType) !void {
+pub fn AddComponentScript(self: SceneLayer, engine_context: *EngineContext, script_asset_path: []const u8, path_type: PathType) !void {
     var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
-
-    std.debug.assert(script_asset.mScriptType == .SceneSceneStart);
 
     const new_script_component = SceneScriptComponent{
         .mScriptAssetHandle = new_script_handle,
     };
 
-    const new_script_entity = try self.AddChild(engine_context, .Script, .{ .bAddSceneUUID = false });
+    const new_script_entity = try self.CreateChild(engine_context, .Script, .{ .bAddSceneUUID = false });
 
-    _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), new_script_component);
+    _ = try new_script_entity.AddComponent(engine_context, new_script_component);
 
     _ = switch (script_asset.mScriptType) {
-        .SceneSceneStart => try new_script_entity.AddComponent(engine_context.EngineAllocator(), OnSceneStartScript{}),
+        .SceneSceneStart => try new_script_entity.AddComponent(engine_context, OnSceneStartScript{}),
         else => @panic("This shouldnt happen!"),
     };
 }
@@ -137,13 +163,29 @@ pub fn IsActive(self: SceneLayer) bool {
     return self.mSceneManager.mECSManagerSC.IsActiveEntity(self.mSceneID);
 }
 
+pub fn GetIterator(self: SceneLayer, comptime iter_type: Iterator.IterType) ?Iterator {
+    if (self.GetComponent(SceneParentComponent)) |parent_component| {
+        const first = switch (iter_type) {
+            .Child => parent_component.mFirstEntity,
+            .Script => parent_component.mFirstScript,
+        };
+        if (first == NullScene) return null;
+        return Iterator{
+            ._CurrentScene = SceneLayer{ .mSceneID = first, .mSceneManager = self.mSceneManager },
+            ._FirstID = first,
+        };
+    } else {
+        return null;
+    }
+}
+
 //===================END for the scenes==============================================
 
 //======================for the entities in the scenes=====================================
 pub fn CreateEntity(self: SceneLayer, engine_context: *EngineContext, new_entity_config: NewEntityConfig) !Entity {
     var new_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.CreateEntity(engine_context.EngineAllocator()), .mSceneManager = self.mSceneManager };
     try new_entity.CreateEntityConfig(engine_context, new_entity_config);
-    _ = try new_entity.AddComponent(engine_context.EngineAllocator(), EntitySceneComponent{ .mScene = self });
+    _ = try new_entity.AddComponent(engine_context, EntitySceneComponent{ .mScene = self });
     return new_entity;
 }
 

@@ -81,9 +81,9 @@ fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, scen
 fn RenderObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, already_popup: *bool) !void {
     const Traits = ObjectTraits(ObjectType);
     if (object.HasComponent(Traits.ParentComponent)) {
-        try try RenderParentObject(ObjectType, engine_context, object, already_popup);
+        try RenderParentObject(ObjectType, engine_context, object, already_popup);
     } else {
-        try try RenderLeafObject(ObjectType, engine_context, object, already_popup);
+        try RenderLeafObject(ObjectType, engine_context, object, already_popup);
     }
 }
 
@@ -123,8 +123,9 @@ fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, o
     try HandleObjectContextMenu(ObjectType, engine_context, object, object_name, already_popup);
 }
 
-fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, already_popup: *bool) !void {
-    if (parent_object.GetIterator(.Child)) |*iter| {
+fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, already_popup: *bool) anyerror!void {
+    if (parent_object.GetIterator(.Child)) |iter_value| {
+        var iter = iter_value;
         while (iter.next()) |child_object| {
             try RenderObject(ObjectType, engine_context, child_object, already_popup);
         }
@@ -184,7 +185,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn HandleDragDropSource(scene_layer: SceneLayer) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                     defer imgui.igEndDragDropSource();
-                    _ = imgui.igSetDragDropPayload("SceneRef", scene_layer, @sizeOf(SceneLayer), 0);
+                    _ = imgui.igSetDragDropPayload("SceneRef", &scene_layer, @sizeOf(SceneLayer), 0);
                 }
             }
         };
@@ -203,7 +204,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn HandleDragDropSource(player: Player) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                     defer imgui.igEndDragDropSource();
-                    _ = imgui.igSetDragDropPayload("PlayerRef", player, @sizeOf(Player), 0);
+                    _ = imgui.igSetDragDropPayload("PlayerRef", &player, @sizeOf(Player), 0);
                 }
             }
         };
@@ -222,7 +223,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn HandleDragDropSource(game_mode: GameMode) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                     defer imgui.igEndDragDropSource();
-                    _ = imgui.igSetDragDropPayload("GameModeRef", game_mode, @sizeOf(GameMode), 0);
+                    _ = imgui.igSetDragDropPayload("GameModeRef", &game_mode, @sizeOf(GameMode), 0);
                 }
             }
         };

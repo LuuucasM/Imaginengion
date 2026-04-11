@@ -37,7 +37,7 @@ pub const Iterator = struct {
         Script,
     };
     _CurrentEntity: Entity,
-    _FirstID: Entity.Type,
+    _FirstID: Type,
     _IsFirst: bool = true,
 
     pub fn next(self: *Iterator) ?Entity {
@@ -71,8 +71,21 @@ const Entity = @This();
 mEntityID: Type = NullEntity,
 mSceneManager: *SceneManager = undefined,
 
-pub fn AddComponent(self: Entity, engine_allocator: std.mem.Allocator, new_component: anytype) !*@TypeOf(new_component) {
-    return try self.mSceneManager.mECSManagerGO.AddComponent(engine_allocator, self.mEntityID, new_component);
+pub fn AddComponent(self: Entity, engine_context: *EngineContext, new_component: anytype) !*@TypeOf(new_component) {
+    const component_type = @TypeOf(new_component);
+    _ValidateComponent(component_type);
+    var comp = new_component;
+    if (component_type == EntityComponents.QuadComponent) {
+        comp.mTexture.mAssetManager = &engine_context.mAssetManager;
+    }
+    if (component_type == EntityComponents.TextComponent) {
+        comp.mTextAssetHandle.mAssetManager = &engine_context.mAssetManager;
+        comp.mTexHandle.mAssetManager = &engine_context.mAssetManager;
+    }
+    if (component_type == EntityComponents.AudioComponent) {
+        comp.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
+    }
+    return try self.mSceneManager.mECSManagerGO.AddComponent(engine_context.EngineAllocator(), self.mEntityID, comp);
 }
 pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     try self.mSceneManager.mECSManagerGO.RemoveComponent(engine_allocator, component_type, self.mEntityID);
@@ -121,7 +134,7 @@ pub fn GetIterator(self: Entity, comptime iter_type: Iterator.IterType) ?Iterato
             .Child => parent_component.mFirstEntity,
             .Script => parent_component.mFirstScript,
         };
-        if (first == Entity.NullEntity) return null;
+        if (first == NullEntity) return null;
         return Iterator{
             ._CurrentEntity = Entity{ .mEntityID = first, .mSceneManager = self.mSceneManager },
             ._FirstID = first,
@@ -131,19 +144,7 @@ pub fn GetIterator(self: Entity, comptime iter_type: Iterator.IterType) ?Iterato
     }
 }
 
-pub fn GetChildIterator(self: Entity) ?Iterator {
-    if (self.GetComponent(EntityParentComponent)) |parent_component| {
-        if (parent_component.mFirstEntity == NullEntity) return null;
-        return Iterator{
-            .entity = self,
-            .current = parent_component.mFirstEntity,
-            .first = parent_component.mFirstEntity,
-        };
-    }
-    return null;
-}
-
-pub fn AddComponentScript(self: *Entity, engine_context: *EngineContext, rel_path_script: []const u8, path_type: PathType) !void {
+pub fn AddComponentScript(self: Entity, engine_context: *EngineContext, rel_path_script: []const u8, path_type: PathType) !void {
     var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), rel_path_script, path_type);
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
@@ -156,15 +157,15 @@ pub fn AddComponentScript(self: *Entity, engine_context: *EngineContext, rel_pat
 
     const new_script_entity = try self.CreateChild(engine_context, .Script, .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
 
-    _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), new_script_component);
+    _ = try new_script_entity.AddComponent(engine_context, new_script_component);
 
     // Add the appropriate script type component based on the script asset
     switch (script_asset.mScriptType) {
         .EntityInputPressed => {
-            _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), OnInputPressedScript{});
+            _ = try new_script_entity.AddComponent(engine_context, OnInputPressedScript{});
         },
         .EntityOnUpdate => {
-            _ = try new_script_entity.AddComponent(engine_context.EngineAllocator(), OnUpdateScript{});
+            _ = try new_script_entity.AddComponent(engine_context, OnUpdateScript{});
         },
         else => @panic("this shouldnt happen!\n"),
     }
@@ -226,17 +227,16 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
 pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: NewEntityConfig) !void {
     if (config.bAddUUID) {
-        const new_uuid_component = UUIDComponent{ .ID = GenUUID() };
-        _ = try self.AddComponent(engine_context.EngineAllocator(), new_uuid_component);
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = GenUUID() });
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {
         var new_name_component = NameComponent{ .mAllocator = engine_context.EngineAllocator() };
         _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
-        _ = try self.AddComponent(engine_context.EngineAllocator(), new_name_component);
+        _ = try self.AddComponent(engine_context, new_name_component);
     }
     if (config.bAddTransform) {
-        _ = try self.AddComponent(engine_context.EngineAllocator(), TransformComponent{});
+        _ = try self.AddComponent(engine_context, TransformComponent{});
     }
 }
 
@@ -250,4 +250,17 @@ pub fn Invalidate(self: *Entity) void {
 
 pub fn IsValid(self: Entity) bool {
     return if (self.mEntityID != NullEntity) true else false;
+}
+
+fn _ValidateComponent(component_type: type) void {
+    comptime var is_valid = false;
+    inline for (EntityComponents.ComponentsList) |list_type| {
+        if (component_type == list_type) {
+            is_valid = true;
+        }
+    }
+
+    if (!is_valid) {
+        @compileError(@typeName(component_type) ++ "Type is not a valid entity component");
+    }
 }

@@ -75,8 +75,8 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
             return self.mVtable.HasComponent(self.mPtr, entityID);
         }
-        pub fn clearAndFree(self: Self, engine_context: *EngineContext) void {
-            self.mVtable.clearAndFree(self.mPtr, engine_context);
+        pub fn clearAndFree(self: Self, engine_context: *EngineContext) !void {
+            try self.mVtable.clearAndFree(self.mPtr, engine_context);
         }
         pub fn DestroyEntity(self: Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             try self.mVtable.DestroyEntity(self.mPtr, engine_context, entity_id);

@@ -60,9 +60,9 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.jso
     }
 
     return RenderTargetComponent{
-        .mFrameBuffer = FrameBuffer.Init(engine_context.EngineAllocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
+        .mFrameBuffer = try FrameBuffer.Init(engine_context.EngineAllocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
         .mVertexArray = VertexArray.Init(),
         .mVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32)),
-        .mIndexBuffer = IndexBuffer.Init([6]u32{ 0, 1, 2, 2, 3, 0 }),
+        .mIndexBuffer = IndexBuffer.Init(&[_]u32{ 0, 1, 2, 2, 3, 0 }, 6),
     };
 }

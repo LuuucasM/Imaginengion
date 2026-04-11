@@ -112,7 +112,7 @@ pub fn Deinit(self: *SceneManager, engine_context: *EngineContext) !void {
 //===============================ECS MANAGER SC==============================================
 pub fn NewScene(self: *SceneManager, engine_context: *EngineContext, _: LayerType, new_scene_config: NewSceneConfig) !SceneLayer {
     var scene_layer = SceneLayer{ .mSceneID = try self.mECSManagerSC.CreateEntity(engine_context.EngineAllocator()), .mSceneManager = self };
-    _ = try scene_layer.AddComponent(engine_context.EngineAllocator(), SceneComponent{});
+    _ = try scene_layer.AddComponent(engine_context, SceneComponent{});
 
     try scene_layer.CreateSceneConfig(engine_context, new_scene_config);
 
@@ -239,13 +239,23 @@ pub fn GetSceneStackIDs(self: *SceneManager, frame_allocator: std.mem.Allocator)
     return stack_pos_scenes;
 }
 
-pub fn SceneECSCallback(self: SceneManager, _: *EngineContext, event: ECSManagerScenes.ECSEventManager.EventType) !void {
+pub fn SceneECSCallback(scene_manager: *anyopaque, _: *EngineContext, event: ECSManagerScenes.ECSEventManager.EventType) anyerror!bool {
+    const self: *SceneManager = @ptrCast(@alignCast(scene_manager));
+
     switch (event) {
         .DestroyEntity => |e| {
             const scene_layer = self.GetSceneLayer(e.mEntityID);
             self.RemoveUUID(scene_layer.GetUUID());
         },
+        .RemoveComponent => |e| {
+            const scene_layer = self.GetSceneLayer(e.mEntityID);
+            if (e.mComponentInd == SceneUUIDComponent.Ind) {
+                self.RemoveUUID(scene_layer.GetUUID());
+            }
+        },
+        .Default => @panic("this shouldnt happen\n"),
     }
+    return true;
 }
 pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: SceneLayer.Type) bool {
     const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
@@ -259,34 +269,45 @@ pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: S
 //===============================ECS MANAGER Player==============================================
 pub fn CreatePlayer(self: *SceneManager, engine_context: *EngineContext) !Player {
     const new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
-    _ = try new_player.AddComponent(engine_context.EngineAllocator(), PossessComponent{});
-    _ = try new_player.AddComponent(engine_context.EngineAllocator(), PlayerMic{});
-    _ = try new_player.AddRenderTarget(engine_context);
+
     return new_player;
 }
 pub fn GetPlayer(self: *SceneManager, player_id: Player.Type) Player {
-    return Player{ .mEntityID = player_id, .mECSManagerRef = self.mECSManagerPL };
+    return Player{ .mEntityID = player_id, .mScenemanager = self };
 }
 pub fn GetPlayerGroup(self: *SceneManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Player.Type) {
     const zone = Tracy.ZoneInit("SceneManager::GetPlayerGroup", @src());
     defer zone.Deinit();
     return try self.mECSManagerPL.GetGroup(frame_allocator, query);
 }
-pub fn PlayerECSCallback(self: SceneManager, engine_context: *EngineContext, event: ECSManagerPlayer.ECSEventManager.EventType) !void {
+pub fn PlayerECSCallback(scene_manager: *anyopaque, engine_context: *EngineContext, event: ECSManagerPlayer.ECSEventManager.EventType) anyerror!bool {
+    const self: *SceneManager = @ptrCast(@alignCast(scene_manager));
     _ = self;
     _ = engine_context;
     _ = event;
+    return true;
 }
 //===============================ECS MANAGER Player END==============================================
 
 //===============================ECS MANAGER Entity==============================================
-pub fn EntityECSCallback(self: *SceneManager, _: *EngineContext, event: ECSManagerGameObj.ECSEventManager.EventType) !void {
+pub fn EntityECSCallback(scene_manager: *anyopaque, _: *EngineContext, event: ECSManagerGameObj.ECSEventManager.EventType) anyerror!bool {
+    const self: *SceneManager = @ptrCast(@alignCast(scene_manager));
     switch (event) {
         .DestroyEntity => |e| {
             const entity = self.GetEntity(e.mEntityID);
             self.RemoveUUID(entity.GetUUID());
         },
+        .RemoveComponent => |e| {
+            const entity = self.GetEntity(e.mEntityID);
+            if (e.mComponentInd == EntityUUIDComponent.Ind) {
+                self.RemoveUUID(entity.GetUUID());
+            }
+        },
+        .Default => {
+            @panic("this musnt happen\n");
+        },
     }
+    return true;
 }
 
 pub fn GetEntityGroup(self: *const SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
@@ -297,6 +318,9 @@ pub fn GetEntityGroup(self: *const SceneManager, frame_allocator: std.mem.Alloca
 //==================================ECS MANAGER GAME MODE START===========================================
 pub fn GetGameModeGroup(self: *const SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameMode.Type) {
     return try self.mECSManagerGM.GetGroup(frame_allocator, query);
+}
+pub fn GetGameMode(self: *SceneManager, gamemode_id: GameMode.Type) GameMode {
+    return GameMode{ .mEntityID = gamemode_id, .mScenemanager = self };
 }
 //========================================ECS MANAGER GAME MODE END=========================================
 
@@ -350,29 +374,29 @@ pub fn RmSceneComp(self: *SceneManager, engine_allocator: std.mem.Allocator, sce
 }
 
 pub fn ProcessRemovedObj(self: *SceneManager, engine_context: *EngineContext) !void {
-    const callback_list: std.DoublyLinkedList = .{};
+    var callback_list: std.DoublyLinkedList = .{};
 
-    const entity_event_callback = ECSManagerGameObj.ECSEventCallback{ .mCtx = self, .mCallbackFn = EntityECSCallback };
+    var entity_event_callback = ECSManagerGameObj.ECSEventCallback{ .mCtx = self, .mCallbackFn = EntityECSCallback };
     callback_list.append(&entity_event_callback.mNode);
     try self.mECSManagerGO.ProcessEvents(engine_context, .Remove, callback_list);
     //sett first and last to null to reset for scenes
     callback_list.first = null;
     callback_list.last = null;
 
-    const scene_event_callback = ECSManagerScenes.ECSEventCallback{ .mCtx = self, .mCallbackFn = SceneECSCallback };
+    var scene_event_callback = ECSManagerScenes.ECSEventCallback{ .mCtx = self, .mCallbackFn = SceneECSCallback };
     callback_list.append(&scene_event_callback.mNode);
-    try self.mECSManagerSC.ProcessEvents(engine_context, .Remove, scene_event_callback);
+    try self.mECSManagerSC.ProcessEvents(engine_context, .Remove, callback_list);
     //reset for players
     callback_list.first = null;
     callback_list.last = null;
 
-    const player_event_callback = ECSManagerPlayer.ECSEventCallback{ .mCtx = self, .mCallbackFn = PlayerECSCallback };
-    callback_list.append(&player_event_callback);
-    try self.mECSManagerPL.ProcessEvents(engine_context, .Remove, player_event_callback);
+    var player_event_callback = ECSManagerPlayer.ECSEventCallback{ .mCtx = self, .mCallbackFn = PlayerECSCallback };
+    callback_list.append(&player_event_callback.mNode);
+    try self.mECSManagerPL.ProcessEvents(engine_context, .Remove, callback_list);
 }
 
-pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *const SceneManager) !void {
-    self.SaveAllScenes(engine_context);
+pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *SceneManager) !void {
+    try self.Serialize(engine_context);
     const frame_allocator = engine_context.FrameAllocator();
 
     const scene_stack = try self.GetSceneGroup(frame_allocator, .{ .Component = SceneStackPos });
@@ -380,16 +404,16 @@ pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *c
         const scene = self.GetSceneLayer(scene_id);
 
         const scene_component = scene.GetComponent(SceneComponent).?;
-        const scene_abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath, .Prj);
+        const scene_abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath.items, .Prj);
 
-        other_scene.LoadScene(engine_context, scene_abs_path);
+        _ = try other_scene.LoadScene(engine_context, scene_abs_path);
     }
 }
 
 fn InsertScene(self: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mLayerType == .GameLayer) {
-        _ = try scene_layer.AddComponent(engine_context.EngineAllocator(), SceneStackPos{ .mPosition = self.mGameLayerInsertIndex });
+        _ = try scene_layer.AddComponent(engine_context, SceneStackPos{ .mPosition = self.mGameLayerInsertIndex });
         const stack_pos_group = try self.mECSManagerSC.GetGroup(engine_context.FrameAllocator(), .{ .Component = SceneStackPos });
         for (stack_pos_group.items) |scene_id| {
             const stack_pos = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id).?;
@@ -399,7 +423,7 @@ fn InsertScene(self: *SceneManager, engine_context: *EngineContext, scene_layer:
         }
         self.mGameLayerInsertIndex += 1;
     } else {
-        _ = try scene_layer.AddComponent(engine_context.EngineAllocator(), SceneStackPos{ .mPosition = self.mNumofLayers });
+        _ = try scene_layer.AddComponent(engine_context, SceneStackPos{ .mPosition = self.mNumofLayers });
     }
     self.mNumofLayers += 1;
 }

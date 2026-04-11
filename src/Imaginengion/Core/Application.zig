@@ -65,7 +65,7 @@ pub fn Run(self: *Application) !void {
 
         try self.mProgram.OnUpdate(&self.mEngineContext);
 
-        _ = self.mEngineContext._internal.FrameArena.reset(.free_all);
+        _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
         self.mEngineContext.mEngineStats.ResetStats();
     }
 }

@@ -1,6 +1,8 @@
 const std = @import("std");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Entity = @import("../GameObjects/Entity.zig");
+const Player = @import("../Players/Player.zig");
+const GameMode = @import("../GameModes/GameMode.zig");
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
@@ -32,6 +34,8 @@ pub const SerializeType = enum {
 pub const Requester = union(enum(u16)) {
     Entity: Entity,
     Scene: SceneLayer,
+    Player: Player,
+    GameMode: GameMode,
 
     pub const default: Requester = .{ .Entity = .{} };
 };
@@ -92,6 +96,8 @@ pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, scene_ma
         const active = switch (request.Requester) {
             .Entity => |e| e.IsActive(),
             .Scene => |s| s.IsActive(),
+            .Player => |p| p.IsActive(),
+            .GameMode => |g| g.IsActive(),
         };
 
         if (!active) {
@@ -108,6 +114,14 @@ pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, scene_ma
                 },
                 .Scene => {
                     const set_loc: *SceneLayer.Type = @ptrCast(@alignCast(request.SetLoc));
+                    set_loc.* = @intCast(world_id);
+                },
+                .Player => {
+                    const set_loc: *Player.Type = @ptrCast(@alignCast(request.SetLoc));
+                    set_loc.* = @intCast(world_id);
+                },
+                .GameMode => {
+                    const set_loc: *GameMode.Type = @ptrCast(@alignCast(request.SetLoc));
                     set_loc.* = @intCast(world_id);
                 },
             }

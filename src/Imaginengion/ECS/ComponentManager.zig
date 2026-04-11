@@ -57,9 +57,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.mComponentsArrays.deinit(engine_context.EngineAllocator());
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.clearAndFree(engine_context);
+                try component_array.clearAndFree(engine_context);
             }
         }
 
@@ -110,7 +110,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
             std.debug.assert(component_ind < components_types.len + 3);
 
-            const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id);
+            const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?;
             entity_skipfield.mSkipField.ChangeToSkipped(@intCast(component_ind));
 
             try self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);

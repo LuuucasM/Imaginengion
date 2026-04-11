@@ -5,7 +5,7 @@ const OpenGLIndexBuffer = @This();
 mCount: usize,
 mBufferID: c_uint,
 
-pub fn Init(indices: []u32, count: usize) OpenGLIndexBuffer {
+pub fn Init(indices: []const u32, count: usize) OpenGLIndexBuffer {
     var new_ib = OpenGLIndexBuffer{
         .mCount = count,
         .mBufferID = undefined,

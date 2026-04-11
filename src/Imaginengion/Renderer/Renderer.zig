@@ -95,7 +95,7 @@ pub fn SwapBuffers(self: *Renderer) void {
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_data: CameraData, camera_buffers: CameraBuffers, mode: u32) !void {
+pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_data: CameraData, camera_buffers: CameraBuffers, mode: u32) !void {
     std.debug.assert(mode == 0b0 or mode == 0b1);
 
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
@@ -207,7 +207,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
     }
 }
 
-fn EndRendering(self: *Renderer, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_buffers: CameraBuffers) !void {
+fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, camera_buffers: CameraBuffers) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
