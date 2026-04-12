@@ -6,7 +6,7 @@ const RendererBackend = enum {
     Vulkan,
 };
 
-pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, enable_tracy: ?bool, enable_nsight: ?bool) *std.Build.Step.Compile {
+pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, enable_tracy: ?bool, enable_nsight: ?bool) !*std.Build.Step.Compile {
     //---------------------------BUILD OPTIONS--------------------------
     var build_options = b.addOptions();
     if (enable_tracy != null and enable_tracy.? == true) {
@@ -20,125 +20,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         build_options.addOption(bool, "enable_nsight", false);
     }
     //--------------------------END BUILD OPTIONS------------------------
-
-    //--------------------------------------------------GLFW---------------------------------------------------------------------------
-    //make library
-    const glfw_lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "GLFW",
-        .root_module = b.addModule("GLFW", .{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/glfw.zig" } },
-        }),
-    });
-
-    //add include paths
-    glfw_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
-
-    //add c source files
-    {
-        const options = switch (builtin.os.tag) {
-            .windows => blk: {
-                glfw_lib.linkSystemLibrary("gdi32");
-                break :blk std.Build.Module.AddCSourceFilesOptions{
-                    .files = &[_][]const u8{
-                        "src/Imaginengion/Vendor/GLFW/src/context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/init.c",
-                        "src/Imaginengion/Vendor/GLFW/src/input.c",
-                        "src/Imaginengion/Vendor/GLFW/src/monitor.c",
-                        "src/Imaginengion/Vendor/GLFW/src/vulkan.c",
-                        "src/Imaginengion/Vendor/GLFW/src/window.c",
-                        "src/Imaginengion/Vendor/GLFW/src/platform.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_init.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_monitor.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_window.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_joystick.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_init.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_joystick.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_monitor.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_time.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_thread.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_window.c",
-                        "src/Imaginengion/Vendor/GLFW/src/wgl_context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/egl_context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/osmesa_context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/win32_module.c",
-                    },
-                    .flags = &[_][]const u8{
-                        "-D_GLFW_WIN32",
-                        "-D_CRT_SECURE_NO_WARNINGS",
-                    },
-                };
-            },
-            .linux => blk: {
-                break :blk std.Build.Module.AddCSourceFilesOptions{
-                    .files = &[_][]const u8{
-                        "src/Imaginengion/Vendor/GLFW/src/context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/init.c",
-                        "src/Imaginengion/Vendor/GLFW/src/input.c",
-                        "src/Imaginengion/Vendor/GLFW/src/monitor.c",
-                        "src/Imaginengion/Vendor/GLFW/src/vulkan.c",
-                        "src/Imaginengion/Vendor/GLFW/src/window.c",
-                        "src/Imaginengion/Vendor/GLFW/src/platform.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_init.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_monitor.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_window.c",
-                        "src/Imaginengion/Vendor/GLFW/src/null_joystick.c",
-                        "src/Imaginengion/Vendor/GLFW/src/x11_init.c",
-                        "src/Imaginengion/Vendor/GLFW/src/x11_monitor.c",
-                        "src/Imaginengion/Vendor/GLFW/src/xx1_window.c",
-                        "src/Imaginengion/Vendor/GLFW/src/xkb_unicode.c",
-                        "src/Imaginengion/Vendor/GLFW/src/posix_time.c",
-                        "src/Imaginengion/Vendor/GLFW/src/posix_thread.c",
-                        "src/Imaginengion/Vendor/GLFW/src/glx_context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/egl_context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/osmesa_context.c",
-                        "src/Imaginengion/Vendor/GLFW/src/linux_joystick.c",
-                    },
-                    .flags = &[_][]const u8{
-                        "-D_GLFW_X11",
-                        "-D_CRT_SECURE_NO_WARNINGS",
-                    },
-                };
-            },
-            else => @compileError("Do not support the OS given !\n"),
-        };
-        glfw_lib.addCSourceFiles(options);
-    }
-
-    //add system libraries
-    if (builtin.os.tag == .windows) {
-        glfw_lib.linkSystemLibrary("gdi32");
-    }
-    //-------------------------------------------------END GLFW----------------------------------------------------
-
-    //---------------------------------------------------GLAD----------------------------------------------
-    //make lib
-    const glad_lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "GLAD",
-        .root_module = b.addModule("GLAD", .{
-            .target = target,
-            .optimize = optimize,
-            .link_libc = true,
-            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/glad.zig" } },
-        }),
-    });
-    //add include paths
-    glad_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/include/" } });
-
-    //add c source files
-    {
-        const options = std.Build.Module.AddCSourceFilesOptions{
-            .files = &[_][]const u8{
-                "src/Imaginengion/Vendor/Glad/src/glad.c",
-            },
-        };
-        glad_lib.addCSourceFiles(options);
-    }
-    //------------------------------------------------------------END GLAD-----------------------------------------------------------------
 
     //-------------------------------------------------------------IMGUI---------------------------------------------------------
     //make library
@@ -157,8 +38,7 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     //add include paths
     imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/" } });
     imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });
-    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
-    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/Glad/include/" } });
+    imgui_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/include/" } });
 
     //add c source files
     {
@@ -169,14 +49,17 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                 "src/Imaginengion/Vendor/imgui/imgui/imgui_draw.cpp",
                 "src/Imaginengion/Vendor/imgui/imgui/imgui_tables.cpp",
                 "src/Imaginengion/Vendor/imgui/imgui/imgui_widgets.cpp",
-                "src/Imaginengion/Vendor/imgui/ImGuizmo/ImGuizmo.cpp",
+
+                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_sdl3.cpp",
+                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_sdlgpu3.cpp",
+
                 "src/Imaginengion/Vendor/imgui/cimgui.cpp",
-                "src/Imaginengion/Vendor/imgui/cimguizmo.cpp",
             },
             .flags = &[_][]const u8{
                 "-D_CRT_SECURE_NO_WARNINGS",
                 if (builtin.os.tag == .windows) "-lstdc++" else "",
-                "-D_IMGUI_IMPL_OPENGL_LOADER_GL3W",
+                "-DCIMGUI_USE_SDL3",
+                "-DCIMGUI_USE_SDLGPU",
             },
         };
         imgui_lib.addCSourceFiles(options);
@@ -312,6 +195,208 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     }
     //--------------------------------------------------END MINIAUDIO--------------------------------------------------------
 
+    //-------------------------------------------------SDL 3-------------------------------------------------------------
+    //make library
+    const sdl3_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "SDL3",
+        .root_module = b.addModule("SDL3", .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .link_libcpp = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/SDL3.zig" } },
+        }),
+    });
+
+    //add include paths
+    sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/include" } });
+    sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/src" } });
+    sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/include/build_config" } });
+    sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/egl" } });
+
+    //add c source files
+    {
+        var sources = std.ArrayList([]const u8).empty;
+        defer sources.deinit(b.allocator);
+
+        var src_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src", .{ .iterate = true });
+        defer src_dir.close();
+        var src_iter = src_dir.iterate();
+        while (try src_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/{s}", .{entry.name}));
+            }
+        }
+
+        var core_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/core", .{ .iterate = true });
+        defer core_dir.close();
+        var core_iter = core_dir.iterate();
+        while (try core_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/core/{s}", .{entry.name}));
+            }
+        }
+
+        var stdlib_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/stdlib", .{ .iterate = true });
+        defer stdlib_dir.close();
+        var stdlib_iter = stdlib_dir.iterate();
+        while (try stdlib_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/stdlib/{s}", .{entry.name}));
+            }
+        }
+
+        var events_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/events", .{ .iterate = true });
+        defer events_dir.close();
+        var events_iter = events_dir.iterate();
+        while (try events_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/events/{s}", .{entry.name}));
+            }
+        }
+
+        var misc_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/misc", .{ .iterate = true });
+        defer misc_dir.close();
+        var misc_iter = misc_dir.iterate();
+        while (try misc_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/misc/{s}", .{entry.name}));
+            }
+        }
+
+        var thread_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/thread", .{ .iterate = true });
+        defer thread_dir.close();
+        var thread_iter = thread_dir.iterate();
+        while (try thread_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/thread/{s}", .{entry.name}));
+            }
+        }
+
+        var timer_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/timer", .{ .iterate = true });
+        defer timer_dir.close();
+        var timer_iter = timer_dir.iterate();
+        while (try timer_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/timer/{s}", .{entry.name}));
+            }
+        }
+
+        var video_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/video", .{ .iterate = true });
+        defer video_dir.close();
+        var video_iter = video_dir.iterate();
+        while (try video_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/video/{s}", .{entry.name}));
+            }
+        }
+
+        var gpu_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/gpu", .{ .iterate = true });
+        defer gpu_dir.close();
+        var gpu_iter = gpu_dir.iterate();
+        while (try gpu_iter.next()) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/gpu/{s}", .{entry.name}));
+            }
+        }
+
+        if (target.result.os.tag == .windows) {
+            var core_windows_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/core/windows", .{ .iterate = true });
+            defer core_windows_dir.close();
+            var core_windows_iter = core_windows_dir.iterate();
+            while (try core_windows_iter.next()) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/core/windows/{s}", .{entry.name}));
+                }
+            }
+
+            var thread_windows_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/thread/windows", .{ .iterate = true });
+            defer thread_windows_dir.close();
+            var thread_windows_iter = thread_windows_dir.iterate();
+            while (try thread_windows_iter.next()) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/thread/windows/{s}", .{entry.name}));
+                }
+            }
+
+            var timer_windows_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/timer/windows", .{ .iterate = true });
+            defer timer_windows_dir.close();
+            var timer_windows_iter = timer_windows_dir.iterate();
+            while (try timer_windows_iter.next()) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/timer/windows/{s}", .{entry.name}));
+                }
+            }
+
+            var video_windows_dir = try std.fs.cwd().openDir("src/Imaginengion/Vendor/sdl3/src/video/windows", .{ .iterate = true });
+            defer video_windows_dir.close();
+            var video_windows_iter = video_windows_dir.iterate();
+            while (try video_windows_iter.next()) |entry| {
+                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".c")) {
+                    try sources.append(b.allocator, b.fmt("src/Imaginengion/Vendor/sdl3/src/video/windows/{s}", .{entry.name}));
+                }
+            }
+        }
+
+        sdl3_lib.addCSourceFiles(.{
+            .files = sources.items,
+            .flags = &[_][]const u8{
+                "-DHAVE_LIBC",
+                "-D_WINDOWS",
+                "-DWIN32",
+                "-D_CRT_SECURE_NO_WARNINGS",
+                "-DSDL_VIDEO_VULKAN=1",
+                "-DSDL_GPU=1",
+            },
+        });
+    }
+    if (target.result.os.tag == .windows) {
+        sdl3_lib.linkSystemLibrary("user32");
+        sdl3_lib.linkSystemLibrary("gdi32");
+        sdl3_lib.linkSystemLibrary("shell32");
+        sdl3_lib.linkSystemLibrary("ole32");
+        sdl3_lib.linkSystemLibrary("oleaut32");
+        sdl3_lib.linkSystemLibrary("uuid");
+        sdl3_lib.linkSystemLibrary("version");
+        sdl3_lib.linkSystemLibrary("winmm");
+        sdl3_lib.linkSystemLibrary("imm32");
+        sdl3_lib.linkSystemLibrary("setupapi");
+        sdl3_lib.linkSystemLibrary("advapi32");
+    }
+    //--------------------------------------------------END SDL 3--------------------------------------------------------
+
+    //-------------------------------------------------STB-------------------------------------------------------------
+    //make library
+    const stb_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "stb",
+        .root_module = b.addModule("stb", .{
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+            .link_libcpp = true,
+            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/stb/stb.zig" } },
+        }),
+    });
+
+    //add include paths
+    stb_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/stb" } });
+
+    //add c source files
+    {
+        const options = std.Build.Module.AddCSourceFilesOptions{
+            .files = &[_][]const u8{
+                "src/Imaginengion/Vendor/stb/stb.c",
+            },
+            .flags = &[_][]const u8{
+                "-std=c99",
+            },
+        };
+        stb_lib.addCSourceFiles(options);
+    }
+    //--------------------------------------------------END STB--------------------------------------------------------
+
     //------------------------------------------------------IMAGINENGION-------------------------------------------------------
     //make library
     const engine_lib = b.addLibrary(.{
@@ -326,11 +411,8 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                 .link_libcpp = true,
                 .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
                 .imports = &[_]std.Build.Module.Import{ std.Build.Module.Import{
-                    .name = "GLFW",
-                    .module = glfw_lib.root_module,
-                }, std.Build.Module.Import{
-                    .name = "GLAD",
-                    .module = glad_lib.root_module,
+                    .name = "SDL3",
+                    .module = sdl3_lib.root_module,
                 }, std.Build.Module.Import{
                     .name = "IMGUI",
                     .module = imgui_lib.root_module,
@@ -343,45 +425,15 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                 }, std.Build.Module.Import{
                     .name = "MiniAudio",
                     .module = miniaudio_lib.root_module,
+                }, std.Build.Module.Import{
+                    .name = "STB",
+                    .module = stb_lib.root_module,
                 } },
             },
         ),
     });
 
     engine_lib.root_module.addOptions("build_options", build_options);
-
-    //add include paths
-    engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });
-    engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/GLFW/include/" } });
-    engine_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/stb/" } });
-
-    //add c source files
-    {
-        const options = std.Build.Module.AddCSourceFilesOptions{
-            .files = &[_][]const u8{
-                "src/Imaginengion/Vendor/stb/stb.c",
-            },
-            .flags = &[_][]const u8{
-                "-std=c99",
-            },
-        };
-        engine_lib.addCSourceFiles(options);
-    }
-    {
-        const options = std.Build.Module.AddCSourceFilesOptions{
-            .files = &[_][]const u8{
-                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_glfw.cpp",
-                "src/Imaginengion/Vendor/imgui/imgui/backends/imgui_impl_opengl3.cpp",
-            },
-            .flags = &[_][]const u8{
-                "-D_CRT_SECURE_NO_WARNINGS",
-                "-DIMGUI_IMPL_API=extern\"C\"",
-                "-DIMGUI_IMPL_OPENGL_LOADER_GLAD",
-                "-includesrc/Imaginengion/Vendor/Glad/include/glad/glad.h",
-            },
-        };
-        engine_lib.addCSourceFiles(options);
-    }
 
     //return final engine_lib
     return engine_lib;

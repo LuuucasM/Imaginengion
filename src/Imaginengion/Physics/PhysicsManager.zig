@@ -102,9 +102,9 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineCont
     defer zone.Deinit();
 
     var scene_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
     };
 
     const transforms_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Not = .{ .mFirst = .{ .Component = EntityTransformComponent }, .mSecond = .{ .Component = ChildComponent } } });
@@ -200,18 +200,22 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
 
             var contact: ?Contact = blk: {
                 if (std.meta.activeTag(collider_origin.mColliderShape) == .Sphere and std.meta.activeTag(collider_target.mColliderShape) == .Sphere) {
+                    const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
+                    const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
                     break :blk Collisions.SphereSphere(
-                        collider_origin.AsSphere(),
-                        entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
-                        collider_target.AsSphere(),
-                        entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
+                        origin_transform.GetWorldPosition(),
+                        origin_transform.GetWorldScale(),
+                        target_transform.GetWorldPosition(),
+                        target_transform.GetWorldScale(),
                     );
                 } else if (std.meta.activeTag(collider_origin.mColliderShape) == .Box and std.meta.activeTag(collider_target.mColliderShape) == .Box) {
+                    const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
+                    const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
                     break :blk Collisions.BoxBox(
-                        collider_origin.AsBox(),
-                        entity_origin.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
-                        collider_target.AsBox(),
-                        entity_target.GetComponent(EntityTransformComponent).?.GetWorldPosition(),
+                        origin_transform.GetWorldPosition(),
+                        origin_transform.GetWorldScale(),
+                        target_transform.GetWorldPosition(),
+                        target_transform.GetWorldScale(),
                     );
                 } else {
                     std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mColliderShape), @tagName(collider_target.mColliderShape) });

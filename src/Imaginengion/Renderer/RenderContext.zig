@@ -1,45 +1,47 @@
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const Window = @import("../Windows/Window.zig");
 const builtin = @import("builtin");
+const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const Tracy = @import("../Core/Tracy.zig");
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("OpenGLContext.zig"),
+    .windows => @import("SDLContext.zig"),
     else => @import("UnsupportedContext.zig"),
 };
 
 const RenderContext = @This();
 
-mImpl: Impl,
+mImpl: Impl = .{},
 
-pub fn Init(window: *Window) RenderContext {
-    return RenderContext{
-        .mImpl = Impl.Init(window),
-    };
+pub fn Init(self: *RenderContext, window: *Window) void {
+    self.mImpl.Init(window);
+}
+pub fn Deinit(self: *RenderContext, window: *Window) void {
+    self.mImpl.Deinit(window);
 }
 
-pub fn SwapBuffers(self: RenderContext) void {
-    const zone = Tracy.ZoneInit("SwapBuffers", @src());
-    defer zone.Deinit();
-    self.mImpl.SwapBuffers();
-}
-
-pub fn SetELineThickness(self: RenderContext, thickness: f32) void {
-    self.mImpl.SetELineThickness(thickness);
+pub fn BeginFrame(self: *RenderContext, window: *Window, clear_color: Vec4f32) bool {
+    return self.mImpl.BeginFrame(window, clear_color);
 }
 
 pub fn GetMaxTextureImageSlots(self: RenderContext) usize {
     return self.mImpl.GetMaxTextureImageSlots();
 }
 
-pub fn DrawIndexed(self: RenderContext, vertex_array: *const VertexArray, index_count: usize) void {
-    const zone = Tracy.ZoneInit("RenderContext DrawIndexed", @src());
-    defer zone.Deinit();
-    self.mImpl.DrawIndexed(vertex_array, index_count);
+pub fn GetDevice(self: RenderContext) *anyopaque {
+    return self.mImpl.GetDevice();
 }
 
-pub fn DrawELines(self: RenderContext, vertex_array: VertexArray, vertex_count: usize) void {
-    self.mImpl.DrawELines(vertex_array, vertex_count);
+pub fn GetRenderPass(self: RenderContext) *anyopaque {
+    return self.mImpl.GetRenderPass();
+}
+
+pub fn GetCommandBuff(self: RenderContext) *anyopaque {
+    return self.mImpl.GetCommandBuff();
+}
+
+pub fn Draw(self: RenderContext) void {
+    self.mImpl.Draw();
 }
 
 pub fn PushDebugGroup(self: RenderContext, message: []const u8) void {

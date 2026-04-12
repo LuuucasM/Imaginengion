@@ -1,124 +1,66 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
-pub const TextureFormat = @import("InternalFrameBuffer.zig").TextureFormat;
-const InternalFrameBuffer = @import("InternalFrameBuffer.zig").FrameBuffer;
-const Tracy = @import("../Core/Tracy.zig");
-const FrameBuffer = @This();
+const EngineContext = @import("../Core/EngineContext.zig");
 
-mPtr: *anyopaque,
-mVTable: *const VTab,
-
-const VTab = struct {
-    Deinit: *const fn (*anyopaque, std.mem.Allocator) void,
-    Invalidate: *const fn (*anyopaque) void,
-    Bind: *const fn (*anyopaque) void,
-    Unbind: *const fn (*anyopaque) void,
-    Resize: *const fn (*anyopaque, usize, usize) void,
-    ClearFrameBuffer: *const fn (*anyopaque, Vec4f32) void,
-    GetColorAttachmentID: *const fn (*anyopaque, u8) usize,
-    ClearColorAttachment: *const fn (*anyopaque, u8, u32) void,
-    BindColorAttachment: *const fn (*anyopaque, u8, usize) void,
-    BindDepthAttachment: *const fn (*anyopaque, usize) void,
+const Impl = switch (builtin.os.tag) {
+    .windows => @import("SDLFrameBuffer.zig"),
+    else => @import("UnsupportedFrameBuffer.zig"),
 };
 
-pub fn Init(allocator: std.mem.Allocator, comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize, comptime is_swap_chain_target: bool, width: usize, height: usize) !FrameBuffer {
-    const internal_type = InternalFrameBuffer(color_texture_formats, depth_texture_format, samples, is_swap_chain_target);
+pub const TextureFormat = enum(u4) {
+    None = 0,
+    RGBA8 = 1,
+    RGBA16F = 2,
+    RGBA32F = 3,
+    RG32F = 4,
+    RED_INTEGER = 5,
+    DEPTH32F = 6,
+    DEPTH24STENCIL8 = 7,
+};
 
-    const impl = struct {
-        fn Deinit(ptr: *anyopaque, deinit_allocator: std.mem.Allocator) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.Deinit();
-            deinit_allocator.destroy(self);
+pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize) type {
+    return struct {
+        const Self = @This();
+        const ImplType = Impl(color_texture_formats, depth_texture_format, samples);
+        mImpl: ImplType,
+
+        pub const empty: Self = .{
+            .mImpl = .empty,
+        };
+
+        pub fn Init(self: Self, engine_context: *EngineContext, width: usize, height: usize) void {
+            self.mImpl.Init(engine_context, width, height);
         }
-        fn Invalidate(ptr: *anyopaque) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.Invalidate();
+        pub fn Deinit(self: Self, engine_context: *EngineContext) void {
+            self.mImpl.Deinit(engine_context);
         }
-        fn Bind(ptr: *anyopaque) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.Bind();
+        pub fn BeginRenderPass(self: *Self, engine_context: *EngineContext, clear_colors: [color_texture_formats.len]Vec4f32) *anyopaque {
+            return self.mImpl.BeginRenderPass(engine_context, clear_colors);
         }
-        fn Unbind(ptr: *anyopaque) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.Unbind();
+        pub fn EndRenderPass(self: Self, render_pass: *anyopaque) void {
+            self.mImpl.EndRenderPass(render_pass);
         }
-        fn Resize(ptr: *anyopaque, resize_width: usize, resize_height: usize) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.Resize(resize_width, resize_height);
+        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) void {
+            self.mImpl.Resize(engine_context, width, height);
         }
-        fn ClearFrameBuffer(ptr: *anyopaque, color: Vec4f32) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.ClearFrameBuffer(color);
+        pub fn Invalidate(self: *Self, engine_context: *EngineContext) void {
+            self.mImpl.Invalidate(engine_context);
         }
-        fn GetColorAttachmentID(ptr: *anyopaque, attachment_index: u8) usize {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            return self.GetColorAttachmentID(attachment_index);
+        pub fn GetColorTexture(self: Self, attachment_index: usize) *anyopaque {
+            return self.mImpl.GetColorTexture(attachment_index);
         }
-        fn ClearColorAttachment(ptr: *anyopaque, attachment_index: u8, value: u32) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.ClearColorAttachment(attachment_index, value);
+        pub fn GetColorSampler(self: Self, attachment_index: usize) *anyopaque {
+            return self.mImpl.GetColorSampler(attachment_index);
         }
-        fn BindColorAttachment(ptr: *anyopaque, attachment_index: u8, slot: usize) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.BindColorAttachment(attachment_index, slot);
+        pub fn GetDepthTexture(self: Self) *anyopaque {
+            return self.mImpl.GetDepthTexture();
         }
-        fn BindDepthAttachment(ptr: *anyopaque, slot: usize) void {
-            const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-            self.BindDepthAttachment(slot);
+        pub fn BindColorAttachment(self: Self, render_pass: *anyopaque, attachment_index: usize, slot: u32) void {
+            self.mImpl.BindColorAttachment(render_pass, attachment_index, slot);
+        }
+        pub fn BindDepthAttachment(self: Self, render_pass: *anyopaque, slot: u32) void {
+            self.mImpl.BindDepthAttachment(render_pass, slot);
         }
     };
-
-    const new_internal_fb = try allocator.create(internal_type);
-    new_internal_fb.* = internal_type.Init(width, height);
-
-    return FrameBuffer{
-        .mPtr = new_internal_fb,
-        .mVTable = &.{
-            .Deinit = impl.Deinit,
-            .Invalidate = impl.Invalidate,
-            .Bind = impl.Bind,
-            .Unbind = impl.Unbind,
-            .Resize = impl.Resize,
-            .ClearFrameBuffer = impl.ClearFrameBuffer,
-            .GetColorAttachmentID = impl.GetColorAttachmentID,
-            .ClearColorAttachment = impl.ClearColorAttachment,
-            .BindColorAttachment = impl.BindColorAttachment,
-            .BindDepthAttachment = impl.BindDepthAttachment,
-        },
-    };
-}
-
-pub fn Deinit(self: *FrameBuffer, engine_allocator: std.mem.Allocator) void {
-    self.mVTable.Deinit(self.mPtr, engine_allocator);
-}
-pub fn Invalidate(self: FrameBuffer) void {
-    self.mVTable.Invalidate(self.mPtr);
-}
-pub fn Bind(self: FrameBuffer) void {
-    const zone = Tracy.ZoneInit("FrameBuffer Bind", @src());
-    defer zone.Deinit();
-    self.mVTable.Bind(self.mPtr);
-}
-pub fn Unbind(self: FrameBuffer) void {
-    const zone = Tracy.ZoneInit("FrameBuffer UnBind", @src());
-    defer zone.Deinit();
-    self.mVTable.Unbind(self.mPtr);
-}
-pub fn Resize(self: FrameBuffer, width: usize, height: usize) void {
-    self.mVTable.Resize(self.mPtr, width, height);
-}
-pub fn ClearFrameBuffer(self: FrameBuffer, color: Vec4f32) void {
-    self.mVTable.ClearFrameBuffer(self.mPtr, color);
-}
-pub fn GetColorAttachmentID(self: FrameBuffer, attachment_index: u8) usize {
-    return self.mVTable.GetColorAttachmentID(self.mPtr, attachment_index);
-}
-pub fn ClearColorAttachment(self: FrameBuffer, attachment_index: u8, value: Vec4f32) void {
-    self.mVTable.ClearColorAttachment(self.mPtr, attachment_index, value);
-}
-pub fn BindColorAttachment(self: FrameBuffer, attachment_index: u8, slot: usize) void {
-    self.mVTable.BindColorAttachment(self.mPtr, attachment_index, slot);
-}
-pub fn BindDepthAttachment(self: FrameBuffer, slot: usize) void {
-    self.mVTable.BindDepthAttachment(self.mPtr, slot);
 }

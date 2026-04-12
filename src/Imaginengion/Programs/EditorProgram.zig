@@ -117,17 +117,18 @@ mActiveWorld: *SceneManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
+    ImGui.Init(&engine_context.mAppWindow);
     self._ComponentsPanel.Init();
     try self._ContentBrowserPanel.Init(engine_context);
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
 
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
-    self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context);
+    self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
 
     self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
     self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
-    self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context);
+    self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
 
     self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
     self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };

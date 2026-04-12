@@ -17,11 +17,11 @@ pub const Contact = struct {
     mPenetration: f32,
 };
 
-pub fn SphereSphere(sphere_origin: *Sphere, world_pos_origin: Vec3f32, sphere_target: *Sphere, world_pos_target: Vec3f32) ?Contact {
-    const delta = world_pos_target - world_pos_origin;
+pub fn SphereSphere(origin_pos: Vec3f32, origin_scale: Vec3f32, target_pos: Vec3f32, target_scale: Vec3f32) ?Contact {
+    const delta = target_pos - origin_pos;
 
     const dist = LinAlg.Vec3Mag(delta);
-    const radius_sum = sphere_origin.mRadius + sphere_target.mRadius;
+    const radius_sum = origin_scale[0] + target_scale[0];
 
     if (dist >= radius_sum) return null; //not a collision
 
@@ -41,12 +41,12 @@ pub fn SphereSphere(sphere_origin: *Sphere, world_pos_origin: Vec3f32, sphere_ta
     };
 }
 
-pub fn BoxBox(box_origin: *Box, world_pos_origin: Vec3f32, box_target: *Box, world_pos_target: Vec3f32) ?Contact {
-    const delta = world_pos_target - world_pos_origin;
+pub fn BoxBox(origin_pos: Vec3f32, origin_scale: Vec3f32, target_pos: Vec3f32, target_scale: Vec3f32) ?Contact {
+    const delta = target_pos - origin_pos;
 
-    const overlap_x = (box_origin.mHalfExtents[0] + box_target.mHalfExtents[0]) - @abs(delta[0]);
-    const overlap_y = (box_origin.mHalfExtents[1] + box_target.mHalfExtents[1]) - @abs(delta[1]);
-    const overlap_z = (box_origin.mHalfExtents[2] + box_target.mHalfExtents[2]) - @abs(delta[2]);
+    const overlap_x = (origin_scale[0] + target_scale[0]) - @abs(delta[0]);
+    const overlap_y = (origin_scale[1] + target_scale[1]) - @abs(delta[1]);
+    const overlap_z = (origin_scale[2] + target_scale[2]) - @abs(delta[2]);
 
     if (overlap_x <= 0 or overlap_y <= 0 or overlap_z <= 0) return null; //not a collision
 

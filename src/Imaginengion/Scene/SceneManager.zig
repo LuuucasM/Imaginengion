@@ -267,9 +267,9 @@ pub fn SortScenesFunc(ecs_manager_sc: ECSManagerScenes, a: SceneLayer.Type, b: S
 //===============================ECS MANAGER SC END==============================================
 
 //===============================ECS MANAGER Player==============================================
-pub fn CreatePlayer(self: *SceneManager, engine_context: *EngineContext) !Player {
-    const new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
-
+pub fn CreatePlayer(self: *SceneManager, engine_context: *EngineContext, new_player_config: Player.NewPlayerConfig) !Player {
+    var new_player = Player{ .mEntityID = try self.mECSManagerPL.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
+    try new_player.CreatePlayerConfig(engine_context, new_player_config);
     return new_player;
 }
 pub fn GetPlayer(self: *SceneManager, player_id: Player.Type) Player {

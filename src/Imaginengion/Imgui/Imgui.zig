@@ -6,7 +6,7 @@ const glfw = @import("../Core/CImports.zig").glfw;
 const Tracy = @import("../Core/Tracy.zig");
 const Imgui = @This();
 
-pub fn Init(window: *Window) !void {
+pub fn Init(window: *Window) void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
     _ = imgui.igCreateContext(null);

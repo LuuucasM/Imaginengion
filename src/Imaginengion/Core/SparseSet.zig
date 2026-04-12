@@ -14,11 +14,13 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
         const generation_t = std.meta.Int(.unsigned, gen_bits);
 
         mDenseToSparse: std.ArrayList(entity_t),
+        mFreeCount: usize,
         mSparseToDense: std.ArrayList(dense_t),
         mValues: std.ArrayList(value_t),
 
         pub const empty: Self = .{
             .mDenseToSparse = .empty,
+            .mFreeCount = 0,
             .mSparseToDense = .empty,
             .mValues = .empty,
         };
@@ -58,8 +60,9 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
             return dense_ind < self.mDenseToSparse.items.len and self.mDenseToSparse.items[dense_ind] == entity_id;
         }
 
-        pub fn HasFreeEntity(self: Self) ?entity_t {
-            if (self.mDenseToSparse.items.len < self.mDenseToSparse.capacity) {
+        pub fn GetFreeEntity(self: *Self) ?entity_t {
+            if (self.mFreeCount > 0) {
+                self.mFreeCount -= 1;
                 return self.mDenseToSparse.unusedCapacitySlice()[0];
             }
             return null;
@@ -77,6 +80,8 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
 
             _ = self.mDenseToSparse.swapRemove(dense_ind);
             _ = self.mValues.swapRemove(dense_ind);
+
+            self.mFreeCount += 1;
 
             if (dense_ind != last_dense) {
                 self.mSparseToDense.items[GetIndexFrom(moved_entity_id)] = dense_ind;

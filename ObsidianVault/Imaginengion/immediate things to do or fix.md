@@ -1,13 +1,4 @@
-
-- debug all the billion changes i made already
-	- compile debug
-	- runtime debug
-	- ensure that hitting the play button AND stop button both work with the physics box test
-	- ensure that deleting entities and scenes works
-- for changing editorprogram::onimguirender, since our selection is shared between all ecs objects instead I can grey out (not selectable) options that can not currently be done
-	- for example if I want to save a scene but my current selection is on an entity then 'Save Scene' top bar option should be not available
-	- this can be easily done since the selected object is just 1 union enum that we can check and greying out invalid options will prevent having to chase down doing checks when eventually i want to grey out the options anyway
-- change physics collider to use the build in entity transform rather than right now where the enum value is a struct "box" and struct "sphere". that way I can align the colliders with more how the rendering system works
-	- this is so for the next TODO to visualize colliders i can simply follow my sdf logic to implement it
+- change windowing/renderer/input to SDL3
+- change input system so that now we are not 
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

@@ -10,9 +10,11 @@
 //! via the appropriate `Run` method for the editor or game.
 
 const std = @import("std");
+const builtin = @import("builtin");
 const Window = @import("../Windows/Window.zig");
 const Program = @import("../Programs/Program.zig");
 const EngineContext = @import("EngineContext.zig");
+const sdl = @import("CImports.zig").sdl;
 const Tracy = @import("Tracy.zig");
 
 const Application: type = @This();
@@ -29,6 +31,13 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
+    if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
+        return error.SDLInitFail;
+    }
+    if (builtin.mode == .Debug) {
+        sdl.SDL_SetLogOutputFunction(SDLLogCallback, null);
+        sdl.SDL_SetLogPriority(sdl.SDL_LOG_CATEGORY_GPU, sdl.SDL_LOG_PRIORITY_VERBOSE);
+    }
     try self.mEngineContext.Init();
     try self.mProgram.Init(&self.mEngineContext);
 }
@@ -45,6 +54,7 @@ pub fn Deinit(self: *Application) !void {
     defer zone.Deinit();
     try self.mProgram.Deinit(&self.mEngineContext);
     try self.mEngineContext.DeInit();
+    sdl.SDL_Quit();
 }
 
 /// Starts the main loop of the engine.
@@ -67,5 +77,23 @@ pub fn Run(self: *Application) !void {
 
         _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
         self.mEngineContext.mEngineStats.ResetStats();
+    }
+}
+
+fn SDLLogCallback(_: ?*anyopaque, category: c_int, priority: sdl.SDL_LogPriority, message: [*c]const u8) callconv(.c) void {
+    const category_str = switch (category) {
+        sdl.SDL_LOG_CATEGORY_GPU => "GPU",
+        sdl.SDL_LOG_CATEGORY_APPLICATION => "APPLICATION",
+        sdl.SDL_LOG_CATEGORY_ERROR => "ERROR",
+        sdl.SDL_LOG_CATEGORY_RENDER => "RENDER",
+        else => "OTHER",
+    };
+
+    switch (priority) {
+        sdl.SDL_LOG_PRIORITY_INFO => std.log.info("[SDL/{s}] {s}", .{ category_str, message }),
+        sdl.SDL_LOG_PRIORITY_WARN => std.log.warn("[SDL/{s}] {s}", .{ category_str, message }),
+        sdl.SDL_LOG_PRIORITY_ERROR => std.log.err("[SDL/{s}] {s}", .{ category_str, message }),
+        sdl.SDL_LOG_PRIORITY_CRITICAL => std.log.err("[SDL/{s}] {s}", .{ category_str, message }),
+        else => std.log.debug("[SDL/{s}] {s}", .{ category_str, message }),
     }
 }

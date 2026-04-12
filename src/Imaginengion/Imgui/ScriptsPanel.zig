@@ -41,7 +41,6 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
 
         //making a child so that drag drop target will tae the entire available region
         if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
-            defer imgui.igEndChild();
             switch (selected_object) {
                 .entity => |e| try RenderScript(Entity, engine_context, e),
                 .scene_layer => |s| try RenderScript(SceneLayer, engine_context, s),
@@ -49,6 +48,7 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
                 .gamemode => |g| try RenderScript(GameMode, engine_context, g),
             }
         }
+        imgui.igEndChild();
 
         switch (selected_object) {
             .entity => |e| try ObjectTraits(Entity).HandleDragDropTarget(engine_context, e),

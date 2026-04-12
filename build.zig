@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) void {
     const enable_nsight = b.option(bool, "enable-nsight", "Enable the GPU profiler nvidia nsight");
     const no_bin = b.option(bool, "no-bin", "skip emitting compiler binary") orelse false;
     //function builds the entire engine lib including the dependencies and all
-    const engine_lib = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight);
+    const engine_lib = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight) catch @panic("error!!!");
 
     //make exe
     const editor_exe = b.addExecutable(.{

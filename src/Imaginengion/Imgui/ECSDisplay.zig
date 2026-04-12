@@ -51,9 +51,7 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     var already_popup = false;
 
     //child that is the width of the entire available region is needed so we can drag scenes from the content browser to load the scene
-    if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
-        defer imgui.igEndChild();
-
+    if (imgui.igBeginChild_Str(@tagName(ecs_type), available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         switch (ecs_type) {
             .GameObj => try RenderObjects(Entity, engine_context, scene_manager, &already_popup),
             .Scenes => try RenderObjects(SceneLayer, engine_context, scene_manager, &already_popup),
@@ -61,6 +59,7 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
             .GameModes => try RenderObjects(GameMode, engine_context, scene_manager, &already_popup),
         }
     }
+    imgui.igEndChild();
 }
 
 pub fn OnTogglePanelEvent(self: *ECSDisplayPanel) void {

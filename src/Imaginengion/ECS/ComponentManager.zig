@@ -42,6 +42,12 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             const skip_array = try ComponentArray(entity_t).Init(engine_allocator, SkipFieldComponent);
             try self.mComponentsArrays.append(engine_allocator, skip_array);
 
+            const entity_tag_array = try ComponentArray(entity_t).Init(engine_allocator, EntityTagComponent);
+            try self.mComponentsArrays.append(engine_allocator, entity_tag_array);
+
+            const script_tag_array = try ComponentArray(entity_t).Init(engine_allocator, ScriptTagComponent);
+            try self.mComponentsArrays.append(engine_allocator, script_tag_array);
+
             inline for (components_types) |component_type| {
                 const new_component_array = try ComponentArray(entity_t).Init(engine_allocator, component_type);
                 try self.mComponentsArrays.append(engine_allocator, new_component_array);
@@ -64,12 +70,16 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            _ = try self.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+            const internal_array: *InternalComponentArray(entity_t, SkipFieldComponent) = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
+            _ = try internal_array.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+
             _ = try self.AddComponent(engine_allocator, entity_id, EntityTagComponent{});
         }
 
         pub fn CreateScript(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            _ = try self.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+            const internal_array: *InternalComponentArray(entity_t, SkipFieldComponent) = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
+            _ = try internal_array.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+
             _ = try self.AddComponent(engine_allocator, entity_id, ScriptTagComponent{});
         }
 
@@ -140,10 +150,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             internal_array.ResetComponent(engine_context, entity_id, component);
         }
 
-        pub fn HasFreeEntity(self: Self) ?entity_t {
+        pub fn GetFreeEntity(self: Self) ?entity_t {
             const internal_array_t = InternalComponentArray(entity_t, SkipFieldComponent.StaticSkipFieldT);
             const skipfield_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
-            return skipfield_array.mComponents.HasFreeEntity();
+
+            return skipfield_array.mComponents.GetFreeEntity();
         }
 
         pub fn IsActiveEntity(self: Self, entity_id: entity_t) bool {

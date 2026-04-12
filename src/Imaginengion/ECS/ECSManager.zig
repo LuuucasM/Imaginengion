@@ -54,8 +54,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const zone = Tracy.ZoneInit("ECSM CreateEntity", @src());
             defer zone.Deinit();
 
-            const new_entity_id = if (self.mComponentManager.HasFreeEntity()) |entity_id| entity_id else self.mNextID;
+            const new_entity_id = if (self.mComponentManager.GetFreeEntity()) |entity_id| entity_id else self.mNextID;
             if (new_entity_id == self.mNextID) self.mNextID += 1;
+
+            std.debug.assert(!self.IsActiveEntity(new_entity_id));
 
             try self.mComponentManager.CreateEntity(engine_allocator, new_entity_id);
 
@@ -66,7 +68,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const zone = Tracy.ZoneInit("ECSM CreateEntity", @src());
             defer zone.Deinit();
 
-            const new_entity_id = if (self.mComponentManager.HasFreeEntity()) |entity_id| entity_id else self.mNextID;
+            const new_entity_id = if (self.mComponentManager.GetFreeEntity()) |entity_id| entity_id else self.mNextID;
             if (new_entity_id == self.mNextID) self.mNextID += 1;
 
             try self.mComponentManager.CreateScript(engine_allocator, new_entity_id);

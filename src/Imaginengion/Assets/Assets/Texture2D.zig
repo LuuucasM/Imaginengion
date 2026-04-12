@@ -15,7 +15,7 @@ pub const TexOptions = struct {
 };
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("Texture2Ds/OpenGLTexture2D.zig"),
+    .windows => @import("Texture2Ds/SDLTexture2D.zig"),
     else => @import("Texture2Ds/UnsupportedTexture2D.zig"),
 };
 
@@ -33,32 +33,24 @@ _Impl: Impl = .{},
 pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
     try self._Impl.Init(engine_context, abs_path, rel_path, asset_file);
 }
-
 pub fn Deinit(self: *Texture2D, engine_context: *EngineContext) !void {
     try self._Impl.Deinit(engine_context);
 }
-
 pub fn GetWidth(self: Texture2D) usize {
     return self._Impl.GetWidth();
 }
 pub fn GetHeight(self: Texture2D) usize {
     return self._Impl.GetHeight();
 }
-pub fn GetID(self: Texture2D) c_uint {
-    return self._Impl.GetID();
+pub fn GetTexture(self: Texture2D) *anyopaque {
+    return self._Impl.GetTexture();
 }
-pub fn GetBindlessID(self: Texture2D) u64 {
-    return self._Impl.GetBindlessID();
-}
-pub fn UpdateData(self: *Texture2D, data: *anyopaque, size: usize) void {
-    self._Impl.UpdateData(data, size);
-}
-pub fn UpdateDataPath(self: *Texture2D, path: []const u8) !void {
-    try self._Impl.UpdateDataPath(path);
+pub fn GetSampler(self: Texture2D) *anyopaque {
+    return self._Impl.GetSampler();
 }
 pub fn Bind(self: *Texture2D, slot: usize) void {
     self._Impl.Bind(slot);
 }
-pub fn Unbind(self: Texture2D, slot: usize) void {
-    self._Impl.Unbind(slot);
+pub fn UpdateDataPath(self: *Texture2D, path: []const u8) !void {
+    try self._Impl.UpdateDataPath(path);
 }
