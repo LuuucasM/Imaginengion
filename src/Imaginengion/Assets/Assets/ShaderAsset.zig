@@ -19,6 +19,8 @@ pub const TextureFormat = enum {
     Depth32Float,
 };
 
+pub const Stage = enum { Vertex, Fragment };
+
 pub const CullMode = enum {
     None,
     Front,

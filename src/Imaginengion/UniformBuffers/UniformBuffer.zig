@@ -1,8 +1,10 @@
 const builtin = @import("builtin");
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
+const Stage = @import("../Assets/Assets/ShaderAsset.zig").Stage;
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("OpenGLUniformBuffer.zig"),
+    .windows => @import("SDLUniformBuffer.zig"),
     else => @import("UnsupportedUniformBuffer.zig"),
 };
 
@@ -10,22 +12,14 @@ const UniformBuffer = @This();
 
 mImpl: Impl,
 
-pub fn Init(size: u32) UniformBuffer {
-    return UniformBuffer{
-        .mImpl = Impl.Init(size),
-    };
+pub const empty: UniformBuffer = .{
+    .mImpl = .empty,
+};
+
+pub fn Init(self: *UniformBuffer, slot: u32, stage: Stage) void {
+    self.mImpl.Init(slot, stage);
 }
 
-pub fn Bind(self: *UniformBuffer, binding: usize) void {
-    const zone = Tracy.ZoneInit("UniformBuffer Bind", @src());
-    defer zone.Deinit();
-    self.mImpl.Bind(binding);
-}
-
-pub fn Deinit(self: UniformBuffer) void {
-    self.mImpl.Deinit();
-}
-
-pub fn SetData(self: UniformBuffer, data: *anyopaque, size: u32, offset: u32) void {
-    self.mImpl.SetData(data, size, offset);
+pub fn SetData(self: UniformBuffer, engine_context: *EngineContext, data: *const anyopaque, size: u32) void {
+    self.mImpl.SetData(engine_context, data, size);
 }
