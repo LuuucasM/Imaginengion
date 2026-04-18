@@ -122,28 +122,28 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self._ContentBrowserPanel.Init(engine_context);
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
 
+    //EDITOR UI STUFF================================================
+
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
-
+    self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
+    _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
+    _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
+    self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
+    //=================================================================
+    //EDITOR VIEWPORT STUFF==================================================
     self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
     self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
     self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
-
-    self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
     self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
-
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "assets/scripts/EditorCameraInput.zig", .Eng);
-
-    self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
-
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
-
-    _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
-    self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
+    //================================================================================
 
     self.mActiveWorld = &engine_context.mGameWorld;
     self.mActiveWorldType = .Game;

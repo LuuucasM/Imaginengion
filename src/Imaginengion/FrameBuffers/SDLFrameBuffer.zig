@@ -3,12 +3,15 @@ const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const TextureFormat = @import("../Assets/Assets/ShaderAsset.zig").TextureFormat;
 const sdl = @import("../Core/CImports.zig").sdl;
 const EngineContext = @import("../Core/EngineContext.zig");
+const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const AssetHandle = @import("../Assets/AssetHandle.zig");
 
-pub fn SDLFrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize) type {
+pub fn SDLFrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize, comptime texture_ids: []const []const u8) type {
     return struct {
         const Self = @This();
 
         pub const empty: Self = .{
+            .mTextures = [_]AssetHandle{.{}} ** color_texture_formats.len,
             .mColorTextures = [_]?*sdl.SDL_GPUTexture{null} ** color_texture_formats.len,
             .mColorSamplers = [_]?*sdl.SDL_GPUSampler{null} ** color_texture_formats.len,
             .mDepthTexture = null,
@@ -26,9 +29,8 @@ pub fn SDLFrameBuffer(comptime color_texture_formats: []const TextureFormat, com
             else => @compileError("Unsupported sample count - must be 1, 2, 4, or 8\n"),
         };
 
-        mColorTextures: [color_texture_formats.len]?*sdl.SDL_GPUTexture,
-        mColorSamplers: [color_texture_formats.len]?*sdl.SDL_GPUSampler,
-        mDepthTexture: ?*sdl.SDL_GPUTexture,
+        mTextures: [color_texture_formats.len]AssetHandle,
+        mDepthTexture: AssetHandle = .{},
         mWidth: usize,
         mHeight: usize,
 
@@ -112,20 +114,21 @@ pub fn SDLFrameBuffer(comptime color_texture_formats: []const TextureFormat, com
             self.Destroy(engine_context);
             self.Create(engine_context);
         }
-        pub fn GetColorTexture(self: Self, attachment_index: usize) *anyopaque {
+        pub fn GetColorTexture(self: Self, attachment_index: usize) *sdl.SDL_GPUTexture {
             std.debug.assert(attachment_index < color_texture_formats.len);
             std.debug.assert(self.mColorTextures[attachment_index] != null);
             return self.mColorTextures[attachment_index].?;
         }
-        pub fn GetColorSampler(self: Self, attachment_index: usize) *anyopaque {
+        pub fn GetColorSampler(self: Self, attachment_index: usize) *sdl.SDL_GPUSampler {
             std.debug.assert(attachment_index < color_texture_formats.len);
             std.debug.assert(self.mColorSamplers[attachment_index] != null);
             return self.mColorSamplers[attachment_index].?;
         }
-        pub fn GetDepthTexture(self: Self) *anyopaque {
+        pub fn GetDepthTexture(self: Self) *sdl.SDL_GPUTexture {
             std.debug.assert(HasDepth);
             return self.mDepthTexture.?;
         }
+
         pub fn BindColorAttachment(self: Self, render_pass: *anyopaque, attachment_index: usize, slot: u32) void {
             std.debug.assert(attachment_index < color_texture_formats.len);
             std.debug.assert(self.mColorTextures[attachment_index] != null);

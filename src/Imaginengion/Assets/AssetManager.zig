@@ -37,12 +37,13 @@ const InternalData = struct {
     DefaultAudioAsset: AudioAsset = .{},
 };
 mAssetECS: ECSManagerAssets = undefined,
-mPathToIDEng: std.AutoHashMap(u64, AssetType) = undefined,
-mPathToIDPrj: std.AutoHashMap(u64, AssetType) = undefined,
+mPathToIDEng: std.AutoHashMapUnmanaged(u64, AssetType) = .empty,
+mPathToIDPrj: std.AutoHashMapUnmanaged(u64, AssetType) = .empty,
+mPathToIDGen: std.AutoHashMapUnmanaged(u64, AssetType) = .empty,
 mCWD: std.fs.Dir = undefined,
-mCWDPath: std.ArrayList(u8) = .{},
+mCWDPath: std.ArrayList(u8) = .empty,
 mProjectDirectory: ?std.fs.Dir = undefined,
-mProjectPath: std.ArrayList(u8) = .{},
+mProjectPath: std.ArrayList(u8) = .empty,
 
 _internal: InternalData = .{},
 
@@ -50,8 +51,6 @@ pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
     try self.mAssetECS.Init(engine_allocator);
-    self.mPathToIDEng = std.AutoHashMap(u64, AssetType).init(engine_allocator);
-    self.mPathToIDPrj = std.AutoHashMap(u64, AssetType).init(engine_allocator);
     self.mCWD = std.fs.cwd();
 
     var buffer: [260]u8 = undefined;
@@ -98,8 +97,9 @@ pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
 
     try self.mAssetECS.Deinit(engine_context);
 
-    self.mPathToIDEng.deinit();
-    self.mPathToIDPrj.deinit();
+    self.mPathToIDEng.deinit(engine_context.EngineAllocator());
+    self.mPathToIDPrj.deinit(engine_context.EngineAllocator());
+    self.mPathToIDGen.deinit(engine_context.EngineAllocator());
 
     self.mCWD.close();
 
@@ -126,6 +126,7 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocato
     const entity_id = switch (path_type) {
         .Eng => self.mPathToIDEng.get(path_hash),
         .Prj => self.mPathToIDPrj.get(path_hash),
+        .Gen => self.mPathToIDGen.get(path_hash),
     };
 
     if (entity_id) |id| {
@@ -136,8 +137,9 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocato
         const asset_handle = try self.CreateAsset(engine_allocator, rel_path, path_type);
         self.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs += 1;
         _ = try switch (path_type) {
-            .Eng => self.mPathToIDEng.put(path_hash, asset_handle.mID),
-            .Prj => self.mPathToIDPrj.put(path_hash, asset_handle.mID),
+            .Eng => self.mPathToIDEng.put(engine_allocator, path_hash, asset_handle.mID),
+            .Prj => self.mPathToIDPrj.put(engine_allocator, path_hash, asset_handle.mID),
+            .Gen => self.mPathToIDGen.put(engine_allocator, path_hash, asset_handle.mID),
         };
         return asset_handle;
     }

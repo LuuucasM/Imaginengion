@@ -1,7 +1,7 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
-const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
@@ -53,7 +53,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
 

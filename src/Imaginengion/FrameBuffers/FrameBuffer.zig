@@ -3,11 +3,6 @@ const builtin = @import("builtin");
 const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const EngineContext = @import("../Core/EngineContext.zig");
 
-const Impl = switch (builtin.os.tag) {
-    .windows => @import("SDLFrameBuffer.zig"),
-    else => @import("UnsupportedFrameBuffer.zig"),
-};
-
 pub const TextureFormat = enum(u4) {
     None = 0,
     RGBA8 = 1,
@@ -19,15 +14,23 @@ pub const TextureFormat = enum(u4) {
     DEPTH24STENCIL8 = 7,
 };
 
-pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize) type {
+pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize, comptime texture_ids: []const []const u8) type {
     return struct {
         const Self = @This();
-        const ImplType = Impl(color_texture_formats, depth_texture_format, samples);
+        const Impl = switch (builtin.os.tag) {
+            .windows => @import("SDLFrameBuffer.zig"),
+            else => @compileError("This cant happen yet!"),
+        };
+        const ImplType = Impl(color_texture_formats, depth_texture_format, samples, texture_ids);
         mImpl: ImplType,
 
         pub const empty: Self = .{
             .mImpl = .empty,
         };
+
+        comptime {
+            std.debug.assert(color_texture_formats.len == texture_ids.len);
+        }
 
         pub fn Init(self: Self, engine_context: *EngineContext, width: usize, height: usize) void {
             self.mImpl.Init(engine_context, width, height);

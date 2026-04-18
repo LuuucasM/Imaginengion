@@ -433,6 +433,10 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         ),
     });
 
+    // build.zig
+    const vulkan_sdk = std.process.getEnvVarOwned(b.allocator, "VULKAN_SDK") catch @panic("VULKAN_SDK not set");
+    engine_lib.addIncludePath(.{ .cwd_relative = b.pathJoin(&.{ vulkan_sdk, "Include" }) });
+
     engine_lib.root_module.addOptions("build_options", build_options);
 
     //return final engine_lib

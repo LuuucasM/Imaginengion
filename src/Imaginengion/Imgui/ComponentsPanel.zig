@@ -7,12 +7,6 @@ const GameMode = @import("../GameModes/GameMode.zig");
 
 const Renderer = @import("../Renderer/Renderer.zig");
 
-const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const VertexArray = @import("../VertexArrays/VertexArray.zig");
-const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
-const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
-const TextureFormat = FrameBuffer.TextureFormat;
-
 const ComponentsPanel = @This();
 
 const EngineContext = @import("../Core/EngineContext.zig");

@@ -113,13 +113,13 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
             self.mValues.clearAndFree(allocator);
         }
 
-        fn GetIndexFrom(entity_id: entity_t) index_t {
+        pub fn GetIndexFrom(entity_id: entity_t) index_t {
             //do some math here
             const index_mask: entity_t = std.math.maxInt(index_t);
             return @intCast(entity_id & index_mask);
         }
         //fn GetGenFrom
-        fn GetGenFrom(entity_id: entity_t) generation_t {
+        pub fn GetGenFrom(entity_id: entity_t) generation_t {
             return @intCast(entity_id >> index_bits);
         }
     };

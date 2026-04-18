@@ -3,7 +3,7 @@ const SDLUniformBuffer = @This();
 const EngineContext = @import("../Core/EngineContext.zig");
 const Stage = @import("../Assets/Assets/ShaderAsset.zig").Stage;
 
-mSlot: u32,
+mSlot: u32 = 0,
 mStage: Stage,
 
 pub const empty: SDLUniformBuffer = .{

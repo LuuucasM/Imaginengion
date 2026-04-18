@@ -1,4 +1,6 @@
+- change around the responsiblities for vulkan bindless reg and vulkan interop
+	- it seems that the vulkan interop, although it was made with extendability in mind, i think i should move all the pre-defined struct stuff into the interop function and then for the thing i need i can pass it as a pointer like i am already doing and that will work
+	- i think this is better since I have decided to separate sdl from vulkan 
 - change windowing/renderer/input to SDL3
-- change input system so that now we are not 
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

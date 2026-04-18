@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
+const TextureFormat = @import("../../FrameBuffers/FrameBuffer.zig").TextureFormat;
 
 const LinAlg = @import("../../Math/LinAlg.zig");
 const Vec4f32 = LinAlg.Vec4f32;
@@ -12,6 +13,13 @@ pub const TexOptions = struct {
     mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
     mTilingFactor: f32 = 1.0,
     mTexCoords: Vec4f32 = Vec4f32{ 0, 0, 1, 1 },
+};
+
+pub const GenDescriptor = struct {
+    width: usize,
+    height: usize,
+    is_render_target: bool,
+    texture_format: TextureFormat,
 };
 
 const Impl = switch (builtin.os.tag) {

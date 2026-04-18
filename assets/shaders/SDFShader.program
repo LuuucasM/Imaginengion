@@ -1,10 +1,10 @@
 {
-  "vertex":                    "SDFShader.vert.spv",
-  "fragment":                  "SDFShader.frag.spv",
-  "vertex_uniform_buffers":    0,
-  "vertex_storage_buffers":    0,
-  "vertex_samplers":           0,
-  "fragment_uniform_buffers":  4,
-  "fragment_storage_buffers":  2,
-  "fragment_samplers":         0
+  "mVertexPath":                    "SDFShader.vert.spv",
+  "mFragmentPath":                  "SDFShader.frag.spv",
+  "mVertexUniformBuffers":    0,
+  "mVertexStorageBuffers":    0,
+  "mVertexSamplers":           0,
+  "mFragmentUniformBuffers":  4,
+  "mFragmentStorageBuffers":  2,
+  "mFragmentSamplers":         0
 }

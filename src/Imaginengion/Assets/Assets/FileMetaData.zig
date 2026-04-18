@@ -6,6 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 pub const PathType = enum(u2) {
     Eng = 0,
     Prj = 1,
+    Gen = 2,
 };
 
 pub const Name: []const u8 = "FileMetaData";

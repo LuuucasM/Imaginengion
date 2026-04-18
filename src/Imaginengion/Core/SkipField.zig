@@ -47,7 +47,7 @@ pub fn StaticSkipField(size: usize) type {
             mSkipFieldRef: *Self,
             mI: usize,
 
-            pub fn Next(self: *FieldIterator) ?usize {
+            pub fn next(self: *FieldIterator) ?usize {
                 if (self.mI >= size) return null;
 
                 const current_index = self.mI;

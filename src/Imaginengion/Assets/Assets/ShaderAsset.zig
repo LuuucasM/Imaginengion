@@ -4,43 +4,24 @@ const builtin = @import("builtin");
 const VertexBufferElement = @import("../../VertexBuffers/VertexBufferElement.zig");
 const Tracy = @import("../../Core/Tracy.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
-
-const Impl = switch (builtin.os.tag) {
-    .windows => @import("Shaders/SDLShader.zig"),
-    else => @import("Shaders/UnsupportedShader.zig"),
-};
-
-pub const TextureFormat = enum {
-    None,
-    RGBA8,
-    BGRA8,
-    RGBA16Float,
-    RGBA32Float,
-    Depth32Float,
-};
-
-pub const Stage = enum { Vertex, Fragment };
-
-pub const CullMode = enum {
-    None,
-    Front,
-    Back,
-};
-pub const FillMode = enum {
-    Fill,
-    Line,
-};
-
-pub const PipelineConfig = struct {
-    mColorTargetFormat: TextureFormat,
-    mEnableDepthTest: bool = false,
-    mDepthWriteEnable: bool = false,
-    mEnableBlend: bool = true,
-    mCullMode: CullMode = .None,
-    mFillMode: FillMode = .Fill,
-};
-
 const ShaderAsset = @This();
+
+const ShaderManifest = struct {
+    mVertexPath: []const u8,
+    mFragmentPath: []const u8,
+    mVertexUniformBuffers: u32 = 0,
+    mVertexStorageBuffers: u32 = 0,
+    mVertexSamplers: u32 = 0,
+    mFragmentUniformBuffers: u32 = 0,
+    mFragmentStorageBuffers: u32 = 0,
+    mFragmentSamplers: u32 = 0,
+};
+
+const ShaderSources = struct {
+    mVertexBinary: []const u8,
+    mFragmentBinary: []const u8,
+    mManifest: ShaderManifest,
+};
 
 pub const Name: []const u8 = "ShaderAsset";
 pub const Ind: usize = blk: {
@@ -51,22 +32,55 @@ pub const Ind: usize = blk: {
     }
 };
 
-mImpl: Impl = .{},
+mShaderSources: ShaderSources = undefined,
 
-pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File, config: PipelineConfig) !void {
+pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []const u8, _: []const u8, asset_file: std.fs.File) !void {
     const zone = Tracy.ZoneInit("Shader Init", @src());
     defer zone.Deinit();
-    try self.mImpl.Init(engine_context, abs_path, rel_path, asset_file, config);
+
+    const file_path = std.fs.path.dirname(abs_path).?;
+
+    const file_size = try asset_file.getEndPos();
+    const json_buf = try engine_context.FrameAllocator().alloc(u8, file_size);
+    _ = try asset_file.readAll(json_buf);
+
+    const manifest = try std.json.parseFromSliceLeaky(
+        ShaderManifest,
+        engine_context.FrameAllocator(),
+        json_buf,
+        .{ .allocate = .alloc_if_needed },
+    );
+
+    const vert_binary = try LoadSpirvFile(engine_context, file_path, manifest.mVertex);
+    const frag_binary = try LoadSpirvFile(engine_context, file_path, manifest.mFragment);
+
+    std.debug.assert(vert_binary.len % 4 == 0);
+    std.debug.assert(frag_binary.len % 4 == 0);
+
+    self.mShaderSources = .{
+        .mVertexCode = vert_binary,
+        .mFragmentCode = frag_binary,
+        .mManifest = manifest,
+    };
 }
 
 pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Shader Deinit", @src());
     defer zone.Deinit();
-    try self.mImpl.Deinit(engine_context);
+
+    const engine_allocator = engine_context.EngineAllocator();
+
+    engine_allocator.free(self.mShaderSources.mVertexBinary);
+    engine_allocator.free(self.mShaderSources.mFragmentBinary);
 }
 
-pub fn Bind(self: ShaderAsset, engine_context: *EngineContext) void {
-    const zone = Tracy.ZoneInit("Shader Bind", @src());
-    defer zone.Deinit();
-    self.mImpl.Bind(engine_context);
+fn LoadSpirvFile(engine_context: *EngineContext, dir: []const u8, name: []const u8) ![]const u8 {
+    const path = try std.fs.path.join(engine_context.FrameAllocator(), &.{ dir, name });
+    const file = try std.fs.openFileAbsolute(path, .{});
+    defer file.close();
+
+    const size = try file.getEndPos();
+    const buf = try engine_context.EngineAllocator().alloc(u8, size);
+    _ = try file.readAll(buf);
+    return buf;
 }

@@ -7,3 +7,5 @@ pub const nfd = @import("NFD").c;
 pub const miniaudio = @import("MiniAudio").c;
 
 pub const sdl = @import("SDL3").c;
+
+pub const vk = @import("SDL3").vk;
