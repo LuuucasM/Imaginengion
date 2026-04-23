@@ -16,11 +16,20 @@ mDescriptorSetLayout: vk.VkDescriptorSetLayout,
 mDescriptorSet: vk.VkDescriptorSet,
 mSampler: vk.VkSampler,
 
-mFreeSkipList: SkipFieldT = .NoSkip,
-mImageViews: std.ArrayList(?vk.VkImageView) = .empty,
+mFreeSkipList: SkipFieldT,
+mImageViews: std.ArrayList(vk.VkImageView),
 
-pub fn Init(self: BindlessVulkanReg, engine_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
-    self.mImageViews.ensureTotalCapacity(engine_allocator, MAX_TEXTURES);
+pub const empty: BindlessVulkanReg = .{
+    .mDescriptorPool = undefined,
+    .mDescriptorSetLayout = undefined,
+    .mDescriptorSet = undefined,
+    .mSampler = undefined,
+    .mFreeSkipList = .AllSkip,
+    .mImageViews = .empty,
+};
+
+pub fn Init(self: *BindlessVulkanReg, engine_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
+    try self.mImageViews.ensureTotalCapacity(engine_allocator, MAX_TEXTURES);
     self.mImageViews.expandToCapacity();
     for (0..self.mImageViews.items.len) |i| {
         self.mImageViews.items[i] = null;
@@ -37,7 +46,7 @@ pub fn Deinit(self: *BindlessVulkanReg, engine_allocator: std.mem.Allocator) voi
     self.mImageViews.deinit(engine_allocator);
 }
 
-pub fn RegisterTexture2D(self: *BindlessVulkanReg, interop: *RenderInterop, texture: *SDLTexture2D, sdl_texture_format: c_int) !u32 {
+pub fn RegisterTexture2D(self: *BindlessVulkanReg, interop: *RenderInterop, texture: *SDLTexture2D, sdl_texture_format: c_int) u32 {
     const vk_texture_format = ToVKTextureFormat(sdl_texture_format);
 
     const new_slot = self.mFreeSkipList.mSkipField[0];
@@ -105,10 +114,10 @@ pub fn Unregister(self: *BindlessVulkanReg, interop: *RenderInterop, slot: u32) 
     std.debug.assert(slot < MAX_TEXTURES);
     std.debug.assert(self.mImageViews.items[slot] != null);
 
-    interop.DestroyImageView(self.mImageViews[slot]);
+    interop.DestroyImageView(self.mImageViews.items[slot].?);
 
-    self.mFreeSkipList.ChangeToUnskipped(slot);
-    self.mImageViews[slot] = null;
+    self.mFreeSkipList.ChangeToUnskipped(@intCast(slot));
+    self.mImageViews.items[slot] = null;
 
     std.log.debug("BindlessTextureRegistry: unregistered slot {d}", .{slot});
 }

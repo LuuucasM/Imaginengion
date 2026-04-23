@@ -1,11 +1,13 @@
 const std = @import("std");
 const vk = @import("../../Core/CImports.zig").vk;
+const sdl = @import("../../Core/CImports.zig").sdl;
 const RenderInterop = @import("RenderInterop.zig");
 const RenderBindlessReg = @import("RenderBindlessReg.zig");
 const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const VulkanPipeline = @This();
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
 const PipelineConfig = @import("../RenderPlatform.zig").PipelineConfig;
+const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
 
 comptime {
     std.debug.assert(@sizeOf(PushConstants) == 60);
@@ -62,44 +64,32 @@ pub fn Deinit(self: VulkanPipeline, interop: *RenderInterop) void {
     interop.DestroyDescriptorPoolLayout(self.mSSBOSetLayout);
 }
 
-pub fn UpdateStorageBuffers(self: VulkanPipeline, interop: *RenderInterop, quad_vk_buff: *vk.VkBuffer, glyph_vk_buff: *vk.VkBuffer) void {
-    const quads_buf_info = vk.VkDescriptorBufferInfo{
-        .buffer = quad_vk_buff,
-        .offset = 0,
-        .range = vk.VK_WHOLE_SIZE,
-    };
-    const glyphs_buf_info = vk.VkDescriptorBufferInfo{
-        .buffer = glyph_vk_buff,
-        .offset = 0,
-        .range = vk.VK_WHOLE_SIZE,
-    };
-    const writes = [_]vk.VkWriteDescriptorSet{
-        .{
+pub fn UpdateStorageBuffers(self: VulkanPipeline, interop: *RenderInterop, buffers: []StorageBufferBinding) void {
+    const writes: [16]vk.VkWriteDescriptorSet = undefined;
+
+    for (buffers, 0..) |buffer_binding, i| {
+        const sdl_buffer: *sdl.SDL_GPUBuffer = @ptrCast(buffer_binding.buffer);
+        const vk_buffer: *vk.VkBuffer = interop.GetRawBuffer(sdl_buffer);
+        const buf_info = vk.VkDescriptorBufferInfo{
+            .buffer = vk_buffer,
+            .offset = 0,
+            .range = vk.VK_WHOLE_SIZE,
+        };
+
+        writes[i] = vk.VkWriteDescriptorSet{
             .sType = vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .pNext = null,
             .dstSet = self.mSSBOSet,
-            .dstBinding = 0,
+            .dstBinding = buffer_binding.binding,
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .pImageInfo = null,
-            .pBufferInfo = &quads_buf_info,
+            .pBufferInfo = &buf_info,
             .pTexelBufferView = null,
-        },
-        .{
-            .sType = vk.VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .pNext = null,
-            .dstSet = self.mSSBOSet,
-            .dstBinding = 1,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-            .pImageInfo = null,
-            .pBufferInfo = &glyphs_buf_info,
-            .pTexelBufferView = null,
-        },
-    };
-    interop.UpdateDescriptorSets(&writes, 2);
+        };
+    }
+    interop.UpdateDescriptorSets(&writes, buffers.items.len);
 }
 
 pub fn Draw(self: VulkanPipeline, interop: *RenderInterop, cmd: *vk.VkCommandBuffer, registry: *RenderBindlessReg, push_constants: *PushConstants) void {

@@ -25,19 +25,11 @@ const InputPressedEvent = WindowEventData.InputPressedEvent;
 
 const ViewportPanel = @This();
 
-const GizmoType = enum(c_int) {
-    None = 0,
-    Translate = imgui.TRANSLATE,
-    Rotation = imgui.ROTATE,
-    Scale = imgui.SCALE,
-};
-
 //for viewport window
 mP_OpenViewport: bool = true,
 mIsFocusedViewport: bool = false,
 mViewportWidth: usize = 0,
 mViewportHeight: usize = 0,
-mGizmoType: GizmoType = .None,
 
 //for play window
 mP_OpenPlay: bool = true,
@@ -80,7 +72,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buff
     try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -105,7 +97,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers:
     try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-fn OnImguiRender(frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
+fn OnImguiRender(frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 
@@ -115,7 +107,6 @@ fn OnImguiRender(frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.Arr
     for (0..frame_buffers.items.len) |i| {
         const rect = area_rects.items[i];
         const frame_buffer = frame_buffers.items[i];
-        const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, frame_buffer.GetColorAttachmentID(0))));
 
         const x = viewport_pos.x + rect[0] * viewport_size.x;
         const y = viewport_pos.y + rect[1] * viewport_size.y;
@@ -125,7 +116,7 @@ fn OnImguiRender(frame_buffers: std.ArrayList(*FrameBuffer), area_rects: std.Arr
         const draw_list = imgui.igGetWindowDrawList();
         imgui.ImDrawList_AddImage(
             draw_list,
-            texture_id,
+            frame_buffer.GetColorTexture(0).GetTexture(),
             .{ .x = x, .y = y },
             .{ .x = x + w, .y = y + h },
             .{ .x = 0, .y = 0 },

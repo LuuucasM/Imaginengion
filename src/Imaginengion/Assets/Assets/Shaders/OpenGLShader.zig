@@ -1,0 +1,404 @@
+const std = @import("std");
+const glad = @import("../../../Core/CImports.zig").glad;
+const VertexBufferElement = @import("../../../VertexBuffers/VertexBufferElement.zig");
+const ShaderDataType = @import("../ShaderAsset.zig").ShaderDataType;
+const ShaderDataTypeSize = @import("../ShaderAsset.zig").ShaderDataTypeSize;
+const LinAlg = @import("../../../Math/LinAlg.zig");
+const EngineContext = @import("../../../Core/EngineContext.zig");
+const Vec2f32 = LinAlg.Vec2f32;
+const Vec3f32 = LinAlg.Vec3f32;
+const Vec4f32 = LinAlg.Vec4f32;
+const Mat3f32 = LinAlg.Mat3f32;
+const Mat4f32 = LinAlg.Mat4f32;
+
+const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
+
+const build_options = @import("build_options");
+
+pub const enable_nsight = build_options.enable_nsight;
+
+const OpenGLShader = @This();
+
+mBufferElements: std.ArrayList(VertexBufferElement) = .{},
+mUniforms: std.AutoHashMap(usize, i32) = undefined,
+mBufferStride: usize = undefined,
+mShaderID: u32 = undefined,
+
+pub fn Init(self: *OpenGLShader, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+    self.mUniforms = std.AutoHashMap(usize, i32).init(engine_context.EngineAllocator());
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const arena_allocator = arena.allocator();
+
+    const shader_sources = try ReadFile(asset_file, arena_allocator, abs_path);
+
+    try self.Compile(shader_sources, rel_path);
+    try self.CreateLayout(engine_context.EngineAllocator(), shader_sources.get(glad.GL_VERTEX_SHADER).?);
+    try self.DiscoverUniforms();
+
+    glad.glObjectLabel(glad.GL_PROGRAM, self.mShaderID, -1, "ShaderProgram");
+}
+
+pub fn Deinit(self: *OpenGLShader, engine_context: *EngineContext) !void {
+    glad.glDeleteProgram(self.mShaderID);
+
+    self.mBufferElements.deinit(engine_context.EngineAllocator());
+    self.mUniforms.deinit();
+}
+
+pub fn Bind(self: OpenGLShader) void {
+    glad.glUseProgram(self.mShaderID);
+}
+
+pub fn Unbind(self: OpenGLShader) void {
+    _ = self;
+    glad.glUseProgram(0);
+}
+
+pub fn GetLayout(self: OpenGLShader) std.ArrayList(VertexBufferElement) {
+    return self.mBufferElements;
+}
+
+pub fn GetStride(self: OpenGLShader) usize {
+    return self.mBufferStride;
+}
+
+pub fn SetUniform_Bool(self: OpenGLShader, name: []const u8, value: bool) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1i(self.mUniforms.get(hash_val).?, @intFromBool(value));
+}
+pub fn SetUniform_Int(self: OpenGLShader, name: []const u8, value: i32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1i(self.mUniforms.get(hash_val).?, value);
+}
+pub fn SetUniform_IntArray(self: OpenGLShader, name: []const u8, value: *i32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1iv(self.mUniforms.get(hash_val).?, value);
+}
+pub fn SetUniform_Float(self: OpenGLShader, name: []const u8, value: f32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform1f(self.mUniforms.get(hash_val).?, value);
+}
+pub fn SetUniform_Vec2(self: OpenGLShader, name: []const u8, value: Vec2f32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform2f(self.mUniforms.get(hash_val).?, value[0], value[1]);
+}
+pub fn SetUniform_Vec3(self: OpenGLShader, name: []const u8, value: Vec3f32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform3f(self.mUniforms.get(hash_val).?, value[0], value[1], value[2]);
+}
+pub fn SetUniform_Vec4(self: OpenGLShader, name: []const u8, value: Vec4f32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniform4f(self.mUniforms.get(hash_val).?, value[0], value[1], value[2], value[3]);
+}
+pub fn SetUniform_Mat3(self: OpenGLShader, name: []const u8, value: Mat3f32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniformMatrix3fv(self.mUniforms.get(hash_val).?, 1, glad.GL_FALSE, &value);
+}
+pub fn SetUniform_Mat4(self: OpenGLShader, name: []const u8, value: Mat4f32) void {
+    var hasher = std.hash.Fnv1a_32.init();
+    hasher.update(name);
+    const hash_val = hasher.final();
+    std.debug.assert(self.mUniforms.contains(hash_val));
+
+    glad.glUniformMatrix4fv(self.mUniforms.get(hash_val).?, 1, glad.GL_FALSE, &value);
+}
+
+fn CreateLayout(self: *OpenGLShader, engine_allocator: std.mem.Allocator, shader_source: []const u8) !void {
+    // Split shader into lines
+    var lines = std.mem.splitSequence(u8, shader_source, "\n");
+
+    while (lines.next()) |line| {
+        // Trim whitespace
+        const trimmed = std.mem.trim(u8, line, " \t");
+
+        // Check if line starts with layout
+        if (std.mem.startsWith(u8, trimmed, "layout")) {
+            // Find the "in" keyword after layout declaration
+            if (std.mem.indexOf(u8, trimmed, ") in ")) |in_pos| {
+                // Extract everything after "in" keyword
+                const after_in = trimmed[in_pos + 5 ..];
+
+                // Split by spaces to get type and variable name
+                var tokens = std.mem.splitSequence(u8, after_in, " ");
+                if (tokens.next()) |type_str| {
+                    // Convert type string to ShaderDataType
+                    const data_type = TypeStrToDataType(type_str);
+                    try self.mBufferElements.append(engine_allocator, .{ .mType = data_type, .mSize = ShaderDataTypeSize(data_type), .mOffset = 0, .mIsNormalized = false });
+                }
+            }
+        }
+    }
+    self.CalculateOffsets();
+    self.CalculateStride();
+}
+fn DiscoverUniforms(self: *OpenGLShader) !void {
+    var i: glad.GLuint = undefined;
+    var count: glad.GLint = undefined;
+    var size: glad.GLint = undefined;
+    var data_type: glad.GLenum = undefined;
+    var length: glad.GLsizei = undefined;
+    var uniname: [32]u8 = undefined;
+
+    glad.glGetProgramiv(self.mShaderID, glad.GL_ACTIVE_UNIFORMS, &count);
+
+    while (i < count) : (i += 1) {
+        glad.glGetActiveUniform(self.mShaderID, i, 32, &length, &size, &data_type, &uniname[0]);
+
+        const name_slice = uniname[0..@intCast(length)];
+
+        var final_name: []const u8 = undefined;
+        if (std.mem.indexOf(u8, name_slice, "[")) |found| {
+            final_name = name_slice[0..found];
+        } else {
+            final_name = name_slice;
+        }
+
+        const location = glad.glGetUniformLocation(self.mShaderID, final_name.ptr);
+
+        var hasher = std.hash.Fnv1a_32.init();
+        hasher.update(final_name);
+
+        try self.mUniforms.put(hasher.final(), location);
+    }
+}
+fn CalculateOffsets(self: OpenGLShader) void {
+    var offset: usize = 0;
+    for (self.mBufferElements.items) |*element| {
+        element.mOffset = offset;
+        offset += element.mSize;
+    }
+}
+fn CalculateStride(self: *OpenGLShader) void {
+    self.mBufferStride = 0;
+    for (self.mBufferElements.items) |*element| {
+        self.mBufferStride += element.mSize;
+    }
+}
+
+fn ReadFile(asset_file: std.fs.File, arena_allocator: std.mem.Allocator, abs_path: []const u8) !std.AutoArrayHashMap(c_uint, []const u8) {
+    var source = std.ArrayList(u8){};
+    defer source.deinit(arena_allocator);
+
+    const file_path = std.fs.path.dirname(abs_path).?;
+
+    const file_size = try asset_file.getEndPos();
+    try source.ensureTotalCapacity(arena_allocator, @intCast(file_size));
+    try source.resize(arena_allocator, @intCast(file_size));
+
+    _ = try asset_file.readAll(source.items);
+
+    var io_reader = std.io.Reader.fixed(source.items);
+
+    var reader = std.json.Reader.init(arena_allocator, &io_reader);
+    defer reader.deinit();
+
+    var shaders = std.AutoArrayHashMap(c_uint, []const u8).init(arena_allocator);
+
+    //deserialize
+    while (true) {
+        const token = try reader.next();
+        const token_value = try switch (token) {
+            .end_of_document => break,
+            .object_begin => continue,
+            .object_end => continue,
+            .string => |value| value,
+            .number => |value| value,
+
+            else => error.NotExpected,
+        };
+
+        const shader_type_str = try arena_allocator.dupe(u8, token_value);
+        defer arena_allocator.free(shader_type_str);
+
+        var shader_source = std.ArrayList(u8){};
+        defer shader_source.deinit(arena_allocator);
+
+        var shader_file: std.fs.File = undefined;
+
+        if (enable_nsight) {
+            const shader_name = try std.json.innerParse([]const u8, arena_allocator, &reader, PARSE_OPTIONS);
+            const name = try std.mem.join(arena_allocator, ".", &[_][]const u8{ shader_name, "spv" });
+            const shader_path = try std.fs.path.join(arena_allocator, &[_][]const u8{ file_path, name });
+
+            shader_file = try std.fs.openFileAbsolute(shader_path, .{});
+        } else {
+            const shader_name = try std.json.innerParse([]const u8, arena_allocator, &reader, PARSE_OPTIONS);
+            const shader_path = try std.fs.path.join(arena_allocator, &[_][]const u8{ file_path, shader_name });
+
+            shader_file = try std.fs.openFileAbsolute(shader_path, .{});
+        }
+        const shader_size = try shader_file.getEndPos();
+
+        try shader_source.ensureTotalCapacity(arena_allocator, shader_size);
+        try shader_source.resize(arena_allocator, shader_size);
+
+        _ = try shader_file.readAll(shader_source.items);
+
+        try shaders.put(ShaderTypeFromStr(shader_type_str), try arena_allocator.dupe(u8, shader_source.items));
+    }
+
+    return shaders;
+}
+
+fn Compile(self: *OpenGLShader, shader_sources: std.AutoArrayHashMap(c_uint, []const u8), rel_path: []const u8) !void {
+    const shader_id: glad.GLuint = glad.glCreateProgram();
+
+    var buffer: [2000]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buffer);
+    const allocator = fba.allocator();
+
+    var gl_shader_ids = std.ArrayList(glad.GLenum){};
+    defer gl_shader_ids.deinit(allocator);
+    var iter = shader_sources.iterator();
+    while (iter.next()) |entry| {
+        const shader_type = entry.key_ptr.*;
+        const shader_source = entry.value_ptr.*;
+
+        const shader = glad.glCreateShader(shader_type);
+
+        if (enable_nsight) {
+            glad.glShaderBinary(1, &shader, glad.GL_SHADER_BINARY_FORMAT_SPIR_V, shader_source.ptr, shader_source.len);
+
+            glad.glSpecializeShader(shader, "main", 0, null, null);
+        } else {
+            const len: c_int = @intCast(shader_source.len);
+            glad.glShaderSource(shader, 1, &shader_source.ptr, &len);
+
+            glad.glCompileShader(shader);
+        }
+
+        var is_compiled: glad.GLint = 0;
+        glad.glGetShaderiv(shader, glad.GL_COMPILE_STATUS, &is_compiled);
+        if (is_compiled == glad.GL_FALSE) {
+            var max_length: glad.GLint = 0;
+            glad.glGetShaderiv(shader, glad.GL_INFO_LOG_LENGTH, &max_length);
+
+            var info_log = try std.ArrayList(u8).initCapacity(allocator, @intCast(max_length));
+            defer info_log.deinit(allocator);
+            try info_log.resize(allocator, @intCast(max_length));
+            glad.glGetShaderInfoLog(shader, max_length, &max_length, info_log.items.ptr);
+
+            glad.glDeleteShader(shader);
+
+            std.log.err("Shader Compilation {s} Failure! {s}\n for file: {s}", .{ ShaderStrFromType(shader_type), info_log.items, rel_path });
+
+            return error.AssetInitFailed;
+        }
+        glad.glAttachShader(shader_id, shader);
+        try gl_shader_ids.append(allocator, shader);
+        glad.glObjectLabel(glad.GL_SHADER, shader, -1, ShaderStrFromType(shader_type).ptr);
+    }
+
+    self.mShaderID = shader_id;
+
+    glad.glLinkProgram(shader_id);
+
+    var is_linked: glad.GLint = 0;
+    glad.glGetProgramiv(shader_id, glad.GL_LINK_STATUS, &is_linked);
+    if (is_linked == glad.GL_FALSE) {
+        var max_length: glad.GLint = 0;
+        glad.glGetProgramiv(shader_id, glad.GL_INFO_LOG_LENGTH, &max_length);
+
+        var info_log = try std.ArrayList(u8).initCapacity(allocator, @intCast(max_length));
+        defer info_log.deinit(allocator);
+        try info_log.resize(allocator, @intCast(max_length));
+        glad.glGetProgramInfoLog(shader_id, max_length, &max_length, info_log.items.ptr);
+
+        glad.glDeleteProgram(shader_id);
+
+        for (gl_shader_ids.items) |id| {
+            glad.glDeleteShader(id);
+        }
+
+        std.log.err("Program failed to link! {s}\n for file {s}", .{ info_log.items, rel_path });
+
+        return error.AssetInitFailed;
+    }
+
+    for (gl_shader_ids.items) |id| {
+        glad.glDetachShader(shader_id, id);
+        glad.glDeleteShader(id);
+    }
+}
+
+fn ShaderTypeFromStr(str: []const u8) glad.GLenum {
+    if (std.mem.eql(u8, str, "vertex") == true) {
+        return glad.GL_VERTEX_SHADER;
+    } else if (std.mem.eql(u8, str, "fragment") == true) {
+        return glad.GL_FRAGMENT_SHADER;
+    } else {
+        @panic("Unkown shader type!\n");
+    }
+}
+
+fn ShaderStrFromType(shader_type: glad.GLenum) []const u8 {
+    if (shader_type == glad.GL_VERTEX_SHADER) {
+        return "Vertex Shader";
+    } else if (shader_type == glad.GL_FRAGMENT_SHADER) {
+        return "Fragment Shader";
+    } else {
+        @panic("That shader type isnt supported yet!\n");
+    }
+}
+
+fn TypeStrToDataType(str: []const u8) ShaderDataType {
+    if (std.mem.eql(u8, str, "float")) {
+        return ShaderDataType.Float;
+    } else if (std.mem.eql(u8, str, "vec2")) {
+        return ShaderDataType.Float2;
+    } else if (std.mem.eql(u8, str, "vec3")) {
+        return ShaderDataType.Float3;
+    } else if (std.mem.eql(u8, str, "vec4")) {
+        return ShaderDataType.Float4;
+    } else if (std.mem.eql(u8, str, "mat3")) {
+        return ShaderDataType.Mat3;
+    } else if (std.mem.eql(u8, str, "mat4")) {
+        return ShaderDataType.Mat4;
+    } else if (std.mem.eql(u8, str, "uint")) {
+        return ShaderDataType.UInt;
+    } else if (std.mem.eql(u8, str, "int")) {
+        return ShaderDataType.Int;
+    } else if (std.mem.eql(u8, str, "int2")) {
+        return ShaderDataType.Int2;
+    } else if (std.mem.eql(u8, str, "int3")) {
+        return ShaderDataType.Int3;
+    } else if (std.mem.eql(u8, str, "int4")) {
+        return ShaderDataType.Int4;
+    } else if (std.mem.eql(u8, str, "bool")) {
+        return ShaderDataType.Bool;
+    } else @panic("unrecognized type str!\n");
+}

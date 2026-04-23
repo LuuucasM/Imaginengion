@@ -11,9 +11,9 @@ const Impl = switch (builtin.os.tag) {
     else => @compileError("This isnt implemented yet"),
 };
 
-_Impl: Impl = .{},
+_Impl: Impl = .empty,
 
-pub fn Init(self: BindlessReg, engine_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
+pub fn Init(self: *BindlessReg, engine_allocator: std.mem.Allocator, interop: *RenderInterop) !void {
     try self._Impl.Init(engine_allocator, interop);
 }
 
@@ -21,7 +21,7 @@ pub fn Deinit(self: *BindlessReg, engine_allocator: std.mem.Allocator) void {
     self._Impl.Deinit(engine_allocator);
 }
 
-pub fn RegisterTexture2D(self: *BindlessReg, interop: *RenderInterop, texture: *SDLTexture2D, sdl_texture_format: c_int) !u32 {
+pub fn RegisterTexture2D(self: *BindlessReg, interop: *RenderInterop, texture: *SDLTexture2D, sdl_texture_format: c_int) u32 {
     try self._Impl.RegisterTexture2D(interop, texture, sdl_texture_format);
 }
 

@@ -4,6 +4,7 @@ const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetMan
 const Assets = @import("Assets.zig");
 const AssetMetaData = Assets.AssetMetaData;
 const FileMetaData = Assets.FileMetaData;
+const GenMetaData = Assets.GenMetaData;
 const ScriptAsset = Assets.ScriptAsset;
 const TextAsset = Assets.TextAsset;
 const Texture2D = Assets.Texture2D;
@@ -21,14 +22,40 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const AssetManager = @This();
 
-const PathType = FileMetaData.PathType;
-
 const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
 pub const AssetType = u32;
 
 pub const ECSManagerAssets = ECSManager(AssetType, &AssetsList);
+
+pub const FileSource = struct {
+    rel_path: []const u8,
+    path_type: PathType,
+};
+
+pub const ComputedSource = struct {
+    id: []const u8,
+};
+
+pub const AssetSource = union(enum) {
+    File: FileSource,
+    Computed: ComputedSource,
+    Default: struct {},
+    pub fn GetPathType(self: AssetSource) PathType {
+        return switch (self) {
+            .File => |f| f.path_type,
+            .Computed => PathType.Gen,
+            .Default => PathType.Eng,
+        };
+    }
+};
+
+pub const PathType = enum(u2) {
+    Eng = 0,
+    Prj = 1,
+    Gen = 2,
+};
 
 const InternalData = struct {
     DefaultFileMetaData: FileMetaData = .{},
@@ -51,13 +78,10 @@ pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
     try self.mAssetECS.Init(engine_allocator);
+
     self.mCWD = std.fs.cwd();
 
-    var buffer: [260]u8 = undefined;
-    var fba = std.heap.FixedBufferAllocator.init(&buffer);
-    const fba_allocator = fba.allocator();
-
-    const cwd_path = try std.fs.cwd().realpathAlloc(fba_allocator, ".");
+    const cwd_path = try std.fs.cwd().realpathAlloc(engine_context.FrameAllocator(), ".");
     _ = try self.mCWDPath.writer(engine_allocator).write(cwd_path);
 }
 
@@ -111,22 +135,24 @@ pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
     self.mProjectPath.deinit(engine_context.EngineAllocator());
 }
 
-pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !AssetHandle {
-    std.debug.assert(rel_path.len != 0);
-
-    if (std.mem.eql(u8, rel_path, "default") and path_type == .Eng) {
+pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_source: AssetSource) !AssetHandle {
+    if (asset_source == .Default) {
         return AssetHandle{
             .mID = AssetHandle.NullHandle,
             .mAssetManager = self,
         };
     }
 
-    const path_hash = ComputePathHash(rel_path);
+    const asset_hash = switch (asset_source) {
+        .File => |f| ComputePathHash(f.rel_path),
+        .Computed => |c| ComputePathHash(c.id),
+        .Default => @panic("shouldnt happen"),
+    };
 
-    const entity_id = switch (path_type) {
-        .Eng => self.mPathToIDEng.get(path_hash),
-        .Prj => self.mPathToIDPrj.get(path_hash),
-        .Gen => self.mPathToIDGen.get(path_hash),
+    const entity_id = switch (asset_source.GetPathType()) {
+        .Eng => self.mPathToIDEng.get(asset_hash),
+        .Prj => self.mPathToIDPrj.get(asset_hash),
+        .Gen => self.mPathToIDGen.get(asset_hash),
     };
 
     if (entity_id) |id| {
@@ -134,14 +160,21 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocato
         self.mAssetECS.GetComponent(AssetMetaData, id).?.mRefs += 1;
         return AssetHandle{ .mID = id, .mAssetManager = self };
     } else {
-        const asset_handle = try self.CreateAsset(engine_allocator, rel_path, path_type);
-        self.mAssetECS.GetComponent(AssetMetaData, asset_handle.mID).?.mRefs += 1;
-        _ = try switch (path_type) {
-            .Eng => self.mPathToIDEng.put(engine_allocator, path_hash, asset_handle.mID),
-            .Prj => self.mPathToIDPrj.put(engine_allocator, path_hash, asset_handle.mID),
-            .Gen => self.mPathToIDGen.put(engine_allocator, path_hash, asset_handle.mID),
+        const new_asset_id = switch (asset_source) {
+            .File => |f| try self.CreateAssetFile(engine_allocator, f),
+            .Computed => try self.CreateAssetGen(engine_allocator),
+            .Default => unreachable,
         };
-        return asset_handle;
+
+        self.mAssetECS.GetComponent(AssetMetaData, new_asset_id).?.mRefs += 1;
+
+        _ = try switch (asset_source.GetPathType()) {
+            .Eng => self.mPathToIDEng.put(engine_allocator, asset_hash, new_asset_id),
+            .Prj => self.mPathToIDPrj.put(engine_allocator, asset_hash, new_asset_id),
+            .Gen => self.mPathToIDGen.put(engine_allocator, asset_hash, new_asset_id),
+        };
+
+        return AssetHandle{ .mID = new_asset_id, .mAssetManager = self };
     }
 }
 
@@ -261,6 +294,7 @@ pub fn OpenFile(self: *AssetManager, rel_path: []const u8, path_type: PathType) 
     switch (path_type) {
         .Eng => return try self.mCWD.openFile(rel_path, .{}),
         .Prj => return try self.mProjectDirectory.?.openFile(rel_path, .{}),
+        .Gen => @panic("This shouldnt happen!"),
     }
 }
 
@@ -287,6 +321,7 @@ pub fn GetAbsPath(self: *AssetManager, allocator: std.mem.Allocator, rel_path: [
         .Prj => {
             return try std.fs.path.join(allocator, &[_][]const u8{ self.mProjectPath.items, rel_path });
         },
+        .Gen => unreachable,
     }
 }
 
@@ -355,33 +390,42 @@ fn ComputePathHash(path: []const u8) u64 {
     return hasher.final();
 }
 
-fn CreateAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) !AssetHandle {
-    const zone = Tracy.ZoneInit("AssetManager CreateAsset", @src());
+fn CreateAssetFile(self: *AssetManager, engine_allocator: std.mem.Allocator, file_source: FileSource) !AssetType {
+    const zone = Tracy.ZoneInit("AssetManager CreateAssetFile", @src());
     defer zone.Deinit();
 
-    const new_handle = AssetHandle{
-        .mID = try self.mAssetECS.CreateEntity(engine_allocator),
-        .mAssetManager = self,
-    };
-    _ = try self.mAssetECS.AddComponent(engine_allocator, new_handle.mID, AssetMetaData{ .mRefs = 0 });
-    const file_meta_data = try self.mAssetECS.AddComponent(engine_allocator, new_handle.mID, FileMetaData{
+    const new_asset_id = try self.mAssetECS.CreateEntity(engine_allocator);
+
+    _ = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
+    const file_meta_data = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, FileMetaData{
         .mLastModified = 0,
         .mSize = 0,
         .mHash = 0,
-        .mPathType = path_type,
+        .mPathType = file_source.path_type,
     });
 
-    _ = try file_meta_data.mRelPath.writer(engine_allocator).write(rel_path);
+    _ = try file_meta_data.mRelPath.writer(engine_allocator).write(file_source.rel_path);
 
-    const file = try self.OpenFile(rel_path, path_type);
+    const file = try self.OpenFile(file_source.rel_path, file_source.path_type);
     defer self.CloseFile(file);
     const fstats = try file.stat();
 
-    try self.UpdateAsset(new_handle.mID, file, fstats);
+    try self.UpdateAsset(new_asset_id, file, fstats);
 
-    return new_handle;
+    return new_asset_id;
 }
 
+fn CreateAssetGen(self: *AssetManager, engine_allocator: std.mem.Allocator) !AssetType {
+    const zone = Tracy.ZoneInit("AssetManager CreateAssetGen", @src());
+    defer zone.Deinit();
+
+    const new_asset_id = try self.mAssetECS.CreateEntity(engine_allocator);
+
+    _ = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
+    _ = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, GenMetaData{});
+
+    return new_asset_id;
+}
 fn DeleteAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_id: AssetType) !void {
     const zone = Tracy.ZoneInit("AssetManager DeleteAsset", @src());
     defer zone.Deinit();
@@ -464,7 +508,7 @@ fn RetryAssetExists(self: *AssetManager, frame_allocator: std.mem.Allocator, ass
     return true;
 }
 
-inline fn _ValidateAssetType(asset_type: type) void {
+fn _ValidateAssetType(asset_type: type) void {
     std.debug.assert(asset_type != FileMetaData);
     std.debug.assert(asset_type != AssetMetaData);
 }

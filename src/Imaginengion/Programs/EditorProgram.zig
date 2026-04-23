@@ -61,7 +61,6 @@ const RunSettings = @import("../Imgui/RunSettings.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
-const TextureFormat = @import("../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EditorProgram = @This();
 const Tracy = @import("../Core/Tracy.zig");
@@ -117,7 +116,7 @@ mActiveWorld: *SceneManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
-    ImGui.Init(&engine_context.mAppWindow);
+    ImGui.Init(engine_context);
     self._ComponentsPanel.Init();
     try self._ContentBrowserPanel.Init(engine_context);
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
@@ -133,6 +132,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
     //=================================================================
+
     //EDITOR VIEWPORT STUFF==================================================
     self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
     self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});

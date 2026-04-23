@@ -9,24 +9,22 @@ const SDFPipeline = @import("SDFPipeline.zig");
 const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
+const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
 
 const sdl = @import("../../Core/CImports.zig").sdl;
 
 const SDLPlatform = @This();
 
-mDevice: ?*sdl.SDL_GPUDevice = null,
+mDevice: *sdl.SDL_GPUDevice = undefined,
 mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
 mRenderInterop: RenderInterop = .{},
 mRenderBindlessReg: RenderBindlessReg = .{},
 mSDFPipeline: SDFPipeline = .{},
 
 pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, shader: *ShaderAsset) void {
-    std.debug.assert(self.mDevice == null);
-
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
 
-    self.mDevice = sdl.SDL_CreateGPUDevice(sdl.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null);
-    std.debug.assert(self.mDevice != null);
+    self.mDevice = sdl.SDL_CreateGPUDevice(sdl.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null) orelse unreachable;
 
     const claimed = sdl.SDL_ClaimWindowForGPUDevice(self.mDevice, sdl_window);
     std.debug.assert(claimed);
@@ -35,7 +33,7 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, shader: *ShaderA
     std.log.info("\tDriver: {s}", .{sdl.SDL_GetGPUDeviceDriver(self.mDevice)});
 
     self.mRenderInterop.Init(self.mDevice);
-    self.mRenderBindlessReg.Init(engine_context.EngineAllocator(), &self.mRenderInterop);
+    try self.mRenderBindlessReg.Init(engine_context.EngineAllocator(), &self.mRenderInterop);
     self.mSDFPipeline.Init(&self.mRenderInterop, &self.mRenderBindlessReg, shader);
 }
 
@@ -49,12 +47,9 @@ pub fn Deinit(self: *SDLPlatform, engine_context: *EngineContext) void {
 
     sdl.SDL_ReleaseWindowFromGPUDevice(self.mDevice, sdl_window);
     sdl.SDL_DestroyGPUDevice(self.mDevice);
-
-    self.mDevice = null;
 }
 
 pub fn BeginFrame(self: SDLPlatform, window: *Window) bool {
-    std.debug.assert(self.mDevice != null);
     self.mCurrentCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
     std.debug.assert(self.mCurrentCmdBuffer != null);
 
@@ -87,7 +82,6 @@ pub fn EndFrame(self: *SDLPlatform) void {
 }
 
 pub fn GetDevice(self: SDLPlatform) *sdl.SDL_GPUDevice {
-    std.debug.assert(self.mDevice != null);
     return self.mDevice.?;
 }
 
@@ -97,11 +91,15 @@ pub fn GetCommandBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
 }
 
 pub fn RegisterTexture2D(self: SDLPlatform, texture_2d: *anyopaque, texture_format: u32) u32 {
-    const sdl_texture2d: *SDLTexture2D = @ptrCast(texture_2d);
+    const sdl_texture2d: *SDLTexture2D = @ptrCast(@alignCast(texture_2d));
     self.mRenderBindlessReg.RegisterTexture2D(&self.mRenderInterop, sdl_texture2d, texture_format);
 }
 
-pub fn Unregister(self: SDLPlatform, slot: u32) void {
+pub fn UpdateStorageBuffers(self: SDLPlatform, buffers: []StorageBufferBinding) void {
+    self.mSDFPipeline.UpdateStorageBuffers(&self.mRenderInterop, buffers);
+}
+
+pub fn Unregister(self: *SDLPlatform, slot: u32) void {
     self.mRenderBindlessReg.Unregister(&self.mRenderInterop, slot);
 }
 

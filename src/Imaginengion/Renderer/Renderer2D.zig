@@ -1,5 +1,6 @@
 const std = @import("std");
 const SSBO = @import("../SSBOs/SSBO.zig");
+const sdl = @import("../Core/CImports.zig").sdl;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
@@ -23,25 +24,13 @@ const EntityTransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 
+const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
+
 const Tracy = @import("../Core/Tracy.zig");
 
 const Renderer2D = @This();
 
 const MAX_PATH_LEN = 256;
-
-pub const QuadVertexPositions = Mat4f32{
-    Vec4f32{ -0.5, -0.5, 0.0, 1.0 },
-    Vec4f32{ 0.5, -0.5, 0.0, 1.0 },
-    Vec4f32{ 0.5, 0.5, 0.0, 1.0 },
-    Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
-};
-
-pub const TextureOptions = extern struct {
-    Color: [4]f32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
-    TexCoords: [4]f32 = [4]f32{ 0, 0, 1, 1 },
-    TilingFactor: f32 = 1.0,
-    _padding0: [3]f32 = [3]f32{ 0.0, 0.0, 0.0 }, // Pad to 16-byte boundary
-};
 
 pub const QuadData = extern struct {
     //transform data
@@ -54,7 +43,7 @@ pub const QuadData = extern struct {
     TilingFactor: f32 = 1.0,
     Color: [4]f32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
     TexCoords: [4]f32 = [4]f32{ 0, 0, 1, 1 },
-    TexIndex: u64, // 8-byte aligned naturally here
+    TexIndex: u32, // 8-byte aligned naturally here
     _padding1: [2]f32 = [2]f32{ 0.0, 0.0 },
 };
 
@@ -72,43 +61,30 @@ pub const GlyphData = extern struct {
 
     AtlasBounds: [4]f32,
     PlaneBounds: [4]f32,
-    AtlasIndex: u64, // 8-byte aligned
-    TexIndex: u64, // 8-byte aligned
+    AtlasIndex: u32, // 8-byte aligned
+    TexIndex: u32, // 8-byte aligned
 };
 
-const RectVertexPositions = Mat4f32{
-    Vec4f32{ -0.5, -0.5, 0.0, 1.0 },
-    Vec4f32{ 0.5, -0.5, 0.0, 1.0 },
-    Vec4f32{ 0.5, 0.5, 0.0, 1.0 },
-    Vec4f32{ -0.5, 0.5, 0.0, 1.0 },
-};
+mQuadBuffer: SSBO = .{},
+mQuadBufferBase: std.ArrayList(QuadData) = .empty,
 
-mQuadBuffer: SSBO = undefined,
-mQuadBufferBase: std.ArrayList(QuadData) = .{},
-mQuadCountUB: UniformBuffer = undefined,
+mGlyphBuffer: SSBO = .{},
+mGlyphBufferBase: std.ArrayList(GlyphData) = .empty,
 
-mGlyphBuffer: SSBO = undefined,
-mGlyphBufferBase: std.ArrayList(GlyphData) = .{},
-mGlyphCountUB: UniformBuffer = undefined,
+pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
+    self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 0, .Fragment);
+    self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_context.EngineAllocator(), 100);
 
-pub fn Init(self: *Renderer2D, engine_allocator: std.mem.Allocator) !void {
-    self.mQuadBuffer = SSBO.Init(@sizeOf(QuadData) * 100);
-    self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_allocator, 100);
-    self.mQuadCountUB = UniformBuffer.Init(@sizeOf(c_uint));
-
-    self.mGlyphBuffer = SSBO.Init(@sizeOf(GlyphData) * 100);
-    self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_allocator, 100);
-    self.mGlyphCountUB = UniformBuffer.Init(@sizeOf(c_uint));
+    self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 1, .Fragment);
+    self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
 }
 
 pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mQuadBuffer.Deinit();
     self.mQuadBufferBase.deinit(engine_allocator);
-    self.mQuadCountUB.Deinit();
 
     self.mGlyphBuffer.Deinit();
     self.mGlyphBufferBase.deinit(engine_allocator);
-    self.mGlyphCountUB.Deinit();
 }
 
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
@@ -120,51 +96,61 @@ pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine
     const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
     defer zone.Deinit();
 
+    var buff: [(@sizeOf(StorageBufferBinding) * 2) + 1]u8 = undefined;
+    std.heap.FixedBufferAllocator.init(&buff);
+
+    var buffer_binding_array = std.ArrayList(StorageBufferBinding).initBuffer(&buff);
+    const quad_byte_size = self.mQuadBufferBase.items.len * @sizeOf(QuadData);
+    const glyph_byte_size = self.mGlyphBufferBase.items.len * @sizeOf(GlyphData);
+
     //quads
-    var quad_count: c_int = @intCast(self.mQuadBufferBase.items.len);
-    if (quad_count > 0) {
-        self.mQuadBuffer.SetData(self.mQuadBufferBase.items.ptr, @as(usize, @intCast(quad_count)) * @sizeOf(QuadData), 0);
+    const quad_resize = self.mQuadBuffer.SetData(engine_context, self.mQuadBufferBase.items.ptr, quad_byte_size, 0);
+    if (quad_resize) {
+        buffer_binding_array.appendAssumeCapacity(.{ .buffer = self.mQuadBuffer.GetBuffer(), .binding = self.mQuadBuffer.GetBinding() });
     }
-    self.mQuadCountUB.SetData(@ptrCast(&quad_count), @sizeOf(c_uint), 0);
 
     //glyphs
-    var glyph_count: c_int = @intCast(self.mGlyphBufferBase.items.len);
-    if (glyph_count > 0) {
-        self.mGlyphBuffer.SetData(self.mGlyphBufferBase.items.ptr, @as(usize, @intCast(glyph_count)) * @sizeOf(GlyphData), 0);
+    const glyph_resize = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
+    if (glyph_resize) {
+        buffer_binding_array.appendAssumeCapacity(.{ .buffer = self.mGlyphBuffer.GetBuffer(), .binding = self.mGlyphBuffer.GetBinding() });
     }
-    self.mGlyphCountUB.SetData(@ptrCast(&glyph_count), @sizeOf(c_uint), 0);
-
     //more shapes
+
+    if (buffer_binding_array.items.len > 0) {
+        engine_context.mRenderer.mPlatform.UpdateStorageBuffers(buffer_binding_array.items);
+    }
 
     //fill out stats
     switch (world_type) {
         .Game => {
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = @intCast(quad_count);
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = @intCast(glyph_count);
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
         },
         .Editor => {
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = @intCast(quad_count);
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = @intCast(glyph_count);
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
         },
         .Simulate => {
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = @intCast(quad_count);
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = @intCast(glyph_count);
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
         },
     }
 }
 
-pub fn BindBuffers(self: *Renderer2D) void {
-    const zone = Tracy.ZoneInit("R2D BindBuffers", @src());
-    defer zone.Deinit();
+pub fn GetQuadCount(self: Renderer2D) u32 {
+    return @intCast(self.mQuadBufferBase.items.len);
+}
 
-    //UBO
-    //start at 2 cuz 0 is camera and 1 is rendering mode
-    self.mQuadCountUB.Bind(2);
-    self.mGlyphCountUB.Bind(3);
+pub fn GetGlyphCount(self: Renderer2D) u32 {
+    return @intCast(self.mGlyphBufferBase.items.len);
+}
 
-    //SSBO
-    self.mQuadBuffer.Bind(0);
-    self.mGlyphBuffer.Bind(1);
+pub fn GetQuadsBuffer(self: *Renderer2D) *anyopaque {
+    return self.mQuadBuffer.GetBuffer().?;
+}
+
+pub fn GetGlyphsBuffer(self: *Renderer2D) *anyopaque {
+    return self.mGlyphBuffer.GetBuffer().?;
 }
 
 pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, quad_component: *QuadComponent) !void {

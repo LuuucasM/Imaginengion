@@ -267,6 +267,7 @@ pub fn StaticSkipField(size: usize) type {
 }
 
 fn AllSkipFn(comptime size: usize, comptime field_type: type) [size]field_type {
+    @setEvalBranchQuota(5000);
     var arr: [size]field_type = std.mem.zeroes([size]field_type);
     for (0..size) |i| {
         arr[i] = 1;

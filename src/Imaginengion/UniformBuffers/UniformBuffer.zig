@@ -10,7 +10,7 @@ const Impl = switch (builtin.os.tag) {
 
 const UniformBuffer = @This();
 
-mImpl: Impl = .{},
+mImpl: Impl = .empty,
 
 pub const empty: UniformBuffer = .{
     .mImpl = .empty,

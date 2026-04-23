@@ -10,8 +10,8 @@ const VulkanInterop = @This();
 pub const empty: VulkanInterop = .{};
 
 mVKInstance: vk.VkInstance = undefined,
-mVKPhysicalDevice: vk.PhysicalDevice = undefined,
-mVKDevice: vk.VkDevice,
+mVKPhysicalDevice: vk.VkPhysicalDevice = undefined,
+mVKDevice: vk.VkDevice = undefined,
 
 mGetInstanceProcAddr: vk.PFN_vkGetInstanceProcAddr = undefined,
 mGetDeviceProcAddr: vk.PFN_vkGetDeviceProcAddr = undefined,
@@ -40,8 +40,8 @@ mCmdBindDescriptorSets: vk.PFN_vkCmdBindDescriptorSets = undefined,
 mCmdPushConstants: vk.PFN_vkCmdPushConstants = undefined,
 mCmdDraw: vk.PFN_vkCmdDraw = undefined,
 
-mCreateImageView: vk.PFN_vkCreateImageView,
-mDestroyImageView: vk.PFN_vkDestroyImageView,
+mCreateImageView: vk.PFN_vkCreateImageView = undefined,
+mDestroyImageView: vk.PFN_vkDestroyImageView = undefined,
 
 pub fn Init(self: *VulkanInterop, sdl_device: *sdl.SDL_GPUDevice) void {
     const raw_get_proc_addr = sdl.SDL_Vulkan_GetVkGetInstanceProcAddr();
@@ -52,19 +52,19 @@ pub fn Init(self: *VulkanInterop, sdl_device: *sdl.SDL_GPUDevice) void {
 
     self.mVKInstance = @ptrCast(sdl.SDL_GetPointerProperty(
         props,
-        sdl.SDL_PROP_GPU_DEVICE_VULKAN_INSTANCE_POINTER,
+        "SDL.gpu.device.vulkan.instance",
         null,
     ) orelse std.debug.panic("Could not get VkInstance from SDL_GPU", .{}));
 
     self.mVKPhysicalDevice = @ptrCast(sdl.SDL_GetPointerProperty(
         props,
-        sdl.SDL_PROP_GPU_DEVICE_VULKAN_PHYSICAL_DEVICE_POINTER,
+        "SDL.gpu.device.vulkan.physical_device",
         null,
     ) orelse std.debug.panic("Could not get VkPhysicalDevice from SDL_GPU", .{}));
 
     self.mVKDevice = @ptrCast(sdl.SDL_GetPointerProperty(
         props,
-        sdl.SDL_PROP_GPU_DEVICE_VULKAN_DEVICE_POINTER,
+        "SDL.gpu.device.vulkan.device",
         null,
     ) orelse std.debug.panic("Could not get VkDevice from SDL_GPU", .{}));
 
@@ -152,8 +152,8 @@ pub fn UpdateDescriptorSets(self: VulkanInterop, writes: *anyopaque, num: usize)
 }
 
 pub fn DestroyImageView(self: VulkanInterop, image_view: *anyopaque) void {
-    const vk_image_view: *vk.VkImageView = @ptrCast(image_view);
-    self.mDestroyImageView(self.mVKDevice, vk_image_view, null);
+    const vk_image_view: vk.VkImageView = @ptrCast(@alignCast(image_view));
+    self.mDestroyImageView.?(self.mVKDevice, vk_image_view, null);
 }
 
 pub fn CreateShaderModule(self: VulkanInterop, module: *anyopaque, module_info: *anyopaque) !void {
@@ -165,7 +165,7 @@ pub fn CreateShaderModule(self: VulkanInterop, module: *anyopaque, module_info: 
 }
 
 pub fn DestroyShaderModule(self: VulkanInterop, module: *anyopaque) void {
-    const vk_module: *vk.VkShaderModule = @ptrCast(module);
+    const vk_module: vk.VkShaderModule = @ptrCast(module);
     self.mDestroyShaderModule(self.mVKDevice, vk_module, null);
 }
 

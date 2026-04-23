@@ -2,65 +2,83 @@ const std = @import("std");
 const Application = @import("../Core/Application.zig");
 const Window = @import("../Windows/Window.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
-const glfw = @import("../Core/CImports.zig").glfw;
+const sdl = @import("../Core/CImports.zig").sdl;
 const Tracy = @import("../Core/Tracy.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const Imgui = @This();
 
-pub fn Init(window: *Window) void {
+pub fn Init(engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
     _ = imgui.igCreateContext(null);
     const io: *imgui.ImGuiIO = imgui.igGetIO();
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable;
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable;
+    io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+    io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+    io.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable; // Enable Docking
+    io.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 
     const style = imgui.igGetStyle();
 
     imgui.igStyleColorsDark(style);
     //imgui.igStyleColorsLight(style);
 
-    if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
-        style.*.WindowRounding = 0;
-        style.*.Colors[2].w = 1;
+    // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
+    if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable) {
+        style.WindowRounding = 0.0;
+        style.Colors[imgui.ImGuiCol_WindowBg].w = 1.0;
     }
 
     SetDarkThemeColors(style);
 
-    _ = imgui.ImGui_ImplGlfw_InitForOpenGL(@ptrCast(window.GetNativeWindow()), true);
-    _ = imgui.ImGui_ImplOpenGL3_Init("#version 460");
+    _ = imgui.ImGui_ImplSDL3_InitForSDLGPU(engine_context.mAppWindow.GetNativeWindow());
+    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+    const init_info: imgui.ImGui_ImplSDLGPU3_InitInfo = .{
+        .Device = device,
+        .ColorTargetFormat = sdl.SDL_GetGPUSwapchainTextureFormat(device, engine_context.mAppWindow.GetNativeWindow()),
+        .MSAASamples = sdl.SDL_GPU_SAMPLECOUNT_1,
+        .SwapchainComposition = sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        .PresentMode = sdl.SDL_GPU_PRESENTMODE_VSYNC,
+    };
+    _ = imgui.ImGui_ImplSDLGPU3_Init(&init_info);
 }
-pub fn Deinit() void {
+pub fn Deinit(engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
     defer zone.Deinit();
-    imgui.ImGui_ImplOpenGL3_Shutdown();
-    imgui.ImGui_ImplGlfw_Shutdown();
+
+    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+
+    sdl.SDL_WaitForGPUIdle(device);
+    imgui.ImGui_ImplSDLGPU3_Shutdown();
+    imgui.ImGui_ImplSDL3_Shutdown();
     imgui.igDestroyContext(null);
 }
 pub fn Begin() void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
     defer zone.Deinit();
-    imgui.ImGui_ImplOpenGL3_NewFrame();
-    imgui.ImGui_ImplGlfw_NewFrame();
+    imgui.ImGui_ImplSDLGPU3_NewFrame();
+    imgui.ImGui_ImplSDL3_NewFrame();
     imgui.igNewFrame();
-    imgui.ImGuizmo_BeginFrame();
 }
-pub fn End(window: *Window) void {
+pub fn End(engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("ImguiEnd ", @src());
     defer zone.Deinit();
 
-    const my_null_ptr: ?*anyopaque = null;
     const io: *imgui.ImGuiIO = imgui.igGetIO();
-
-    io.DisplaySize = .{ .x = @floatFromInt(window.GetWidth()), .y = @floatFromInt(window.GetHeight()) };
+    io.DisplaySize = .{
+        .x = @floatFromInt(engine_context.mAppWindow.GetWidth()),
+        .y = @floatFromInt(engine_context.mAppWindow.GetHeight()),
+    };
 
     imgui.igRender();
-    imgui.ImGui_ImplOpenGL3_RenderDrawData(imgui.igGetDrawData());
+
+    const cmd_buffer: *sdl.SDL_GPUCommandBuffer = @ptrCast(engine_context.mRenderer.mPlatform.GetCommandBuff());
+
+    const draw_data = imgui.igGetDrawData();
+    imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, cmd_buffer);
+
     if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
-        const backup_current_context: ?*glfw.struct_GLFWwindow = glfw.glfwGetCurrentContext();
         imgui.igUpdatePlatformWindows();
-        imgui.igRenderPlatformWindowsDefault(@ptrCast(@alignCast(my_null_ptr)), @ptrCast(@alignCast(my_null_ptr)));
-        glfw.glfwMakeContextCurrent(backup_current_context);
+        imgui.igRenderPlatformWindowsDefault(null, null);
     }
 }
 

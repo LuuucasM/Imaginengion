@@ -9,7 +9,7 @@ const Impl = switch (builtin.os.tag) {
     else => @compileError("this shouldnt ever happen!"),
 };
 
-_Impl: Impl = .{},
+_Impl: Impl = .empty,
 
 pub fn Init(self: *RenderInterop, sdl_device: *sdl.SDL_GPUDevice) void {
     self._Impl.Init(sdl_device);

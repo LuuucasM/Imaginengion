@@ -2,7 +2,6 @@ const std = @import("std");
 const sdl = @import("../../../Core/CImports.zig").sdl;
 const stb = @import("../../../Core/CImports.zig").stb;
 const EngineContext = @import("../../../Core/EngineContext.zig");
-const GenDescriptor = @import("../Texture2D.zig").GenDescriptor;
 const SDLTexture2D = @This();
 
 const SDL_TEXTURE_FORMAT = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
@@ -52,7 +51,7 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
     self._Width = width;
     self._Height = height;
 
-    self.mBindlessInd = try engine_context.mRenderer.mPlatform.RegisterTexture2D(self, SDL_TEXTURE_FORMAT);
+    self.mBindlessInd = engine_context.mRenderer.mPlatform.RegisterTexture2D(self, SDL_TEXTURE_FORMAT);
 
     std.log.debug("SDLGPUTexture2D: loaded '{s}' → bindless slot {d}", .{ rel_path, self.mSlot });
 }

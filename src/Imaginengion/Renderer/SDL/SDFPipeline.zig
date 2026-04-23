@@ -1,3 +1,4 @@
+const std = @import("std");
 const builtin = @import("builtin");
 const sdl = @import("../../Core/CImports.zig").sdl;
 const RenderInterop = @import("RenderInterop.zig");
@@ -5,6 +6,7 @@ const RenderBindlessReg = @import("RenderBindlessReg.zig");
 const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const PipelineConfig = @import("../RenderPlatform.zig").PipelineConfig;
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
+const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("VulkanPipeline.zig"),
@@ -23,8 +25,8 @@ pub fn Deinit(self: RenderPipeline, interop: *RenderInterop) void {
     self._Impl.Deinit(interop);
 }
 
-pub fn UpdateStorageBuffers(self: RenderPipeline, interop: *RenderInterop, quads_buffer: *sdl.SDL_GPUBuffer, glyphs_buffer: *sdl.SDL_GPUBuffer) void {
-    self._Impl.UpdateStorageBuffers(interop, interop.GetBuffer(quads_buffer), interop.GetBuffer(glyphs_buffer));
+pub fn UpdateStorageBuffers(self: RenderPipeline, interop: *RenderInterop, buffers: []StorageBufferBinding) void {
+    self._Impl.UpdateStorageBuffers(interop, buffers);
 }
 
 pub fn Draw(self: RenderPipeline, interop: *RenderInterop, cmd: *sdl.SDL_GPUCommandBuffer, bindless_reg: *RenderBindlessReg, push_constants: *PushConstants) void {

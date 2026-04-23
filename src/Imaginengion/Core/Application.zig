@@ -31,7 +31,7 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application) !void {
-    if (sdl.SDL_Init(sdl.SDL_INIT_VIDEO) != 0) {
+    if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.SDLInitFail;
     }
     if (builtin.mode == .Debug) {

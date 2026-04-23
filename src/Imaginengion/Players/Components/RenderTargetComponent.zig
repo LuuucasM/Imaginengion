@@ -1,11 +1,11 @@
 const std = @import("std");
-const FrameBuffer = @import("../../FrameBuffers/FrameBuffer.zig");
+
 const VertexArray = @import("../../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const TextureFormat = @import("../../FrameBuffers/InternalFrameBuffer.zig").TextureFormat;
+const OutputFrameBuffer = @import("../../Renderer/Renderer.zig").OutputFrameBuffer;
 
 const RenderTargetComponent = @This();
 
@@ -18,20 +18,14 @@ pub const Ind: usize = blk: {
     }
 };
 
-mFrameBuffer: FrameBuffer = undefined,
-mVertexArray: VertexArray = undefined,
-mVertexBuffer: VertexBuffer = undefined,
-mIndexBuffer: IndexBuffer = undefined,
+mFrameBuffer: OutputFrameBuffer = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
     self.mFrameBuffer.Deinit(engine_context.EngineAllocator());
-    self.mVertexArray.Deinit(engine_context.EngineAllocator());
-    self.mVertexBuffer.Deinit(engine_context.EngineAllocator());
-    self.mIndexBuffer.Deinit();
 }
 
-pub fn SetViewportSize(self: *RenderTargetComponent, width: usize, height: usize) void {
-    self.mFrameBuffer.Resize(width, height);
+pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, width: usize, height: usize) void {
+    self.mFrameBuffer.Resize(engine_context, width, height);
 }
 
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
@@ -63,9 +57,6 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.jso
     }
 
     return RenderTargetComponent{
-        .mFrameBuffer = try FrameBuffer.Init(engine_context.EngineAllocator(), &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900),
-        .mVertexArray = VertexArray.Init(),
-        .mVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32)),
-        .mIndexBuffer = IndexBuffer.Init(&[_]u32{ 0, 1, 2, 2, 3, 0 }, 6),
+        .mFrameBuffer = .empty.Init(engine_context, 1600, 900),
     };
 }

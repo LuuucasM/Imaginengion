@@ -140,11 +140,10 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
     const back_texture = try self.mBackArrowTextureHandle.GetAsset(engine_context, Texture2D);
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, back_texture.GetID())));
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(
         "back",
-        texture_id,
+        back_texture.GetTexture(),
         .{ .x = thumbnail_size, .y = thumbnail_size },
         .{ .x = 0, .y = 0 },
         .{ .x = 1, .y = 1 },
@@ -180,7 +179,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
+            try RenderImageButton(entry_name, texture_asset, thumbnail_size);
 
             if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
                 _ = try self.mCurrentPath.writer(engine_context.EngineAllocator()).write("/");
@@ -194,7 +193,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texture_asset.GetID(), thumbnail_size);
+            try RenderImageButton(entry_name, texture_asset, thumbnail_size);
 
             try self.DragDropSourceBase(engine_context, entry_name, "PNGLoad");
             NextColumn(entry_name);
@@ -203,7 +202,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
+            try RenderImageButton(entry_name, texutre_asset, thumbnail_size);
 
             try self.DragDropSourceBase(engine_context, entry_name, "IMSCLoad");
             NextColumn(entry_name);
@@ -212,7 +211,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
+            try RenderImageButton(entry_name, texutre_asset, thumbnail_size);
 
             try self.DragDropSourceScript(engine_context, entry_name);
             NextColumn(entry_name);
@@ -221,7 +220,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texutre_asset.GetID(), thumbnail_size);
+            try RenderImageButton(entry_name, texutre_asset, thumbnail_size);
 
             try self.DragDropSourceBase(engine_context, entry_name, "MP3Load");
             NextColumn(entry_name);
@@ -307,17 +306,15 @@ pub fn OnNewScriptEvent(self: *ContentBrowserPanel, engine_context: *EngineConte
     }
 }
 
-fn RenderImageButton(entry_name: []const u8, id: c_uint, thumbnail_size: f32) !void {
+fn RenderImageButton(entry_name: []const u8, texture: *Texture2D, thumbnail_size: f32) !void {
     const zone = Tracy.ZoneInit("ContentBrowser Render Image Button", @src());
     defer zone.Deinit();
     _ = imgui.igPushID_Str(entry_name.ptr);
     defer imgui.igPopID();
 
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, id)));
-
     _ = imgui.igImageButton(
         entry_name.ptr,
-        texture_id,
+        texture.GetTexture(),
         .{ .x = thumbnail_size, .y = thumbnail_size },
         .{ .x = 0.0, .y = 0.0 },
         .{ .x = 1.0, .y = 1.0 },

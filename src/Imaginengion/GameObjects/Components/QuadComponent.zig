@@ -8,6 +8,9 @@ const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Entity = @import("../Entity.zig");
+const Player = @import("../../Players/Player.zig");
+const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
 const QuadComponent = @This();
 
 //IMGUI
@@ -24,7 +27,23 @@ pub const Ind: usize = blk: {
 };
 
 mShouldRender: bool = true,
-mTexture: AssetHandle = .{},
+mTexture: union(enum) {
+    const Self = @This();
+    Asset: AssetHandle,
+    EntityRenderTarget: Entity,
+    pub fn ReleaseAsset(self: *Self) void {
+        switch (self.*) {
+            .Asset => self.Asset.ReleaseAsset(),
+            .EntityRenderTarget => self.EntityRenderTarget.mEntityID = Entity.NullHandle,
+        }
+    }
+    pub fn GetTexture(self: Self, engine_context: *EngineContext) *Texture2D {
+        switch (self) {
+            .Asset => |a| return a.GetAsset(engine_context, Texture2D),
+            .EntityRenderTarget => |e| return e.GetComponent(RenderTargetComponent).?.GetOutputTexture(),
+        }
+    }
+},
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 
@@ -40,10 +59,10 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
-    const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
-    const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, (texture_asset.GetID()))));
+    const texture_asset = try self.mTexture.GetTexture(engine_context);
+
     imgui.igImage(
-        texture_id,
+        texture_asset.GetTexture(),
         .{ .x = 50.0, .y = 50.0 },
         // Always show full texture in preview
         .{ .x = 0.0, .y = 1.0 },
@@ -61,8 +80,8 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
         if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mTexture);
-            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj);
+            self.mTexture.ReleaseAsset();
+            self.mTexture = .{ .Asset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj) };
         }
     }
     try self.EditTexCoords(texture_asset);
@@ -95,10 +114,8 @@ fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
             draw_w = draw_h * texture_aspect;
         }
 
-        const texture_id = @as(*anyopaque, @ptrFromInt(@as(usize, texture_asset.GetID())));
-
         imgui.igImage(
-            texture_id,
+            texture_asset.GetTexture(),
             .{ .x = draw_w, .y = draw_h },
             .{ .x = self.mTexOptions.mTexCoords[0], .y = 1.0 - self.mTexOptions.mTexCoords[1] },
             .{ .x = self.mTexOptions.mTexCoords[2], .y = 1.0 - self.mTexOptions.mTexCoords[3] },

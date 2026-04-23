@@ -214,7 +214,7 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/src" } });
     sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/include/build_config" } });
     sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/egl" } });
-
+    sdl3_lib.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "C:/VulkanSDK/1.4.341.1/Include" } });
     //add c source files
     {
         var sources = std.ArrayList([]const u8).empty;

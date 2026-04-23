@@ -1,6 +1,6 @@
 pub const AssetMetaData = @import("Assets/AssetMetaData.zig");
 pub const FileMetaData = @import("Assets/FileMetaData.zig");
-
+pub const GenMetaData = @import("Assets/GenMetaData.zig");
 pub const ScriptAsset = @import("Assets/ScriptAsset.zig");
 pub const ShaderAsset = @import("Assets/ShaderAsset.zig");
 pub const Texture2D = @import("Assets/Texture2D.zig");
@@ -14,5 +14,6 @@ pub const AssetsList = [_]type{
     TextAsset,
     AssetMetaData,
     FileMetaData,
+    GenMetaData,
     AudioAsset,
 };

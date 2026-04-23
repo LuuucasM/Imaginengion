@@ -44,7 +44,7 @@ mAppWindow: Window = .{},
 
 mAssetManager: AssetManager = .{},
 mAudioManager: AudioManager = .{},
-mInputManager: InputManager = .{},
+mInputManager: InputManager = .empty,
 mRenderer: Renderer = .{},
 mPhysicsManager: PhysicsManager = .{},
 
@@ -76,7 +76,7 @@ pub fn Init(self: *EngineContext) !void {
     self.mAppWindow.Init(self);
 
     try self.mAssetManager.Init(self);
-    try self.mRenderer.Init(&self.mAppWindow, self);
+    try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
     try self.mAudioManager.Init();
     self.mInputManager.Init(self.EngineAllocator());

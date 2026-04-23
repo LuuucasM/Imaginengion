@@ -201,6 +201,7 @@
   "lastOpenFiles": [
     "longer term things to do or fix.md",
     "immediate things to do or fix.md",
+    "Engine Notes/2026 4 April/2026.04.19.md",
     "Engine Notes/2026 4 April/2026.04.05.md",
     "Engine Notes/2026 4 April/2026.04.04.md",
     "Engine Notes/2026 3 March/2026.03.28.md",
@@ -228,7 +229,6 @@
     "Scenes.md",
     "Renderer.md",
     "Static SkipField.md",
-    "Adding new scripts to engine.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

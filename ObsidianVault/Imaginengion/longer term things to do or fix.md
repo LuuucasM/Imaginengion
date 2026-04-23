@@ -1,6 +1,8 @@
 - zig build --watch -fincremental -Dno-bin
 - zig build --watch --error-style verbose_clear -fincremental -Dno-bin
 - change windowing/renderer/input to SDL3
+- i can split rendering into 2 parts one for overlay layer and one for game layer and then a 3rd pass to compose the overlay layer on top
+	- this means i can split textures a little better instead of doing it all in one and dealing with 16 8k textures only
 - add more physics
 - add entity picking in the viewport/playport using ray tracing
 	- after this is implemented then I can start making UI elements

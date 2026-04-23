@@ -5,6 +5,7 @@ const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const OutputFrameBuffer = @import("../../Renderer/Renderer.zig").OutputFrameBuffer;
+const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
 
 const RenderTargetComponent = @This();
 
@@ -22,6 +23,10 @@ mFrameBuffer: OutputFrameBuffer = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
     self.mFrameBuffer.Deinit(engine_context.EngineAllocator());
+}
+
+pub fn GetOutputTexture(self: RenderTargetComponent) *Texture2D {
+    return self.mFrameBuffer.GetColorTexture(0);
 }
 
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {

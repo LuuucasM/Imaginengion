@@ -14,19 +14,17 @@ const SDLWindow = @This();
 _Title: []const u8 = "Imaginengion\x00",
 _Width: usize = 1600,
 _Height: usize = 900,
-_Window: ?*sdl.SDL_Window = null,
+_Window: *sdl.SDL_Window = undefined,
 mIsMinimized: bool = false,
 
-pub fn Init(self: *SDLWindow, engine_context: *EngineContext) !void {
-    self._Window = sdl.SDL_CreateWindow(self._Title.ptr, @intCast(self._Width), @intCast(self._Height), sdl.SDL_WINDOW_RESIZABLE);
-    std.debug.assert(self._Window != null);
-    sdl.SDL_SetPointerProperty(sdl.SDL_GetWindowProperties(self._Window), "engine", engine_context);
+pub fn Init(self: *SDLWindow, engine_context: *EngineContext) void {
+    self._Window = sdl.SDL_CreateWindow(self._Title.ptr, @intCast(self._Width), @intCast(self._Height), sdl.SDL_WINDOW_RESIZABLE) orelse unreachable;
+    _ = sdl.SDL_SetPointerProperty(sdl.SDL_GetWindowProperties(self._Window), "engine", engine_context);
 }
 
 pub fn Deinit(self: *SDLWindow) void {
     std.debug.assert(self._Window != null);
     sdl.SDL_DestroyWindow(self._Window);
-    self._Window = null;
 }
 
 pub fn GetWidth(self: SDLWindow) usize {
@@ -37,10 +35,8 @@ pub fn GetHeight(self: SDLWindow) usize {
     return self._Height;
 }
 
-pub fn GetNativeWindow(self: SDLWindow) *anyopaque {
-    if (self._Window) |window| {
-        return @ptrCast(window);
-    }
+pub fn GetNativeWindow(self: SDLWindow) *sdl.SDL_Window {
+    return self._Window;
 }
 
 pub fn IsMinimized(self: SDLWindow) bool {

@@ -6,6 +6,7 @@ const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const Tracy = @import("../Core/Tracy.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const PushConstants = extern struct {
     rotation: [4]f32, // 16 bytes
@@ -18,6 +19,11 @@ pub const PushConstants = extern struct {
     mode: u32, //  4 bytes  → 52
     quads_count: u32, //  4 bytes  → 56
     glyphs_count: u32, //  4 bytes  → 60
+};
+
+pub const StorageBufferBinding = struct {
+    buffer: *anyopaque,
+    binding: u32, // matches set=1, binding=N in the shader
 };
 
 pub const PipelineConfig = struct {
@@ -34,8 +40,8 @@ const Platform = @This();
 
 _Impl: Impl = .{},
 
-pub fn Init(self: *Platform, engine_allocator: std.mem.Allocator, window: *Window, shader: *ShaderAsset) void {
-    self._Impl.Init(engine_allocator, window, shader);
+pub fn Init(self: *Platform, engine_context: *EngineContext, shader: *ShaderAsset) void {
+    self._Impl.Init(engine_context, shader);
 }
 pub fn Deinit(self: *Platform, window: *Window) void {
     self._Impl.Deinit(window);
@@ -43,6 +49,10 @@ pub fn Deinit(self: *Platform, window: *Window) void {
 
 pub fn BeginFrame(self: *Platform, window: *Window) bool {
     return self._Impl.BeginFrame(window);
+}
+
+pub fn EndFrame(self: *Platform) void {
+    self._Impl.EndFrame();
 }
 
 pub fn GetMaxTextureImageSlots(self: Platform) usize {
@@ -61,7 +71,11 @@ pub fn RegisterTexture2D(self: Platform, texture_2d: *anyopaque, texture_format:
     return self._Impl.RegisterTexture2D(texture_2d, texture_format);
 }
 
-pub fn Unregister(self: Platform, slot: u32) void {
+pub fn UpdateStorageBuffers(self: Platform, buffers: []StorageBufferBinding) void {
+    self._Impl.UpdateStorageBuffers(buffers);
+}
+
+pub fn Unregister(self: *Platform, slot: u32) void {
     self._Impl.Unregister(slot);
 }
 

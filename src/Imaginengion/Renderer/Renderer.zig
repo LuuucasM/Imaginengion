@@ -2,7 +2,6 @@ const std = @import("std");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const Window = @import("../Windows/Window.zig");
 
-const RenderContext = @import("RenderContext.zig");
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
 
@@ -20,7 +19,7 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EngineContext = @import("../Core/EngineContext.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
-const TextureFormat = @import("../FrameBuffers/FrameBuffer.zig").TextureFormat;
+const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
 const PushConstants = @import("RenderPlatform.zig").PushConstants;
 
@@ -41,18 +40,30 @@ mPlatform: RenderPlatform = .{},
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
 
-mPushConstants: PushConstants = .{},
+mPushConstants: PushConstants = .{
+    .aspect_ratio = 0,
+    .fov = 90,
+    .glyphs_count = 0,
+    .mode = 1,
+    .perspective_far = 1000,
+    .position = [3]f32{ 0, 0, 0 },
+    .quads_count = 0,
+    .resolution_height = 0,
+    .resolution_width = 0,
+    .rotation = [4]f32{ 1, 0, 0, 0 },
+},
+
 mSDFShader: AssetHandle = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
     const shader_rel_path = "assets/shaders/SDFShader.program";
-    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_allocator, shader_rel_path, .Eng);
+    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_allocator, .{ .File = .{ .rel_path = shader_rel_path, .path_type = .Eng } });
 
-    self.mPlatform.Init(engine_allocator, engine_context.mAppWindow, try self.mSDFShader.GetAsset(engine_context, ShaderAsset));
+    self.mPlatform.Init(engine_context, try self.mSDFShader.GetAsset(engine_context, ShaderAsset));
 
-    try self.mR2D.Init(engine_allocator);
+    try self.mR2D.Init(engine_context);
     self.mR3D.Init();
 }
 
@@ -152,9 +163,7 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
 
     const cmd = self.mPlatform.GetCommandBuff();
 
-    try self.mR2D.SetBuffers(world_type, engine_context);
-
-    //check if the buffers were resized
+    self.mR2D.SetBuffers(world_type, engine_context);
 
     self.mPlatform.PushDebugGroup("Draw\x00");
     defer self.mPlatform.PopDebugGroup();
@@ -163,4 +172,6 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     defer frame_buffer.EndRenderPass(render_pass);
 
     self.mPlatform.Draw(cmd, push_constants);
+
+    self.mPlatform.EndFrame();
 }

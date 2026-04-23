@@ -6,6 +6,11 @@ const Tracy = @import("../../Core/Tracy.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ShaderAsset = @This();
 
+pub const Stage = enum {
+    Vertex,
+    Fragment,
+};
+
 const ShaderManifest = struct {
     mVertexPath: []const u8,
     mFragmentPath: []const u8,
@@ -51,15 +56,15 @@ pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []cons
         .{ .allocate = .alloc_if_needed },
     );
 
-    const vert_binary = try LoadSpirvFile(engine_context, file_path, manifest.mVertex);
-    const frag_binary = try LoadSpirvFile(engine_context, file_path, manifest.mFragment);
+    const vert_binary = try LoadSpirvFile(engine_context, file_path, manifest.mVertexPath);
+    const frag_binary = try LoadSpirvFile(engine_context, file_path, manifest.mFragmentPath);
 
     std.debug.assert(vert_binary.len % 4 == 0);
     std.debug.assert(frag_binary.len % 4 == 0);
 
     self.mShaderSources = .{
-        .mVertexCode = vert_binary,
-        .mFragmentCode = frag_binary,
+        .mVertexBinary = vert_binary,
+        .mFragmentBinary = frag_binary,
         .mManifest = manifest,
     };
 }
