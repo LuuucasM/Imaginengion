@@ -28,8 +28,8 @@ pub const TextureFormat = enum(u4) {
 pub const GenDescriptor = struct {
     width: usize,
     height: usize,
-    is_render_target: bool,
     texture_format: TextureFormat,
+    data: *anyopaque,
 };
 
 const Impl = switch (builtin.os.tag) {
@@ -63,15 +63,18 @@ pub fn GetWidth(self: Texture2D) usize {
 pub fn GetHeight(self: Texture2D) usize {
     return self._Impl.GetHeight();
 }
+pub fn GetTextureHandle(self: Texture2D) u32 {
+    return self._Impl.GetTextureHandle();
+}
 pub fn GetTexture(self: Texture2D) *anyopaque {
     return self._Impl.GetTexture();
 }
 pub fn GetSampler(self: Texture2D) *anyopaque {
     return self._Impl.GetSampler();
 }
-pub fn Bind(self: *Texture2D, slot: usize) void {
-    self._Impl.Bind(slot);
-}
 pub fn UpdateDataPath(self: *Texture2D, path: []const u8) !void {
     try self._Impl.UpdateDataPath(path);
+}
+pub fn UpdateDataGen(self: *Texture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
+    try self._Impl.UpdateDataGen(engine_context, descriptor);
 }

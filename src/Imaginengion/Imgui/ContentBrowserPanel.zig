@@ -140,6 +140,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
     if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
 
     const back_texture = try self.mBackArrowTextureHandle.GetAsset(engine_context, Texture2D);
+
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(
         "back",

@@ -2,10 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Window = @import("../../Windows/Window.zig");
 const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
-const RenderInterop = @import("RenderInterop.zig");
-const RenderBindlessReg = @import("RenderBindlessReg.zig");
-const SDLTexture2D = @import("../../Assets/Assets/Texture2Ds/SDLTexture2D.zig");
-const SDFPipeline = @import("SDFPipeline.zig");
 const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
@@ -17,9 +13,6 @@ const SDLPlatform = @This();
 
 mDevice: *sdl.SDL_GPUDevice = undefined,
 mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
-mRenderInterop: RenderInterop = .{},
-mRenderBindlessReg: RenderBindlessReg = .{},
-mSDFPipeline: SDFPipeline = .{},
 
 pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, shader: *ShaderAsset) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
@@ -41,9 +34,6 @@ pub fn Deinit(self: *SDLPlatform, engine_context: *EngineContext) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
 
     sdl.SDL_WaitForGPUIdle(self.mDevice);
-
-    self.mSDFPipeline.Deinit(self.mRenderInterop);
-    self.mRenderBindlessReg.Deinit(engine_context.EngineAllocator());
 
     sdl.SDL_ReleaseWindowFromGPUDevice(self.mDevice, sdl_window);
     sdl.SDL_DestroyGPUDevice(self.mDevice);
@@ -88,24 +78,6 @@ pub fn GetDevice(self: SDLPlatform) *sdl.SDL_GPUDevice {
 pub fn GetCommandBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
     std.debug.assert(self.mCurrentCmdBuffer != null);
     return self.mCurrentCmdBuffer.?;
-}
-
-pub fn RegisterTexture2D(self: SDLPlatform, texture_2d: *anyopaque, texture_format: u32) u32 {
-    const sdl_texture2d: *SDLTexture2D = @ptrCast(@alignCast(texture_2d));
-    self.mRenderBindlessReg.RegisterTexture2D(&self.mRenderInterop, sdl_texture2d, texture_format);
-}
-
-pub fn UpdateStorageBuffers(self: SDLPlatform, buffers: []StorageBufferBinding) void {
-    self.mSDFPipeline.UpdateStorageBuffers(&self.mRenderInterop, buffers);
-}
-
-pub fn Unregister(self: *SDLPlatform, slot: u32) void {
-    self.mRenderBindlessReg.Unregister(&self.mRenderInterop, slot);
-}
-
-pub fn Draw(self: *SDLPlatform, cmd: *anyopaque, push_constants: anytype) void {
-    const sdl_cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(cmd);
-    self.mSDFPipeline.Draw(sdl_cmd, push_constants);
 }
 
 pub fn PushDebugGroup(self: SDLPlatform, message: []const u8) void {

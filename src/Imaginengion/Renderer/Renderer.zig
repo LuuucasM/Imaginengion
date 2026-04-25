@@ -21,6 +21,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
+const TextureManager = @import("../TextureManager/TextureManager.zig");
 const PushConstants = @import("RenderPlatform.zig").PushConstants;
 
 const LinAlg = @import("../Math/LinAlg.zig");
@@ -36,6 +37,7 @@ const Renderer = @This();
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 
 mPlatform: RenderPlatform = .{},
+mTextureManager: TextureManager = .{},
 
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
@@ -63,11 +65,14 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
 
     self.mPlatform.Init(engine_context, try self.mSDFShader.GetAsset(engine_context, ShaderAsset));
 
+    self.mTextureManager.Init(engine_context, 2_000_000_000);
+
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
+    self.mTextureManager.Deinit(engine_context);
     self.mPlatform.Deinit(engine_context.mAppWindow);
 
     self.mSDFShader.ReleaseAsset();

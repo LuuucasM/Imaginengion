@@ -1,5 +1,4 @@
 #version 460
-#extension GL_EXT_nonuniform_qualifier : require
 
 #define MAX_STEPS      512
 #define SURF_DIST      0.00099
@@ -7,22 +6,28 @@
 
 layout(location = 0) out vec4 oFragColor;
 
-layout(set = 0, binding = 0) uniform sampler2D uTextures[];
+layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
 
 #define SHAPE_NONE  0
 #define SHAPE_QUAD  1
 #define SHAPE_GLYPH 2
 
+// =============================================================================
+// Storage buffers
+// =============================================================================
 struct QuadData {
     vec3  Position;
     vec4  Rotation;
     vec3  Scale;
     float TilingFactor;
     vec4  Color;
-    vec4  TexCoords;
-    uint  TexIndex;     // index into uTextures[]
+    vec4  TexCoords; 
+    uint  TexLayer;
+    vec2  TexUVOffset;
+    vec2  TexUVScale;
 };
-layout(set = 1, binding = 0) readonly buffer QuadsSSBO {
+
+layout(set = 2, binding = 0) readonly buffer QuadsSSBO {
     QuadData data[];
 } Quads;
 
@@ -35,14 +40,23 @@ struct GlyphData {
     vec4  TexCoords;
     vec4  AtlasBounds;
     vec4  PlaneBounds;
-    uint  AtlasIndex;   // index into uTextures[]
-    uint  TexIndex;     // index into uTextures[]
+    // Replaces: AtlasIndex: uint, TexIndex: uint
+    uint  AtlasLayer;
+    vec2  AtlasUVOffset;
+    vec2  AtlasUVScale;
+    uint  TexLayer;
+    vec2  TexUVOffset;
+    vec2  TexUVScale;
 };
-layout(set = 1, binding = 1) readonly buffer GlyphSSBO {
+
+layout(set = 2, binding = 1) readonly buffer GlyphSSBO {
     GlyphData data[];
 } Glyphs;
 
-layout(push_constant) uniform PushConstants {
+// =============================================================================
+// Push constants
+// =============================================================================
+layout(set = 3, binding = 0) uniform PushConstants {
     vec4  Rotation;
     vec3  Position;
     float PerspectiveFar;
@@ -68,6 +82,12 @@ vec3 QuatRotateInv(vec3 v, vec4 q) {
 }
 float Median(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
+}
+
+vec3 AtlasUV(vec2 tex_uv, vec2 uv_offset, vec2 uv_scale, uint layer) {
+    // Map tex_uv [0,1] into the texture's region within the layer
+    vec2 atlas_uv = uv_offset + tex_uv * uv_scale;
+    return vec3(atlas_uv, float(layer));
 }
 
 // =============================================================================
@@ -122,11 +142,16 @@ vec2 GetTextUV(vec3 hit_point, GlyphData glyph) {
 }
 
 float GetMSD(vec2 texture_uv, GlyphData glyph) {
-    vec2 atlas_size = vec2(textureSize(uTextures[nonuniformEXT(glyph.AtlasIndex)], 0));
+    // Sample the MSDF atlas — remap texture_uv into the atlas bounds region
+    // AtlasBounds is in texels within the atlas layer, convert to [0,1]
+    vec2 atlas_size = vec2(textureSize(uTextures, 0).xy);
     vec2 atlas_min  = glyph.AtlasBounds.xy / atlas_size;
     vec2 atlas_max  = glyph.AtlasBounds.zw / atlas_size;
-    vec2 atlas_uv   = mix(atlas_min, atlas_max, texture_uv);
-    vec3 msd = texture(uTextures[nonuniformEXT(glyph.AtlasIndex)], atlas_uv).rgb;
+    vec2 raw_uv     = mix(atlas_min, atlas_max, texture_uv);
+
+    // Remap into atlas layer space
+    vec3 sample_uv = AtlasUV(raw_uv, glyph.AtlasUVOffset, glyph.AtlasUVScale, glyph.AtlasLayer);
+    vec3 msd = texture(uTextures, sample_uv).rgb;
     return Median(msd.r, msd.g, msd.b);
 }
 
@@ -135,9 +160,11 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
         QuadData quad = Quads.data[shape_index];
         vec2 texture_uv = GetQuadUV(hit_point, quad.Position, quad.Rotation, quad.Scale);
         if (texture_uv[0] >= 0.0 && texture_uv[1] >= 0.0) {
-            vec2 tiled_uv = texture_uv * quad.TilingFactor;
-            vec2 atlas_uv = mix(quad.TexCoords.xy, quad.TexCoords.zw, tiled_uv);
-            return quad.Color * texture(uTextures[nonuniformEXT(quad.TexIndex)], atlas_uv);
+            // Apply tiling/crop from TexCoords, then remap into atlas layer
+            vec2 tiled_uv  = texture_uv * quad.TilingFactor;
+            vec2 cropped_uv = mix(quad.TexCoords.xy, quad.TexCoords.zw, tiled_uv);
+            vec3 atlas_uv  = AtlasUV(cropped_uv, quad.TexUVOffset, quad.TexUVScale, quad.TexLayer);
+            return quad.Color * texture(uTextures, atlas_uv);
         }
     }
     if (shape_type == SHAPE_GLYPH) {
@@ -148,8 +175,9 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
             if (msd >= 0.5) {
                 float alpha    = smoothstep(0.4, 0.6, msd);
                 vec2 tiled_uv  = texture_uv * glyph.TilingFactor;
-                vec2 atlas_uv  = mix(glyph.TexCoords.xy, glyph.TexCoords.zw, tiled_uv);
-                vec4 tex_color = texture(uTextures[nonuniformEXT(glyph.TexIndex)], atlas_uv);
+                vec2 cropped_uv = mix(glyph.TexCoords.xy, glyph.TexCoords.zw, tiled_uv);
+                vec3 atlas_uv  = AtlasUV(cropped_uv, glyph.TexUVOffset, glyph.TexUVScale, glyph.TexLayer);
+                vec4 tex_color = texture(uTextures, atlas_uv);
                 return vec4(glyph.Color.rgb, alpha * glyph.Color.a) * tex_color;
             }
         }
@@ -177,8 +205,8 @@ float sdGlyph(vec3 p, GlyphData glyph) {
 float IMQuad(vec3 p, vec3 translation, vec4 rotation, vec3 scale) {
     return sdBox(QuatRotateInv(p - translation, rotation), vec3(scale.xy * 0.5, QUAD_THICKNESS));
 }
-float IMGlyph(vec3 p, GlyphData glyph) {
-    return sdGlyph(QuatRotateInv(p - glyph.Position, glyph.Rotation), glyph);
+float IMGlyph(vec3 p, vec3 translation, vec4 rotation) {
+    return sdGlyph(QuatRotateInv(p - translation, rotation), glyph);
 }
 
 // =============================================================================
@@ -199,8 +227,8 @@ DistData ShortestDistance(vec3 p) {
     }
     for (uint i = 0u; i < Camera.GlyphsCount; i++) {
         if (IsExcluded(SHAPE_GLYPH, i)) continue;
-        GlyphData glyph = Glyphs.data[i];
-        float dist = IMGlyph(p, glyph);
+        GlyphData data = Glyphs.data[i];
+        float dist = IMGlyph(p, data.Position, data.Rotation);
         if (dist < min_dist) { min_dist = dist; shape_type = SHAPE_GLYPH; shape_index = i; }
     }
     return DistData(min_dist, shape_type, shape_index);

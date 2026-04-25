@@ -37,17 +37,17 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) void {
             self.mImpl.Invalidate(engine_context);
         }
-        pub fn GetColorTexture(self: Self, attachment_index: usize) *Texture2D {
+        pub fn GetColorTexture(self: Self, attachment_index: usize) *anyopaque {
             return self.mImpl.GetColorTexture(attachment_index);
         }
-        pub fn GetDepthTexture(self: Self) *Texture2D {
+        pub fn GetDepthTexture(self: Self) *anyopaque {
             return self.mImpl.GetDepthTexture();
         }
-        pub fn BindColorAttachment(self: Self, render_pass: *anyopaque, attachment_index: usize, slot: u32) void {
-            self.mImpl.BindColorAttachment(render_pass, attachment_index, slot);
+        pub fn GetWidth(self: Self) usize {
+            return self.mImpl.GetWidth();
         }
-        pub fn BindDepthAttachment(self: Self, render_pass: *anyopaque, slot: u32) void {
-            self.mImpl.BindDepthAttachment(render_pass, slot);
+        pub fn GetHeight(self: Self) usize {
+            return self.mImpl.GetHeight();
         }
     };
 }

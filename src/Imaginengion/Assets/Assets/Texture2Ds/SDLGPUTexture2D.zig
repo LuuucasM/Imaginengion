@@ -2,18 +2,18 @@ const std = @import("std");
 const sdl = @import("../../../Core/CImports.zig").sdl;
 const stb = @import("../../../Core/CImports.zig").stb;
 const EngineContext = @import("../../../Core/EngineContext.zig");
+const GenDescriptor = @import("../Texture2D.zig").GenDescriptor;
+const TextureManager = @import("../../../TextureManager/TextureManager.zig");
 const SDLTexture2D = @This();
 
 const SDL_TEXTURE_FORMAT = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
 _Width: c_int = 0,
 _Height: c_int = 0,
-mTexture: ?*sdl.SDL_GPUTexture = null,
-mSampler: ?*sdl.SDL_GPUSampler = null,
-mBindlessInd: u32 = std.math.maxInt(u32),
+_TextureHandle: u32 = 0,
+_TextureManager: TextureManager = undefined,
 
 pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
     const frame_allocator = engine_context.FrameAllocator();
 
     var width: c_int = 0;
@@ -24,7 +24,6 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
     const contents = try asset_file.readToEndAlloc(frame_allocator, @intCast(fstats.size));
 
     stb.stbi_set_flip_vertically_on_load(1);
-
     const data = stb.stbi_load_from_memory(
         contents.ptr,
         @intCast(contents.len),
@@ -40,46 +39,27 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
         return error.AssetInitFailed;
     }
 
-    self.mTexture = CreateGPUTexture(device, @intCast(width), @intCast(height), false) orelse {
-        std.log.err("SDL_CreateGPUTexture failed for: {s} — {s}", .{ rel_path, sdl.SDL_GetError() });
-        return error.AssetInitFailed;
-    };
-
-    const pixel_data_size: u32 = @intCast(width * height * 4);
-    try UploadPixels(device, self.mTexture.?, data, pixel_data_size, @intCast(width), @intCast(height));
+    engine_context.mRenderer.mTextureManager.Register(engine_context, data, width, height);
 
     self._Width = width;
     self._Height = height;
-
-    self.mBindlessInd = engine_context.mRenderer.mPlatform.RegisterTexture2D(self, SDL_TEXTURE_FORMAT);
+    self._TextureManager = &engine_context.mRenderer.mTextureManager;
 
     std.log.debug("SDLGPUTexture2D: loaded '{s}' → bindless slot {d}", .{ rel_path, self.mSlot });
 }
 
 pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-
-    self.mTexture = CreateGPUTexture(device, descriptor.width, descriptor.height);
-    self.mSampler = CreateSampler(device);
+    engine_context.mRenderer.mTextureManager.Register(engine_context, descriptor.data, descriptor.width, descriptor.height);
 
     self._Width = descriptor.width;
     self._Height = descriptor.height;
 
-    self.mBindlessInd = try engine_context.mRenderer.mPlatform.RegisterTexture2D(self, SDL_TEXTURE_FORMAT);
+    std.log.debug("SDLGPUTexture2D.InitGen: {d}x{d}", .{ descriptor.width, descriptor.height });
 }
 
 pub fn Deinit(self: *SDLTexture2D, engine_context: *EngineContext) !void {
-    std.debug.assert(self.mTexture != null);
-    std.debug.assert(self.mBindlessInd != std.math.maxInt(u32));
-
-    engine_context.mRenderer.mPlatform.Unregister(self.mBindlessInd);
-
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-    sdl.SDL_ReleaseGPUTexture(device, self.mTexture);
-    sdl.SDL_ReleaseGPUSampler(device, self.mSampler);
-
-    self.mTexture = null;
-    self.mSampler = null;
+    engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
+    self._TextureHandle = 0;
 }
 pub fn GetWidth(self: SDLTexture2D) usize {
     return @intCast(self._Width);
@@ -87,18 +67,17 @@ pub fn GetWidth(self: SDLTexture2D) usize {
 pub fn GetHeight(self: SDLTexture2D) usize {
     return @intCast(self._Height);
 }
-pub fn GetSlot(self: SDLTexture2D) usize {
-    return self.mBindlessInd;
+
+pub fn GetTextureHandle(self: SDLTexture2D) u32 {
+    return self._TextureHandle;
 }
 
 pub fn GetTexture(self: SDLTexture2D) *sdl.SDL_GPUTexture {
-    std.debug.assert(self.mTexture != null);
-    return self.mTexture;
+    return self._TextureManager.GetTexture();
 }
 
 pub fn GetSampler(self: SDLTexture2D) *sdl.SDL_GPUSampler {
-    std.debug.assert(self.mSampler);
-    return self.mSampler;
+    return self._TextureManager.GetSampler();
 }
 
 pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_path: []const u8) !void {
@@ -124,40 +103,18 @@ pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_p
     defer stb.stbi_image_free(data);
     std.debug.assert(data != null);
 
-    const pixel_data_size: u32 = @intCast(width * height * 4);
+    engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
+    engine_context.mRenderer.mTextureManager.Register(engine_context, data, width, height);
 
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-
-    if (width != self._Width or height != self._Height) {
-        engine_context.mRenderer.mPlatform.Unregister(self.mBindlessInd);
-        sdl.SDL_ReleaseGPUTexture(device, self.mTexture);
-
-        self.mTexture = CreateGPUTexture(device, width, height);
-
-        self._Width = width;
-        self._Height = height;
-
-        self.mBindlessInd = engine_context.mRenderer.mPlatform.RegisterTexture2D(self, SDL_TEXTURE_FORMAT);
-    }
-
-    const cmd = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice) orelse return error.AssetInitFailed;
-    try UploadPixels(self.mDevice.?, self.mTexture.?, data, pixel_data_size, @intCast(width), @intCast(height));
-    _ = sdl.SDL_SubmitGPUCommandBuffer(cmd);
+    self._Width = width;
+    self._Height = height;
 }
 
 pub fn UpdateDataGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-    if (descriptor.width != self._Width or descriptor.height != self._Height) {
-        engine_context.mRenderer.mPlatform.Unregister(self.mBindlessInd);
-        sdl.SDL_ReleaseGPUTexture(device, self.mTexture);
+    engine_context.mRenderer.mTextureManager.Register(engine_context, descriptor.data, descriptor.width, descriptor.height);
 
-        self.mTexture = CreateGPUTexture(device, descriptor.width, descriptor.height);
-
-        self._Width = descriptor.width;
-        self._Height = descriptor.height;
-
-        self.mBindlessInd = engine_context.mRenderer.mPlatform.RegisterTexture2D(self, SDL_TEXTURE_FORMAT);
-    }
+    self._Width = descriptor.width;
+    self._Height = descriptor.height;
 }
 
 fn CreateGPUTexture(device: *sdl.SDL_GPUDevice, width: u32, height: u32, is_render_target: bool) ?*sdl.SDL_GPUTexture {
