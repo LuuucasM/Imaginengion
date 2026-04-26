@@ -25,7 +25,15 @@ const ShaderManifest = struct {
 const ShaderSources = struct {
     mVertexBinary: []const u8,
     mFragmentBinary: []const u8,
-    mManifest: ShaderManifest,
+    mVertexStageInfo: StageInfo,
+    mFragmentStageInfo: StageInfo,
+};
+
+const StageInfo = struct {
+    mStage: Stage,
+    mNumUniformBuffers: u32,
+    mNumStorageBuffers: u32,
+    mNumSamplers: u32,
 };
 
 pub const Name: []const u8 = "ShaderAsset";
@@ -65,7 +73,18 @@ pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []cons
     self.mShaderSources = .{
         .mVertexBinary = vert_binary,
         .mFragmentBinary = frag_binary,
-        .mManifest = manifest,
+        .mVertexStageInfo = .{
+            .mStage = .Vertex,
+            .mNumUniformBuffers = manifest.mVertexUniformBuffers,
+            .mNumStorageBuffers = manifest.mVertexStorageBuffers,
+            .mNumSamplers = manifest.mVertexSamplers,
+        },
+        .mFragmentStageInfo = .{
+            .mStage = .Fragment,
+            .mNumUniformBuffers = manifest.mFragmentUniformBuffers,
+            .mNumStorageBuffers = manifest.mFragmentStorageBuffers,
+            .mNumSamplers = manifest.mFragmentSamplers,
+        },
     };
 }
 

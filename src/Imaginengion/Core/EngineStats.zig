@@ -31,7 +31,7 @@ pub const WorldStats = struct {
     }
 };
 
-AppTimer: std.time.Timer = undefined,
+AppTimer: std.Io.Timestamp = undefined,
 GameWorldStats: WorldStats = .{},
 EditorWorldStats: WorldStats = .{},
 SimulateWorldStats: WorldStats = .{},

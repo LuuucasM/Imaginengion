@@ -97,7 +97,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers:
     try OnImguiRender(frame_buffers, area_rects, viewport_size);
 }
 
-fn OnImguiRender(frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
+fn OnImguiRender(engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 
@@ -116,7 +116,7 @@ fn OnImguiRender(frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: s
         const draw_list = imgui.igGetWindowDrawList();
         imgui.ImDrawList_AddImage(
             draw_list,
-            frame_buffer.GetColorTexture(0).GetTexture(),
+            engine_context.mImguiManager.GetImguiTexture(engine_context, frame_buffer.GetColorTexture(0)),
             .{ .x = x, .y = y },
             .{ .x = x + w, .y = y + h },
             .{ .x = 0, .y = 0 },

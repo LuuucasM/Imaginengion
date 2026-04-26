@@ -30,7 +30,8 @@ mEngineContext: EngineContext = .{},
 ///
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
-pub fn Init(self: *Application) !void {
+pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
+    _ = init; //havnt gotten to this yet lmao
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.SDLInitFail;
     }
@@ -65,18 +66,40 @@ pub fn Deinit(self: *Application) !void {
 /// Returns:
 /// - `!void` if an update loop iteration fails return the error else return nothing.
 pub fn Run(self: *Application) !void {
-    var frame_timer = try std.time.Timer.start();
+    var t0: std.Io.Timestamp = .zero;
+    var t1: std.Io.Duration = .zero;
 
-    while (self.mEngineContext.mIsRunning) : (self.mEngineContext.mDT = @as(f32, @floatFromInt(frame_timer.lap())) / std.time.ns_per_s) {
+    const first_zone = Tracy.ZoneInit("Main Loop", @src());
+
+    t0 = .now(self.mEngineContext.Io(), .awake);
+
+    try self.mProgram.OnUpdate(&self.mEngineContext);
+    _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
+    self.mEngineContext.mEngineStats.ResetStats();
+
+    first_zone.Deinit();
+    Tracy.FrameMark();
+
+    t1 = t0.untilNow(self.mEngineContext.Io(), .awake);
+    const first_ns = t1.nanoseconds;
+    const first_seconds_f64 = @as(f64, @floatFromInt(first_ns)) / @as(f64, std.time.ns_per_s);
+    self.mEngineContext.mDT = @floatCast(first_seconds_f64);
+
+    while (self.mEngineContext.mIsRunning) {
         defer Tracy.FrameMark();
-
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
 
-        try self.mProgram.OnUpdate(&self.mEngineContext);
+        t0 = .now(self.mEngineContext.Io(), .awake);
 
+        try self.mProgram.OnUpdate(&self.mEngineContext);
         _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
         self.mEngineContext.mEngineStats.ResetStats();
+
+        t1 = t0.untilNow(self.mEngineContext.Io(), .awake);
+        const ns = t1.nanoseconds;
+        const seconds_f64 = @as(f64, @floatFromInt(ns)) / @as(f64, std.time.ns_per_s);
+        self.mEngineContext.mDT = @floatCast(seconds_f64);
     }
 }
 

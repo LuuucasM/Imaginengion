@@ -1,10 +1,9 @@
 const std = @import("std");
 const sdl = @import("../../../Core/CImports.zig").sdl;
 const EngineContext = @import("../../../Core/EngineContext.zig");
-const PipelineConfig = @import("../ShaderAsset.zig").PipelineConfig;
-const TextureFormat = @import("../ShaderAsset.zig").TextureFormat;
-const CullMode = @import("../ShaderAsset.zig").CullMode;
-const FillMode = @import("../ShaderAsset.zig").FillMode;
+const ShaderManifest = @import("../ShaderAsset.zig").ShaderManifest;
+const ShaderSources = @import("../ShaderAsset.zig").ShaderSources;
+const StageInfo = @import("../ShaderAsset.zig").StageInfo;
 
 const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
 
@@ -12,30 +11,6 @@ const build_options = @import("build_options");
 pub const enable_nsight = build_options.enable_nsight;
 
 const SDLShader = @This();
-
-const ShaderManifest = struct {
-    mVertex: []const u8,
-    mFragment: []const u8,
-    mVertexUniformBuffers: u32 = 0,
-    mVertexStorageBuffers: u32 = 0,
-    mVertexSamplers: u32 = 0,
-    mFragmentUniformBuffers: u32 = 0,
-    mFragmentStorageBuffers: u32 = 0,
-    mFragmentSamplers: u32 = 0,
-};
-
-const ShaderSources = struct {
-    mVertexCode: []const u8,
-    mFragmentCode: []const u8,
-    mManifest: ShaderManifest,
-};
-
-const StageInfo = struct {
-    mStage: sdl.SDL_GPUShaderStage,
-    mNumUniformBuffers: u32,
-    mNumStorageBuffers: u32,
-    mNumSamplers: u32,
-};
 
 mPipeline: ?*sdl.SDL_GPUGraphicsPipeline,
 

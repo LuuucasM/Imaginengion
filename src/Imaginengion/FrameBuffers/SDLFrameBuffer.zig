@@ -28,9 +28,8 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             else => @compileError("Unsupported sample count - must be 1, 2, 4, or 8\n"),
         };
 
-        mTextures: [color_texture_formats.len]?*sdl.SDL_GPUTexture,
-        mSamplers: [color_texture_formats.len]?*sdl.SDL_GPUSampler,
-        mDepthTexture: ?Texture2D,
+        mTextures: [color_texture_formats.len]Texture2D,
+        mDepthTexture: ?*sdl.SDL_GPUTexture,
         mWidth: usize,
         mHeight: usize,
 
@@ -43,22 +42,17 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             self.Destroy(engine_context);
         }
 
-        pub fn BeginRenderPass(self: *Self, engine_context: *EngineContext, clear_colors: [color_texture_formats.len]Vec4f32) *sdl.struct_SDL_GPURenderPass {
+        pub fn BeginRenderPass(self: *Self, engine_context: *EngineContext) *sdl.struct_SDL_GPURenderPass {
             const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetCommandBuff()));
 
             // Build color target infos — replaces glBindFramebuffer + glClearColor + glClear
             var color_targets: [color_texture_formats.len]sdl.SDL_GPUColorTargetInfo = undefined;
             inline for (0..color_texture_formats.len) |i| {
                 color_targets[i] = sdl.SDL_GPUColorTargetInfo{
-                    .texture = self.mTextures[i],
+                    .texture = self.mTextures[i].GetTexture(),
                     .mip_level = 0,
-                    .layer_or_depth_plane = 0,
-                    .clear_color = .{
-                        .r = clear_colors[i][0],
-                        .g = clear_colors[i][1],
-                        .b = clear_colors[i][2],
-                        .a = clear_colors[i][3],
-                    },
+                    .layer_or_depth_plane = engine_context.mRenderer.mTextureManager.GetLayerIndex(self.mTextures[i].GetTextureHandle()),
+                    .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 0 },
                     .load_op = sdl.SDL_GPU_LOADOP_CLEAR, // replaces glClear
                     .store_op = sdl.SDL_GPU_STOREOP_STORE,
                     .resolve_texture = null,
@@ -73,10 +67,9 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
 
             // Build depth target info if present — replaces GL_DEPTH_BUFFER_BIT in glClear
             var depth_target: sdl.SDL_GPUDepthStencilTargetInfo = undefined;
-            const depth_target_ptr: ?*sdl.SDL_GPUDepthStencilTargetInfo = if (HasDepth) blk: {
-                const sdl_texture: *sdl.SDL_GPUTexture = @ptrCast(self.mDepthTexture.?.GetTexture());
+            if (self.mDepthTexture) |depth_tex| {
                 depth_target = sdl.SDL_GPUDepthStencilTargetInfo{
-                    .texture = sdl_texture,
+                    .texture = depth_tex,
                     .clear_depth = 1.0,
                     .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
                     .store_op = sdl.SDL_GPU_STOREOP_STORE,
@@ -87,16 +80,38 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                     .padding1 = 0,
                     .padding2 = 0,
                 };
-                break :blk &depth_target;
-            } else null;
+            }
 
             const render_pass = sdl.SDL_BeginGPURenderPass(
                 cmd,
                 if (HasColor) &color_targets[0] else null,
                 @intCast(color_texture_formats.len),
-                depth_target_ptr,
+                &depth_target,
             );
             std.debug.assert(render_pass != null);
+
+            inline for (0..color_texture_formats.len) |i| {
+                const offset_x, const offset_y = engine_context.mRenderer.mTextureManager.GetPixelOffsets(self.mTextures[i].GetTextureHandle());
+
+                const viewport = sdl.SDL_GPUViewport{
+                    .x = @floatFromInt(offset_x),
+                    .y = @floatFromInt(offset_y),
+                    .w = @floatFromInt(self.mWidth),
+                    .h = @floatFromInt(self.mHeight),
+                    .min_depth = 0.0,
+                    .max_depth = 1.0,
+                };
+                sdl.SDL_SetGPUViewport(render_pass, &viewport);
+
+                const scissor = sdl.SDL_Rect{
+                    .x = @intCast(offset_x),
+                    .y = @intCast(offset_y),
+                    .w = @intCast(self.mWidth),
+                    .h = @intCast(self.mHeight),
+                };
+                sdl.SDL_SetGPUScissor(render_pass, &scissor);
+            }
+
             return render_pass.?;
         }
 
@@ -117,19 +132,14 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             self.Create(engine_context);
         }
 
-        pub fn GetColorTexture(self: Self, attachment_index: usize) ?*sdl.SDL_GPUTexture {
+        pub fn GetColorTexture(self: Self, attachment_index: usize) *Texture2D {
             std.debug.assert(attachment_index < color_texture_formats.len);
-            return self.mTextures[attachment_index];
+            return &self.mTextures[attachment_index];
         }
 
-        pub fn GetSampler(self: Self, attachment_index: usize) ?*sdl.SDL_GPUSampler {
-            std.debug.assert(attachment_index < color_texture_formats.len);
-            return self.mSamplers[attachment_index];
-        }
-
-        pub fn GetDepthTexture(self: Self) ?*sdl.SDL_GPUTexture {
+        pub fn GetDepthTexture(self: Self) *Texture2D {
             std.debug.assert(HasDepth);
-            return self.mDepthTexture;
+            return &self.mDepthTexture;
         }
 
         pub fn GetWidth(self: Self) usize {
@@ -140,49 +150,13 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         }
 
         fn Create(self: *Self, engine_context: *EngineContext) void {
-            const device: ?*sdl.SDL_GPUDevice = engine_context.mRenderer.mPlatform.GetDevice();
             inline for (color_texture_formats, 0..) |format, i| {
-                const texture_info = sdl.SDL_GPUTextureCreateInfo{
-                    .type = sdl.SDL_GPU_TEXTURETYPE_2D,
-                    .format = ToSDLTextureFormat(format),
-                    .usage = sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET |
-                        sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
-                    .width = @intCast(self.mWidth),
-                    .height = @intCast(self.mHeight),
-                    .layer_count_or_depth = 1,
-                    .num_levels = 1,
-                    .sample_count = SampleCount,
-                    .props = 0,
-                };
-                self.mColorTextures[i] = sdl.SDL_CreateGPUTexture(device, &texture_info);
-                if (self.mColorTextures[i] == null) {
-                    std.log.err("SDLGPUFrameBuffer: SDL_CreateGPUTexture failed — {s}", .{sdl.SDL_GetError()});
-                    return error.InitFailed;
-                }
-
-                const sampler_info = sdl.SDL_GPUSamplerCreateInfo{
-                    .min_filter = sdl.SDL_GPU_FILTER_LINEAR,
-                    .mag_filter = sdl.SDL_GPU_FILTER_LINEAR,
-                    .mipmap_mode = sdl.SDL_GPU_SAMPLERMIPMAPMODE_LINEAR,
-                    .address_mode_u = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-                    .address_mode_v = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-                    .address_mode_w = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
-                    .mip_lod_bias = 0,
-                    .max_anisotropy = 1,
-                    .compare_op = sdl.SDL_GPU_COMPAREOP_NEVER,
-                    .min_lod = 0,
-                    .max_lod = 0,
-                    .enable_anisotropy = false,
-                    .enable_compare = false,
-                    .padding1 = 0,
-                    .padding2 = 0,
-                    .props = 0,
-                };
-                self.mSamplers[i] = sdl.SDL_CreateGPUSampler(device, &sampler_info);
-                if (self.mSamplers[i] == null) {
-                    std.log.err("SDLGPUFrameBuffer: SDL_CreateGPUSampler failed — {s}", .{sdl.SDL_GetError()});
-                    return error.InitFailed;
-                }
+                self.mTextures[i].InitGen(engine_context, .{
+                    .data = null,
+                    .width = self.mWidth,
+                    .height = self.mHeight,
+                    .texture_format = format,
+                });
             }
             if (HasDepth) {
                 const depth_info = sdl.SDL_GPUTextureCreateInfo{
@@ -196,20 +170,17 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                     .sample_count = SampleCount,
                     .props = 0,
                 };
-                self.mDepthTexture = sdl.SDL_CreateGPUTexture(device, &depth_info);
-                if (self.mDepthTexture == null) {
-                    std.log.err("SDLGPUFrameBuffer: depth SDL_CreateGPUTexture failed — {s}", .{sdl.SDL_GetError()});
-                    return error.InitFailed;
-                }
+                self.mDepthTexture = sdl.SDL_CreateGPUTexture(self.mDevice, &depth_info);
+                std.debug.assert(self.mDepthTexture != null);
             }
         }
 
         fn Destroy(self: *Self, engine_context: *EngineContext) void {
             inline for (0..color_texture_formats.len) |i| {
-                self.mTextures[i].?.Deinit(engine_context);
-                self.mSamplers[i].?.Deinit(engine_context);
+                self.mTextures[i].Deinit(engine_context);
             }
             if (self.mDepthTexture) |t| t.Deinit(engine_context);
+            self.mDepthTexture = null;
         }
         fn ToSDLTextureFormat(format: TextureFormat) sdl.SDL_GPUTextureFormat {
             return switch (format) {

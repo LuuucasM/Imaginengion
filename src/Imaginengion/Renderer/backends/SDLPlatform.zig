@@ -14,7 +14,7 @@ const SDLPlatform = @This();
 mDevice: *sdl.SDL_GPUDevice = undefined,
 mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
 
-pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, shader: *ShaderAsset) void {
+pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
 
     self.mDevice = sdl.SDL_CreateGPUDevice(sdl.SDL_GPU_SHADERFORMAT_SPIRV, builtin.mode == .Debug, null) orelse unreachable;
@@ -24,10 +24,6 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, shader: *ShaderA
 
     std.log.info("SDL_GPU Info:", .{});
     std.log.info("\tDriver: {s}", .{sdl.SDL_GetGPUDeviceDriver(self.mDevice)});
-
-    self.mRenderInterop.Init(self.mDevice);
-    try self.mRenderBindlessReg.Init(engine_context.EngineAllocator(), &self.mRenderInterop);
-    self.mSDFPipeline.Init(&self.mRenderInterop, &self.mRenderBindlessReg, shader);
 }
 
 pub fn Deinit(self: *SDLPlatform, engine_context: *EngineContext) void {
@@ -72,7 +68,7 @@ pub fn EndFrame(self: *SDLPlatform) void {
 }
 
 pub fn GetDevice(self: SDLPlatform) *sdl.SDL_GPUDevice {
-    return self.mDevice.?;
+    return self.mDevice;
 }
 
 pub fn GetCommandBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {

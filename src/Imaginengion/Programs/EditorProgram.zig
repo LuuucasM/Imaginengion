@@ -116,7 +116,7 @@ mActiveWorld: *SceneManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
-    ImGui.Init(engine_context);
+    engine_context.mImguiManager.Init(engine_context);
     self._ComponentsPanel.Init();
     try self._ContentBrowserPanel.Init(engine_context);
     self._ViewportPanel.Init(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
@@ -152,7 +152,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
     defer zone.Deinit();
-
+    engine_context.mImguiManager.Deinit(engine_context);
     self._ContentBrowserPanel.Deinit(engine_context);
 }
 

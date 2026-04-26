@@ -13,7 +13,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-mRelPath: std.ArrayList(u8) = .{},
+mRelPath: std.ArrayList(u8) = .empty,
 mLastModified: i128 = 0,
 mSize: u64 = 0,
 mHash: u64 = 0,

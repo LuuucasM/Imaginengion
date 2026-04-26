@@ -28,11 +28,11 @@ mSceneTextureHandle: AssetHandle = undefined,
 mScriptTextureHandle: AssetHandle = undefined,
 mAudioTextureHandle: AssetHandle = undefined,
 
-mProjectDirectory: ?std.fs.Dir = null,
-mProjectPath: std.ArrayList(u8) = .{},
-mCurrentDirectory: ?std.fs.Dir = null,
-mCurrentPath: std.ArrayList(u8) = .{},
-mProjectFile: ?std.fs.File = null,
+mProjectDirectory: ?std.Io.Dir = null,
+mProjectPath: std.ArrayList(u8) = .empty,
+mCurrentDirectory: ?std.Io.Dir = null,
+mCurrentPath: std.ArrayList(u8) = .empty,
+mProjectFile: ?std.Io.File = null,
 
 pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
     self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/foldericon.png", .Eng);
@@ -144,7 +144,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(
         "back",
-        back_texture.GetTexture(),
+        engine_context.mImguiManager.GetImguiTexture(engine_context, back_texture),
         .{ .x = thumbnail_size, .y = thumbnail_size },
         .{ .x = 0, .y = 0 },
         .{ .x = 1, .y = 1 },
@@ -307,7 +307,7 @@ pub fn OnNewScriptEvent(self: *ContentBrowserPanel, engine_context: *EngineConte
     }
 }
 
-fn RenderImageButton(entry_name: []const u8, texture: *Texture2D, thumbnail_size: f32) !void {
+fn RenderImageButton(engine_context: *EngineContext, entry_name: []const u8, texture: *Texture2D, thumbnail_size: f32) !void {
     const zone = Tracy.ZoneInit("ContentBrowser Render Image Button", @src());
     defer zone.Deinit();
     _ = imgui.igPushID_Str(entry_name.ptr);
@@ -315,7 +315,7 @@ fn RenderImageButton(entry_name: []const u8, texture: *Texture2D, thumbnail_size
 
     _ = imgui.igImageButton(
         entry_name.ptr,
-        texture.GetTexture(),
+        engine_context.mImguiManager.GetImguiTexture(engine_context, texture),
         .{ .x = thumbnail_size, .y = thumbnail_size },
         .{ .x = 0.0, .y = 0.0 },
         .{ .x = 1.0, .y = 1.0 },

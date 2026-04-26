@@ -1,6 +1,5 @@
 const std = @import("std");
 const sdl = @import("../../Core/CImports.zig").sdl;
-const Atlas = @import("../Atlas.zig");
 const Bin = @import("../Bin.zig").Bin;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const SkipField = @import("../../Core/SkipField.zig").StaticSkipField;
@@ -10,14 +9,12 @@ const SGTextureManager = @This();
 pub const ATLAS_SIZE: u32 = 4096;
 pub const MAX_POSSIBLE_LAYERS = 512;
 pub const PADDING: u32 = 2;
-pub const NUM_BINS: u32 = 9;
+pub const NUM_BINS: u32 = 7;
 pub const BYTES_PER_LAYER: usize = ATLAS_SIZE * ATLAS_SIZE * 4; // RGBA8
 pub const SLOT_BYTES = 18;
 pub const LAYER_BYTES = 10;
 pub const BINS_BYTES = 4;
 
-const BIN16 = Bin(ATLAS_SIZE, 16, 2);
-const BIN32 = Bin(ATLAS_SIZE, 32, 2);
 const BIN64 = Bin(ATLAS_SIZE, 64, 2);
 const BIN128 = Bin(ATLAS_SIZE, 128, 2);
 const BIN256 = Bin(ATLAS_SIZE, 256, 2);
@@ -27,10 +24,8 @@ const BIN2048 = Bin(ATLAS_SIZE, 2048, 2);
 const BIN4096 = Bin(ATLAS_SIZE, 4096, 2);
 
 const LayersFreeListT = SkipField(MAX_POSSIBLE_LAYERS);
-const SlotFreeListT = SkipField(BIN16.TotalSlots);
+const SlotFreeListT = SkipField(BIN64.TotalSlots);
 const SizeBoundsList = [_]usize{
-    BIN16.MaxTextureSize,
-    BIN32.MaxTextureSize,
     BIN64.MaxTextureSize,
     BIN128.MaxTextureSize,
     BIN256.MaxTextureSize,
@@ -61,10 +56,10 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
     const texture_info = sdl.SDL_GPUTextureCreateInfo{
         .type = sdl.SDL_GPU_TEXTURETYPE_2D_ARRAY,
         .format = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-        .usage = sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+        .usage = sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER | sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
         .width = ATLAS_SIZE,
         .height = ATLAS_SIZE,
-        .layer_count_or_depth = self.mMaxLayers,
+        .layer_count_or_depth = @intCast(self.mMaxLayers),
         .num_levels = 1,
         .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
         .props = 0,
@@ -112,6 +107,8 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
 }
 
 pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
+    const device: ?*sdl.SDL_GPUDevice = engine_context.mRenderer.mPlatform.GetDevice();
+    sdl.SDL_WaitForGPUIdle(device);
     self.mBins.deinit(engine_context.EngineAllocator());
     self.mLayers.deinit(engine_context.EngineAllocator());
 
@@ -122,7 +119,7 @@ pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
     self.mSampler = null;
 }
 
-pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, pixels: *anyopaque, width: usize, height: usize) !u32 {
+pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?*anyopaque, width: usize, height: usize) !u32 {
     const max_dim = @max(width, height);
 
     const bin_index = std.sort.lowerBound(
@@ -154,9 +151,21 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, pixels:
 
     const offset_x, const offset_y = CalculateOffsets(bin_index, slot_index);
 
-    try self.UpdateToLayer(device, pixels, width, height, layer_index, offset_x, offset_y);
+    if (data) |d| {
+        try self.UpdateToLayer(device, d, width, height, layer_index, offset_x, offset_y);
+    }
 
     return (@as(u32, slot_index) << (LAYER_BYTES + BINS_BYTES)) | (@as(u32, layer_index) << BINS_BYTES) | @as(u32, bin_index);
+}
+
+pub fn Bind(self: SGTextureManager, render_pass: *anyopaque) void {
+    const sdl_render_pass: *sdl.SDL_GPURenderPass = @ptrCast(render_pass);
+
+    const binding = sdl.SDL_GPUTextureSamplerBinding{
+        .texture = self.mTexture,
+        .sampler = self.mSampler,
+    };
+    sdl.SDL_BindGPUFragmentSamplers(sdl_render_pass, 0, &binding, 1);
 }
 
 pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
@@ -165,12 +174,12 @@ pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
     const bin_index = GetBinIndex(texture_location);
 
     std.debug.assert(layer_index < self.mLayers.items.len);
-    self.mLayers.items[layer_index].ChangeToUnskipped(slot_index);
+    self.mLayers.items[layer_index].ChangeToUnskipped(@intCast(slot_index));
 
     self.CheckReleaseLayer(bin_index, layer_index);
 }
 
-pub fn CalculateTexOffsets(_: *SGTextureManager, texture_handle: u32) struct { f32, f32 } {
+pub fn GetNormalizedOffsets(_: SGTextureManager, texture_handle: u32) struct { f32, f32 } {
     const bin_index = GetBinIndex(texture_handle);
     const slot_index = GetSlotIndex(texture_handle);
 
@@ -180,6 +189,13 @@ pub fn CalculateTexOffsets(_: *SGTextureManager, texture_handle: u32) struct { f
         @as(f32, @floatFromInt(x_pixel_offset)) / @as(f32, @floatFromInt(ATLAS_SIZE)),
         @as(f32, @floatFromInt(y_pixel_offset)) / @as(f32, @floatFromInt(ATLAS_SIZE)),
     };
+}
+
+pub fn GetPixelOffsets(_: SGTextureManager, texture_handle: u32) struct { usize, usize } {
+    const bin_index = GetBinIndex(texture_handle);
+    const slot_index = GetSlotIndex(texture_handle);
+
+    return CalculateOffsets(bin_index, slot_index);
 }
 
 pub fn GetTexture(self: SGTextureManager) *sdl.SDL_GPUTexture {
@@ -208,17 +224,22 @@ fn FindLayerIndex(self: *SGTextureManager, bin_index: usize) !struct { usize, us
     if (self.mLayersFreeList.GetFirstUnskipped()) |layer_index| {
         self.mBins.items[bin_index].ChangeToUnskipped(layer_index);
         self.mLayersFreeList.ChangeToSkipped(layer_index);
-        return .{ layer_index, self.mLayers.items[layer_index].GetFirstUnskipped().? };
+
+        const slot_index = self.mLayers.items[layer_index].GetFirstUnskipped().?;
+        self.mLayers.items[layer_index].ChangeToSkipped(slot_index);
+
+        return .{ layer_index, slot_index };
     } else {
         //no more available layers so error
         return error.OutOfTextureMemory;
     }
 }
 
-fn CheckReleaseLayer(self: *SGTextureManager, bin_index: u4, layer_index: u12) void {
+fn CheckReleaseLayer(self: *SGTextureManager, bin_index: usize, layer_index: usize) void {
     if (self.mLayers.items[layer_index].IsAllUnskipped()) {
-        self.mBins.items[bin_index].ChangeToSkipped(layer_index);
-        self.mLayersFreeList.ChangeToUnskipped(layer_index);
+        self.mBins.items[bin_index].ChangeToSkipped(@intCast(layer_index));
+        self.mLayersFreeList.ChangeToUnskipped(@intCast(layer_index));
+        self.mLayers.items[layer_index] = .NoSkip;
     }
 }
 
@@ -279,45 +300,39 @@ fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *
 
 fn BinIndToSlotsPerRow(bin_index: usize) usize {
     return switch (bin_index) {
-        0 => BIN16.SlotsPerRow,
-        1 => BIN32.SlotsPerRow,
-        2 => BIN64.SlotsPerRow,
-        3 => BIN128.SlotsPerRow,
-        4 => BIN256.SlotsPerRow,
-        5 => BIN512.SlotsPerRow,
-        6 => BIN1024.SlotsPerRow,
-        7 => BIN2048.SlotsPerRow,
-        8 => BIN4096.SlotsPerRow,
+        0 => BIN64.SlotsPerRow,
+        1 => BIN128.SlotsPerRow,
+        2 => BIN256.SlotsPerRow,
+        3 => BIN512.SlotsPerRow,
+        4 => BIN1024.SlotsPerRow,
+        5 => BIN2048.SlotsPerRow,
+        6 => BIN4096.SlotsPerRow,
         else => undefined,
     };
 }
 
 fn BinIndToSlotSize(bin_index: usize) usize {
     return switch (bin_index) {
-        0 => BIN16.SlotSize,
-        1 => BIN32.SlotSize,
-        2 => BIN64.SlotSize,
-        3 => BIN128.SlotSize,
-        4 => BIN256.SlotSize,
-        5 => BIN512.SlotSize,
-        6 => BIN1024.SlotSize,
-        7 => BIN2048.SlotSize,
-        8 => BIN4096.SlotSize,
+        0 => BIN64.SlotSize,
+        1 => BIN128.SlotSize,
+        2 => BIN256.SlotSize,
+        3 => BIN512.SlotSize,
+        4 => BIN1024.SlotSize,
+        5 => BIN2048.SlotSize,
+        6 => BIN4096.SlotSize,
         else => undefined,
     };
 }
 
 fn BinIndToTotalSlots(bin_index: usize) usize {
     return switch (bin_index) {
-        0 => BIN16.TotalSlots,
-        1 => BIN32.TotalSlots,
-        2 => BIN64.TotalSlots,
-        3 => BIN128.TotalSlots,
-        4 => BIN256.TotalSlots,
-        5 => BIN512.TotalSlots,
-        6 => BIN1024.TotalSlots,
-        7 => BIN2048.TotalSlots,
-        8 => BIN4096.TotalSlots,
+        0 => BIN64.TotalSlots,
+        1 => BIN128.TotalSlots,
+        2 => BIN256.TotalSlots,
+        3 => BIN512.TotalSlots,
+        4 => BIN1024.TotalSlots,
+        5 => BIN2048.TotalSlots,
+        6 => BIN4096.TotalSlots,
         else => undefined,
     };
 }

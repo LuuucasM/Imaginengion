@@ -28,7 +28,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         const Self = @This();
 
-        mComponentsArrays: std.ArrayList(ComponentArray(entity_t)) = .{},
+        mComponentsArrays: std.ArrayList(ComponentArray(entity_t)) = .empty,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
 

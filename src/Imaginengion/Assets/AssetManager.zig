@@ -67,9 +67,9 @@ mAssetECS: ECSManagerAssets = undefined,
 mPathToIDEng: std.AutoHashMapUnmanaged(u64, AssetType) = .empty,
 mPathToIDPrj: std.AutoHashMapUnmanaged(u64, AssetType) = .empty,
 mPathToIDGen: std.AutoHashMapUnmanaged(u64, AssetType) = .empty,
-mCWD: std.fs.Dir = undefined,
+mCWD: std.Io.Dir = undefined,
 mCWDPath: std.ArrayList(u8) = .empty,
-mProjectDirectory: ?std.fs.Dir = undefined,
+mProjectDirectory: ?std.Io.Dir = undefined,
 mProjectPath: std.ArrayList(u8) = .empty,
 
 _internal: InternalData = .{},
@@ -79,10 +79,9 @@ pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
 
     try self.mAssetECS.Init(engine_allocator);
 
-    self.mCWD = std.fs.cwd();
-
-    const cwd_path = try std.fs.cwd().realpathAlloc(engine_context.FrameAllocator(), ".");
-    _ = try self.mCWDPath.writer(engine_allocator).write(cwd_path);
+    self.mCWD = std.Io.Dir.cwd();
+    const cwd_path = try self.mCWD.realPathFileAlloc(engine_context.Io(), ".", engine_context.FrameAllocator());
+    _ = try self.mCWDPath.print(engine_allocator, "{s}", .{cwd_path});
 }
 
 pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
@@ -135,7 +134,7 @@ pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
     self.mProjectPath.deinit(engine_context.EngineAllocator());
 }
 
-pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_source: AssetSource) !AssetHandle {
+pub fn GetAssetHandleRef(self: *AssetManager, engine_context: *EngineContext, asset_source: AssetSource) !AssetHandle {
     if (asset_source == .Default) {
         return AssetHandle{
             .mID = AssetHandle.NullHandle,
@@ -155,14 +154,16 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_allocator: std.mem.Allocato
         .Gen => self.mPathToIDGen.get(asset_hash),
     };
 
+    const engine_allocator = engine_context.EngineAllocator();
+
     if (entity_id) |id| {
         std.debug.assert(self.mAssetECS.HasComponent(AssetMetaData, id));
         self.mAssetECS.GetComponent(AssetMetaData, id).?.mRefs += 1;
         return AssetHandle{ .mID = id, .mAssetManager = self };
     } else {
         const new_asset_id = switch (asset_source) {
-            .File => |f| try self.CreateAssetFile(engine_allocator, f),
-            .Computed => try self.CreateAssetGen(engine_allocator),
+            .File => |f| try self.CreateAssetFile(engine_context, f),
+            .Computed => try self.CreateAssetGen(),
             .Default => unreachable,
         };
 
@@ -198,7 +199,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
 
             const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
 
-            const asset_file = try self.OpenFile(file_data.mRelPath.items, file_data.mPathType);
+            const asset_file = try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
             defer self.CloseFile(asset_file);
 
             var asset_component = asset_type{};
@@ -239,7 +240,7 @@ pub fn OnUpdate(self: *AssetManager, engine_context: *EngineContext) !void {
 
             //check to see if the file needs to be updated
             if (self.CheckModified(file_stat, file_data.mLastModified)) {
-                const file = try self.OpenFile(file_data.mRelPath.items, file_data.mPathType);
+                const file = try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
                 try self.UpdateAsset(entity_id, file, file_stat);
             }
         }
@@ -288,12 +289,12 @@ pub fn OpenFileStats(self: *AssetManager, rel_path: []const u8, path_type: PathT
     }
 }
 
-pub fn OpenFile(self: *AssetManager, rel_path: []const u8, path_type: PathType) !std.fs.File {
+pub fn OpenFile(self: *AssetManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File {
     const zone = Tracy.ZoneInit("AssetManager OpenFile", @src());
     defer zone.Deinit();
     switch (path_type) {
-        .Eng => return try self.mCWD.openFile(rel_path, .{}),
-        .Prj => return try self.mProjectDirectory.?.openFile(rel_path, .{}),
+        .Eng => return try self.mCWD.openFile(engine_context.Io(), rel_path, .{}),
+        .Prj => return try self.mProjectDirectory.?.openFile(engine_context.Io(), rel_path, .{}),
         .Gen => @panic("This shouldnt happen!"),
     }
 }
@@ -360,11 +361,11 @@ fn GetFileStatsIfExists(self: *AssetManager, rel_path: []const u8, path_type: Pa
     };
 }
 
-fn GetFileIfExists(_: *AssetManager, rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File {
+fn GetFileIfExists(_: *AssetManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType, entity_id: AssetType) !?std.fs.File {
     const zone = Tracy.ZoneInit("AssetManager GetFileIfExists", @src());
     defer zone.Deinit();
 
-    return OpenFile(rel_path, path_type) catch |err| {
+    return OpenFile(engine_context, rel_path, path_type) catch |err| {
         if (err == error.FileNotFound) {
             MarkAssetToDelete(entity_id);
         }
@@ -390,11 +391,13 @@ fn ComputePathHash(path: []const u8) u64 {
     return hasher.final();
 }
 
-fn CreateAssetFile(self: *AssetManager, engine_allocator: std.mem.Allocator, file_source: FileSource) !AssetType {
+fn CreateAssetFile(self: *AssetManager, engine_context: *EngineContext, file_source: FileSource) !AssetType {
     const zone = Tracy.ZoneInit("AssetManager CreateAssetFile", @src());
     defer zone.Deinit();
 
-    const new_asset_id = try self.mAssetECS.CreateEntity(engine_allocator);
+    const engine_allocator = engine_context.EngineAllocator();
+
+    const new_asset_id = try self.mAssetECS.CreateEntity();
 
     _ = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
     const file_meta_data = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, FileMetaData{
@@ -404,9 +407,9 @@ fn CreateAssetFile(self: *AssetManager, engine_allocator: std.mem.Allocator, fil
         .mPathType = file_source.path_type,
     });
 
-    _ = try file_meta_data.mRelPath.writer(engine_allocator).write(file_source.rel_path);
+    _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
 
-    const file = try self.OpenFile(file_source.rel_path, file_source.path_type);
+    const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
     defer self.CloseFile(file);
     const fstats = try file.stat();
 

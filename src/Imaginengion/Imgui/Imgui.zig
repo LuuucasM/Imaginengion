@@ -5,9 +5,15 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const sdl = @import("../Core/CImports.zig").sdl;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Imgui = @This();
+const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const ImguiManager = @This();
 
-pub fn Init(engine_context: *EngineContext) void {
+const TEXTURE_SIZE: usize = 128;
+
+mImguiTextures: std.ArrayList(*sdl.SDL_GPUTexture) = .empty,
+mImguiTexturesSize: usize = 0,
+
+pub fn Init(_: ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
     _ = imgui.igCreateContext(null);
@@ -41,7 +47,7 @@ pub fn Init(engine_context: *EngineContext) void {
     };
     _ = imgui.ImGui_ImplSDLGPU3_Init(&init_info);
 }
-pub fn Deinit(engine_context: *EngineContext) void {
+pub fn Deinit(self: ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
     defer zone.Deinit();
 
@@ -51,15 +57,18 @@ pub fn Deinit(engine_context: *EngineContext) void {
     imgui.ImGui_ImplSDLGPU3_Shutdown();
     imgui.ImGui_ImplSDL3_Shutdown();
     imgui.igDestroyContext(null);
+
+    self.mImguiTextures.deinit(engine_context);
 }
-pub fn Begin() void {
+pub fn Begin(self: ImguiManager) void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
     defer zone.Deinit();
     imgui.ImGui_ImplSDLGPU3_NewFrame();
     imgui.ImGui_ImplSDL3_NewFrame();
     imgui.igNewFrame();
+    self.mImguiTexturesSize = 0;
 }
-pub fn End(engine_context: *EngineContext) void {
+pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("ImguiEnd ", @src());
     defer zone.Deinit();
 
@@ -80,6 +89,58 @@ pub fn End(engine_context: *EngineContext) void {
         imgui.igUpdatePlatformWindows();
         imgui.igRenderPlatformWindowsDefault(null, null);
     }
+}
+pub fn GetImguiTexture(self: ImguiManager, engine_context: *EngineContext, texture: Texture2D) !*sdl.SDL_GPUTexture {
+    const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+
+    const preview = try self.getOrCreatePreviewTexture(device);
+
+    const offset_x, const offset_y = engine_context.mRenderer.mTextureManager.GetPixelOffsets(texture.GetTextureHandle());
+    const layer = engine_context.mRenderer.mTextureManager.GetLayerIndex(texture.GetTextureHandle());
+
+    const copy_w = @min(texture.GetWidth(), TEXTURE_SIZE);
+    const copy_h = @min(texture.GetHeight(), TEXTURE_SIZE);
+
+    const dst_x = (TEXTURE_SIZE - copy_w) / 2;
+    const dst_y = (TEXTURE_SIZE - copy_h) / 2;
+
+    const cmd = sdl.SDL_AcquireGPUCommandBuffer(engine_context.gpu_device) orelse error.AquireGPUCMDFailed;
+    defer sdl.SDL_SubmitGPUCommandBuffer(cmd);
+
+    const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd);
+    defer sdl.SDL_EndGPUCopyPass(copy_pass);
+
+    const atlas_texture: *sdl.SDL_GPUTexture = @ptrCast(texture.GetTexture());
+
+    const src = sdl.SDL_GPUTextureLocation{
+        .texture = atlas_texture,
+        .mip_level = 0,
+        .layer = layer,
+        .x = offset_x,
+        .y = offset_y,
+        .z = 0,
+    };
+
+    const dst = sdl.SDL_GPUTextureLocation{
+        .texture = preview,
+        .mip_level = 0,
+        .layer = 0,
+        .x = dst_x,
+        .y = dst_y,
+        .z = 0,
+    };
+
+    sdl.SDL_CopyGPUTextureToTexture(
+        copy_pass,
+        &src,
+        &dst,
+        copy_w,
+        copy_h,
+        1,
+        true,
+    );
+
+    return preview;
 }
 
 fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {
@@ -115,4 +176,26 @@ fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {
     style.*.Colors[imgui.ImGuiCol_ResizeGrip] = .{ .x = 0.8, .y = 0.3, .z = 0.3, .w = 1.0 };
     style.*.Colors[imgui.ImGuiCol_ResizeGripHovered] = .{ .x = 0.303, .y = 0.333, .z = 0.340, .w = 1.0 };
     style.*.Colors[imgui.ImGuiCol_ResizeGripActive] = .{ .x = 0.404, .y = 0.444, .z = 0.454, .w = 1.0 };
+}
+
+fn getOrCreatePreviewTexture(self: *ImguiManager, device: *sdl.SDL_GPUDevice) !*sdl.SDL_GPUTexture {
+    if (self.mImguiTextureIndex >= self.mImguiTextures.items.len) {
+        //have to make a new one
+        const info = sdl.SDL_GPUTextureCreateInfo{
+            .type = sdl.SDL_GPU_TEXTURETYPE_2D,
+            .format = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+            .usage = sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+            .width = 256,
+            .height = 256,
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
+            .props = 0,
+        };
+        return sdl.SDL_CreateGPUTexture(device, &info) orelse error.TextureCreateFail;
+    } else {
+        const texture = self.mImguiTextures.items[self.mImguiTexturesSize];
+        self.mImguiTexturesSize += 1;
+        return texture;
+    }
 }

@@ -59,10 +59,10 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
-    const texture_asset = try self.mTexture.GetTexture(engine_context);
+    const texture_asset = self.mTexture.GetTexture(engine_context);
 
     imgui.igImage(
-        texture_asset.GetTexture(),
+        engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
         .{ .x = 50.0, .y = 50.0 },
         // Always show full texture in preview
         .{ .x = 0.0, .y = 1.0 },
@@ -87,7 +87,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     try self.EditTexCoords(texture_asset);
 }
 
-fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
+fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_asset: *Texture2D) !void {
     if (!self.mEditTexCoords) return;
     //const window_flags = imgui.ImGuiWindowFlags_NoDecoration | imgui.ImGuiWindowFlags_NoCollapse | imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoResize | imgui.ImGuiWindowFlags_NoSavedSettings | imgui.ImGuiWindowFlags_NoBringToFrontOnFocus | imgui.ImGuiWindowFlags_NoNavFocus;
     imgui.igSetNextWindowSize(.{ .x = @floatFromInt(texture_asset.GetWidth()), .y = @floatFromInt(texture_asset.GetHeight()) }, imgui.ImGuiCond_Once);
@@ -115,7 +115,7 @@ fn EditTexCoords(self: *QuadComponent, texture_asset: *Texture2D) !void {
         }
 
         imgui.igImage(
-            texture_asset.GetTexture(),
+            engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
             .{ .x = draw_w, .y = draw_h },
             .{ .x = self.mTexOptions.mTexCoords[0], .y = 1.0 - self.mTexOptions.mTexCoords[1] },
             .{ .x = self.mTexOptions.mTexCoords[2], .y = 1.0 - self.mTexOptions.mTexCoords[3] },

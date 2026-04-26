@@ -2,44 +2,6 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const builtin = @import("builtin");
 
-fn CategoryTaggedEventUnion(EventCategories: type, EventUnion: type) type {
-    const phase_name = @typeName(EventCategories);
-    const phase_info = @typeInfo(EventCategories);
-    switch (phase_info) {
-        .@"enum" => {},
-        else => @compileError(phase_name ++ " event phases must be an enum"),
-    }
-
-    const event_name = @typeName(EventUnion);
-    const event_info = @typeInfo(EventUnion);
-    switch (event_info) {
-        .@"union" => |u| {
-            if (u.tag_type == null) {
-                @compileError(event_name ++ " must be a tagged union (e.g. `union(enum)`)");
-            }
-        },
-        else => @compileError(event_name ++ " must be a union (e.g. `union(enum)` )"),
-    }
-
-    const phase_fields = std.meta.fields(EventCategories);
-
-    comptime var union_fields: [phase_fields.len]std.builtin.Type.UnionField = undefined;
-    inline for (phase_fields, 0..) |f, i| {
-        union_fields[i] = .{
-            .name = f.name,
-            .type = EventUnion,
-            .alignment = @alignOf(EventUnion),
-        };
-    }
-
-    return @Type(.{ .@"union" = .{
-        .layout = .auto,
-        .tag_type = EventCategories,
-        .fields = &union_fields,
-        .decls = &.{},
-    } });
-}
-
 pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
     return struct {
         pub const ClearMode = enum {

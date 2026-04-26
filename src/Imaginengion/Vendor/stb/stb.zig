@@ -1,3 +1,1 @@
-pub const c = @cImport({
-    @cInclude("stb_image.h");
-});
+pub const c = @import("c");

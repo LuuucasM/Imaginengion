@@ -29,7 +29,7 @@ pub const GenDescriptor = struct {
     width: usize,
     height: usize,
     texture_format: TextureFormat,
-    data: *anyopaque,
+    data: ?*anyopaque,
 };
 
 const Impl = switch (builtin.os.tag) {

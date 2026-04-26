@@ -137,6 +137,11 @@ pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine
     }
 }
 
+pub fn BindBuffers(self: Renderer2D, render_pass: *anyopaque) void {
+    self.mQuadBuffer.Bind(render_pass);
+    self.mGlyphBuffer.Bind(render_pass);
+}
+
 pub fn GetQuadCount(self: Renderer2D) u32 {
     return @intCast(self.mQuadBufferBase.items.len);
 }
@@ -157,7 +162,7 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
-    const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
+    const texture_asset = quad_component.mTexture.GetTexture(engine_context);
 
     const world_pos = transform_component.GetWorldPosition();
     const world_rot = transform_component.GetWorldRotation();

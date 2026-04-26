@@ -24,7 +24,7 @@ pub const Ind: usize = blk: {
 };
 
 mShouldRender: bool = true,
-mText: std.ArrayList(u8) = .{},
+mText: std.ArrayList(u8) = .empty,
 mTextAssetHandle: AssetHandle = .{},
 mTexHandle: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},

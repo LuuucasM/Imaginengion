@@ -27,8 +27,13 @@ const Tracy = @import("../Core/Tracy.zig");
 const PhysicsManager = @This();
 
 const InternalData = struct {
-    Accumulator: f32 = 0,
-    Contacts: std.ArrayList(Contact) = .{},
+    pub const empty: InternalData = .{
+        .Accumulator = 0,
+        .Contacts = .empty,
+    };
+
+    Accumulator: f32,
+    Contacts: std.ArrayList(Contact),
 };
 const PHYSICS_DT: f32 = 1.0 / 60.0;
 const PERCENT: f32 = 0.8;
@@ -36,7 +41,7 @@ const SLOP: f32 = 0.01;
 const SOLVER_ITERS: u32 = 4;
 const SUB_STEPS: u32 = 4;
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
-_InternalData: InternalData = .{},
+_InternalData: InternalData = .empty,
 
 pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("PhysicsManager::Deinit", @src());

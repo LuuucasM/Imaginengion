@@ -22,7 +22,8 @@ const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
 const TextureManager = @import("../TextureManager/TextureManager.zig");
-const PushConstants = @import("RenderPlatform.zig").PushConstants;
+const RenderPipeline = @import("RenderPipeline.zig");
+const PushConstants = RenderPipeline.PushConstants;
 
 const LinAlg = @import("../Math/LinAlg.zig");
 const Vec3f32 = LinAlg.Vec3f32;
@@ -38,7 +39,7 @@ pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 
 mPlatform: RenderPlatform = .{},
 mTextureManager: TextureManager = .{},
-
+mPipeline: RenderPipeline = .{},
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
 
@@ -60,12 +61,14 @@ mSDFShader: AssetHandle = .{},
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
+    self.mPlatform.Init(engine_context);
+
+    try self.mTextureManager.Init(engine_context, 2_000_000_000);
+
     const shader_rel_path = "assets/shaders/SDFShader.program";
     self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_allocator, .{ .File = .{ .rel_path = shader_rel_path, .path_type = .Eng } });
 
-    self.mPlatform.Init(engine_context, try self.mSDFShader.GetAsset(engine_context, ShaderAsset));
-
-    self.mTextureManager.Init(engine_context, 2_000_000_000);
+    self.mPipeline.Init(engine_context, self.mSDFShader.GetAsset(engine_context, ShaderAsset), .{ .color_format = .RGBA8, .enable_blend = true });
 
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
@@ -73,10 +76,9 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
     self.mTextureManager.Deinit(engine_context);
+    self.mPipeline.Deinit(engine_context);
     self.mPlatform.Deinit(engine_context.mAppWindow);
-
     self.mSDFShader.ReleaseAsset();
-
     self.mR2D.Deinit(engine_context.EngineAllocator());
     self.mR3D.Deinit(engine_context.EngineAllocator());
 }
@@ -95,6 +97,8 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
     };
+
+    self.mPushConstants = push_constants;
 
     self.BeginRendering(engine_context.EngineAllocator());
 
@@ -124,10 +128,10 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         try self.DrawShape(engine_context, shape_entity);
     }
 
-    push_constants.quads_count = self.mR2D.mQuadBufferBase.items.len;
-    push_constants.glyphs_count = self.mR2D.mGlyphBufferBase.items.len;
+    self.mPushConstants.quads_count = self.mR2D.GetQuadCount();
+    self.mPushConstants.glyphs_count = self.mR2D.GetGlyphCount();
 
-    try self.EndRendering(world_type, engine_context, frame_buffer, &push_constants);
+    try self.EndRendering(world_type, engine_context, frame_buffer);
 }
 
 pub fn GetSDFShader(self: *Renderer, engine_context: *EngineContext) *ShaderAsset {
@@ -137,9 +141,6 @@ pub fn GetSDFShader(self: *Renderer, engine_context: *EngineContext) *ShaderAsse
 fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("BeginFrame", @src());
     defer zone.Deinit();
-
-    self.mPlatform.PushDebugGroup("Set Camera Data\x00");
-    defer self.mPlatform.PopDebugGroup();
 
     self.mR2D.StartBatch(engine_allocator);
 }
@@ -159,7 +160,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
     }
 }
 
-fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, frame_buffer: *OutputFrameBuffer, push_constants: *PushConstants) !void {
+fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, frame_buffer: *OutputFrameBuffer) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
@@ -168,15 +169,26 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
 
     const cmd = self.mPlatform.GetCommandBuff();
 
+    self.mPlatform.PushDebugGroup("Upload Buffers\x00");
     self.mR2D.SetBuffers(world_type, engine_context);
+    self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw\x00");
     defer self.mPlatform.PopDebugGroup();
 
     const render_pass = frame_buffer.BeginRenderPass(engine_context, .{ 0.3, 0.3, 0.3, 1.0 });
-    defer frame_buffer.EndRenderPass(render_pass);
 
-    self.mPlatform.Draw(cmd, push_constants);
+    self.mPipeline.Bind(render_pass);
+
+    self.mR2D.BindBuffers(render_pass);
+
+    self.mTextureManager.Bind(render_pass);
+
+    self.mPipeline.PushUniforms(cmd, self.mPushConstants);
+
+    self.mPipeline.Draw(render_pass);
+
+    frame_buffer.EndRenderPass(render_pass);
 
     self.mPlatform.EndFrame();
 }
