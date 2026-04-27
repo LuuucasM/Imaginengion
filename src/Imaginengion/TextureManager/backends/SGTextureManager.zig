@@ -124,10 +124,10 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
 
     const bin_index = std.sort.lowerBound(
         usize,
-        SizeBoundsList,
+        &SizeBoundsList,
         max_dim,
         struct {
-            fn comparison(_: void, key: usize, mid: usize) std.math.Order {
+            fn comparison(key: usize, mid: usize) std.math.Order {
                 return std.math.order(key, mid);
             }
         }.comparison,
@@ -155,7 +155,7 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
         try self.UpdateToLayer(device, d, width, height, layer_index, offset_x, offset_y);
     }
 
-    return (@as(u32, slot_index) << (LAYER_BYTES + BINS_BYTES)) | (@as(u32, layer_index) << BINS_BYTES) | @as(u32, bin_index);
+    return (@as(u32, @intCast(slot_index)) << (LAYER_BYTES + BINS_BYTES)) | (@as(u32, @intCast(layer_index)) << BINS_BYTES) | @as(u32, @intCast(bin_index));
 }
 
 pub fn Bind(self: SGTextureManager, render_pass: *anyopaque) void {
@@ -174,7 +174,7 @@ pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
     const bin_index = GetBinIndex(texture_location);
 
     std.debug.assert(layer_index < self.mLayers.items.len);
-    self.mLayers.items[layer_index].ChangeToUnskipped(@intCast(slot_index));
+    self.mLayers.items[layer_index].ChangeToUnskipped(slot_index);
 
     self.CheckReleaseLayer(bin_index, layer_index);
 }
@@ -237,8 +237,8 @@ fn FindLayerIndex(self: *SGTextureManager, bin_index: usize) !struct { usize, us
 
 fn CheckReleaseLayer(self: *SGTextureManager, bin_index: usize, layer_index: usize) void {
     if (self.mLayers.items[layer_index].IsAllUnskipped()) {
-        self.mBins.items[bin_index].ChangeToSkipped(@intCast(layer_index));
-        self.mLayersFreeList.ChangeToUnskipped(@intCast(layer_index));
+        self.mBins.items[bin_index].ChangeToSkipped(layer_index);
+        self.mLayersFreeList.ChangeToUnskipped(layer_index);
         self.mLayers.items[layer_index] = .NoSkip;
     }
 }
@@ -254,7 +254,7 @@ fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *
 
     const transfer_info = sdl.SDL_GPUTransferBufferCreateInfo{
         .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = data_size,
+        .size = @intCast(data_size),
         .props = 0,
     };
 
@@ -277,19 +277,19 @@ fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *
     const src = sdl.SDL_GPUTextureTransferInfo{
         .transfer_buffer = transfer_buf,
         .offset = 0,
-        .pixels_per_row = width,
-        .rows_per_layer = height,
+        .pixels_per_row = @intCast(width),
+        .rows_per_layer = @intCast(height),
     };
 
     const dst = sdl.SDL_GPUTextureRegion{
         .texture = self.mTexture,
         .mip_level = 0,
-        .layer = layer_index, // which layer in the array
-        .x = offset_x, // horizontal offset within the layer
-        .y = offset_y, // vertical offset within the layer
+        .layer = @intCast(layer_index), // which layer in the array
+        .x = @intCast(offset_x), // horizontal offset within the layer
+        .y = @intCast(offset_y), // vertical offset within the layer
         .z = 0,
-        .w = width,
-        .h = height,
+        .w = @intCast(width),
+        .h = @intCast(height),
         .d = 1,
     };
 

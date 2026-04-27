@@ -133,7 +133,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
+            result.mTextAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -144,7 +144,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
+            result.mTexHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

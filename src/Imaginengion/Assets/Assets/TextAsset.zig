@@ -40,7 +40,7 @@ mEmsize: f32 = 0.0,
 mAtlasSize: Vec2f32 = Vec2f32{ 0, 0 },
 mAtlas: Texture2D = .{},
 
-pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
+pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
     const ext = std.fs.path.extension(rel_path);
@@ -51,19 +51,19 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     const name_json = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{base_path});
 
     //test to see if both of the files are present already
-    var file_json: ?std.fs.File = std.fs.cwd().openFile(name_json, .{}) catch |err| switch (err) {
+    var file_json: ?std.Io.File = std.Io.Dir.cwd().openFile(engine_context.Io(), name_json, .{}) catch |err| switch (err) {
         error.FileNotFound => null,
         else => return err,
     };
-    var file_png: ?std.fs.File = std.fs.cwd().openFile(name_png, .{}) catch |err| switch (err) {
+    var file_png: ?std.Io.File = std.Io.Dir.cwd().openFile(engine_context.Io(), name_png, .{}) catch |err| switch (err) {
         error.FileNotFound => null,
         else => return err,
     };
 
     //if one of them is missing then we generate new files using msdfgen
     if (file_png == null or file_json == null) {
-        if (file_json) |f| f.close();
-        if (file_png) |f| f.close();
+        if (file_json) |f| f.close(engine_context.Io());
+        if (file_png) |f| f.close(engine_context.Io());
 
         std.log.info("Font generated files not found for {s}.\n Generating files now.", .{rel_path});
 

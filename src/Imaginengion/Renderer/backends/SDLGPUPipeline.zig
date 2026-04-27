@@ -179,8 +179,9 @@ fn ToSDLTextureFormat(format: TextureFormat) sdl.SDL_GPUTextureFormat {
     return switch (format) {
         .RGBA8 => sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
         .BGRA8 => sdl.SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM,
-        .RGBA16Float => sdl.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
-        .RGBA32Float => sdl.SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
-        .Depth32Float => sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        .RGBA16F => sdl.SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+        .RGBA32F => sdl.SDL_GPU_TEXTUREFORMAT_R32G32B32A32_FLOAT,
+        .DEPTH32F => sdl.SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        else => undefined,
     };
 }

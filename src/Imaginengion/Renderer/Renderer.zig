@@ -59,16 +59,14 @@ mPushConstants: PushConstants = .{
 mSDFShader: AssetHandle = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
-    const engine_allocator = engine_context.EngineAllocator();
-
     self.mPlatform.Init(engine_context);
 
     try self.mTextureManager.Init(engine_context, 2_000_000_000);
 
     const shader_rel_path = "assets/shaders/SDFShader.program";
-    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_allocator, .{ .File = .{ .rel_path = shader_rel_path, .path_type = .Eng } });
+    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = shader_rel_path, .path_type = .Eng } });
 
-    self.mPipeline.Init(engine_context, self.mSDFShader.GetAsset(engine_context, ShaderAsset), .{ .color_format = .RGBA8, .enable_blend = true });
+    try self.mPipeline.Init(engine_context, try self.mSDFShader.GetAsset(engine_context, ShaderAsset), .{ .color_format = .RGBA8, .enable_blend = true });
 
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();

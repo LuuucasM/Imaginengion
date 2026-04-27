@@ -96,8 +96,12 @@ pub fn StaticSkipField(size: usize) type {
         ///
         /// Returns:
         /// - Nothing
-        pub fn ChangeToSkipped(self: *Self, index: SkipFieldType) void {
-            std.debug.assert(size > index);
+        pub fn ChangeToSkipped(self: *Self, in_index: anytype) void {
+            _ValidateIndexType(@TypeOf(in_index));
+            std.debug.assert(size > in_index);
+
+            const index: SkipFieldType = @intCast(in_index);
+
             if (size < 2) {
                 self.mSkipField[0] = 1;
                 return;
@@ -149,8 +153,12 @@ pub fn StaticSkipField(size: usize) type {
         ///
         /// Returns:
         /// - Nothing
-        pub fn ChangeToUnskipped(self: *Self, index: SkipFieldType) void {
-            std.debug.assert(size > index);
+        pub fn ChangeToUnskipped(self: *Self, in_index: anytype) void {
+            _ValidateIndexType(@TypeOf(in_index));
+            std.debug.assert(size > in_index);
+
+            const index: SkipFieldType = @intCast(in_index);
+
             if (size < 2) {
                 self.mSkipField[0] = 0;
                 return;
@@ -287,6 +295,14 @@ pub fn StaticSkipField(size: usize) type {
 
         pub fn GetFirstUnskipped(self: Self) ?usize {
             if (self.mSkipField[0] >= size) return null else return self.mSkipField[0];
+        }
+
+        fn _ValidateIndexType(index_t: type) void {
+            const type_info = @typeInfo(index_t);
+
+            if (type_info != .int and type_info != .comptime_int) {
+                @compileError("index must be int type");
+            }
         }
     };
 }

@@ -29,7 +29,7 @@ const ShaderSources = struct {
     mFragmentStageInfo: StageInfo,
 };
 
-const StageInfo = struct {
+pub const StageInfo = struct {
     mStage: Stage,
     mNumUniformBuffers: u32,
     mNumStorageBuffers: u32,
@@ -47,20 +47,19 @@ pub const Ind: usize = blk: {
 
 mShaderSources: ShaderSources = undefined,
 
-pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []const u8, _: []const u8, asset_file: std.fs.File) !void {
+pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []const u8, _: []const u8, asset_file: std.Io.File) !void {
     const zone = Tracy.ZoneInit("Shader Init", @src());
     defer zone.Deinit();
 
     const file_path = std.fs.path.dirname(abs_path).?;
 
-    const file_size = try asset_file.getEndPos();
-    const json_buf = try engine_context.FrameAllocator().alloc(u8, file_size);
-    _ = try asset_file.readAll(json_buf);
+    var file_reader = asset_file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
 
     const manifest = try std.json.parseFromSliceLeaky(
         ShaderManifest,
         engine_context.FrameAllocator(),
-        json_buf,
+        contents,
         .{ .allocate = .alloc_if_needed },
     );
 
@@ -100,11 +99,11 @@ pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) !void {
 
 fn LoadSpirvFile(engine_context: *EngineContext, dir: []const u8, name: []const u8) ![]const u8 {
     const path = try std.fs.path.join(engine_context.FrameAllocator(), &.{ dir, name });
-    const file = try std.fs.openFileAbsolute(path, .{});
-    defer file.close();
+    const file = try std.Io.Dir.openFileAbsolute(engine_context.Io(), path, .{});
+    defer file.close(engine_context.Io());
 
-    const size = try file.getEndPos();
-    const buf = try engine_context.EngineAllocator().alloc(u8, size);
-    _ = try file.readAll(buf);
-    return buf;
+    var file_reader = file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
+
+    return contents;
 }

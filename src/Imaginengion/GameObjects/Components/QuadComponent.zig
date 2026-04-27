@@ -81,7 +81,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             self.mTexture.ReleaseAsset();
-            self.mTexture = .{ .Asset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj) };
+            self.mTexture = .{ .Asset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, path, .Prj) };
         }
     }
     try self.EditTexCoords(texture_asset);
@@ -218,7 +218,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
+            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

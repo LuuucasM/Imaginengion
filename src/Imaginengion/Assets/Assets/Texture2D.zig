@@ -16,13 +16,14 @@ pub const TexOptions = struct {
 
 pub const TextureFormat = enum(u4) {
     None = 0,
-    RGBA8 = 1,
-    RGBA16F = 2,
-    RGBA32F = 3,
-    RG32F = 4,
-    RED_INTEGER = 5,
-    DEPTH32F = 6,
-    DEPTH24STENCIL8 = 7,
+    RGBA8,
+    BGRA8,
+    RGBA16F,
+    RGBA32F,
+    RG32F,
+    RED_INTEGER,
+    DEPTH32F,
+    DEPTH24STENCIL8,
 };
 
 pub const GenDescriptor = struct {
@@ -48,7 +49,7 @@ pub const Ind: usize = blk: {
 
 _Impl: Impl = .{},
 
-pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+pub fn Init(self: *Texture2D, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     try self._Impl.Init(engine_context, abs_path, rel_path, asset_file);
 }
 pub fn InitGen(self: *Texture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {

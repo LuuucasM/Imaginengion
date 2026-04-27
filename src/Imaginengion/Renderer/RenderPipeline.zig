@@ -29,7 +29,7 @@ const RenderPipeline = @This();
 _Impl: Impl = .{},
 
 pub fn Init(self: *RenderPipeline, engine_context: *EngineContext, shader: *ShaderAsset, config: PipelineConfig) !void {
-    self._Impl.Init(engine_context, shader, config);
+    try self._Impl.Init(engine_context, shader, config);
 }
 
 pub fn Deinit(self: *RenderPipeline, engine_context: *EngineContext) void {

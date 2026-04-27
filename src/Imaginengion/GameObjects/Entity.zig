@@ -144,7 +144,7 @@ pub fn GetIterator(self: Entity, comptime iter_type: Iterator.IterType) ?Iterato
 }
 
 pub fn AddComponentScript(self: Entity, engine_context: *EngineContext, rel_path_script: []const u8, path_type: PathType) !void {
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), rel_path_script, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, rel_path_script, path_type);
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
     std.debug.assert(script_asset.mScriptType == .EntityInputPressed or script_asset.mScriptType == .EntityOnUpdate);

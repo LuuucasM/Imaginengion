@@ -11,17 +11,17 @@ const SDL_TEXTURE_FORMAT = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 _Width: c_int = 0,
 _Height: c_int = 0,
 _TextureHandle: u32 = 0,
-_TextureManager: TextureManager = undefined,
+_TextureManager: *TextureManager = undefined,
 
-pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
 
-    const fstats = try asset_file.stat();
-    const contents = try asset_file.readToEndAlloc(frame_allocator, @intCast(fstats.size));
+    var file_reader = asset_file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
 
     stb.stbi_set_flip_vertically_on_load(1);
     const data = stb.stbi_load_from_memory(
@@ -39,13 +39,13 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
         return error.AssetInitFailed;
     }
 
-    engine_context.mRenderer.mTextureManager.Register(engine_context, data, width, height);
+    self._TextureHandle = try engine_context.mRenderer.mTextureManager.Register(engine_context, data, @intCast(width), @intCast(height));
 
     self._Width = width;
     self._Height = height;
     self._TextureManager = &engine_context.mRenderer.mTextureManager;
 
-    std.log.debug("SDLGPUTexture2D: loaded '{s}' → bindless slot {d}", .{ rel_path, self.mSlot });
+    std.log.debug("SDLGPUTexture2D: loaded '{s}' → bindless slot {d}", .{ rel_path, self._TextureHandle });
 }
 
 pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {

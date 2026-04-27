@@ -14,7 +14,7 @@ pub const Ind: usize = blk: {
 };
 
 mRelPath: std.ArrayList(u8) = .empty,
-mLastModified: i128 = 0,
+mLastModified: std.Io.Timestamp = .zero,
 mSize: u64 = 0,
 mHash: u64 = 0,
 mPathType: PathType = .Eng,

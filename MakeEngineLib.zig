@@ -70,6 +70,7 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         .target = target,
         .optimize = optimize,
     });
+
     imgui_c_trans.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/" } });
     imgui_c_trans.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/imgui/imgui/" } });
     imgui_c_trans.addIncludePath(.{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Vendor/sdl3/include/" } });

@@ -107,7 +107,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), path, .Prj);
+            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, path, .Prj);
         }
         imgui.igEndDragDropTarget();
     }
@@ -163,7 +163,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mAudioAsset = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
+            result.mAudioAsset = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
                 std.debug.panic("error: {}\n", .{err});
             };
         } else if (std.mem.eql(u8, field_name, "Volume")) {

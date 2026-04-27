@@ -86,29 +86,30 @@ pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
 
 pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
+    const io = engine_context.Io();
 
     //FILE META DATA =======================
-    _ = try self._internal.DefaultFileMetaData.mRelPath.writer(engine_context.EngineAllocator()).write("default");
+    _ = try self._internal.DefaultFileMetaData.mRelPath.print(engine_context.EngineAllocator(), "default", .{});
 
     //TEXTURE 2D =========================
     const texture2d_rel_path = "assets/textures/DefaultTexture.png";
     const texture2d_abs_path = try self.GetAbsPath(frame_allocator, texture2d_rel_path, .Eng);
-    const texture2d_file = try std.fs.openFileAbsolute(texture2d_abs_path, .{});
-    defer texture2d_file.close();
+    const texture2d_file = try std.Io.Dir.openFileAbsolute(io, texture2d_abs_path, .{});
+    defer texture2d_file.close(io);
     try self._internal.DefaultTexture2D.Init(engine_context, texture2d_abs_path, texture2d_rel_path, texture2d_file);
 
     //TEXT ================================
     const text_rel_path = "assets/fonts/default/static/ChironGoRoundTC-Regular.ttf";
     const text_abs_path = try self.GetAbsPath(frame_allocator, text_rel_path, .Eng);
-    const text_file = try std.fs.openFileAbsolute(text_abs_path, .{});
-    defer text_file.close();
+    const text_file = try std.Io.Dir.openFileAbsolute(io, text_abs_path, .{});
+    defer text_file.close(io);
     try self._internal.DefaultTextAsset.Init(engine_context, text_abs_path, text_rel_path, text_file);
 
     //AUDIO =================================
     const audio_rel_path = "assets/sounds/DefaultSound.mp3";
     const audio_abs_path = try self.GetAbsPath(frame_allocator, audio_rel_path, .Eng);
-    const audio_file = try std.fs.openFileAbsolute(audio_abs_path, .{});
-    defer audio_file.close();
+    const audio_file = try std.Io.Dir.openFileAbsolute(io, audio_abs_path, .{});
+    defer audio_file.close(io);
     try self._internal.DefaultAudioAsset.Init(engine_context, audio_abs_path, audio_rel_path, audio_file);
 }
 
@@ -163,7 +164,7 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_context: *EngineContext, as
     } else {
         const new_asset_id = switch (asset_source) {
             .File => |f| try self.CreateAssetFile(engine_context, f),
-            .Computed => try self.CreateAssetGen(),
+            .Computed => try self.CreateAssetGen(engine_allocator),
             .Default => unreachable,
         };
 
@@ -200,7 +201,7 @@ pub fn GetAsset(self: *AssetManager, engine_context: *EngineContext, comptime as
             const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
 
             const asset_file = try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
-            defer self.CloseFile(asset_file);
+            defer self.CloseFile(engine_context.Io(), asset_file);
 
             var asset_component = asset_type{};
             asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file) catch |err| {
@@ -241,7 +242,7 @@ pub fn OnUpdate(self: *AssetManager, engine_context: *EngineContext) !void {
             //check to see if the file needs to be updated
             if (self.CheckModified(file_stat, file_data.mLastModified)) {
                 const file = try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
-                try self.UpdateAsset(entity_id, file, file_stat);
+                try self.UpdateAsset(engine_context, entity_id, file, file_stat);
             }
         }
     }
@@ -299,10 +300,10 @@ pub fn OpenFile(self: *AssetManager, engine_context: *EngineContext, rel_path: [
     }
 }
 
-pub fn CloseFile(_: *AssetManager, file: std.fs.File) void {
+pub fn CloseFile(_: *AssetManager, io: std.Io, file: std.Io.File) void {
     const zone = Tracy.ZoneInit("AssetManager CloseFile", @src());
     defer zone.Deinit();
-    file.close();
+    file.close(io);
 }
 
 pub fn GetFileStats(_: *AssetManager, file: std.fs.File) !std.fs.File.Stat {
@@ -397,11 +398,11 @@ fn CreateAssetFile(self: *AssetManager, engine_context: *EngineContext, file_sou
 
     const engine_allocator = engine_context.EngineAllocator();
 
-    const new_asset_id = try self.mAssetECS.CreateEntity();
+    const new_asset_id = try self.mAssetECS.CreateEntity(engine_allocator);
 
     _ = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
     const file_meta_data = try self.mAssetECS.AddComponent(engine_allocator, new_asset_id, FileMetaData{
-        .mLastModified = 0,
+        .mLastModified = .zero,
         .mSize = 0,
         .mHash = 0,
         .mPathType = file_source.path_type,
@@ -410,10 +411,10 @@ fn CreateAssetFile(self: *AssetManager, engine_context: *EngineContext, file_sou
     _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
 
     const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
-    defer self.CloseFile(file);
-    const fstats = try file.stat();
+    defer self.CloseFile(engine_context.Io(), file);
+    const fstats = try file.stat(engine_context.Io());
 
-    try self.UpdateAsset(new_asset_id, file, fstats);
+    try self.UpdateAsset(engine_context, new_asset_id, file, fstats);
 
     return new_asset_id;
 }
@@ -454,18 +455,16 @@ fn MarkAssetToDelete(self: *AssetManager, asset_id: AssetType) void {
     file_meta_data.mSize = 0;
 }
 
-fn UpdateAsset(self: *AssetManager, asset_id: AssetType, file: std.fs.File, fstats: std.fs.File.Stat) !void {
+fn UpdateAsset(self: *AssetManager, engine_context: *EngineContext, asset_id: AssetType, file: std.Io.File, fstats: std.Io.File.Stat) !void {
     const zone = Tracy.ZoneInit("AssetManager UpdateAsset", @src());
     defer zone.Deinit();
 
     const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
-    var file_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer file_arena.deinit();
-    const arena_allocator = file_arena.allocator();
-
     var file_hasher = std.hash.Fnv1a_64.init();
-    file_hasher.update(try file.readToEndAlloc(arena_allocator, MAX_FILE_SIZE));
+    var file_reader = file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), std.Io.Limit.unlimited);
+    file_hasher.update(contents);
 
     file_data.mHash = file_hasher.final();
     file_data.mLastModified = fstats.mtime;
@@ -477,7 +476,7 @@ fn CheckAssetForDeletion(self: *AssetManager, engine_context: *EngineContext, as
     defer zone.Deinit();
 
     //check to see if we can recover the asset
-    if (try self.RetryAssetExists(engine_context.FrameAllocator(), asset_id)) return;
+    if (try self.RetryAssetExists(engine_context, asset_id)) return;
 
     //if we cannot recover it automatically then delete it from AssetManager
     const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
@@ -488,12 +487,12 @@ fn CheckAssetForDeletion(self: *AssetManager, engine_context: *EngineContext, as
 
 //This function checks again to see if we can open the file maybe there was
 //some weird issue last frame but this frame the file is ok so we can recover it
-fn RetryAssetExists(self: *AssetManager, frame_allocator: std.mem.Allocator, asset_id: AssetType) !bool {
+fn RetryAssetExists(self: *AssetManager, engine_context: *EngineContext, asset_id: AssetType) !bool {
     const zone = Tracy.ZoneInit("AssetManager::RetryAssetExists", @src());
     defer zone.Deinit();
     const file_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
 
-    const abs_path = try self.GetAbsPath(frame_allocator, file_data.mRelPath.items, file_data.mPathType);
+    const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
 
     const file = std.fs.openFileAbsolute(abs_path, .{}) catch |err| {
         if (err == error.FileNotFound) {
@@ -502,11 +501,11 @@ fn RetryAssetExists(self: *AssetManager, frame_allocator: std.mem.Allocator, ass
             return err;
         }
     };
-    defer self.CloseFile(file);
+    defer self.CloseFile(engine_context.Io(), file);
 
     const fstats = try file.stat();
 
-    try self.UpdateAsset(asset_id, file, fstats);
+    try self.UpdateAsset(engine_context, asset_id, file, fstats);
 
     return true;
 }

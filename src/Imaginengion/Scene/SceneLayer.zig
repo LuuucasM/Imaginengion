@@ -121,7 +121,7 @@ pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, conf
 }
 
 pub fn AddComponentScript(self: SceneLayer, engine_context: *EngineContext, script_asset_path: []const u8, path_type: PathType) !void {
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), script_asset_path, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, script_asset_path, path_type);
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
     const new_script_component = SceneScriptComponent{

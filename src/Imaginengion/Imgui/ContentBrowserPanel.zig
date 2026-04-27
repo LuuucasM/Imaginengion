@@ -35,12 +35,12 @@ mCurrentPath: std.ArrayList(u8) = .empty,
 mProjectFile: ?std.Io.File = null,
 
 pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
-    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/foldericon.png", .Eng);
-    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/pngicon.png", .Eng);
-    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/backarrowicon.png", .Eng);
-    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/sceneicon.png", .Eng);
-    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/scripticon.png", .Eng);
-    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), "assets/textures/mp3.png", .Eng);
+    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/foldericon.png", .Eng);
+    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/pngicon.png", .Eng);
+    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/backarrowicon.png", .Eng);
+    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/sceneicon.png", .Eng);
+    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/scripticon.png", .Eng);
+    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/mp3.png", .Eng);
 }
 
 pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
@@ -350,7 +350,7 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
 
         const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
-        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), rel_path, .Prj);
+        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, rel_path, .Prj);
         defer engine_context.mAssetManager.ReleaseAssetHandleRef(&script_handle);
 
         const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);

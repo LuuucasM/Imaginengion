@@ -5,7 +5,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const SDLSSBO = @This();
 
 mSize: usize,
-mSlot: u32,
+mSlot: usize,
 mStage: Stage,
 mBuffer: ?*sdl.SDL_GPUBuffer,
 
@@ -16,7 +16,7 @@ pub const empty: SDLSSBO = .{
     .mSlot = undefined,
 };
 
-pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: u32, stage: Stage) void {
+pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: usize, stage: Stage) void {
     self.mSize = size;
     self.mSlot = slot;
     self.mStage = stage;

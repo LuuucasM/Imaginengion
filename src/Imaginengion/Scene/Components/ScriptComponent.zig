@@ -77,7 +77,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
 
-            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context.EngineAllocator(), parsed_path, parsed_path_type) catch |err| {
+            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
