@@ -22,8 +22,8 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         pub fn Init(self: Self, engine_context: *EngineContext, width: usize, height: usize) void {
             self.mImpl.Init(engine_context, width, height);
         }
-        pub fn Deinit(self: Self, engine_context: *EngineContext) void {
-            self.mImpl.Deinit(engine_context);
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
+            try self.mImpl.Deinit(engine_context);
         }
         pub fn BeginRenderPass(self: *Self, engine_context: *EngineContext) *anyopaque {
             return self.mImpl.BeginRenderPass(engine_context);

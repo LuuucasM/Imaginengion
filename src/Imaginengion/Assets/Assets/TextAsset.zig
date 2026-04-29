@@ -67,50 +67,50 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
 
         std.log.info("Font generated files not found for {s}.\n Generating files now.", .{rel_path});
 
-        var child = std.process.Child.init(
-            &[_][]const u8{
-                "./src/Imaginengion/Vendor/msdfgen/msdf-atlas-gen.exe",
-                "-type",
-                "msdf",
-                "-font",
-                abs_path,
-                "-charset",
-                "assets/fonts/charset.txt",
-                "-size",
-                "64",
-                "-pxrange",
-                "4",
-                "-imageout",
-                name_png,
-                "-json",
-                name_json,
+        var child = try std.process.spawn(
+            engine_context.Io(),
+            .{
+                .argv = &[_][]const u8{
+                    "./src/Imaginengion/Vendor/msdfgen/msdf-atlas-gen.exe",
+                    "-type",
+                    "msdf",
+                    "-font",
+                    abs_path,
+                    "-charset",
+                    "assets/fonts/charset.txt",
+                    "-size",
+                    "64",
+                    "-pxrange",
+                    "4",
+                    "-imageout",
+                    name_png,
+                    "-json",
+                    name_json,
+                },
+                .stdin = .inherit,
+                .stdout = .inherit,
+                .stderr = .inherit,
             },
-            engine_context.FrameAllocator(),
         );
-        child.stdin_behavior = .Inherit;
-        child.stdout_behavior = .Inherit;
-        child.stderr_behavior = .Inherit;
+        const result = try child.wait(engine_context.Io());
 
-        try child.spawn();
-        const result = try child.wait();
-
-        if (result != .Exited) {
+        if (result != .exited) {
             std.log.err("Unable to correctly generate text files {s}. It terminated by {s}!", .{ rel_path, @tagName(result) });
             return error.AssetInitFailed;
         }
-        if (result.Exited != 0) {
-            std.log.err("Unable to correctly generate text files {s} exited with code {d}!", .{ rel_path, result.Exited });
+        if (result.exited != 0) {
+            std.log.err("Unable to correctly generate text files {s} exited with code {d}!", .{ rel_path, result.exited });
             return error.AssetInitFailed;
         }
         std.log.info("text {s} generated success!\n", .{rel_path});
 
-        file_json = try std.fs.cwd().openFile(name_json, .{});
-        file_png = try std.fs.cwd().openFile(name_png, .{});
+        file_json = try std.Io.Dir.cwd().openFile(engine_context.Io(), name_json, .{});
+        file_png = try std.Io.Dir.cwd().openFile(engine_context.Io(), name_png, .{});
     }
-    defer file_json.?.close();
-    defer file_png.?.close();
+    defer file_json.?.close(engine_context.Io());
+    defer file_png.?.close(engine_context.Io());
 
-    try self.ProcessTextJson(engine_context.EngineAllocator(), frame_allocator, file_json.?);
+    try self.ProcessTextJson(engine_context, file_json.?);
 
     const atlas_rel_path = name_png;
     const atlas_abs_path = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{abs_path});
@@ -124,16 +124,15 @@ pub fn Deinit(self: *TextAsset, engine_context: *EngineContext) !void {
     try self.mAtlas.Deinit(engine_context);
 }
 
-fn ProcessTextJson(self: *TextAsset, engine_allocator: std.mem.Allocator, frame_allocator: std.mem.Allocator, text_json: std.fs.File) !void {
-    const file_size = try text_json.getEndPos();
+fn ProcessTextJson(self: *TextAsset, engine_context: *EngineContext, text_json: std.Io.File) !void {
+    const frame_allocator = engine_context.FrameAllocator();
 
-    var file_contents = try std.ArrayList(u8).initCapacity(frame_allocator, file_size);
-    try file_contents.resize(frame_allocator, file_size);
-    _ = try text_json.readAll(file_contents.items);
+    var file_reader = text_json.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
 
-    var io_reader = std.io.Reader.fixed(file_contents.items);
+    var the_reader: std.Io.Reader = .fixed(contents);
 
-    var reader = std.json.Reader.init(frame_allocator, &io_reader);
+    var reader = std.json.Reader.init(frame_allocator, &the_reader);
     defer reader.deinit();
 
     //deserialize
@@ -157,7 +156,7 @@ fn ProcessTextJson(self: *TextAsset, engine_allocator: std.mem.Allocator, frame_
         } else if (std.mem.eql(u8, actual_value, "metrics")) {
             try self.ProcessMetrics(&reader, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "glyphs")) {
-            try self.ProcessGlyphs(engine_allocator, &reader, frame_allocator);
+            try self.ProcessGlyphs(engine_context.EngineAllocator(), &reader, frame_allocator);
         } else if (std.mem.eql(u8, actual_value, "kerning")) {
             try self.ProcessKerning(&reader, frame_allocator);
         }

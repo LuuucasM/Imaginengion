@@ -22,7 +22,7 @@ pub const Ind: usize = blk: {
 mFrameBuffer: OutputFrameBuffer = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
-    self.mFrameBuffer.Deinit(engine_context.EngineAllocator());
+    try self.mFrameBuffer.Deinit(engine_context);
 }
 
 pub fn GetOutputTexture(self: RenderTargetComponent) *Texture2D {

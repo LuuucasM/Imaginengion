@@ -38,8 +38,8 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             self.mHeight = height;
             self.Create(engine_context);
         }
-        pub fn Deinit(self: Self, engine_context: *EngineContext) void {
-            self.Destroy(engine_context);
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
+            try self.Destroy(engine_context);
         }
 
         pub fn BeginRenderPass(self: *Self, engine_context: *EngineContext) *sdl.struct_SDL_GPURenderPass {
@@ -120,15 +120,15 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             sdl.SDL_EndGPURenderPass(pass);
         }
 
-        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) void {
+        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
             if (width < 1 or height < 1 or width > 8192 or height > 8192 or (width == self.mWidth and height == self.mHeight)) return;
             self.mWidth = width;
             self.mHeight = height;
-            self.Invalidate(engine_context);
+            try self.Invalidate(engine_context);
         }
 
-        pub fn Invalidate(self: *Self, engine_context: *EngineContext) void {
-            self.Destroy(engine_context);
+        pub fn Invalidate(self: *Self, engine_context: *EngineContext) !void {
+            try self.Destroy(engine_context);
             self.Create(engine_context);
         }
 
@@ -175,11 +175,12 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             }
         }
 
-        fn Destroy(self: *Self, engine_context: *EngineContext) void {
+        fn Destroy(self: *Self, engine_context: *EngineContext) !void {
+            const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
             inline for (0..color_texture_formats.len) |i| {
-                self.mTextures[i].Deinit(engine_context);
+                try self.mTextures[i].Deinit(engine_context);
             }
-            if (self.mDepthTexture) |t| t.Deinit(engine_context);
+            if (self.mDepthTexture) |t| sdl.SDL_ReleaseGPUTexture(device, t);
             self.mDepthTexture = null;
         }
         fn ToSDLTextureFormat(format: TextureFormat) sdl.SDL_GPUTextureFormat {

@@ -35,12 +35,12 @@ mCurrentPath: std.ArrayList(u8) = .empty,
 mProjectFile: ?std.Io.File = null,
 
 pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
-    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/foldericon.png", .Eng);
-    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/pngicon.png", .Eng);
-    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/backarrowicon.png", .Eng);
-    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/sceneicon.png", .Eng);
-    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/scripticon.png", .Eng);
-    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, "assets/textures/mp3.png", .Eng);
+    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .path_type = .Eng, .rel_path = "assets/textures/foldericon.png" } });
+    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "assets/textures/pngicon.png", .path_type = .Eng } });
+    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "assets/textures/backarrowicon.png", .path_type = .Eng } });
+    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "assets/textures/sceneicon.png", .path_type = .Eng } });
+    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "assets/textures/scripticon.png", .path_type = .Eng } });
+    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "assets/textures/mp3.png", .path_type = .Eng } });
 }
 
 pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {

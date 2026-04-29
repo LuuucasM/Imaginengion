@@ -16,8 +16,8 @@ pub const Ind: usize = blk: {
 
 mAudioBuffer: AudioBuffer = .{},
 
-pub fn Init(self: *AudioAsset, _: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
-    try self.mAudioBuffer.Init(rel_path, asset_file);
+pub fn Init(self: *AudioAsset, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
+    try self.mAudioBuffer.Init(engine_context, rel_path, asset_file);
 }
 
 pub fn Deinit(self: *AudioAsset, _: *EngineContext) !void {

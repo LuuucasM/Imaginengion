@@ -34,7 +34,7 @@ mTexture: union(enum) {
     pub fn ReleaseAsset(self: *Self) void {
         switch (self.*) {
             .Asset => self.Asset.ReleaseAsset(),
-            .EntityRenderTarget => self.EntityRenderTarget.mEntityID = Entity.NullHandle,
+            .EntityRenderTarget => self.EntityRenderTarget.mEntityID = Entity.NullEntity,
         }
     }
     pub fn GetTexture(self: Self, engine_context: *EngineContext) *Texture2D {

@@ -17,11 +17,11 @@ pub fn Init(_: ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
     _ = imgui.igCreateContext(null);
-    const io: *imgui.ImGuiIO = imgui.igGetIO();
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable; // Enable Docking
-    io.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
+    const io = imgui.igGetIO_Nil();
+    io.*.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+    io.*.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
+    io.*.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable; // Enable Docking
+    io.*.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 
     const style = imgui.igGetStyle();
 
@@ -29,9 +29,12 @@ pub fn Init(_: ImguiManager, engine_context: *EngineContext) void {
     //imgui.igStyleColorsLight(style);
 
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
-    if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable) {
-        style.WindowRounding = 0.0;
-        style.Colors[imgui.ImGuiCol_WindowBg].w = 1.0;
+    if ((io.*.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable) > 0) {
+        style.*.WindowRounding = 0.0;
+        const colors = style.*.Colors[imgui.ImGuiCol_WindowBg];
+        var color = colors[2];
+        color.w = 1.0;
+        style.*.Colors[imgui.ImGuiCol_WindowBg] = color;
     }
 
     SetDarkThemeColors(style);

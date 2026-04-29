@@ -1,5 +1,6 @@
 const std = @import("std");
 const ma = @import("../../../Core/CImports.zig").miniaudio;
+const EngineContext = @import("../../../Core/EngineContext.zig");
 const MiniAudioBuffer = @This();
 
 const AUDIO_FORMAT = @import("../../../AudioManager/AudioManager.zig").AUDIO_FORMAT;
@@ -11,21 +12,15 @@ mAudioConfig: ma.ma_audio_buffer_config = undefined,
 mPcmFrames: ?*anyopaque = null,
 mFrameCount: u64 = 0,
 
-pub fn Init(self: *MiniAudioBuffer, rel_path: []const u8, asset_file: std.fs.File) !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const arena_allocator = arena.allocator();
+pub fn Init(self: *MiniAudioBuffer, engine_context: *EngineContext, rel_path: []const u8, asset_file: std.Io.File) !void {
+    const frame_allocator = engine_context.FrameAllocator();
 
-    var file_data: std.ArrayList(u8) = .{};
-    const file_size = try asset_file.getEndPos();
-    try file_data.ensureTotalCapacity(arena_allocator, file_size);
-    file_data.expandToCapacity();
-
-    _ = try asset_file.readAll(file_data.items);
+    var file_reader = asset_file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(frame_allocator, .unlimited);
 
     var decoder_config = ma.ma_decoder_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, SAMPLE_RATE);
 
-    if (ma.ma_decode_memory(file_data.items.ptr, file_data.items.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
+    if (ma.ma_decode_memory(contents.ptr, contents.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
         std.log.err("Failed to decode memory for MiniAudioBuffer for file {s}!\n", .{rel_path});
         return error.AssetInitFail;
     }

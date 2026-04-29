@@ -24,9 +24,9 @@ pub const empty: InputManager = .{
     ._MouseScrolledDelta = Vec2f32{ 0.0, 0.0 },
 };
 
-pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) void {
-    self._KeyPressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.ScanCodes).@"enum".fields.len);
-    self._MousePressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.MouseCodes).@"enum".fields.len);
+pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
+    try self._KeyPressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.ScanCodes).@"enum".fields.len);
+    try self._MousePressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.MouseCodes).@"enum".fields.len);
 }
 
 pub fn Deinit(self: *InputManager, engine_allocator: std.mem.Allocator) void {

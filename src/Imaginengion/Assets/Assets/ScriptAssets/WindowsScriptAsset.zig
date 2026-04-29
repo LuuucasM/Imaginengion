@@ -32,9 +32,9 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
             "build_script.zig",
             file_arg,
         },
-        .stdin = .pipe,
-        .stdout = .pipe,
-        .stderr = .pipe,
+        .stdin = .inherit,
+        .stdout = .inherit,
+        .stderr = .inherit,
     });
 
     const result = try child.wait(engine_context.Io());
@@ -43,8 +43,8 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
         std.log.err("Unable to correctly compile script {s} it terminated by {s}!", .{ rel_path, @tagName(result) });
         return error.AssetInitFail;
     }
-    if (result.Exited != 0) {
-        std.log.err("Unable to correctly compile script {s} exited with code {d}!", .{ rel_path, result.Exited });
+    if (result.exited != 0) {
+        std.log.err("Unable to correctly compile script {s} exited with code {d}!", .{ rel_path, result.exited });
         return error.AssetInitFail;
     }
     std.log.info("script {s} compile success!\n", .{rel_path});

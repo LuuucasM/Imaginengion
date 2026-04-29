@@ -15,7 +15,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-mName: std.ArrayList(u8) = .{},
+mName: std.ArrayList(u8) = .empty,
 mAllocator: std.mem.Allocator = undefined,
 
 pub fn Deinit(self: *NameComponent, _: *EngineContext) !void {

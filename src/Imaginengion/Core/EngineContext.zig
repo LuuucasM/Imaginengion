@@ -83,13 +83,11 @@ pub fn Init(self: *EngineContext) !void {
     try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
     try self.mAudioManager.Init();
-    self.mInputManager.Init(self.EngineAllocator());
+    try self.mInputManager.Init(self.EngineAllocator());
 
     try self.mGameWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mEditorWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mSimulateWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
-
-    self.mAppWindow.SetVSync(false);
 }
 
 pub fn DeInit(self: *EngineContext) !void {
