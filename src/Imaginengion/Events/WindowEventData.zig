@@ -32,7 +32,6 @@ pub const KeyboardReleasedEvent = struct {
 };
 pub const MousePressedEvent = struct {
     _ButtonCode: MouseCodes,
-    _Repeat: u8,
 };
 pub const MouseReleasedEvent = struct {
     _ButtonCode: MouseCodes,

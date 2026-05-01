@@ -6,23 +6,23 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const ScriptType = @import("../../Assets/Assets/ScriptAsset.zig").ScriptType;
 
 const WindowEventData = @import("../../Events/WindowEventData.zig");
-const InputPressedEvent = WindowEventData.InputPressedEvent;
+const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
 
 //scripts
-pub const OnInputPressedScript = struct {
-    pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const InputPressedEvent) callconv(.c) bool;
+pub const OnKeyPressedScript = struct {
+    pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const KeyboardPressedEvent) callconv(.c) bool;
     bit: u1 = 0,
     pub const Editable: bool = false;
-    pub const Name: []const u8 = "OnInputPressedScript";
+    pub const Name: []const u8 = "OnKeyPressedScript";
     pub const Scripttype: ScriptType = .EntityInputPressed;
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == OnInputPressedScript) {
+            if (component_type == OnKeyPressedScript) {
                 break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
             }
         }
     };
-    pub fn Deinit(_: *OnInputPressedScript, _: *EngineContext) !void {}
+    pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext) !void {}
 };
 
 pub const OnUpdateScript = struct {

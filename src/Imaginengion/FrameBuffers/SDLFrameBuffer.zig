@@ -33,10 +33,10 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         mWidth: usize,
         mHeight: usize,
 
-        pub fn Init(self: Self, engine_context: *EngineContext, width: usize, height: usize) void {
+        pub fn Init(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
             self.mWidth = width;
             self.mHeight = height;
-            self.Create(engine_context);
+            try self.Create(engine_context);
         }
         pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
             try self.Destroy(engine_context);
@@ -129,7 +129,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
 
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) !void {
             try self.Destroy(engine_context);
-            self.Create(engine_context);
+            try self.Create(engine_context);
         }
 
         pub fn GetColorTexture(self: Self, attachment_index: usize) *Texture2D {
@@ -149,9 +149,9 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             return self.mHeight;
         }
 
-        fn Create(self: *Self, engine_context: *EngineContext) void {
+        fn Create(self: *Self, engine_context: *EngineContext) !void {
             inline for (color_texture_formats, 0..) |format, i| {
-                self.mTextures[i].InitGen(engine_context, .{
+                try self.mTextures[i].InitGen(engine_context, .{
                     .data = null,
                     .width = self.mWidth,
                     .height = self.mHeight,

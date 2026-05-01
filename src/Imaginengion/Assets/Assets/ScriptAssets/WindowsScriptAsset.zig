@@ -19,7 +19,7 @@ mLib: std.os.windows.HMODULE = undefined,
 mScriptType: ScriptType = undefined,
 mRunFunc: *anyopaque = undefined,
 
-pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.fs.File) !void {
+pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
 
     //spawn a child to handle compiling the zig file into a dll
     const file_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_abs_path={s}", .{abs_path});
@@ -80,6 +80,10 @@ pub fn Run(self: *WindowsScriptAsset, comptime script_type: type, args: anytype)
 pub fn EditorRender(self: *WindowsScriptAsset) !void {
     _ = self;
     imgui.igText("Nothing for now!", "");
+}
+
+pub fn GetScriptType(self: WindowsScriptAsset) ScriptType {
+    return self.mScriptType;
 }
 
 fn LoadSymbol(comptime T: type, lib: std.os.windows.HMODULE, comptime name: [:0]const u8) !T {

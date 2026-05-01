@@ -22,7 +22,7 @@ pub fn Bind(self: TextureManager, render_pass: *anyopaque) void {
     self._Impl.Bind(render_pass);
 }
 
-pub fn Register(self: *TextureManager, engine_context: *EngineContext, pixels: *anyopaque, width: usize, height: usize) !u32 {
+pub fn Register(self: *TextureManager, engine_context: *EngineContext, pixels: ?*anyopaque, width: usize, height: usize) !u32 {
     return try self._Impl.Register(engine_context, pixels, width, height);
 }
 

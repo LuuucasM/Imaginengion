@@ -11,7 +11,7 @@ const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
-
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 
@@ -112,7 +112,13 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineCont
         .Simulate => &engine_context.mSimulateWorld,
     };
 
-    const transforms_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Not = .{ .mFirst = .{ .Component = EntityTransformComponent }, .mSecond = .{ .Component = ChildComponent } } });
+    const EntityTransformQuery = GroupQuery{ .Component = EntityTransformComponent };
+    const ChildQuery = GroupQuery{ .Component = ChildComponent };
+
+    const transforms_arr = try scene_manager.GetEntityGroup(
+        engine_context.FrameAllocator(),
+        .{ .Not = .{ .mFirst = &EntityTransformQuery, .mSecond = &ChildQuery } },
+    );
 
     for (transforms_arr.items) |entity_id| {
         const entity = scene_manager.GetEntity(entity_id);

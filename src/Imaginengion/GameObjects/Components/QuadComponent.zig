@@ -43,6 +43,21 @@ mTexture: union(enum) {
             .EntityRenderTarget => |e| return e.GetComponent(RenderTargetComponent).?.GetOutputTexture(),
         }
     }
+    pub fn jsonStringify(self: Self, jw: anytype) !void {
+        switch (self) {
+            .Asset => |a| {
+                const fmd = a.GetFileMetaData();
+                try jw.objectField("Texture");
+                try jw.write(fmd.mRelPath.items);
+                try jw.objectField("PathType");
+                try jw.write(fmd.mPathType);
+            },
+            .EntityRenderTarget => |e| {
+                try jw.objectField("EntityRef");
+                try jw.write(e.GetUUID());
+            },
+        }
+    }
 },
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
@@ -174,15 +189,10 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.objectField("TilingFactor");
     try jw.write(self.mTexOptions.mTilingFactor);
 
+    try self.mTexture.jsonStringify(jw);
+
     try jw.objectField("TexCoords");
     try jw.write(self.mTexOptions.mTexCoords);
-
-    try jw.objectField("Texture");
-    const asset_file_data = self.mTexture.GetFileMetaData();
-    try jw.write(asset_file_data.mRelPath.items);
-
-    try jw.objectField("PathType");
-    try jw.write(asset_file_data.mPathType);
 
     try jw.endObject();
 }
@@ -218,10 +228,21 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
 
-            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
+            result.mTexture.Asset = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
+        } else if (std.mem.eql(u8, field_name, "EntityRef")) {
+            std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Entity);
+            const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
+            const entity = engine_context.mSerializer.mCurrDeserialize.requester.Entity;
+            const quad_component: *QuadComponent = @ptrCast(engine_context.mSerializer.mCurrDeserialize.component_ptr);
+            result.mTexture = .{ .EntityRenderTarget = .{ .mSceneManager = entity.mSceneManager } };
+            entity.mSceneManager.AddResolveUUID(engine_context, .{
+                .Requester = engine_context.mSerializer.mCurrDeserialize.requester,
+                .UUID = entity_uuid,
+                .SetLoc = &quad_component.mTexture.EntityRenderTarget.mEntityID,
+            });
         }
     }
 

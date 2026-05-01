@@ -14,10 +14,10 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const PlayerSlotComponent = Components.PlayerSlotComponent;
-const OnInputPressedScript = Components.OnInputPressedScript;
+const OnKeyPressedScript = Components.OnKeyPressedScript;
 const ViewpointComponent = Components.ViewpointComponent;
 const OnUpdateScript = Components.OnUpdateScript;
-const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
+const PathType = @import("../Assets/AssetManager.zig").PathType;
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -26,7 +26,6 @@ const Vec3f32 = LinAlg.Vec3f32;
 const Quatf32 = LinAlg.Quatf32;
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const EntityComponents = @import("Components.zig");
-const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
 const Player = @import("../Players/Player.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 
@@ -144,10 +143,13 @@ pub fn GetIterator(self: Entity, comptime iter_type: Iterator.IterType) ?Iterato
 }
 
 pub fn AddComponentScript(self: Entity, engine_context: *EngineContext, rel_path_script: []const u8, path_type: PathType) !void {
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, rel_path_script, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(
+        engine_context,
+        .{ .File = .{ .rel_path = rel_path_script, .path_type = path_type } },
+    );
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
-    std.debug.assert(script_asset.mScriptType == .EntityInputPressed or script_asset.mScriptType == .EntityOnUpdate);
+    std.debug.assert(script_asset.GetScriptType() == .EntityInputPressed or script_asset.GetScriptType() == .EntityOnUpdate);
 
     // Create the script component with the asset handle
     const new_script_component = ScriptComponent{
@@ -159,9 +161,9 @@ pub fn AddComponentScript(self: Entity, engine_context: *EngineContext, rel_path
     _ = try new_script_entity.AddComponent(engine_context, new_script_component);
 
     // Add the appropriate script type component based on the script asset
-    switch (script_asset.mScriptType) {
+    switch (script_asset.GetScriptType()) {
         .EntityInputPressed => {
-            _ = try new_script_entity.AddComponent(engine_context, OnInputPressedScript{});
+            _ = try new_script_entity.AddComponent(engine_context, OnKeyPressedScript{});
         },
         .EntityOnUpdate => {
             _ = try new_script_entity.AddComponent(engine_context, OnUpdateScript{});
@@ -210,12 +212,12 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
 pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: NewEntityConfig) !void {
     if (config.bAddUUID) {
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = GenUUID() });
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = engine_context.GenUUID() });
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {
         var new_name_component = NameComponent{ .mAllocator = engine_context.EngineAllocator() };
-        _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
+        _ = try new_name_component.mName.print(new_name_component.mAllocator, "New Entity", .{});
         _ = try self.AddComponent(engine_context, new_name_component);
     }
     if (config.bAddTransform) {

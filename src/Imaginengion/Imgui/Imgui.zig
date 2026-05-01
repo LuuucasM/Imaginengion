@@ -13,7 +13,7 @@ const TEXTURE_SIZE: usize = 128;
 mImguiTextures: std.ArrayList(*sdl.SDL_GPUTexture) = .empty,
 mImguiTexturesSize: usize = 0,
 
-pub fn Init(_: ImguiManager, engine_context: *EngineContext) void {
+pub fn Init(_: *ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Init", @src());
     defer zone.Deinit();
     _ = imgui.igCreateContext(null);
@@ -23,7 +23,7 @@ pub fn Init(_: ImguiManager, engine_context: *EngineContext) void {
     io.*.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable; // Enable Docking
     io.*.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 
-    const style = imgui.igGetStyle();
+    const style: *imgui.struct_ImGuiStyle = imgui.igGetStyle();
 
     imgui.igStyleColorsDark(style);
     //imgui.igStyleColorsLight(style);
@@ -31,24 +31,24 @@ pub fn Init(_: ImguiManager, engine_context: *EngineContext) void {
     // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows can look identical to regular ones.
     if ((io.*.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable) > 0) {
         style.*.WindowRounding = 0.0;
-        const colors = style.*.Colors[imgui.ImGuiCol_WindowBg];
-        var color = colors[2];
-        color.w = 1.0;
-        style.*.Colors[imgui.ImGuiCol_WindowBg] = color;
+        style.*.Colors[imgui.ImGuiCol_WindowBg].w = 1.0;
     }
 
     SetDarkThemeColors(style);
 
-    _ = imgui.ImGui_ImplSDL3_InitForSDLGPU(engine_context.mAppWindow.GetNativeWindow());
-    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-    const init_info: imgui.ImGui_ImplSDLGPU3_InitInfo = .{
-        .Device = device,
-        .ColorTargetFormat = sdl.SDL_GetGPUSwapchainTextureFormat(device, engine_context.mAppWindow.GetNativeWindow()),
-        .MSAASamples = sdl.SDL_GPU_SAMPLECOUNT_1,
-        .SwapchainComposition = sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-        .PresentMode = sdl.SDL_GPU_PRESENTMODE_VSYNC,
-    };
-    _ = imgui.ImGui_ImplSDLGPU3_Init(&init_info);
+    //const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+    const win: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
+
+    _ = imgui.ImGui_ImplSDL3_InitForSDLGPU(@ptrCast(win));
+
+    //const init_info: imgui.ImGui_ImplSDLGPU3_InitInfo = .{
+    //    .Device = device,
+    //    .ColorTargetFormat = sdl.SDL_GetGPUSwapchainTextureFormat(device, @ptrCast(win)),
+    //    .MSAASamples = sdl.SDL_GPU_SAMPLECOUNT_1,
+    //    .SwapchainComposition = sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+    //    .PresentMode = sdl.SDL_GPU_PRESENTMODE_VSYNC,
+    //};
+    //_ = imgui.ImGui_ImplSDLGPU3_Init(&init_info);
 }
 pub fn Deinit(self: ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
@@ -57,7 +57,6 @@ pub fn Deinit(self: ImguiManager, engine_context: *EngineContext) void {
     const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
     sdl.SDL_WaitForGPUIdle(device);
-    imgui.ImGui_ImplSDLGPU3_Shutdown();
     imgui.ImGui_ImplSDL3_Shutdown();
     imgui.igDestroyContext(null);
 
@@ -66,7 +65,6 @@ pub fn Deinit(self: ImguiManager, engine_context: *EngineContext) void {
 pub fn Begin(self: ImguiManager) void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
     defer zone.Deinit();
-    imgui.ImGui_ImplSDLGPU3_NewFrame();
     imgui.ImGui_ImplSDL3_NewFrame();
     imgui.igNewFrame();
     self.mImguiTexturesSize = 0;

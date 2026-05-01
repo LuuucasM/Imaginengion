@@ -10,11 +10,11 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 
 pub const GroupQuery = union(enum) {
-    And: []const GroupQuery,
-    Or: []const GroupQuery,
+    And: []const *const GroupQuery,
+    Or: []const *const GroupQuery,
     Not: struct {
-        mFirst: GroupQuery,
-        mSecond: GroupQuery,
+        mFirst: *const GroupQuery,
+        mSecond: *const GroupQuery,
     },
     Component: type,
 };
@@ -164,38 +164,40 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return skipfield_array.mComponents.HasSparse(entity_id);
         }
 
-        //provides a mask for a group query where if index[i] == 1 then it is skipped and if index[i] == 0 then it is included
-        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
-            const ones: SkipFieldComponent.StaticSkipFieldT.SkipFieldVector = @splat(1);
+        //provides a mask for a group query
+        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {
             switch (query) {
                 .Component => |component_type| {
-                    var result = ones;
-                    result[component_type.Ind] = 0;
-                    return result;
+                    var empty_field: SkipFieldComponent.StaticSkipFieldT = .AllSkip;
+                    empty_field.ChangeToUnskipped(component_type.Ind);
+                    return empty_field;
                 },
                 .Not => |not| {
-                    var result = GetGroupMask(not.mFirst);
-                    result = result | (~GetGroupMask(not.mSecond));
-                    return result;
+                    var result_first = GetGroupMask(not.mFirst.*);
+                    const result_second = GetGroupMask(not.mSecond.*);
+                    result_first.Difference(&result_second);
+                    return result_first;
                 },
                 .Or => |ors| {
                     var result = GetGroupMask(ors[0]);
                     inline for (ors[1..]) |or_query| {
-                        result &= GetGroupMask(or_query);
+                        const intermediate = GetGroupMask(or_query.*);
+                        result.Union(&intermediate);
                     }
                     return result;
                 },
                 .And => |ands| {
                     var result = GetGroupMask(ands[0]);
                     inline for (ands[1..]) |and_query| {
-                        result |= GetGroupMask(and_query);
+                        const intermediate = GetGroupMask(and_query.*);
+                        result.Intersect(&intermediate);
                     }
                     return result;
                 },
             }
         }
 
-        pub fn GetGroup(self: Self, comptime query: GroupQuery, mask: *const SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
+        pub fn GetGroup(self: Self, comptime query: GroupQuery, mask: *const SkipFieldComponent.StaticSkipFieldT, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
             switch (query) {
                 .Component => |component_type| {
                     const internal_array_t = InternalComponentArray(entity_t, component_type);
@@ -208,8 +210,8 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                     return result;
                 },
                 .Not => |not| {
-                    var result = try self.GetGroup(not.mFirst, mask, allocator);
-                    var second = try self.GetGroup(not.mSecond, mask, allocator);
+                    var result = try self.GetGroup(not.mFirst.*, mask, allocator);
+                    var second = try self.GetGroup(not.mSecond.*, mask, allocator);
                     defer second.deinit(allocator);
                     try self.EntityListDifference(&result, second, allocator);
                     return result;
@@ -217,7 +219,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 .Or => |ors| {
                     var result = try self.GetGroup(ors[0], mask, allocator);
                     inline for (ors[1..]) |or_query| {
-                        var intermediate = try self.GetGroup(or_query, mask, allocator);
+                        var intermediate = try self.GetGroup(or_query.*, mask, allocator);
                         defer intermediate.deinit(allocator);
                         try self.EntityListUnion(&result, intermediate, allocator);
                     }
@@ -226,7 +228,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 .And => |ands| {
                     var result = try self.GetGroup(ands[0], mask, allocator);
                     inline for (ands[1..]) |and_query| {
-                        var intermediate = try self.GetGroup(and_query, mask, allocator);
+                        var intermediate = try self.GetGroup(and_query.*, mask, allocator);
                         defer intermediate.deinit(allocator);
                         try self.EntityListIntersection(&result, intermediate, allocator);
                     }
@@ -235,11 +237,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT.SkipFieldVector, allocator: std.mem.Allocator) !void {
+        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT, allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("CompMan EntityListMask", @src());
             defer zone.Deinit();
 
-            if (@reduce(.Or, mask.*) == 0) return;
+            if (mask.mNumUnskipped >= SkipFieldComponent.StaticSkipFieldT.SkipFieldSize) return;
             if (result.items.len == 0) return;
 
             var end_index: usize = result.items.len;
@@ -247,7 +249,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             while (i < end_index) {
                 const entity_id = result.items[i];
                 const skip_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
-                if (!skip_comp.mSkipField.MatchesMask(mask)) {
+                if (!skip_comp.mSkipField.IsUnskippedSuperSet(mask)) {
                     result.items[i] = result.items[end_index - 1];
                     end_index -= 1;
                 } else {

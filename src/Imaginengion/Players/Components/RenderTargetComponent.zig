@@ -21,11 +21,11 @@ pub const Ind: usize = blk: {
 mFrameBuffer: OutputFrameBuffer = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
-    self.mFrameBuffer.Deinit(engine_context.EngineAllocator());
+    try self.mFrameBuffer.Deinit(engine_context);
 }
 
-pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, width: usize, height: usize) void {
-    self.mFrameBuffer.Resize(engine_context, width, height);
+pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, width: usize, height: usize) !void {
+    try self.mFrameBuffer.Resize(engine_context, width, height);
 }
 
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {

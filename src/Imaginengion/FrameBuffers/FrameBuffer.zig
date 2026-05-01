@@ -19,8 +19,8 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             .mImpl = .empty,
         };
 
-        pub fn Init(self: Self, engine_context: *EngineContext, width: usize, height: usize) void {
-            self.mImpl.Init(engine_context, width, height);
+        pub fn Init(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
+            try self.mImpl.Init(engine_context, width, height);
         }
         pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
             try self.mImpl.Deinit(engine_context);
@@ -31,8 +31,8 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         pub fn EndRenderPass(self: Self, render_pass: *anyopaque) void {
             self.mImpl.EndRenderPass(render_pass);
         }
-        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) void {
-            self.mImpl.Resize(engine_context, width, height);
+        pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
+            try self.mImpl.Resize(engine_context, width, height);
         }
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) void {
             self.mImpl.Invalidate(engine_context);

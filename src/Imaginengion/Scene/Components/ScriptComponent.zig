@@ -5,7 +5,7 @@ const ScriptComponent = @This();
 const Assets = @import("../../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const FileMetaData = Assets.FileMetaData;
-const PathType = FileMetaData.PathType;
+const PathType = @import("../../Assets/AssetManager.zig").PathType;
 
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 

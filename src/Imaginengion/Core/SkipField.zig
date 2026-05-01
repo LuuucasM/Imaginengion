@@ -220,7 +220,7 @@ pub fn StaticSkipField(size: usize) type {
 
             for (0..size) |i| {
                 if (!same_zeros_arr[i]) {
-                    self.ChangeToSkipped(@intCast(i));
+                    self.ChangeToSkipped(i);
                 }
             }
         }
@@ -239,7 +239,7 @@ pub fn StaticSkipField(size: usize) type {
 
             for (0..size) |i| {
                 if (!same_zeros_arr[i]) {
-                    self.ChangeToUnskipped(@intCast(i));
+                    self.ChangeToUnskipped(i);
                 }
             }
         }
@@ -258,7 +258,7 @@ pub fn StaticSkipField(size: usize) type {
 
             for (0..size) |i| {
                 if (same_zeros_arr[i]) {
-                    self.ChangeToSkipped(@intCast(i));
+                    self.ChangeToSkipped(i);
                 }
             }
         }
@@ -270,23 +270,23 @@ pub fn StaticSkipField(size: usize) type {
         pub fn HasSameUnskipped(self: Self, other: *const Self) bool {
             const zero_vec = @as(SkipFieldVectorT, @splat(0));
 
-            const v1_zeros = self.mSkipField == zero_vec;
-            const v2_zeros = other.mSkipField == zero_vec;
+            const self_is_zeros = self.mSkipField == zero_vec;
+            const other_is_zeros = other.mSkipField == zero_vec;
 
-            const same_zeros = v1_zeros == v2_zeros;
+            const same_zeros = self_is_zeros == other_is_zeros;
 
             return @reduce(.And, same_zeros);
         }
 
-        pub fn MatchesMask(self: Self, mask: *const SkipFieldVectorT) bool {
-            const zero: SkipFieldVectorT = @splat(0);
-            const one: SkipFieldVectorT = @splat(1);
+        pub fn IsUnskippedSuperSet(self: Self, other: *const Self) bool {
+            const zero_vec = @as(SkipFieldVectorT, @splat(0));
 
-            const entity_is_skipped = @select(u32, self.mSkipField > zero, one, zero);
+            const self_is_zeros = self.mSkipField == zero_vec;
+            const other_is_zeros = other.mSkipField == zero_vec;
 
-            const matches = entity_is_skipped == mask.*;
+            const same_zeros = ~other_is_zeros | self_is_zeros;
 
-            return @reduce(.And, matches);
+            return @reduce(.And, same_zeros);
         }
 
         pub fn IsAllUnskipped(self: Self) bool {

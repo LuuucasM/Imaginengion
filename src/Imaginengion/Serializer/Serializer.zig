@@ -21,8 +21,6 @@ const SceneManager = @import("../Scene/SceneManager.zig");
 
 const TextSerializer = @import("TextSerializer.zig");
 const BinarySerializer = @import("BinarySerializer.zig");
-var prng: std.Random.Xoshiro256 = undefined;
-var random_init_once = once(random_init);
 
 const Serializer = @This();
 
@@ -52,9 +50,11 @@ pub const DeserializeContext = struct {
 };
 
 pub const empty: Serializer = .{
+    .mRand = undefined,
     .mCurrDeserialize = DeserializeContext{},
 };
 
+mRand: std.Random,
 mCurrDeserialize: DeserializeContext,
 
 pub fn Deinit(_: Serializer, _: std.mem.Allocator) void {}
@@ -76,14 +76,8 @@ pub fn DeserializeEntity(_: Serializer, engine_context: *EngineContext, scene_la
     TextSerializer.DeserializeEntity(engine_context, scene_layer, abs_path);
 }
 
-fn random_init() void {
-    var seed: u64 = undefined;
-    std.posix.getrandom(std.mem.asBytes(&seed)) catch unreachable;
-    prng.seed(seed);
-}
-pub fn GenUUID() u64 {
-    random_init_once.call();
-    return prng.random().uintAtMost(u64, ~@as(u64, 0) - 1);
+pub fn GenUUID(self: Serializer) u64 {
+    return self.mRand.int(u64);
 }
 
 pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, scene_manager: *SceneManager) void {

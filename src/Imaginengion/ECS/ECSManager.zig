@@ -102,7 +102,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return self.mComponentManager.IsActiveEntity(entity_id);
         }
 
-        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT.SkipFieldVector {
+        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {
             _ValidateGroupQuery(query);
             return ComponentManagerT.GetGroupMask(query);
         }
@@ -454,15 +454,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     _ValidateType(component_type);
                 },
                 .Not => |not| {
-                    _ValidateGroupQuery(not.mFirst);
-                    _ValidateGroupQuery(not.mSecond);
+                    _ValidateGroupQuery(not.mFirst.*);
+                    _ValidateGroupQuery(not.mSecond.*);
                 },
                 .Or => |ors| {
                     if (ors.len < 1) {
                         @compileError("Must have 1 or more in ors group");
                     }
                     inline for (ors[1..]) |or_query| {
-                        _ValidateGroupQuery(or_query);
+                        _ValidateGroupQuery(or_query.*);
                     }
                 },
                 .And => |ands| {
@@ -470,7 +470,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         @compileError("Must have 1 or more in ands group");
                     }
                     inline for (ands[1..]) |and_query| {
-                        _ValidateGroupQuery(and_query);
+                        _ValidateGroupQuery(and_query.*);
                     }
                 },
             }

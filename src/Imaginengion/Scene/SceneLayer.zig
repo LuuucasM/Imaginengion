@@ -108,13 +108,13 @@ pub fn CreateChild(self: SceneLayer, engine_context: *EngineContext, child_type:
 
 pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, config: NewSceneConfig) !void {
     if (config.bAddSceneUUID) {
-        const uuid_component = SceneUUIDComponent{ .ID = GenUUID() };
+        const uuid_component = SceneUUIDComponent{ .ID = engine_context.mRandom.int(u64) };
         _ = try self.AddComponent(engine_context, uuid_component);
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
     }
     if (config.bAddSceneName) {
         var scene_name_component = SceneNameComponent{ .mAllocator = engine_context.EngineAllocator() };
-        _ = try scene_name_component.mName.writer(scene_name_component.mAllocator).write("New Scene");
+        _ = try scene_name_component.mName.print(scene_name_component.mAllocator, "New Scene", .{});
 
         _ = try self.AddComponent(engine_context, scene_name_component);
     }

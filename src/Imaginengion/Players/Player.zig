@@ -9,7 +9,7 @@ const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerNameComponent = PlayerComponents.NameComponent;
 const UUIDComponent = PlayerComponents.UUIDComponent;
 const PlayerMic = PlayerComponents.MicComponent;
-const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
@@ -139,12 +139,12 @@ pub fn GetIterator(self: Player, comptime iter_type: Iterator.IterType) ?Iterato
 
 pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config: NewPlayerConfig) !void {
     if (config.bAddUUIDComponent) {
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = GenUUID() });
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = engine_context.GenUUID() });
         try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddNameComponent) {
         var new_name_component = PlayerNameComponent{ .mAllocator = engine_context.EngineAllocator() };
-        _ = try new_name_component.mName.writer(new_name_component.mAllocator).write("New Entity");
+        _ = try new_name_component.mName.print(new_name_component.mAllocator, "New Entity", .{});
         _ = try self.AddComponent(engine_context, new_name_component);
     }
     if (config.bAddPossessComponent) {
@@ -160,26 +160,10 @@ pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config:
 
 pub fn AddRenderTarget(self: Player, engine_context: *EngineContext) !*RenderTargetComponent {
     var new_render_comp = RenderTargetComponent{};
-    const engine_allocator = engine_context.EngineAllocator();
 
-    new_render_comp.mFrameBuffer = try FrameBuffer.Init(engine_allocator, &[_]TextureFormat{.RGBA8}, .None, 1, false, 1600, 900);
-    new_render_comp.mVertexArray = VertexArray.Init();
-    new_render_comp.mVertexBuffer = VertexBuffer.Init(@sizeOf([4][2]f32));
-    new_render_comp.mIndexBuffer = undefined;
+    try new_render_comp.mFrameBuffer.Init(engine_context, 1600, 600);
 
-    const shader_asset = engine_context.mRenderer.GetSDFShader();
-    try new_render_comp.mVertexBuffer.SetLayout(engine_context.EngineAllocator(), shader_asset.GetLayout());
-    new_render_comp.mVertexBuffer.SetStride(shader_asset.GetStride());
-
-    var index_buffer_data = [6]u32{ 0, 1, 2, 2, 3, 0 };
-    new_render_comp.mIndexBuffer = IndexBuffer.Init(index_buffer_data[0..], 6);
-
-    var data_vertex_buffer = [4][2]f32{ [2]f32{ -1.0, -1.0 }, [2]f32{ 1.0, -1.0 }, [2]f32{ 1.0, 1.0 }, [2]f32{ -1.0, 1.0 } };
-    new_render_comp.mVertexBuffer.SetData(&data_vertex_buffer[0][0], @sizeOf([4][2]f32), 0);
-    try new_render_comp.mVertexArray.AddVertexBuffer(engine_allocator, new_render_comp.mVertexBuffer);
-    new_render_comp.mVertexArray.SetIndexBuffer(new_render_comp.mIndexBuffer);
-
-    new_render_comp.SetViewportSize(1600, 900);
+    try new_render_comp.SetViewportSize(engine_context, 1600, 900);
     return try self.AddComponent(engine_context, new_render_comp);
 }
 

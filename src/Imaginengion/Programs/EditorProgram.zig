@@ -25,7 +25,7 @@ const Vec4f32 = LinAlg.Vec4f32;
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const EntityUUIDComponent = EntityComponents.UUIDComponent;
-const OnInputPressedScript = EntityComponents.OnInputPressedScript;
+const OnKeyPressedScript = EntityComponents.OnKeyPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
@@ -127,7 +127,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
     self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
-    self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
+    try self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
@@ -139,7 +139,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
     self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "assets/scripts/EditorCameraInput.zig", .Eng);
-    self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+    try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
@@ -182,7 +182,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer input_zone.Deinit();
 
         //Human Inputs
-        engine_context.mAppWindow.PollInputEvents();
+        try engine_context.mAppWindow.PollInputEvents(engine_context);
 
         var window_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent };
         callback_list.append(&window_event_callback.mNode);
@@ -340,8 +340,7 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     switch (event) {
         .WindowClose => _ = self.OnWindowClose(engine_context),
-        .WindowResize => |e| _ = try OnWindowResize(engine_context, e._Width, e._Height),
-        .InputPressed => |e| _ = try self.OnInputPressedEvent(engine_context, e),
+        .KeyboardPressed => |e| _ = try self.OnKeyboardPressedEvent(engine_context, e),
         else => {},
     }
     return true;
@@ -350,11 +349,6 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
 fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
     engine_context.mIsRunning = false;
     return false;
-}
-
-fn OnWindowResize(engine_context: *EngineContext, width: usize, height: usize) !bool {
-    engine_context.mAppWindow.OnWindowResize(width, height);
-    return true;
 }
 
 pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: GameEvent) anyerror!bool {
@@ -416,15 +410,14 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
     return true;
 }
 
-pub fn OnInputPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.InputPressedEvent) !bool {
-    _ = try ScriptsProcessor.RunEntityScript(OnInputPressedScript, .Editor, engine_context, .{&e});
+pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !bool {
+    _ = try ScriptsProcessor.RunEntityScript(OnKeyPressedScript, .Editor, engine_context, .{&e});
+    if (self.mEditorState == .Play) {
+        _ = try ScriptsProcessor.RunEntityScript(OnKeyPressedScript, .Simulate, engine_context, .{&e});
+    }
 
     if (e._InputCode == .F5) {
         try self.OnChangeEditorStateEvent(engine_context);
-    }
-
-    if (self.mEditorState == .Play) {
-        _ = try ScriptsProcessor.RunEntityScript(OnInputPressedScript, .Simulate, engine_context, .{&e});
     }
 
     _ = self._ViewportPanel.OnInputPressedEvent(e);

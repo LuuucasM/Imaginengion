@@ -17,6 +17,8 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const EntityTextComponent = EntityComponents.TextComponent;
 const EntityUUIDComponent = EntityComponents.UUIDComponent;
 
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -27,14 +29,14 @@ const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_
 
 const TextSerializer = @This();
 //==================================SERIALIZING ==================================================
-pub fn SerializeScene(frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, abs_path: []const u8) !void {
-    var out: std.io.Writer.Allocating = .init(frame_allocator);
+pub fn SerializeScene(engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
+    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = StringifyOptions };
 
-    try SerializeSceneLayer(&write_stream, scene_layer, frame_allocator);
-    try WriteToFile(abs_path, out.written());
+    try SerializeSceneLayer(&write_stream, scene_layer, engine_context.FrameAllocator());
+    try WriteToFile(engine_context, abs_path, out.written());
 }
 
 fn SerializeSceneLayer(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) anyerror!void {
@@ -96,10 +98,12 @@ fn SerializeSceneParentComp(write_stream: *WriteStream, scene_layer: SceneLayer,
 }
 
 fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: SceneLayer, frame_allocator: std.mem.Allocator) !void {
+    const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
+    const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
     const entity_list = try scene_layer.GetEntityGroup(frame_allocator, .{
         .Not = .{
-            .mFirst = .{ .Component = EntitySceneComponent },
-            .mSecond = .{ .Component = EntityChildComponent },
+            .mFirst = &EntitySceneQuery,
+            .mSecond = &EntityChildQuery,
         },
     });
 
@@ -164,14 +168,14 @@ fn SerializeEntityParentCompo(write_stream: *WriteStream, entity: Entity) anyerr
     }
 }
 
-fn WriteToFile(abs_path: []const u8, data: []const u8) !void {
-    const file = try std.fs.createFileAbsolute(abs_path, .{ .read = false, .truncate = true });
+fn WriteToFile(engine_context: *EngineContext, abs_path: []const u8, data: []const u8) !void {
+    const file = try std.Io.Dir.createFileAbsolute(engine_context.Io(), abs_path, .{ .read = false, .truncate = true });
     defer file.close();
     try file.writeAll(data);
 }
 
-pub fn SerializeEntity(frame_allocator: std.mem.Allocator, entity: Entity, abs_path: []const u8) !void {
-    var out: std.io.Writer.Allocating = .init(frame_allocator);
+pub fn SerializeEntity(engine_context: *EngineContext, entity: Entity, abs_path: []const u8) !void {
+    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = StringifyOptions };
@@ -180,7 +184,7 @@ pub fn SerializeEntity(frame_allocator: std.mem.Allocator, entity: Entity, abs_p
     try SerializeSceneEntity(&write_stream, entity);
     try write_stream.endObject();
 
-    try WriteToFile(abs_path, out.written());
+    try WriteToFile(engine_context, abs_path, out.written());
 }
 //========================================= END SERIALIZING ===============================================
 

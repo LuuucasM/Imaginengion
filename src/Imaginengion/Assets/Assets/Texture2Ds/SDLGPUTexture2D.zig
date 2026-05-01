@@ -8,16 +8,16 @@ const SDLTexture2D = @This();
 
 const SDL_TEXTURE_FORMAT = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 
-_Width: c_int = 0,
-_Height: c_int = 0,
+_Width: usize = 0,
+_Height: usize = 0,
 _TextureHandle: u32 = 0,
 _TextureManager: *TextureManager = undefined,
 
 pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
-    var width: c_int = 0;
-    var height: c_int = 0;
+    var width: usize = 0;
+    var height: usize = 0;
     var channels: c_int = 0;
 
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
@@ -27,8 +27,8 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
     const data = stb.stbi_load_from_memory(
         contents.ptr,
         @intCast(contents.len),
-        &width,
-        &height,
+        @ptrCast(&width),
+        @ptrCast(&height),
         &channels,
         4,
     );
@@ -39,7 +39,7 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
         return error.AssetInitFailed;
     }
 
-    self._TextureHandle = try engine_context.mRenderer.mTextureManager.Register(engine_context, data, @intCast(width), @intCast(height));
+    try self.RegisterTexture(engine_context, width, height, data);
 
     self._Width = width;
     self._Height = height;
@@ -49,8 +49,7 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
 }
 
 pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
-    engine_context.mRenderer.mTextureManager.Register(engine_context, descriptor.data, descriptor.width, descriptor.height);
-
+    try self.RegisterTexture(engine_context, descriptor.width, descriptor.height, descriptor.data);
     self._Width = descriptor.width;
     self._Height = descriptor.height;
 
@@ -104,17 +103,21 @@ pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_p
     std.debug.assert(data != null);
 
     engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
-    engine_context.mRenderer.mTextureManager.Register(engine_context, data, width, height);
+    self.RegisterTexture(engine_context, width, height, data);
 
     self._Width = width;
     self._Height = height;
 }
 
 pub fn UpdateDataGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
-    engine_context.mRenderer.mTextureManager.Register(engine_context, descriptor.data, descriptor.width, descriptor.height);
+    self.RegisterTexture(engine_context, descriptor.width, descriptor.height, descriptor.data);
 
     self._Width = descriptor.width;
     self._Height = descriptor.height;
+}
+
+fn RegisterTexture(self: *SDLTexture2D, engine_context: *EngineContext, width: usize, height: usize, pixels: ?*anyopaque) !void {
+    self._TextureHandle = try engine_context.mRenderer.mTextureManager.Register(engine_context, pixels, width, height);
 }
 
 fn CreateGPUTexture(device: *sdl.SDL_GPUDevice, width: u32, height: u32, is_render_target: bool) ?*sdl.SDL_GPUTexture {

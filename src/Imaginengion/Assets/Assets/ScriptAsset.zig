@@ -41,7 +41,7 @@ pub const Ind: usize = blk: {
 
 _Impl: Impl = .{},
 
-pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.fs.File) !void {
+pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     try self._Impl.Init(engine_context, abs_path, rel_path, asset_file);
 }
 
@@ -55,4 +55,8 @@ pub fn Run(self: *ScriptAsset, comptime script_type: type, args: anytype) bool {
 
 pub fn EditorRender(self: *ScriptAsset) !void {
     self._Impl.EditorRender();
+}
+
+pub fn GetScriptType(self: ScriptAsset) ScriptType {
+    return self._Impl.GetScriptType();
 }

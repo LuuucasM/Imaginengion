@@ -66,6 +66,8 @@ mEngineStats: EngineStats = .{},
 
 mIsRunning: bool = true,
 
+mRandom: std.Random = undefined,
+
 _Internal: InternalData = .{},
 
 pub fn Init(self: *EngineContext) !void {
@@ -88,6 +90,9 @@ pub fn Init(self: *EngineContext) !void {
     try self.mGameWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mEditorWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mSimulateWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
+
+    const io_source = std.Random.IoSource{ .io = self.Io() };
+    self.mRandom = io_source.interface();
 }
 
 pub fn DeInit(self: *EngineContext) !void {
@@ -112,6 +117,10 @@ pub fn DeInit(self: *EngineContext) !void {
 
     _ = self._Internal.EngineGPA.deinit();
     self._Internal.FrameArena.deinit();
+}
+
+pub fn GenUUID(self: EngineContext) u64 {
+    return self.mRandom.int(u64);
 }
 
 pub inline fn EngineAllocator(self: *EngineContext) std.mem.Allocator {

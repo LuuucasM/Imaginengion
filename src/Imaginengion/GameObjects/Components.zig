@@ -17,7 +17,7 @@ pub const ViewpointComponent = @import("Components/ViewpointComponent.zig");
 pub const RenderTargetComponent = @import("Components/RenderTargetComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
-pub const OnInputPressedScript = TagComponents.OnInputPressedScript;
+pub const OnKeyPressedScript = TagComponents.OnKeyPressedScript;
 pub const OnUpdateScript = TagComponents.OnUpdateScript;
 
 pub const ComponentsList = [_]type{
@@ -38,7 +38,7 @@ pub const ComponentsList = [_]type{
 
     //scripts
     ScriptComponent,
-    OnInputPressedScript,
+    OnKeyPressedScript,
     OnUpdateScript,
 };
 
@@ -74,7 +74,7 @@ pub const ComponentPanelList = [_]type{
 };
 
 pub const ScriptsList = [_]type{
-    OnInputPressedScript,
+    OnKeyPressedScript,
     OnUpdateScript,
 };
 
@@ -91,7 +91,7 @@ pub const EComponents = enum(u16) {
     TextComponent = TextComponent.Ind,
     TransformComponent = TransformComponent.Ind,
     ScriptComponent = ScriptComponent.Ind,
-    OnInputPressedScript = OnInputPressedScript.Ind,
+    OnInputPressedScript = OnKeyPressedScript.Ind,
     OnUpdateScript = OnUpdateScript.Ind,
     ViewpointComponent = ViewpointComponent.Ind,
     RenderTargetComponent = RenderTargetComponent.Ind,

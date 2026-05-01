@@ -54,7 +54,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             return self.mComponents.mValues.items.len;
         }
         pub fn GetAllEntities(self: *Self, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
-            var entity_set = std.ArrayList(entity_t){};
+            var entity_set: std.ArrayList(entity_t) = .empty;
             try entity_set.appendSlice(allocator, self.mComponents.mDenseToSparse.items);
             return entity_set;
         }

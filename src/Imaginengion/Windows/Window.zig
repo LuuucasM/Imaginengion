@@ -30,8 +30,8 @@ pub fn GetNativeWindow(self: Window) *anyopaque {
     return self._Impl.GetNativeWindow();
 }
 
-pub fn PollInputEvents(self: Window, engine_context: *EngineContext) void {
-    self._Impl.PollInputEvents(engine_context);
+pub fn PollInputEvents(self: *Window, engine_context: *EngineContext) !void {
+    try self._Impl.PollInputEvents(engine_context);
 }
 
 pub fn IsMinimized(self: Window) bool {
