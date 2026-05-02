@@ -25,7 +25,7 @@ pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !voi
     try self.mFrameBuffer.Deinit(engine_context);
 }
 
-pub fn GetOutputTexture(self: RenderTargetComponent) *Texture2D {
+pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
     return self.mFrameBuffer.GetColorTexture(0);
 }
 
@@ -57,5 +57,11 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.jso
         }
     }
 
-    return RenderTargetComponent{ .mFrameBuffer = .empty.Init(engine_context, 1600, 900) };
+    var frame_buffer: OutputFrameBuffer = .empty;
+    frame_buffer.Init(engine_context, 1600, 900) catch |err| {
+        std.debug.print("{}", .{err});
+        @panic("couldnt make frame buffer ahhh!");
+    };
+
+    return RenderTargetComponent{ .mFrameBuffer = frame_buffer };
 }

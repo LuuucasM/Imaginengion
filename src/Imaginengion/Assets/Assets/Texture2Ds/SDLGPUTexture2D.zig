@@ -71,11 +71,11 @@ pub fn GetTextureHandle(self: SDLTexture2D) u32 {
     return self._TextureHandle;
 }
 
-pub fn GetTexture(self: SDLTexture2D) *sdl.SDL_GPUTexture {
+pub fn GetTexture(self: SDLTexture2D) *anyopaque {
     return self._TextureManager.GetTexture();
 }
 
-pub fn GetSampler(self: SDLTexture2D) *sdl.SDL_GPUSampler {
+pub fn GetSampler(self: SDLTexture2D) *anyopaque {
     return self._TextureManager.GetSampler();
 }
 

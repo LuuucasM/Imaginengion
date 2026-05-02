@@ -84,8 +84,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext)
     const padding: f32 = 8.0;
     const thumbnail_size: f32 = 70.0;
     const cell_size: f32 = thumbnail_size + padding;
-    var content_region: imgui.struct_ImVec2 = .{};
-    imgui.igGetContentRegionAvail(&content_region);
+    const content_region = imgui.igGetContentRegionAvail();
     const panel_width = content_region.x;
     var column_count: i32 = @intFromFloat(panel_width / cell_size);
     if (column_count < 1) {
@@ -144,7 +143,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
     //imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, .{ .x = 0.7, .y = 0.2, .z = 0.3, .w = 1.0 });
     _ = imgui.igImageButton(
         "back",
-        engine_context.mImguiManager.GetImguiTexture(engine_context, back_texture),
+        try engine_context.mImguiManager.GetImguiTexture(engine_context, back_texture),
         .{ .x = thumbnail_size, .y = thumbnail_size },
         .{ .x = 0, .y = 0 },
         .{ .x = 1, .y = 1 },
@@ -157,8 +156,8 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
         const last_slash = std.mem.lastIndexOf(u8, self.mCurrentPath.items, "/").?;
         self.mCurrentPath.shrinkAndFree(engine_allocator, last_slash);
 
-        self.mCurrentDirectory.?.close();
-        self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
+        self.mCurrentDirectory.?.close(engine_context.Io());
+        self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), self.mCurrentPath.items, .{ .iterate = true });
     }
 
     imgui.igTextWrapped("Back");
@@ -174,17 +173,17 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
     var new_curr_dir: bool = false;
 
     var iter = self.mCurrentDirectory.?.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(engine_context.Io())) |entry| {
         if (entry.kind == .directory) {
             const texture_asset = try self.mDirTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texture_asset, thumbnail_size);
+            try RenderImageButton(engine_context, entry_name, texture_asset, thumbnail_size);
 
             if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
-                _ = try self.mCurrentPath.writer(engine_context.EngineAllocator()).write("/");
-                _ = try self.mCurrentPath.writer(engine_context.EngineAllocator()).write(entry.name);
+                _ = try self.mCurrentPath.print(engine_context.EngineAllocator(), "/", .{});
+                _ = try self.mCurrentPath.print(engine_context.EngineAllocator(), "{s}", .{entry.name});
 
                 new_curr_dir = true;
             }
@@ -194,7 +193,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texture_asset, thumbnail_size);
+            try RenderImageButton(engine_context, entry_name, texture_asset, thumbnail_size);
 
             try self.DragDropSourceBase(engine_context, entry_name, "PNGLoad");
             NextColumn(entry_name);
@@ -203,7 +202,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texutre_asset, thumbnail_size);
+            try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
             try self.DragDropSourceBase(engine_context, entry_name, "IMSCLoad");
             NextColumn(entry_name);
@@ -212,7 +211,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texutre_asset, thumbnail_size);
+            try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
             try self.DragDropSourceScript(engine_context, entry_name);
             NextColumn(entry_name);
@@ -221,15 +220,15 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
 
-            try RenderImageButton(entry_name, texutre_asset, thumbnail_size);
+            try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
             try self.DragDropSourceBase(engine_context, entry_name, "MP3Load");
             NextColumn(entry_name);
         }
     }
     if (new_curr_dir) {
-        self.mCurrentDirectory.?.close();
-        self.mCurrentDirectory = try std.fs.openDirAbsolute(self.mCurrentPath.items, .{ .iterate = true });
+        self.mCurrentDirectory.?.close(engine_context.Io());
+        self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), self.mCurrentPath.items, .{ .iterate = true });
     }
 }
 
@@ -315,7 +314,7 @@ fn RenderImageButton(engine_context: *EngineContext, entry_name: []const u8, tex
 
     _ = imgui.igImageButton(
         entry_name.ptr,
-        engine_context.mImguiManager.GetImguiTexture(engine_context, texture),
+        try engine_context.mImguiManager.GetImguiTexture(engine_context, texture),
         .{ .x = thumbnail_size, .y = thumbnail_size },
         .{ .x = 0.0, .y = 0.0 },
         .{ .x = 1.0, .y = 1.0 },
@@ -350,13 +349,13 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
 
         const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
-        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, rel_path, .Prj);
+        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
         defer engine_context.mAssetManager.ReleaseAssetHandleRef(&script_handle);
 
         const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);
-        if (script_asset.mScriptType == .EntityInputPressed or script_asset.mScriptType == .EntityOnUpdate) {
+        if (script_asset.GetScriptType() == .EntityInputPressed or script_asset.GetScriptType() == .EntityOnUpdate) {
             _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
-        } else if (script_asset.mScriptType == .SceneSceneStart) {
+        } else if (script_asset.GetScriptType() == .SceneSceneStart) {
             _ = imgui.igSetDragDropPayload("SceneScriptLoad", rel_path.ptr, rel_path.len, 0);
         }
     }

@@ -170,8 +170,8 @@ fn SerializeEntityParentCompo(write_stream: *WriteStream, entity: Entity) anyerr
 
 fn WriteToFile(engine_context: *EngineContext, abs_path: []const u8, data: []const u8) !void {
     const file = try std.Io.Dir.createFileAbsolute(engine_context.Io(), abs_path, .{ .read = false, .truncate = true });
-    defer file.close();
-    try file.writeAll(data);
+    defer file.close(engine_context.Io());
+    try file.writeStreamingAll(engine_context.Io(), data);
 }
 
 pub fn SerializeEntity(engine_context: *EngineContext, entity: Entity, abs_path: []const u8) !void {
@@ -190,28 +190,26 @@ pub fn SerializeEntity(engine_context: *EngineContext, entity: Entity, abs_path:
 
 //====================================== DESRIALIZING ========================================================
 pub fn DeserializeScene(engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
-    const scene_file = try std.fs.openFileAbsolute(abs_path, .{ .mode = .read_only });
+    const scene_file = try std.Io.Dir.openFileAbsolute(engine_context.Io(), abs_path, .{ .mode = .read_only });
 
     const scene_contents = try GetSceneContents(engine_context, scene_file);
 
-    var io_reader = std.io.Reader.fixed(scene_contents.items);
-    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &io_reader);
+    var reader = std.Io.Reader.fixed(scene_contents);
+
+    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &reader);
 
     try SkipToken(&json_reader); //skip the very first begin object at the top level of the file
 
     try DeSerializeSceneLayer(engine_context, &json_reader, scene_layer);
 
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
-    _ = try scene_component.mScenePath.writer(engine_context.EngineAllocator()).write(engine_context.mAssetManager.GetRelPath(abs_path));
+    _ = try scene_component.mScenePath.print(engine_context.EngineAllocator(), "{s}", .{engine_context.mAssetManager.GetRelPath(abs_path)});
 }
 
-fn GetSceneContents(engine_context: *EngineContext, scene_file: std.fs.File) !std.ArrayList(u8) {
-    const file_size = try scene_file.getEndPos();
-    var scene_contents = try std.ArrayList(u8).initCapacity(engine_context.FrameAllocator(), file_size);
-    try scene_contents.resize(engine_context.FrameAllocator(), file_size);
-    _ = try scene_file.readAll(scene_contents.items);
-
-    return scene_contents;
+fn GetSceneContents(engine_context: *EngineContext, scene_file: std.Io.File) ![]const u8 {
+    var file_reader = scene_file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
+    return contents;
 }
 
 fn DeSerializeSceneLayer(engine_context: *EngineContext, reader: *std.json.Reader, scene_layer: SceneLayer) !void {
@@ -302,22 +300,20 @@ fn DeserializeEntityComponent(engine_context: *EngineContext, comptime component
 }
 
 //note: this function is for deserializing prefabs, not to be confused with DeserializeThisEntity which actually deserializes an entity
-pub fn DeserializeEntity(scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
-    const file = try std.fs.openFileAbsolute(abs_path, .{});
-    defer file.close();
+pub fn DeserializeEntity(engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8, frame_allocator: std.mem.Allocator) !void {
+    const file = try std.Io.Dir.openFileAbsolute(abs_path, .{});
+    defer file.close(engine_context.Io());
 
-    const file_size = try file.getEndPos();
+    var file_reader = file.reader(engine_context.Io(), &.{});
+    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
 
-    const file_contents = try std.ArrayList(u8).initCapacity(frame_allocator, file_size);
-    file.readAll(file_contents.items);
+    var reader = std.Io.Reader.fixed(contents);
 
-    var io_reader = std.io.Reader.fixed(file_contents.items);
-
-    var reader = std.json.Reader.init(frame_allocator, &io_reader);
-    defer reader.deinit();
+    var json_reader = std.json.Reader.init(frame_allocator, &reader);
+    defer json_reader.deinit();
 
     const new_entity = try scene_layer.CreateBlankEntity();
-    try DeserializeThisEntity(&reader, new_entity, scene_layer, frame_allocator);
+    try DeserializeThisEntity(engine_context, &json_reader, new_entity, scene_layer, frame_allocator);
 }
 
 //======================================================= END DESERIALIZING ==============================================================

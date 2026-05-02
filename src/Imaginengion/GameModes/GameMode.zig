@@ -12,7 +12,7 @@ const UUIDComponent = GameModeComponents.UUIDComponent;
 const NameComponent = GameModeComponents.NameComponent;
 const ScriptComponent = GameModeComponents.ScriptComponent;
 const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
-const PathType = @import("../Assets/Assets.zig").FileMetaData.PathType;
+const PathType = @import("../Assets/AssetManager.zig").PathType;
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
 const GameMode = @This();
 
@@ -93,7 +93,7 @@ pub fn AddComponentScript(self: GameMode, engine_context: *EngineContext, rel_pa
     var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = rel_path_script, .path_type = path_type } });
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
-    std.debug.assert(script_asset.mScriptType == .EntityInputPressed or script_asset.mScriptType == .EntityOnUpdate);
+    std.debug.assert(script_asset.GetScriptType() == .EntityInputPressed or script_asset.GetScriptType() == .EntityOnUpdate);
 
     // Create the script component with the asset handle
     const new_script_component = ScriptComponent{
@@ -105,14 +105,14 @@ pub fn AddComponentScript(self: GameMode, engine_context: *EngineContext, rel_pa
     _ = try new_script_entity.AddComponent(engine_context, new_script_component);
 
     // Add the appropriate script type component based on the script asset
-    switch (script_asset.mScriptType) {
+    switch (script_asset.GetScriptType()) {
         else => @panic("this shouldnt happen!\n"),
     }
 }
 
 pub fn CreateGameModeConfig(self: *GameMode, engine_context: *EngineContext, config: NewGameModeConfig) !void {
     if (config.bAddUUIDComponent) {
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = GenUUID() });
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = engine_context.GenUUID() });
         try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddNameComponent) {

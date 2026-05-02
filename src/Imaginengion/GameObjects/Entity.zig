@@ -72,18 +72,7 @@ mSceneManager: *SceneManager = undefined,
 pub fn AddComponent(self: Entity, engine_context: *EngineContext, new_component: anytype) !*@TypeOf(new_component) {
     const component_type = @TypeOf(new_component);
     _ValidateComponent(component_type);
-    var comp = new_component;
-    if (component_type == EntityComponents.QuadComponent) {
-        comp.mTexture.mAssetManager = &engine_context.mAssetManager;
-    }
-    if (component_type == EntityComponents.TextComponent) {
-        comp.mTextAssetHandle.mAssetManager = &engine_context.mAssetManager;
-        comp.mTexHandle.mAssetManager = &engine_context.mAssetManager;
-    }
-    if (component_type == EntityComponents.AudioComponent) {
-        comp.mAudioAsset.mAssetManager = &engine_context.mAssetManager;
-    }
-    return try self.mSceneManager.mECSManagerGO.AddComponent(engine_context.EngineAllocator(), self.mEntityID, comp);
+    return try self.mSceneManager.mECSManagerGO.AddComponent(engine_context.EngineAllocator(), self.mEntityID, new_component);
 }
 pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     try self.mSceneManager.mECSManagerGO.RemoveComponent(engine_allocator, component_type, self.mEntityID);

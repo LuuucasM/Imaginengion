@@ -19,7 +19,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
-const PathType = @import("../Assets/Assets/FileMetaData.zig").PathType;
+const PathType = @import("../Assets/AssetManager.zig").PathType;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const SceneManager = @import("SceneManager.zig");
@@ -121,7 +121,7 @@ pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, conf
 }
 
 pub fn AddComponentScript(self: SceneLayer, engine_context: *EngineContext, script_asset_path: []const u8, path_type: PathType) !void {
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, script_asset_path, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = script_asset_path, .path_type = path_type } });
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
     const new_script_component = SceneScriptComponent{
@@ -132,7 +132,7 @@ pub fn AddComponentScript(self: SceneLayer, engine_context: *EngineContext, scri
 
     _ = try new_script_entity.AddComponent(engine_context, new_script_component);
 
-    _ = switch (script_asset.mScriptType) {
+    _ = switch (script_asset.GetScriptType()) {
         .SceneSceneStart => try new_script_entity.AddComponent(engine_context, OnSceneStartScript{}),
         else => @panic("This shouldnt happen!"),
     };

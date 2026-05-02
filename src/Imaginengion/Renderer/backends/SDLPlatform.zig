@@ -35,11 +35,11 @@ pub fn Deinit(self: *SDLPlatform, engine_context: *EngineContext) void {
     sdl.SDL_DestroyGPUDevice(self.mDevice);
 }
 
-pub fn BeginFrame(self: SDLPlatform, window: *Window) bool {
+pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
     self.mCurrentCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
     std.debug.assert(self.mCurrentCmdBuffer != null);
 
-    var swapchain_tex: ?sdl.SDL_GPUTexture = null;
+    var swapchain_tex: *sdl.SDL_GPUTexture = undefined;
     var width: usize = 0;
     var height: usize = 0;
     const acquired = sdl.SDL_AcquireGPUSwapchainTexture(
@@ -50,7 +50,7 @@ pub fn BeginFrame(self: SDLPlatform, window: *Window) bool {
         &height,
     );
 
-    if (!acquired or swapchain_tex == null) {
+    if (!acquired) {
         _ = sdl.SDL_CancelGPUCommandBuffer(self.mCurrentCmdBuffer);
         self.mCurrentCmdBuffer = null;
         return false;

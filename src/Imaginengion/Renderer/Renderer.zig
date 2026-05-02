@@ -44,16 +44,16 @@ mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
 
 mPushConstants: PushConstants = .{
-    .aspect_ratio = 0,
-    .fov = 90,
-    .glyphs_count = 0,
-    .mode = 1,
-    .perspective_far = 1000,
-    .position = [3]f32{ 0, 0, 0 },
-    .quads_count = 0,
-    .resolution_height = 0,
-    .resolution_width = 0,
-    .rotation = [4]f32{ 1, 0, 0, 0 },
+    .mPosition = [3]f32{ 0, 0, 0 },
+    .mRotation = [4]f32{ 1, 0, 0, 0 },
+    .mPerspectiveFar = 1000,
+    .mResolutionWidth = 0,
+    .mResolutionHeight = 0,
+    .mAspectRatio = 0,
+    .mFOV = 90,
+    .mMode = 1,
+    .mQuadsCount = 0,
+    .mGlyphsCount = 0,
 },
 
 mSDFShader: AssetHandle = .{},
@@ -88,7 +88,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mPlatform.PushDebugGroup("Frame\x00");
     defer self.mPlatform.PopDebugGroup();
 
-    if (!self.mPlatform.BeginFrame(engine_context.mAppWindow)) return;
+    if (!self.mPlatform.BeginFrame(&engine_context.mAppWindow)) return;
 
     const scene_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
@@ -126,8 +126,8 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         try self.DrawShape(engine_context, shape_entity);
     }
 
-    self.mPushConstants.quads_count = self.mR2D.GetQuadCount();
-    self.mPushConstants.glyphs_count = self.mR2D.GetGlyphCount();
+    self.mPushConstants.mQuadsCount = self.mR2D.GetQuadCount();
+    self.mPushConstants.mGlyphsCount = self.mR2D.GetGlyphCount();
 
     try self.EndRendering(world_type, engine_context, frame_buffer);
 }
@@ -168,13 +168,13 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     const cmd = self.mPlatform.GetCommandBuff();
 
     self.mPlatform.PushDebugGroup("Upload Buffers\x00");
-    self.mR2D.SetBuffers(world_type, engine_context);
+    try self.mR2D.SetBuffers(world_type, engine_context);
     self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw\x00");
     defer self.mPlatform.PopDebugGroup();
 
-    const render_pass = frame_buffer.BeginRenderPass(engine_context, .{ 0.3, 0.3, 0.3, 1.0 });
+    const render_pass = frame_buffer.BeginRenderPass(engine_context);
 
     self.mPipeline.Bind(render_pass);
 

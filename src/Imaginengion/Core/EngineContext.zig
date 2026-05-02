@@ -73,7 +73,6 @@ _Internal: InternalData = .{},
 pub fn Init(self: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EngineContext::Init", @src());
     defer zone.Deinit();
-
     self.mEngineStats.AppTimer = .now(self._Internal.EngineIO.io(), .awake);
 
     self._Internal.EngineAllocator = self._Internal.EngineGPA.allocator();

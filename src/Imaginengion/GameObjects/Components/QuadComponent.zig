@@ -11,6 +11,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../Entity.zig");
 const Player = @import("../../Players/Player.zig");
 const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
+const PathType = @import("../../Assets/AssetManager.zig").PathType;
 const QuadComponent = @This();
 
 //IMGUI
@@ -31,15 +32,18 @@ mTexture: union(enum) {
     const Self = @This();
     Asset: AssetHandle,
     EntityRenderTarget: Entity,
+    pub const empty: Self = .{
+        .Asset = .{},
+    };
     pub fn ReleaseAsset(self: *Self) void {
         switch (self.*) {
             .Asset => self.Asset.ReleaseAsset(),
             .EntityRenderTarget => self.EntityRenderTarget.mEntityID = Entity.NullEntity,
         }
     }
-    pub fn GetTexture(self: Self, engine_context: *EngineContext) *Texture2D {
+    pub fn GetTexture(self: Self, engine_context: *EngineContext) !*Texture2D {
         switch (self) {
-            .Asset => |a| return a.GetAsset(engine_context, Texture2D),
+            .Asset => |a| return try a.GetAsset(engine_context, Texture2D),
             .EntityRenderTarget => |e| return e.GetComponent(RenderTargetComponent).?.GetOutputTexture(),
         }
     }
@@ -58,7 +62,7 @@ mTexture: union(enum) {
             },
         }
     }
-},
+} = .empty,
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 
@@ -74,16 +78,14 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
-    const texture_asset = self.mTexture.GetTexture(engine_context);
+    const texture_asset = try self.mTexture.GetTexture(engine_context);
 
     imgui.igImage(
-        engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
+        try engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
         .{ .x = 50.0, .y = 50.0 },
         // Always show full texture in preview
-        .{ .x = 0.0, .y = 1.0 },
-        .{ .x = 1.0, .y = 0.0 },
-        .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-        .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
+        .{ .x = 0.0, .y = 0.0 },
+        .{ .x = 1.0, .y = 1.0 },
     );
 
     // Open tiling editor on double-click of the image
@@ -96,10 +98,10 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             self.mTexture.ReleaseAsset();
-            self.mTexture = .{ .Asset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, path, .Prj) };
+            self.mTexture = .{ .Asset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } }) };
         }
     }
-    try self.EditTexCoords(texture_asset);
+    try self.EditTexCoords(engine_context, texture_asset);
 }
 
 fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_asset: *Texture2D) !void {
@@ -110,8 +112,7 @@ fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_a
     if (imgui.igBegin("Texture Coordinate Editor", &self.mEditTexCoords, 0)) {
         defer imgui.igEnd();
         // Compute image size to fit above the controls while preserving aspect ratio
-        var available: imgui.struct_ImVec2 = undefined;
-        imgui.igGetContentRegionAvail(&available);
+        const available = imgui.igGetContentRegionAvail();
         const tex_w: f32 = @floatFromInt(texture_asset.GetWidth());
         const tex_h: f32 = @floatFromInt(texture_asset.GetHeight());
         const texture_aspect = if (tex_h > 0) tex_w / tex_h else 1.0;
@@ -130,12 +131,10 @@ fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_a
         }
 
         imgui.igImage(
-            engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
+            try engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
             .{ .x = draw_w, .y = draw_h },
             .{ .x = self.mTexOptions.mTexCoords[0], .y = 1.0 - self.mTexOptions.mTexCoords[1] },
             .{ .x = self.mTexOptions.mTexCoords[2], .y = 1.0 - self.mTexOptions.mTexCoords[3] },
-            .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-            .{ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
         );
 
         // UV editors under the image
@@ -226,9 +225,12 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             try SkipToken(reader); //skip PathType object field
 
-            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
+            const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
 
-            result.mTexture.Asset = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
+            result.mTexture.Asset = engine_context.mAssetManager.GetAssetHandleRef(
+                engine_context,
+                .{ .File = .{ .rel_path = parsed_path, .path_type = parsed_path_type } },
+            ) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
@@ -236,9 +238,9 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
             std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Entity);
             const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
             const entity = engine_context.mSerializer.mCurrDeserialize.requester.Entity;
-            const quad_component: *QuadComponent = @ptrCast(engine_context.mSerializer.mCurrDeserialize.component_ptr);
+            const quad_component: *QuadComponent = @ptrCast(@alignCast(engine_context.mSerializer.mCurrDeserialize.component_ptr));
             result.mTexture = .{ .EntityRenderTarget = .{ .mSceneManager = entity.mSceneManager } };
-            entity.mSceneManager.AddResolveUUID(engine_context, .{
+            try entity.mSceneManager.AddResolveUUID(engine_context.EngineAllocator(), .{
                 .Requester = engine_context.mSerializer.mCurrDeserialize.requester,
                 .UUID = entity_uuid,
                 .SetLoc = &quad_component.mTexture.EntityRenderTarget.mEntityID,

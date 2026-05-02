@@ -48,10 +48,11 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             // Build color target infos — replaces glBindFramebuffer + glClearColor + glClear
             var color_targets: [color_texture_formats.len]sdl.SDL_GPUColorTargetInfo = undefined;
             inline for (0..color_texture_formats.len) |i| {
+                const texture: *sdl.SDL_GPUTexture = @ptrCast(self.mTextures[i].GetTexture());
                 color_targets[i] = sdl.SDL_GPUColorTargetInfo{
-                    .texture = self.mTextures[i].GetTexture(),
+                    .texture = texture,
                     .mip_level = 0,
-                    .layer_or_depth_plane = engine_context.mRenderer.mTextureManager.GetLayerIndex(self.mTextures[i].GetTextureHandle()),
+                    .layer_or_depth_plane = @intCast(engine_context.mRenderer.mTextureManager.GetLayerIndex(self.mTextures[i].GetTextureHandle())),
                     .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 0 },
                     .load_op = sdl.SDL_GPU_LOADOP_CLEAR, // replaces glClear
                     .store_op = sdl.SDL_GPU_STOREOP_STORE,
@@ -115,7 +116,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             return render_pass.?;
         }
 
-        pub fn EndRenderPass(_: *Self, render_pass: *anyopaque) void {
+        pub fn EndRenderPass(_: Self, render_pass: *anyopaque) void {
             const pass: *sdl.SDL_GPURenderPass = @ptrCast(@alignCast(render_pass));
             sdl.SDL_EndGPURenderPass(pass);
         }
@@ -132,12 +133,12 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             try self.Create(engine_context);
         }
 
-        pub fn GetColorTexture(self: Self, attachment_index: usize) *Texture2D {
+        pub fn GetColorTexture(self: *Self, attachment_index: usize) *Texture2D {
             std.debug.assert(attachment_index < color_texture_formats.len);
             return &self.mTextures[attachment_index];
         }
 
-        pub fn GetDepthTexture(self: Self) *Texture2D {
+        pub fn GetDepthTexture(self: *Self) *Texture2D {
             std.debug.assert(HasDepth);
             return &self.mDepthTexture;
         }

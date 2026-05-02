@@ -8,8 +8,6 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Renderer = @import("../Renderer/Renderer.zig");
 
-const once = @import("../Core/Once.zig").once;
-
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldType = EngineContext.WorldType;
 
@@ -50,21 +48,19 @@ pub const DeserializeContext = struct {
 };
 
 pub const empty: Serializer = .{
-    .mRand = undefined,
     .mCurrDeserialize = DeserializeContext{},
 };
 
-mRand: std.Random,
 mCurrDeserialize: DeserializeContext,
 
 pub fn Deinit(_: Serializer, _: std.mem.Allocator) void {}
 
-pub fn SerializeScene(_: Serializer, frame_allocator: std.mem.Allocator, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
-    try TextSerializer.SerializeScene(frame_allocator, scene_layer, abs_path);
+pub fn SerializeScene(_: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
+    try TextSerializer.SerializeScene(engine_context, scene_layer, abs_path);
 }
 
-pub fn SerializeEntity(_: Serializer, frame_allocator: std.mem.Allocator, entity: Entity, abs_path: []const u8, _: SerializeType) !void {
-    try TextSerializer.SerializeEntity(frame_allocator, entity, abs_path);
+pub fn SerializeEntity(_: Serializer, engine_context: *EngineContext, entity: Entity, abs_path: []const u8, _: SerializeType) !void {
+    try TextSerializer.SerializeEntity(engine_context, entity, abs_path);
 }
 
 pub fn DeserializeScene(self: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
@@ -74,10 +70,6 @@ pub fn DeserializeScene(self: Serializer, engine_context: *EngineContext, scene_
 
 pub fn DeserializeEntity(_: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
     TextSerializer.DeserializeEntity(engine_context, scene_layer, abs_path);
-}
-
-pub fn GenUUID(self: Serializer) u64 {
-    return self.mRand.int(u64);
 }
 
 pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, scene_manager: *SceneManager) void {

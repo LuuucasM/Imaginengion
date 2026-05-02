@@ -96,29 +96,15 @@ pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine
     const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
     defer zone.Deinit();
 
-    var buff: [(@sizeOf(StorageBufferBinding) * 2) + 1]u8 = undefined;
-    std.heap.FixedBufferAllocator.init(&buff);
-
-    var buffer_binding_array = std.ArrayList(StorageBufferBinding).initBuffer(&buff);
     const quad_byte_size = self.mQuadBufferBase.items.len * @sizeOf(QuadData);
     const glyph_byte_size = self.mGlyphBufferBase.items.len * @sizeOf(GlyphData);
 
     //quads
-    const quad_resize = self.mQuadBuffer.SetData(engine_context, self.mQuadBufferBase.items.ptr, quad_byte_size, 0);
-    if (quad_resize) {
-        buffer_binding_array.appendAssumeCapacity(.{ .buffer = self.mQuadBuffer.GetBuffer(), .binding = self.mQuadBuffer.GetBinding() });
-    }
+    _ = self.mQuadBuffer.SetData(engine_context, self.mQuadBufferBase.items.ptr, quad_byte_size, 0);
 
     //glyphs
-    const glyph_resize = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
-    if (glyph_resize) {
-        buffer_binding_array.appendAssumeCapacity(.{ .buffer = self.mGlyphBuffer.GetBuffer(), .binding = self.mGlyphBuffer.GetBinding() });
-    }
-    //more shapes
-
-    if (buffer_binding_array.items.len > 0) {
-        engine_context.mRenderer.mPlatform.UpdateStorageBuffers(buffer_binding_array.items);
-    }
+    _ = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
+    //more shape
 
     //fill out stats
     switch (world_type) {
@@ -162,7 +148,7 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
-    const texture_asset = quad_component.mTexture.GetTexture(engine_context);
+    const texture_asset = try quad_component.mTexture.GetTexture(engine_context);
 
     const world_pos = transform_component.GetWorldPosition();
     const world_rot = transform_component.GetWorldRotation();
@@ -172,7 +158,7 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
         .Position = [3]f32{ world_pos[0], world_pos[1], world_pos[2] },
         .Rotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] },
         .Scale = [3]f32{ world_scale[0], world_scale[1], world_scale[2] },
-        .TexIndex = texture_asset.GetBindlessID(),
+        .TexIndex = texture_asset.GetTextureHandle(),
         .Color = [4]f32{ quad_component.mTexOptions.mColor[0], quad_component.mTexOptions.mColor[1], quad_component.mTexOptions.mColor[2], quad_component.mTexOptions.mColor[3] },
         .TexCoords = [4]f32{ quad_component.mTexOptions.mTexCoords[0], quad_component.mTexOptions.mTexCoords[1], quad_component.mTexOptions.mTexCoords[2], quad_component.mTexOptions.mTexCoords[3] },
         .TilingFactor = quad_component.mTexOptions.mTilingFactor,
@@ -220,8 +206,8 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
             .Scale = text_component.mFontSize,
             .AtlasBounds = [4]f32{ glyph_atlas_bounds[0], glyph_atlas_bounds[1], glyph_atlas_bounds[2], glyph_atlas_bounds[3] },
             .PlaneBounds = [4]f32{ glyph_plane_bounds[0], glyph_plane_bounds[1], glyph_plane_bounds[2], glyph_plane_bounds[3] },
-            .AtlasIndex = atlas_asset.GetBindlessID(),
-            .TexIndex = texture_asset.GetBindlessID(),
+            .AtlasIndex = atlas_asset.GetTextureHandle(),
+            .TexIndex = texture_asset.GetTextureHandle(),
             .Color = [4]f32{ text_component.mTexOptions.mColor[0], text_component.mTexOptions.mColor[1], text_component.mTexOptions.mColor[2], text_component.mTexOptions.mColor[3] },
             .TexCoords = [4]f32{ text_component.mTexOptions.mTexCoords[0], text_component.mTexOptions.mTexCoords[1], text_component.mTexOptions.mTexCoords[2], text_component.mTexOptions.mTexCoords[3] },
             .TilingFactor = text_component.mTexOptions.mTilingFactor,

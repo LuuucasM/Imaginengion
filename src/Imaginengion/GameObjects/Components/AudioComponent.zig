@@ -4,6 +4,7 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
 const Assets = @import("../../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
+const PathType = @import("../../Assets/AssetManager.zig").PathType;
 const imgui = @import("../../Core/CImports.zig").imgui;
 const Entity = @import("../Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -107,7 +108,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, path, .Prj);
+            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
         }
         imgui.igEndDragDropTarget();
     }
@@ -161,9 +162,12 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             try SkipToken(reader); //skip PathType object field
 
-            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
+            const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
 
-            result.mAudioAsset = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
+            result.mAudioAsset = engine_context.mAssetManager.GetAssetHandleRef(
+                engine_context,
+                .{ .File = .{ .rel_path = parsed_path, .path_type = parsed_path_type } },
+            ) catch |err| {
                 std.debug.panic("error: {}\n", .{err});
             };
         } else if (std.mem.eql(u8, field_name, "Volume")) {

@@ -22,7 +22,7 @@ const PlayerParentComponent = @import("../ECS/Components.zig").ParentComponent(T
 const PlayerChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
-const PathType = @import("../Assets/Assets/FileMetaData.zig").PathType;
+const PathType = @import("../Assets//AssetManager.zig").PathType;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const ScriptComponent = PlayerComponents.ScriptComponent;
@@ -105,7 +105,7 @@ pub fn CreateChild(self: Player, engine_context: *EngineContext, child_type: Chi
 }
 
 pub fn AddComponentScript(self: Player, engine_context: *EngineContext, script_asset_path: []const u8, path_type: PathType) !void {
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, script_asset_path, path_type);
+    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = script_asset_path, .path_type = path_type } });
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 
     const new_script_component = ScriptComponent{
@@ -116,7 +116,7 @@ pub fn AddComponentScript(self: Player, engine_context: *EngineContext, script_a
 
     _ = try new_script_player.AddComponent(engine_context, new_script_component);
 
-    _ = switch (script_asset.mScriptType) {
+    _ = switch (script_asset.GetScriptType()) {
         else => @panic("This shouldnt happen!"),
     };
 }

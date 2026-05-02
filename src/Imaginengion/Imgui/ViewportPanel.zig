@@ -14,14 +14,11 @@ const Quatf32 = LinAlg.Quatf32;
 const Mat4f32 = LinAlg.Mat4f32;
 const Vec4f32 = LinAlg.Vec4f32;
 
-const PlayerComponents = @import("../Players/Components.zig");
-const LensComponent = PlayerComponents.LensComponent;
-
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
-const InputPressedEvent = WindowEventData.InputPressedEvent;
+const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
 
 const ViewportPanel = @This();
 
@@ -57,8 +54,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buff
     defer imgui.igEnd();
 
     //update viewport size if needed
-    var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
-    imgui.igGetContentRegionAvail(&viewport_size);
+    const viewport_size = imgui.igGetContentRegionAvail();
 
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
@@ -138,22 +134,24 @@ pub fn OnSelectEntityEvent(self: *ViewportPanel, new_entity: ?Entity) void {
     self.mSelectedEntity = new_entity;
 }
 
-pub fn OnInputPressedEvent(self: *ViewportPanel, e: InputPressedEvent) bool {
-    switch (e._InputCode) {
-        .Q => {
-            self.mGizmoType = .None;
-        },
-        .W => {
-            self.mGizmoType = .Translate;
-        },
-        .E => {
-            self.mGizmoType = .Rotation;
-        },
-        .R => {
-            self.mGizmoType = .Scale;
-        },
-        else => return true,
-    }
+pub fn OnInputPressedEvent(self: *ViewportPanel, e: KeyboardPressedEvent) bool {
+    _ = self;
+    _ = e;
+    //switch (e._InputCode) {
+    //    .Q => {
+    //        self.mGizmoType = .None;
+    //    },
+    //    .W => {
+    //        self.mGizmoType = .Translate;
+    //    },
+    //    .E => {
+    //        self.mGizmoType = .Rotation;
+    //    },
+    //    .R => {
+    //        self.mGizmoType = .Scale;
+    //    },
+    //    else => return true,
+    //}
     return true;
 }
 

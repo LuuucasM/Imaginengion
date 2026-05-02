@@ -462,7 +462,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         @compileError("Must have 1 or more in ors group");
                     }
                     inline for (ors[1..]) |or_query| {
-                        _ValidateGroupQuery(or_query.*);
+                        _ValidateGroupQuery(or_query);
                     }
                 },
                 .And => |ands| {
@@ -470,7 +470,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                         @compileError("Must have 1 or more in ands group");
                     }
                     inline for (ands[1..]) |and_query| {
-                        _ValidateGroupQuery(and_query.*);
+                        _ValidateGroupQuery(and_query);
                     }
                 },
             }

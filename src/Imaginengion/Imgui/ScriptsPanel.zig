@@ -36,8 +36,7 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
         }
         defer imgui.igEnd();
 
-        var available_region: imgui.ImVec2 = undefined;
-        imgui.igGetContentRegionAvail(&available_region);
+        const available_region = imgui.igGetContentRegionAvail();
 
         //making a child so that drag drop target will tae the entire available region
         if (imgui.igBeginChild_Str("SceneChild", available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {

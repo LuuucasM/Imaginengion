@@ -60,7 +60,7 @@ const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig");
+const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EditorProgram = @This();
 const Tracy = @import("../Core/Tracy.zig");
@@ -247,8 +247,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
-        if (engine_context.mIsMinimized == false) {
-            ImGui.Begin();
+        if (!engine_context.mAppWindow.IsMinimized()) {
+            engine_context.mImguiManager.Begin();
             Dockspace.Begin();
 
             try self._ContentBrowserPanel.OnImguiRender(engine_context);
@@ -482,15 +482,11 @@ fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, view
             .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
             .mAspectRatio = viewpoint_component.mAspectRatio,
             .mFOV = viewpoint_component.mPerspectiveFOVRad,
+            .mode = 0b1,
         },
-        .{
-            .FrameBuffer = &render_component.mFrameBuffer,
-            .VertexArray = &render_component.mVertexArray,
-            .VertexBuffer = &render_component.mVertexBuffer,
-        },
-        0b1,
+        &render_component.mFrameBuffer,
     );
-    var frame_buffers: std.ArrayList(*FrameBuffer) = .empty;
+    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
     var area_rects: std.ArrayList(Vec4f32) = .empty;
 
     try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mFrameBuffer);
@@ -514,7 +510,7 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewpo
 
     const frame_allocator = engine_context.FrameAllocator();
 
-    var frame_buffers: std.ArrayList(*FrameBuffer) = .empty;
+    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
     var area_rects: std.ArrayList(Vec4f32) = .empty;
 
     var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
@@ -530,10 +526,10 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewpo
         const world_rot = transform_component.GetWorldRotation();
         const world_pos = transform_component.GetWorldPosition();
 
-        switch (viewport_type) {
-            .ViewportPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-            .PlayPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
-        }
+        try switch (viewport_type) {
+            .ViewportPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+            .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+        };
 
         try engine_context.mRenderer.OnUpdate(
             self.mActiveWorldType,
@@ -546,13 +542,9 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewpo
                 .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
                 .mAspectRatio = viewpoint_component.mAspectRatio,
                 .mFOV = viewpoint_component.mPerspectiveFOVRad,
+                .mMode = 0b1,
             },
-            .{
-                .FrameBuffer = &render_component.mFrameBuffer,
-                .VertexArray = &render_component.mVertexArray,
-                .VertexBuffer = &render_component.mVertexBuffer,
-            },
-            0b1,
+            &render_component.mFrameBuffer,
         );
 
         try frame_buffers.append(frame_allocator, &render_component.mFrameBuffer);

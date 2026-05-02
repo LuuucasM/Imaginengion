@@ -9,6 +9,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Player = @import("../Players/Player.zig");
 const GameMode = @import("../GameModes/GameMode.zig");
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const ECSDisplayPanel = @This();
 
 const SCENE_NAME_BUFFER_SIZE = 200;
@@ -45,8 +46,7 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     _ = imgui.igBegin(window_name.ptr, null, 0);
     defer imgui.igEnd();
 
-    var available_region: imgui.ImVec2 = undefined;
-    imgui.igGetContentRegionAvail(&available_region);
+    const available_region = imgui.igGetContentRegionAvail();
 
     var already_popup = false;
 
@@ -70,7 +70,10 @@ fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, scen
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
-    const objects_list = try Traits.GetGroupFn(scene_manager, frame_allocator, .{ .Not = .{ .mFirst = .{ .Component = EntityTagComponent }, .mSecond = .{ .Component = Traits.ChildComponent } } });
+    const EntityTagQuery = GroupQuery{ .Component = EntityTagComponent };
+    const ChildQuery = GroupQuery{ .Component = Traits.ChildComponent };
+
+    const objects_list = try Traits.GetGroupFn(scene_manager, frame_allocator, .{ .Not = .{ .mFirst = &EntityTagQuery, .mSecond = &ChildQuery } });
     for (objects_list.items) |object_id| {
         const object = Traits.GetObject(object_id, scene_manager);
         try RenderObject(ObjectType, engine_context, object, already_popup);

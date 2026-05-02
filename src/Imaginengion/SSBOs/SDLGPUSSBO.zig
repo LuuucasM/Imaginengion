@@ -35,7 +35,7 @@ pub fn Deinit(self: *SDLSSBO, engine_context: *EngineContext) void {
     self.mBuffer = null;
 }
 
-pub fn Bind(self: *SDLSSBO, render_pass: *anyopaque) void {
+pub fn Bind(self: SDLSSBO, render_pass: *anyopaque) void {
     std.debug.assert(self.mBuffer != null);
     const pass: *sdl.SDL_GPURenderPass = @ptrCast(@alignCast(render_pass));
 
@@ -45,11 +45,11 @@ pub fn Bind(self: *SDLSSBO, render_pass: *anyopaque) void {
     }
 }
 
-pub fn SetData(self: SDLSSBO, engine_context: *EngineContext, data: *const anyopaque, size: usize, offset: u32) bool {
+pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyopaque, size: usize, offset: u32) bool {
     std.debug.assert(self.mBuffer != null);
     var resize: bool = false;
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mRenderContext.GetDevice()));
-    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mRenderContext.GetCommandBuff()));
+    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
+    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetCommandBuff()));
 
     if (size + offset > self.mSize) {
         sdl.SDL_ReleaseGPUBuffer(device, self.mBuffer.?);
@@ -98,7 +98,7 @@ pub fn GetBuffer(self: SDLSSBO) *sdl.SDL_GPUBuffer {
     return self.mBuffer.?;
 }
 
-pub fn GetBinding(self: SDLSSBO) u32 {
+pub fn GetBinding(self: SDLSSBO) usize {
     return self.mSlot;
 }
 

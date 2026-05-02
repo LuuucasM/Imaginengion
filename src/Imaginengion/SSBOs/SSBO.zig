@@ -19,7 +19,7 @@ pub fn Deinit(self: SSBO) void {
     self.mImpl.Deinit();
 }
 
-pub fn Bind(self: *SSBO, render_pass: *anyopaque) void {
+pub fn Bind(self: SSBO, render_pass: *anyopaque) void {
     self.mImpl.Bind(render_pass);
 }
 
@@ -27,7 +27,7 @@ pub fn Unbind(self: SSBO) void {
     self.mImpl.Unbind();
 }
 
-pub fn SetData(self: SSBO, engine_context: *EngineContext, data: *anyopaque, size: usize, offset: u32) bool {
+pub fn SetData(self: *SSBO, engine_context: *EngineContext, data: *anyopaque, size: usize, offset: u32) bool {
     return self.mImpl.SetData(engine_context, data, size, offset);
 }
 
@@ -35,6 +35,6 @@ pub fn GetBuffer(self: SSBO) *anyopaque {
     return self.mImpl.GetBuffer();
 }
 
-pub fn GetBinding(self: SSBO) u32 {
+pub fn GetBinding(self: SSBO) usize {
     return self.mImpl.GetBinding();
 }

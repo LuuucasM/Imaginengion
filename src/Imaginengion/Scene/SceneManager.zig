@@ -170,7 +170,7 @@ pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_laye
 
     if (scene_component.mScenePath.items.len != 0) {
         const abs_path = try engine_context.mAssetManager.GetAbsPath(frame_allocator, scene_component.mScenePath.items, .Prj);
-        try engine_context.mSerializer.SerializeScene(frame_allocator, scene_layer, abs_path, .Text);
+        try engine_context.mSerializer.SerializeScene(engine_context, scene_layer, abs_path, .Text);
     } else {
         try self.SaveSceneAs(engine_context, scene_layer);
     }
@@ -179,7 +179,7 @@ pub fn SaveScene(self: *SceneManager, engine_context: *EngineContext, scene_laye
 pub fn SaveSceneAs(_: *SceneManager, engine_context: *EngineContext, scene_layer: SceneLayer) !void {
     const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imsc");
     if (abs_path.len > 0) {
-        try engine_context.mSerializer.SerializeScene(engine_context.FrameAllocator(), scene_layer, abs_path, .Text);
+        try engine_context.mSerializer.SerializeScene(engine_context, scene_layer, abs_path, .Text);
         const scene_component = scene_layer.GetComponent(SceneComponent).?;
         scene_component.mScenePath.clearAndFree(engine_context.EngineAllocator());
         try scene_component.mScenePath.print(engine_context.EngineAllocator(), "{s}", .{engine_context.mAssetManager.GetRelPath(abs_path)});

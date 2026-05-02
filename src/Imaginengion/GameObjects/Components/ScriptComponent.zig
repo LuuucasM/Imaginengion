@@ -12,6 +12,7 @@ const Entity = @import("../../GameObjects/Entity.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 
 const EngineContext = @import("../../Core/EngineContext.zig");
+const PathType = @import("../../Assets/AssetManager.zig").PathType;
 
 mParent: Entity.Type = Entity.NullEntity,
 mFirst: Entity.Type = Entity.NullEntity,
@@ -70,9 +71,12 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             try SkipToken(reader); //skip PathType object field
 
-            const parsed_path_type = try std.json.innerParse(FileMetaData.PathType, frame_allocator, reader, options);
+            const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
 
-            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(engine_context, parsed_path, parsed_path_type) catch |err| {
+            result.mScriptAssetHandle = engine_context.mAssetManager.GetAssetHandleRef(
+                engine_context,
+                .{ .File = .{ .rel_path = parsed_path, .path_type = parsed_path_type } },
+            ) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };

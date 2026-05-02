@@ -11,16 +11,16 @@ const TextureFormat = @import("../../Assets/Assets.zig").Texture2D.TextureFormat
 const SDLGPUPipeline = @This();
 
 pub const PushConstants = extern struct {
-    rotation: [4]f32, // 16 bytes
-    position: [3]f32, // 12 bytes
-    perspective_far: f32, //  4 bytes  → 32
-    resolution_width: f32, //  4 bytes
-    resolution_height: f32, //  4 bytes
-    aspect_ratio: f32, //  4 bytes
-    fov: f32, //  4 bytes  → 48
-    mode: u32, //  4 bytes  → 52
-    quads_count: u32, //  4 bytes  → 56
-    glyphs_count: u32, //  4 bytes  → 60
+    mRotation: [4]f32, // 16 bytes
+    mPosition: [3]f32, // 12 bytes
+    mPerspectiveFar: f32, //  4 bytes  → 32
+    mResolutionWidth: f32, //  4 bytes
+    mResolutionHeight: f32, //  4 bytes
+    mAspectRatio: f32, //  4 bytes
+    mFOV: f32, //  4 bytes  → 48
+    mMode: u32, //  4 bytes  → 52
+    mQuadsCount: u32 = 0, //  4 bytes  → 56
+    mGlyphsCount: u32 = 0, //  4 bytes  → 60
 };
 
 mPipeline: ?*sdl.SDL_GPUGraphicsPipeline = null,

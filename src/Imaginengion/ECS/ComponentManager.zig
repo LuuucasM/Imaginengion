@@ -10,8 +10,8 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 
 pub const GroupQuery = union(enum) {
-    And: []const *const GroupQuery,
-    Or: []const *const GroupQuery,
+    And: []const GroupQuery,
+    Or: []const GroupQuery,
     Not: struct {
         mFirst: *const GroupQuery,
         mSecond: *const GroupQuery,
@@ -181,7 +181,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 .Or => |ors| {
                     var result = GetGroupMask(ors[0]);
                     inline for (ors[1..]) |or_query| {
-                        const intermediate = GetGroupMask(or_query.*);
+                        const intermediate = GetGroupMask(or_query);
                         result.Union(&intermediate);
                     }
                     return result;
@@ -189,7 +189,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 .And => |ands| {
                     var result = GetGroupMask(ands[0]);
                     inline for (ands[1..]) |and_query| {
-                        const intermediate = GetGroupMask(and_query.*);
+                        const intermediate = GetGroupMask(and_query);
                         result.Intersect(&intermediate);
                     }
                     return result;
@@ -219,7 +219,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 .Or => |ors| {
                     var result = try self.GetGroup(ors[0], mask, allocator);
                     inline for (ors[1..]) |or_query| {
-                        var intermediate = try self.GetGroup(or_query.*, mask, allocator);
+                        var intermediate = try self.GetGroup(or_query, mask, allocator);
                         defer intermediate.deinit(allocator);
                         try self.EntityListUnion(&result, intermediate, allocator);
                     }
@@ -228,7 +228,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 .And => |ands| {
                     var result = try self.GetGroup(ands[0], mask, allocator);
                     inline for (ands[1..]) |and_query| {
-                        var intermediate = try self.GetGroup(and_query.*, mask, allocator);
+                        var intermediate = try self.GetGroup(and_query, mask, allocator);
                         defer intermediate.deinit(allocator);
                         try self.EntityListIntersection(&result, intermediate, allocator);
                     }

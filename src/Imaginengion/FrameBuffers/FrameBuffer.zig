@@ -37,10 +37,10 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) void {
             self.mImpl.Invalidate(engine_context);
         }
-        pub fn GetColorTexture(self: Self, attachment_index: usize) *Texture2D {
+        pub fn GetColorTexture(self: *Self, attachment_index: usize) *Texture2D {
             return self.mImpl.GetColorTexture(attachment_index);
         }
-        pub fn GetDepthTexture(self: Self) *Texture2D {
+        pub fn GetDepthTexture(self: *Self) *Texture2D {
             return self.mImpl.GetDepthTexture();
         }
         pub fn GetWidth(self: Self) usize {

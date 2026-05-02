@@ -287,7 +287,7 @@ pub fn OpenFileStats(self: *AssetManager, engine_context: *EngineContext, rel_pa
     switch (path_type) {
         .Eng => return try self.mCWD.statFile(engine_context.Io(), rel_path, .{}),
         .Prj => return try self.mProjectDirectory.?.statFile(engine_context.Io(), rel_path, .{}),
-        .Gen => undefined,
+        .Gen => return error.NoFileToOpen,
     }
 }
 
@@ -356,7 +356,7 @@ fn GetFileStatsIfExists(self: *AssetManager, engine_context: *EngineContext, rel
 
     return self.OpenFileStats(engine_context, rel_path, path_type) catch |err| {
         if (err == error.FileNotFound) {
-            self.MarkAssetToDelete(entity_id);
+            self.MarkAssetToDelete(engine_context, entity_id);
             return null;
         }
         return null;
@@ -369,17 +369,17 @@ fn GetFileIfExists(_: *AssetManager, engine_context: *EngineContext, rel_path: [
 
     return OpenFile(engine_context, rel_path, path_type) catch |err| {
         if (err == error.FileNotFound) {
-            MarkAssetToDelete(entity_id);
+            MarkAssetToDelete(engine_context, entity_id);
         }
         return null;
     };
 }
 
-fn CheckModified(_: *AssetManager, file_stat: std.fs.File.Stat, last_modified: i128) bool {
+fn CheckModified(_: *AssetManager, file_stat: std.Io.File.Stat, last_modified: std.Io.Timestamp) bool {
     const zone = Tracy.ZoneInit("AssetManager CheckLastModified", @src());
     defer zone.Deinit();
 
-    if (last_modified != file_stat.mtime) {
+    if (last_modified.nanoseconds != file_stat.mtime.nanoseconds) {
         return true;
     }
     return false;
@@ -448,12 +448,12 @@ fn DeleteAsset(self: *AssetManager, engine_allocator: std.mem.Allocator, asset_i
     try self.mAssetECS.DestroyEntity(engine_allocator, asset_id);
 }
 
-fn MarkAssetToDelete(self: *AssetManager, asset_id: AssetType) void {
+fn MarkAssetToDelete(self: *AssetManager, engine_context: *EngineContext, asset_id: AssetType) void {
     const zone = Tracy.ZoneInit("AssetManager MarkAssetToDelete", @src());
     defer zone.Deinit();
 
     const file_meta_data = self.mAssetECS.GetComponent(FileMetaData, asset_id).?;
-    file_meta_data.mLastModified = std.time.nanoTimestamp();
+    file_meta_data.mLastModified = std.Io.Timestamp.now(engine_context.Io(), .awake);
     file_meta_data.mSize = 0;
 }
 

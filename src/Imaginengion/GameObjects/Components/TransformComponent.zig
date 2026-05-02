@@ -63,7 +63,7 @@ pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
 }
 
 fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32, speed: f32, column_width: f32) void {
-    const io = imgui.igGetIO();
+    const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
     defer imgui.igPopID();
@@ -78,14 +78,14 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemSpacing, .{ .x = 0.0, .y = 0.0 });
     defer imgui.igPopStyleVar(1);
 
-    const line_height = bold_font.*.FontSize + imgui.igGetStyle().*.FramePadding.y * 2.0;
+    const line_height = bold_font.*.LegacySize + imgui.igGetStyle().*.FramePadding.y * 2.0;
     const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
 
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.717, .y = 0.234, .z = 0.234, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.597, .y = 0.195, .z = 0.195, .w = 1.0 });
 
-    imgui.igPushFont(bold_font);
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("X", button_size)) {
         values.*[0] = reset_value;
     }
@@ -102,7 +102,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.717, .z = 0.234, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.597, .z = 0.195, .w = 1.0 });
 
-    imgui.igPushFont(bold_font);
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Y", button_size)) {
         values.*[1] = reset_value;
     }
@@ -119,7 +119,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.459, .z = 0.717, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.328, .z = 0.597, .w = 1.0 });
 
-    imgui.igPushFont(bold_font);
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Z", button_size)) {
         values.*[2] = reset_value;
     }
@@ -133,7 +133,7 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 }
 
 fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf32, speed: f32, column_width: f32) void {
-    const io = imgui.igGetIO();
+    const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
     defer imgui.igPopID();
@@ -148,14 +148,14 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemSpacing, .{ .x = 0.0, .y = 0.0 });
     defer imgui.igPopStyleVar(1);
 
-    const line_height = bold_font.*.FontSize + imgui.igGetStyle().*.FramePadding.y * 2.0;
+    const line_height = bold_font.*.LegacySize + imgui.igGetStyle().*.FramePadding.y * 2.0;
     const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
 
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.717, .y = 0.234, .z = 0.234, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.597, .y = 0.195, .z = 0.195, .w = 1.0 });
 
-    imgui.igPushFont(bold_font);
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("X", button_size)) {
         rotation.* = reset_value;
     }
@@ -178,7 +178,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.717, .z = 0.234, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.597, .z = 0.195, .w = 1.0 });
 
-    imgui.igPushFont(bold_font);
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Y", button_size)) {
         rotation.* = reset_value;
     }
@@ -202,7 +202,7 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.459, .z = 0.717, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.328, .z = 0.597, .w = 1.0 });
 
-    imgui.igPushFont(bold_font);
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Z", button_size)) {
         rotation.* = reset_value;
     }
