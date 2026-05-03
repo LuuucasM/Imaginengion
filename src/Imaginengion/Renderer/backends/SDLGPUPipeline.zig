@@ -40,7 +40,7 @@ pub fn Init(self: *SDLGPUPipeline, engine_context: *EngineContext, shader: *Shad
 
 pub fn Deinit(self: *SDLGPUPipeline, engine_context: *EngineContext) void {
     const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-    sdl.SDL_WaitForGPUIdle(device);
+    _ = sdl.SDL_WaitForGPUIdle(device);
     if (self.mPipeline) |p| sdl.SDL_ReleaseGPUGraphicsPipeline(device, p);
     self.mPipeline = null;
 }

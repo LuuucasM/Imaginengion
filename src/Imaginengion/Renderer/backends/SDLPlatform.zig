@@ -26,10 +26,10 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     std.log.info("\tDriver: {s}", .{sdl.SDL_GetGPUDeviceDriver(self.mDevice)});
 }
 
-pub fn Deinit(self: *SDLPlatform, engine_context: *EngineContext) void {
-    const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
+pub fn Deinit(self: *SDLPlatform, window: *Window) void {
+    const sdl_window: ?*sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
 
-    sdl.SDL_WaitForGPUIdle(self.mDevice);
+    _ = sdl.SDL_WaitForGPUIdle(self.mDevice);
 
     sdl.SDL_ReleaseWindowFromGPUDevice(self.mDevice, sdl_window);
     sdl.SDL_DestroyGPUDevice(self.mDevice);
@@ -39,15 +39,18 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
     self.mCurrentCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
     std.debug.assert(self.mCurrentCmdBuffer != null);
 
-    var swapchain_tex: *sdl.SDL_GPUTexture = undefined;
+    const swapchain_tex: *sdl.SDL_GPUTexture = undefined;
     var width: usize = 0;
     var height: usize = 0;
+
+    const sdl_window: *sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
+
     const acquired = sdl.SDL_AcquireGPUSwapchainTexture(
         self.mCurrentCmdBuffer,
-        window.GetNativeWindow(),
-        &swapchain_tex,
-        &width,
-        &height,
+        sdl_window,
+        @ptrCast(@alignCast(swapchain_tex)),
+        @ptrCast(&width),
+        @ptrCast(&height),
     );
 
     if (!acquired) {

@@ -75,9 +75,9 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
     self.mTextureManager.Deinit(engine_context);
     self.mPipeline.Deinit(engine_context);
-    self.mPlatform.Deinit(engine_context.mAppWindow);
+    self.mPlatform.Deinit(&engine_context.mAppWindow);
     self.mSDFShader.ReleaseAsset();
-    self.mR2D.Deinit(engine_context.EngineAllocator());
+    self.mR2D.Deinit(engine_context);
     self.mR3D.Deinit(engine_context.EngineAllocator());
 }
 

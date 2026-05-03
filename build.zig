@@ -13,20 +13,17 @@ pub fn build(b: *std.Build) void {
     const enable_nsight = b.option(bool, "enable-nsight", "Enable the GPU profiler nvidia nsight");
     const no_bin = b.option(bool, "no-bin", "skip emitting compiler binary") orelse false;
     //function builds the entire engine lib including the dependencies and all
-    const engine_lib = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight) catch @panic("error!!!");
 
-    //make exe
+    const engine_module = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight) catch @panic("error!!!");
+
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
-            .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Editor.zig" } },
-            .imports = &[_]std.Build.Module.Import{
-                std.Build.Module.Import{
-                    .name = "IM",
-                    .module = engine_lib.root_module,
-                },
+            .root_source_file = b.path("src/Editor.zig"),
+            .imports = &.{
+                .{ .name = "IM", .module = engine_module },
             },
         }),
     });

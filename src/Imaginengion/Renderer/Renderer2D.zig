@@ -79,12 +79,12 @@ pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
     self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
 }
 
-pub fn Deinit(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
-    self.mQuadBuffer.Deinit();
-    self.mQuadBufferBase.deinit(engine_allocator);
+pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
+    self.mQuadBuffer.Deinit(engine_context);
+    self.mQuadBufferBase.deinit(engine_context.EngineAllocator());
 
-    self.mGlyphBuffer.Deinit();
-    self.mGlyphBufferBase.deinit(engine_allocator);
+    self.mGlyphBuffer.Deinit(engine_context);
+    self.mGlyphBufferBase.deinit(engine_context.EngineAllocator());
 }
 
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {

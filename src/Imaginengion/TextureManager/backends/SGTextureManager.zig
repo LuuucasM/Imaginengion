@@ -107,13 +107,13 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
 }
 
 pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
-    const device: ?*sdl.SDL_GPUDevice = engine_context.mRenderer.mPlatform.GetDevice();
-    sdl.SDL_WaitForGPUIdle(device);
+    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+    _ = sdl.SDL_WaitForGPUIdle(device);
     self.mBins.deinit(engine_context.EngineAllocator());
     self.mLayers.deinit(engine_context.EngineAllocator());
 
-    if (self.mSampler) |s| sdl.SDL_ReleaseGPUSampler(self.mDevice, s);
-    if (self.mTexture) |t| sdl.SDL_ReleaseGPUTexture(self.mDevice, t);
+    if (self.mSampler) |s| sdl.SDL_ReleaseGPUSampler(device, s);
+    if (self.mTexture) |t| sdl.SDL_ReleaseGPUTexture(device, t);
 
     self.mTexture = null;
     self.mSampler = null;

@@ -280,7 +280,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             callback_list.last = null;
 
             Dockspace.End();
-            ImGui.End(&engine_context.mAppWindow);
+            engine_context.mImguiManager.End(engine_context);
         }
     }
     //--------------Render End-------------------
@@ -303,9 +303,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const end_frame_zone = Tracy.ZoneInit("End Frame Section", @src());
         defer end_frame_zone.Deinit();
-
-        //swap buffers
-        engine_context.mRenderer.SwapBuffers();
 
         //Process window events
         var system_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent };
@@ -466,10 +463,10 @@ fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, view
     const world_rot = transform_component.GetWorldRotation();
     const world_pos = transform_component.GetWorldPosition();
 
-    switch (viewport_type) {
-        .ViewportPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-        .PlayPanel => render_component.mFrameBuffer.Resize(self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
-    }
+    try switch (viewport_type) {
+        .ViewportPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+        .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+    };
 
     try engine_context.mRenderer.OnUpdate(
         self.mActiveWorldType,
@@ -482,7 +479,7 @@ fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, view
             .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
             .mAspectRatio = viewpoint_component.mAspectRatio,
             .mFOV = viewpoint_component.mPerspectiveFOVRad,
-            .mode = 0b1,
+            .mMode = 0b1,
         },
         &render_component.mFrameBuffer,
     );
@@ -662,21 +659,23 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const abs_path = try PlatformUtils.OpenFolder(engine_context.FrameAllocator());
                 if (abs_path.len > 0) {
-                    try self._ContentBrowserPanel.OnNewProjectEvent(engine_allocator, abs_path);
-                    try engine_context.mAssetManager.OnNewProjectEvent(engine_allocator, abs_path);
+                    try self._ContentBrowserPanel.OnNewProjectEvent(engine_context, abs_path);
+                    try engine_context.mAssetManager.OnNewProjectEvent(engine_context, abs_path);
                 }
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
                 const abs_path = try PlatformUtils.OpenFile(engine_context.EngineAllocator(), ".imprj");
                 if (abs_path.len > 0) {
-                    try self._ContentBrowserPanel.OnOpenProjectEvent(engine_allocator, abs_path);
-                    try engine_context.mAssetManager.OnOpenProjectEvent(engine_allocator, abs_path);
+                    try self._ContentBrowserPanel.OnOpenProjectEvent(engine_context, abs_path);
+                    try engine_context.mAssetManager.OnOpenProjectEvent(engine_context, abs_path);
                 }
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {
                 try engine_context.mSystemEventManager.Insert(engine_allocator, .WindowEvent, .{
-                    .WindowClose = .{},
+                    .WindowClose = .{
+                        ._Window = &engine_context.mAppWindow,
+                    },
                 });
             }
         }

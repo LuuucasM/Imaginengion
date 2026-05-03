@@ -42,7 +42,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
 
@@ -54,7 +54,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buff
     defer imgui.igEnd();
 
     //update viewport size if needed
-    const viewport_size = imgui.igGetContentRegionAvail();
+    var viewport_size = imgui.igGetContentRegionAvail();
 
     if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
@@ -65,10 +65,10 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, _: *EngineContext, frame_buff
 
     //get if the window is focused or not
     self.mIsFocusedViewport = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
-    try OnImguiRender(frame_buffers, area_rects, viewport_size);
+    try OnImguiRender(engine_context, frame_buffers, area_rects, viewport_size);
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -78,8 +78,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers:
     defer imgui.igEnd();
 
     //update viewport size if needed
-    var viewport_size: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
-    imgui.igGetContentRegionAvail(&viewport_size);
+    var viewport_size = imgui.igGetContentRegionAvail();
     if (viewport_size.x != @as(f32, @floatFromInt(self.mPlayWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mPlayHeight))) {
         if (viewport_size.x < 0) viewport_size.x = 0;
         if (viewport_size.y < 0) viewport_size.y = 0;
@@ -90,15 +89,14 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, _: *EngineContext, frame_buffers:
     //get if the window is focused or not
     self.mIsFocusedPlay = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
 
-    try OnImguiRender(frame_buffers, area_rects, viewport_size);
+    try OnImguiRender(engine_context, frame_buffers, area_rects, viewport_size);
 }
 
-fn OnImguiRender(engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.struct_ImVec2) !void {
+fn OnImguiRender(engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.ImVec2) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 
-    var viewport_pos: imgui.struct_ImVec2 = .{ .x = 0, .y = 0 };
-    imgui.igGetCursorScreenPos(&viewport_pos);
+    const viewport_pos = imgui.igGetCursorScreenPos();
 
     for (0..frame_buffers.items.len) |i| {
         const rect = area_rects.items[i];
@@ -112,7 +110,7 @@ fn OnImguiRender(engine_context: *EngineContext, frame_buffers: std.ArrayList(*O
         const draw_list = imgui.igGetWindowDrawList();
         imgui.ImDrawList_AddImage(
             draw_list,
-            engine_context.mImguiManager.GetImguiTexture(engine_context, frame_buffer.GetColorTexture(0)),
+            try engine_context.mImguiManager.GetImguiTexture(engine_context, frame_buffer.GetColorTexture(0)),
             .{ .x = x, .y = y },
             .{ .x = x + w, .y = y + h },
             .{ .x = 0, .y = 0 },

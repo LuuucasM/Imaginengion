@@ -15,8 +15,8 @@ pub fn Init(self: *SSBO, engine_context: *EngineContext, size: usize, slot: usiz
     self.mImpl.Init(engine_context, size, slot, stage);
 }
 
-pub fn Deinit(self: SSBO) void {
-    self.mImpl.Deinit();
+pub fn Deinit(self: *SSBO, engine_context: *EngineContext) void {
+    self.mImpl.Deinit(engine_context);
 }
 
 pub fn Bind(self: SSBO, render_pass: *anyopaque) void {

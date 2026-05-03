@@ -358,7 +358,7 @@ pub fn SaveEntity(self: *SceneManager, engine_context: *EngineContext, entity: E
 
 pub fn SaveEntityAs(_: *SceneManager, engine_context: *EngineContext, entity: Entity) !void {
     const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imfab");
-    try engine_context.mSerializer.SerializeEntity(engine_context.FrameAllocator(), entity, abs_path, .Text);
+    try engine_context.mSerializer.SerializeEntity(engine_context, entity, abs_path, .Text);
 }
 
 pub fn GetEntity(self: *SceneManager, entity_id: Entity.Type) Entity {

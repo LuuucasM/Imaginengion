@@ -78,8 +78,6 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                     .stencil_store_op = sdl.SDL_GPU_STOREOP_DONT_CARE,
                     .cycle = false,
                     .clear_stencil = 0,
-                    .padding1 = 0,
-                    .padding2 = 0,
                 };
             }
 

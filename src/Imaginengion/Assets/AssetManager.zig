@@ -125,10 +125,10 @@ pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
     self.mPathToIDPrj.deinit(engine_context.EngineAllocator());
     self.mPathToIDGen.deinit(engine_context.EngineAllocator());
 
-    self.mCWD.close();
+    self.mCWD.close(engine_context.Io());
 
     if (self.mProjectDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
     }
 
     self.mCWDPath.deinit(engine_context.EngineAllocator());
@@ -252,32 +252,32 @@ pub fn GetGroup(self: AssetManager, frame_allocator: std.mem.Allocator, comptime
     return try self.mAssetECS.GetGroup(frame_allocator, query);
 }
 
-pub fn OnNewProjectEvent(self: *AssetManager, engine_allocator: std.mem.Allocator, abs_path: []const u8) !void {
+pub fn OnNewProjectEvent(self: *AssetManager, engine_context: *EngineContext, abs_path: []const u8) !void {
     if (self.mProjectDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree(engine_allocator);
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
 
-    self.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
+    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{});
 
-    _ = try self.mProjectPath.writer(engine_allocator).write(abs_path);
+    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
 }
 
-pub fn OnOpenProjectEvent(self: *AssetManager, engine_allocator: std.mem.Allocator, abs_path: []const u8) !void {
+pub fn OnOpenProjectEvent(self: *AssetManager, engine_context: *EngineContext, abs_path: []const u8) !void {
     if (self.mProjectDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree(engine_allocator);
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
 
     const dir_name = std.fs.path.dirname(abs_path).?;
 
-    self.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
+    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{});
 
-    _ = try self.mProjectPath.writer(engine_allocator).write(dir_name);
+    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
 }
 
 pub fn OpenFileStats(self: *AssetManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File.Stat {

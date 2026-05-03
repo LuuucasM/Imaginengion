@@ -50,17 +50,17 @@ pub fn Init(_: *ImguiManager, engine_context: *EngineContext) void {
     //};
     //_ = imgui.ImGui_ImplSDLGPU3_Init(&init_info);
 }
-pub fn Deinit(self: ImguiManager, engine_context: *EngineContext) void {
+pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
     defer zone.Deinit();
 
     const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
-    sdl.SDL_WaitForGPUIdle(device);
+    _ = sdl.SDL_WaitForGPUIdle(device);
     imgui.ImGui_ImplSDL3_Shutdown();
     imgui.igDestroyContext(null);
 
-    self.mImguiTextures.deinit(engine_context);
+    self.mImguiTextures.deinit(engine_context.EngineAllocator());
 }
 pub fn Begin(self: *ImguiManager) void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
@@ -73,7 +73,7 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("ImguiEnd ", @src());
     defer zone.Deinit();
 
-    const io: *imgui.ImGuiIO = imgui.igGetIO();
+    const io: *imgui.ImGuiIO = imgui.igGetIO_Nil();
     io.DisplaySize = .{
         .x = @floatFromInt(engine_context.mAppWindow.GetWidth()),
         .y = @floatFromInt(engine_context.mAppWindow.GetHeight()),
@@ -81,10 +81,10 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
 
     imgui.igRender();
 
-    const cmd_buffer: *sdl.SDL_GPUCommandBuffer = @ptrCast(engine_context.mRenderer.mPlatform.GetCommandBuff());
+    //const cmd_buffer: *sdl.SDL_GPUCommandBuffer = @ptrCast(engine_context.mRenderer.mPlatform.GetCommandBuff());
 
-    const draw_data = imgui.igGetDrawData();
-    imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, cmd_buffer);
+    //const draw_data = imgui.igGetDrawData();
+    //imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, cmd_buffer);
 
     if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
         imgui.igUpdatePlatformWindows();

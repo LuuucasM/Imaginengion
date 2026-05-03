@@ -51,17 +51,17 @@ pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
     engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
     engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioTextureHandle);
     if (self.mProjectDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
     self.mProjectPath.deinit(engine_context.EngineAllocator());
     if (self.mCurrentDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
     self.mCurrentPath.deinit(engine_context.EngineAllocator());
     if (self.mProjectFile) |*file| {
-        file.close();
+        file.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
 }
@@ -236,52 +236,52 @@ pub fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
     self.mIsVisible = !self.mIsVisible;
 }
 
-pub fn OnNewProjectEvent(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator, abs_path: []const u8) !void {
+pub fn OnNewProjectEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, abs_path: []const u8) !void {
     if (self.mProjectDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
 
     if (self.mCurrentDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree(engine_allocator);
-    self.mCurrentPath.clearAndFree(engine_allocator);
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
+    self.mCurrentPath.clearAndFree(engine_context.EngineAllocator());
 
-    self.mProjectDirectory = try std.fs.openDirAbsolute(abs_path, .{});
-    self.mCurrentDirectory = try std.fs.openDirAbsolute(abs_path, .{ .iterate = true });
+    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{});
+    self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{ .iterate = true });
 
-    _ = try self.mProjectPath.writer(engine_allocator).write(abs_path);
-    _ = try self.mCurrentPath.writer(engine_allocator).write(abs_path);
+    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
+    _ = try self.mCurrentPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
 
-    self.mProjectFile = try self.mProjectDirectory.?.createFile("NewGame.imprj", .{});
+    self.mProjectFile = try self.mProjectDirectory.?.createFile(engine_context.Io(), "NewGame.imprj", .{});
 }
 
-pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator, abs_path: []const u8) !void {
+pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, abs_path: []const u8) !void {
     const dir_name = std.fs.path.dirname(abs_path).?;
 
     if (self.mProjectDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mProjectDirectory = null;
     }
 
     if (self.mCurrentDirectory) |*dir| {
-        dir.close();
+        dir.close(engine_context.Io());
         self.mCurrentDirectory = null;
     }
 
-    self.mProjectPath.clearAndFree(engine_allocator);
-    self.mCurrentPath.clearAndFree(engine_allocator);
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
+    self.mCurrentPath.clearAndFree(engine_context.EngineAllocator());
 
-    self.mProjectDirectory = try std.fs.openDirAbsolute(dir_name, .{});
-    self.mCurrentDirectory = try std.fs.openDirAbsolute(dir_name, .{ .iterate = true });
+    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{});
+    self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{ .iterate = true });
 
-    _ = try self.mProjectPath.writer(engine_allocator).write(dir_name);
-    _ = try self.mCurrentPath.writer(engine_allocator).write(dir_name);
+    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
+    _ = try self.mCurrentPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
 
-    self.mProjectFile = try self.mProjectDirectory.?.openFile("NewGame.imprj", .{});
+    self.mProjectFile = try self.mProjectDirectory.?.openFile(engine_context.Io(), "NewGame.imprj", .{});
 }
 
 pub fn OnNewScriptEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, new_script_event: NewScriptEvent) !void {

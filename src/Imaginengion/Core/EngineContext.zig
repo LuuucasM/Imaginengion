@@ -103,7 +103,7 @@ pub fn DeInit(self: *EngineContext) !void {
     try self.mSimulateWorld.Deinit(self);
 
     self.mPhysicsManager.Deinit(self.EngineAllocator());
-    self.mInputManager.Deinit();
+    self.mInputManager.Deinit(self.EngineAllocator());
     self.mRenderer.Deinit(self);
     self.mAudioManager.Deinit();
     try self.mAssetManager.Deinit(self);

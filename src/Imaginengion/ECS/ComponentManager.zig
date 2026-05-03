@@ -88,7 +88,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             const entity_skipfield_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
 
             var field_iter = entity_skipfield_comp.mSkipField.Iterator();
-            while (field_iter.Next()) |comp_arr_ind| {
+            while (field_iter.next()) |comp_arr_ind| {
                 try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
             }
         }
@@ -121,7 +121,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             std.debug.assert(component_ind < components_types.len + 3);
 
             const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?;
-            entity_skipfield.mSkipField.ChangeToSkipped(@intCast(component_ind));
+            entity_skipfield.mSkipField.ChangeToSkipped(component_ind);
 
             try self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);
         }

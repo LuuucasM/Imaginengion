@@ -40,8 +40,8 @@ pub fn Bind(self: SDLSSBO, render_pass: *anyopaque) void {
     const pass: *sdl.SDL_GPURenderPass = @ptrCast(@alignCast(render_pass));
 
     switch (self.mStage) {
-        .Vertex => sdl.SDL_BindGPUVertexStorageBuffers(pass, self.mSlot, &self.mBuffer, 1),
-        .Fragment => sdl.SDL_BindGPUFragmentStorageBuffers(pass, self.mSlot, &self.mBuffer, 1),
+        .Vertex => sdl.SDL_BindGPUVertexStorageBuffers(pass, @intCast(self.mSlot), &self.mBuffer, 1),
+        .Fragment => sdl.SDL_BindGPUFragmentStorageBuffers(pass, @intCast(self.mSlot), &self.mBuffer, 1),
     }
 }
 
