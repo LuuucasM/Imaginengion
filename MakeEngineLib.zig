@@ -82,8 +82,15 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             .link_libc = true,
         },
     );
-    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui"));
+
+    imgui_c.defineCMacro("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", "");
+    imgui_c.defineCMacro("CIMGUI_USE_SDL3", "");
+    imgui_c.defineCMacro("CIMGUI_USE_SDLGPU", "");
+    imgui_c.defineCMacro("IMGUI_IMPL_API", "extern \"C\"");
+
     imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui/imgui/"));
+    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui/imgui/backends/"));
+    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui"));
     imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/sdl3/include/"));
     //----------------------------------------------END IMGUI------------------------------------------------------------
 

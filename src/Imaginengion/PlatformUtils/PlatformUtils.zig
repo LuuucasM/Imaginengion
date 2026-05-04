@@ -13,8 +13,6 @@ pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
         return &[_]u8{};
     }
 
-    defer nfd.free(outPath);
-
     const len = std.mem.len(outPath);
     const path_result = try allocator.alloc(u8, len);
 
@@ -32,8 +30,6 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
         }
         return &[_]u8{};
     }
-
-    defer nfd.free(outPath);
 
     const path_len = std.mem.len(outPath);
     const path_result = try allocator.alloc(u8, path_len);
@@ -53,8 +49,6 @@ pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
         }
         return &[_]u8{};
     }
-
-    defer nfd.free(outPath);
 
     const path_len = std.mem.len(outPath);
     const filter_len = std.mem.len(filter);

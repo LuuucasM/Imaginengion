@@ -1,11 +1,9 @@
-pub const imgui = @import("IMGUI").c;
+pub const imgui = @import("IMGUI");
 
-pub const stb = @import("STB").c;
+pub const stb = @import("STB");
 
-pub const nfd = @import("NFD").c;
+pub const nfd = @import("NFD");
 
-pub const miniaudio = @import("MiniAudio").c;
+pub const miniaudio = @import("MiniAudio");
 
-pub const sdl = @import("SDL3").c;
-
-pub const vk = @import("SDL3").vk;
+pub const sdl = @import("SDL3");

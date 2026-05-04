@@ -36,19 +36,19 @@ pub fn Init(_: *ImguiManager, engine_context: *EngineContext) void {
 
     SetDarkThemeColors(style);
 
-    //const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+    const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
     const win: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
 
     _ = imgui.ImGui_ImplSDL3_InitForSDLGPU(@ptrCast(win));
 
-    //const init_info: imgui.ImGui_ImplSDLGPU3_InitInfo = .{
-    //    .Device = device,
-    //    .ColorTargetFormat = sdl.SDL_GetGPUSwapchainTextureFormat(device, @ptrCast(win)),
-    //    .MSAASamples = sdl.SDL_GPU_SAMPLECOUNT_1,
-    //    .SwapchainComposition = sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-    //    .PresentMode = sdl.SDL_GPU_PRESENTMODE_VSYNC,
-    //};
-    //_ = imgui.ImGui_ImplSDLGPU3_Init(&init_info);
+    var init_info = imgui.ImGui_ImplSDLGPU3_InitInfo{
+        .Device = @ptrCast(device),
+        .ColorTargetFormat = sdl.SDL_GetGPUSwapchainTextureFormat(device, @ptrCast(win)),
+        .MSAASamples = sdl.SDL_GPU_SAMPLECOUNT_1,
+        .SwapchainComposition = sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        .PresentMode = sdl.SDL_GPU_PRESENTMODE_VSYNC,
+    };
+    _ = imgui.ImGui_ImplSDLGPU3_Init(@ptrCast(&init_info));
 }
 pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
@@ -65,6 +65,7 @@ pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
 pub fn Begin(self: *ImguiManager) void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
     defer zone.Deinit();
+    imgui.ImGui_ImplSDLGPU3_NewFrame();
     imgui.ImGui_ImplSDL3_NewFrame();
     imgui.igNewFrame();
     self.mNumUsedTextures = 0;
@@ -74,17 +75,47 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
     defer zone.Deinit();
 
     const io: *imgui.ImGuiIO = imgui.igGetIO_Nil();
-    io.DisplaySize = .{
-        .x = @floatFromInt(engine_context.mAppWindow.GetWidth()),
-        .y = @floatFromInt(engine_context.mAppWindow.GetHeight()),
-    };
 
     imgui.igRender();
+    const draw_data = imgui.igGetDrawData();
+    const is_minimized: bool = draw_data.*.DisplaySize.x <= 0.0 or draw_data.*.DisplaySize.y <= 0.0;
 
-    //const cmd_buffer: *sdl.SDL_GPUCommandBuffer = @ptrCast(engine_context.mRenderer.mPlatform.GetCommandBuff());
+    const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
-    //const draw_data = imgui.igGetDrawData();
-    //imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, cmd_buffer);
+    const cmd_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(device);
+    const sdl_window: *sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
+
+    var swapchain_texture: ?*sdl.SDL_GPUTexture = null;
+    _ = sdl.SDL_AcquireGPUSwapchainTexture(cmd_buffer, sdl_window, &swapchain_texture, null, null);
+
+    if (swapchain_texture != null and !is_minimized) {
+        imgui.ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, @ptrCast(cmd_buffer));
+
+        const target_info = sdl.SDL_GPUColorTargetInfo{
+            .texture = swapchain_texture,
+            .clear_color = .{ .r = 0.1, .g = 0.1, .b = 0.1, .a = 1.0 },
+            .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+            .store_op = sdl.SDL_GPU_STOREOP_STORE,
+            .mip_level = 0,
+            .layer_or_depth_plane = 0,
+            .cycle = false,
+            .resolve_texture = null,
+            .resolve_mip_level = 0,
+            .resolve_layer = 0,
+            .cycle_resolve_texture = false,
+            .padding1 = 0,
+            .padding2 = 0,
+        };
+
+        const render_pass = sdl.SDL_BeginGPURenderPass(cmd_buffer, &target_info, 1, null);
+
+        imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, @ptrCast(cmd_buffer), @ptrCast(render_pass), null);
+
+        sdl.SDL_EndGPURenderPass(render_pass);
+    }
+
+    // Submit the command buffer
+    _ = sdl.SDL_SubmitGPUCommandBuffer(cmd_buffer);
 
     if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
         imgui.igUpdatePlatformWindows();
