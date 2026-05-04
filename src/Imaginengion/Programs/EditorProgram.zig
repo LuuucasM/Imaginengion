@@ -467,7 +467,6 @@ fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, view
         .ViewportPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
         .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
     };
-
     try engine_context.mRenderer.OnUpdate(
         self.mActiveWorldType,
         engine_context,

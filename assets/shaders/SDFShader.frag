@@ -4,14 +4,6 @@
 #define SURF_DIST      0.00099
 #define QUAD_THICKNESS 0.001
 
-layout(location = 0) out vec4 oFragColor;
-
-layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
-
-#define SHAPE_NONE  0
-#define SHAPE_QUAD  1
-#define SHAPE_GLYPH 2
-
 // =============================================================================
 // Storage buffers
 // =============================================================================
@@ -27,9 +19,7 @@ struct QuadData {
     vec2  TexUVScale;
 };
 
-layout(set = 2, binding = 0) readonly buffer QuadsSSBO {
-    QuadData data[];
-} Quads;
+
 
 struct GlyphData {
     vec3  Position;
@@ -49,14 +39,13 @@ struct GlyphData {
     vec2  TexUVScale;
 };
 
-layout(set = 2, binding = 1) readonly buffer GlyphSSBO {
-    GlyphData data[];
-} Glyphs;
+layout(location = 0) out vec4 oFragColor;
 
-// =============================================================================
-// Push constants
-// =============================================================================
-layout(set = 3, binding = 0) uniform PushConstants {
+layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
+layout(set = 2, binding = 1) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
+layout(set = 2, binding = 2) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
+
+layout(set = 3, binding = 0) uniform CameraUBO {
     vec4  Rotation;
     vec3  Position;
     float PerspectiveFar;
@@ -68,6 +57,12 @@ layout(set = 3, binding = 0) uniform PushConstants {
     uint  QuadsCount;
     uint  GlyphsCount;
 } Camera;
+
+#define SHAPE_NONE  0
+#define SHAPE_QUAD  1
+#define SHAPE_GLYPH 2
+
+
 
 // =============================================================================
 // LinAlg

@@ -14,8 +14,8 @@ const OnUpdateTemplate = @This();
 /// if it returns false it will stop at this layer
 pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allocator, self: *Entity) callconv(.c) bool {
     _ = allocator;
-    var input_context = engine_context.mInputManager;
-    if (input_context.IsInputPressed(.LeftAlt) == true) {
+    const input_context = &engine_context.mInputManager;
+    if (input_context.IsKeyPressed(.LALT) == true) {
         const PanSpeed = 0.015;
         const RotateSpeed = 0.08;
         const ZoomSpeed = 0.03;
@@ -26,12 +26,12 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
         var translation = transform_component.Translation;
         var rotation = transform_component.Rotation;
 
-        if (input_context.IsInputPressed(.MouseButtonMiddle) == true) {
+        if (input_context.IsMousePressed(.BUTTON_MIDDLE) == true) {
             const right_dir = GetRightDirection(rotation);
             const up_dir = GetUpDirection(rotation);
             translation = translation - right_dir * @as(Vec3f32, @splat(mouse_delta[0] * PanSpeed)) + (up_dir * @as(Vec3f32, @splat(mouse_delta[1] * PanSpeed)));
             transform_component.Translation = translation;
-        } else if (input_context.IsInputPressed(.MouseButtonLeft) == true) {
+        } else if (input_context.IsMousePressed(.BUTTON_LEFT) == true) {
             //const up_dir = GetUpDirection(rotation); //yaw
             const up_dir = Vec3f32{ 0.0, 1.0, 0.0 }; //yaw
             const right_dir = GetRightDirection(rotation); //pitch
@@ -40,7 +40,7 @@ pub export fn Run(engine_context: *EngineContext, allocator: *const std.mem.Allo
             const pitch = LinAlg.QuatAngleAxis(-mouse_delta[1] * RotateSpeed, right_dir);
             rotation = LinAlg.QuatMulQuat(LinAlg.QuatMulQuat(yaw, rotation), pitch);
             transform_component.Rotation = rotation;
-        } else if (input_context.IsInputPressed(.MouseButtonRight) == true) {
+        } else if (input_context.IsMousePressed(.BUTTON_RIGHT) == true) {
             const forward_dir = GetForwardDirection(rotation);
             translation += forward_dir * @as(Vec3f32, @splat(mouse_delta[1] * ZoomSpeed));
             transform_component.Translation = translation;

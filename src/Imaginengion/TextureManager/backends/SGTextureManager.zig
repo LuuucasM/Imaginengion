@@ -121,7 +121,6 @@ pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
 
 pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?*anyopaque, width: usize, height: usize) !u32 {
     const max_dim = @max(width, height);
-
     const bin_index = std.sort.lowerBound(
         usize,
         &SizeBoundsList,
@@ -261,7 +260,12 @@ fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *
     const transfer_buf = sdl.SDL_CreateGPUTransferBuffer(device, &transfer_info) orelse return error.UpdateFailed;
     defer sdl.SDL_ReleaseGPUTransferBuffer(device, transfer_buf);
 
+    std.log.debug("UpdateToLayer: pixels={*} w={d} h={d} data_size={d}", .{ pixels, width, height, data_size });
+
     const mapped = sdl.SDL_MapGPUTransferBuffer(device, transfer_buf, false) orelse return error.InitFailed;
+
+    std.log.debug("UpdateToLayer: mapped={*}", .{mapped});
+
     @memcpy(
         @as([*]u8, @ptrCast(mapped))[0..data_size],
         @as([*]const u8, @ptrCast(pixels))[0..data_size],

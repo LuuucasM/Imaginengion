@@ -10,11 +10,6 @@ pub fn build(b: *std.Build) void {
         .link_libc = true,
         .link_libcpp = true,
     });
-    const mini_lib = b.addLibrary(.{
-        .linkage = .static,
-        .name = "MiniAudio",
-        .root_module = mini_mod,
-    });
 
     mini_mod.addIncludePath(b.path("./"));
 
@@ -26,6 +21,12 @@ pub fn build(b: *std.Build) void {
     };
 
     mini_mod.addCSourceFiles(options);
+
+    const mini_lib = b.addLibrary(.{
+        .linkage = .static,
+        .name = "MiniAudio",
+        .root_module = mini_mod,
+    });
 
     b.installArtifact(mini_lib);
 }

@@ -94,6 +94,7 @@ pub fn GetName(self: Entity) []const u8 {
 pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: NewEntityConfig) !Entity {
     const child_entity = Entity{ .mEntityID = try self.mSceneManager.mECSManagerGO.AddChild(engine_context.EngineAllocator(), self.mEntityID, child_type), .mSceneManager = self.mSceneManager };
     try child_entity.CreateEntityConfig(engine_context, config);
+    _ = try child_entity.AddComponent(engine_context, self.GetComponent(EntitySceneComponent).?.*);
     return child_entity;
 }
 
@@ -201,7 +202,9 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
 pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: NewEntityConfig) !void {
     if (config.bAddUUID) {
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = engine_context.GenUUID() });
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {

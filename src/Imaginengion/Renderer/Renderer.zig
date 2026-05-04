@@ -85,10 +85,10 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, frame_buffer: *OutputFrameBuffer) !void {
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
-    self.mPlatform.PushDebugGroup("Frame\x00");
-    defer self.mPlatform.PopDebugGroup();
 
     if (!self.mPlatform.BeginFrame(&engine_context.mAppWindow)) return;
+
+    self.mPlatform.PushDebugGroup("Frame\x00");
 
     const scene_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
@@ -163,7 +163,6 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     defer zone.Deinit();
 
     self.mPlatform.PushDebugGroup("End Rendering\x00");
-    defer self.mPlatform.PopDebugGroup();
 
     const cmd = self.mPlatform.GetCommandBuff();
 
@@ -172,8 +171,6 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw\x00");
-    defer self.mPlatform.PopDebugGroup();
-
     const render_pass = frame_buffer.BeginRenderPass(engine_context);
 
     self.mPipeline.Bind(render_pass);
@@ -185,8 +182,12 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mPipeline.PushUniforms(cmd, self.mPushConstants);
 
     self.mPipeline.Draw(render_pass);
+    self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
 
     frame_buffer.EndRenderPass(render_pass);
+
+    self.mPlatform.PopDebugGroup(); //pop end rendering group
+    self.mPlatform.PopDebugGroup(); //pop frame group
 
     self.mPlatform.EndFrame();
 }

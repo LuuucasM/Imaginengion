@@ -108,7 +108,9 @@ pub fn CreateChild(self: SceneLayer, engine_context: *EngineContext, child_type:
 
 pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, config: NewSceneConfig) !void {
     if (config.bAddSceneUUID) {
-        const uuid_component = SceneUUIDComponent{ .ID = engine_context.mRandom.int(u64) };
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const uuid_component = SceneUUIDComponent{ .ID = new_random.int(u64) };
         _ = try self.AddComponent(engine_context, uuid_component);
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
     }

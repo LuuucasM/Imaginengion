@@ -85,7 +85,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                 cmd,
                 if (HasColor) &color_targets[0] else null,
                 @intCast(color_texture_formats.len),
-                &depth_target,
+                if (self.mDepthTexture != null) &depth_target else null,
             );
             std.debug.assert(render_pass != null);
 

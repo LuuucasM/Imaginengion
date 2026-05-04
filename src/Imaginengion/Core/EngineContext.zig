@@ -29,9 +29,11 @@ pub const GameEventCallback = GameEventManager.EventCallback;
 const InternalData = struct {
     EngineAllocator: std.mem.Allocator = undefined,
     FrameAllocator: std.mem.Allocator = undefined,
+
     EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
     FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
-    EngineIO: std.Io.Threaded = .init_single_threaded,
+
+    ThreadedIO: std.Io.Threaded = undefined,
 };
 
 pub const WorldType = enum(u8) {
@@ -66,17 +68,22 @@ mEngineStats: EngineStats = .{},
 
 mIsRunning: bool = true,
 
-mRandom: std.Random = undefined,
+mEnviron: std.process.Environ = undefined,
 
 _Internal: InternalData = .{},
 
-pub fn Init(self: *EngineContext) !void {
+pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     const zone = Tracy.ZoneInit("EngineContext::Init", @src());
     defer zone.Deinit();
-    self.mEngineStats.AppTimer = .now(self._Internal.EngineIO.io(), .awake);
-
+    self.mEnviron = environ;
     self._Internal.EngineAllocator = self._Internal.EngineGPA.allocator();
     self._Internal.FrameAllocator = self._Internal.FrameArena.allocator();
+    self._Internal.ThreadedIO = std.Io.Threaded.init(self._Internal.EngineAllocator, .{
+        .concurrent_limit = .nothing,
+        .async_limit = .nothing,
+    });
+
+    self.mEngineStats.AppTimer = .now(self._Internal.ThreadedIO.io(), .awake);
 
     self.mAppWindow.Init(self);
 
@@ -89,9 +96,6 @@ pub fn Init(self: *EngineContext) !void {
     try self.mGameWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mEditorWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mSimulateWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
-
-    const io_source = std.Random.IoSource{ .io = self.Io() };
-    self.mRandom = io_source.interface();
 }
 
 pub fn DeInit(self: *EngineContext) !void {
@@ -117,11 +121,6 @@ pub fn DeInit(self: *EngineContext) !void {
     _ = self._Internal.EngineGPA.deinit();
     self._Internal.FrameArena.deinit();
 }
-
-pub fn GenUUID(self: EngineContext) u64 {
-    return self.mRandom.int(u64);
-}
-
 pub inline fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
@@ -184,11 +183,11 @@ pub inline fn Io(self: *EngineContext) std.Io {
             .dirAccess = std.Io.failingDirAccess,
             .dirCreateFile = std.Io.failingDirCreateFile,
             .dirCreateFileAtomic = std.Io.failingDirCreateFileAtomic,
-            .dirOpenFile = std.Io.failingDirOpenFile,
+            .dirOpenFile = threaded_DirOpenFile,
             .dirClose = std.Io.unreachableDirClose,
             .dirRead = std.Io.noDirRead,
             .dirRealPath = std.Io.failingDirRealPath,
-            .dirRealPathFile = std.Io.failingDirRealPathFile,
+            .dirRealPathFile = threaded_DirRealPathFile,
             .dirDeleteFile = std.Io.failingDirDeleteFile,
             .dirDeleteDir = std.Io.failingDirDeleteDir,
             .dirRename = std.Io.failingDirRename,
@@ -202,13 +201,13 @@ pub inline fn Io(self: *EngineContext) std.Io {
             .dirSetTimestamps = std.Io.noDirSetTimestamps,
             .dirHardLink = std.Io.failingDirHardLink,
 
-            .fileStat = std.Io.failingFileStat,
+            .fileStat = threaded_FileStat,
             .fileLength = std.Io.failingFileLength,
-            .fileClose = std.Io.unreachableFileClose,
+            .fileClose = threaded_FileClose,
             .fileWritePositional = std.Io.failingFileWritePositional,
             .fileWriteFileStreaming = std.Io.noFileWriteFileStreaming,
             .fileWriteFilePositional = std.Io.noFileWriteFilePositional,
-            .fileReadPositional = std.Io.failingFileReadPositional,
+            .fileReadPositional = threaded_FileReadPositional,
             .fileSeekBy = std.Io.failingFileSeekBy,
             .fileSeekTo = std.Io.failingFileSeekTo,
             .fileSync = std.Io.failingFileSync,
@@ -242,14 +241,14 @@ pub inline fn Io(self: *EngineContext) std.Io {
             .processSetCurrentPath = std.Io.failingProcessSetCurrentPath,
             .processReplace = std.Io.failingProcessReplace,
             .processReplacePath = std.Io.failingProcessReplacePath,
-            .processSpawn = std.Io.failingProcessSpawn,
+            .processSpawn = threaded_ProcessSpawn,
             .processSpawnPath = std.Io.failingProcessSpawnPath,
-            .childWait = std.Io.unreachableChildWait,
+            .childWait = threaded_ChildWait,
             .childKill = std.Io.unreachableChildKill,
 
             .progressParentFile = std.Io.failingProgressParentFile,
 
-            .random = std.Io.noRandom,
+            .random = threaded_Random,
             .randomSecure = std.Io.failingRandomSecure,
 
             .now = std.Io.noNow,
@@ -314,4 +313,60 @@ fn engine_free(context: *anyopaque, old_memory: []u8, alignment: std.mem.Alignme
 fn frame_free(context: *anyopaque, old_memory: []u8, alignment: std.mem.Alignment, return_address: usize) void {
     const engine_context: *EngineContext = @ptrCast(@alignCast(context));
     return engine_context._Internal.FrameAllocator.rawFree(old_memory, alignment, return_address);
+}
+
+fn threaded_DirRealPathFile(context: ?*anyopaque, dir: std.Io.Dir, path_name: []const u8, out_buffer: []u8) std.Io.Dir.RealPathFileError!usize {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.dirRealPathFile(inner_io.userdata, dir, path_name, out_buffer);
+}
+
+fn threaded_DirOpenFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, flags: std.Io.File.OpenFlags) std.Io.File.OpenError!std.Io.File {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.dirOpenFile(inner_io.userdata, dir, sub_path, flags);
+}
+
+fn threaded_FileStat(context: ?*anyopaque, file: std.Io.File) std.Io.File.StatError!std.Io.File.Stat {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.fileStat(inner_io.userdata, file);
+}
+
+fn threaded_FileClose(context: ?*anyopaque, files: []const std.Io.File) void {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    inner_io.vtable.fileClose(inner_io.userdata, files);
+}
+
+fn threaded_FileReadPositional(context: ?*anyopaque, file: std.Io.File, data: []const []u8, offset: u64) std.Io.File.ReadPositionalError!usize {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.fileReadPositional(inner_io.userdata, file, data, offset);
+}
+
+fn threaded_ProcessSpawn(context: ?*anyopaque, options: std.process.SpawnOptions) std.process.SpawnError!std.process.Child {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.processSpawn(inner_io.userdata, options);
+}
+
+fn threaded_Random(context: ?*anyopaque, buffer: []u8) void {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    inner_io.vtable.random(inner_io.userdata, buffer);
+}
+
+fn threaded_ChildWait(context: ?*anyopaque, child: *std.process.Child) std.process.Child.WaitError!std.process.Child.Term {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.childWait(inner_io.userdata, child);
 }

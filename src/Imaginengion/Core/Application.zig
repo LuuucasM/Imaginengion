@@ -31,7 +31,6 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
-    _ = init; //havnt gotten to this yet lmao
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.SDLInitFail;
     }
@@ -39,7 +38,7 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
         sdl.SDL_SetLogOutputFunction(SDLLogCallback, null);
         sdl.SDL_SetLogPriority(sdl.SDL_LOG_CATEGORY_GPU, sdl.SDL_LOG_PRIORITY_VERBOSE);
     }
-    try self.mEngineContext.Init();
+    try self.mEngineContext.Init(init.environ);
     try self.mProgram.Init(&self.mEngineContext);
 }
 
@@ -68,9 +67,7 @@ pub fn Deinit(self: *Application) !void {
 pub fn Run(self: *Application) !void {
     var t0: std.Io.Timestamp = .zero;
     var t1: std.Io.Duration = .zero;
-
     const first_zone = Tracy.ZoneInit("Main Loop", @src());
-
     t0 = .now(self.mEngineContext.Io(), .awake);
 
     try self.mProgram.OnUpdate(&self.mEngineContext);

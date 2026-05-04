@@ -21,24 +21,23 @@ pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: u
     self.mSlot = slot;
     self.mStage = stage;
 
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
+    if (size == 0) return;
 
+    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
     self.mBuffer = CreateBuffer(device, size);
 }
 
 pub fn Deinit(self: *SDLSSBO, engine_context: *EngineContext) void {
-    std.debug.assert(self.mBuffer != null);
-
-    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-
-    sdl.SDL_ReleaseGPUBuffer(device, self.mBuffer);
-    self.mBuffer = null;
+    if (self.mBuffer) |buf| {
+        const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
+        sdl.SDL_ReleaseGPUBuffer(device, buf);
+        self.mBuffer = null;
+    }
 }
 
 pub fn Bind(self: SDLSSBO, render_pass: *anyopaque) void {
-    std.debug.assert(self.mBuffer != null);
+    if (self.mBuffer == null) return;
     const pass: *sdl.SDL_GPURenderPass = @ptrCast(@alignCast(render_pass));
-
     switch (self.mStage) {
         .Vertex => sdl.SDL_BindGPUVertexStorageBuffers(pass, @intCast(self.mSlot), &self.mBuffer, 1),
         .Fragment => sdl.SDL_BindGPUFragmentStorageBuffers(pass, @intCast(self.mSlot), &self.mBuffer, 1),
@@ -46,13 +45,14 @@ pub fn Bind(self: SDLSSBO, render_pass: *anyopaque) void {
 }
 
 pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyopaque, size: usize, offset: u32) bool {
-    std.debug.assert(self.mBuffer != null);
+    if (size == 0) return false;
+
     var resize: bool = false;
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
     const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetCommandBuff()));
 
     if (size + offset > self.mSize) {
-        sdl.SDL_ReleaseGPUBuffer(device, self.mBuffer.?);
+        if (self.mBuffer) |buf| sdl.SDL_ReleaseGPUBuffer(device, buf);
         self.mSize = size + offset;
         self.mBuffer = CreateBuffer(device, self.mSize);
         resize = true;

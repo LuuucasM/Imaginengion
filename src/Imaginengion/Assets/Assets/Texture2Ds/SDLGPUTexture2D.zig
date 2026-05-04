@@ -16,8 +16,8 @@ _TextureManager: *TextureManager = undefined,
 pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
-    var width: usize = 0;
-    var height: usize = 0;
+    var width: c_int = 0;
+    var height: c_int = 0;
     var channels: c_int = 0;
 
     var file_reader = asset_file.reader(engine_context.Io(), &.{});
@@ -39,10 +39,12 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
         return error.AssetInitFailed;
     }
 
-    try self.RegisterTexture(engine_context, width, height, data);
+    std.log.debug("Loaded file: {s} that is width: {d} height: {d}\n", .{ rel_path, width, height });
 
-    self._Width = width;
-    self._Height = height;
+    try self.RegisterTexture(engine_context, @intCast(width), @intCast(height), data);
+
+    self._Width = @intCast(width);
+    self._Height = @intCast(height);
     self._TextureManager = &engine_context.mRenderer.mTextureManager;
 
     std.log.debug("SDLGPUTexture2D: loaded '{s}' → bindless slot {d}", .{ rel_path, self._TextureHandle });
@@ -52,6 +54,7 @@ pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: 
     try self.RegisterTexture(engine_context, descriptor.width, descriptor.height, descriptor.data);
     self._Width = descriptor.width;
     self._Height = descriptor.height;
+    self._TextureManager = &engine_context.mRenderer.mTextureManager;
 
     std.log.debug("SDLGPUTexture2D.InitGen: {d}x{d}", .{ descriptor.width, descriptor.height });
 }
@@ -100,13 +103,20 @@ pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_p
         4,
     );
     defer stb.stbi_image_free(data);
-    std.debug.assert(data != null);
+
+    if (data == null) {
+        std.log.err("stbi_load_from_memory unable to correctly load the data for file {s}!\n", .{abs_path});
+        return error.AssetInitFailed;
+    }
+
+    std.log.debug("Loaded file: {s} that is width: {d} height: {d}\n", .{ abs_path, width, height });
 
     engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
+
     self.RegisterTexture(engine_context, width, height, data);
 
-    self._Width = width;
-    self._Height = height;
+    self._Width = @intCast(width);
+    self._Height = @intCast(height);
 }
 
 pub fn UpdateDataGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {

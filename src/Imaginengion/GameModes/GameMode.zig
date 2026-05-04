@@ -112,7 +112,9 @@ pub fn AddComponentScript(self: GameMode, engine_context: *EngineContext, rel_pa
 
 pub fn CreateGameModeConfig(self: *GameMode, engine_context: *EngineContext, config: NewGameModeConfig) !void {
     if (config.bAddUUIDComponent) {
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = engine_context.GenUUID() });
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
         try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddNameComponent) {

@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     const no_bin = b.option(bool, "no-bin", "skip emitting compiler binary") orelse false;
     //function builds the entire engine lib including the dependencies and all
 
-    const engine_module = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight) catch @panic("error!!!");
+    const engine_module = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight, .Full) catch @panic("error!!!");
 
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",

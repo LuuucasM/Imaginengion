@@ -20,9 +20,14 @@ mScriptType: ScriptType = undefined,
 mRunFunc: *anyopaque = undefined,
 
 pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
+    const name = std.fs.path.basename(abs_path);
+    //const the_path = std.fs.path.dirname(abs_path);
 
     //spawn a child to handle compiling the zig file into a dll
-    const file_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_abs_path={s}", .{abs_path});
+    const path_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_path={s}", .{abs_path});
+    const name_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_name={s}", .{name});
+    const environ_map = try engine_context.mEnviron.createMap(engine_context.FrameAllocator());
+
     //defer allocator.free(file_arg);
     var child = try std.process.spawn(engine_context.Io(), .{
         .argv = &[_][]const u8{
@@ -30,15 +35,16 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
             "build",
             "--build-file",
             "build_script.zig",
-            file_arg,
+            path_arg,
+            name_arg,
         },
+        .environ_map = &environ_map,
+        .request_resource_usage_statistics = true,
         .stdin = .inherit,
         .stdout = .inherit,
         .stderr = .inherit,
     });
-
     const result = try child.wait(engine_context.Io());
-
     if (result != .exited) {
         std.log.err("Unable to correctly compile script {s} it terminated by {s}!", .{ rel_path, @tagName(result) });
         return error.AssetInitFail;

@@ -35,10 +35,10 @@ pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineCo
     _ValidateEntityType(script_type);
     const zone = Tracy.ZoneInit("RunEntityScript", @src());
     defer zone.Deinit();
-    var scene_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
+    const scene_manager = switch (world_type) {
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
     };
 
     const frame_allocator = engine_context.FrameAllocator();

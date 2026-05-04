@@ -139,7 +139,9 @@ pub fn GetIterator(self: Player, comptime iter_type: Iterator.IterType) ?Iterato
 
 pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config: NewPlayerConfig) !void {
     if (config.bAddUUIDComponent) {
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = engine_context.GenUUID() });
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
         try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddNameComponent) {

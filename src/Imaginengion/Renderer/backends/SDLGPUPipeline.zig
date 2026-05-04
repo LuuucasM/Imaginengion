@@ -146,7 +146,7 @@ fn CreatePipeline(device: *sdl.SDL_GPUDevice, vert_shader: *sdl.SDL_GPUShader, f
 
         .multisample_state = .{
             .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,
-            .sample_mask = 0xFFFFFFFF,
+            .sample_mask = 0,
             .enable_mask = false,
         },
 
