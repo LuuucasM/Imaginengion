@@ -1,5 +1,3 @@
-- Finish changing all the callsites for GetAssetHandleRef to give engine_context instead of engine_context.EngineAllocator()
-- debug migrating to SDL_GPU with texture manager and all that
-- migrate to 0.16.0
+- fix bugs from migrations
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

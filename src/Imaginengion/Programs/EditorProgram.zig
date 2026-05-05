@@ -248,31 +248,29 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
         if (!engine_context.mAppWindow.IsMinimized()) {
-            engine_context.mImguiManager.Begin();
-            Dockspace.Begin();
-
-            try self._ContentBrowserPanel.OnImguiRender(engine_context);
-            try self._AssetHandlePanel.OnImguiRender(engine_context);
+            try self.RenderRenderTargets(engine_context);
 
             const current_world = switch (self.mEditorState) {
                 .Play => EngineContext.WorldType.Simulate,
                 .Stop => EngineContext.WorldType.Game,
             };
 
+            engine_context.mImguiManager.Begin();
+            Dockspace.Begin();
+
+            try self._ContentBrowserPanel.OnImguiRender(engine_context);
+            try self._AssetHandlePanel.OnImguiRender(engine_context);
             try self.mEntityPanel.OnImguiRender(engine_context, current_world, .GameObj);
             try self.mScenePanel.OnImguiRender(engine_context, current_world, .Scenes);
             try self.mPlayerPanel.OnImguiRender(engine_context, current_world, .Players);
             try self.mGameModePanel.OnImguiRender(engine_context, current_world, .GameModes);
-
             try self._ComponentsPanel.OnImguiRender(engine_context, self.mSelectedObj);
             try self._ScriptsPanel.OnImguiRender(engine_context, self.mSelectedObj);
-
-            try self.RenderLenses(engine_context);
-
             try self._StatsPanel.OnImguiRender(engine_context);
-
             try self.OnImguiRender(engine_context);
+            try self.RenderViewports(engine_context);
 
+            //process any imgui events
             var imgui_event_callback = EngineContext.ImguiEventCallback{ .mCtx = self, .mCallbackFn = OnImguiEvent };
             callback_list.append(&imgui_event_callback.mNode);
             try engine_context.mImguiEventManager.ProcessCategory(.RenderEnd, engine_context, callback_list);
@@ -440,23 +438,42 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     }
 }
 
-fn RenderLenses(self: *EditorProgram, engine_context: *EngineContext) !void {
+fn RenderRenderTargets(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Render Lenses", @src());
     defer zone.Deinit();
 
     if (!self._ViewportPanel.mP_OpenPlay) {
         if (self.mEditorState == .Play) {
-            try self.RenderPlayerLens(engine_context, .ViewportPanel);
+            try self.RenderWorldTarget(engine_context, .ViewportPanel);
         } else {
-            try self.RenderViewportLens(engine_context, .ViewportPanel);
+            try self.RenderEditorTarget(engine_context, .ViewportPanel);
         }
     } else {
-        try self.RenderViewportLens(engine_context, .ViewportPanel);
-        try self.RenderPlayerLens(engine_context, .PlayPanel);
+        try self.RenderEditorTarget(engine_context, .ViewportPanel);
+        try self.RenderWorldTarget(engine_context, .PlayPanel);
     }
 }
 
-fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
+//NOTE - the logic of this function should be the same, just calls different functions
+fn RenderViewports(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("Render Lenses", @src());
+    defer zone.Deinit();
+
+    if (!self._ViewportPanel.mP_OpenPlay) {
+        if (self.mEditorState == .Play) {
+            try self.RenderViewportWorlds(engine_context, .ViewportPanel);
+        } else {
+            try self.RenderViewportEditor(engine_context, .ViewportPanel);
+        }
+    } else {
+        try self.RenderViewportEditor(engine_context, .ViewportPanel);
+        try self.RenderViewportWorlds(engine_context, .PlayPanel);
+    }
+}
+
+fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
+    const zone = Tracy.ZoneInit("RenderEditorTarget", @src());
+    defer zone.Deinit();
     const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
@@ -482,32 +499,15 @@ fn RenderViewportLens(self: *EditorProgram, engine_context: *EngineContext, view
         },
         &render_component.mFrameBuffer,
     );
-    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
-    var area_rects: std.ArrayList(Vec4f32) = .empty;
-
-    try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mFrameBuffer);
-    try area_rects.append(engine_context.FrameAllocator(), viewpoint_component.mAreaRect);
-
-    switch (viewport_type) {
-        .ViewportPanel => {
-            try self._ViewportPanel.OnImguiRenderViewport(engine_context, frame_buffers, area_rects);
-        },
-        .PlayPanel => {
-            try self._ViewportPanel.OnImguiRenderPlay(engine_context, frame_buffers, area_rects);
-        },
-    }
 }
 
-fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
-    const zone = Tracy.ZoneInit("Render Bufferss", @src());
+fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
+    const zone = Tracy.ZoneInit("RenderWorldTarget", @src());
     defer zone.Deinit();
 
     const scene_manager = self.mActiveWorld;
 
     const frame_allocator = engine_context.FrameAllocator();
-
-    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
-    var area_rects: std.ArrayList(Vec4f32) = .empty;
 
     var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
     try FilterPossessedPlayers(frame_allocator, &player_entites, scene_manager);
@@ -542,7 +542,49 @@ fn RenderPlayerLens(self: *EditorProgram, engine_context: *EngineContext, viewpo
             },
             &render_component.mFrameBuffer,
         );
+    }
+}
 
+fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
+    const zone = Tracy.ZoneInit("RenderViewportEditor", @src());
+    defer zone.Deinit();
+    const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
+    const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
+
+    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
+    var area_rects: std.ArrayList(Vec4f32) = .empty;
+
+    try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mFrameBuffer);
+    try area_rects.append(engine_context.FrameAllocator(), viewpoint_component.mAreaRect);
+
+    switch (viewport_type) {
+        .ViewportPanel => {
+            try self._ViewportPanel.OnImguiRenderViewport(engine_context, frame_buffers, area_rects);
+        },
+        .PlayPanel => {
+            try self._ViewportPanel.OnImguiRenderPlay(engine_context, frame_buffers, area_rects);
+        },
+    }
+}
+
+fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
+    const zone = Tracy.ZoneInit("RenderViewportWorlds", @src());
+    defer zone.Deinit();
+
+    const scene_manager = self.mActiveWorld;
+    const frame_allocator = engine_context.FrameAllocator();
+
+    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
+    var area_rects: std.ArrayList(Vec4f32) = .empty;
+
+    var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
+    try FilterPossessedPlayers(frame_allocator, &player_entites, scene_manager);
+
+    for (player_entites.items) |player_id| {
+        const player = scene_manager.GetPlayer(player_id);
+        const possess_component = player.GetComponent(PossessComponent).?;
+        const render_component = player.GetComponent(PlayerRenderComponent).?;
+        const viewpoint_component = possess_component.mPossessedEntity.GetComponent(ViewpointComponent).?;
         try frame_buffers.append(frame_allocator, &render_component.mFrameBuffer);
         try area_rects.append(frame_allocator, viewpoint_component.mAreaRect);
     }
