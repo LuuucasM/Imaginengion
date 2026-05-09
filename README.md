@@ -11,15 +11,19 @@
 I haven't written a proper introduction yet ^_^
 
 ## Compatibility <a  name="Comp"></a>
-#### Platform:
-- Windows
-#### Compiler version:
-- 15.1
-#### System requirements:
-###### GPU:
-	- NVIDIA: GTX 700 series (2013) and newer
-	- AMD: R9 200 series (2013) and newer
-	- Intel: Arc series (2022) and newer
+##### Compiler version:
+- 0.16.0
+##### OS:
+- Windows 10 64-bit (build 1903+) or newer
+##### CPU:
+- x86-64, SSE4.2
+##### GPU:
+- A graphics card supporting DirectX 12 Feature Level 11_0 and Resource Binding Tier 2
+##### RAM:
+- 512 MB
+##### VRAM:
+- 2 GB
+	
 ## Instillation<a name="Inst"></a>
 1. Have this repo downloaded and extracted into a folder
 2. Have the correct version of the zig compiler downloaded

@@ -115,8 +115,8 @@ pub fn CreateSceneConfig(self: *SceneLayer, engine_context: *EngineContext, conf
         try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
     }
     if (config.bAddSceneName) {
-        var scene_name_component = SceneNameComponent{ .mAllocator = engine_context.EngineAllocator() };
-        _ = try scene_name_component.mName.print(scene_name_component.mAllocator, "New Scene", .{});
+        var scene_name_component: SceneNameComponent = .empty;
+        _ = try scene_name_component.mName.print(engine_context.EngineAllocator(), "New Scene", .{});
 
         _ = try self.AddComponent(engine_context, scene_name_component);
     }

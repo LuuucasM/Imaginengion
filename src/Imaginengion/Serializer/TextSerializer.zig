@@ -5,11 +5,9 @@ const SceneComponent = SceneComponents.SceneComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(SceneLayer.Type);
 const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(SceneLayer.Type);
-const SceneNameComponent = SceneComponents.NameComponent;
 const SceneUUIDComponent = SceneComponents.UUIDComponent;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
-const EntityNameComponent = EntityComponents.NameComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);

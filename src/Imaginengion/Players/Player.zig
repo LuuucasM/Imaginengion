@@ -145,8 +145,8 @@ pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config:
         try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddNameComponent) {
-        var new_name_component = PlayerNameComponent{ .mAllocator = engine_context.EngineAllocator() };
-        _ = try new_name_component.mName.print(new_name_component.mAllocator, "New Entity", .{});
+        var new_name_component: PlayerNameComponent = .empty;
+        _ = try new_name_component.mName.print(engine_context.EngineAllocator(), "New Entity", .{});
         _ = try self.AddComponent(engine_context, new_name_component);
     }
     if (config.bAddPossessComponent) {

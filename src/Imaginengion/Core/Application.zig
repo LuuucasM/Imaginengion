@@ -96,7 +96,6 @@ pub fn Run(self: *Application) !void {
         t1 = .now(run_io, .awake);
         const duration = t0.durationTo(t1);
         const ns = duration.toNanoseconds();
-        std.debug.print("raw ns: {f}\n", .{duration});
         const seconds_f64 = @as(f64, @floatFromInt(ns)) / @as(f64, std.time.ns_per_s);
         self.mEngineContext.mDT = @floatCast(seconds_f64);
     }

@@ -118,8 +118,8 @@ pub fn CreateGameModeConfig(self: *GameMode, engine_context: *EngineContext, con
         try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddNameComponent) {
-        var new_name_component = NameComponent{ .mAllocator = engine_context.EngineAllocator() };
-        _ = try new_name_component.mName.print(new_name_component.mAllocator, "New Entity", .{});
+        var new_name_component: NameComponent = .empty;
+        _ = try new_name_component.mName.print(engine_context.EngineAllocator(), "New Entity", .{});
         _ = try self.AddComponent(engine_context, new_name_component);
     }
 }
