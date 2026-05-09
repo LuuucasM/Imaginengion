@@ -703,9 +703,10 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
                     try self._ContentBrowserPanel.OnNewProjectEvent(engine_context, abs_path);
                     try engine_context.mAssetManager.OnNewProjectEvent(engine_context, abs_path);
                 }
+                @breakpoint();
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
-                const abs_path = try PlatformUtils.OpenFile(engine_context.EngineAllocator(), ".imprj");
+                const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), ".imprj");
                 if (abs_path.len > 0) {
                     try self._ContentBrowserPanel.OnOpenProjectEvent(engine_context, abs_path);
                     try engine_context.mAssetManager.OnOpenProjectEvent(engine_context, abs_path);

@@ -61,6 +61,10 @@ pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
     imgui.ImGui_ImplSDLGPU3_Shutdown();
     imgui.igDestroyContext(null);
 
+    for (self.mImguiTextures.items) |tex| {
+        _ = sdl.SDL_ReleaseGPUTexture(device, tex);
+    }
+
     self.mImguiTextures.deinit(engine_context.EngineAllocator());
 }
 

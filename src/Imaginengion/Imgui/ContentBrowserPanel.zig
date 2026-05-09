@@ -44,12 +44,12 @@ pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
 }
 
 pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
-    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mDirTextureHandle);
-    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mPngTextureHandle);
-    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mBackArrowTextureHandle);
-    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mSceneTextureHandle);
-    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mScriptTextureHandle);
-    engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioTextureHandle);
+    self.mDirTextureHandle.ReleaseAsset();
+    self.mPngTextureHandle.ReleaseAsset();
+    self.mBackArrowTextureHandle.ReleaseAsset();
+    self.mSceneTextureHandle.ReleaseAsset();
+    self.mScriptTextureHandle.ReleaseAsset();
+    self.mAudioTextureHandle.ReleaseAsset();
     if (self.mProjectDirectory) |*dir| {
         dir.close(engine_context.Io());
         self.mProjectDirectory = null;

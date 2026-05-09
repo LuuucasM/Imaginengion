@@ -11,7 +11,6 @@ const ComponentsPanel = @This();
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
-const AssetHandle = @import("../Assets/AssetHandle.zig");
 const Assets = @import("../Assets/Assets.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 

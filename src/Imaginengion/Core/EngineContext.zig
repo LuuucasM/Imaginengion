@@ -293,6 +293,22 @@ inline fn MakeIoVTable(comptime io_type: IoType) type {
             };
             return try inner_io.vtable.dirRealPathFile(inner_io.userdata, dir, path_name, out_buffer);
         }
+        fn DirCreateFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.File.CreateFlags) std.Io.File.OpenError!std.Io.File {
+            const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+            const inner_io = switch (io_type) {
+                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Evented => @compileError("evented not implemented for this Io yet\n"),
+            };
+            return try inner_io.vtable.dirCreateFile(inner_io.userdata, dir, sub_path, options);
+        }
+        fn DirRead(context: ?*anyopaque, dir_reader: *std.Io.Dir.Reader, buffer: []std.Io.Dir.Entry) std.Io.Dir.Reader.Error!usize {
+            const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+            const inner_io = switch (io_type) {
+                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Evented => @compileError("evented not implemented for this Io yet\n"),
+            };
+            return try inner_io.vtable.dirRead(inner_io.userdata, dir_reader, buffer);
+        }
     };
 
     return struct {
@@ -329,11 +345,11 @@ inline fn MakeIoVTable(comptime io_type: IoType) type {
             .dirStat = std.Io.failingDirStat,
             .dirStatFile = fns.DirStatFile,
             .dirAccess = std.Io.failingDirAccess,
-            .dirCreateFile = std.Io.failingDirCreateFile,
+            .dirCreateFile = fns.DirCreateFile,
             .dirCreateFileAtomic = std.Io.failingDirCreateFileAtomic,
             .dirOpenFile = fns.DirOpenFile,
             .dirClose = fns.DirClose,
-            .dirRead = std.Io.noDirRead,
+            .dirRead = fns.DirRead,
             .dirRealPath = std.Io.failingDirRealPath,
             .dirRealPathFile = fns.DirRealPathFile,
             .dirDeleteFile = std.Io.failingDirDeleteFile,
