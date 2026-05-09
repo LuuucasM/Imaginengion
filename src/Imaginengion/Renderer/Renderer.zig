@@ -56,7 +56,7 @@ mPushConstants: PushConstants = .{
     .mGlyphsCount = 0,
 },
 
-mSDFShader: AssetHandle = .{},
+mSDFShader: ShaderAsset = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     self.mPlatform.Init(engine_context);
@@ -64,21 +64,24 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     try self.mTextureManager.Init(engine_context, 2_000_000_000);
 
     const shader_rel_path = "assets/shaders/SDFShader.program";
-    self.mSDFShader = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = shader_rel_path, .path_type = .Eng } });
+    const shader_abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), shader_rel_path, .Eng);
+    const file = try engine_context.mAssetManager.mCWD.openFile(engine_context.Io(), shader_rel_path, .{});
 
-    try self.mPipeline.Init(engine_context, try self.mSDFShader.GetAsset(engine_context, ShaderAsset), .{ .color_format = .RGBA8, .enable_blend = true });
+    try self.mSDFShader.Init(engine_context, shader_abs_path, shader_rel_path, file);
+
+    try self.mPipeline.Init(engine_context, &self.mSDFShader, .{ .color_format = .RGBA8, .enable_blend = true });
 
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
+    self.mSDFShader.Deinit(engine_context) catch unreachable;
     self.mTextureManager.Deinit(engine_context);
     self.mPipeline.Deinit(engine_context);
-    self.mPlatform.Deinit(&engine_context.mAppWindow);
-    self.mSDFShader.ReleaseAsset();
     self.mR2D.Deinit(engine_context);
     self.mR3D.Deinit(engine_context.EngineAllocator());
+    self.mPlatform.Deinit(&engine_context.mAppWindow);
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not

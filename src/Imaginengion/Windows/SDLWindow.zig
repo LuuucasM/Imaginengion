@@ -50,6 +50,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
     defer zone.Deinit();
     var event: sdl.SDL_Event = undefined;
     while (sdl.SDL_PollEvent(&event)) {
+        engine_context.mImguiManager.ProcessEvent(&event);
         switch (event.type) {
             sdl.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
                 try engine_context.mSystemEventManager.Insert(

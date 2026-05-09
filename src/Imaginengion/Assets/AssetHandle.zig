@@ -6,6 +6,11 @@ const FileMetaData = @import("Assets/FileMetaData.zig");
 const AssetHandle = @This();
 pub const NullHandle = std.math.maxInt(AssetManager.AssetType);
 
+pub const empty: AssetHandle = .{
+    .mID = NullHandle,
+    .mAssetManager = undefined,
+};
+
 mID: AssetManager.AssetType = NullHandle,
 mAssetManager: *AssetManager = undefined,
 
@@ -21,4 +26,12 @@ pub fn ReleaseAsset(self: *AssetHandle) void {
     if (self.mID != NullHandle) {
         self.mAssetManager.ReleaseAssetHandleRef(self);
     }
+}
+
+pub fn jsonStringify(self: *const AssetHandle, jw: anytype) !void {
+    const fmd = self.GetFileMetaData();
+    try jw.objectField("Texture");
+    try jw.write(fmd.mRelPath.items);
+    try jw.objectField("PathType");
+    try jw.write(fmd.mPathType);
 }

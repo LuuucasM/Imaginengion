@@ -65,20 +65,20 @@ pub fn Deinit(self: *Application) !void {
 /// Returns:
 /// - `!void` if an update loop iteration fails return the error else return nothing.
 pub fn Run(self: *Application) !void {
-    var t0: std.Io.Timestamp = .zero;
-    var t1: std.Io.Duration = .zero;
     const first_zone = Tracy.ZoneInit("Main Loop", @src());
-    t0 = .now(self.mEngineContext.Io(), .awake);
+    const run_io = self.mEngineContext.Io();
+    var t0: std.Io.Timestamp = .now(run_io, .awake);
 
     try self.mProgram.OnUpdate(&self.mEngineContext);
     _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
     self.mEngineContext.mEngineStats.ResetStats();
-
     first_zone.Deinit();
     Tracy.FrameMark();
 
-    t1 = t0.untilNow(self.mEngineContext.Io(), .awake);
-    const first_ns = t1.nanoseconds;
+    var t1: std.Io.Timestamp = .now(run_io, .awake);
+    const first_duration = t0.durationTo(t1);
+
+    const first_ns = first_duration.toNanoseconds();
     const first_seconds_f64 = @as(f64, @floatFromInt(first_ns)) / @as(f64, std.time.ns_per_s);
     self.mEngineContext.mDT = @floatCast(first_seconds_f64);
 
@@ -87,14 +87,16 @@ pub fn Run(self: *Application) !void {
         const zone = Tracy.ZoneInit("Main Loop", @src());
         defer zone.Deinit();
 
-        t0 = .now(self.mEngineContext.Io(), .awake);
+        t0 = .now(run_io, .awake);
 
         try self.mProgram.OnUpdate(&self.mEngineContext);
         _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
         self.mEngineContext.mEngineStats.ResetStats();
 
-        t1 = t0.untilNow(self.mEngineContext.Io(), .awake);
-        const ns = t1.nanoseconds;
+        t1 = .now(run_io, .awake);
+        const duration = t0.durationTo(t1);
+        const ns = duration.toNanoseconds();
+        std.debug.print("raw ns: {f}\n", .{duration});
         const seconds_f64 = @as(f64, @floatFromInt(ns)) / @as(f64, std.time.ns_per_s);
         self.mEngineContext.mDT = @floatCast(seconds_f64);
     }

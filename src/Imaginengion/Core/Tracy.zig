@@ -2,7 +2,7 @@ const std = @import("std");
 
 const build_options = @import("build_options");
 pub const enable_tracy = build_options.enable_tracy;
-pub const tracy = if (enable_tracy) @import("Tracy").c else void;
+pub const tracy = if (enable_tracy) @import("Tracy") else void;
 
 pub const Zone = if (enable_tracy) struct {
     mContext: tracy.TracyCZoneCtx,

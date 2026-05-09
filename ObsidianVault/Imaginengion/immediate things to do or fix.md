@@ -1,3 +1,9 @@
-- fix bugs from migrations
+- change frame buffer to not use in engine textures but sdl_gpu textures instead
+	- its currently not really possible on sdl_gpu to use the texture atlas also directly as a render target. sdl_gpu would need to expose more stuff for this (of course sdl_gpu needs to expose a lot of things but its designer is very reluctant about literally every solution lol)'
+	- for now since i do not need the functionality i will not have frame buffers be able to be textures for game objects. although it is used in game dev and should be possible in the future i will have to instead come up with a system where i move pixels from the framebuffer onto the texture atlas but only when being used. idk future me problem
+	- this also simplifies the viewport/play panel display since i dont need ot make a texture specifically for imgui anymore
+- so get rid of quad frame buffer display, just make it simply asset handle again
+- change frame buffer to raw sdl_gpu handles instead of Texture2D
+- change ivewport panel displays to use the frame buffers GetTexture instead
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

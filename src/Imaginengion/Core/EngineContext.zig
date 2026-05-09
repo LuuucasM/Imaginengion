@@ -42,7 +42,7 @@ pub const WorldType = enum(u8) {
     Simulate,
 };
 
-mDT: f32 = 0.0,
+mDT: f32 = 1.0 / 60.0,
 
 mAppWindow: Window = .{},
 
@@ -106,15 +106,16 @@ pub fn DeInit(self: *EngineContext) !void {
     try self.mEditorWorld.Deinit(self);
     try self.mSimulateWorld.Deinit(self);
 
-    self.mPhysicsManager.Deinit(self.EngineAllocator());
-    self.mInputManager.Deinit(self.EngineAllocator());
-    self.mRenderer.Deinit(self);
-    self.mAudioManager.Deinit();
-    try self.mAssetManager.Deinit(self);
-
     self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mImguiEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
+
+    self.mPhysicsManager.Deinit(self.EngineAllocator());
+    self.mInputManager.Deinit(self.EngineAllocator());
+    self.mAudioManager.Deinit();
+    try self.mAssetManager.Deinit(self);
+
+    self.mRenderer.Deinit(self);
 
     self.mAppWindow.Deinit();
 
@@ -179,12 +180,12 @@ pub inline fn Io(self: *EngineContext) std.Io {
             .dirCreateDirPathOpen = std.Io.failingDirCreateDirPathOpen,
             .dirOpenDir = std.Io.failingDirOpenDir,
             .dirStat = std.Io.failingDirStat,
-            .dirStatFile = std.Io.failingDirStatFile,
+            .dirStatFile = threaded_DirStatFile,
             .dirAccess = std.Io.failingDirAccess,
             .dirCreateFile = std.Io.failingDirCreateFile,
             .dirCreateFileAtomic = std.Io.failingDirCreateFileAtomic,
             .dirOpenFile = threaded_DirOpenFile,
-            .dirClose = std.Io.unreachableDirClose,
+            .dirClose = threaded_DirClose,
             .dirRead = std.Io.noDirRead,
             .dirRealPath = std.Io.failingDirRealPath,
             .dirRealPathFile = threaded_DirRealPathFile,
@@ -251,7 +252,7 @@ pub inline fn Io(self: *EngineContext) std.Io {
             .random = threaded_Random,
             .randomSecure = std.Io.failingRandomSecure,
 
-            .now = std.Io.noNow,
+            .now = threaded_Now,
             .clockResolution = std.Io.failingClockResolution,
             .sleep = std.Io.noSleep,
 
@@ -369,4 +370,25 @@ fn threaded_ChildWait(context: ?*anyopaque, child: *std.process.Child) std.proce
     const inner_io = engine_context._Internal.ThreadedIO.io();
 
     return try inner_io.vtable.childWait(inner_io.userdata, child);
+}
+
+fn threaded_DirClose(context: ?*anyopaque, dirs: []const std.Io.Dir) void {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    inner_io.vtable.dirClose(inner_io.userdata, dirs);
+}
+
+fn threaded_Now(context: ?*anyopaque, clock: std.Io.Clock) std.Io.Timestamp {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return inner_io.vtable.now(inner_io.userdata, clock);
+}
+
+fn threaded_DirStatFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.StatFileOptions) std.Io.Dir.StatFileError!std.Io.File.Stat {
+    const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+    const inner_io = engine_context._Internal.ThreadedIO.io();
+
+    return try inner_io.vtable.dirStatFile(inner_io.userdata, dir, sub_path, options);
 }

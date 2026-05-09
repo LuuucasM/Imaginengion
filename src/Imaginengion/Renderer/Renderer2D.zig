@@ -148,7 +148,7 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
-    const texture_asset = try quad_component.mTexture.GetTexture(engine_context);
+    const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
 
     const world_pos = transform_component.GetWorldPosition();
     const world_rot = transform_component.GetWorldRotation();

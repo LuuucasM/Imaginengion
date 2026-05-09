@@ -21,7 +21,7 @@ pub fn Init(_: *ImguiManager, engine_context: *EngineContext) void {
     io.*.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     io.*.ConfigFlags |= imgui.ImGuiConfigFlags_NavEnableGamepad; // Enable Gamepad Controls
     io.*.ConfigFlags |= imgui.ImGuiConfigFlags_DockingEnable; // Enable Docking
-    io.*.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
+    //io.*.ConfigFlags |= imgui.ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
 
     const style: *imgui.struct_ImGuiStyle = imgui.igGetStyle();
 
@@ -58,9 +58,14 @@ pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
 
     _ = sdl.SDL_WaitForGPUIdle(device);
     imgui.ImGui_ImplSDL3_Shutdown();
+    imgui.ImGui_ImplSDLGPU3_Shutdown();
     imgui.igDestroyContext(null);
 
     self.mImguiTextures.deinit(engine_context.EngineAllocator());
+}
+
+pub fn ProcessEvent(_: *ImguiManager, event: *sdl.SDL_Event) void {
+    _ = imgui.ImGui_ImplSDL3_ProcessEvent(@ptrCast(event));
 }
 pub fn Begin(self: *ImguiManager) void {
     const zone = Tracy.ZoneInit("Imgui Begin", @src());
@@ -88,31 +93,34 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
     var swapchain_texture: ?*sdl.SDL_GPUTexture = null;
     _ = sdl.SDL_AcquireGPUSwapchainTexture(cmd_buffer, sdl_window, &swapchain_texture, null, null);
 
-    if (swapchain_texture != null and !is_minimized) {
-        imgui.ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, @ptrCast(cmd_buffer));
-
-        const target_info = sdl.SDL_GPUColorTargetInfo{
-            .texture = swapchain_texture,
-            .clear_color = .{ .r = 0.1, .g = 0.1, .b = 0.1, .a = 1.0 },
-            .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
-            .store_op = sdl.SDL_GPU_STOREOP_STORE,
-            .mip_level = 0,
-            .layer_or_depth_plane = 0,
-            .cycle = false,
-            .resolve_texture = null,
-            .resolve_mip_level = 0,
-            .resolve_layer = 0,
-            .cycle_resolve_texture = false,
-            .padding1 = 0,
-            .padding2 = 0,
-        };
-
-        const render_pass = sdl.SDL_BeginGPURenderPass(cmd_buffer, &target_info, 1, null);
-
-        imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, @ptrCast(cmd_buffer), @ptrCast(render_pass), null);
-
-        sdl.SDL_EndGPURenderPass(render_pass);
+    if (swapchain_texture == null or is_minimized) {
+        _ = sdl.SDL_CancelGPUCommandBuffer(cmd_buffer);
+        return;
     }
+
+    imgui.ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, @ptrCast(cmd_buffer));
+
+    const target_info = sdl.SDL_GPUColorTargetInfo{
+        .texture = swapchain_texture,
+        .clear_color = .{ .r = 0.1, .g = 0.1, .b = 0.1, .a = 1.0 },
+        .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+        .store_op = sdl.SDL_GPU_STOREOP_STORE,
+        .mip_level = 0,
+        .layer_or_depth_plane = 0,
+        .cycle = false,
+        .resolve_texture = null,
+        .resolve_mip_level = 0,
+        .resolve_layer = 0,
+        .cycle_resolve_texture = false,
+        .padding1 = 0,
+        .padding2 = 0,
+    };
+
+    const render_pass = sdl.SDL_BeginGPURenderPass(cmd_buffer, &target_info, 1, null);
+
+    imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, @ptrCast(cmd_buffer), @ptrCast(render_pass), null);
+
+    sdl.SDL_EndGPURenderPass(render_pass);
 
     // Submit the command buffer
     _ = sdl.SDL_SubmitGPUCommandBuffer(cmd_buffer);
@@ -122,6 +130,7 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
         imgui.igRenderPlatformWindowsDefault(null, null);
     }
 }
+
 pub fn GetImguiTexture(self: *ImguiManager, engine_context: *EngineContext, texture: *Texture2D) !imgui.struct_ImTextureRef_c {
     const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 

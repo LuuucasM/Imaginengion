@@ -28,41 +28,7 @@ pub const Ind: usize = blk: {
 };
 
 mShouldRender: bool = true,
-mTexture: union(enum) {
-    const Self = @This();
-    Asset: AssetHandle,
-    EntityRenderTarget: Entity,
-    pub const empty: Self = .{
-        .Asset = .{},
-    };
-    pub fn ReleaseAsset(self: *Self) void {
-        switch (self.*) {
-            .Asset => self.Asset.ReleaseAsset(),
-            .EntityRenderTarget => self.EntityRenderTarget.mEntityID = Entity.NullEntity,
-        }
-    }
-    pub fn GetTexture(self: Self, engine_context: *EngineContext) !*Texture2D {
-        switch (self) {
-            .Asset => |a| return try a.GetAsset(engine_context, Texture2D),
-            .EntityRenderTarget => |e| return e.GetComponent(RenderTargetComponent).?.GetOutputTexture(),
-        }
-    }
-    pub fn jsonStringify(self: Self, jw: anytype) !void {
-        switch (self) {
-            .Asset => |a| {
-                const fmd = a.GetFileMetaData();
-                try jw.objectField("Texture");
-                try jw.write(fmd.mRelPath.items);
-                try jw.objectField("PathType");
-                try jw.write(fmd.mPathType);
-            },
-            .EntityRenderTarget => |e| {
-                try jw.objectField("EntityRef");
-                try jw.write(e.GetUUID());
-            },
-        }
-    }
-} = .empty,
+mTexture: AssetHandle = .empty,
 mTexOptions: Texture2D.TexOptions = .{},
 mEditTexCoords: bool = false,
 
@@ -78,7 +44,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
-    const texture_asset = try self.mTexture.GetTexture(engine_context);
+    const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
 
     imgui.igImage(
         try engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
@@ -98,7 +64,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             self.mTexture.ReleaseAsset();
-            self.mTexture = .{ .Asset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } }) };
+            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
         }
     }
     try self.EditTexCoords(engine_context, texture_asset);
@@ -227,24 +193,13 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
             const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
 
-            result.mTexture.Asset = engine_context.mAssetManager.GetAssetHandleRef(
+            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(
                 engine_context,
                 .{ .File = .{ .rel_path = parsed_path, .path_type = parsed_path_type } },
             ) catch |err| {
                 std.debug.print("error: {}\n", .{err});
                 @panic("");
             };
-        } else if (std.mem.eql(u8, field_name, "EntityRef")) {
-            std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Entity);
-            const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
-            const entity = engine_context.mSerializer.mCurrDeserialize.requester.Entity;
-            const quad_component: *QuadComponent = @ptrCast(@alignCast(engine_context.mSerializer.mCurrDeserialize.component_ptr));
-            result.mTexture = .{ .EntityRenderTarget = .{ .mSceneManager = entity.mSceneManager } };
-            try entity.mSceneManager.AddResolveUUID(engine_context.EngineAllocator(), .{
-                .Requester = engine_context.mSerializer.mCurrDeserialize.requester,
-                .UUID = entity_uuid,
-                .SetLoc = &quad_component.mTexture.EntityRenderTarget.mEntityID,
-            });
         }
     }
 

@@ -103,7 +103,7 @@ fn LoadSpirvFile(engine_context: *EngineContext, dir: []const u8, name: []const 
     defer file.close(engine_context.Io());
 
     var file_reader = file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
+    const contents = try file_reader.interface.allocRemaining(engine_context.EngineAllocator(), .unlimited);
 
     return contents;
 }
