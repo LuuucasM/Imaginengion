@@ -47,7 +47,7 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
     self._Height = @intCast(height);
     self._TextureManager = &engine_context.mRenderer.mTextureManager;
 
-    std.log.debug("SDLGPUTexture2D: loaded '{s}' → bindless slot {d}", .{ rel_path, self._TextureHandle });
+    std.log.debug("SDLGPUTexture2D: loaded '{s}' -> bindless slot {d}", .{ rel_path, self._TextureHandle });
 }
 
 pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {

@@ -316,6 +316,11 @@ pub fn GetEntityGroup(self: *const SceneManager, frame_allocator: std.mem.Alloca
 //===============================ECS MANAGER Entity END==============================================
 
 //==================================ECS MANAGER GAME MODE START===========================================
+pub fn CreateGameMode(self: *SceneManager, engine_context: *EngineContext, config: GameMode.NewGameModeConfig) !GameMode {
+    var new_game_mode = GameMode{ .mEntityID = try self.mECSManagerPL.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
+    try new_game_mode.CreateGameModeConfig(engine_context, config);
+    return new_game_mode;
+}
 pub fn GetGameModeGroup(self: *const SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameMode.Type) {
     return try self.mECSManagerGM.GetGroup(frame_allocator, query);
 }

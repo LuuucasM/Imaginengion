@@ -2,6 +2,7 @@ const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const ScriptType = @import("../Assets/Assets/ScriptAsset.zig").ScriptType;
 const LayerType = @import("../Scene/Components/SceneComponent.zig").LayerType;
+const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 pub const EventCategories = enum {
     RenderEnd,
@@ -19,6 +20,7 @@ pub const Event = union(enum) {
     DeleteSceneEvent: DeleteSceneEvent,
     NewScriptEvent: NewScriptEvent,
     NewSceneEvent: NewSceneEvent,
+    SelectObjectEvent: SelectObjectEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -64,4 +66,8 @@ pub const NewScriptEvent = struct {
 
 pub const NewSceneEvent = struct {
     mLayerType: LayerType,
+};
+
+pub const SelectObjectEvent = struct {
+    mObject: SelectedObject,
 };

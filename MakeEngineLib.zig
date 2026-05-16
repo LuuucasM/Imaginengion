@@ -174,6 +174,30 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         const stb_lib = stb_dep.artifact("stb");
         engine_module.linkLibrary(stb_lib);
         b.installArtifact(stb_lib);
+
+        //NOTE: not working for some reaosn just manual compile for now
+        //const spirv_target = b.resolveTargetQuery(.{
+        //    .cpu_arch = .spirv32,
+        //    .cpu_model = .{ .explicit = &std.Target.spirv.cpu.vulkan_v1_2 },
+        //    .os_tag = .vulkan,
+        //    .ofmt = .spirv,
+        //});
+        //
+        //const vert_mod = b.createModule(.{
+        //    .target = spirv_target,
+        //    .optimize = .ReleaseFast,
+        //    .root_source_file = b.path("assets/shaders/SDFVertShader.zig"),
+        //});
+        //const vert_shader = b.addObject(.{
+        //    .name = "vert",
+        //    .root_module = vert_mod,
+        //    .use_llvm = false,
+        //    .use_lld = false,
+        //});
+        //
+        //const opts = b.addOptions();
+        //opts.addOptionPath("vert_spv", vert_shader.getEmittedBin());
+        //engine_module.addOptions("shaders", opts);
     } else {
         engine_module.addLibraryPath(b.path("zig-out/lib/"));
         engine_module.linkSystemLibrary("NFD", .{ .needed = true });

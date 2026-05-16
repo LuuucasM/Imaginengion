@@ -10,6 +10,7 @@ const SceneLayer = @import("../Scene/SceneLayer.zig");
 const Player = @import("../Players/Player.zig");
 const GameMode = @import("../GameModes/GameMode.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 const ECSDisplayPanel = @This();
 
 const SCENE_NAME_BUFFER_SIZE = 200;
@@ -27,13 +28,15 @@ pub fn Init(self: ECSDisplayPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, world_type: EngineContext.WorldType, comptime ecs_type: SceneManager.ECSType) !void {
-    const zone = Tracy.ZoneInit("AssetHandle OIR", @src());
+pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, world_type: EngineContext.WorldType, comptime ecs_type: SceneManager.ECSType, selected_object: *?SelectedObject) !void {
+    const zone = Tracy.ZoneInit("ECS Display OIR", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;
 
     const frame_allocator = engine_context.FrameAllocator();
+    var already_popup = false;
+    const available_region = imgui.igGetContentRegionAvail();
 
     const scene_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
@@ -46,10 +49,6 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     _ = imgui.igBegin(window_name.ptr, null, 0);
     defer imgui.igEnd();
 
-    const available_region = imgui.igGetContentRegionAvail();
-
-    var already_popup = false;
-
     //child that is the width of the entire available region is needed so we can drag scenes from the content browser to load the scene
     if (imgui.igBeginChild_Str(@tagName(ecs_type), available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         switch (ecs_type) {
@@ -60,6 +59,20 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
         }
     }
     imgui.igEndChild();
+
+    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false)) {
+        imgui.igOpenPopup_Str(@tagName(ecs_type), imgui.ImGuiPopupFlags_None);
+    }
+    if (imgui.igBeginPopup(@tagName(ecs_type), imgui.ImGuiWindowFlags_None)) {
+        defer imgui.igEndPopup();
+        already_popup = true;
+        switch (ecs_type) {
+            .GameObj => try HandleWindowMenu(Entity, engine_context, selected_object, scene_manager),
+            .Scenes => try HandleWindowMenu(SceneLayer, engine_context, selected_object, scene_manager),
+            .Players => try HandleWindowMenu(Player, engine_context, selected_object, scene_manager),
+            .GameModes => try HandleWindowMenu(GameMode, engine_context, selected_object, scene_manager),
+        }
+    }
 }
 
 pub fn OnTogglePanelEvent(self: *ECSDisplayPanel) void {
@@ -99,11 +112,17 @@ fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext,
 
     //if the tree node gets left clicked it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
     if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left)) {
-        //TODO: need to rework how selection works so holdon there
-        //try SelectEntity(engine_context, entity, scene_layer);
+        try Traits.SelectObject(engine_context, object);
     }
 
-    try HandleObjectContextMenu(ObjectType, engine_context, object, object_name, already_popup);
+    if (!already_popup.* and imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+        defer imgui.igEndPopup();
+        already_popup.* = true;
+
+        try Traits.HandleObjectContextMenu(engine_context, object);
+    }
+
+    Traits.HandleDragDropSource(object);
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
@@ -118,11 +137,17 @@ fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, o
     const object_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ object.GetName(), Traits.ID(object) }, 0);
 
     if (imgui.igSelectable_Bool(object_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 })) {
-        //TODO: need to rework new selection system
-        //try SelectEntity(engine_context, entity, scene_layer);
+        try Traits.SelectObject(engine_context, object);
     }
 
-    try HandleObjectContextMenu(ObjectType, engine_context, object, object_name, already_popup);
+    if (!already_popup.* and imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+        defer imgui.igEndPopup();
+        already_popup.* = true;
+
+        try Traits.HandleObjectContextMenu(engine_context, object);
+    }
+
+    Traits.HandleDragDropSource(object);
 }
 
 fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, already_popup: *bool) anyerror!void {
@@ -134,31 +159,18 @@ fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext,
     }
 }
 
-fn HandleObjectContextMenu(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, object_name: [*:0]const u8, already_popup: *bool) !void {
-    const Trait = ObjectTraits(ObjectType);
-
-    Trait.HandleDragDropSource(object);
-
-    if (!already_popup.* and imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
-        defer imgui.igEndPopup();
-        already_popup.* = true;
-
-        if (imgui.igMenuItem_Bool("New Child", "", false, true)) {
-            _ = try object.CreateChild(engine_context, .Entity, .{});
-        }
-
-        if (imgui.igMenuItem_Bool("Delete Object", "", false, true)) {
-            try object.Delete(engine_context);
-        }
-    }
+fn HandleWindowMenu(comptime ObjectType: type, engine_context: *EngineContext, selected_object: *?SelectedObject, scene_manager: *SceneManager) !void {
+    const Traits = ObjectTraits(ObjectType);
+    try Traits.HandleWindowContextMenu(engine_context, selected_object, scene_manager);
 }
 
 fn ObjectTraits(comptime T: type) type {
     if (T == Entity) {
         return struct {
-            const ParentComponent = SceneManager.ECSManagerGameObj.ParentComponent;
-            const ChildComponent = SceneManager.ECSManagerGameObj.ChildComponent;
-            const GetGroupFn = SceneManager.GetEntityGroup;
+            pub const ParentComponent = SceneManager.ECSManagerGameObj.ParentComponent;
+            pub const ChildComponent = SceneManager.ECSManagerGameObj.ChildComponent;
+            pub const GetGroupFn = SceneManager.GetEntityGroup;
+            const Self = @This();
             pub fn ID(entity: Entity) u64 {
                 return @intCast(entity.mEntityID);
             }
@@ -171,13 +183,40 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload("EntityRef", &entity, @sizeOf(Entity), 0);
                 }
             }
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Entity) !void {
+                if (imgui.igMenuItem_Bool("New Child Entity", "", false, true)) {
+                    _ = try object.CreateChild(engine_context, .Entity, .{});
+                }
+
+                if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
+                    try object.Delete(engine_context);
+                }
+            }
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, selected_object: *?SelectedObject, _: *SceneManager) !void {
+                var is_scene_layer = false;
+                if (selected_object.*) |obj| {
+                    if (std.meta.activeTag(obj) == .scene_layer) {
+                        is_scene_layer = true;
+                    }
+                }
+                if (imgui.igMenuItem_Bool("New Entity", "", false, is_scene_layer)) {
+                    _ = try selected_object.*.?.scene_layer.CreateEntity(engine_context, .{});
+                }
+            }
+            pub fn SelectObject(engine_context: *EngineContext, obj: Entity) !void {
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                    .SelectObjectEvent = .{
+                        .mObject = .{ .entity = obj },
+                    },
+                });
+            }
         };
     } else if (T == SceneLayer) {
         return struct {
-            const ParentComponent = SceneManager.ECSManagerScenes.ParentComponent;
-            const ChildComponent = SceneManager.ECSManagerScenes.ChildComponent;
-            const GetGroupFn = SceneManager.GetSceneGroup;
-
+            pub const ParentComponent = SceneManager.ECSManagerScenes.ParentComponent;
+            pub const ChildComponent = SceneManager.ECSManagerScenes.ChildComponent;
+            pub const GetGroupFn = SceneManager.GetSceneGroup;
+            const Self = @This();
             pub fn ID(scene_layer: SceneLayer) u64 {
                 return @intCast(scene_layer.mSceneID);
             }
@@ -190,12 +229,38 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload("SceneRef", &scene_layer, @sizeOf(SceneLayer), 0);
                 }
             }
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: SceneLayer) !void {
+                if (imgui.igMenuItem_Bool("New Child Scene", "", false, true)) {
+                    _ = try object.CreateChild(engine_context, .Entity, .{});
+                }
+
+                if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
+                    _ = try object.CreateEntity(engine_context, .{});
+                }
+
+                if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
+                    try object.Delete(engine_context);
+                }
+            }
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
+                if (imgui.igMenuItem_Bool("New Scene", "", false, true)) {
+                    _ = try scene_manager.NewScene(engine_context, .GameLayer, .{});
+                }
+            }
+            pub fn SelectObject(engine_context: *EngineContext, obj: SceneLayer) !void {
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                    .SelectObjectEvent = .{
+                        .mObject = .{ .scene_layer = obj },
+                    },
+                });
+            }
         };
     } else if (T == Player) {
         return struct {
-            const ParentComponent = SceneManager.ECSManagerPlayer.ParentComponent;
-            const ChildComponent = SceneManager.ECSManagerPlayer.ChildComponent;
-            const GetGroupFn = SceneManager.GetPlayerGroup;
+            pub const ParentComponent = SceneManager.ECSManagerPlayer.ParentComponent;
+            pub const ChildComponent = SceneManager.ECSManagerPlayer.ChildComponent;
+            pub const GetGroupFn = SceneManager.GetPlayerGroup;
+            const Self = @This();
 
             pub fn ID(entity: Player) u64 {
                 return @intCast(entity.mEntityID);
@@ -209,12 +274,34 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload("PlayerRef", &player, @sizeOf(Player), 0);
                 }
             }
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Player) !void {
+                if (imgui.igMenuItem_Bool("New Child Player", "", false, true)) {
+                    _ = try object.CreateChild(engine_context, .Entity, .{});
+                }
+
+                if (imgui.igMenuItem_Bool("Delete Player", "", false, true)) {
+                    try object.Delete(engine_context);
+                }
+            }
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
+                if (imgui.igMenuItem_Bool("New Player", "", false, true)) {
+                    _ = try scene_manager.CreatePlayer(engine_context, .{});
+                }
+            }
+            pub fn SelectObject(engine_context: *EngineContext, obj: Player) !void {
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                    .SelectObjectEvent = .{
+                        .mObject = .{ .player = obj },
+                    },
+                });
+            }
         };
     } else if (T == GameMode) {
         return struct {
-            const ParentComponent = SceneManager.ECSManagerGameMode.ParentComponent;
-            const ChildComponent = SceneManager.ECSManagerGameMode.ChildComponent;
-            const GetGroupFn = SceneManager.GetGameModeGroup;
+            pub const ParentComponent = SceneManager.ECSManagerGameMode.ParentComponent;
+            pub const ChildComponent = SceneManager.ECSManagerGameMode.ChildComponent;
+            pub const GetGroupFn = SceneManager.GetGameModeGroup;
+            const Self = @This();
 
             pub fn ID(entity: GameMode) u64 {
                 return @intCast(entity.mEntityID);
@@ -227,6 +314,27 @@ fn ObjectTraits(comptime T: type) type {
                     defer imgui.igEndDragDropSource();
                     _ = imgui.igSetDragDropPayload("GameModeRef", &game_mode, @sizeOf(GameMode), 0);
                 }
+            }
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: GameMode) !void {
+                if (imgui.igMenuItem_Bool("New Child Game Mode", "", false, true)) {
+                    _ = try object.CreateChild(engine_context, .Entity, .{});
+                }
+
+                if (imgui.igMenuItem_Bool("Delete Game Mode", "", false, true)) {
+                    try object.Delete(engine_context);
+                }
+            }
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
+                if (imgui.igMenuItem_Bool("New Game Mode", "", false, true)) {
+                    _ = try scene_manager.CreateGameMode(engine_context, .{});
+                }
+            }
+            pub fn SelectObject(engine_context: *EngineContext, obj: GameMode) !void {
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                    .SelectObjectEvent = .{
+                        .mObject = .{ .gamemode = obj },
+                    },
+                });
             }
         };
     } else {

@@ -260,12 +260,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             try self._ContentBrowserPanel.OnImguiRender(engine_context);
             try self._AssetHandlePanel.OnImguiRender(engine_context);
-            try self.mEntityPanel.OnImguiRender(engine_context, current_world, .GameObj);
-            try self.mScenePanel.OnImguiRender(engine_context, current_world, .Scenes);
-            try self.mPlayerPanel.OnImguiRender(engine_context, current_world, .Players);
-            try self.mGameModePanel.OnImguiRender(engine_context, current_world, .GameModes);
-            try self._ComponentsPanel.OnImguiRender(engine_context, self.mSelectedObj);
-            try self._ScriptsPanel.OnImguiRender(engine_context, self.mSelectedObj);
+            try self.mEntityPanel.OnImguiRender(engine_context, current_world, .GameObj, &self.mSelectedObj);
+            try self.mScenePanel.OnImguiRender(engine_context, current_world, .Scenes, &self.mSelectedObj);
+            try self.mPlayerPanel.OnImguiRender(engine_context, current_world, .Players, &self.mSelectedObj);
+            try self.mGameModePanel.OnImguiRender(engine_context, current_world, .GameModes, &self.mSelectedObj);
+            try self._ComponentsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
+            try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             try self._StatsPanel.OnImguiRender(engine_context);
             try self.OnImguiRender(engine_context);
             try self.RenderViewports(engine_context);
@@ -400,6 +400,9 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
                 }
             }
         },
+        .SelectObjectEvent => |e| {
+            self.mSelectedObj = e.mObject;
+        },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
     return true;
@@ -484,18 +487,24 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
         .ViewportPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
         .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
     };
+
+    const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
+    const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5)); //note here we use aspect ratio cuz its editor
+    const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
+    const ray_offset_x: f32 = -tan_half_fov * viewpoint_component.mAspectRatio;
+    const ray_offset_y: f32 = tan_half_fov;
+
     try engine_context.mRenderer.OnUpdate(
         self.mActiveWorldType,
         engine_context,
         .{
-            .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
             .mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] }, //this is in (x, y, z) format
+            .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
+            .mRayScale = [2]f32{ ray_scale_x, ray_scale_y },
+            .mRayOffset = [2]f32{ ray_offset_x, ray_offset_y },
             .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-            .mResolutionWidth = @floatFromInt(viewpoint_component.mViewportWidth),
-            .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
-            .mAspectRatio = viewpoint_component.mAspectRatio,
-            .mFOV = viewpoint_component.mPerspectiveFOVRad,
-            .mMode = 0b1,
+            .mQuadsCount = 0,
+            .mGlyphsCount = 0,
         },
         &render_component.mFrameBuffer,
     );
@@ -527,6 +536,12 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
         };
 
+        const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
+        const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5)); //note here we use aspect ratio cuz its editor
+        const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
+        const ray_offset_x: f32 = -tan_half_fov * viewpoint_component.mAspectRatio;
+        const ray_offset_y: f32 = tan_half_fov;
+
         try engine_context.mRenderer.OnUpdate(
             self.mActiveWorldType,
             engine_context,
@@ -534,11 +549,10 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
                 .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
                 .mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] }, //this is in (x, y, z) format
                 .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-                .mResolutionWidth = @floatFromInt(viewpoint_component.mViewportWidth),
-                .mResolutionHeight = @floatFromInt(viewpoint_component.mViewportHeight),
-                .mAspectRatio = viewpoint_component.mAspectRatio,
-                .mFOV = viewpoint_component.mPerspectiveFOVRad,
-                .mMode = 0b1,
+                .mRayScale = [2]f32{ ray_scale_x, ray_scale_y },
+                .mRayOffset = [2]f32{ ray_offset_x, ray_offset_y },
+                .mQuadsCount = 0,
+                .mGlyphsCount = 0,
             },
             &render_component.mFrameBuffer,
         );

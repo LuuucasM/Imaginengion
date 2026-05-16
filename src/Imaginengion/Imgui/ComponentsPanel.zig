@@ -20,13 +20,13 @@ _P_Open: bool = true,
 
 pub fn Init(_: *ComponentsPanel) void {}
 
-pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, selected_object_opt: ?SelectedObject) !void {
+pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, selected_object_opt: *?SelectedObject) !void {
     const zone = Tracy.ZoneInit("Components Panel OIR", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;
 
-    if (selected_object_opt) |selected_object| {
+    if (selected_object_opt.*) |selected_object| {
         switch (selected_object) {
             .entity => |e| try RenderBegin(Entity, engine_context, e),
             .scene_layer => |s| try RenderBegin(SceneLayer, engine_context, s),
@@ -51,7 +51,7 @@ fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object
     const object_name = object.GetName();
     const name_len = std.mem.indexOf(u8, object_name, &.{0}) orelse object_name.len;
     const trimmed_name = object_name[0..name_len];
-    const name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "Components - {s}###Components\x00", .{trimmed_name}, 0);
+    const name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "Components - {s}###Components", .{trimmed_name}, 0);
 
     _ = imgui.igBegin(name.ptr, null, 0);
 }
