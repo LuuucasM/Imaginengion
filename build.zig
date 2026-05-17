@@ -9,12 +9,18 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const enable_tracy = b.option(bool, "enable-tracy", "Enable the CPU profiler tracy");
-    const enable_nsight = b.option(bool, "enable-nsight", "Enable the GPU profiler nvidia nsight");
+    const enable_tracy = b.option(bool, "enable-tracy", "Enable the CPU profiler tracy") orelse false;
+    const enable_nsight = b.option(bool, "enable-nsight", "Enable the GPU profiler nvidia nsight") orelse false;
     const no_bin = b.option(bool, "no-bin", "skip emitting compiler binary") orelse false;
-    //function builds the entire engine lib including the dependencies and all
+    const test_build = b.option(bool, "test-build", "has run step depend on tests") orelse false;
 
-    const engine_module = MakeEngineLib(b, target, optimize, enable_tracy, enable_nsight, .Full) catch @panic("error!!!");
+    var build_options = b.addOptions();
+    build_options.addOption(bool, "enable_tracy", enable_tracy);
+    build_options.addOption(bool, "enable_nsight", enable_nsight);
+
+    const engine_module = MakeEngineLib(b, target, optimize, .Full) catch @panic("error!!!");
+
+    engine_module.addOptions("build_options", build_options);
 
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",
@@ -54,11 +60,26 @@ pub fn build(b: *std.Build) void {
     //skip field tests
     const skip_field_tests = b.addTest(.{ .root_module = b.createModule(.{
         .target = target,
-        .optimize = optimize,
-        .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Core/SkipField.zig" } },
+        .optimize = .Debug,
+        .root_source_file = b.path("src/Imaginengion/Core/SkipField.zig"),
     }) });
     const run_skip_field_tests = b.addRunArtifact(skip_field_tests);
 
     test_step.dependOn(&run_skip_field_tests.step);
+
+    //LinAlg test_step
+    const lin_alg_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .target = target,
+        .optimize = .Debug,
+        .root_source_file = b.path("src/Imaginengion/Math/LinAlg.zig"),
+    }) });
+
+    const run_lin_alg_tests = b.addRunArtifact(lin_alg_tests);
+
+    test_step.dependOn(&run_lin_alg_tests.step);
+
+    if (test_build) {
+        run_step.dependOn(test_step);
+    }
     //=========================================END TEST STEP==================================================
 }

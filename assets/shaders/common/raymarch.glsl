@@ -46,7 +46,7 @@ vec4 RayMarch(vec3 ray_origin, vec3 ray_dir) {
     float dist_origin = 0.0;
 
     for (uint i = 0u; i < MAX_STEPS; i++) {
-        vec3     p         = ray_origin + dist_origin * ray_dir;
+        vec3 p = ray_origin + dist_origin * ray_dir;
         DistData next_step = ShortestDistance(p);
         dist_origin += next_step.min_dist;
 

@@ -1,5 +1,6 @@
 - zig build --watch -fincremental -Dno-bin
 - zig build --watch --error-style verbose_clear -fincremental -Dno-bin
+- zig build-obj assets/shaders/SDFVertShader.zig -target spirv32-vulkan -ofmt=spirv -mcpu vulkan_v1_2 -fno-llvm -femit-bin=assets/shaders/SDFVertShader.spv
 - change windowing/renderer/input to SDL3
 - i can split rendering into 2 parts one for overlay layer and one for game layer and then a 3rd pass to compose the overlay layer on top
 	- this means i can split textures a little better instead of doing it all in one and dealing with 16 8k textures only

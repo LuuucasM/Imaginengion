@@ -11,21 +11,7 @@ const LightBuild = enum {
     Full,
 };
 
-pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, enable_tracy: ?bool, enable_nsight: ?bool, build_type: LightBuild) !*std.Build.Module {
-    //---------------------------BUILD OPTIONS--------------------------
-    var build_options = b.addOptions();
-    if (enable_tracy != null and enable_tracy.? == true) {
-        build_options.addOption(bool, "enable_tracy", true);
-    } else {
-        build_options.addOption(bool, "enable_tracy", false);
-    }
-    if (enable_nsight != null and enable_nsight.? == true) {
-        build_options.addOption(bool, "enable_nsight", true);
-    } else {
-        build_options.addOption(bool, "enable_nsight", false);
-    }
-    //--------------------------END BUILD OPTIONS------------------------
-
+pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, build_type: LightBuild) !*std.Build.Module {
     //----------------------------------------------------NFD---------------------------------------------------------
     const nfd_c = b.addTranslateC(.{
         .optimize = optimize,
@@ -207,8 +193,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
         engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
         engine_module.linkSystemLibrary("stb", .{ .needed = true });
     }
-
-    engine_module.addOptions("build_options", build_options);
 
     return engine_module;
 } //-------------------------------------------------------- END IMAGINENGION--------------------------------------------------------------

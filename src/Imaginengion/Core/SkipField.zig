@@ -39,6 +39,12 @@ pub fn StaticSkipField(size: usize) type {
         pub const AllSkip: Self = .{ .mSkipField = AllSkipArr, .mNumUnskipped = 0 };
         pub const NoSkip: Self = .{ .mSkipField = NoSkipArr, .mNumUnskipped = size };
 
+        comptime {
+            if (size == 0) {
+                @compileError("SkipField size must be greater than 0!\n");
+            }
+        }
+
         const ResetOption = enum(u1) {
             AllSkip = 0,
             NoSkip = 1,
@@ -60,8 +66,8 @@ pub fn StaticSkipField(size: usize) type {
             }
         };
 
-        mSkipField: SkipFieldArrayT = AllSkipArr,
-        mNumUnskipped: usize = 0,
+        mSkipField: SkipFieldArrayT,
+        mNumUnskipped: usize,
 
         /// Resets the skip field based on the specified option.
         ///
@@ -100,17 +106,18 @@ pub fn StaticSkipField(size: usize) type {
             _ValidateIndexType(@TypeOf(in_index));
             std.debug.assert(size > in_index);
 
-            const index: SkipFieldType = @intCast(in_index);
+            var index: SkipFieldType = @intCast(in_index);
+            defer index += 0;
+
+            if (self.mSkipField[index] != 0) return; //alreday a skipped index
 
             if (size < 2) {
                 self.mSkipField[0] = 1;
                 return;
             }
-            //alreday a skipped index
-            if (self.mSkipField[index] != 0) return;
 
-            const left_non_zero = index > 0 and self.mSkipField[index - 1] > 0;
-            const right_non_zero = index < size - 1 and self.mSkipField[index + 1] > 0;
+            const left_non_zero = (index > 0) and (self.mSkipField[index - 1] > 0);
+            const right_non_zero = (index < size - 1) and (self.mSkipField[index + 1] > 0);
 
             //left and right are zero
             if (!left_non_zero and !right_non_zero) {
@@ -139,7 +146,6 @@ pub fn StaticSkipField(size: usize) type {
                 self.mSkipField[index + right_val] = new_value;
                 self.mSkipField[index] = 1;
             }
-
             self.mNumUnskipped -= 1;
         }
 
@@ -157,7 +163,8 @@ pub fn StaticSkipField(size: usize) type {
             _ValidateIndexType(@TypeOf(in_index));
             std.debug.assert(size > in_index);
 
-            const index: SkipFieldType = @intCast(in_index);
+            var index: SkipFieldType = @intCast(in_index);
+            defer index += 0;
 
             if (size < 2) {
                 self.mSkipField[0] = 0;
@@ -369,7 +376,7 @@ test "Init Large Field" {
 }
 
 test "Large Change To Skip" {
-    const FieldSize = 10;
+    const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
     var field: SkipFieldT = .NoSkip;
@@ -395,16 +402,10 @@ test "Large Change To Skip" {
 }
 
 test "Large Change To UnSkip" {
-    const FieldSize = 10;
+    const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
     var field: SkipFieldT = .AllSkip;
-
-    field.ChangeToSkipped(4);
-    field.ChangeToSkipped(0);
-    field.ChangeToSkipped(3);
-    field.ChangeToSkipped(1);
-    field.ChangeToSkipped(2);
 
     field.ChangeToUnskipped(4);
     try std.testing.expect(field.mSkipField[0] == 4);
@@ -544,28 +545,27 @@ test "Test Difference" {
     try std.testing.expect(!field.IndexIsUnskipped(1));
 }
 
-test "Matches Mask" {
+test "IsUnskippedSuperSet" {
     const FieldSize = 5;
     const SkipFieldT = StaticSkipField(FieldSize);
 
     var field: SkipFieldT = .AllSkip;
-    var mask: SkipFieldT.SkipFieldArrayT = SkipFieldT.SkipFieldArrayT{ 1, 1, 1, 1, 1 };
-    var mask_vec: SkipFieldT.SkipFieldVectorT = undefined;
+    var mask: SkipFieldT = .AllSkip;
+
+    try std.testing.expect(field.IsUnskippedSuperSet(&mask));
 
     field.ChangeToUnskipped(1);
-    mask[1] = 0;
-    mask_vec = mask;
+    mask.ChangeToUnskipped(1);
 
-    try std.testing.expect(field.MatchesMask(&mask_vec));
+    try std.testing.expect(field.IsUnskippedSuperSet(&mask));
 
-    mask[2] = 0;
-    mask_vec = mask;
+    mask.ChangeToUnskipped(2);
 
-    try std.testing.expect(!field.MatchesMask(&mask_vec));
+    try std.testing.expect(!field.IsUnskippedSuperSet(&mask));
 
     field.ChangeToUnskipped(2);
 
-    try std.testing.expect(field.MatchesMask(&mask_vec));
+    try std.testing.expect(field.IsUnskippedSuperSet(&mask));
 }
 
 test "IsAllUnskipped" {

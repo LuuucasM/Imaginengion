@@ -15,9 +15,7 @@ struct QuadData {
     float TilingFactor;
     vec4  Color;
     vec4  TexCoords; 
-    uint  TexLayer;
-    vec2  TexUVOffset;
-    vec2  TexUVScale;
+    uint  TextureHandle;
 };
 
 struct GlyphData {
@@ -30,10 +28,6 @@ struct GlyphData {
     vec4  AtlasBounds;
     vec4  PlaneBounds;
     // Replaces: AtlasIndex: uint, TexIndex: uint
-    uint  AtlasLayer;
-    vec2  AtlasUVOffset;
-    vec2  AtlasUVScale;
-    uint  TexLayer;
-    vec2  TexUVOffset;
-    vec2  TexUVScale;
+    uint AtlasHandle;
+    uint TextureHandle;
 };

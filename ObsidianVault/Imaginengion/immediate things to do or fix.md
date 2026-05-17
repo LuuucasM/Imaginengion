@@ -1,9 +1,13 @@
-- change frame buffer to not use in engine textures but sdl_gpu textures instead
-	- its currently not really possible on sdl_gpu to use the texture atlas also directly as a render target. sdl_gpu would need to expose more stuff for this (of course sdl_gpu needs to expose a lot of things but its designer is very reluctant about literally every solution lol)'
-	- for now since i do not need the functionality i will not have frame buffers be able to be textures for game objects. although it is used in game dev and should be possible in the future i will have to instead come up with a system where i move pixels from the framebuffer onto the texture atlas but only when being used. idk future me problem
-	- this also simplifies the viewport/play panel display since i dont need ot make a texture specifically for imgui anymore
-- so get rid of quad frame buffer display, just make it simply asset handle again
-- change frame buffer to raw sdl_gpu handles instead of Texture2D
-- change ivewport panel displays to use the frame buffers GetTexture instead
+
+- Finish migrating math and math types to new files / functions and stuff
+	- because zig made indexing at runtime not allowed and my like entire engine is built on vectors so it would have taken me a lot of time to fix things anyway so i decided to take this moment to enhance the math stuff.
+	- zig is planning on adding dedicated spirv equivlanet types in the future and possibly i might want to use those in the future?
+	- but for now my idea is to take the leap into making vectors a packed struct with methods. this way you can use my_vec.x, .y, .z, etc which wasnt possible with raw vectors.
+	- if I want people to use my engine in the future i better make it feel more accessible so this is my attempt.
+- after finish migrating make sure to write tests for everything :)
+- then continue on my journy of migrating my shaders into zig
+	- recently zig started to support spirv as a target backend thanks to llvm. it is not fully fleshed out yet so like for example right now i cannot do texture arrays with sampler2d 
+	- but i had to change my shaders due to new rendering pipline so similar to the math stuff i figured if im going to rework my shaders i might as well using the new tools which will be better in the long run
+	- another reason for why i needed to write the math library is because since the shaders wil be written in zig I can share definitions between the main program and the shaders which means I can use the same data structures, functions, etc. so it should be much easier to write and maintain a higher quality shader due to this
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine

@@ -199,8 +199,10 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
-    "longer term things to do or fix.md",
+    "Engine Notes/2026 5 May/All of may.md",
     "immediate things to do or fix.md",
+    "Engine Notes/2026 5 May",
+    "longer term things to do or fix.md",
     "Engine Notes/2026 4 April/2026.04.19.md",
     "Engine Notes/2026 4 April/2026.04.05.md",
     "Engine Notes/2026 4 April/2026.04.04.md",
@@ -228,7 +230,6 @@
     "Game objects.md",
     "Scenes.md",
     "Renderer.md",
-    "Static SkipField.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

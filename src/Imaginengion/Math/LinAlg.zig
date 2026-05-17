@@ -58,30 +58,6 @@ pub fn Mat4ToArray(m1: Mat4f32) [4][4]f32 {
     };
 }
 
-pub fn PrintVec(v: anytype) void {
-    if (@typeInfo(@TypeOf(v)) != .vector) return;
-
-    const vlen = @typeInfo(@TypeOf(v)).vector.len;
-
-    var i: usize = 0;
-    while (i < vlen) : (i += 1) {
-        std.debug.print("{d:.4} ", .{v[i]});
-    }
-    std.debug.print("\n", .{});
-}
-
-pub fn PrintMat4(m: Mat4f32) void {
-    var i: usize = 0;
-    while (i < 4) : (i += 1) {
-        PrintVec(m[i]);
-    }
-    std.debug.print("\n", .{});
-}
-
-pub fn PrintQuat(q: Quatf32) void {
-    std.debug.print("{d:.4} {d:.4} {d:.4} {d:.4}\n\n", .{ q[0], q[1], q[2], q[3] });
-}
-
 pub fn DegreesToRadians(degrees: anytype) @TypeOf(degrees) {
     std.debug.assert(@typeInfo(@TypeOf(degrees)) == .float or
         @typeInfo(@TypeOf(degrees)) == .comptime_float);
@@ -442,6 +418,10 @@ pub fn Vec3CrossVec3(x: Vec3f32, y: Vec3f32) Vec3f32 {
         x[2] * y[0] - x[0] * y[2],
         x[0] * y[1] - x[1] * y[0],
     };
+}
+
+pub fn RotateVec3QuatInv(q: Quatf32, v: Vec3f32) Vec3f32 {
+    return RotateVec3Quat(Quatf32{ q[0], -q[1], -q[2], -q[3] }, v);
 }
 
 pub fn RotateVec3Quat(q: Quatf32, v: Vec3f32) Vec3f32 {
