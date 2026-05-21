@@ -1,6 +1,17 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
-const MathUtils = @import("MathUtils.zig");
+const math = std.math;
+
+pub const Axis = enum { x, y, z };
+pub fn Mat4Identity(comptime number_type: type) Mat4(number_type) {
+    _ValidateNumberType(number_type);
+    return Mat4(number_type){ .cols = .{
+        Vec4(number_type){ .w = 1, .x = 0, .y = 0, .z = 0 },
+        Vec4(number_type){ .w = 0, .x = 1, .y = 0, .z = 0 },
+        Vec4(number_type){ .w = 0, .x = 0, .y = 1, .z = 0 },
+        Vec4(number_type){ .w = 0, .x = 0, .y = 0, .z = 1 },
+    } };
+}
 
 pub fn Vec2(comptime number_type: type) type {
     _ValidateNumberType(number_type);
@@ -27,11 +38,11 @@ pub fn Vec2(comptime number_type: type) type {
             }
         }
 
-        pub fn Dot(self: Self, other: Self) Self {
+        pub fn Dot(self: Self, other: Self) number_type {
             return @reduce(.Add, self.ToVector() * other.ToVector());
         }
 
-        pub fn Normalize(self: Self) void {
+        pub fn Normalize(self: *Self) void {
             const v = self.ToVector();
             const len = @sqrt(@reduce(.Add, v * v));
             if (len <= 0) {
@@ -154,11 +165,11 @@ pub fn Vec3(comptime number_type: type) type {
             }
         }
 
-        pub fn Dot(self: Self, other: Self) Self {
+        pub fn Dot(self: Self, other: Self) number_type {
             return @reduce(.Add, self.ToVector() * other.ToVector());
         }
 
-        pub fn Normalize(self: Self) void {
+        pub fn Normalize(self: *Self) void {
             const v = self.ToVector();
             const len = @sqrt(@reduce(.Add, v * v));
             if (len <= 0) {
@@ -226,6 +237,22 @@ pub fn Vec3(comptime number_type: type) type {
             _ = options;
             try writer.print("{s} - x: {}, y: {}, z: {}\n", .{ @typeName(Self), self.x, self.y, self.z });
         }
+        pub fn QuatRotate(self: Self, quat: Quat(number_type)) Self {
+            const quat_vect = Self{ .x = quat.x, .y = quat.y, .z = quat.z };
+
+            const uv = quat_vect.Cross(self);
+            const uuv = quat_vect.Cross(uv);
+
+            const expanded_uv = @as(VectorT, @splat(2.0)) * (uv.ToVector() * @as(VectorT, @splat(quat[0])));
+            const expanded_uuv = @as(VectorT, @splat(2.0)) * uuv.ToVector();
+
+            const res = self.ToVector() + expanded_uv + expanded_uuv;
+
+            return Self{ .x = res[0], .y = res[1], .z = res[2] };
+        }
+        pub fn InvQuatRotate(self: Self, quat: Quat(number_type)) Self {
+            return self.QuatRotate(quat.Conjugate());
+        }
     };
 }
 
@@ -240,6 +267,10 @@ pub fn Vec4(comptime number_type: type) type {
         y: number_type,
         z: number_type,
         w: number_type,
+
+        pub fn InitFromVector(vect: VectorT) Self {
+            return .{ .x = vect[0], .y = vect[1], .z = vect[2], .w = vect[3] };
+        }
 
         pub fn Len(self: Self) number_type {
             _EnsureFloat(number_type);
@@ -256,11 +287,11 @@ pub fn Vec4(comptime number_type: type) type {
             }
         }
 
-        pub fn Dot(self: Self, other: Self) Self {
+        pub fn Dot(self: Self, other: Self) number_type {
             return @reduce(.Add, self.ToVector() * other.ToVector());
         }
 
-        pub fn Normalize(self: Self) void {
+        pub fn Normalize(self: *Self) void {
             const len = self.Len();
             if (len <= 0) {
                 self.x = 0;
@@ -334,18 +365,129 @@ pub fn Vec4(comptime number_type: type) type {
     };
 }
 
-pub fn Mat4(comptime number_type: type) type {
+pub fn Mat3(comptime number_type: type) type {
     _ValidateNumberType(number_type);
     return packed struct {
         const Self = @This();
 
-        data: [4]Vec4(number_type),
+        cols: [3]Vec3(number_type),
+
+        pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
+            for (0..3) |i| {
+                try writer.print("{s}{d}: \n", .{ @typeName(Self), i });
+                self.data[i].format(fmt, options, writer);
+            }
+        }
+    };
+}
+
+pub fn Mat4(comptime number_type: type) type {
+    _ValidateNumberType(number_type);
+    return packed struct {
+        const Self = @This();
+        const Vec4T = Vec4(number_type);
+
+        cols: [4]Vec4T,
 
         pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
             for (0..4) |i| {
                 try writer.print("{s}{d}: \n", .{ @typeName(Self), i });
-                self.data[i].format(fmt, options, writer);
+                self.cols[i].format(fmt, options, writer);
             }
+        }
+
+        pub fn MulVec4(self: Self, vect: Vec4(number_type)) Vec4(number_type) {
+            const mov0: Vec4T.VectorT = @splat(vect.x);
+            const mov1: Vec4T.VectorT = @splat(vect.y);
+            const mov2: Vec4T.VectorT = @splat(vect.z);
+            const mov3: Vec4T.VectorT = @splat(vect.w);
+
+            const mul0 = self.cols[0].ToVector() * mov0;
+            const mul1 = self.cols[1].ToVector() * mov1;
+            const mul2 = self.cols[2].ToVector() * mov2;
+            const mul3 = self.cols[3].ToVector() * mov3;
+
+            const res = mul0 + mul1 + mul2 + mul3;
+
+            return Vec4T.InitFromVector(res);
+        }
+
+        pub fn Mat4MulMat4(self: Self, other: Self) Self {
+            return .{ .cols = [4]Vec4T{
+                self.MulVec4(other.cols[0]),
+                self.MulVec4(other.cols[1]),
+                self.MulVec4(other.cols[2]),
+                self.MulVec4(other.cols[3]),
+            } };
+        }
+
+        pub fn Inverse(self: Self) Self {
+            const Coef00 = self.cols[2].z * self.cols[3].w - self.cols[3].z * self.cols[2].w;
+            const Coef02 = self.cols[1].z * self.cols[3].w - self.cols[3].z * self.cols[1].w;
+            const Coef03 = self.cols[1].z * self.cols[2].w - self.cols[2].z * self.cols[1].w;
+
+            const Coef04 = self.cols[2].y * self.cols[3].w - self.cols[3].y * self.cols[2].w;
+            const Coef06 = self.cols[1].y * self.cols[3].w - self.cols[3].y * self.cols[1].w;
+            const Coef07 = self.cols[1].y * self.cols[2].w - self.cols[2].y * self.cols[1].w;
+
+            const Coef08 = self.cols[2].y * self.cols[3].z - self.cols[3].y * self.cols[2].z;
+            const Coef10 = self.cols[1].y * self.cols[3].z - self.cols[3].y * self.cols[1].z;
+            const Coef11 = self.cols[1].y * self.cols[2].z - self.cols[2].y * self.cols[1].z;
+
+            const Coef12 = self.cols[2].x * self.cols[3].w - self.cols[3].x * self.cols[2].w;
+            const Coef14 = self.cols[1].x * self.cols[3].w - self.cols[3].x * self.cols[1].w;
+            const Coef15 = self.cols[1].x * self.cols[2].w - self.cols[2].x * self.cols[1].w;
+
+            const Coef16 = self.cols[2].x * self.cols[3].z - self.cols[3].x * self.cols[2].z;
+            const Coef18 = self.cols[1].x * self.cols[3].z - self.cols[3].x * self.cols[1].z;
+            const Coef19 = self.cols[1].x * self.cols[2].z - self.cols[2].x * self.cols[1].z;
+
+            const Coef20 = self.cols[2].x * self.cols[3].y - self.cols[3].x * self.cols[2].y;
+            const Coef22 = self.cols[1].x * self.cols[3].y - self.cols[3].x * self.cols[1].y;
+            const Coef23 = self.cols[1].x * self.cols[2].y - self.cols[2].x * self.cols[1].y;
+
+            const Fac0 = Vec4T.VectorT{ Coef00, Coef00, Coef02, Coef03 };
+            const Fac1 = Vec4T.VectorT{ Coef04, Coef04, Coef06, Coef07 };
+            const Fac2 = Vec4T.VectorT{ Coef08, Coef08, Coef10, Coef11 };
+            const Fac3 = Vec4T.VectorT{ Coef12, Coef12, Coef14, Coef15 };
+            const Fac4 = Vec4T.VectorT{ Coef16, Coef16, Coef18, Coef19 };
+            const Fac5 = Vec4T.VectorT{ Coef20, Coef20, Coef22, Coef23 };
+
+            const vec0 = Vec4T.VectorT{ self.cols[1].x, self.cols[0].x, self.cols[0].x, self.cols[0].x };
+            const vec1 = Vec4T.VectorT{ self.cols[1].y, self.cols[0].y, self.cols[0].y, self.cols[0].y };
+            const vec2 = Vec4T.VectorT{ self.cols[1].z, self.cols[0].z, self.cols[0].z, self.cols[0].z };
+            const vec3 = Vec4T.VectorT{ self.cols[1].w, self.cols[0].w, self.cols[0].w, self.cols[0].w };
+
+            const Inv0 = vec1 * Fac0 - vec2 * Fac1 + vec3 * Fac2;
+            const Inv1 = vec0 * Fac0 - vec2 * Fac3 + vec3 * Fac4;
+            const Inv2 = vec0 * Fac1 - vec1 * Fac3 + vec3 * Fac5;
+            const Inv3 = vec0 * Fac2 - vec1 * Fac4 + vec2 * Fac5;
+
+            const SignA = Vec4T.VectorT{ 1, -1, 1, -1 };
+            const SignB = Vec4T.VectorT{ -1, 1, -1, 1 };
+
+            var inverse: [4]Vec4T.VectorT = .{
+                Inv0 * SignA,
+                Inv1 * SignB,
+                Inv2 * SignA,
+                Inv3 * SignB,
+            };
+
+            const Col0 = Vec4T.VectorT{ inverse[0][0], inverse[1][0], inverse[2][0], inverse[3][0] };
+
+            const Dot1 = self.cols[0].Dot(Vec4T.InitFromVector(Col0));
+
+            inverse[0] /= @as(Vec4T.VectorT, @splat(Dot1));
+            inverse[1] /= @as(Vec4T.VectorT, @splat(Dot1));
+            inverse[2] /= @as(Vec4T.VectorT, @splat(Dot1));
+            inverse[3] /= @as(Vec4T.VectorT, @splat(Dot1));
+
+            return .{ .cols = [4]Vec4T{
+                .{ .x = inverse[0][0], .y = inverse[0][1], .z = inverse[0][2], .w = inverse[0][3] },
+                .{ .x = inverse[1][0], .y = inverse[1][1], .z = inverse[1][2], .w = inverse[1][3] },
+                .{ .x = inverse[2][0], .y = inverse[2][1], .z = inverse[2][2], .w = inverse[2][3] },
+                .{ .x = inverse[3][0], .y = inverse[3][1], .z = inverse[3][2], .w = inverse[3][3] },
+            } };
         }
     };
 }
@@ -362,13 +504,24 @@ pub fn Quat(comptime number_type: type) type {
         y: number_type,
         z: number_type,
 
+        pub fn InitFromAxisAngle(axis: Vec3(number_type), angle: number_type) Self {
+            const half = angle * 0.5;
+            const s = @sin(half);
+            return Self{
+                .w = @cos(half),
+                .x = axis.x * s,
+                .y = axis.y * s,
+                .z = axis.z * s,
+            };
+        }
+
         pub fn Len(self: Self) number_type {
             _EnsureFloat(number_type);
             const q = self.ToVector();
             return @sqrt(@reduce(.Add, q * q));
         }
 
-        pub fn Normalize(self: Self) void {
+        pub fn Normalize(self: *Self) void {
             const len = self.Len();
             if (len <= 0) {
                 self.w = 1;
@@ -381,6 +534,13 @@ pub fn Quat(comptime number_type: type) type {
                 self.y /= len;
                 self.z /= len;
             }
+        }
+
+        pub fn Normalized(self: Self) Self {
+            const len = self.Len();
+            if (len <= 0) return Self{ .w = 1, .x = 0, .y = 0, .z = 0 };
+            const v = self.ToVector() / @as(VectorT, @splat(len));
+            return @bitCast(v);
         }
 
         pub fn MulQuat(self: Self, other: Self) Self {
@@ -413,12 +573,42 @@ pub fn Quat(comptime number_type: type) type {
             const r2: [2]number_type = two2 * @Vector(2, number_type){ xy - zw, yz + xw };
             const r3: [2]number_type = two2 * @Vector(2, number_type){ xz + yw, yz - xw };
 
-            return Mat4(number_type){ .data = [4]Vec4(number_type){
+            return Mat4(number_type){ .cols = [4]Vec4(number_type){
                 Vec4(number_type){ .x = diag[0], .y = r2[0], .z = r3[0], .w = 0 },
                 Vec4(number_type){ .x = r1[0], .y = diag[1], .z = r3[1], .w = 0 },
                 Vec4(number_type){ .x = r1[1], .y = r2[1], .z = diag[2], .w = 0 },
                 Vec4(number_type){ .x = 0, .y = 0, .z = 0, .w = 1 },
             } };
+        }
+
+        pub fn ToMat3(self: Self) Mat3(number_type) {
+            const v = self.ToVector();
+            const q2: ArrT = v * v;
+            return Mat3(number_type){ .cols = [3]Vec3(number_type){
+                Vec3(number_type){
+                    .x = q2[0] + q2[1] - q2[2] - q2[3],
+                    .y = 2 * (self.x * self.y + self.w * self.z),
+                    .z = 2 * (self.x * self.z - self.w * self.y),
+                },
+                Vec3(number_type){
+                    .x = 2 * (self.x * self.y - self.w * self.z),
+                    .y = q2[0] - q2[1] + q2[2] - q2[3],
+                    .z = 2 * (self.y * self.z + self.w * self.x),
+                },
+                Vec3(number_type){
+                    .x = 2 * (self.x * self.z + self.w * self.y),
+                    .y = 2 * (self.y * self.z - self.w * self.x),
+                    .z = q2[0] - q2[1] - q2[2] + q2[3],
+                },
+            } };
+        }
+
+        pub fn Normal(self: Self, axis: Axis) Vec3(number_type) {
+            return switch (axis) {
+                .x => self.ToMat3().cols[0],
+                .y => self.ToMat3().cols[1],
+                .z => self.ToMat3().cols[2],
+            };
         }
 
         pub fn ToVector(self: Self) VectorT {
@@ -430,10 +620,99 @@ pub fn Quat(comptime number_type: type) type {
             _ = options;
             try writer.print("{s} - w: {}, x: {}, y: {}, z: {}\n", .{ @typeName(Self), self.w, self.x, self.y, self.z });
         }
+        pub fn ToDegrees(self: Self) Vec3(number_type) {
+            const rad = VectorT{ self.GetPitch(), self.GetYaw(), self.GetRoll() };
+            const to_deg = @as(VectorT, @splat(180.0 / math.pi));
+            const res = rad * to_deg;
+            return Vec3(number_type){ .x = res[0], .y = res[1], .z = res[2] };
+        }
+        pub fn GetPitch(self: Self) number_type {
+            const y = 2.0 * (self.y * self.z + self.w * self.x);
+            const x = 1.0 - 2.0 * (self.x * self.x + self.y * self.y);
+
+            if (std.math.approxEqRel(number_type, x, 0.0, 0.0000001) and std.math.approxEqRel(number_type, y, 0.0, 0.0000001)) {
+                return math.atan2(self.x, self.w) * 2;
+            }
+            return math.atan2(y, x);
+        }
+
+        pub fn GetYaw(self: Self) number_type {
+            return math.asin(math.clamp(-2.0 * (self.x * self.z - self.w * self.y), -1.0, 1.0));
+        }
+
+        pub fn GetRoll(self: Self) number_type {
+            const y = 2.0 * (self.x * self.y + self.w * self.z);
+            const sqr = self.ToVector() * self.ToVector();
+            const x = sqr[0] + sqr[1] - sqr[2] - sqr[3];
+
+            if (std.math.approxEqRel(number_type, x, 0.0, 0.0000001) and std.math.approxEqRel(number_type, y, 0.0, 0.0000001)) {
+                return 0.0;
+            }
+            return math.atan2(y, x);
+        }
+        pub fn Conjugate(self: Self) Self {
+            return .{ .w = self.w, .x = -self.x, .y = -self.y, .z = -self.z };
+        }
+        pub fn FromRadians(vec: Vec3(number_type)) Self {
+            const hp = vec.x * 0.5;
+            const hy = vec.y * 0.5;
+            const hr = vec.z * 0.5;
+
+            const cp = @cos(hp);
+            const sp = @sin(hp);
+            const cy = @cos(hy);
+            const sy = @sin(hy);
+            const cr = @cos(hr);
+            const sr = @sin(hr);
+
+            return Self{
+                .w = cr * cp * cy + sr * sp * sy,
+                .x = sr * cp * cy - cr * sp * sy,
+                .y = cr * sp * cy + sr * cp * sy,
+                .z = cr * cp * sy - sr * sp * cy,
+            };
+        }
+        pub fn FromDegrees(vect: Vec3(number_type)) Self {
+            const to_rad = math.pi / 180.0;
+            const rad = vect.ToVector() * to_rad;
+            return Self.FromEuler(.{ .x = rad[0], .y = rad[1], .z = rad[2] });
+        }
+
+        pub fn Dot(self: Self, other: Self) number_type {
+            const a = self.ToVector();
+            const b = other.ToVector();
+            return @reduce(.Add, a * b);
+        }
+
+        pub fn Slerp(self: Self, other: Self, t: number_type) Self {
+            var dot = self.Dot(other);
+            var other_adj = other;
+
+            if (dot < 0.0) {
+                other_adj = Self{ .w = -other.w, .x = -other.x, .y = -other.y, .z = -other.z };
+                dot = -dot;
+            }
+
+            if (dot > 0.9995) {
+                const a = self.ToVector();
+                const b = other_adj.ToVector();
+                const res = a + @as(VectorT, @splat(t)) * (b - a);
+                const q: Self = @bitCast(res);
+                return q.Normalized();
+            }
+
+            const theta = math.acos(dot);
+            const sin_theta = @sin(theta);
+            const scale_a = @sin((1.0 - t) * theta) / sin_theta;
+            const scale_b = @sin(t * theta) / sin_theta;
+
+            const a = self.ToVector();
+            const b = other_adj.ToVector();
+            const res = @as(VectorT, @splat(scale_a)) * a + @as(VectorT, @splat(scale_b)) * b;
+            return @bitCast(res);
+        }
     };
 }
-
-//testing
 
 pub fn _ValidateNumberType(comptime number_type: type) void {
     const type_info = @typeInfo(number_type);

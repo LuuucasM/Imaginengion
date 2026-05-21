@@ -1,4 +1,5 @@
 
+- Go through each struct and write a test block for each one with a compile error in it so i make sure i dont try and compile and run without actually running tests first
 - Finish migrating math and math types to new files / functions and stuff
 	- because zig made indexing at runtime not allowed and my like entire engine is built on vectors so it would have taken me a lot of time to fix things anyway so i decided to take this moment to enhance the math stuff.
 	- zig is planning on adding dedicated spirv equivlanet types in the future and possibly i might want to use those in the future?
