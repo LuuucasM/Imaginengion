@@ -68,15 +68,15 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_skip_field_tests.step);
 
     //LinAlg test_step
-    const lin_alg_tests = b.addTest(.{ .root_module = b.createModule(.{
+    const math_types_tests = b.addTest(.{ .root_module = b.createModule(.{
         .target = target,
         .optimize = .Debug,
-        .root_source_file = b.path("src/Imaginengion/Math/LinAlg.zig"),
+        .root_source_file = b.path("src/Imaginengion/Math/MathTypes.zig"),
     }) });
 
-    const run_lin_alg_tests = b.addRunArtifact(lin_alg_tests);
+    const run_math_types_test = b.addRunArtifact(math_types_tests);
 
-    test_step.dependOn(&run_lin_alg_tests.step);
+    test_step.dependOn(&run_math_types_test.step);
 
     if (test_build) {
         run_step.dependOn(test_step);
