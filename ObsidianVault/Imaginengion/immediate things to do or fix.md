@@ -1,5 +1,6 @@
 
-- finish writing testing for Mat4 and Quat
+- convert all the vec4f32, mat4f32, etc in the engine to new MathType stuff
+	- this means also all the places wher ei use to do like Vec4f32\[0] needs to be changed to .x and stuff like that
 - Finish migrating math and math types to new files / functions and stuff
 	- because zig made indexing at runtime not allowed and my like entire engine is built on vectors so it would have taken me a lot of time to fix things anyway so i decided to take this moment to enhance the math stuff.
 	- zig is planning on adding dedicated spirv equivlanet types in the future and possibly i might want to use those in the future?

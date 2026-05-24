@@ -1,5 +1,5 @@
 const std = @import("std");
-const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
+const Vec4 = @import("../Math/MathTypes.zig").Vec4;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const sdl = @import("../Core/CImports.zig").sdl;
 const EngineContext = @import("../Core/EngineContext.zig");

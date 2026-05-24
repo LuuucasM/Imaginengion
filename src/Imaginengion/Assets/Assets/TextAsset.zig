@@ -1,9 +1,9 @@
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
-const LinAlg = @import("../../Math/LinAlg.zig");
 const AssetHandle = @import("../AssetHandle.zig");
-const Vec4f32 = LinAlg.Vec4f32;
-const Vec2f32 = LinAlg.Vec2f32;
+const MathTypes = @import("../../Math/MathTypes.zig");
+const Vec4 = MathTypes.Vec4;
+const Vec2 = MathTypes.Vec2;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Texture2D = @import("Texture2D.zig");
 const TextAsset = @This();
@@ -11,8 +11,8 @@ const TextAsset = @This();
 const KerningsT = std.AutoHashMap(u16, f32);
 
 const GlyphInfo = struct {
-    mPlaneBounds: Vec4f32 = Vec4f32{ -1, -1, -1, -1 }, //0 == left, 1 == top, 2 == right, 1 == bottom
-    mAtlasBounds: Vec4f32 = Vec4f32{ -1, -1, -1, -1 }, //bounds 0 and 1 are x and y for top left UV, 2 and 3 are x and y for bottom right UV
+    mPlaneBounds: Vec4(f32) = .{ .x = -1, .y = -1, .z = -1, .w = -1 }, //0 == left, 1 == top, 2 == right, 1 == bottom
+    mAtlasBounds: Vec4(f32) = .{ .x = -1, .y = -1, .z = -1, .w = -1 }, //bounds 0 and 1 are x and y for top left UV, 2 and 3 are x and y for bottom right UV
     mAdvance: f32 = -1,
     mKernings: KerningsT = undefined,
 };
@@ -37,7 +37,7 @@ mLineHeight: f32 = 0.0,
 mAscender: f32 = 0.0,
 mDescender: f32 = 0.0,
 mEmsize: f32 = 0.0,
-mAtlasSize: Vec2f32 = Vec2f32{ 0, 0 },
+mAtlasSize: Vec2(f32) = .{ .x = 0, .y = 0 },
 mAtlas: Texture2D = .{},
 
 pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {

@@ -4,14 +4,14 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-const LinAlg = @import("../../Math/LinAlg.zig");
-const Vec4f32 = LinAlg.Vec4f32;
-const Vec2f32 = LinAlg.Vec2f32;
+const MathTypes = @import("../../Math/MathTypes.zig");
+const Vec4 = MathTypes.Vec4;
+const Vec2 = MathTypes.Vec4;
 
 pub const TexOptions = struct {
-    mColor: Vec4f32 = .{ 1.0, 1.0, 1.0, 1.0 },
+    mColor: Vec4(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
     mTilingFactor: f32 = 1.0,
-    mTexCoords: Vec4f32 = Vec4f32{ 0, 0, 1, 1 },
+    mTexCoords: Vec4(f32) = .{ .x = 0, .y = 0, .z = 1, .w = 1 },
 };
 
 pub const TextureFormat = enum(u4) {
