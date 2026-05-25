@@ -1,7 +1,6 @@
 const std = @import("std");
 const QuadData = @import("Renderer2D.zig").QuadData;
 const GlyphData = @import("Renderer2D.zig").GlyphData;
-const CircularHistory = @import("../Core/CircularHistory.zig").CircularHistory;
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Ray = MathTypes.Ray;

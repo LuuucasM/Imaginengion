@@ -1,7 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
-const MakeOptions = @import("MakeOptions.zig").MakeOptions;
+const build_shaders = @import("build_shaders.zig");
+const build_script = @import("build_script.zig");
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -9,11 +10,32 @@ const MakeOptions = @import("MakeOptions.zig").MakeOptions;
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const spirv_target = b.resolveTargetQuery(.{
+        .cpu_arch = .spirv64,
+        .os_tag = .vulkan,
+    });
 
-    const engine_module = MakeEngineLib(b, target, optimize, .Full) catch @panic("error!!!");
+    //==============================ENGINE MODULE===========================================================
+    const engine_module_eng = MakeEngineLib(b, target, optimize, .Full);
+    const engine_module_script = MakeEngineLib(b, target, optimize, .Script);
+    const engine_module_shader = MakeEngineLib(b, spirv_target, optimize, .Shader);
+    //=================================END ENGINE MODULE============================================================
 
-    const no_bin, const test_build = MakeOptions(b, engine_module);
+    //==================================OPTIONS============================================================
+    const enable_tracy = b.option(bool, "enable-tracy", "Enable tracy") orelse false;
+    const enable_nsight = b.option(bool, "enable-nsight", "Enable nsight") orelse false;
+    const no_bin = b.option(bool, "no-bin", "skip emitting binary") orelse false;
+    const test_build = b.option(bool, "test-build", "run depends on tests") orelse false;
 
+    var build_options = b.addOptions();
+    build_options.addOption(bool, "enable_tracy", enable_tracy);
+    build_options.addOption(bool, "enable_nsight", enable_nsight);
+
+    engine_module_eng.addOptions("build_options", build_options);
+    engine_module_script.addOptions("build_options", build_options);
+    //=======================================END OPTIONS========================================================
+
+    //=========================================EDITOR STEP=========================================
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",
         .root_module = b.createModule(.{
@@ -21,7 +43,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .root_source_file = b.path("src/Editor.zig"),
             .imports = &.{
-                .{ .name = "IM", .module = engine_module },
+                .{ .name = "IM", .module = engine_module_eng },
             },
         }),
     });
@@ -31,12 +53,7 @@ pub fn build(b: *std.Build) void {
     } else {
         b.installArtifact(editor_exe);
     }
-
-    // This allows the user to pass arguments to the application in the build
-    // command itself, like this: `zig build run -- arg1 arg2 etc`
-    //if (b.args) |args| {
-    //    run_cmd.addArgs(args);
-    //}
+    //=========================================END EDITOR STEP=====================================
 
     //================================================RUN STEP=======================================
     const run_cmd = b.addRunArtifact(editor_exe);
@@ -74,4 +91,12 @@ pub fn build(b: *std.Build) void {
         run_step.dependOn(test_step);
     }
     //=========================================END TEST STEP==================================================
+
+    //=========================================SHADER STEP=========================================
+    build_shaders.BuildShader(b, engine_module_shader, spirv_target, optimize);
+    //=========================================END SHADER STEP=====================================
+
+    //=========================================SCRIPT STEP=========================================
+    build_script.BuildScript(b, engine_module_script, target, optimize);
+    //=========================================END SCRIPT STEP=====================================
 }

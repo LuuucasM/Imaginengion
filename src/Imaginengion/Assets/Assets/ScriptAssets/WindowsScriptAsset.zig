@@ -33,8 +33,7 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
         .argv = &[_][]const u8{
             "zig",
             "build",
-            "--build-file",
-            "build_script.zig",
+            "script",
             path_arg,
             name_arg,
         },

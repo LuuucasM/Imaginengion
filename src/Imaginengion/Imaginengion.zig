@@ -14,6 +14,12 @@ pub const SceneLayer = @import("Scene/SceneLayer.zig");
 pub const ScriptType = @import("Assets/Assets/ScriptAsset.zig").ScriptType;
 pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
 
+//Rendering Stuff -------------------------------------------
+pub const PushConstants = @import("Renderer/RenderPipeline.zig").PushConstants;
+pub const QuatData = @import("Renderer/Renderer2D.zig").QuadData;
+pub const GlyphData = @import("Renderer/Renderer2D.zig").GlyphData;
+pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig");
+
 //LinAlg stuff
 const MathTypes = @import("Math/MathTypes.zig");
 pub const MathUtils = @import("Math/MathUtils.zig");

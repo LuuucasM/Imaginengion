@@ -1,17 +1,19 @@
 const std = @import("std");
 const gpu = std.gpu;
 
-const PushConstants = @import("../../src/Imaginengion/Renderer/RenderPipeline.zig").PushConstants;
-const QuadData = @import("../../src/Imaginengion/Renderer/Renderer2D.zig").QuadData;
-const GlyphData = @import("../../src/Imaginengion/Renderer/Renderer2D.zig").GlyphData;
-const RayMarcher = @import("../../src/Imaginengion/Renderer/SDFRayMarcher.zig");
-const MathTypes = @import("../../src/Imaginengion/Math/MathTypes.zig");
-const Vec2 = MathTypes.Vec2;
-const Vec3 = MathTypes.Vec3;
-const Quat = MathTypes.Quat;
+const PushConstants = @import("IM").PushConstants;
+const QuadData = @import("IM").QuadData;
+const GlyphData = @import("IM").GlyphData;
+const RayMarcher = @import("IM");
+const Vec2 = @import("IM").Vec2;
+const Vec3 = @import("IM").Vec3;
+const Quat = @import("IM").Quat;
 
 // layout(location = 0) out vec4 oFragColor
-extern var oFragColor: @Vector(4, f32) addrspace(.output);
+const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
+    .name = "oFragColor",
+    .decoration = .{ .location = 0 },
+});
 
 // layout(set = 3, binding = 0) uniform CameraUBO
 extern const CameraUBO: PushConstants addrspace(.uniform);
