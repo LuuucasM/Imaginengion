@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
+const MakeOptions = @import("MakeOptions.zig").MakeOptions;
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -9,18 +10,9 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const enable_tracy = b.option(bool, "enable-tracy", "Enable the CPU profiler tracy") orelse false;
-    const enable_nsight = b.option(bool, "enable-nsight", "Enable the GPU profiler nvidia nsight") orelse false;
-    const no_bin = b.option(bool, "no-bin", "skip emitting compiler binary") orelse false;
-    const test_build = b.option(bool, "test-build", "has run step depend on tests") orelse false;
-
-    var build_options = b.addOptions();
-    build_options.addOption(bool, "enable_tracy", enable_tracy);
-    build_options.addOption(bool, "enable_nsight", enable_nsight);
-
     const engine_module = MakeEngineLib(b, target, optimize, .Full) catch @panic("error!!!");
 
-    engine_module.addOptions("build_options", build_options);
+    const no_bin, const test_build = MakeOptions(b, engine_module);
 
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",

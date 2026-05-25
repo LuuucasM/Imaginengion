@@ -1,8 +1,4 @@
 const std = @import("std");
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec2f32 = LinAlg.Vec2f32;
-const Vec3f32 = LinAlg.Vec3f32;
-const Mat4f32 = LinAlg.Mat4f32;
 
 const SceneLayer = @import("SceneLayer.zig");
 const LayerType = @import("Components/SceneComponent.zig").LayerType;

@@ -6,12 +6,13 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
-const Vec2 = MathTypes.Vec4;
+const Vec2 = MathTypes.Vec2;
 
 pub const TexOptions = struct {
     mColor: Vec4(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
     mTilingFactor: f32 = 1.0,
-    mTexCoords: Vec4(f32) = .{ .x = 0, .y = 0, .z = 1, .w = 1 },
+    mTextureUV0: Vec2(f32) = .{ .x = 0, .y = 0 },
+    mTextureUV1: Vec2(f32) = .{ .x = 1, .y = 1 },
 };
 
 pub const TextureFormat = enum(u4) {

@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const WindowEvent = @import("../Events/WindowEventData.zig").Event;
 
 const sdl = @import("../Core/CImports.zig").sdl;

@@ -25,10 +25,6 @@ const TextureManager = @import("../TextureManager/TextureManager.zig");
 const RenderPipeline = @import("RenderPipeline.zig");
 const PushConstants = RenderPipeline.PushConstants;
 
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec3f32 = LinAlg.Vec3f32;
-const Quatf32 = LinAlg.Quatf32;
-
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Tracy = @import("../Core/Tracy.zig");

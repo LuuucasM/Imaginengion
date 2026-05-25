@@ -1,9 +1,10 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const LinAlg = @import("../../Math/LinAlg.zig");
-const Mat4f32 = LinAlg.Mat4f32;
+const MathTypes = @import("../../Math/MathTypes.zig");
+const MathUtils = @import("../../Math/MathUtils.zig");
+const Mat4 = MathTypes.Mat4;
+const Vec4 = MathTypes.Vec4;
 
 const ViewpointComponent = @This();
 
@@ -25,13 +26,13 @@ mViewportWidth: usize = 1600,
 mViewportHeight: usize = 900,
 mAspectRatio: f32 = 0.0,
 
-mProjection: Mat4f32 = LinAlg.Mat4Identity(),
+mProjection: Mat4(f32) = MathUtils.Mat4Identity(f32),
 
 mIsFixedAspectRatio: bool = false,
-mPerspectiveFOVRad: f32 = LinAlg.DegreesToRadians(60.0),
+mPerspectiveFOVRad: f32 = MathUtils.DegreesToRadians(60.0),
 mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
-mAreaRect: Vec4f32 = Vec4f32{ 0.0, 0.0, 1.0, 1.0 },
+mAreaRect: Vec4(f32) = .{ .x = 0.0, .y = 0.0, .z = 1.0, .w = 1.0 },
 
 pub fn Deinit(_: *ViewpointComponent, _: *EngineContext) !void {}
 
@@ -42,7 +43,7 @@ pub fn SetPerspective(self: *ViewpointComponent, fov_radians: f32, near_clip: f3
     self.RecalculateProjection();
 }
 
-pub fn SetAreaRect(self: *ViewpointComponent, new_area: Vec4f32) void {
+pub fn SetAreaRect(self: *ViewpointComponent, new_area: Vec4(f32)) void {
     self.mAreaRect = new_area;
 }
 
@@ -58,7 +59,7 @@ pub fn SetViewportSize(self: *ViewpointComponent, width: usize, height: usize) v
 }
 
 fn RecalculateProjection(self: *ViewpointComponent) void {
-    self.mProjection = LinAlg.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
+    self.mProjection = MathUtils.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
 }
 
 pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
@@ -67,9 +68,9 @@ pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
     _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
 
     //print the size/far/near variables depending on projection type
-    var perspective_degrees = LinAlg.RadiansToDegrees(self.mPerspectiveFOVRad);
+    var perspective_degrees = MathUtils.RadiansToDegrees(self.mPerspectiveFOVRad);
     if (imgui.igDragFloat("FOV", &perspective_degrees, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
-        self.mPerspectiveFOVRad = LinAlg.DegreesToRadians(perspective_degrees);
+        self.mPerspectiveFOVRad = MathUtils.DegreesToRadians(perspective_degrees);
         self.RecalculateProjection();
     }
 
@@ -81,10 +82,10 @@ pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
         self.RecalculateProjection();
     }
 
-    var rect_area: [4]f32 = [4]f32{ self.mAreaRect[0], self.mAreaRect[1], self.mAreaRect[2], self.mAreaRect[3] };
+    var rect_area: [4]f32 = [4]f32{ self.mAreaRect.x, self.mAreaRect.y, self.mAreaRect.z, self.mAreaRect.w };
 
     if (imgui.igDragFloat4("Area Rect", &rect_area[0], 0.01, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_None)) {
-        self.SetAreaRect(Vec4f32{ rect_area[0], rect_area[1], rect_area[2], rect_area[3] });
+        self.SetAreaRect(.{ .x = rect_area[0], .y = rect_area[1], .z = rect_area[2], .w = rect_area[3] });
     }
 }
 
@@ -132,7 +133,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         } else if (std.mem.eql(u8, field_name, "PerspectiveFar")) {
             result.mPerspectiveFar = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "AreaRect")) {
-            result.mAreaRect = try std.json.innerParse(Vec4f32, frame_allocator, reader, options);
+            result.mAreaRect = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         }
     }
     result.RecalculateProjection();

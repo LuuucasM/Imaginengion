@@ -1,4 +1,4 @@
-const Vec3f32 = @import("../../Math/LinAlg.zig").Vec3f32;
+const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PhysicsComponent = @This();
@@ -15,10 +15,15 @@ pub const Ind: usize = blk: {
     }
 };
 
-mGravity: Vec3f32 = Vec3f32{ 0.0, -9.81, 0.0 },
+mGravity: Vec3(f32) = .{ .x = 0.0, .y = -9.81, .z = 0.0 },
 
 pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *PhysicsComponent, _: *EngineContext) !void {
-    _ = imgui.igInputFloat3("Gravity", &self.mGravity[0], "%.3f", 0);
+    var gravity_arr = [3]f32{ self.mGravity.x, self.mGravity.y, self.mGravity.z };
+    if (imgui.igInputFloat3("Gravity", &gravity_arr[0], "%.3f", 0)) {
+        self.mGravity.x = gravity_arr[0];
+        self.mGravity.y = gravity_arr[1];
+        self.mGravity.z = gravity_arr[2];
+    }
 }

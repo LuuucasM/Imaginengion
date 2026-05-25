@@ -1,5 +1,5 @@
 const std = @import("std");
-const Vec3f32 = @import("../../Math/LinAlg.zig").Vec3f32;
+const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const Entity = @import("../Entity.zig");
@@ -14,7 +14,7 @@ pub const Sphere = struct {
 };
 
 pub const Box = struct {
-    mHalfExtents: Vec3f32 = Vec3f32{ 1, 1, 1 },
+    mHalfExtents: Vec3(f32) = Vec3(f32){ .x = 1, .y = 1, .z = 1 },
 };
 
 pub const UColliderShape = union(enum) {
@@ -78,7 +78,10 @@ pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
             _ = imgui.igInputFloat("Radius", &collider.mRadius, 0.1, 1.0, "%.3f", 0);
         },
         .Box => |*collider| {
-            _ = imgui.igInputFloat3("Half Extents", &collider.mHalfExtents[0], "%.3f", 0);
+            var half_extents: f32 = 0;
+            if (imgui.igInputFloat3("Half Extents", &half_extents, "%.3f", 0)) {
+                collider.mHalfExtents.x = half_extents;
+            }
         },
     }
 }

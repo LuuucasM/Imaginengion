@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "immediate things to do or fix.md",
+                "file": "Engine Notes/2026 5 May/15.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "immediate things to do or fix"
+              "title": "15"
             }
           },
           {
@@ -199,10 +199,11 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
-    "Engine Notes/2026 5 May/All of may.md",
+    "Engine Notes/2026 5 May/25.md",
     "immediate things to do or fix.md",
-    "Engine Notes/2026 5 May",
     "longer term things to do or fix.md",
+    "Engine Notes/2026 5 May/15.md",
+    "Engine Notes/2026 5 May",
     "Engine Notes/2026 4 April/2026.04.19.md",
     "Engine Notes/2026 4 April/2026.04.05.md",
     "Engine Notes/2026 4 April/2026.04.04.md",
@@ -229,7 +230,6 @@
     "Optimizations to consider.md",
     "Game objects.md",
     "Scenes.md",
-    "Renderer.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

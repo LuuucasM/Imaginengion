@@ -76,11 +76,11 @@ test "Vec2 Tests" {
                 try std.testing.expectApproxEqAbs(ey, add.y, eps);
             }
         }
-        test "Vec2.MulScaler" {
+        test "Vec2.MulScalar" {
             const expected_x = [4]f32{ 7.5, 2.5, -5.0, 1.25 };
             const expected_y = [4]f32{ 10.0, 0.0, 7.5, 1.25 };
             for (tests, expected_x, expected_y) |st, ex, ey| {
-                const mul = st.a.MulScaler(2.5);
+                const mul = st.a.MulScalar(2.5);
                 try std.testing.expectApproxEqAbs(ex, mul.x, eps);
                 try std.testing.expectApproxEqAbs(ey, mul.y, eps);
             }
@@ -201,12 +201,12 @@ test "Vec3 Tests" {
                 try std.testing.expectApproxEqAbs(ez, cross.z, eps);
             }
         }
-        test "Vec3.MulScaler" {
+        test "Vec3.MulScalar" {
             const expected_x = [4]f32{ 7.5, 2.5, -5.0, 1.25 };
             const expected_y = [4]f32{ 10.0, 0.0, 7.5, 1.25 };
             const expected_z = [4]f32{ 0.0, 0.0, 2.5, 1.25 };
             for (tests, expected_x, expected_y, expected_z) |st, ex, ey, ez| {
-                const mul = st.a.MulScaler(2.5);
+                const mul = st.a.MulScalar(2.5);
                 try std.testing.expectApproxEqAbs(ex, mul.x, eps);
                 try std.testing.expectApproxEqAbs(ey, mul.y, eps);
                 try std.testing.expectApproxEqAbs(ez, mul.z, eps);
@@ -430,13 +430,13 @@ test "Vec4 Tests" {
                 try std.testing.expectApproxEqAbs(ew, sub.w, eps);
             }
         }
-        test "Vec4.MulScaler" {
+        test "Vec4.MulScalar" {
             const expected_x = [4]f32{ 2.5, 2.5, -2.5, 1.25 };
             const expected_y = [4]f32{ 5.0, 0.0, 5.0, 1.25 };
             const expected_z = [4]f32{ 7.5, 0.0, -7.5, 1.25 };
             const expected_w = [4]f32{ 10.0, 0.0, 10.0, 1.25 };
             for (tests, expected_x, expected_y, expected_z, expected_w) |st, ex, ey, ez, ew| {
-                const mul = st.a.MulScaler(2.5);
+                const mul = st.a.MulScalar(2.5);
                 try std.testing.expectApproxEqAbs(ex, mul.x, eps);
                 try std.testing.expectApproxEqAbs(ey, mul.y, eps);
                 try std.testing.expectApproxEqAbs(ez, mul.z, eps);

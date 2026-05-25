@@ -1,4 +1,5 @@
-const Vec3f32 = @import("../../Math/LinAlg.zig").Vec3f32;
+const std = @import("std");
+const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const RigidBodyComponent = @This();
@@ -18,8 +19,8 @@ pub const Ind: usize = blk: {
 
 mMass: f32 = 0.0,
 mInvMass: f32 = 0.0,
-mVelocity: Vec3f32 = Vec3f32{ 0.0, 0.0, 0.0 },
-mForce: Vec3f32 = Vec3f32{ 0.0, 0.0, 0.0 },
+mVelocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
+mForce: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 mUseGravity: bool = false,
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) !void {}

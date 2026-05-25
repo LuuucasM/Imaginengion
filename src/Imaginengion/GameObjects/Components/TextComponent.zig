@@ -1,9 +1,9 @@
 const std = @import("std");
 const AssetHandle = @import("../../Assets/AssetHandle.zig");
 const ComponentsList = @import("../../GameObjects/Components.zig").ComponentsList;
-const LinAlg = @import("../../Math/LinAlg.zig");
-const Vec4f32 = LinAlg.Vec4f32;
-const Vec2f32 = LinAlg.Vec2f32;
+const MathTypes = @import("../../Math/MathTypes.zig");
+const Vec4 = MathTypes.Vec4;
+const Vec2 = MathTypes.Vec2;
 const AssetsList = @import("../../Assets/Assets.zig");
 const FileMetaData = AssetsList.FileMetaData;
 const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
@@ -30,7 +30,7 @@ mTextAssetHandle: AssetHandle = .{},
 mTexHandle: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},
 mFontSize: f32 = 9,
-mBounds: Vec2f32 = Vec2f32{ 8, 8 },
+mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 mEngineAllocator: std.mem.Allocator = undefined,
 
 pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
@@ -101,8 +101,11 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
     try jw.objectField("TilingFactor");
     try jw.write(self.mTexOptions.mTilingFactor);
 
-    try jw.objectField("TexCoords");
-    try jw.write(self.mTexOptions.mTexCoords);
+    try jw.objectField("TextureUV0");
+    try jw.write(self.mTexOptions.mTextureUV0);
+
+    try jw.objectField("TextureUV1");
+    try jw.write(self.mTexOptions.mTextureUV1);
 
     //bounds
     try jw.objectField("Bounds");
@@ -160,13 +163,15 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
                 @panic("error appending slice, error out of memory");
             };
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mTexOptions.mColor = try std.json.innerParse(Vec4f32, frame_allocator, reader, options);
+            result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
             result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "TexCoords")) {
-            result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4f32, frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "TextureUV0")) {
+            result.mTexOptions.mTextureUV0 = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "TextureUV1")) {
+            result.mTexOptions.mTextureUV1 = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Bounds")) {
-            result.mBounds = try std.json.innerParse(Vec2f32, frame_allocator, reader, options);
+            result.mBounds = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
         }
     }
 

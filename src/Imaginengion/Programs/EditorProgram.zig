@@ -17,10 +17,11 @@ const GameMode = @import("../GameModes/GameMode.zig");
 const Assets = @import("../Assets/Assets.zig");
 const AudioAsset = Assets.AudioAsset;
 
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec3f32 = LinAlg.Vec3f32;
-const Quatf32 = LinAlg.Quatf32;
-const Vec4f32 = LinAlg.Vec4f32;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
+const Vec4 = MathTypes.Vec4;
+const Vec2 = MathTypes.Vec2;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
@@ -126,7 +127,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
-    self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
     try self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
@@ -137,7 +138,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
     self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
     self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
-    self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3f32{ 0.0, 0.0, 15.0 };
+    self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "assets/scripts/EditorCameraInput.zig", .Eng);
     try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
@@ -498,10 +499,10 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
         self.mActiveWorldType,
         engine_context,
         .{
-            .mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] }, //this is in (x, y, z) format
-            .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
-            .mRayScale = [2]f32{ ray_scale_x, ray_scale_y },
-            .mRayOffset = [2]f32{ ray_offset_x, ray_offset_y },
+            .mPosition = world_pos.ToVector(),
+            .mRotation = world_rot.ToVector(),
+            .mRayScale = Vec2(f32).VectorT{ ray_scale_x, ray_scale_y },
+            .mRayOffset = Vec2(f32).VectorT{ ray_offset_x, ray_offset_y },
             .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
             .mQuadsCount = 0,
             .mGlyphsCount = 0,
@@ -546,11 +547,11 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             self.mActiveWorldType,
             engine_context,
             .{
-                .mRotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] }, //this is in (w, x, y, z) format
-                .mPosition = [3]f32{ world_pos[0], world_pos[1], world_pos[2] }, //this is in (x, y, z) format
+                .mRotation = world_rot.ToVector(),
+                .mPosition = world_pos.ToVector(),
                 .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-                .mRayScale = [2]f32{ ray_scale_x, ray_scale_y },
-                .mRayOffset = [2]f32{ ray_offset_x, ray_offset_y },
+                .mRayScale = Vec2(f32).VectorT{ ray_scale_x, ray_scale_y },
+                .mRayOffset = Vec2(f32).VectorT{ ray_offset_x, ray_offset_y },
                 .mQuadsCount = 0,
                 .mGlyphsCount = 0,
             },
@@ -566,7 +567,7 @@ fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, vi
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
 
     var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
-    var area_rects: std.ArrayList(Vec4f32) = .empty;
+    var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
     try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mFrameBuffer);
     try area_rects.append(engine_context.FrameAllocator(), viewpoint_component.mAreaRect);
@@ -589,7 +590,7 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     const frame_allocator = engine_context.FrameAllocator();
 
     var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
-    var area_rects: std.ArrayList(Vec4f32) = .empty;
+    var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
     var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
     try FilterPossessedPlayers(frame_allocator, &player_entites, scene_manager);

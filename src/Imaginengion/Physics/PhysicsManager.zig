@@ -15,9 +15,9 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec3f32 = LinAlg.Vec3f32;
-const Quatf32 = LinAlg.Quatf32;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
 
 const Collisions = @import("Collisions.zig");
 const Contact = Collisions.Contact;
@@ -122,7 +122,6 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineCont
 
     for (transforms_arr.items) |entity_id| {
         const entity = scene_manager.GetEntity(entity_id);
-
         const transform = entity.GetComponent(EntityTransformComponent).?;
 
         transform.SetWorldPosition(transform.Translation);
@@ -137,7 +136,7 @@ pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineCont
     }
 }
 
-fn CalculateChildren(parent_entity: Entity, position_acc: Vec3f32, rotation_acc: Quatf32, scale_acc: Vec3f32) void {
+fn CalculateChildren(parent_entity: Entity, position_acc: Vec3(f32), rotation_acc: Quat(f32), scale_acc: Vec3(f32)) void {
     const parent_component = parent_entity.GetComponent(ParentComponent).?;
 
     var curr_id = parent_component.mFirstEntity;
@@ -152,12 +151,12 @@ fn CalculateChildren(parent_entity: Entity, position_acc: Vec3f32, rotation_acc:
     }
 }
 
-fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3f32, rotation_acc: Quatf32, scale_acc: Vec3f32) void {
+fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3(f32), rotation_acc: Quat(f32), scale_acc: Vec3(f32)) void {
     const transform = child_entity.GetComponent(EntityTransformComponent).?;
 
-    transform.SetWorldPosition(transform.Translation + position_acc);
-    transform.SetWorldRotation(LinAlg.QuatMulQuat(transform.Rotation, rotation_acc));
-    transform.SetWorldScale(transform.Scale + scale_acc);
+    transform.SetWorldPosition(transform.Translation.AddVec(position_acc));
+    transform.SetWorldRotation(rotation_acc.MulQuat(transform.Rotation));
+    transform.SetWorldScale(transform.Scale.AddVec(scale_acc));
 
     if (child_entity.GetComponent(ParentComponent)) |parent_component| {
         _ = parent_component;
@@ -171,24 +170,24 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = entity_scene_comp.mScene;
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
-        entity_rb.mForce += if (entity_rb.mInvMass != 0) physics_component.mGravity * @as(Vec3f32, @splat(entity_rb.mMass)) else @as(Vec3f32, @splat(0));
-    } else {
-        entity_rb.mForce += @as(Vec3f32, @splat(0 * entity_rb.mMass));
+        if (entity_rb.mInvMass != 0) {
+            entity_rb.mForce.AddEqVec(physics_component.mGravity.MulScalar(entity_rb.mMass));
+        }
     }
 }
 
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
     const zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
     defer zone.Deinit();
-    entity_rb.mVelocity += entity_rb.mForce * @as(Vec3f32, @splat(entity_rb.mInvMass * dt));
-    entity_rb.mForce = std.mem.zeroes(Vec3f32);
+    entity_rb.mVelocity.AddEqVec(entity_rb.mForce.MulScalar(entity_rb.mInvMass * dt));
+    entity_rb.mForce = std.mem.zeroes(Vec3(f32));
 }
 
 fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) void {
     const zone = Tracy.ZoneInit("PhysicsManager::IntegratePositions", @src());
     defer zone.Deinit();
     const transform = entity.GetComponent(EntityTransformComponent).?;
-    transform.Translation += entity_rb.mVelocity * @as(Vec3f32, @splat(dt));
+    transform.Translation.AddEqVec(entity_rb.mVelocity.MulScalar(dt));
 }
 
 fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, colliders_arr: std.ArrayList(Entity.Type)) !void {
@@ -247,30 +246,30 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
 fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("PhysicsManager::ResolveCollisions", @src());
     defer zone.Deinit();
-    const rv = rb_target.mVelocity - rb_origin.mVelocity;
+    const rv = rb_target.mVelocity.SubVec(rb_origin.mVelocity);
 
-    const vel_along_norm = LinAlg.VecDotVec(rv, contact.mNormal);
+    const vel_along_norm = rv.Dot(contact.mNormal);
     if (vel_along_norm > 0) return; //they are already moving apart
 
     const e: f32 = 0.0; //coefficient of restitution
 
     const j = (-(1.0 + e) * vel_along_norm) / (rb_origin.mInvMass + rb_target.mInvMass); //magnitude of the impulse
 
-    const impulse = contact.mNormal * @as(Vec3f32, @splat(j));
+    const impulse = contact.mNormal.MulScalar(j);
 
-    rb_origin.mVelocity -= impulse * @as(Vec3f32, @splat(rb_origin.mInvMass));
-    rb_target.mVelocity += impulse * @as(Vec3f32, @splat(rb_target.mInvMass));
+    rb_origin.mVelocity.SubEqVec(impulse.MulScalar(rb_origin.mInvMass));
+    rb_target.mVelocity.AddEqVec(impulse.MulScalar(rb_target.mInvMass));
 }
 
 fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("PhysicsManager::PositionCorrection", @src());
     defer zone.Deinit();
     const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin.mInvMass + rb_target.mInvMass) * PERCENT;
-    const correction = @as(Vec3f32, @splat(correction_mag)) * contact.mNormal;
+    const correction = contact.mNormal.MulScalar(correction_mag);
 
     const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
     const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
 
-    transform_origin.Translation -= correction * @as(Vec3f32, @splat(rb_origin.mInvMass));
-    transform_target.Translation += correction * @as(Vec3f32, @splat(rb_target.mInvMass));
+    transform_origin.Translation.SubEqVec(correction.MulScalar(rb_origin.mInvMass));
+    transform_target.Translation.AddEqVec(correction.MulScalar(rb_target.mInvMass));
 }

@@ -11,8 +11,10 @@ const TextAsset = @This();
 const KerningsT = std.AutoHashMap(u16, f32);
 
 const GlyphInfo = struct {
-    mPlaneBounds: Vec4(f32) = .{ .x = -1, .y = -1, .z = -1, .w = -1 }, //0 == left, 1 == top, 2 == right, 1 == bottom
-    mAtlasBounds: Vec4(f32) = .{ .x = -1, .y = -1, .z = -1, .w = -1 }, //bounds 0 and 1 are x and y for top left UV, 2 and 3 are x and y for bottom right UV
+    mAtlasUV0: Vec2(f32) = .{ .x = -1, .y = -1 }, //top-left
+    mAtlasUV1: Vec2(f32) = .{ .x = -1, .y = -1 }, //bottom-right
+    mPlaneMin: Vec2(f32) = .{ .x = -1, .y = -1 }, //left,top
+    mPlaneMax: Vec2(f32) = .{ .x = -1, .y = -1 }, //right,bottom
     mAdvance: f32 = -1,
     mKernings: KerningsT = undefined,
 };
@@ -186,10 +188,10 @@ fn ProcessAtlas(self: *TextAsset, reader: *std.json.Reader, frame_allocator: std
             self.mSize = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "width")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            self.mAtlasSize[0] = parsed_value;
+            self.mAtlasSize.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "height")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            self.mAtlasSize[1] = parsed_value;
+            self.mAtlasSize.y = parsed_value;
         }
     }
 }
@@ -289,16 +291,16 @@ fn ProcessPlaneBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_all
 
         if (std.mem.eql(u8, actual_value, "left")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mPlaneBounds[0] = parsed_value;
+            new_glyph.mPlaneMin.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mPlaneBounds[3] = parsed_value;
+            new_glyph.mPlaneMax.y = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mPlaneBounds[2] = parsed_value;
+            new_glyph.mPlaneMax.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mPlaneBounds[1] = parsed_value;
+            new_glyph.mPlaneMin.y = parsed_value;
         }
     }
 }
@@ -320,16 +322,16 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_all
 
         if (std.mem.eql(u8, actual_value, "left")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasBounds[0] = parsed_value;
+            new_glyph.mAtlasUV0.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasBounds[3] = parsed_value;
+            new_glyph.mAtlasUV1.y = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasBounds[2] = parsed_value;
+            new_glyph.mAtlasUV1.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasBounds[1] = parsed_value;
+            new_glyph.mAtlasUV0.y = parsed_value;
         }
     }
 }

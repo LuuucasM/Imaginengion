@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const Window = @import("../../Windows/Window.zig");
-const Vec4f32 = @import("../../Math/LinAlg.zig").Vec4f32;
 const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;

@@ -1,7 +1,6 @@
 const std = @import("std");
 const AudioContext = @import("AudioContext.zig");
 const ECSManager = @import("../ECS/ECSManager.zig");
-const Vec3f32 = @import("../Math/LinAlg.zig").Vec3f32;
 const SPSCRingBuffer = @import("../Core/SPSCRingBuffer.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");

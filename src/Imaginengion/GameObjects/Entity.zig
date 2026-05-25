@@ -21,9 +21,6 @@ const PathType = @import("../Assets/AssetManager.zig").PathType;
 const ScriptAsset = @import("../Assets/Assets.zig").ScriptAsset;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec3f32 = LinAlg.Vec3f32;
-const Quatf32 = LinAlg.Quatf32;
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const EntityComponents = @import("Components.zig");
 const Player = @import("../Players/Player.zig");
@@ -186,9 +183,9 @@ pub fn _CalculateWorldTransform(self: Entity) void {
             const parent_entity = Entity{ .mEntityID = child_component.?.mParent, .mSceneManager = self.mSceneManager };
 
             if (parent_entity.GetComponent(TransformComponent)) |parent_transform| {
-                translation_out += parent_transform.Translation;
-                rotation_out = LinAlg.QuatMulQuat(rotation_out, parent_transform.Rotation);
-                scale_out += parent_transform.Scale;
+                translation_out = translation_out.AddVec(parent_transform.Translation);
+                rotation_out = rotation_out.MulQuat(parent_transform.Rotation);
+                scale_out = scale_out.AddVec(parent_transform.Scale);
             }
 
             child_component = parent_entity.GetComponent(EntityChildComponent);

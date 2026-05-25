@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec2f32 = LinAlg.Vec2f32;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const HashMap = std.AutoHashMapUnmanaged;
 const InputEnums = @import("InputEnums.zig");
@@ -10,18 +10,18 @@ const InputManager = @This();
 
 _KeyPressedSet: HashMap(InputEnums.ScanCodes, u1),
 _MousePressedSet: HashMap(InputEnums.MouseCodes, u1),
-_MousePosition: Vec2f32,
-_MouseScrolled: Vec2f32,
-_MousePositionDelta: Vec2f32,
-_MouseScrolledDelta: Vec2f32,
+_MousePosition: Vec2(f32),
+_MouseScrolled: Vec2(f32),
+_MousePositionDelta: Vec2(f32),
+_MouseScrolledDelta: Vec2(f32),
 
 pub const empty: InputManager = .{
     ._KeyPressedSet = .empty,
     ._MousePressedSet = .empty,
-    ._MousePosition = Vec2f32{ 0.0, 0.0 },
-    ._MouseScrolled = Vec2f32{ 0.0, 0.0 },
-    ._MousePositionDelta = Vec2f32{ 0.0, 0.0 },
-    ._MouseScrolledDelta = Vec2f32{ 0.0, 0.0 },
+    ._MousePosition = .{ .x = 0.0, .y = 0.0 },
+    ._MouseScrolled = .{ .x = 0.0, .y = 0.0 },
+    ._MousePositionDelta = .{ .x = 0.0, .y = 0.0 },
+    ._MouseScrolledDelta = .{ .x = 0.0, .y = 0.0 },
 };
 
 pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
@@ -52,16 +52,16 @@ pub fn IsMouseRepeated(self: InputManager, button: InputEnums.MouseCodes) bool {
     }
     return false;
 }
-pub fn GetMousePosition(self: *InputManager) Vec2f32 {
+pub fn GetMousePosition(self: *InputManager) Vec2(f32) {
     return self._MousePosition;
 }
-pub fn GetMousePositionDelta(self: *InputManager) Vec2f32 {
+pub fn GetMousePositionDelta(self: *InputManager) Vec2(f32) {
     return self._MousePositionDelta;
 }
-pub fn GetMouseScrolled(self: *InputManager) Vec2f32 {
+pub fn GetMouseScrolled(self: *InputManager) Vec2(f32) {
     return self._MouseScrolled;
 }
-pub fn GetMouseScrolledDelta(self: *InputManager) Vec2f32 {
+pub fn GetMouseScrolledDelta(self: *InputManager) Vec2(f32) {
     return self._MouseScrolledDelta;
 }
 
@@ -85,12 +85,12 @@ pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes) !void
     }
 }
 
-pub fn SetMousePosition(self: *InputManager, new_pos: Vec2f32) void {
-    self._MousePositionDelta = new_pos - self._MousePosition;
+pub fn SetMousePosition(self: *InputManager, new_pos: Vec2(f32)) void {
+    self._MousePositionDelta = new_pos.SubVec(self._MousePosition);
     self._MousePosition = new_pos;
 }
 
-pub fn SetMouseScrolled(self: *InputManager, new_scrolled: Vec2f32) void {
-    self._MouseScrolledDelta = new_scrolled - self._MouseScrolled;
+pub fn SetMouseScrolled(self: *InputManager, new_scrolled: Vec2(f32)) void {
+    self._MouseScrolledDelta = new_scrolled.SubVec(self._MouseScrolled);
     self._MouseScrolled = new_scrolled;
 }

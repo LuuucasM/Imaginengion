@@ -2,19 +2,20 @@ const std = @import("std");
 const math = std.math;
 
 pub const Axis = enum { x, y, z };
-pub fn Mat4Identity(comptime number_type: type) Mat4(number_type) {
+
+pub fn Ray(comptime number_type: type) type {
     _ValidateNumberType(number_type);
-    return Mat4(number_type){ .cols = .{
-        Vec4(number_type){ .w = 1, .x = 0, .y = 0, .z = 0 },
-        Vec4(number_type){ .w = 0, .x = 1, .y = 0, .z = 0 },
-        Vec4(number_type){ .w = 0, .x = 0, .y = 1, .z = 0 },
-        Vec4(number_type){ .w = 0, .x = 0, .y = 0, .z = 1 },
-    } };
+    return extern struct {
+        const Self = @This();
+
+        Origin: Vec3(number_type),
+        Direction: Vec3(number_type),
+    };
 }
 
 pub fn Vec2(comptime number_type: type) type {
     _ValidateNumberType(number_type);
-    return packed struct {
+    return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(2, number_type);
         pub const ArrT = [2]number_type;
@@ -30,6 +31,10 @@ pub fn Vec2(comptime number_type: type) type {
 
         pub fn FromVector(vec: VectorT) Self {
             return @bitCast(vec);
+        }
+
+        pub fn FromScalar(scalar: number_type) Self {
+            return Self{ .x = scalar, .y = scalar };
         }
 
         pub fn Dir(self: Self) Self {
@@ -62,7 +67,7 @@ pub fn Vec2(comptime number_type: type) type {
             const denom = other.Dot(other);
             if (denom <= 0) return Self{ .x = 0, .y = 0 };
 
-            return other.MulScaler(num / denom);
+            return other.MulScalar(num / denom);
         }
 
         pub fn RejectFrom(self: Self, other: Self) Self {
@@ -81,7 +86,7 @@ pub fn Vec2(comptime number_type: type) type {
 
         pub fn Lerp(self: Self, target: Self, t: number_type) Self {
             // Formula: self + (target - self) * t
-            return self.AddVec(target.SubVec(self).MulScaler(t));
+            return self.AddVec(target.SubVec(self).MulScalar(t));
         }
 
         pub fn AddVec(self: Self, other: Self) Self {
@@ -92,8 +97,17 @@ pub fn Vec2(comptime number_type: type) type {
             return @bitCast(self.ToVector() - other.ToVector());
         }
 
-        pub fn MulScaler(self: Self, scalar: number_type) Self {
-            return @bitCast(self.ToVector() * @as(VectorT, @splat(scalar)));
+        pub fn MulScalar(self: Self, scalar: number_type) Self {
+            return self.MulVec(FromScalar(scalar));
+        }
+
+        //NOTE: no tests for this
+        pub fn MulVec(self: Self, other: Self) Self {
+            return @bitCast(self.ToVector() * other.ToVector());
+        }
+
+        pub fn DivScalar(self: Self, scalar: number_type) Self {
+            return @bitCast(self.ToVector() / @as(VectorT, @splat(scalar)));
         }
 
         pub fn ToVector(self: Self) VectorT {
@@ -105,14 +119,11 @@ pub fn Vec2(comptime number_type: type) type {
             _ = options;
             try writer.print("{s} - x: {}, y: {},\n", .{ @typeName(Self), self.x, self.y });
         }
-
-        //=================TESTS=========================
-
     };
 }
 
 pub fn Vec3(comptime number_type: type) type {
-    return packed struct {
+    return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(3, number_type);
         pub const ArrT = [3]number_type;
@@ -129,11 +140,33 @@ pub fn Vec3(comptime number_type: type) type {
             return @bitCast(self);
         }
 
+        pub fn FromScalar(scalar: number_type) Self {
+            return Self{ .x = scalar, .y = scalar, .z = scalar };
+        }
+
         pub fn Cross(self: Self, other: Self) Self {
             return Self{
                 .x = self.y * other.z - self.z * other.y,
                 .y = self.z * other.x - self.x * other.z,
                 .z = self.x * other.y - self.y * other.x,
+            };
+        }
+
+        //TODO: no test
+        pub fn Abs(self: Self) Self {
+            return Self{
+                .x = @abs(self.x),
+                .y = @abs(self.y),
+                .z = @abs(self.z),
+            };
+        }
+
+        //TODO: no test
+        pub fn ClampScalar(self: Self, scalar: number_type) Self {
+            return Self{
+                .x = @max(self.x, scalar),
+                .y = @max(self.y, scalar),
+                .z = @max(self.z, scalar),
             };
         }
 
@@ -183,7 +216,7 @@ pub fn Vec3(comptime number_type: type) type {
             const denom = other.Dot(other);
             if (denom <= 0) return Self{ .x = 0, .y = 0, .z = 0 };
 
-            return other.MulScaler(num / denom);
+            return other.MulScalar(num / denom);
         }
 
         pub fn RejectFrom(self: Self, other: Self) Self {
@@ -202,19 +235,35 @@ pub fn Vec3(comptime number_type: type) type {
 
         pub fn Lerp(self: Self, target: Self, t: number_type) Self {
             // Formula: self + (target - self) * t
-            return self.AddVec(target.SubVec(self).MulScaler(t));
+            return self.AddVec(target.SubVec(self).MulScalar(t));
         }
 
         pub fn AddVec(self: Self, other: Self) Self {
             return @bitCast(self.ToVector() + other.ToVector());
         }
 
+        pub fn AddScalar(self: Self, scalar: number_type) Self {
+            return self.AddVec(FromScalar(scalar));
+        }
+
+        pub fn AddEqVec(self: *Self, other: Self) void {
+            self.* = self.AddVec(other);
+        }
+
         pub fn SubVec(self: Self, other: Self) Self {
             return @bitCast(self.ToVector() - other.ToVector());
         }
 
-        pub fn MulScaler(self: Self, scalar: number_type) Self {
-            return @bitCast(self.ToVector() * @as(VectorT, @splat(scalar)));
+        pub fn SubEqVec(self: *Self, other: Self) void {
+            self.* = self.SubVec(other);
+        }
+
+        pub fn DivScalar(self: Self, scalar: number_type) Self {
+            return @bitCast(self.ToVector() / FromScalar(scalar).ToVector());
+        }
+
+        pub fn MulScalar(self: Self, scalar: number_type) Self {
+            return @bitCast(self.ToVector() * FromScalar(scalar).ToVector());
         }
         pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
             _ = fmt;
@@ -242,7 +291,7 @@ pub fn Vec3(comptime number_type: type) type {
 
 pub fn Vec4(comptime number_type: type) type {
     _ValidateNumberType(number_type);
-    return packed struct {
+    return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(4, number_type);
         pub const ArrT = [4]number_type;
@@ -295,7 +344,7 @@ pub fn Vec4(comptime number_type: type) type {
             const denom = other.Dot(other);
             if (denom <= 0) return Self{ .x = 0, .y = 0, .z = 0, .w = 0 };
 
-            return other.MulScaler(num / denom);
+            return other.MulScalar(num / denom);
         }
 
         pub fn RejectFrom(self: Self, other: Self) Self {
@@ -313,8 +362,7 @@ pub fn Vec4(comptime number_type: type) type {
         }
 
         pub fn Lerp(self: Self, target: Self, t: number_type) Self {
-            // Formula: self + (target - self) * t
-            return self.AddVec(target.SubVec(self).MulScaler(t));
+            return self.AddVec(target.SubVec(self).MulScalar(t));
         }
 
         pub fn AddVec(self: Self, other: Self) Self {
@@ -325,8 +373,12 @@ pub fn Vec4(comptime number_type: type) type {
             return @bitCast(self.ToVector() - other.ToVector());
         }
 
-        pub fn MulScaler(self: Self, scalar: number_type) Self {
+        pub fn MulScalar(self: Self, scalar: number_type) Self {
             return Self.FromVector(self.ToVector() * @as(VectorT, @splat(scalar)));
+        }
+
+        pub fn DivScalar(self: Self, scalar: number_type) Self {
+            return @bitCast(self.ToVector() / @as(VectorT, @splat(scalar)));
         }
 
         pub fn ToVector(self: Self) VectorT {
@@ -343,7 +395,7 @@ pub fn Vec4(comptime number_type: type) type {
 
 pub fn Mat3(comptime number_type: type) type {
     _ValidateNumberType(number_type);
-    return struct {
+    return extern struct {
         const Self = @This();
         pub const Vec3T = Vec3(number_type);
 
@@ -360,7 +412,7 @@ pub fn Mat3(comptime number_type: type) type {
 
 pub fn Mat4(comptime number_type: type) type {
     _ValidateNumberType(number_type);
-    return struct {
+    return extern struct {
         const Self = @This();
         pub const Vec4T = Vec4(number_type);
 
@@ -471,7 +523,7 @@ pub fn Mat4(comptime number_type: type) type {
 
 pub fn Quat(comptime number_type: type) type {
     _ValidateNumberType(number_type);
-    return packed struct {
+    return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(4, number_type);
         pub const Vec3T = Vec3(number_type);
@@ -517,10 +569,37 @@ pub fn Quat(comptime number_type: type) type {
             return Self.FromRadians(Vec3T.FromVector(vect.ToVector() * @as(Vec3T.VectorT, @splat(to_rad))));
         }
 
+        pub fn FromVector(vect: VectorT) Self {
+            return Self{
+                .w = vect[0],
+                .x = vect[1],
+                .y = vect[2],
+                .z = vect[3],
+            };
+        }
+
+        pub fn ToVector(self: Self) VectorT {
+            return @bitCast(self);
+        }
+
         pub fn Len(self: Self) number_type {
             _EnsureFloat(number_type);
             const q = self.ToVector();
             return @sqrt(@reduce(.Add, q * q));
+        }
+
+        pub fn GetRightDir(self: Self) Vec3(number_type) {
+            const vec = Vec3(f32){ .x = 1, .y = 0, .z = 0 };
+            return vec.QuatRotate(self);
+        }
+
+        pub fn GetUpDir(self: Self) Vec3(number_type) {
+            const vec = Vec3(f32){ .x = 0, .y = 1, .z = 0 };
+            return vec.QuatRotate(self);
+        }
+        pub fn GetForwardDir(self: Self) Vec3(number_type) {
+            const vec = Vec3(f32){ .x = 1, .y = 0, .z = 0 };
+            return vec.QuatRotate(self);
         }
 
         pub fn Normalize(self: *Self) void {
@@ -611,10 +690,6 @@ pub fn Quat(comptime number_type: type) type {
                 .y => self.ToMat3().cols[1],
                 .z => self.ToMat3().cols[2],
             };
-        }
-
-        pub fn ToVector(self: Self) VectorT {
-            return @bitCast(self);
         }
 
         pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {

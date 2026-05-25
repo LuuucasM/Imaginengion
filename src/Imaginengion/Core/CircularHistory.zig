@@ -3,7 +3,10 @@ const std = @import("std");
 pub fn CircularHistory(comptime T: type, comptime size: usize) type {
     comptime {
         if ((size & (size - 1)) != 0) {
-            @compileError("Capacity must be a power of two");
+            @compileError(@typeName(T) ++ "Capacity must be a power of two");
+        }
+        if (!@hasDecl(T, "Equals")) {
+            @compileError(@typeName(T) ++ "Type needs 'Equals' function for comparison");
         }
     }
 
@@ -33,7 +36,7 @@ pub fn CircularHistory(comptime T: type, comptime size: usize) type {
         pub fn contains(self: *const Self, item: T) bool {
             if (self.count == 0) return false;
             for (self.buffer[0..self.count]) |element| {
-                if (element == item) {
+                if (element.Equals(item)) {
                     return true;
                 }
             }

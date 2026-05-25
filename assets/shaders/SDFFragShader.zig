@@ -4,8 +4,11 @@ const gpu = std.gpu;
 const PushConstants = @import("../../src/Imaginengion/Renderer/RenderPipeline.zig").PushConstants;
 const QuadData = @import("../../src/Imaginengion/Renderer/Renderer2D.zig").QuadData;
 const GlyphData = @import("../../src/Imaginengion/Renderer/Renderer2D.zig").GlyphData;
-const LinAlg = @import("../../src/Imaginengion/Math/LinAlg.zig");
-const RayMarcher = @import("SDFRayMarcher.zig");
+const RayMarcher = @import("../../src/Imaginengion/Renderer/SDFRayMarcher.zig");
+const MathTypes = @import("../../src/Imaginengion/Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
 
 // layout(location = 0) out vec4 oFragColor
 extern var oFragColor: @Vector(4, f32) addrspace(.output);
@@ -33,22 +36,23 @@ export fn main() callconv(.spirv_fragment) void {
 
     const frag = gpu.frag_coord;
 
-    const uv = @Vector(2, f32){
-        CameraUBO.mRayScale * frag[0] + CameraUBO.mRayOffset[0],
-        CameraUBO.mRayScale * frag[1] + CameraUBO.mRayOffset[1],
-    };
+    const uv = Vec2(f32).FromVector(CameraUBO.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(CameraUBO.mRayOffset));
 
-    const dir = LinAlg.NormalizeVec(@Vector(3, f32){ uv[0], uv[1], -1.0 });
-    const ray_dir = LinAlg.RotateVec3Quat(CameraUBO.mRotation, dir);
+    const dir = Vec3(f32).Dir(.{ .x = uv.x, .y = uv.y, .z = -1.0 });
+    const ray_dir = dir.QuatRotate(Quat(f32).FromVector(CameraUBO.mRotation));
 
-    const marcher = RayMarcher{
+    var marcher = RayMarcher{
         .mQuads = QuadsSSBO[0..CameraUBO.mQuadsCount],
         .mGlyphs = GlyphsSSBO[0..CameraUBO.mGlyphsCount],
         .mRay = .{ .Origin = CameraUBO.mPosition, .Direction = ray_dir },
         .mPerspectiveFar = CameraUBO.mPerspectiveFar,
     };
+    marcher.mNodes[0] = .{ .SurfaceColor = .{ .x = 0, .y = 0, .z = 0, .w = 0 }, .FirstRay = 0, .ParentRay = -1, .Is2D = false };
+    marcher.mNodeCount = 1;
+    marcher.mEdges[0] = .{ .Ray = .{ .Origin = CameraUBO.mPosition, .Direction = ray_dir }, .FromNode = 0, .SiblingNode = -1, .ToNode = -1, .Length = -1 };
+    marcher.mEdgeCount = 1;
 
-    const hit = marcher.March();
+    marcher.March();
 
-    oFragColor = .{ 0.7, 0.7, 0.7, hit[3] };
+    oFragColor = marcher.GenerateColor();
 }

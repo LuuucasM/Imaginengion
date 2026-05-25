@@ -12,12 +12,12 @@ const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
 const TextAsset = Assets.TextAsset;
 
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec2f32 = LinAlg.Vec2f32;
-const Vec3f32 = LinAlg.Vec3f32;
-const Vec4f32 = LinAlg.Vec4f32;
-const Quatf32 = LinAlg.Quatf32;
-const Mat4f32 = LinAlg.Mat4f32;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
+const Vec3 = MathTypes.Vec3;
+const Vec4 = MathTypes.Vec4;
+const Quat = MathTypes.Quat;
+const Mat4 = MathTypes.Mat4;
 
 const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
@@ -33,36 +33,40 @@ const Renderer2D = @This();
 const MAX_PATH_LEN = 256;
 
 pub const QuadData = extern struct {
-    //transform data
-    Position: [3]f32,
-    _padding0: f32 = 0.0,
-    Rotation: [4]f32,
-    Scale: [3]f32,
+    Position: Vec3(f32).VectorT,
+    _pad0: f32 = 0,
+    Rotation: Vec4(f32).VectorT,
+    Scale: Vec3(f32).VectorT,
+    _pad1: f32 = 0,
 
-    //texture data
-    TilingFactor: f32 = 1.0,
-    Color: [4]f32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
-    TexCoords: [4]f32 = [4]f32{ 0, 0, 1, 1 },
-    TexIndex: u32, // 8-byte aligned naturally here
-    _padding1: [2]f32 = [2]f32{ 0.0, 0.0 },
+    TilingFactor: f32,
+    TextureHandle: u32,
+    _pad2: [2]u32 = .{ 0, 0 },
+
+    Color: Vec4(f32).VectorT,
+    TextureUV0: Vec2(f32).VectorT,
+    TextureUV1: Vec2(f32).VectorT,
 };
 
 pub const GlyphData = extern struct {
-    //transofmr data
-    Position: [3]f32,
-    Scale: f32, // Moved here to fill the vec3 padding
-    Rotation: [4]f32,
+    Position: Vec3(f32).VectorT,
+    Scale: f32,
+    Rotation: Vec4(f32).VectorT,
 
-    //texture data
-    TilingFactor: f32 = 1.0,
-    _padding1: [3]f32 = [3]f32{ 0.0, 0.0, 0.0 },
-    Color: [4]f32 = [4]f32{ 1.0, 1.0, 1.0, 1.0 },
-    TexCoords: [4]f32 = [4]f32{ 0, 0, 1, 1 },
+    TilingFactor: f32,
+    _pad0: [3]u32 = .{ 0, 0, 0 },
+    Color: Vec4(f32).VectorT,
 
-    AtlasBounds: [4]f32,
-    PlaneBounds: [4]f32,
-    AtlasIndex: u32, // 8-byte aligned
-    TexIndex: u32, // 8-byte aligned
+    TextureUV0: Vec2(f32).VectorT,
+    TextureUV1: Vec2(f32).VectorT,
+    AtlasUV0: Vec2(f32).VectorT, // atlas left,bottom
+    AtlasUV1: Vec2(f32).VectorT, // atlas right,top
+    PlaneMin: Vec2(f32).VectorT, // plane left,bottom
+    PlaneMax: Vec2(f32).VectorT, // plane right,top
+
+    AtlasHandle: u32,
+    TextureHandle: u32,
+    _pad1: [2]u32 = .{ 0, 0 },
 };
 
 mQuadBuffer: SSBO = .{},
@@ -155,12 +159,13 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
     const world_scale = transform_component.GetWorldScale();
 
     try self.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
-        .Position = [3]f32{ world_pos[0], world_pos[1], world_pos[2] },
-        .Rotation = [4]f32{ world_rot[0], world_rot[1], world_rot[2], world_rot[3] },
-        .Scale = [3]f32{ world_scale[0], world_scale[1], world_scale[2] },
-        .TexIndex = texture_asset.GetTextureHandle(),
-        .Color = [4]f32{ quad_component.mTexOptions.mColor[0], quad_component.mTexOptions.mColor[1], quad_component.mTexOptions.mColor[2], quad_component.mTexOptions.mColor[3] },
-        .TexCoords = [4]f32{ quad_component.mTexOptions.mTexCoords[0], quad_component.mTexOptions.mTexCoords[1], quad_component.mTexOptions.mTexCoords[2], quad_component.mTexOptions.mTexCoords[3] },
+        .Position = world_pos.ToVector(),
+        .Rotation = world_rot.ToVector(),
+        .Scale = world_scale.ToVector(),
+        .TextureHandle = texture_asset.GetTextureHandle(),
+        .Color = quad_component.mTexOptions.mColor.ToVector(),
+        .TextureUV0 = quad_component.mTexOptions.mTextureUV0.ToVector(),
+        .TextureUV1 = quad_component.mTexOptions.mTextureUV1.ToVector(),
         .TilingFactor = quad_component.mTexOptions.mTilingFactor,
     });
 }
@@ -175,23 +180,20 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
 
     const world_pos = transform_component.GetWorldPosition();
 
-    const left_bounds = world_pos[0] - text_component.mBounds[0];
-    const right_bounds = world_pos[0] + text_component.mBounds[1];
+    const left_bounds = world_pos.x - text_component.mBounds.x;
+    const right_bounds = world_pos.x + text_component.mBounds.y;
 
     var pen_x = left_bounds;
-    var pen_y = world_pos[1];
+    var pen_y = world_pos.y;
 
     for (text_component.mText.items, 0..) |char, i| {
-        const array_ind: usize = TextAsset.ToArrayIndex(char);
+        const array_ind = TextAsset.ToArrayIndex(char);
         const glyph = text_asset.mGlyphs[array_ind];
 
         if (char == 32) { //if its space just continue on
             pen_x += glyph.mAdvance * text_component.mFontSize;
             continue;
         }
-
-        const glyph_atlas_bounds = glyph.mAtlasBounds;
-        const glyph_plane_bounds = glyph.mPlaneBounds;
 
         const glyph_width = glyph.mAdvance;
 
@@ -201,15 +203,20 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
         }
 
         try self.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
-            .Position = [3]f32{ pen_x, pen_y, world_pos[2] },
-            .Rotation = [4]f32{ transform_component.Rotation[0], transform_component.Rotation[1], transform_component.Rotation[2], transform_component.Rotation[3] },
+            .Position = Vec3(f32).VectorT{ pen_x, pen_y, world_pos.z },
+            .Rotation = transform_component.Rotation.ToVector(),
             .Scale = text_component.mFontSize,
-            .AtlasBounds = [4]f32{ glyph_atlas_bounds[0], glyph_atlas_bounds[1], glyph_atlas_bounds[2], glyph_atlas_bounds[3] },
-            .PlaneBounds = [4]f32{ glyph_plane_bounds[0], glyph_plane_bounds[1], glyph_plane_bounds[2], glyph_plane_bounds[3] },
-            .AtlasIndex = atlas_asset.GetTextureHandle(),
-            .TexIndex = texture_asset.GetTextureHandle(),
-            .Color = [4]f32{ text_component.mTexOptions.mColor[0], text_component.mTexOptions.mColor[1], text_component.mTexOptions.mColor[2], text_component.mTexOptions.mColor[3] },
-            .TexCoords = [4]f32{ text_component.mTexOptions.mTexCoords[0], text_component.mTexOptions.mTexCoords[1], text_component.mTexOptions.mTexCoords[2], text_component.mTexOptions.mTexCoords[3] },
+
+            .TextureUV0 = text_component.mTexOptions.mTextureUV0.ToVector(),
+            .TextureUV1 = text_component.mTexOptions.mTextureUV1.ToVector(),
+            .AtlasUV0 = glyph.mAtlasUV0.ToVector(),
+            .AtlasUV1 = glyph.mAtlasUV1.ToVector(),
+            .PlaneMin = glyph.mPlaneMin.ToVector(),
+            .PlaneMax = glyph.mPlaneMax.ToVector(),
+
+            .AtlasHandle = atlas_asset.GetTextureHandle(),
+            .TextureHandle = texture_asset.GetTextureHandle(),
+            .Color = text_component.mTexOptions.mColor.ToVector(),
             .TilingFactor = text_component.mTexOptions.mTilingFactor,
         });
 

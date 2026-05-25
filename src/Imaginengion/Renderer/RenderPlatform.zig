@@ -2,7 +2,6 @@ const std = @import("std");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const Window = @import("../Windows/Window.zig");
 const builtin = @import("builtin");
-const Vec4f32 = @import("../Math/LinAlg.zig").Vec4f32;
 const Tracy = @import("../Core/Tracy.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;

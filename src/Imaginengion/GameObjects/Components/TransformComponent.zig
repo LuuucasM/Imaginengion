@@ -1,22 +1,23 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const LinAlg = @import("../../Math/LinAlg.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
+const MathUtils = @import("../../Math/MathUtils.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../Entity.zig");
 
 //imgui stuff
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-const Vec3f32 = LinAlg.Vec3f32;
-const Quatf32 = LinAlg.Quatf32;
-const Mat4f32 = LinAlg.Mat4f32;
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
+const Mat4 = MathTypes.Mat4;
 
 const TransformComponent = @This();
 
 const InternalData = struct {
-    WorldPosition: Vec3f32 = .{ 0.0, 0.0, 0.0 },
-    WorldRotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
-    WorldScale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
+    WorldPosition: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
+    WorldRotation: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
+    WorldScale: Vec3(f32) = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
 };
 
 pub const Editable: bool = true;
@@ -29,40 +30,40 @@ pub const Ind: usize = blk: {
     }
 };
 
-Translation: Vec3f32 = .{ 0.0, 0.0, 0.0 },
-Rotation: Quatf32 = .{ 1.0, 0.0, 0.0, 0.0 },
-Scale: Vec3f32 = .{ 2.0, 2.0, 2.0 },
+Translation: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
+Rotation: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
+Scale: Vec3(f32) = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
 
 _InternalData: InternalData = .{},
 
 pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
 
-pub fn GetWorldPosition(self: TransformComponent) Vec3f32 {
+pub fn GetWorldPosition(self: TransformComponent) Vec3(f32) {
     return self._InternalData.WorldPosition;
 }
-pub fn SetWorldPosition(self: *TransformComponent, new_pos: Vec3f32) void {
+pub fn SetWorldPosition(self: *TransformComponent, new_pos: Vec3(f32)) void {
     self._InternalData.WorldPosition = new_pos;
 }
-pub fn GetWorldRotation(self: TransformComponent) Quatf32 {
+pub fn GetWorldRotation(self: TransformComponent) Quat(f32) {
     return self._InternalData.WorldRotation;
 }
-pub fn SetWorldRotation(self: *TransformComponent, new_rot: Quatf32) void {
+pub fn SetWorldRotation(self: *TransformComponent, new_rot: Quat(f32)) void {
     self._InternalData.WorldRotation = new_rot;
 }
-pub fn GetWorldScale(self: TransformComponent) Vec3f32 {
+pub fn GetWorldScale(self: TransformComponent) Vec3(f32) {
     return self._InternalData.WorldScale;
 }
-pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3f32) void {
+pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3(f32)) void {
     self._InternalData.WorldScale = new_scale;
 }
 
 pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
     DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
-    DrawVec3ControlRot("Rotation", &self.Rotation, Quatf32{ 1.0, 0.0, 0.0, 0.0 }, 0.25, 100.0);
+    DrawVec3ControlRot("Rotation", &self.Rotation, Quat(f32){ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 }, 0.25, 100.0);
     DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);
 }
 
-fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32, speed: f32, column_width: f32) void {
+fn DrawVec3Control(label: []const u8, values: *Vec3(f32), reset_value: f32, speed: f32, column_width: f32) void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
@@ -87,14 +88,17 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("X", button_size)) {
-        values.*[0] = reset_value;
+        values.x = reset_value;
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    _ = imgui.igDragFloat("##X", &values[0], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+    var values_x: f32 = 0;
+    if (imgui.igDragFloat("##X", &values_x, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        values.x = values_x;
+    }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
 
@@ -104,14 +108,17 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Y", button_size)) {
-        values.*[1] = reset_value;
+        values.*.y = reset_value;
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    _ = imgui.igDragFloat("##Y", &values[1], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+    var values_y: f32 = 0;
+    if (imgui.igDragFloat("##Y", &values_y, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        values.y = values_y;
+    }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
 
@@ -121,18 +128,21 @@ fn DrawVec3Control(label: []const u8, values: *LinAlg.Vec3f32, reset_value: f32,
 
     imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Z", button_size)) {
-        values.*[2] = reset_value;
+        values.*.z = reset_value;
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    _ = imgui.igDragFloat("##Z", &values[2], speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+    var values_z: f32 = 0;
+    if (imgui.igDragFloat("##Z", &values_z, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        values.z = values_z;
+    }
     imgui.igPopItemWidth();
 }
 
-fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf32, speed: f32, column_width: f32) void {
+fn DrawVec3ControlRot(label: []const u8, rotation: *Quat(f32), reset_value: Quat(f32), speed: f32, column_width: f32) void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
@@ -164,12 +174,12 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    const x_ang_saved = LinAlg.RadiansToDegrees(LinAlg.QuatToPitch(rotation.*));
+    const x_ang_saved = MathUtils.RadiansToDegrees(rotation.GetPitch());
     var x_ang = x_ang_saved;
     if (imgui.igDragFloat("##X", &x_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
         const delta_theta = x_ang_saved - x_ang;
-        const new_quat = LinAlg.QuatAngleAxis(delta_theta, Vec3f32{ 1.0, 0.0, 0.0 });
-        rotation.* = LinAlg.QuatMulQuat(rotation.*, new_quat);
+        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 1.0, .y = 0, .z = 0 }, delta_theta);
+        rotation.* = rotation.MulQuat(new_quat);
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -188,12 +198,12 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
 
     imgui.igSameLine(0.0, 0.0);
 
-    const y_ang_saved = LinAlg.RadiansToDegrees(LinAlg.QuatToYaw(rotation.*));
+    const y_ang_saved = MathUtils.RadiansToDegrees(rotation.GetYaw());
     var y_ang = y_ang_saved;
     if (imgui.igDragFloat("##Y", &y_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
         const delta_theta = y_ang_saved - y_ang;
-        const new_quat = LinAlg.QuatAngleAxis(delta_theta, Vec3f32{ 0.0, 1.0, 0.0 });
-        rotation.* = LinAlg.QuatMulQuat(rotation.*, new_quat);
+        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 0, .y = 1, .z = 0 }, delta_theta);
+        rotation.* = rotation.MulQuat(new_quat);
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -211,12 +221,12 @@ fn DrawVec3ControlRot(label: []const u8, rotation: *Quatf32, reset_value: Quatf3
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    const z_ang_saved = LinAlg.RadiansToDegrees(LinAlg.QuatToRoll(rotation.*));
+    const z_ang_saved = MathUtils.RadiansToDegrees(rotation.GetRoll());
     var z_ang = z_ang_saved;
     if (imgui.igDragFloat("##Z", &z_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
         const delta_theta = z_ang_saved - z_ang;
-        const new_quat = LinAlg.QuatAngleAxis(delta_theta, Vec3f32{ 0.0, 0.0, 1.0 });
-        rotation.* = LinAlg.QuatMulQuat(rotation.*, new_quat);
+        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 0, .y = 0, .z = 1 }, delta_theta);
+        rotation.* = rotation.MulQuat(new_quat);
     }
     imgui.igPopItemWidth();
 }
@@ -251,11 +261,11 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         };
 
         if (std.mem.eql(u8, field_name, "Translation")) {
-            result.Translation = try std.json.innerParse(Vec3f32, frame_allocator, reader, options);
+            result.Translation = try std.json.innerParse(Vec3(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Rotation")) {
-            result.Rotation = try std.json.innerParse(Quatf32, frame_allocator, reader, options);
+            result.Rotation = try std.json.innerParse(Quat(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Scale")) {
-            result.Scale = try std.json.innerParse(Vec3f32, frame_allocator, reader, options);
+            result.Scale = try std.json.innerParse(Vec3(f32), frame_allocator, reader, options);
         }
     }
 

@@ -8,14 +8,19 @@ const StageInfo = ShaderAsset.StageInfo;
 const Stage = ShaderAsset.Stage;
 const TextureFormat = @import("../../Assets/Assets.zig").Texture2D.TextureFormat;
 
+const MathTypes = @import("../../Math/MathTypes.zig");
+const Vec4 = MathTypes.Vec4;
+const Vec3 = MathTypes.Vec3;
+const Vec2 = MathTypes.Vec2;
+
 const SDLGPUPipeline = @This();
 
 pub const PushConstants = extern struct {
-    mRotation: [4]f32,
-    mPosition: [3]f32,
+    mPosition: Vec3(f32).VectorT,
     mPerspectiveFar: f32,
-    mRayScale: [2]f32,
-    mRayOffset: [2]f32,
+    mRotation: Vec4(f32).VectorT,
+    mRayScale: Vec2(f32).VectorT,
+    mRayOffset: Vec2(f32).VectorT,
     mQuadsCount: u32,
     mGlyphsCount: u32,
 };

@@ -1,6 +1,5 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const Vec2f32 = @import("../Math/LinAlg.zig").Vec2f32;
 const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 
 const Entity = @import("../GameObjects/Entity.zig");
@@ -8,11 +7,11 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 
-const LinAlg = @import("../Math/LinAlg.zig");
-const Vec3f32 = LinAlg.Vec3f32;
-const Quatf32 = LinAlg.Quatf32;
-const Mat4f32 = LinAlg.Mat4f32;
-const Vec4f32 = LinAlg.Vec4f32;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
+const Mat4 = MathTypes.Mat4;
+const Vec4 = MathTypes.Vec4;
 
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -42,7 +41,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
     self.mPlayHeight = viewport_height;
 }
 
-pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4(f32))) !void {
     const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
     defer zone.Deinit();
 
@@ -68,7 +67,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
     try OnImguiRender(engine_context, frame_buffers, area_rects, viewport_size);
 }
 
-pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32)) !void {
+pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4(f32))) !void {
     const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
     defer zone.Deinit();
 
@@ -92,7 +91,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, f
     try OnImguiRender(engine_context, frame_buffers, area_rects, viewport_size);
 }
 
-fn OnImguiRender(_: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4f32), viewport_size: imgui.ImVec2) !void {
+fn OnImguiRender(_: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuffer), area_rects: std.ArrayList(Vec4(f32)), viewport_size: imgui.ImVec2) !void {
     const zone = Tracy.ZoneInit("ImguiRender", @src());
     defer zone.Deinit();
 
@@ -102,10 +101,10 @@ fn OnImguiRender(_: *EngineContext, frame_buffers: std.ArrayList(*OutputFrameBuf
         const rect = area_rects.items[i];
         const frame_buffer = frame_buffers.items[i];
 
-        const x = viewport_pos.x + rect[0] * viewport_size.x;
-        const y = viewport_pos.y + rect[1] * viewport_size.y;
-        const w = rect[2] * viewport_size.x;
-        const h = rect[3] * viewport_size.y;
+        const x = viewport_pos.x + rect.x * viewport_size.x;
+        const y = viewport_pos.y + rect.y * viewport_size.y;
+        const w = rect.z * viewport_size.x;
+        const h = rect.w * viewport_size.y;
 
         const tex_ref = imgui.ImTextureRef_c{
             ._TexData = null,

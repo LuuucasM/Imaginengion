@@ -100,8 +100,8 @@ fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_a
         imgui.igImage(
             try engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
             .{ .x = draw_w, .y = draw_h },
-            .{ .x = self.mTexOptions.mTexCoords[0], .y = 1.0 - self.mTexOptions.mTexCoords[1] },
-            .{ .x = self.mTexOptions.mTexCoords[2], .y = 1.0 - self.mTexOptions.mTexCoords[3] },
+            .{ .x = self.mTexOptions.mTextureUV0.x, .y = 1.0 - self.mTexOptions.mTextureUV0.y },
+            .{ .x = self.mTexOptions.mTextureUV1.x, .y = 1.0 - self.mTexOptions.mTextureUV1.y },
         );
 
         // UV editors under the image
@@ -109,32 +109,25 @@ fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_a
         imgui.igSeparatorText("Texture Coordinates (UV)");
 
         // UV0 (Min)
-        _ = imgui.igSliderFloat2(
-            "UV0 (Min) - Slider",
-            @ptrCast(&self.mTexOptions.mTexCoords[0]),
-            0.0,
-            1.0,
-            "%.3f",
-            imgui.ImGuiSliderFlags_AlwaysClamp,
-        );
+        var uv0x: f32 = 0;
+        if (imgui.igSliderFloat2("UV0 (Min) - Slider", &uv0x, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_AlwaysClamp)) {
+            self.mTexOptions.mTextureUV0.x = uv0x;
+        }
 
         // UV1 (Max)
-        _ = imgui.igSliderFloat2(
-            "UV1 (Max) - Slider",
-            @ptrCast(&self.mTexOptions.mTexCoords[1]),
-            0.0,
-            1.0,
-            "%.3f",
-            imgui.ImGuiSliderFlags_AlwaysClamp,
-        );
+        var uv0y: f32 = 0;
+
+        if (imgui.igSliderFloat2("UV1 (Max) - Slider", &uv0y, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_AlwaysClamp)) {
+            self.mTexOptions.mTextureUV0.y = uv0y;
+        }
 
         // Clamp and enforce min <= max per component
-        self.mTexOptions.mTexCoords[0] = std.math.clamp(self.mTexOptions.mTexCoords[0], 0.0, 1.0);
-        self.mTexOptions.mTexCoords[1] = std.math.clamp(self.mTexOptions.mTexCoords[1], 0.0, 1.0);
-        self.mTexOptions.mTexCoords[2] = std.math.clamp(self.mTexOptions.mTexCoords[2], 0.0, 1.0);
-        self.mTexOptions.mTexCoords[3] = std.math.clamp(self.mTexOptions.mTexCoords[3], 0.0, 1.0);
-        if (self.mTexOptions.mTexCoords[0] < self.mTexOptions.mTexCoords[2]) self.mTexOptions.mTexCoords[0] = self.mTexOptions.mTexCoords[2];
-        if (self.mTexOptions.mTexCoords[1] < self.mTexOptions.mTexCoords[3]) self.mTexOptions.mTexCoords[1] = self.mTexOptions.mTexCoords[3];
+        self.mTexOptions.mTextureUV0.x = std.math.clamp(self.mTexOptions.mTextureUV0.x, 0.0, 1.0);
+        self.mTexOptions.mTextureUV0.y = std.math.clamp(self.mTexOptions.mTextureUV0.y, 0.0, 1.0);
+        self.mTexOptions.mTextureUV1.x = std.math.clamp(self.mTexOptions.mTextureUV1.x, 0.0, 1.0);
+        self.mTexOptions.mTextureUV1.y = std.math.clamp(self.mTexOptions.mTextureUV1.y, 0.0, 1.0);
+        if (self.mTexOptions.mTextureUV0.x < self.mTexOptions.mTextureUV1.x) self.mTexOptions.mTextureUV0.x = self.mTexOptions.mTextureUV1.x;
+        if (self.mTexOptions.mTextureUV0.y < self.mTexOptions.mTextureUV1.y) self.mTexOptions.mTextureUV1.y = self.mTexOptions.mTextureUV1.y;
 
         // Close editor on double-click or outside click
         if (imgui.igIsMouseDoubleClicked_Nil(0) and imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None)) {
@@ -157,8 +150,11 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
 
     try self.mTexture.jsonStringify(jw);
 
-    try jw.objectField("TexCoords");
-    try jw.write(self.mTexOptions.mTexCoords);
+    try jw.objectField("TextureUV0");
+    try jw.write(self.mTexOptions.mTextureUV0);
+
+    try jw.objectField("TextureUV1");
+    try jw.write(self.mTexOptions.mTextureUV1);
 
     try jw.endObject();
 }
@@ -185,8 +181,10 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
             result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
             result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "TexCoords")) {
-            result.mTexOptions.mTexCoords = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "TextureUV0")) {
+            result.mTexOptions.mTextureUV0 = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
+        } else if (std.mem.eql(u8, field_name, "TextureUV1")) {
+            result.mTexOptions.mTextureUV1 = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Texture")) {
             const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
 

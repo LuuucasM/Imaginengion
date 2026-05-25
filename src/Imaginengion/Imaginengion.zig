@@ -15,7 +15,11 @@ pub const ScriptType = @import("Assets/Assets/ScriptAsset.zig").ScriptType;
 pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
 
 //LinAlg stuff
-pub const LinAlg = @import("Math/LinAlg.zig");
-pub const Vec2f32 = LinAlg.Vec2f32;
-pub const Vec3f32 = LinAlg.Vec3f32;
-pub const Quatf32 = LinAlg.Quatf32;
+const MathTypes = @import("Math/MathTypes.zig");
+pub const MathUtils = @import("Math/MathUtils.zig");
+pub const Vec2 = MathTypes.Vec2;
+pub const Vec3 = MathTypes.Vec3;
+pub const Vec4 = MathTypes.Vec4;
+pub const Mat3 = MathTypes.Mat3;
+pub const Mat4 = MathTypes.Mat4;
+pub const Quat = MathTypes.Quat;
