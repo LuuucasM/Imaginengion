@@ -16,26 +16,11 @@ const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
 });
 
 // layout(set = 3, binding = 0) uniform CameraUBO
-extern const CameraUBO: PushConstants addrspace(.uniform);
-extern var QuadsSSBO: [*]QuadData addrspace(.storage_buffer);
-extern var GlyphsSSBO: [*]GlyphData addrspace(.storage_buffer);
+const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = 3, .location = 0 } });
+var QuadsSSBO = @extern(*addrspace(.storage_buffer) [*]QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = 2, .location = 1 } });
+var GlyphsSSBO = @extern(*addrspace(.storage_buffer) [*]GlyphData, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = 2, .location = 2 } });
 
 export fn main() callconv(.spirv_fragment) void {
-    gpu.location(&oFragColor, 0);
-    gpu.binding(&CameraUBO, 3, 0);
-
-    asm volatile (
-        \\OpDecorate %q DescriptorSet 2
-        \\OpDecorate %q Binding 1
-        \\OpDecorate %q NonWritable
-        \\OpDecorate %g DescriptorSet 2
-        \\OpDecorate %g Binding 2
-        \\OpDecorate %g NonWritable
-        :
-        : [q] "" (&QuadsSSBO),
-          [g] "" (&GlyphsSSBO),
-    );
-
     const frag = gpu.frag_coord;
 
     const uv = Vec2(f32).FromVector(CameraUBO.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(CameraUBO.mRayOffset));

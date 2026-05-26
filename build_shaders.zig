@@ -10,7 +10,7 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
     const shaders_step = b.step("shaders", "Build all SPIR-V shaders");
 
     inline for (shaders) |s| {
-        const exe = b.addExecutable(.{
+        const obj = b.addObject(.{
             .name = s[0],
             .root_module = b.createModule(.{
                 .root_source_file = b.path(s[1]),
@@ -21,9 +21,10 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
                 },
             }),
         });
-        const install = b.addInstallArtifact(exe, .{
-            .dest_dir = .{ .override = .{ .custom = "shaders" } },
-        });
+        const install = b.addInstallFile(
+            obj.getEmittedBin(),
+            "shaders/" ++ s[0] ++ ".spv",
+        );
         shaders_step.dependOn(&install.step);
 
         const single_step = b.step(s[2], "Build " ++ s[0] ++ " only");
