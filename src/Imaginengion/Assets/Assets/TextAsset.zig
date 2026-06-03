@@ -32,7 +32,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = [_]GlyphInfo{GlyphInfo{}} ** GYLPH_SET_SIZE,
+mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = undefined,
 mDistanceRange: u32 = 0,
 mSize: u32 = 0,
 mLineHeight: f32 = 0.0,

@@ -6,8 +6,7 @@ const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const PushConstants = switch (builtin.os.tag) {
-    .windows => @import("backends/SDLGPUPipeline.zig").PushConstants,
-    else => @compileError("not supported currently!\n"),
+    else => @import("backends/SDLGPUPipeline.zig").PushConstants,
 };
 
 pub const PipelineConfig = struct {

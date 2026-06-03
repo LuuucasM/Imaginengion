@@ -9,7 +9,6 @@ const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
 
 pub const TexOptions = struct {
-    mColor: Vec4(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
     mTilingFactor: f32 = 1.0,
     mTextureUV0: Vec2(f32) = .{ .x = 0, .y = 0 },
     mTextureUV1: Vec2(f32) = .{ .x = 1, .y = 1 },

@@ -88,8 +88,26 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     // vendor C/C++ objects while executables importing this module never linked that `.lib`,
     // giving undefined SDL/ImGui symbols.
     const engine_module = switch (build_type) {
-        .Full, .Script => b.addModule(
-            "ImaginEngion",
+        .Full => b.addModule(
+            "ImaginEngionEngine",
+            .{
+                .optimize = optimize,
+                .target = target,
+                .link_libc = true,
+                .link_libcpp = true,
+                .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
+                .imports = &.{
+                    .{ .name = "SDL3", .module = sdl3_c.createModule() },
+                    .{ .name = "IMGUI", .module = imgui_c.createModule() },
+                    .{ .name = "NFD", .module = nfd_c.createModule() },
+                    .{ .name = "Tracy", .module = tracy_c.createModule() },
+                    .{ .name = "MiniAudio", .module = mini_c.createModule() },
+                    .{ .name = "STB", .module = stb_c.createModule() },
+                },
+            },
+        ),
+        .Script => b.addModule(
+            "ImaginEngionScript",
             .{
                 .optimize = optimize,
                 .target = target,
@@ -107,7 +125,7 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             },
         ),
         .Shader => b.addModule(
-            "ImaginEngion",
+            "ImaginEngionShader",
             .{
                 .optimize = optimize,
                 .target = target,

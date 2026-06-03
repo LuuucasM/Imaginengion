@@ -13,6 +13,7 @@ const Entity = @import("../Entity.zig");
 const Player = @import("../../Players/Player.zig");
 const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
 const PathType = @import("../../Assets/AssetManager.zig").PathType;
+const Material = @import("../../Materials/Material.zig");
 const QuadComponent = @This();
 
 //IMGUI
@@ -31,6 +32,7 @@ pub const Ind: usize = blk: {
 mShouldRender: bool = true,
 mTexture: AssetHandle = .empty,
 mTexOptions: Texture2D.TexOptions = .{},
+mMaterial: Material,
 mEditTexCoords: bool = false,
 
 pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {

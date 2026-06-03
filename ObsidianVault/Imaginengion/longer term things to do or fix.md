@@ -1,6 +1,8 @@
 - zig build --watch -fincremental -Dno-bin
 - zig build --watch --error-style verbose_clear -fincremental -Dno-bin
-- zig build-obj assets/shaders/SDFVertShader.zig -target spirv32-vulkan -ofmt=spirv -mcpu vulkan_v1_2 -fno-llvm -femit-bin=assets/shaders/SDFVertShader.spv
+- commands for building shaders while the the build system has an bug with outputing errors:
+	- zig build-obj -fno-llvm -fno-lld -ofmt=spirv -target spirv64-vulkan -mcpu baseline --name SDFVertShader -femit-bin=SDFVertShader.spv --dep IM -Mroot=assets/shaders/SDFVertShader.zig -MIM=src/Imaginengion/ImagineShaders.zig
+	- zig build-obj -ODebug -target spirv64-vulkan -mcpu baseline --dep IM "-Mroot=assets\shaders\SDFFragShader.zig" "-MIM=src\Imaginengion\ImagineShaders.zig" --name SDFFragShader
 - change windowing/renderer/input to SDL3
 - i can split rendering into 2 parts one for overlay layer and one for game layer and then a 3rd pass to compose the overlay layer on top
 	- this means i can split textures a little better instead of doing it all in one and dealing with 16 8k textures only

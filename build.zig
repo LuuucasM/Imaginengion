@@ -10,10 +10,9 @@ const build_script = @import("build_script.zig");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const spirv_target = b.resolveTargetQuery(.{
-        .cpu_arch = .spirv64,
-        .os_tag = .vulkan,
-    });
+    const spirv_target = b.resolveTargetQuery(.{ .cpu_arch = .spirv64, .os_tag = .vulkan, .cpu_features_add = std.Target.spirv.featureSet(&.{
+        .variable_pointers,
+    }) });
 
     //==============================ENGINE MODULE===========================================================
     const engine_module_eng = MakeEngineLib(b, target, optimize, .Full);
