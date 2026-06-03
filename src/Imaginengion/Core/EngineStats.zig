@@ -5,11 +5,13 @@ pub const RenderStats = struct {
     TotalObjects: usize = 0,
     OutputQuadNum: usize = 0,
     OutputGlyphNum: usize = 0,
+    ShadingsNum: usize = 0,
 
     pub fn ResetStats(self: *RenderStats) void {
         self.TotalObjects = 0;
         self.OutputQuadNum = 0;
         self.OutputGlyphNum = 0;
+        self.ShadingsNum = 0;
     }
 };
 

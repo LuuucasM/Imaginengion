@@ -116,16 +116,16 @@ comptime {
             }
 
             const fn_info = editorrender_info.@"fn";
-            if (fn_info.params.len != 2) {
+            if (fn_info.param_types.len != 2) {
                 @compileError("Type's EditorRender must have 2 parameters " ++ type_name);
             }
 
-            const first_param = fn_info.params[0].type.?;
+            const first_param = fn_info.param_types[0].?;
             if (first_param != *component_type) {
                 @compileError("Type's EditorRender first parameter must be *type " ++ type_name);
             }
 
-            const second_param = fn_info.params[1].type.?;
+            const second_param = fn_info.param_types[1].?;
             if (second_param != *EngineContext) {
                 @compileError("Type's EditorRender second paramter must be *EngineContext " ++ type_name);
             }

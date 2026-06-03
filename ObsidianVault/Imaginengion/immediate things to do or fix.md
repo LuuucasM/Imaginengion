@@ -1,6 +1,10 @@
-- then continue on my journy of migrating my shaders into zig
-	- recently zig started to support spirv as a target backend thanks to llvm. it is not fully fleshed out yet so like for example right now i cannot do texture arrays with sampler2d 
-	- but i had to change my shaders due to new rendering pipline so similar to the math stuff i figured if im going to rework my shaders i might as well using the new tools which will be better in the long run
-	- another reason for why i needed to write the math library is because since the shaders wil be written in zig I can share definitions between the main program and the shaders which means I can use the same data structures, functions, etc. so it should be much easier to write and maintain a higher quality shader due to this
-- make visualizer for sphere collision and box collision
-- do next phase of physics engine
+- fix GetSurfaceColor
+	- i forgot i did actually need material data in the main march loop so i can determine if i need to spawn new rays, keep marching, etc. 
+	- I am starting to realize that my current setup is not going to scale well because i have to pass around the ssbo's in the functions instead of having them as members of RayMarcher, this will get silly quickly
+	- so instead i think I will have RayMarcher be a function that returns a ray marcher type and for the function I can give it a parameter that lets me select the type of container that the buffers will be. 
+	- I dont really want to hard code the SSBO types (with addrspace being .storage_buffer) directly into the marcher cuz for some reason i thought it would be cool if I could build it in a way where I could reuse it possibly for CPU ray marching in the future so right now i just pass the SSBO's as function parameters where the parameter type is anytype. but not only is that a bit of an abuse of anyrype but then i could have up to like maximum 16 different ssbo's in the future which is crazy so i better change it to members of marcher instead of function parameters
+- make it so that the shaders are embedded into the main program instead of loading from a file
+- change the engine program to make use of the embedded shaders
+	- I think for my shader asset I may have to create a function like "InitFromBinary" or something which instead of taking in a file path it will take in the binary for the vertex and frag shader and then skip the read file part that exists right now
+- debug, add tests, add asserts, etc
+	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!

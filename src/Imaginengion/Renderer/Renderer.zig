@@ -10,6 +10,11 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 const SceneManager = @import("../Scene/SceneManager.zig");
 
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
+const Vec3 = MathTypes.Vec3;
+const Vec4 = MathTypes.Vec4;
+
 const Entity = @import("../GameObjects/Entity.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
@@ -32,6 +37,22 @@ const Tracy = @import("../Core/Tracy.zig");
 const Renderer = @This();
 
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
+
+pub const ShadingData = extern struct {
+    //texture data
+    TextureUV0: Vec2(f32).VectorT,
+    TextureUV1: Vec2(f32).VectorT,
+    TilingFactor: f32,
+
+    //material volume data
+    Absorption: Vec3(f32).VectorT,
+
+    //material surface data
+    Color: Vec4(f32).VectorT,
+
+    Texturehandle: u32,
+    _pad0: [3]f32 = [3]f32{ 0, 0, 0 },
+};
 
 mPlatform: RenderPlatform = .{},
 mTextureManager: TextureManager = .{},

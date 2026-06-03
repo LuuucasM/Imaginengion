@@ -1,6 +1,7 @@
 const std = @import("std");
 const QuadData = @import("Renderer2D.zig").QuadData;
 const GlyphData = @import("Renderer2D.zig").GlyphData;
+const ShadingData = @import("Renderer.zig").ShadingData;
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Ray = MathTypes.Ray;
@@ -21,27 +22,53 @@ const MAX_STEPS: u32 = 9999;
 const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 8;
 pub const MAX_EDGES: u32 = 8;
+pub const DEFAULT_COLOR = Vec4(f32){ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1.0 };
 
 //NOTE: This is a medium which we travel through
 //contains details related to the medium
 pub const Node = struct {
     ParentEdge: i32, //if ParentEdge == -1 -> root parent
-    SurfaceColor: Vec4(f32),
-    Is2D: bool,
+    MaterialHandle: u32,
     FirstEdge: i32, //if FirstEdge == -1 -> leaf
+    AccumColor: Vec4(f32),
+
+    pub fn CalcColor(self: *Node, materials: anytype, edges: *EdgeArr) void {
+        const child_accum = if (self.FirstEdge == -1) DEFAULT_COLOR else edges[@intCast(self.FirstEdge)].AccumColor;
+
+        const material: ShadingData = materials[self.MaterialHandle];
+        const color = Vec4(f32).FromVector(material.Color);
+        const alpha = color.w;
+
+        self.AccumColor = color.Lerp(child_accum, 1.0 - alpha);
+    }
 };
 
 //NOTE: This is the ray we travel according to the ray
 //stores information for ray
 pub const Edge = struct {
     Ray: Ray(f32),
-    Length: f32, //if Length == -1 -> miss
+    Length: f32,
     FromNode: i32,
     ToNode: i32, //if ToNode == -1 -> miss
     SiblingEdge: i32, //used if a node has multiple rays (multiple edges)
     Normal: Vec3(f32),
     AccumColor: Vec4(f32),
+    MaterialHandle: u32,
+
+    pub fn CalcColor(self: *Edge, materials: anytype, nodes: *NodeArr) void {
+        const child_accum = if (self.ToNode == -1) DEFAULT_COLOR else nodes[@intCast(self.ToNode)].AccumColor;
+
+        const material: ShadingData = materials[self.MaterialHandle];
+
+        // Beer-Lambert for absorbtion
+        const rgb = Vec3(f32).FromVector(-material.Absorption).MulScalar(self.Length).Exp().MulVec(Vec3(f32){ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
+
+        self.AccumColor = .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = child_accum.w };
+    }
 };
+
+const NodeArr = [MAX_NODES]Node;
+const EdgeArr = [MAX_EDGES]Edge;
 
 const ShapeType = enum(u32) {
     None = 0,
@@ -67,8 +94,8 @@ const MarchData = extern struct {
     object: ObjectData,
 };
 
-mNodes: [MAX_NODES]Node,
-mEdges: [MAX_EDGES]Edge,
+mNodes: NodeArr,
+mEdges: EdgeArr,
 mNodeCount: usize,
 mEdgeCount: usize,
 
@@ -113,7 +140,6 @@ pub fn March(self: *RayMarcher, quads: anytype, glyphs: anytype, quad_count: usi
         self.mNodes[new_node_ind] = Node{
             .ParentEdge = @intCast(curr_edge_ind),
             .SurfaceColor = surface_color,
-            .Is2D = march_data.object.Is2D(),
             .FirstEdge = -1,
         };
 
@@ -145,25 +171,23 @@ pub fn March(self: *RayMarcher, quads: anytype, glyphs: anytype, quad_count: usi
     }
 }
 
-pub fn GenerateColor(self: *RayMarcher) Vec4(f32).VectorT {
-    const default_color = Vec4(f32){ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1.0 };
+pub fn GenerateColor(self: *RayMarcher, materials: anytype) Vec4(f32).VectorT {
+    var i: usize = self.mNodeCount;
+    while (i > 0) {
+        i -= 1;
+        const node = &self.mNodes[i];
 
-    var i: usize = self.mEdgeCount - 1;
-    while (i >= 0) : (i -= 1) {
-        const edge = self.mEdges[i];
+        var ei: i32 = node.FirstEdge;
+        while (ei != -1) {
+            const edge = &self.mEdges[@intCast(ei)];
+            edge.CalcColor(materials, &self.mNodes);
+            ei = edge.SiblingEdge;
+        }
 
-        if (edge.ToNode == -1) continue;
-
-        const node = self.mNodes[@intCast(edge.ToNode)];
-
-        const child_color = if (node.FirstEdge == -1) default_color else self.mEdges[@intCast(node.FirstEdge)].AccumColor;
-
-        const alpha = node.SurfaceColor.w;
-        self.mEdges[i].AccumColor = node.SurfaceColor.Lerp(child_color, 1.0 - alpha);
+        node.CalcColor(materials, &self.mEdges);
     }
-    const final_color = if (self.mEdgeCount > 0) self.mEdges[0].AccumColor else default_color;
 
-    return final_color.ToVector();
+    return self.mNodes[0].AccumColor.ToVector();
 }
 
 fn GetNodeIndex(self: *RayMarcher) usize {

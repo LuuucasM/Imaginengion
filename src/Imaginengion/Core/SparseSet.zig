@@ -11,7 +11,7 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
         comptime {
             std.debug.assert(index_bits <= entity_bits);
         }
-        const generation_t = std.meta.Int(.unsigned, gen_bits);
+        const generation_t = @Int(.unsigned, gen_bits);
 
         mDenseToSparse: std.ArrayList(entity_t),
         mFreeCount: usize,

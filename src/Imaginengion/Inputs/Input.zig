@@ -25,8 +25,8 @@ pub const empty: InputManager = .{
 };
 
 pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
-    try self._KeyPressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.ScanCodes).@"enum".fields.len);
-    try self._MousePressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.MouseCodes).@"enum".fields.len);
+    try self._KeyPressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.ScanCodes).@"enum".field_names.len);
+    try self._MousePressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.MouseCodes).@"enum".field_names.len);
 }
 
 pub fn Deinit(self: *InputManager, engine_allocator: std.mem.Allocator) void {

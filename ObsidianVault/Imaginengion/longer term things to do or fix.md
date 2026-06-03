@@ -1,12 +1,7 @@
-- zig build --watch -fincremental -Dno-bin
-- zig build --watch --error-style verbose_clear -fincremental -Dno-bin
-- commands for building shaders while the the build system has an bug with outputing errors:
-	- zig build-obj -fno-llvm -fno-lld -ofmt=spirv -target spirv64-vulkan -mcpu baseline --name SDFVertShader -femit-bin=SDFVertShader.spv --dep IM -Mroot=assets/shaders/SDFVertShader.zig -MIM=src/Imaginengion/ImagineShaders.zig
-	- zig build-obj -ODebug -target spirv64-vulkan -mcpu baseline --dep IM "-Mroot=assets\shaders\SDFFragShader.zig" "-MIM=src\Imaginengion\ImagineShaders.zig" --name SDFFragShader
-- change windowing/renderer/input to SDL3
+- make visualizer for sphere collision and box collision
+- do next phase of physics engine
 - i can split rendering into 2 parts one for overlay layer and one for game layer and then a 3rd pass to compose the overlay layer on top
 	- this means i can split textures a little better instead of doing it all in one and dealing with 16 8k textures only
-- add more physics
 - add entity picking in the viewport/playport using ray tracing
 	- after this is implemented then I can start making UI elements
 	- This means I can start making the UI for Pong which consists of
@@ -33,34 +28,10 @@
 - expose a way to use internal engine assets to the editor
 	- like for example if something is white texture and then i change it, i have no way of changing it back to white texture if i change my mind 
 	- i can either expose the engine assets OR add some X button that will return the value back to default but I think just exposing engine assets is better and who knows maybe in the future engine assets will contain a whole lots of nice goodies to make dev lives easier
-- read about vulkan
-	- using bindless textures in opengl prevents from using spirv, which prevents from using detailed performance profiling using nsight so i have no choice but to switch now
-	- start reading: https://vulkan-tutorial.com/en/Overview
-	- another resource: https://paroj.github.io/gltut/
-	- another resource: https://vkguide.dev/
-	- i need to learn how to:
-		- initiailize a vulkan context
-		- frame buffer
-		- vertex buffer
-		- index buffer
-		- SSBO
-		- Texture2D
-		- Shader
-		- uniform buffer
-		- vertex array
-	- or at least these equivalents how they can work into the engine
-- change all the vendor library interfaces to rely on command line variables rather than like just builtin.os.tag like it is right now
-	- like add a "RenderContext" flag that u can set to either opengl or vulkan or whatever
-	- one for audio
-	- one for ECS
-	- platform utils (like native file dialog)
-	- window maker (like glfw)
 - i need to add components at some point:
 	- attribute component (multi)
 	- particle component (dont know yet its so far away)
 - maybe in the future i can introduce like saved editor states where you can like hotkey or save specific scene setups so you can use later that way you can hot swap like if you want to start a game from the main menu screen after working on some other scene you can quick load the main menu setup and play from there and when it ends you can quick load back to the setup that ur editing currently
-- fix bug where if you minimize it crashes because imgui begin/end children dont match
-	- maybe this bug will be fixed by abandoning imgui in favor of built in UI
 - does alt + f4 work natively with every program or does it need to be implemented?
 - make it so u cant make scenes or anything until you have a project selected first
 - Editor settings config file that gets saved file
@@ -69,4 +40,6 @@
 	- ill need to change literally everything to utf-8 including entity names, and anything that is displayed onto the screen
 - add in reinforcement learning to the ECS for sorting components lists
 - abstract away the ECS so I can start working on comparing my ECS with others to do research on heuristic functions when dealing with sorting component buckets
-- make a game where its kind of just a big world that you can walk/run/fly around where you can visualize the profiling of the game engine. since I may need to introduce more game engine specific profiling (so dedicated proifling tool) to the engine one day especially for memory, maybe it would be fun to put that into a like a game where you can move around 
+- [https://20_games_challenge.gitlab.io/](https://20_games_challenge.gitlab.io/ "https://20_games_challenge.gitlab.io/")
+	- go through the games on this list and make them :)
+	- im sure i will see lots of issues and have to fix lots of things while doing this it sounds like so much fun

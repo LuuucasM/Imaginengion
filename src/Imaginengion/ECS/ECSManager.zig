@@ -397,16 +397,16 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     }
 
                     const fn_info = deinit_info.@"fn";
-                    if (fn_info.params.len != 2) {
+                    if (fn_info.param_types.len != 2) {
                         @compileError(type_name ++ "'s Deinit must have 2 parameters");
                     }
 
-                    const first_param = fn_info.params[0].type.?;
+                    const first_param = fn_info.param_types[0].?;
                     if (first_param != *component_type) {
                         @compileError(type_name ++ "'s Deinit's first parameter must be *type right now it is " ++ @typeName(first_param));
                     }
 
-                    const second_param = fn_info.params[1].type.?;
+                    const second_param = fn_info.param_types[1].?;
                     if (second_param != *EngineContext) {
                         @compileError(type_name ++ "'s Deinit's second parameter must be *EngineContext currently " ++ @typeName(second_param));
                     }

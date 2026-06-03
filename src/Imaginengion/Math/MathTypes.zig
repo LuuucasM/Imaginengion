@@ -152,6 +152,10 @@ pub fn Vec3(comptime number_type: type) type {
             };
         }
 
+        pub fn Exp(self: Self) Self {
+            return @exp(self.ToVector());
+        }
+
         //TODO: no test
         pub fn Abs(self: Self) Self {
             return Self{
@@ -262,9 +266,14 @@ pub fn Vec3(comptime number_type: type) type {
             return @bitCast(self.ToVector() / FromScalar(scalar).ToVector());
         }
 
-        pub fn MulScalar(self: Self, scalar: number_type) Self {
-            return @bitCast(self.ToVector() * FromScalar(scalar).ToVector());
+        pub fn MulVec(self: Self, other: Self) Self {
+            return @bitCast(self.ToVector() * other.ToVector());
         }
+
+        pub fn MulScalar(self: Self, scalar: number_type) Self {
+            return self.MulVec(Self.FromScalar(scalar));
+        }
+
         pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
             _ = fmt;
             _ = options;
@@ -303,6 +312,10 @@ pub fn Vec4(comptime number_type: type) type {
 
         pub fn FromVector(vect: VectorT) Self {
             return @bitCast(vect);
+        }
+
+        pub fn FromScalar(scalar: number_type) Self {
+            return @splat(scalar);
         }
 
         pub fn Len(self: Self) number_type {
@@ -373,8 +386,12 @@ pub fn Vec4(comptime number_type: type) type {
             return @bitCast(self.ToVector() - other.ToVector());
         }
 
+        pub fn MulVec(self: Self, other: Self) Self {
+            return @bitCast(self.ToVector() * other.ToVector());
+        }
+
         pub fn MulScalar(self: Self, scalar: number_type) Self {
-            return Self.FromVector(self.ToVector() * @as(VectorT, @splat(scalar)));
+            return self.MulVec(Self.FromScalar(scalar));
         }
 
         pub fn DivScalar(self: Self, scalar: number_type) Self {
