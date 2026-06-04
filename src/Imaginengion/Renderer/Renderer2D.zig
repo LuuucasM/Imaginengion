@@ -40,6 +40,7 @@ pub const QuadData = extern struct {
     ShadingHandle: u32,
     Rotation: Vec4(f32).VectorT,
     HalfExtents: Vec4(f32).VectorT,
+    ShadingFlags: u32,
 };
 
 pub const GlyphData = extern struct {
@@ -49,7 +50,9 @@ pub const GlyphData = extern struct {
     HalfExtents: Vec3(f32).VectorT,
     PlaneCenter: Vec2(f32).VectorT,
     TextureShadingHandle: u32,
-    _pad0: [3]f32 = [3]f32{ 0, 0, 0 },
+    AtlasShadingFlags: u32,
+    TextureShadingFlags: u32,
+    _pad0: f32 = 9,
 };
 
 pub const BufferKind = enum {
@@ -175,11 +178,15 @@ pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_com
 
     const shading_handle = self.mShadingBufferBase.items.len - 1;
 
+    var shading_flag: u32 = 0;
+    if (quad_component.mMaterial.mSurfaceColor.w < 1.0) shading_flag |= ShadingData.SHADING_FLAG_TRANSPARENT;
+
     try self.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
         .Position = world_pos.ToVector(),
         .Rotation = world_rot.ToVector(),
         .HalfExtents = Vec4(f32).VectorT{ world_scale.x * 0.5, world_scale.y * 0.5, world_scale.z * 0.5, THICKNESS_2D },
         .ShadingHandle = @intCast(shading_handle),
+        .ShadingFlags = shading_flag,
     });
 }
 
@@ -226,6 +233,8 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
         });
 
         const texture_shading_handle = self.mShadingBufferBase.items.len - 1;
+        var texture_shading_flags: u32 = 0;
+        if (text_component.mMaterial.mSurfaceColor.w < 1.0) texture_shading_flags |= ShadingData.SHADING_FLAG_TRANSPARENT;
 
         //for the atlas of the text
         try self.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
@@ -238,6 +247,7 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
         });
 
         const atlas_shading_handle = self.mShadingBufferBase.items.len - 1;
+        const atlas_shading_flags: u32 = 0;
 
         const left = glyph.mPlaneMin[0];
         const top = glyph.mPlaneMin[1];
@@ -261,6 +271,8 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
             .PlaneCenter = Vec2(f32).VectorT{ plane_center.x, plane_center.y },
             .TextureShadingHandle = texture_shading_handle,
             .AtlasShadingHandle = atlas_shading_handle,
+            .AtlasShadingFlags = atlas_shading_flags,
+            .TextureShadingFlags = texture_shading_flags,
         });
 
         var move_dist = glyph_width;

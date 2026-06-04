@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "longer term things to do or fix.md",
+                "file": "immediate things to do or fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "longer term things to do or fix"
+              "title": "immediate things to do or fix"
             }
           },
           {
@@ -199,8 +199,8 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
-    "Useful commands.md",
     "longer term things to do or fix.md",
+    "Useful commands.md",
     "immediate things to do or fix.md",
     "Engine Notes/2026 6 June/3.md",
     "Engine Notes/2026 6 June",

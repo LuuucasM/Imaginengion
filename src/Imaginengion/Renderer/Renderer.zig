@@ -39,10 +39,12 @@ const Renderer = @This();
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 
 pub const ShadingData = extern struct {
+    pub const SHADING_FLAG_TRANSPARENT: u32 = 1 << 0;
+
     //texture data
     TextureUV0: Vec2(f32).VectorT,
     TextureUV1: Vec2(f32).VectorT,
-    TilingFactor: f32,
+    TilingFactor: f32, //note this one has to be a single f32 so that it packs into the Absorption Vec3 well
 
     //material volume data
     Absorption: Vec3(f32).VectorT,

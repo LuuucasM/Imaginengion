@@ -16,8 +16,6 @@ const THICKNESS_2D = SDFFunctions.THICKNESS_2D;
 
 const Stack = @import("../Core/Stack.zig").Stack;
 
-const RayMarcher = @This();
-
 const MAX_STEPS: u32 = 9999;
 const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 8;
@@ -67,9 +65,6 @@ pub const Edge = struct {
     }
 };
 
-const NodeArr = [MAX_NODES]Node;
-const EdgeArr = [MAX_EDGES]Edge;
-
 const ShapeType = enum(u32) {
     None = 0,
     Quad,
@@ -87,173 +82,192 @@ const ObjectData = extern struct {
         if (self.shape_type == ShapeType.Quad or self.shape_type == ShapeType.Glyph) return true;
         return false;
     }
+    pub fn GetShadingHandle(self: ObjectData, quads: anytype, glyphs: anytype) u32 {
+        return switch (self.shape_type) {
+            .Quad => quads[self.shape_ind].ShadingHandle,
+            .Glyph => glyphs[self.shape_ind].TextureShadingHandle,
+            else => 0,
+        };
+    }
+    pub fn GetShadingFlags(self: ObjectData, quads: anytype, glyphs: anytype) u32 {
+        return switch (self.shape_type) {
+            .Quad => quads[self.shape_ind].ShadingFlags,
+            .Glyph => glyphs[self.shape_ind].TextureShadingFlags,
+            else => 0,
+        };
+    }
 };
+
+const NodeArr = [MAX_NODES]Node;
+const EdgeArr = [MAX_EDGES]Edge;
 
 const MarchData = extern struct {
     min_dist: f32,
     object: ObjectData,
 };
 
-mNodes: NodeArr,
-mEdges: EdgeArr,
-mNodeCount: usize,
-mEdgeCount: usize,
+pub fn RayMarcher(ssbo_type: type) type {
+    return struct {
+        const Self = @This();
 
-pub fn March(self: *RayMarcher, quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize, perspective_far: f32) void {
-    var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
-    edge_ind_stack.push(0);
+        mNodes: NodeArr,
+        mEdges: EdgeArr,
+        mNodeCount: usize,
+        mEdgeCount: usize,
+        mShadingSSBO: ssbo_type,
 
-    while (edge_ind_stack.len > 0) {
-        const curr_edge_ind = edge_ind_stack.pop();
-        const curr_edge = self.mEdges[curr_edge_ind];
+        pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize, perspective_far: f32) void {
+            var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
+            edge_ind_stack.push(0);
 
-        var i: u32 = 0;
-        var march_data: MarchData = .{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
-        var dist_origin: f32 = 0;
+            while (edge_ind_stack.len > 0) {
+                const curr_edge_ind = edge_ind_stack.pop();
+                const curr_edge = self.mEdges[curr_edge_ind];
 
-        while (i < MAX_STEPS and dist_origin < perspective_far and march_data.min_dist > SURF_DIST) : (i += 1) {
-            march_data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
-            const point = curr_edge.Ray.Origin.AddVec(curr_edge.Ray.Direction.MulScalar(dist_origin));
-            march_data = NextSurface(point, quads, glyphs, quad_count, glyph_count);
-            dist_origin += march_data.min_dist;
-        }
-        //once we are herer we either a) hit max steps, b) hit our max distance, c) hit a surface
+                var i: u32 = 0;
+                var march_data: MarchData = .{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
+                var dist_origin: f32 = 0;
 
-        //case a and b - ray dies for whatever reason
-        if (i >= MAX_STEPS or dist_origin >= perspective_far) {
-            self.mEdges[curr_edge_ind].ToNode = -1;
-            self.mEdges[curr_edge_ind].Length = dist_origin;
-            continue;
-        }
+                while (i < MAX_STEPS and dist_origin < perspective_far and march_data.min_dist > SURF_DIST) : (i += 1) {
+                    march_data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
+                    const point = curr_edge.Ray.Origin.AddVec(curr_edge.Ray.Direction.MulScalar(dist_origin));
+                    march_data = NextSurface(point, quads, glyphs, quad_count, glyph_count);
+                    dist_origin += march_data.min_dist;
+                }
+                //once we are herer we either a) hit max steps, b) hit our max distance, c) hit a surface
 
-        //case c
-        const hit_point = curr_edge.Ray.Origin.AddVec(curr_edge.Ray.Direction.MulScalar(dist_origin));
-        const hit_normal = CalcNormal(hit_point, quads, glyphs, quad_count, glyph_count);
+                //case a and b - ray dies for whatever reason
+                if (i >= MAX_STEPS or dist_origin >= perspective_far) {
+                    self.mEdges[curr_edge_ind].ToNode = -1;
+                    self.mEdges[curr_edge_ind].Length = dist_origin;
+                    continue;
+                }
 
-        // fill in current edge
-        self.mEdges[curr_edge_ind].Length = dist_origin;
-        self.mEdges[curr_edge_ind].Normal = hit_normal;
+                //case c
+                const hit_point = curr_edge.Ray.Origin.AddVec(curr_edge.Ray.Direction.MulScalar(dist_origin));
+                const hit_normal = CalcNormal(hit_point, quads, glyphs, quad_count, glyph_count);
 
-        const surface_color = GetSurfaceColor(march_data.object, quads, glyphs);
+                // fill in current edge
+                self.mEdges[curr_edge_ind].Length = dist_origin;
+                self.mEdges[curr_edge_ind].Normal = hit_normal;
 
-        const new_node_ind = self.GetNodeIndex();
-        self.mNodes[new_node_ind] = Node{
-            .ParentEdge = @intCast(curr_edge_ind),
-            .SurfaceColor = surface_color,
-            .FirstEdge = -1,
-        };
+                const shading_handle = march_data.object.GetShadingHandle(quads, glyphs);
 
-        self.mEdges[curr_edge_ind].ToNode = @intCast(new_node_ind);
+                const new_node_ind = self.GetNodeIndex();
+                self.mNodes[new_node_ind] = Node{
+                    .ParentEdge = @intCast(curr_edge_ind),
+                    .MaterialHandle = shading_handle,
+                    .FirstEdge = -1,
+                    .AccumColor = DEFAULT_COLOR,
+                };
 
-        //in the future can expand this to do translucency, reflectivity, lighting, shadows, refraction, whatever else exists idk
-        //for now if the object is translucent make a ray that goes straight through
-        if (surface_color.w < 1.0) {
-            const new_edge_ind = self.GetEdgeIndex();
+                self.mEdges[curr_edge_ind].ToNode = @intCast(new_node_ind);
 
-            const nudged_origin = if (march_data.object.Is2D()) hit_point.AddVec(curr_edge.Ray.Direction.MulScalar(SURF_DIST)).AddScalar(THICKNESS_2D) else hit_point.AddVec(curr_edge.Ray.Direction.MulScalar(SURF_DIST));
+                const shading_flags = march_data.object.GetShadingFlags(quads, glyphs);
 
-            self.mEdges[new_edge_ind] = Edge{
-                .Ray = Ray(f32){
-                    .Origin = nudged_origin,
-                    .Direction = curr_edge.Ray.Direction, // same dir, straight through
-                },
-                .Length = -1.0,
-                .Normal = .{ .x = 0, .y = 0, .z = 0 },
-                .FromNode = @intCast(new_node_ind),
-                .ToNode = -1,
-                .SiblingEdge = -1,
-                .AccumColor = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 },
-            };
+                //in the future can expand this to do translucency, reflectivity, lighting, shadows, refraction, whatever else exists idk
+                //for now if the object is translucent make a ray that goes straight through
+                if (shading_flags & ShadingData.SHADING_FLAG_TRANSPARENT != 0) { //if transparent bit is set, aka it is transparent
+                    const new_edge_ind = self.GetEdgeIndex();
 
-            self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
-            edge_ind_stack.push(new_edge_ind);
-        }
-    }
-}
+                    const nudged_origin = if (march_data.object.Is2D()) hit_point.AddVec(curr_edge.Ray.Direction.MulScalar(SURF_DIST)).AddScalar(THICKNESS_2D) else hit_point.AddVec(curr_edge.Ray.Direction.MulScalar(SURF_DIST));
 
-pub fn GenerateColor(self: *RayMarcher, materials: anytype) Vec4(f32).VectorT {
-    var i: usize = self.mNodeCount;
-    while (i > 0) {
-        i -= 1;
-        const node = &self.mNodes[i];
+                    self.mEdges[new_edge_ind] = Edge{
+                        .Ray = Ray(f32){
+                            .Origin = nudged_origin,
+                            .Direction = curr_edge.Ray.Direction, // same dir, straight through
+                        },
+                        .Length = -1.0,
+                        .Normal = .{ .x = 0, .y = 0, .z = 0 },
+                        .FromNode = @intCast(new_node_ind),
+                        .ToNode = -1,
+                        .SiblingEdge = -1,
+                        .AccumColor = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 },
+                    };
 
-        var ei: i32 = node.FirstEdge;
-        while (ei != -1) {
-            const edge = &self.mEdges[@intCast(ei)];
-            edge.CalcColor(materials, &self.mNodes);
-            ei = edge.SiblingEdge;
+                    self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
+                    edge_ind_stack.push(new_edge_ind);
+                }
+            }
         }
 
-        node.CalcColor(materials, &self.mEdges);
-    }
+        pub fn GenerateColor(self: *Self, materials: anytype) Vec4(f32).VectorT {
+            var i: usize = self.mNodeCount;
+            while (i > 0) {
+                i -= 1;
+                const node = &self.mNodes[i];
 
-    return self.mNodes[0].AccumColor.ToVector();
-}
+                var ei: i32 = node.FirstEdge;
+                while (ei != -1) {
+                    const edge = &self.mEdges[@intCast(ei)];
+                    edge.CalcColor(materials, &self.mNodes);
+                    ei = edge.SiblingEdge;
+                }
 
-fn GetNodeIndex(self: *RayMarcher) usize {
-    defer self.mNodeCount += 1;
-    return self.mNodeCount;
-}
+                node.CalcColor(materials, &self.mEdges);
+            }
 
-fn GetEdgeIndex(self: *RayMarcher) usize {
-    defer self.mEdgeCount += 1;
-    return self.mEdgeCount;
-}
+            return self.mNodes[0].AccumColor.ToVector();
+        }
 
-fn GetSurfaceColor(obj: ObjectData, quads: anytype, glyphs: anytype) Vec4(f32) {
-    return switch (obj.shape_type) {
-        .Quad => Vec4(f32).FromVector(quads[obj.shape_ind].Color),
-        .Glyph => Vec4(f32).FromVector(glyphs[obj.shape_ind].Color),
-        else => return Vec4(f32){ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1.0 },
+        fn GetNodeIndex(self: *Self) usize {
+            defer self.mNodeCount += 1;
+            return self.mNodeCount;
+        }
+
+        fn GetEdgeIndex(self: *Self) usize {
+            defer self.mEdgeCount += 1;
+            return self.mEdgeCount;
+        }
+
+        fn NextSurface(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize) MarchData {
+            var data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
+
+            var i: u32 = 0;
+            while (i < quad_count) : (i += 1) {
+                const dist = IMQuad(point, quads[i]);
+                if (dist < data.min_dist) {
+                    data.min_dist = dist;
+                    data.object.shape_type = .Quad;
+                    data.object.shape_ind = @intCast(i);
+                }
+            }
+            i = 0;
+            while (i < glyph_count) : (i += 1) {
+                const dist = IMGlyph(point, glyphs[i]);
+                if (dist < data.min_dist) {
+                    data.min_dist = dist;
+                    data.object.shape_type = .Glyph;
+                    data.object.shape_ind = @intCast(i);
+                }
+            }
+            return data;
+        }
+
+        fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize) Vec3(f32) {
+            const e: f32 = 0.001;
+
+            const x = Vec3(f32){ .x = e, .y = 0, .z = 0 };
+            const neg_x = Vec3(f32){ .x = -e, .y = 0, .z = 0 };
+            const y = Vec3(f32){ .x = 0, .y = e, .z = 0 };
+            const neg_y = Vec3(f32){ .x = 0, .y = -e, .z = 0 };
+            const z = Vec3(f32){ .x = 0, .y = 0, .z = e };
+            const neg_z = Vec3(f32){ .x = 0, .y = 0, .z = -e };
+
+            const next_surf_x = NextSurface(point.AddVec(x), quads, glyphs, quad_count, glyph_count);
+            const next_surf_neg_x = NextSurface(point.AddVec(neg_x), quads, glyphs, quad_count, glyph_count);
+            const next_surf_y = NextSurface(point.AddVec(y), quads, glyphs, quad_count, glyph_count);
+            const next_surf_neg_y = NextSurface(point.AddVec(neg_y), quads, glyphs, quad_count, glyph_count);
+            const next_surf_z = NextSurface(point.AddVec(z), quads, glyphs, quad_count, glyph_count);
+            const next_surf_neg_z = NextSurface(point.AddVec(neg_z), quads, glyphs, quad_count, glyph_count);
+
+            const dx = next_surf_x.min_dist - next_surf_neg_x.min_dist;
+            const dy = next_surf_y.min_dist - next_surf_neg_y.min_dist;
+            const dz = next_surf_z.min_dist - next_surf_neg_z.min_dist;
+
+            const vec = Vec3(f32){ .x = dx, .y = dy, .z = dz };
+
+            return vec.Dir();
+        }
     };
-}
-
-fn NextSurface(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize) MarchData {
-    var data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
-
-    var i: u32 = 0;
-    while (i < quad_count) : (i += 1) {
-        const dist = IMQuad(point, quads[i]);
-        if (dist < data.min_dist) {
-            data.min_dist = dist;
-            data.object.shape_type = .Quad;
-            data.object.shape_ind = @intCast(i);
-        }
-    }
-    i = 0;
-    while (i < glyph_count) : (i += 1) {
-        const dist = IMGlyph(point, glyphs[i]);
-        if (dist < data.min_dist) {
-            data.min_dist = dist;
-            data.object.shape_type = .Glyph;
-            data.object.shape_ind = @intCast(i);
-        }
-    }
-    return data;
-}
-
-fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize) Vec3(f32) {
-    const e: f32 = 0.001;
-
-    const x = Vec3(f32){ .x = e, .y = 0, .z = 0 };
-    const neg_x = Vec3(f32){ .x = -e, .y = 0, .z = 0 };
-    const y = Vec3(f32){ .x = 0, .y = e, .z = 0 };
-    const neg_y = Vec3(f32){ .x = 0, .y = -e, .z = 0 };
-    const z = Vec3(f32){ .x = 0, .y = 0, .z = e };
-    const neg_z = Vec3(f32){ .x = 0, .y = 0, .z = -e };
-
-    const next_surf_x = NextSurface(point.AddVec(x), quads, glyphs, quad_count, glyph_count);
-    const next_surf_neg_x = NextSurface(point.AddVec(neg_x), quads, glyphs, quad_count, glyph_count);
-    const next_surf_y = NextSurface(point.AddVec(y), quads, glyphs, quad_count, glyph_count);
-    const next_surf_neg_y = NextSurface(point.AddVec(neg_y), quads, glyphs, quad_count, glyph_count);
-    const next_surf_z = NextSurface(point.AddVec(z), quads, glyphs, quad_count, glyph_count);
-    const next_surf_neg_z = NextSurface(point.AddVec(neg_z), quads, glyphs, quad_count, glyph_count);
-
-    const dx = next_surf_x.min_dist - next_surf_neg_x.min_dist;
-    const dy = next_surf_y.min_dist - next_surf_neg_y.min_dist;
-    const dz = next_surf_z.min_dist - next_surf_neg_z.min_dist;
-
-    const vec = Vec3(f32){ .x = dx, .y = dy, .z = dz };
-
-    return vec.Dir();
 }
