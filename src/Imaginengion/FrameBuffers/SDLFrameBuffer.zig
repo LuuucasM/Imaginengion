@@ -11,6 +11,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
 
         pub const empty: Self = .{
             .mTextures = @splat(null),
+            .mSampler = null,
             .mDepthTexture = null,
             .mWidth = 0,
             .mHeight = 0,
@@ -28,6 +29,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         };
 
         mTextures: [color_texture_formats.len]?*sdl.SDL_GPUTexture,
+        mSampler: ?*sdl.SDL_GPUSampler,
         mDepthTexture: ?*sdl.SDL_GPUTexture,
         mWidth: usize,
         mHeight: usize,
@@ -95,6 +97,15 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             sdl.SDL_EndGPURenderPass(pass);
         }
 
+        pub fn Bind(self: Self, render_pass: *anyopaque, attachment_index: usize, slot: u32) void {
+            std.debug.assert(attachment_index < color_texture_formats.len);
+            const binding = sdl.SDL_GPUTextureSamplerBinding{
+                .texture = self.mTextures[attachment_index].?,
+                .sampler = self.mSampler.?,
+            };
+            sdl.SDL_BindGPUFragmentSamplers(render_pass, slot, &binding, 1);
+        }
+
         pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
             if (width < 1 or height < 1 or width > 8192 or height > 8192 or (width == self.mWidth and height == self.mHeight)) return;
             self.mWidth = width;
@@ -142,6 +153,17 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                 };
                 self.mTextures[i] = sdl.SDL_CreateGPUTexture(device, &info) orelse return error.CreateColorTextureFailed;
             }
+
+            const sampler_info = sdl.SDL_GPUSamplerCreateInfo{
+                .min_filter = sdl.SDL_GPU_FILTER_NEAREST,
+                .mag_filter = sdl.SDL_GPU_FILTER_NEAREST,
+                .mipmap_mode = sdl.SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
+                .address_mode_u = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+                .address_mode_v = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+                .address_mode_w = sdl.SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+            };
+            self.mSampler = sdl.SDL_CreateGPUSampler(device, &sampler_info) orelse return error.CreateSamplerFailed;
+
             if (HasDepth) {
                 const depth_info = sdl.SDL_GPUTextureCreateInfo{
                     .type = sdl.SDL_GPU_TEXTURETYPE_2D,
@@ -167,6 +189,12 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                     self.mTextures[i] = null;
                 }
             }
+
+            if (self.mSampler) |s| {
+                sdl.SDL_ReleaseGPUSampler(device, s);
+                self.mSampler = null;
+            }
+
             if (self.mDepthTexture) |t| {
                 self.mDepthTexture = null;
                 sdl.SDL_ReleaseGPUTexture(device, t);

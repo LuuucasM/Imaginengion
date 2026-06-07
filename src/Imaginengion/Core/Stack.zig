@@ -7,29 +7,29 @@ pub fn Stack(comptime T: type, comptime size: usize) type {
         items: [size]T = undefined,
         len: usize = 0,
 
-        pub fn push(self: *Self, value: T) void {
+        pub fn Push(self: *Self, value: T) void {
             self.items[self.len] = value;
             self.len += 1;
         }
 
-        pub fn pop(self: *Self) T {
+        pub fn Pop(self: *Self) T {
             self.len -= 1;
             return self.items[self.len];
         }
 
-        pub fn clear(self: *Self) void {
+        pub fn Clear(self: *Self) void {
             self.len = 0;
         }
 
-        pub fn isEmpty(self: *Self) bool {
+        pub fn IsEmpty(self: *Self) bool {
             return self.len == 0;
         }
 
-        pub fn isFull(self: *Self) bool {
+        pub fn IsFull(self: *Self) bool {
             return self.len >= size;
         }
 
-        pub fn count(self: *Self) usize {
+        pub fn Count(self: *Self) usize {
             return self.len;
         }
     };

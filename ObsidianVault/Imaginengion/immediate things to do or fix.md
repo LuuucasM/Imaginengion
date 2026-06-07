@@ -6,5 +6,8 @@
 - make it so that the shaders are embedded into the main program instead of loading from a file
 - change the engine program to make use of the embedded shaders
 	- I think for my shader asset I may have to create a function like "InitFromBinary" or something which instead of taking in a file path it will take in the binary for the vertex and frag shader and then skip the read file part that exists right now
+- make it so that there are different piplines like game shader, overlay shader, and custom shader (idk how or what to do this for yet)
+	- before i didnt want to have different shaders because i wanted to process all the entieis together on the cpu side but i can still do that but when doing "draw quad" or whatever I will check the scene component and then ill have double SSBOS but its ok because like before everyone was one big ssbo but now theres a couple tiny ones which i believe should be ok
+	- the only thing to note with splitting ssbo's is that vulkan only guarantees 16 bindings per set and with esplitting them ill already be using 5 so the number of primitive shapes will decrease some
 - debug, add tests, add asserts, etc
 	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!

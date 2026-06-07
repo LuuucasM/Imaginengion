@@ -20,6 +20,7 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -28,7 +29,7 @@ const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const RenderPipeline = @import("RenderPipeline.zig");
-const PushConstants = RenderPipeline.PushConstants;
+const PushConstants = RenderPipeline.SDFPushConstants;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
@@ -37,6 +38,8 @@ const Tracy = @import("../Core/Tracy.zig");
 const Renderer = @This();
 
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
+pub const GamePipielineT = RenderPipeline.Pipeline(.GameShader);
+pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayShader);
 
 pub const ShadingData = extern struct {
     pub const SHADING_FLAG_TRANSPARENT: u32 = 1 << 0;
@@ -53,39 +56,31 @@ pub const ShadingData = extern struct {
     Color: Vec4(f32).VectorT,
 
     Texturehandle: u32,
-    _pad0: [3]f32 = [3]f32{ 0, 0, 0 },
+    SiblingShading: u32,
+    _pad0: [2]f32 = [2]f32{ 0, 0 },
+};
+
+pub const ShapeType = enum(u32) {
+    None = 0,
+    Quad,
+    Glyph,
 };
 
 mPlatform: RenderPlatform = .{},
 mTextureManager: TextureManager = .{},
-mPipeline: RenderPipeline = .{},
+mGamePipeline: GamePipielineT = .{},
+mOverlayPipeline: OverlayPipelineT = .{},
+mIntermediateFB: OutputFrameBuffer = .{},
+mSDFPushConstants: PushConstants = undefined,
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
-
-mPushConstants: PushConstants = .{
-    .mRotation = [4]f32{ 1, 0, 0, 0 },
-    .mPosition = [3]f32{ 0, 0, 0 },
-    .mPerspectiveFar = 1000,
-    .mRayScale = [2]f32{ 0, 0 },
-    .mRayOffset = [2]f32{ 0, 0 },
-    .mQuadsCount = 0,
-    .mGlyphsCount = 0,
-},
-
-mSDFShader: ShaderAsset = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     self.mPlatform.Init(engine_context);
 
     try self.mTextureManager.Init(engine_context, 2_000_000_000);
 
-    const shader_rel_path = "assets/shaders/SDFShader.program";
-    const shader_abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), shader_rel_path, .Eng);
-    const file = try engine_context.mAssetManager.mCWD.openFile(engine_context.Io(), shader_rel_path, .{});
-
-    try self.mSDFShader.Init(engine_context, shader_abs_path, shader_rel_path, file);
-
-    try self.mPipeline.Init(engine_context, &self.mSDFShader, .{ .color_format = .RGBA8, .enable_blend = true });
+    try self.mGamePipeline.Init(engine_context);
 
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
@@ -115,7 +110,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         .Simulate => &engine_context.mSimulateWorld,
     };
 
-    self.mPushConstants = push_constants;
+    self.mSDFPushConstants = push_constants;
 
     self.BeginRendering(engine_context.EngineAllocator());
 
@@ -145,14 +140,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         try self.DrawShape(engine_context, shape_entity);
     }
 
-    self.mPushConstants.mQuadsCount = self.mR2D.GetQuadCount();
-    self.mPushConstants.mGlyphsCount = self.mR2D.GetGlyphCount();
-
     try self.EndRendering(world_type, engine_context, frame_buffer);
-}
-
-pub fn GetSDFShader(self: *Renderer, engine_context: *EngineContext) *ShaderAsset {
-    return try self.mSDFShader.GetAsset(engine_context, ShaderAsset);
 }
 
 fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
@@ -167,13 +155,14 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
     defer zone.Deinit();
 
     const transform_component = entity.GetComponent(TransformComponent).?;
+    const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
 
     //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try self.mR2D.DrawQuad(engine_context, transform_component, quad_component);
+        try self.mR2D.DrawQuad(engine_context, transform_component, quad_component, entity_scene_comp);
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        try self.mR2D.DrawText(engine_context, transform_component, text_component);
+        try self.mR2D.DrawText(engine_context, transform_component, text_component, entity_scene_comp);
     }
 }
 
@@ -184,26 +173,57 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mPlatform.PushDebugGroup("End Rendering\x00");
 
     const cmd = self.mPlatform.GetCommandBuff();
+    self.mIntermediateFB.Resize(engine_context, frame_buffer.GetWidth(), frame_buffer.GetHeight());
 
-    self.mPlatform.PushDebugGroup("Upload Buffers\x00");
-    try self.mR2D.SetBuffers(world_type, engine_context);
+    //====================first overlay render pipeline======================================
+    self.mPlatform.PushDebugGroup("Upload Buffers - Overlay\x00");
+    try self.mR2D.SetBuffers(world_type, engine_context, .OverlayPipeline);
     self.mPlatform.PopDebugGroup();
 
-    self.mPlatform.PushDebugGroup("Draw\x00");
-    const render_pass = frame_buffer.BeginRenderPass(engine_context);
+    self.mPlatform.PushDebugGroup("Draw - Overlay\x00");
+    const overlay_render_pass = self.mIntermediateFB.BeginRenderPass(engine_context);
 
-    self.mPipeline.Bind(render_pass);
+    self.mOverlayPipeline.Bind(overlay_render_pass);
 
-    self.mR2D.BindBuffers(render_pass);
+    self.mR2D.BindBuffers(overlay_render_pass, .OverlayPipeline);
 
-    self.mTextureManager.Bind(render_pass);
+    self.mTextureManager.Bind(overlay_render_pass);
 
-    self.mPipeline.PushUniforms(cmd, self.mPushConstants);
+    self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
+    self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
+    self.mOverlayPipeline.PushUniforms(cmd, self.mPushConstants);
 
-    self.mPipeline.Draw(render_pass);
+    self.mOverlayPipeline.Draw(overlay_render_pass);
     self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
 
-    frame_buffer.EndRenderPass(render_pass);
+    self.mIntermediateFB.EndRenderPass(overlay_render_pass);
+    //=======================================end overlay render pipeline============================
+
+    //=====================================now for game layer render pipeline======================================================
+    self.mPlatform.PushDebugGroup("Upload Buffers - Game\x00");
+    try self.mR2D.SetBuffers(world_type, engine_context, .GamePipeline);
+    self.mPlatform.PopDebugGroup();
+
+    self.mPlatform.PushDebugGroup("Draw - Game\x00");
+    const game_render_pass = frame_buffer.BeginRenderPass(engine_context);
+
+    self.mGamePipeline.Bind(game_render_pass);
+
+    self.mR2D.BindBuffers(game_render_pass, .GamePipeline);
+
+    self.mTextureManager.Bind(game_render_pass);
+
+    self.mIntermediateFB.Bind(game_render_pass, 0, 1);
+
+    self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .GamePipeline);
+    self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .GamePipeline);
+    self.mGamePipeline.PushUniforms(cmd, self.mPushConstants);
+
+    self.mGamePipeline.Draw(game_render_pass);
+    self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
+
+    frame_buffer.EndRenderPass(game_render_pass);
+    //=====================================end game layer render pipeline ========================================================
 
     self.mPlatform.PopDebugGroup(); //pop end rendering group
     self.mPlatform.PopDebugGroup(); //pop frame group

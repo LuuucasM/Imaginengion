@@ -5,44 +5,38 @@ const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub const PushConstants = switch (builtin.os.tag) {
-    else => @import("backends/SDLGPUPipeline.zig").PushConstants,
-};
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec4 = MathTypes.Vec4;
+const Vec3 = MathTypes.Vec3;
+const Vec2 = MathTypes.Vec2;
 
 pub const PipelineConfig = struct {
     color_format: TextureFormat,
     enable_blend: bool = true,
 };
 
-comptime {
-    std.debug.assert(@sizeOf(PushConstants) <= 128);
-}
-
-const Impl = switch (builtin.os.tag) {
-    .windows => @import("backends/SDLGPUPipeline.zig"),
-    else => @compileError("not suported currently!\n"),
+pub const PipelineType = enum {
+    GamePipeline,
+    OverlayPipeline,
+    //CustomShader, one day when i konw what to even do with this
 };
 
-const RenderPipeline = @This();
+pub const SDFPushConstants = extern struct {
+    mPosition: Vec3(f32).VectorT,
+    mPerspectiveFar: f32,
+    mRotation: Vec4(f32).VectorT,
+    mRayScale: Vec2(f32).VectorT,
+    mRayOffset: Vec2(f32).VectorT,
+    mQuadsCount: u32,
+    mGlyphsCount: u32,
+    mViewportWidth: u32,
+    mViewportHeight: u32,
+};
 
-_Impl: Impl = .{},
-
-pub fn Init(self: *RenderPipeline, engine_context: *EngineContext, shader: *ShaderAsset, config: PipelineConfig) !void {
-    try self._Impl.Init(engine_context, shader, config);
-}
-
-pub fn Deinit(self: *RenderPipeline, engine_context: *EngineContext) void {
-    self._Impl.Deinit(engine_context);
-}
-
-pub fn Bind(self: RenderPipeline, render_pass: *anyopaque) void {
-    self._Impl.Bind(render_pass);
-}
-
-pub fn PushUniforms(self: RenderPipeline, cmd: *anyopaque, push: PushConstants) void {
-    self._Impl.PushUniforms(cmd, push);
-}
-
-pub fn Draw(self: RenderPipeline, render_pass: *anyopaque) void {
-    self._Impl.Draw(render_pass);
+pub fn Pipeline(pipeline_t: PipelineType) type {
+    return switch (pipeline_t) {
+        .GamePipeline => @import("backends/SDLGPUPipeline.zig"),
+        .OverlayPipeline => @import("backends/SDLGPUPipeline.zig"),
+        //.CustomShader =>
+    };
 }

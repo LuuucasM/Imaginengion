@@ -506,6 +506,8 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
             .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
             .mQuadsCount = 0,
             .mGlyphsCount = 0,
+            .mViewportWidth = viewpoint_component.mViewportWidth,
+            .mViewportHeight = viewpoint_component.mViewportHeight,
         },
         &render_component.mFrameBuffer,
     );
@@ -554,6 +556,8 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
                 .mRayOffset = Vec2(f32).VectorT{ ray_offset_x, ray_offset_y },
                 .mQuadsCount = 0,
                 .mGlyphsCount = 0,
+                .mViewportWidth = viewpoint_component.mViewportWidth,
+                .mViewportHeight = viewpoint_component.mViewportHeight,
             },
             &render_component.mFrameBuffer,
         );

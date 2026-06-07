@@ -46,7 +46,6 @@ float GetMSD(vec2 texture_uv, GlyphData glyph) {
 }
 
 vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
-    return vec4(1.0, 0.0, 0.0, 1.0);
     if (shape_type == SHAPE_QUAD) {
         QuadData quad = Quads.data[shape_index];
         vec2 texture_uv = GetQuadUV(hit_point, quad.Position, quad.Rotation, quad.Scale);
@@ -73,5 +72,5 @@ vec4 GetSurfaceColor(vec3 hit_point, int shape_type, uint shape_index) {
             }
         }
     }
-    //return vec4(0.0);
+    return vec4(0.0);
 }

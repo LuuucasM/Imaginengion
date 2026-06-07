@@ -106,8 +106,13 @@ pub fn Vec2(comptime number_type: type) type {
             return @bitCast(self.ToVector() * other.ToVector());
         }
 
+        //NOTE: no tests for this
+        pub fn DivVec(self: Self, other: Self) Self {
+            return @bitCast(self.ToVector() / other.ToVector());
+        }
+
         pub fn DivScalar(self: Self, scalar: number_type) Self {
-            return @bitCast(self.ToVector() / @as(VectorT, @splat(scalar)));
+            return self.DivVec(.FromScalar(scalar));
         }
 
         pub fn ToVector(self: Self) VectorT {

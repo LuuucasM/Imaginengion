@@ -7,53 +7,63 @@ const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const StageInfo = ShaderAsset.StageInfo;
 const Stage = ShaderAsset.Stage;
 const TextureFormat = @import("../../Assets/Assets.zig").Texture2D.TextureFormat;
+const PushConstants = @import("../RenderPipeline.zig").SDFPushConstants;
 
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec3 = MathTypes.Vec3;
 const Vec2 = MathTypes.Vec2;
 
-const SDLGPUPipeline = @This();
+const VertexShader = @embedFile("../../../../zig-out/shaders/SDFVertShader.spv");
+const FragmentShader = @embedFile("../../../../zig-out/shaders/SDFFragShaderGame.spv");
 
-pub const PushConstants = extern struct {
-    mPosition: Vec3(f32).VectorT,
-    mPerspectiveFar: f32,
-    mRotation: Vec4(f32).VectorT,
-    mRayScale: Vec2(f32).VectorT,
-    mRayOffset: Vec2(f32).VectorT,
-    mQuadsCount: u32,
-    mGlyphsCount: u32,
+const VertexStageInfo: StageInfo = .{
+    .mStage = .Vertex,
+    .mNumSamplers = 0,
+    .mNumStorageBuffers = 0,
+    .mNumUniformBuffers = 0,
 };
+const FragmentStageInfo: StageInfo = .{
+    .mStage = .Fragment,
+    .mNumSamplers = 2,
+    .mNumStorageBuffers = 3,
+    .mNumUniformBuffers = 1,
+};
+const Config: PipelineConfig = .{
+    .color_format = .RGBA8,
+    .enable_blend = true,
+};
+const GamePipeline = @This();
 
 mPipeline: ?*sdl.SDL_GPUGraphicsPipeline = null,
 
-pub fn Init(self: *SDLGPUPipeline, engine_context: *EngineContext, shader: *ShaderAsset, config: PipelineConfig) !void {
+pub fn Init(self: *GamePipeline, engine_context: *EngineContext) !void {
     const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
-    const vert_shader = CreateShaderStage(device, shader.mShaderSources.mVertexBinary, shader.mShaderSources.mVertexStageInfo) orelse return error.AssetInitFailed;
+    const vert_shader = CreateShaderStage(device, VertexShader, VertexStageInfo) orelse return error.PipelineInitFailed;
     defer sdl.SDL_ReleaseGPUShader(device, vert_shader);
 
-    const frag_shader = CreateShaderStage(device, shader.mShaderSources.mFragmentBinary, shader.mShaderSources.mFragmentStageInfo) orelse return error.AssetInitFailed;
+    const frag_shader = CreateShaderStage(device, FragmentShader, FragmentStageInfo) orelse return error.PipelineInitFailed;
     defer sdl.SDL_ReleaseGPUShader(device, frag_shader);
 
-    self.mPipeline = try CreatePipeline(device, vert_shader, frag_shader, config);
+    self.mPipeline = try CreatePipeline(device, vert_shader, frag_shader, Config);
     std.log.info("SDLGPUPipeline: created successfully", .{});
 }
 
-pub fn Deinit(self: *SDLGPUPipeline, engine_context: *EngineContext) void {
+pub fn Deinit(self: *GamePipeline, engine_context: *EngineContext) void {
     const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
     _ = sdl.SDL_WaitForGPUIdle(device);
     if (self.mPipeline) |p| sdl.SDL_ReleaseGPUGraphicsPipeline(device, p);
     self.mPipeline = null;
 }
 
-pub fn Bind(self: SDLGPUPipeline, render_pass: *anyopaque) void {
+pub fn Bind(self: GamePipeline, render_pass: *anyopaque) void {
     const sdl_render_pass: *sdl.SDL_GPURenderPass = @ptrCast(render_pass);
 
     sdl.SDL_BindGPUGraphicsPipeline(sdl_render_pass, self.mPipeline);
 }
 
-pub fn PushUniforms(_: SDLGPUPipeline, cmd: *anyopaque, push: PushConstants) void {
+pub fn PushUniforms(_: GamePipeline, cmd: *anyopaque, push: PushConstants) void {
     const sdl_cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(cmd);
 
     sdl.SDL_PushGPUFragmentUniformData(
@@ -64,7 +74,7 @@ pub fn PushUniforms(_: SDLGPUPipeline, cmd: *anyopaque, push: PushConstants) voi
     );
 }
 
-pub fn Draw(_: SDLGPUPipeline, render_pass: *anyopaque) void {
+pub fn Draw(_: GamePipeline, render_pass: *anyopaque) void {
     const sdl_render_pass: *sdl.SDL_GPURenderPass = @ptrCast(render_pass);
     sdl.SDL_DrawGPUPrimitives(sdl_render_pass, 3, 1, 0, 0);
 }

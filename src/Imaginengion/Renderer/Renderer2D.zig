@@ -8,6 +8,7 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ShadingData = @import("Renderer.zig").ShadingData;
+const PipelineType = @import("RenderPipeline.zig").PipelineType;
 
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
@@ -26,6 +27,10 @@ const EntityComponents = @import("../GameObjects/Components.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+
+const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneSceneComponent = SceneComponents.SceneComponent;
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 
@@ -61,142 +66,215 @@ pub const BufferKind = enum {
     Shading,
 };
 
-mQuadBuffer: SSBO = .{},
-mQuadBufferBase: std.ArrayList(QuadData) = .empty,
+pub const ShaderData = struct {
+    mQuadBuffer: SSBO = .{},
+    mQuadBufferBase: std.ArrayList(QuadData) = .empty,
 
-mGlyphBuffer: SSBO = .{},
-mGlyphBufferBase: std.ArrayList(GlyphData) = .empty,
+    mGlyphBuffer: SSBO = .{},
+    mGlyphBufferBase: std.ArrayList(GlyphData) = .empty,
 
-mShadingBuffer: SSBO = .{},
-mShadingBufferBase: std.ArrayList(ShadingData) = .empty,
+    mShadingBuffer: SSBO = .{},
+    mShadingBufferBase: std.ArrayList(ShadingData) = .empty,
+
+    pub fn Init(self: *ShaderData, engine_context: *EngineContext) !void {
+        self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 2, .Fragment);
+        self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_context.EngineAllocator(), 100);
+
+        self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 3, .Fragment);
+        self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
+
+        self.mShadingBuffer.Init(engine_context, @sizeOf(ShadingData) * 100, 4, .Fragment);
+        self.mShadingBufferBase = try std.ArrayList(ShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+    }
+    pub fn Deinit(self: *ShaderData, engine_context: *EngineContext) void {
+        self.mQuadBuffer.Deinit(engine_context);
+        self.mQuadBufferBase.deinit(engine_context.EngineAllocator());
+
+        self.mGlyphBuffer.Deinit(engine_context);
+        self.mGlyphBufferBase.deinit(engine_context.EngineAllocator());
+
+        self.mShadingBuffer.Deinit(engine_context);
+        self.mShadingBufferBase.deinit(engine_context.EngineAllocator());
+    }
+    pub fn ClearAndFree(self: *ShaderData, engine_allocator: std.mem.Allocator) void {
+        self.mQuadBufferBase.clearAndFree(engine_allocator);
+        self.mGlyphBufferBase.clearAndFree(engine_allocator);
+        self.mShadingBufferBase.clearAndFree(engine_allocator);
+    }
+    pub fn SetBuffers(self: *ShaderData, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+        const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
+        defer zone.Deinit();
+
+        const quad_byte_size = self.mQuadBufferBase.items.len * @sizeOf(QuadData);
+        const glyph_byte_size = self.mGlyphBufferBase.items.len * @sizeOf(GlyphData);
+        const shading_byte_size = self.mShadingBufferBase.items.len * @sizeOf(ShadingData);
+
+        //quads
+        _ = self.mQuadBuffer.SetData(engine_context, self.mQuadBufferBase.items.ptr, quad_byte_size, 0);
+
+        //glyphs
+        _ = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
+
+        //shadings
+        _ = self.mShadingBuffer.SetData(engine_context, self.mShadingBufferBase.items.ptr, shading_byte_size, 0);
+
+        //fill out stats
+        switch (world_type) {
+            .Game => {
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+            },
+            .Editor => {
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.ShadingsNum = @intCast(self.mGlyphBufferBase.items.len);
+            },
+            .Simulate => {
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+            },
+        }
+    }
+    pub fn BindBuffers(self: ShaderData, render_pass: *anyopaque) void {
+        self.mQuadBuffer.Bind(render_pass);
+        self.mGlyphBuffer.Bind(render_pass);
+        self.mShadingBuffer.Bind(render_pass);
+    }
+};
+
+mGameData: ShaderData = .{},
+mOverlayData: ShaderData = .{},
 
 pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
-    self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 1, .Fragment);
-    self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_context.EngineAllocator(), 100);
-
-    self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 2, .Fragment);
-    self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
-
-    self.mShadingBuffer.Init(engine_context, @sizeOf(ShadingData) * 100, 3, .Fragment);
-    self.mShadingBufferBase = try std.ArrayList(ShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+    try self.mGameData.Init(engine_context);
+    try self.mOverlayData.Init(engine_context);
 }
 
 pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
-    self.mQuadBuffer.Deinit(engine_context);
-    self.mQuadBufferBase.deinit(engine_context.EngineAllocator());
-
-    self.mGlyphBuffer.Deinit(engine_context);
-    self.mGlyphBufferBase.deinit(engine_context.EngineAllocator());
-
-    self.mShadingBuffer.Deinit(engine_context);
-    self.mShadingBufferBase.deinit(engine_context.EngineAllocator());
+    self.mGameData.Deinit(engine_context);
+    self.mOverlayData.Init(engine_context);
 }
 
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
-    self.mQuadBufferBase.clearAndFree(engine_allocator);
-    self.mGlyphBufferBase.clearAndFree(engine_allocator);
-    self.mShadingBufferBase.clearAndFree(engine_allocator);
+    self.mGameData.ClearAndFree(engine_allocator);
+    self.mOverlayData.ClearAndFree(engine_allocator);
 }
 
-pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
-    defer zone.Deinit();
-
-    const quad_byte_size = self.mQuadBufferBase.items.len * @sizeOf(QuadData);
-    const glyph_byte_size = self.mGlyphBufferBase.items.len * @sizeOf(GlyphData);
-    const shading_byte_size = self.mShadingBufferBase.items.len * @sizeOf(ShadingData);
-
-    //quads
-    _ = self.mQuadBuffer.SetData(engine_context, self.mQuadBufferBase.items.ptr, quad_byte_size, 0);
-
-    //glyphs
-    _ = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
-
-    //shadings
-    _ = self.mShadingBuffer.SetData(engine_context, self.mShadingBufferBase.items.ptr, shading_byte_size, 0);
-
-    //fill out stats
-    switch (world_type) {
-        .Game => {
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
-            engine_context.mEngineStats.GameWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
-        },
-        .Editor => {
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
-            engine_context.mEngineStats.EditorWorldStats.mRenderStats.ShadingsNum = @intCast(self.mGlyphBufferBase.items.len);
-        },
-        .Simulate => {
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
-            engine_context.mEngineStats.SimulateWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
-        },
+pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine_context: *EngineContext, pipeline_t: PipelineType) !void {
+    switch (pipeline_t) {
+        .GameShader => self.mGameData.SetBuffers(world_type, engine_context),
+        .OverlayShader => self.mOverlayData.SetBuffers(world_type, engine_context),
     }
 }
 
-pub fn BindBuffers(self: Renderer2D, render_pass: *anyopaque) void {
-    self.mQuadBuffer.Bind(render_pass);
-    self.mGlyphBuffer.Bind(render_pass);
-    self.mShadingBuffer.Bind(render_pass);
+pub fn BindBuffers(self: Renderer2D, render_pass: *anyopaque, pipeline_t: PipelineType) void {
+    switch (pipeline_t) {
+        .GameShader => self.mGameData.BindBuffers(render_pass),
+        .OverlayShader => self.mOverlayData.BindBuffers(render_pass),
+    }
 }
 
-pub fn GetBufferCount(self: Renderer2D, comptime buff_kind: BufferKind) u32 {
-    return switch (buff_kind) {
-        .Quad => @intCast(self.mQuadBufferBase.items.len),
-        .Glyph => @intCast(self.mGlyphBufferBase.items.len),
-        .Shading => @intCast(self.mShadingBufferBase.items.len),
+pub fn GetBufferCount(self: Renderer2D, comptime buff_kind: BufferKind, pipeline_kind: PipelineType) u32 {
+    return switch (pipeline_kind) {
+        .GameShader => switch (buff_kind) {
+            .Quad => @intCast(self.mGameData.mQuadBufferBase.items.len),
+            .Glyph => @intCast(self.mGameData.mGlyphBufferBase.items.len),
+            .Shading => @intCast(self.mGameData.mShadingBufferBase.items.len),
+        },
+        .OverlayShader => switch (buff_kind) {
+            .Quad => @intCast(self.mOverlayData.mQuadBufferBase.items.len),
+            .Glyph => @intCast(self.mOverlayData.mGlyphBufferBase.items.len),
+            .Shading => @intCast(self.mOverlayData.mShadingBufferBase.items.len),
+        },
     };
 }
 
-pub fn GetBuffer(self: Renderer2D, comptime buff_kind: BufferKind) *anyopaque {
-    return switch (buff_kind) {
-        .Quad => self.mQuadBuffer.GetBuffer().?,
-        .Glyph => self.mGlyphBuffer.GetBuffer().?,
-        .Shading => self.mShadingBuffer.GetBuffer().?,
+pub fn GetBuffer(self: Renderer2D, comptime buff_kind: BufferKind, pipeline_kind: PipelineType) *anyopaque {
+    return switch (pipeline_kind) {
+        .GameShader => switch (buff_kind) {
+            .Quad => @intCast(self.mGameData.mQuadBuffer.GetBuffer()),
+            .Glyph => @intCast(self.mGameData.mGlyphBuffer.GetBuffer()),
+            .Shading => @intCast(self.mGameData.mShadingBuffer.GetBuffer()),
+        },
+        .OverlayShader => switch (buff_kind) {
+            .Quad => @intCast(self.mOverlayData.mQuadBuffer.GetBuffer()),
+            .Glyph => @intCast(self.mOverlayData.mGlyphBuffer.GetBuffer()),
+            .Shading => @intCast(self.mOverlayData.mShadingBuffer.GetBuffer()),
+        },
     };
 }
 
-pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, quad_component: *QuadComponent) !void {
+pub fn DrawQuad(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, quad_component: *QuadComponent, entity_scene_comp: EntitySceneComponent) !void {
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
+    const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
     const world_pos = transform_component.GetWorldPosition();
     const world_rot = transform_component.GetWorldRotation();
     const world_scale = transform_component.GetWorldScale();
 
-    try self.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-        .TilingFactor = quad_component.mTexOptions.mTilingFactor,
-        .TextureUV0 = quad_component.mTexOptions.mTextureUV0.ToVector(),
-        .TextureUV1 = quad_component.mTexOptions.mTextureUV1.ToVector(),
-        .Texturehandle = texture_asset.GetTextureHandle(),
-        .Color = quad_component.mMaterial.mSurfaceColor.ToVector(),
-        .Absorption = quad_component.mMaterial.Absorption.ToVector(),
-    });
+    const shading_handle = switch (scene_scene_comp.mLayerType) {
+        .GameLayer => blk: {
+            try self.mGameData.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
+                .TilingFactor = quad_component.mTexOptions.mTilingFactor,
+                .TextureUV0 = quad_component.mTexOptions.mTextureUV0.ToVector(),
+                .TextureUV1 = quad_component.mTexOptions.mTextureUV1.ToVector(),
+                .Texturehandle = texture_asset.GetTextureHandle(),
+                .Color = quad_component.mMaterial.mSurfaceColor.ToVector(),
+                .Absorption = quad_component.mMaterial.Absorption.ToVector(),
+                .SiblingShading = std.math.maxInt(u32),
+            });
 
-    const shading_handle = self.mShadingBufferBase.items.len - 1;
+            break :blk self.mShadingBufferBase.items.len - 1;
+        },
+        .OverlayLayer => blk: {
+            try self.mOverlayData.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
+                .TilingFactor = quad_component.mTexOptions.mTilingFactor,
+                .TextureUV0 = quad_component.mTexOptions.mTextureUV0.ToVector(),
+                .TextureUV1 = quad_component.mTexOptions.mTextureUV1.ToVector(),
+                .Texturehandle = texture_asset.GetTextureHandle(),
+                .Color = quad_component.mMaterial.mSurfaceColor.ToVector(),
+                .Absorption = quad_component.mMaterial.Absorption.ToVector(),
+                .SiblingShading = std.math.maxInt(u32),
+            });
+
+            break :blk self.mShadingBufferBase.items.len - 1;
+        },
+    };
 
     var shading_flag: u32 = 0;
     if (quad_component.mMaterial.mSurfaceColor.w < 1.0) shading_flag |= ShadingData.SHADING_FLAG_TRANSPARENT;
 
-    try self.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
-        .Position = world_pos.ToVector(),
-        .Rotation = world_rot.ToVector(),
-        .HalfExtents = Vec4(f32).VectorT{ world_scale.x * 0.5, world_scale.y * 0.5, world_scale.z * 0.5, THICKNESS_2D },
-        .ShadingHandle = @intCast(shading_handle),
-        .ShadingFlags = shading_flag,
-    });
+    switch (scene_scene_comp.mLayerType) {
+        .GameLayer => try self.mGameData.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
+            .Position = world_pos.ToVector(),
+            .Rotation = world_rot.ToVector(),
+            .HalfExtents = Vec4(f32).VectorT{ world_scale.x * 0.5, world_scale.y * 0.5, world_scale.z * 0.5, THICKNESS_2D },
+            .ShadingHandle = @intCast(shading_handle),
+            .ShadingFlags = shading_flag,
+        }),
+        .OverlayLayer => try self.mGameData.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
+            .Position = world_pos.ToVector(),
+            .Rotation = world_rot.ToVector(),
+            .HalfExtents = Vec4(f32).VectorT{ world_scale.x * 0.5, world_scale.y * 0.5, world_scale.z * 0.5, THICKNESS_2D },
+            .ShadingHandle = @intCast(shading_handle),
+            .ShadingFlags = shading_flag,
+        }),
+    }
 }
 
-pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, text_component: *TextComponent) !void {
+pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_component: *EntityTransformComponent, text_component: *TextComponent, entity_scene_comp: EntitySceneComponent) !void {
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
 
     const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
     const atlas_asset = text_asset.mAtlas;
     const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
+    const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
     const world_pos = transform_component.GetWorldPosition();
 
@@ -222,32 +300,62 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
             pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
-        //for the texture of the text
-        try self.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-            .TilingFactor = text_component.mTexOptions.mTilingFactor,
-            .TextureUV0 = text_component.mTexOptions.mTextureUV0.ToVector(),
-            .TextureUV1 = text_component.mTexOptions.mTextureUV1.ToVector(),
-            .Texturehandle = texture_asset.GetTextureHandle(),
-            .Color = text_component.mMaterial.mSurfaceColor.ToVector(),
-            .Absorption = text_component.mMaterial.Absorption.ToVector(),
-        });
+        const texture_shading_handle = switch (scene_scene_comp.mLayerType) {
+            .GameLayer => blk: {
+                try self.mGameData.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
+                    .TilingFactor = text_component.mTexOptions.mTilingFactor,
+                    .TextureUV0 = text_component.mTexOptions.mTextureUV0.ToVector(),
+                    .TextureUV1 = text_component.mTexOptions.mTextureUV1.ToVector(),
+                    .Texturehandle = texture_asset.GetTextureHandle(),
+                    .Color = text_component.mMaterial.mSurfaceColor.ToVector(),
+                    .Absorption = text_component.mMaterial.Absorption.ToVector(),
+                    .SiblingShading = std.math.maxInt(u32),
+                });
+                break :blk self.mShadingBufferBase.items.len - 1;
+            },
+            .OverlayLayer => blk: {
+                try self.mOverlayData.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
+                    .TilingFactor = text_component.mTexOptions.mTilingFactor,
+                    .TextureUV0 = text_component.mTexOptions.mTextureUV0.ToVector(),
+                    .TextureUV1 = text_component.mTexOptions.mTextureUV1.ToVector(),
+                    .Texturehandle = texture_asset.GetTextureHandle(),
+                    .Color = text_component.mMaterial.mSurfaceColor.ToVector(),
+                    .Absorption = text_component.mMaterial.Absorption.ToVector(),
+                    .SiblingShading = std.math.maxInt(u32),
+                });
+                break :blk self.mShadingBufferBase.items.len - 1;
+            },
+        };
 
-        const texture_shading_handle = self.mShadingBufferBase.items.len - 1;
         var texture_shading_flags: u32 = 0;
         if (text_component.mMaterial.mSurfaceColor.w < 1.0) texture_shading_flags |= ShadingData.SHADING_FLAG_TRANSPARENT;
 
-        //for the atlas of the text
-        try self.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-            .TilingFactor = 1.0,
-            .TextureUV0 = glyph.mAtlasUV0.ToVector(),
-            .TextureUV1 = glyph.mAtlasUV1.ToVector(),
-            .Texturehandle = atlas_asset.GetTextureHandle(),
-            .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
-            .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },
-        });
-
-        const atlas_shading_handle = self.mShadingBufferBase.items.len - 1;
-        const atlas_shading_flags: u32 = 0;
+        const atlas_shading_handle = switch (scene_scene_comp.mLayerType) {
+            .GameLayer => blk: {
+                try self.mGameData.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
+                    .TilingFactor = 1.0,
+                    .TextureUV0 = glyph.mAtlasUV0.ToVector(),
+                    .TextureUV1 = glyph.mAtlasUV1.ToVector(),
+                    .Texturehandle = atlas_asset.GetTextureHandle(),
+                    .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
+                    .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },
+                    .SiblingShading = texture_shading_handle,
+                });
+                break :blk self.mShadingBufferBase.items.len - 1;
+            },
+            .OverlayLayer => blk: {
+                try self.mOverlayData.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
+                    .TilingFactor = 1.0,
+                    .TextureUV0 = glyph.mAtlasUV0.ToVector(),
+                    .TextureUV1 = glyph.mAtlasUV1.ToVector(),
+                    .Texturehandle = atlas_asset.GetTextureHandle(),
+                    .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
+                    .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },
+                    .SiblingShading = texture_shading_handle,
+                });
+                break :blk self.mShadingBufferBase.items.len - 1;
+            },
+        };
 
         const left = glyph.mPlaneMin[0];
         const top = glyph.mPlaneMin[1];
@@ -264,16 +372,24 @@ pub fn DrawText(self: *Renderer2D, engine_context: *EngineContext, transform_com
             .y = (top + bottom) * 0.5 * text_component.mFontSize,
         };
 
-        try self.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
-            .Position = Vec3(f32).VectorT{ pen_x, pen_y, world_pos.z },
-            .Rotation = transform_component.Rotation.ToVector(),
-            .HalfExtents = Vec3(f32).VectorT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
-            .PlaneCenter = Vec2(f32).VectorT{ plane_center.x, plane_center.y },
-            .TextureShadingHandle = texture_shading_handle,
-            .AtlasShadingHandle = atlas_shading_handle,
-            .AtlasShadingFlags = atlas_shading_flags,
-            .TextureShadingFlags = texture_shading_flags,
-        });
+        switch (scene_scene_comp.mLayerType) {
+            .GameLayer => try self.mGameData.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
+                .Position = Vec3(f32).VectorT{ pen_x, pen_y, world_pos.z },
+                .Rotation = transform_component.Rotation.ToVector(),
+                .HalfExtents = Vec3(f32).VectorT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
+                .PlaneCenter = Vec2(f32).VectorT{ plane_center.x, plane_center.y },
+                .AtlasShadingHandle = atlas_shading_handle, //
+                .TextureShadingFlags = texture_shading_flags,
+            }),
+            .OverlayLayer => try self.mOverlayData.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
+                .Position = Vec3(f32).VectorT{ pen_x, pen_y, world_pos.z },
+                .Rotation = transform_component.Rotation.ToVector(),
+                .HalfExtents = Vec3(f32).VectorT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
+                .PlaneCenter = Vec2(f32).VectorT{ plane_center.x, plane_center.y },
+                .AtlasShadingHandle = atlas_shading_handle, //
+                .TextureShadingFlags = texture_shading_flags,
+            }),
+        }
 
         var move_dist = glyph_width;
         if (i < text_component.mText.items.len - 1) {

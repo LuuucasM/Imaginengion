@@ -31,6 +31,9 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         pub fn EndRenderPass(self: Self, render_pass: *anyopaque) void {
             self.mImpl.EndRenderPass(render_pass);
         }
+        pub fn Bind(self: Self, render_pass: *anyopaque, attachment_index: usize, slot: u32) void {
+            self.mImpl.Bind(render_pass, attachment_index, slot);
+        }
         pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
             try self.mImpl.Resize(engine_context, width, height);
         }

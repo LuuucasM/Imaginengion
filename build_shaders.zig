@@ -1,13 +1,23 @@
 const std = @import("std");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
 
-pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    const shaders = .{
-        .{ "SDFVertShader", "assets/shaders/SDFVertShader.zig", "vert" },
-        .{ "SDFFragShader", "assets/shaders/SDFFragShader.zig", "frag" },
-    };
+const shaders = .{
+    .{ "SDFVertShader", "assets/shaders/SDFVertShader.zig", "vert" },
+    .{ "SDFFragShaderOverlay", "assets/shaders/SDFFragShaderOverlay.zig", "frag_overlay" },
+    .{ "SDFFragShaderGame", "assets/shaders/SDFFragShaderGame.zig", "frag_game" },
+};
 
+pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     const shaders_step = b.step("shaders", "Build all SPIR-V shaders");
+
+    const base_module = b.createModule(.{
+        .root_source_file = b.path("assets/shaders/SDFFragShaderBase.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "IM", .module = module },
+        },
+    });
 
     inline for (shaders) |s| {
         const obj = b.addObject(.{
@@ -17,6 +27,7 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
                 .target = target,
                 .optimize = optimize,
                 .imports = &.{
+                    .{ .name = "FragShaderBase", .module = base_module },
                     .{ .name = "IM", .module = module },
                 },
             }),
