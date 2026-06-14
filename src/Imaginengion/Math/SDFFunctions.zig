@@ -14,7 +14,7 @@ fn sdBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
     return q.ClampScalar(0).Len() + @min(@max(q.x, @max(q.y, q.z)), 0.0);
 }
 
-fn uvBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
+fn uvBox(point: Vec3(f32), half_extents: Vec3(f32)) Vec2(f32) {
     const local_point_xy: Vec2(f32) = .{ .x = point.x, .y = point.y };
     const half_extents_xy: Vec2(f32) = .{ .x = half_extents.x, .y = half_extents.y };
 
@@ -28,18 +28,18 @@ fn uvBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
 }
 
 pub fn GetLocalPoint(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32)) Vec3(f32) {
-    point.SubVec(.FromVector(position)).InvQuatRotate(.FromVector(rotation));
+    return point.SubVec(position).InvQuatRotate(rotation);
 }
 
 pub fn sdIMQuad(point: Vec3(f32), quad: QuadData) f32 {
     return sdBox(
-        GetLocalPoint(point, quad.Position, quad.Rotation),
-        quad.HalfExtents,
+        GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation)),
+        .FromVector(quad.HalfExtents),
     );
 }
 
 pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
-    const local_point = GetLocalPoint(point, glyph.Position, glyph.Rotation);
+    const local_point = GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation));
 
     const p2: Vec3(f32) = .{
         .x = local_point.x - glyph.PlaneCenter[0],
@@ -47,18 +47,18 @@ pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
         .z = local_point.z,
     };
 
-    return sdBox(p2, glyph.HalfExtents);
+    return sdBox(p2, .FromVector(glyph.HalfExtents));
 }
 
-pub fn uvIMQuad(point: Vec3(f32), quad: QuadData) f32 {
+pub fn uvIMQuad(point: Vec3(f32), quad: QuadData) Vec2(f32) {
     return uvBox(
-        GetLocalPoint(point, quad.Position, quad.Rotation),
-        quad.HalfExtents,
+        GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation)),
+        .FromVector(quad.HalfExtents),
     );
 }
 
-pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
-    const local_point = GetLocalPoint(point, glyph.Position, glyph.Rotation);
+pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData) Vec2(f32) {
+    const local_point = GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation));
 
     const p2: Vec3(f32) = .{
         .x = local_point.x - glyph.PlaneCenter[0],
@@ -66,5 +66,5 @@ pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
         .z = local_point.z,
     };
 
-    return uvBox(p2, glyph.HalfExtents);
+    return uvBox(p2, .FromVector(glyph.HalfExtents));
 }

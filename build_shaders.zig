@@ -34,7 +34,7 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
         });
         const install = b.addInstallFile(
             obj.getEmittedBin(),
-            "shaders/" ++ s[0] ++ ".spv",
+            "../src/Imaginengion/EngineAssets/shaders/" ++ s[0] ++ ".spv",
         );
         shaders_step.dependOn(&install.step);
 

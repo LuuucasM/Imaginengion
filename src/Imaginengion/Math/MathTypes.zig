@@ -157,8 +157,9 @@ pub fn Vec3(comptime number_type: type) type {
             };
         }
 
+        //TODO: no test
         pub fn Exp(self: Self) Self {
-            return @exp(self.ToVector());
+            return FromVector(@exp(self.ToVector()));
         }
 
         //TODO: no test
@@ -320,7 +321,7 @@ pub fn Vec4(comptime number_type: type) type {
         }
 
         pub fn FromScalar(scalar: number_type) Self {
-            return @splat(scalar);
+            return FromVector(@splat(scalar));
         }
 
         pub fn Len(self: Self) number_type {

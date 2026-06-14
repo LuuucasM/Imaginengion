@@ -1,0 +1,225 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Zig Software Foundation Zig Compiler; 2176
+; Bound: 117
+; Schema: 0
+               OpCapability Shader
+               OpCapability Matrix
+               OpCapability PhysicalStorageBufferAddresses
+               OpCapability Int64
+               OpCapability VariablePointersStorageBuffer
+               OpCapability VariablePointers
+               OpCapability Int8
+               OpCapability Int16
+               OpExtension "SPV_KHR_physical_storage_buffer"
+               OpExtension "SPV_KHR_variable_pointers"
+               OpMemoryModel PhysicalStorageBuffer64 GLSL450
+               OpEntryPoint Fragment %100 "main" %oFragColor
+               OpExecutionMode %100 OriginUpperLeft
+         %18 = OpString "SDFFragShaderOverlay.zig"
+               OpSourceExtension "zig_errors:"
+               OpSource Zig 2176
+               OpName %u64 "u64"
+               OpName %void "void"
+               OpName %initializer_of_builtin_zig_backend "initializer of builtin.zig_backend"
+               OpName %f32 "f32"
+               OpName %oFragColor "oFragColor"
+               OpMemberName %Math_MathTypes_Vec2_f32_ 0 "x"
+               OpMemberName %Math_MathTypes_Vec2_f32_ 1 "y"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %uv "uv"
+               OpName %u32 "u32"
+               OpName %SDFFragShaderOverlay_main "SDFFragShaderOverlay.main"
+               OpMemberName %Target_Cpu_Feature_Set 0 "ints"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %initializer_of_Target_Cpu_Feature_Set_empty "initializer of Target.Cpu.Feature.Set.empty"
+               OpName %u8 "u8"
+               OpMemberName %_struct_40 0 "ptr"
+               OpMemberName %_struct_40 1 "len"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpMemberName %Target_Cpu_Model 0 "name"
+               OpMemberName %Target_Cpu_Model 1 "llvm_name"
+               OpMemberName %Target_Cpu_Model 2 "features"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpMemberName %Target_Cpu 0 "arch"
+               OpMemberName %Target_Cpu 1 "model"
+               OpMemberName %Target_Cpu 2 "features"
+               OpName %Target_Cpu "Target.Cpu"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu "Target.Cpu"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu "Target.Cpu"
+               OpName %initializer_of_builtin_cpu "initializer of builtin.cpu"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %Math_MathTypes_Vec2_f32_ "Math.MathTypes.Vec2(f32)"
+               OpName %coords "coords"
+               OpName %SDFFragShaderOverlay_texture2DArray__anon_588 "SDFFragShaderOverlay.texture2DArray__anon_588"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %initializer_of___anon_859 "initializer of __anon_859"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Feature_Set "Target.Cpu.Feature.Set"
+               OpName %Target_Cpu_Model "Target.Cpu.Model"
+               OpName %initializer_of_Target_spirv_cpu_generic "initializer of Target.spirv.cpu.generic"
+               OpDecorate %_ptr_Output_v4f32 ArrayStride 16
+               OpDecorate %oFragColor Location 0
+               OpDecorate %_arr_u64_u32_6 ArrayStride 8
+               OpDecorate %_arr_u8_u32_8 ArrayStride 1
+        %u64 = OpTypeInt 64 0
+%_ptr_Function_u64 = OpTypePointer Function %u64
+       %void = OpTypeVoid
+     %u64_11 = OpConstant %u64 11
+        %f32 = OpTypeFloat 32
+      %v4f32 = OpTypeVector %f32 4
+%_ptr_Output_v4f32 = OpTypePointer Output %v4f32
+ %oFragColor = OpVariable %_ptr_Output_v4f32 Output
+%Math_MathTypes_Vec2_f32_ = OpTypeStruct %f32 %f32
+      %f32_0 = OpConstant %f32 0
+        %u32 = OpTypeInt 32 0
+         %26 = OpUndef %u32
+      %u32_6 = OpConstant %u32 6
+%_arr_u64_u32_6 = OpTypeArray %u64 %u32_6
+%Target_Cpu_Feature_Set = OpTypeStruct %_arr_u64_u32_6
+%_ptr_Function_Target_Cpu_Feature_Set = OpTypePointer Function %Target_Cpu_Feature_Set
+      %u64_0 = OpConstant %u64 0
+         %u8 = OpTypeInt 8 0
+%_ptr_Function_u8 = OpTypePointer Function %u8
+ %_struct_40 = OpTypeStruct %_ptr_Function_u8 %u64
+%Target_Cpu_Model = OpTypeStruct %_struct_40 %_struct_40 %Target_Cpu_Feature_Set
+%_ptr_Function_Target_Cpu_Model = OpTypePointer Function %Target_Cpu_Model
+ %Target_Cpu = OpTypeStruct %u8 %_ptr_Function_Target_Cpu_Model %Target_Cpu_Feature_Set
+%_ptr_Function_Target_Cpu = OpTypePointer Function %Target_Cpu
+      %u8_48 = OpConstant %u8 48
+   %u64_8256 = OpConstant %u64 8256
+%_ptr_Function_Math_MathTypes_Vec2_f32_ = OpTypePointer Function %Math_MathTypes_Vec2_f32_
+%_ptr_Function_f32 = OpTypePointer Function %f32
+      %u32_0 = OpConstant %u32 0
+      %u32_1 = OpConstant %u32 1
+      %v3f32 = OpTypeVector %f32 3
+         %68 = OpTypeImage %f32 2D 0 1 0 1 Unknown
+         %69 = OpTypeSampledImage %68
+%_ptr_UniformConstant_69 = OpTypePointer UniformConstant %69
+         %71 = OpUndef %_ptr_UniformConstant_69
+         %75 = OpUndef %u32
+      %u32_8 = OpConstant %u32 8
+%_arr_u8_u32_8 = OpTypeArray %u8 %u32_8
+%_ptr_Function__arr_u8_u32_8 = OpTypePointer Function %_arr_u8_u32_8
+     %u8_103 = OpConstant %u8 103
+     %u8_101 = OpConstant %u8 101
+     %u8_110 = OpConstant %u8 110
+     %u8_114 = OpConstant %u8 114
+     %u8_105 = OpConstant %u8 105
+      %u8_99 = OpConstant %u8 99
+       %u8_0 = OpConstant %u8 0
+      %u64_7 = OpConstant %u64 7
+        %101 = OpTypeFunction %void %_ptr_Function_u64
+        %103 = OpTypeFunction %void
+        %104 = OpTypeFunction %void %_ptr_Function_Target_Cpu_Feature_Set
+        %106 = OpTypeFunction %void %_ptr_Function_Target_Cpu_Model %_ptr_Function_Target_Cpu
+        %109 = OpTypeFunction %v4f32 %Math_MathTypes_Vec2_f32_ %f32
+        %110 = OpTypeFunction %void %_ptr_Function__arr_u8_u32_8
+        %112 = OpTypeFunction %void %_ptr_Function__arr_u8_u32_8 %_ptr_Function_Target_Cpu_Model
+%initializer_of_builtin_zig_backend = OpFunction %void None %101
+        %102 = OpFunctionParameter %_ptr_Function_u64
+          %7 = OpLabel
+               OpStore %102 %u64_11
+               OpReturn
+               OpFunctionEnd
+%SDFFragShaderOverlay_main = OpFunction %void None %103
+         %17 = OpLabel
+               OpLine %18 40 30
+         %23 = OpCompositeConstruct %Math_MathTypes_Vec2_f32_ %f32_0 %f32_0
+         %uv = OpFunctionCall %v4f32 %SDFFragShaderOverlay_texture2DArray__anon_588 %23 %f32_0
+               OpLine %18 41 5
+               OpStore %oFragColor %uv None
+               OpReturn
+         %24 = OpLabel
+               OpUnreachable
+               OpFunctionEnd
+%initializer_of_Target_Cpu_Feature_Set_empty = OpFunction %void None %104
+        %105 = OpFunctionParameter %_ptr_Function_Target_Cpu_Feature_Set
+         %33 = OpLabel
+         %35 = OpCompositeConstruct %_arr_u64_u32_6 %u64_0 %u64_0 %u64_0 %u64_0 %u64_0 %u64_0
+         %36 = OpCompositeConstruct %Target_Cpu_Feature_Set %35
+               OpStore %105 %36
+               OpReturn
+               OpFunctionEnd
+%initializer_of_builtin_cpu = OpFunction %void None %106
+        %107 = OpFunctionParameter %_ptr_Function_Target_Cpu_Model
+        %108 = OpFunctionParameter %_ptr_Function_Target_Cpu
+         %46 = OpLabel
+         %50 = OpCompositeConstruct %_arr_u64_u32_6 %u64_8256 %u64_0 %u64_0 %u64_0 %u64_0 %u64_0
+         %51 = OpCompositeConstruct %Target_Cpu_Feature_Set %50
+         %52 = OpCompositeConstruct %Target_Cpu %u8_48 %107 %51
+               OpStore %108 %52
+               OpReturn
+               OpFunctionEnd
+%SDFFragShaderOverlay_texture2DArray__anon_588 = OpFunction %v4f32 None %109
+         %54 = OpFunctionParameter %Math_MathTypes_Vec2_f32_
+         %55 = OpFunctionParameter %f32
+         %56 = OpLabel
+         %58 = OpVariable %_ptr_Function_Math_MathTypes_Vec2_f32_ Function
+               OpStore %58 %54 None
+               OpLine %18 47 41
+         %61 = OpInBoundsAccessChain %_ptr_Function_f32 %58 %u32_0
+         %62 = OpLoad %f32 %61 Aligned 4
+               OpLine %18 47 47
+         %64 = OpInBoundsAccessChain %_ptr_Function_f32 %58 %u32_1
+         %65 = OpLoad %f32 %64 Aligned 4
+     %coords = OpCompositeConstruct %v3f32 %62 %65 %55
+               OpLine %18 55 32
+         %72 = OpLoad %69 %71
+         %73 = OpImageSampleImplicitLod %v4f32 %72 %coords
+               OpLine %18 49 5
+               OpReturnValue %73
+         %74 = OpLabel
+               OpUnreachable
+               OpFunctionEnd
+%initializer_of___anon_859 = OpFunction %void None %110
+        %111 = OpFunctionParameter %_ptr_Function__arr_u8_u32_8
+         %83 = OpLabel
+         %91 = OpCompositeConstruct %_arr_u8_u32_8 %u8_103 %u8_101 %u8_110 %u8_101 %u8_114 %u8_105 %u8_99 %u8_0
+               OpStore %111 %91
+               OpReturn
+               OpFunctionEnd
+%initializer_of_Target_spirv_cpu_generic = OpFunction %void None %112
+        %113 = OpFunctionParameter %_ptr_Function__arr_u8_u32_8
+        %114 = OpFunctionParameter %_ptr_Function_Target_Cpu_Model
+         %77 = OpLabel
+         %92 = OpBitcast %_ptr_Function_u8 %113
+         %94 = OpCompositeConstruct %_struct_40 %92 %u64_7
+         %95 = OpBitcast %_ptr_Function_u8 %113
+         %96 = OpCompositeConstruct %_struct_40 %95 %u64_7
+         %97 = OpCompositeConstruct %_arr_u64_u32_6 %u64_0 %u64_0 %u64_0 %u64_0 %u64_0 %u64_0
+         %98 = OpCompositeConstruct %Target_Cpu_Feature_Set %97
+         %99 = OpCompositeConstruct %Target_Cpu_Model %94 %96 %98
+               OpStore %114 %99
+               OpReturn
+               OpFunctionEnd
+        %100 = OpFunction %void None %103
+        %115 = OpLabel
+        %116 = OpFunctionCall %void %SDFFragShaderOverlay_main
+               OpReturn
+               OpFunctionEnd

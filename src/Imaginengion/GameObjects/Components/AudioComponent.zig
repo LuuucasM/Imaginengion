@@ -71,14 +71,14 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     var current_audio_type: i32 = @intFromEnum(self.mAudioType);
     const preview_text: []const u8 = audio_type_names[@as(usize, @intCast(current_audio_type))];
     var preview_buf: [16]u8 = undefined;
-    const preview_cstr = try std.fmt.bufPrintZ(&preview_buf, "{s}", .{preview_text});
+    const preview_cstr = try std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{preview_text}, 0);
 
     if (imgui.igBeginCombo("Audio Type", @ptrCast(preview_cstr.ptr), imgui.ImGuiComboFlags_None)) {
         defer imgui.igEndCombo();
 
         for (audio_type_names, 0..) |name, i| {
             var name_buf: [16]u8 = undefined;
-            const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{name});
+            const name_cstr = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{name}, 0);
             const is_selected = (current_audio_type == @as(i32, @intCast(i)));
             if (imgui.igSelectable_Bool(name_cstr.ptr, is_selected, 0, .{ .x = 0, .y = 0 })) {
                 current_audio_type = @as(i32, @intCast(i));
@@ -95,7 +95,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     if (self.mAudioAsset.mID != AssetHandle.NullHandle) {
         const file_data_asset = self.mAudioAsset.GetFileMetaData();
         const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
-        const name_term = try frame_allocator.dupeZ(u8, name);
+        const name_term = try frame_allocator.dupeSentinel(u8, name, 0);
         imgui.igTextUnformatted("Audio Asset: ", null);
         imgui.igSameLine(0.0, 0.0);
         imgui.igTextUnformatted(name_term, null);

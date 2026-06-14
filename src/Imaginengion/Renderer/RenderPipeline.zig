@@ -35,8 +35,8 @@ pub const SDFPushConstants = extern struct {
 
 pub fn Pipeline(pipeline_t: PipelineType) type {
     return switch (pipeline_t) {
-        .GamePipeline => @import("backends/SDLGPUPipeline.zig"),
-        .OverlayPipeline => @import("backends/SDLGPUPipeline.zig"),
+        .GamePipeline => @import("backends/GamePipeline.zig"),
+        .OverlayPipeline => @import("backends/OverlayPipeline.zig"),
         //.CustomShader =>
     };
 }

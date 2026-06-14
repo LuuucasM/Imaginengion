@@ -194,7 +194,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, gl
                 .Direction = curr_edge.Direction,
                 .Length = 0,
                 .FromNode = @intCast(new_node_ind),
-                .ToNode = -1,
+                .ToNode = 0,
                 .SiblingEdge = -1,
                 .AccumColor = DEFAULT_COLOR,
             };

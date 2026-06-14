@@ -30,7 +30,7 @@ pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
-    const text = try engine_context.FrameAllocator().dupeZ(u8, self.mName.items);
+    const text = try engine_context.FrameAllocator().dupeSentinel(u8, self.mName.items, 0);
     var ctx = InputTextContext{ .name_component = self, .allocator = engine_context.EngineAllocator() };
     if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(&ctx))) {
         _ = self.mName.swapRemove(self.mName.items.len - 1);

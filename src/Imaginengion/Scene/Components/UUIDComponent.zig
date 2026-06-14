@@ -21,7 +21,7 @@ pub fn Deinit(_: *UUIDComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
     var buff: [140]u8 = undefined;
-    const text = try std.fmt.bufPrintZ(&buff, "{d}\n", .{self.ID});
+    const text = try std.fmt.bufPrintSentinel(&buff, "{d}\n", .{self.ID}, 0);
     _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);
 }
 

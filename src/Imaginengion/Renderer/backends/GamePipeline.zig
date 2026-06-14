@@ -14,8 +14,8 @@ const Vec4 = MathTypes.Vec4;
 const Vec3 = MathTypes.Vec3;
 const Vec2 = MathTypes.Vec2;
 
-const VertexShader = @embedFile("../../../../zig-out/shaders/SDFVertShader.spv");
-const FragmentShader = @embedFile("../../../../zig-out/shaders/SDFFragShaderGame.spv");
+const VertexShader = @embedFile("../../EngineAssets/shaders/SDFVertShader.spv");
+const FragmentShader = @embedFile("../../EngineAssets/shaders/SDFFragShaderGame.spv");
 
 const VertexStageInfo: StageInfo = .{
     .mStage = .Vertex,

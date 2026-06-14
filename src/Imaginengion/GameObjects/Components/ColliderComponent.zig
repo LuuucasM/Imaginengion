@@ -52,14 +52,14 @@ pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
 
     const preview_text = shape_names[current_index];
     var preview_buf: [32]u8 = undefined;
-    const preview_cstr = try std.fmt.bufPrintZ(&preview_buf, "{s}", .{preview_text});
+    const preview_cstr = try std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{preview_text}, 0);
 
     if (imgui.igBeginCombo("Collider Type", @ptrCast(preview_cstr.ptr), 0)) {
         defer imgui.igEndCombo();
 
         for (shape_names, 0..) |name, i| {
             var name_buf: [32]u8 = undefined;
-            const name_cstr = try std.fmt.bufPrintZ(&name_buf, "{s}", .{name});
+            const name_cstr = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{name}, 0);
             const is_selected = (current_index == i);
 
             if (imgui.igSelectable_Bool(name_cstr.ptr, is_selected, 0, .{ .x = 0, .y = 0 })) {

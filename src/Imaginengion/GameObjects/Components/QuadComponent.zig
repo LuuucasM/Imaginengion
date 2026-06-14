@@ -32,7 +32,7 @@ pub const Ind: usize = blk: {
 mShouldRender: bool = true,
 mTexture: AssetHandle = .empty,
 mTexOptions: Texture2D.TexOptions = .{},
-mMaterial: Material,
+mMaterial: Material = .{},
 mEditTexCoords: bool = false,
 
 pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
@@ -44,7 +44,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
 
     imgui.igSeparator();
 
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mMaterial.mSurfaceColor), imgui.ImGuiColorEditFlags_None);
     _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
 
     const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
@@ -145,7 +145,7 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.write(self.mShouldRender);
 
     try jw.objectField("Color");
-    try jw.write(self.mTexOptions.mColor);
+    try jw.write(self.mMaterial.mSurfaceColor);
 
     try jw.objectField("TilingFactor");
     try jw.write(self.mTexOptions.mTilingFactor);
@@ -180,7 +180,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         if (std.mem.eql(u8, field_name, "ShouldRender")) {
             result.mShouldRender = try std.json.innerParse(bool, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
+            result.mMaterial.mSurfaceColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
             result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TextureUV0")) {

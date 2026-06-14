@@ -98,12 +98,13 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
         }
 
         pub fn Bind(self: Self, render_pass: *anyopaque, attachment_index: usize, slot: u32) void {
+            const pass: *sdl.SDL_GPURenderPass = @ptrCast(@alignCast(render_pass));
             std.debug.assert(attachment_index < color_texture_formats.len);
             const binding = sdl.SDL_GPUTextureSamplerBinding{
                 .texture = self.mTextures[attachment_index].?,
                 .sampler = self.mSampler.?,
             };
-            sdl.SDL_BindGPUFragmentSamplers(render_pass, slot, &binding, 1);
+            sdl.SDL_BindGPUFragmentSamplers(pass, slot, &binding, 1);
         }
 
         pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {

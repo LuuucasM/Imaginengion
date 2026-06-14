@@ -30,7 +30,7 @@ mText: std.ArrayList(u8) = .empty,
 mTextAssetHandle: AssetHandle = .{},
 mTexHandle: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},
-mMaterial: Material,
+mMaterial: Material = .{},
 mFontSize: f32 = 9,
 mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 mEngineAllocator: std.mem.Allocator = undefined,
@@ -44,7 +44,7 @@ pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
     //text box
-    const text = try frame_allocator.dupeZ(u8, self.mText.items);
+    const text = try frame_allocator.dupeSentinel(u8, self.mText.items, 0);
     self.mEngineAllocator = engine_context.EngineAllocator();
     if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
         _ = self.mText.swapRemove(self.mText.items.len - 1);
@@ -53,7 +53,7 @@ pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void 
     //font name just as a text that can be drag dropped onto to change the text
     const file_data_asset = self.mTextAssetHandle.GetFileMetaData();
     const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
-    const name_term = try frame_allocator.dupeZ(u8, name);
+    const name_term = try frame_allocator.dupeSentinel(u8, name, 0);
     imgui.igTextUnformatted(name_term, null);
     //drag drop target for ttf files from content browser
 
@@ -63,7 +63,7 @@ pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void 
     _ = imgui.igDragFloat2("Bounds L R", @ptrCast(&self.mBounds), 0.1, 0, 0, "%.3f", imgui.ImGuiSliderFlags_None);
 
     //color, do the color picker from imgui
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mTexOptions.mColor), imgui.ImGuiColorEditFlags_None);
+    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mMaterial.mSurfaceColor), imgui.ImGuiColorEditFlags_None);
 }
 
 fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {
@@ -98,7 +98,7 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
 
     //texture options
     try jw.objectField("Color");
-    try jw.write(self.mTexOptions.mColor);
+    try jw.write(self.mMaterial.mSurfaceColor);
 
     try jw.objectField("TilingFactor");
     try jw.write(self.mTexOptions.mTilingFactor);
@@ -165,7 +165,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
                 @panic("error appending slice, error out of memory");
             };
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
+            result.mMaterial.mSurfaceColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
             result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TextureUV0")) {

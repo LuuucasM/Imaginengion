@@ -177,7 +177,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
         if (entry.kind == .directory) {
             const texture_asset = try self.mDirTextureHandle.GetAsset(engine_context, Texture2D);
 
-            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+            const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texture_asset, thumbnail_size);
 
@@ -191,7 +191,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
             const texture_asset = try self.mPngTextureHandle.GetAsset(engine_context, Texture2D);
 
-            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+            const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texture_asset, thumbnail_size);
 
@@ -200,7 +200,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(engine_context, Texture2D);
 
-            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+            const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
@@ -209,7 +209,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
             const texutre_asset = try self.mScriptTextureHandle.GetAsset(engine_context, Texture2D);
 
-            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+            const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
@@ -218,7 +218,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".mp3") == true) {
             const texutre_asset = try self.mAudioTextureHandle.GetAsset(engine_context, Texture2D);
 
-            const entry_name = try std.fmt.bufPrintZ(&name_buf, "{s}", .{entry.name});
+            const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 

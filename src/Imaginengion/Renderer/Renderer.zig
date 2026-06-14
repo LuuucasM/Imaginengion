@@ -1,6 +1,7 @@
 const std = @import("std");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const Window = @import("../Windows/Window.zig");
+const SSBO = @import("../SSBOs/SSBO.zig");
 
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
@@ -38,8 +39,8 @@ const Tracy = @import("../Core/Tracy.zig");
 const Renderer = @This();
 
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
-pub const GamePipielineT = RenderPipeline.Pipeline(.GameShader);
-pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayShader);
+pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
+pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayPipeline);
 
 pub const ShadingData = extern struct {
     pub const SHADING_FLAG_TRANSPARENT: u32 = 1 << 0;
@@ -66,14 +67,57 @@ pub const ShapeType = enum(u32) {
     Glyph,
 };
 
+pub const ShadingBuffers = struct {
+    mShadingBuffer: SSBO = .{},
+    mShadingBufferBase: std.ArrayList(ShadingData) = .empty,
+    pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
+        self.mShadingBuffer.Init(engine_context, @sizeOf(ShadingData) * 100, 4, .Fragment);
+        self.mShadingBufferBase = try std.ArrayList(ShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+    }
+    pub fn Deinit(self: *ShadingBuffers, engine_context: *EngineContext) void {
+        self.mShadingBuffer.Deinit(engine_context);
+        self.mShadingBufferBase.deinit(engine_context.EngineAllocator());
+    }
+    pub fn ClearAndFree(self: *ShadingBuffers, engine_allocator: std.mem.Allocator) void {
+        self.mShadingBufferBase.clearAndFree(engine_allocator);
+    }
+    pub fn SetBuffers(self: *ShadingBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+        const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
+        defer zone.Deinit();
+
+        const shading_byte_size = self.mShadingBufferBase.items.len * @sizeOf(ShadingData);
+
+        //shadings
+        _ = self.mShadingBuffer.SetData(engine_context, self.mShadingBufferBase.items.ptr, shading_byte_size, 0);
+
+        //fill out stats
+        switch (world_type) {
+            .Game => {
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+            },
+            .Editor => {
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+            },
+            .Simulate => {
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+            },
+        }
+    }
+    pub fn BindBuffers(self: ShadingBuffers, render_pass: *anyopaque) void {
+        self.mShadingBuffer.Bind(render_pass);
+    }
+};
+
 mPlatform: RenderPlatform = .{},
 mTextureManager: TextureManager = .{},
 mGamePipeline: GamePipielineT = .{},
 mOverlayPipeline: OverlayPipelineT = .{},
-mIntermediateFB: OutputFrameBuffer = .{},
+mIntermediateFB: OutputFrameBuffer = .empty,
 mSDFPushConstants: PushConstants = undefined,
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
+mGameShading: ShadingBuffers = .{},
+mOverlayShading: ShadingBuffers = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     self.mPlatform.Init(engine_context);
@@ -84,9 +128,14 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
 
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
+
+    try self.mGameShading.Init(engine_context);
+    try self.mOverlayShading.Init(engine_context);
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
+    self.mGameShading.Deinit(engine_context);
+    self.mOverlayShading.Deinit(engine_context);
     self.mSDFShader.Deinit(engine_context) catch unreachable;
     self.mTextureManager.Deinit(engine_context);
     self.mPipeline.Deinit(engine_context);
@@ -148,6 +197,8 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
     defer zone.Deinit();
 
     self.mR2D.StartBatch(engine_allocator);
+    self.mGameShading.ClearAndFree(engine_allocator);
+    self.mOverlayShading.ClearAndFree(engine_allocator);
 }
 
 fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) anyerror!void {
@@ -159,10 +210,24 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
 
     //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try self.mR2D.DrawQuad(engine_context, transform_component, quad_component, entity_scene_comp);
+        try self.mR2D.DrawQuad(
+            engine_context,
+            transform_component,
+            quad_component,
+            entity_scene_comp,
+            &self.mGameShading,
+            &self.mOverlayShading,
+        );
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        try self.mR2D.DrawText(engine_context, transform_component, text_component, entity_scene_comp);
+        try self.mR2D.DrawText(
+            engine_context,
+            transform_component,
+            text_component,
+            entity_scene_comp,
+            &self.mGameShading,
+            &self.mOverlayShading,
+        );
     }
 }
 
@@ -173,11 +238,12 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mPlatform.PushDebugGroup("End Rendering\x00");
 
     const cmd = self.mPlatform.GetCommandBuff();
-    self.mIntermediateFB.Resize(engine_context, frame_buffer.GetWidth(), frame_buffer.GetHeight());
+    try self.mIntermediateFB.Resize(engine_context, frame_buffer.GetWidth(), frame_buffer.GetHeight());
 
     //====================first overlay render pipeline======================================
     self.mPlatform.PushDebugGroup("Upload Buffers - Overlay\x00");
     try self.mR2D.SetBuffers(world_type, engine_context, .OverlayPipeline);
+    try self.mOverlayShading.SetBuffers(world_type, engine_context);
     self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw - Overlay\x00");
@@ -186,12 +252,13 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mOverlayPipeline.Bind(overlay_render_pass);
 
     self.mR2D.BindBuffers(overlay_render_pass, .OverlayPipeline);
+    self.mOverlayShading.BindBuffers(overlay_render_pass);
 
     self.mTextureManager.Bind(overlay_render_pass);
 
     self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
     self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
-    self.mOverlayPipeline.PushUniforms(cmd, self.mPushConstants);
+    self.mOverlayPipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
     self.mOverlayPipeline.Draw(overlay_render_pass);
     self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
@@ -202,6 +269,7 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     //=====================================now for game layer render pipeline======================================================
     self.mPlatform.PushDebugGroup("Upload Buffers - Game\x00");
     try self.mR2D.SetBuffers(world_type, engine_context, .GamePipeline);
+    try self.mGameShading.SetBuffers(world_type, engine_context);
     self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw - Game\x00");
@@ -210,6 +278,7 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     self.mGamePipeline.Bind(game_render_pass);
 
     self.mR2D.BindBuffers(game_render_pass, .GamePipeline);
+    self.mGameShading.BindBuffers(game_render_pass);
 
     self.mTextureManager.Bind(game_render_pass);
 
@@ -217,7 +286,7 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
 
     self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .GamePipeline);
     self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .GamePipeline);
-    self.mGamePipeline.PushUniforms(cmd, self.mPushConstants);
+    self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
     self.mGamePipeline.Draw(game_render_pass);
     self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
