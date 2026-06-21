@@ -24,24 +24,41 @@ pub const Image2D = @SpirvType(
     } },
 );
 
+pub const QuadsSSBOT = @SpirvType(.{ .runtime_array = QuadData });
+
 pub const Sampler2D = @SpirvType(.{ .sampled_image = Image2D });
 
-//std.lang.Type.Spirv
+pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 3, .binding = 0 } } });
+
+//layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
+pub const Textures = @extern(*addrspace(.constant) Sampler2D, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
+//layout(set = 2, binding = 1) uniform sampler
+pub const Overlay = @extern(*addrspace(.constant) @SpirvType(.sampler), .{ .name = "Overlay", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
+
+//layout(set = 2, binding = 2) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
+//pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
+pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
+
+//layout(set = 2, binding = 3) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
+pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphData, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
+
+//layout(set = 2, binding = 4) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
+pub const ShadingSSBO = @extern(*addrspace(.storage_buffer) ShadingData, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
 
 pub fn FragShaderBase(
-    CameraUBO: PushConstants,
-    QuadsSSBO: [*]addrspace(.storage_buffer) QuadData,
-    GlyphsSSBO: [*]addrspace(.storage_buffer) GlyphData,
-    ShadingSSBO: [*]addrspace(.storage_buffer) ShadingData,
-    Textures: *addrspace(.constant) Sampler2D,
+    camera_ubo: PushConstants,
+    quads_ssbo: [*]QuadData,
+    glyphs_ssbo: [*]GlyphData,
+    shading_ssbo: [*]ShadingData,
+    textures: *addrspace(.constant) Sampler2D,
 ) @Vector(4, f32) {
-    _ = Textures;
+    _ = textures;
     const frag = spirv.frag_coord;
 
-    const uv = Vec2(f32).FromVector(CameraUBO.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(CameraUBO.mRayOffset));
+    const uv = Vec2(f32).FromVector(camera_ubo.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(camera_ubo.mRayOffset));
 
     const dir = Vec3(f32).Dir(.{ .x = uv.x, .y = uv.y, .z = -1.0 });
-    const ray_dir = dir.QuatRotate(.FromVector(CameraUBO.mRotation));
+    const ray_dir = dir.QuatRotate(.FromVector(camera_ubo.mRotation));
 
     var marcher = RayMarcher{
         .mNodes = undefined,
@@ -52,7 +69,7 @@ pub fn FragShaderBase(
 
     //setup initial node and edge
     marcher.mNodes[0] = RayMarcher.Node{
-        .Point = .FromVector(CameraUBO.mPosition),
+        .Point = .FromVector(camera_ubo.mPosition),
         .Normal = .{ .x = 0, .y = 0, .z = 0 },
         .ParentEdge = NO_EDGE,
         .FirstEdge = NO_EDGE,
@@ -75,8 +92,8 @@ pub fn FragShaderBase(
     marcher.mEdgeCount = 1;
 
     //create the ray tree
-    marcher.March(QuadsSSBO[0..CameraUBO.mQuadsCount], GlyphsSSBO[9..CameraUBO.mGlyphsCount], CameraUBO.mPerspectiveFar);
+    marcher.March(quads_ssbo.*[0..camera_ubo.mQuadsCount], glyphs_ssbo.*[9..camera_ubo.mGlyphsCount], camera_ubo.mPerspectiveFar);
 
     //traverse ray tree backwards to obtain final output color
-    return marcher.GenerateColor(ShadingSSBO);
+    return marcher.GenerateColor(shading_ssbo.*);
 }

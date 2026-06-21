@@ -28,14 +28,14 @@ const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "Camera
 const Textures = @extern(*addrspace(.constant) Sampler2D, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
 
 //layout(set = 2, binding = 2) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
-const QuadsSSBO = @extern([*]addrspace(.storage_buffer) QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
+const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
 
 //layout(set = 2, binding = 3) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
-const GlyphsSSBO = @extern([*]addrspace(.storage_buffer) GlyphData, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
+const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphData, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
 
 //layout(set = 2, binding = 4) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
-const ShadingSSBO = @extern([*]addrspace(.storage_buffer) ShadingData, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
+const ShadingSSBO = @extern(*addrspace(.storage_buffer) ShadingData, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
 
 export fn main() callconv(.{ .spirv_fragment = .{} }) void {
-    oFragColor.* = FragShaderBase(CameraUBO.*, QuadsSSBO, GlyphsSSBO, ShadingSSBO, Textures);
+    oFragColor.* = FragShaderBase(CameraUBO.*, QuadsSSBO.*, GlyphsSSBO.*, ShadingSSBO.*, Textures);
 }
