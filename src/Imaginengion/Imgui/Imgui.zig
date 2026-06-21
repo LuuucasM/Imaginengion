@@ -6,6 +6,7 @@ const sdl = @import("../Core/CImports.zig").sdl;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const TextureManager = @import("../TextureManager/TextureManager.zig");
 const ImguiManager = @This();
 
 const TEXTURE_SIZE: usize = 128;
@@ -141,7 +142,7 @@ pub fn GetImguiTexture(self: *ImguiManager, engine_context: *EngineContext, text
     const preview = try self.getOrCreatePreviewTexture(engine_context.EngineAllocator(), device);
 
     const offset_x, const offset_y = engine_context.mRenderer.mTextureManager.GetPixelOffsets(texture.GetTextureHandle());
-    const layer = engine_context.mRenderer.mTextureManager.GetLayerIndex(texture.GetTextureHandle());
+    const layer = TextureManager.GetLayerIndex(texture.GetTextureHandle());
 
     const copy_w = @min(texture.GetWidth(), TEXTURE_SIZE);
     const copy_h = @min(texture.GetHeight(), TEXTURE_SIZE);

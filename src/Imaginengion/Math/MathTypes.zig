@@ -1,7 +1,9 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const math = std.math;
 
 pub const Axis = enum { x, y, z };
+const is_spirv = builtin.target.cpu.arch == .spirv32 or builtin.target.cpu.arch == .spirv64;
 
 pub fn Ray(comptime number_type: type) type {
     _ValidateNumberType(number_type);
@@ -30,7 +32,23 @@ pub fn Vec2(comptime number_type: type) type {
         }
 
         pub fn FromVector(vec: VectorT) Self {
-            return @bitCast(vec);
+            //NOTE: bit casting causes some validation errors
+            //likely internally due to some struct <-> vector reinterprating
+            if (is_spirv) {
+                return .{ .x = vec[0], .y = vec[1] };
+            } else {
+                return @bitCast(vec);
+            }
+        }
+
+        pub fn ToVector(self: Self) VectorT {
+            //NOTE: bit casting causes some validation errors
+            //likely internally due to some struct <-> vector reinterprating
+            if (is_spirv) {
+                return .{ self.x, self.y };
+            } else {
+                return @bitCast(self);
+            }
         }
 
         pub fn FromScalar(scalar: number_type) Self {
@@ -90,11 +108,11 @@ pub fn Vec2(comptime number_type: type) type {
         }
 
         pub fn AddVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() + other.ToVector());
+            return FromVector(self.ToVector() + other.ToVector());
         }
 
         pub fn SubVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() - other.ToVector());
+            return FromVector(self.ToVector() - other.ToVector());
         }
 
         pub fn MulScalar(self: Self, scalar: number_type) Self {
@@ -103,20 +121,16 @@ pub fn Vec2(comptime number_type: type) type {
 
         //NOTE: no tests for this
         pub fn MulVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() * other.ToVector());
+            return FromVector(self.ToVector() * other.ToVector());
         }
 
         //NOTE: no tests for this
         pub fn DivVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() / other.ToVector());
+            return FromVector(self.ToVector() / other.ToVector());
         }
 
         pub fn DivScalar(self: Self, scalar: number_type) Self {
             return self.DivVec(.FromScalar(scalar));
-        }
-
-        pub fn ToVector(self: Self) VectorT {
-            return @bitCast(self);
         }
 
         pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {
@@ -137,12 +151,24 @@ pub fn Vec3(comptime number_type: type) type {
         y: number_type,
         z: number_type,
 
-        pub fn FromVector(vect: VectorT) Self {
-            return @bitCast(vect);
+        pub fn FromVector(vec: VectorT) Self {
+            //NOTE: bit casting causes some validation errors
+            //likely internally due to some struct <-> vector reinterprating
+            if (is_spirv) {
+                return .{ .x = vec[0], .y = vec[1], .z = vec[2] };
+            } else {
+                return @bitCast(vec);
+            }
         }
 
         pub fn ToVector(self: Self) VectorT {
-            return @bitCast(self);
+            //NOTE: bit casting causes some validation errors
+            //likely internally due to some struct <-> vector reinterprating
+            if (is_spirv) {
+                return .{ self.x, self.y, self.z };
+            } else {
+                return @bitCast(self);
+            }
         }
 
         pub fn FromScalar(scalar: number_type) Self {
@@ -249,7 +275,7 @@ pub fn Vec3(comptime number_type: type) type {
         }
 
         pub fn AddVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() + other.ToVector());
+            return FromVector(self.ToVector() + other.ToVector());
         }
 
         pub fn AddScalar(self: Self, scalar: number_type) Self {
@@ -261,7 +287,7 @@ pub fn Vec3(comptime number_type: type) type {
         }
 
         pub fn SubVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() - other.ToVector());
+            return FromVector(self.ToVector() - other.ToVector());
         }
 
         pub fn SubEqVec(self: *Self, other: Self) void {
@@ -269,11 +295,11 @@ pub fn Vec3(comptime number_type: type) type {
         }
 
         pub fn DivScalar(self: Self, scalar: number_type) Self {
-            return @bitCast(self.ToVector() / FromScalar(scalar).ToVector());
+            return FromVector(self.ToVector() / FromScalar(scalar).ToVector());
         }
 
         pub fn MulVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() * other.ToVector());
+            return FromVector(self.ToVector() * other.ToVector());
         }
 
         pub fn MulScalar(self: Self, scalar: number_type) Self {
@@ -316,8 +342,22 @@ pub fn Vec4(comptime number_type: type) type {
         z: number_type,
         w: number_type,
 
-        pub fn FromVector(vect: VectorT) Self {
-            return @bitCast(vect);
+        pub fn FromVector(vec: VectorT) Self {
+            if (is_spirv) {
+                return .{ .x = vec[0], .y = vec[1], .z = vec[2], .w = vec[3] };
+            } else {
+                return @bitCast(vec);
+            }
+        }
+
+        pub fn ToVector(self: Self) VectorT {
+            //NOTE: bit casting causes some validation errors
+            //likely internally due to some struct <-> vector reinterprating
+            if (is_spirv) {
+                return .{ self.x, self.y, self.z, self.w };
+            } else {
+                return @bitCast(self);
+            }
         }
 
         pub fn FromScalar(scalar: number_type) Self {
@@ -385,15 +425,15 @@ pub fn Vec4(comptime number_type: type) type {
         }
 
         pub fn AddVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() + other.ToVector());
+            return FromVector(self.ToVector() + other.ToVector());
         }
 
         pub fn SubVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() - other.ToVector());
+            return FromVector(self.ToVector() - other.ToVector());
         }
 
         pub fn MulVec(self: Self, other: Self) Self {
-            return @bitCast(self.ToVector() * other.ToVector());
+            return FromVector(self.ToVector() * other.ToVector());
         }
 
         pub fn MulScalar(self: Self, scalar: number_type) Self {
@@ -401,11 +441,7 @@ pub fn Vec4(comptime number_type: type) type {
         }
 
         pub fn DivScalar(self: Self, scalar: number_type) Self {
-            return @bitCast(self.ToVector() / @as(VectorT, @splat(scalar)));
-        }
-
-        pub fn ToVector(self: Self) VectorT {
-            return @bitCast(self);
+            return FromVector(self.ToVector() / @as(VectorT, @splat(scalar)));
         }
 
         pub fn format(self: Self, comptime fmt: []const u8, options: std.fmt.FormatOptions, writer: anytype) !void {

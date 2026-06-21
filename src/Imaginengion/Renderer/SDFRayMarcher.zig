@@ -23,27 +23,18 @@ const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 9;
 pub const MAX_EDGES: u32 = 8;
 pub const DEFAULT_COLOR = Vec4(f32){ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1.0 };
+pub const NO_EDGE: u32 = std.math.maxInt(u32);
 
 //NOTE: This represents a surface that we hit
 pub const Node = struct {
     Point: Vec3(f32),
     Normal: Vec3(f32),
-    ParentEdge: i32, //if ParentEdge == -1 -> root parent
-    FirstEdge: i32, //if FirstEdge == -1 -> leaf
+    ParentEdge: u32,
+    FirstEdge: u32,
     MaterialHandle: u32,
     AccumColor: Vec4(f32),
     TextureUV: Vec2(f32),
     ShapeT: ShapeType,
-
-    pub fn CalcColor(self: *Node, materials: anytype, edges: *EdgeArr) void {
-        const child_accum = if (self.FirstEdge == -1) DEFAULT_COLOR else edges[@intCast(self.FirstEdge)].AccumColor;
-
-        const material: ShadingData = materials[self.MaterialHandle];
-        const color = Vec4(f32).FromVector(material.Color);
-        const alpha = color.w;
-
-        self.AccumColor = color.Lerp(child_accum, 1.0 - alpha);
-    }
 };
 
 //NOTE: This represents travelling through volume
@@ -52,20 +43,8 @@ pub const Edge = struct {
     Length: f32,
     FromNode: u32,
     ToNode: u32,
-    SiblingEdge: i32, //used if a node has multiple rays (multiple edges)
+    SiblingEdge: u32,
     AccumColor: Vec4(f32),
-
-    pub fn CalcColor(self: *Edge, materials: anytype, nodes: *NodeArr) void {
-        const child_accum = nodes[@intCast(self.ToNode)].AccumColor;
-
-        const from_node = nodes[@intCast(self.FromNode)];
-        const material: ShadingData = materials[from_node.MaterialHandle];
-
-        // Beer-Lambert for absorbtion  over edge length
-        const rgb = Vec3(f32).FromVector(-material.Absorption).MulScalar(self.Length).Exp().MulVec(Vec3(f32){ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
-
-        self.AccumColor = .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = child_accum.w };
-    }
 };
 
 const ObjectData = extern struct {
@@ -82,7 +61,7 @@ const ObjectData = extern struct {
     pub fn GetShadingHandle(self: ObjectData, quads: anytype, glyphs: anytype) u32 {
         return switch (self.shape_type) {
             .Quad => quads[self.shape_ind].ShadingHandle,
-            .Glyph => glyphs[self.shape_ind].TextureShadingHandle,
+            .Glyph => glyphs[self.shape_ind].AtlasShadingHandle,
             else => 0,
         };
     }
@@ -110,7 +89,7 @@ mEdges: EdgeArr,
 mNodeCount: usize,
 mEdgeCount: usize,
 
-pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize, perspective_far: f32) void {
+pub fn March(self: *Self, quads: anytype, glyphs: anytype, perspective_far: f32) void {
     var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
     edge_ind_stack.Push(0);
 
@@ -126,7 +105,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, gl
         while (i < MAX_STEPS and dist_origin < perspective_far and march_data.min_dist > SURF_DIST) : (i += 1) {
             march_data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
             const point = from_point.AddVec(curr_edge.Direction.MulScalar(dist_origin));
-            march_data = NextSurface(point, quads, glyphs, quad_count, glyph_count);
+            march_data = NextSurface(point, quads, glyphs);
             dist_origin += march_data.min_dist;
         }
         //once we are herer we either a) hit max steps, b) hit our max distance, c) hit a surface
@@ -134,14 +113,14 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, gl
         self.mEdges[curr_edge_ind].Length = dist_origin;
         const end_point = from_point.AddVec(curr_edge.Direction.MulScalar(dist_origin));
 
-        //case a and b - ray dies for whatever reason
+        //case a and b - ray dies
         if (i >= MAX_STEPS or dist_origin >= perspective_far) {
             const miss_node_ind = self.GetNodeIndex();
             self.mNodes[miss_node_ind] = .{
                 .Point = end_point,
                 .Normal = .{ .x = 0, .y = 0, .z = 0 },
                 .ParentEdge = @intCast(curr_edge_ind),
-                .FirstEdge = -1,
+                .FirstEdge = NO_EDGE,
                 .MaterialHandle = 0,
                 .AccumColor = DEFAULT_COLOR,
                 .TextureUV = .{ .x = 0, .y = 0 },
@@ -152,7 +131,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, gl
         }
 
         //calculate the normal
-        const hit_normal = CalcNormal(end_point, quads, glyphs, quad_count, glyph_count);
+        const hit_normal = CalcNormal(end_point, quads, glyphs);
 
         const shading_handle = march_data.object.GetShadingHandle(quads, glyphs);
 
@@ -174,7 +153,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, gl
             .Point = end_point,
             .Normal = hit_normal,
             .ParentEdge = @intCast(curr_edge_ind),
-            .FirstEdge = -1,
+            .FirstEdge = NO_EDGE,
             .MaterialHandle = shading_handle,
             .AccumColor = DEFAULT_COLOR,
             .TextureUV = texture_uv,
@@ -195,7 +174,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, quad_count: usize, gl
                 .Length = 0,
                 .FromNode = @intCast(new_node_ind),
                 .ToNode = 0,
-                .SiblingEdge = -1,
+                .SiblingEdge = NO_EDGE,
                 .AccumColor = DEFAULT_COLOR,
             };
 
@@ -209,16 +188,14 @@ pub fn GenerateColor(self: *Self, materials: anytype) Vec4(f32).VectorT {
     var i: usize = self.mNodeCount;
     while (i > 0) {
         i -= 1;
-        const node = &self.mNodes[i];
+        const node = self.mNodes[i];
 
-        var ei: i32 = node.FirstEdge;
-        while (ei != -1) {
-            const edge = &self.mEdges[@intCast(ei)];
-            edge.CalcColor(materials, &self.mNodes);
-            ei = edge.SiblingEdge;
+        var ei: u32 = node.FirstEdge;
+        while (ei != NO_EDGE) {
+            self.CalcEdgeColor(materials, ei);
+            ei = self.mEdges[@intCast(ei)].SiblingEdge;
         }
-
-        node.CalcColor(materials, &self.mEdges);
+        self.CalcNodeColor(materials, i);
     }
 
     return self.mNodes[0].AccumColor.ToVector();
@@ -234,21 +211,19 @@ fn GetEdgeIndex(self: *Self) usize {
     return self.mEdgeCount;
 }
 
-fn NextSurface(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize) MarchData {
+fn NextSurface(point: Vec3(f32), quads: anytype, glyphs: anytype) MarchData {
     var data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
-    var i: u32 = 0;
 
-    while (i < quad_count) : (i += 1) {
-        const dist = SDFFunc.sdIMQuad(point, quads[i]);
+    for (quads, 0..) |quad, i| {
+        const dist = SDFFunc.sdIMQuad(point, quad);
         if (dist < data.min_dist) {
             data.min_dist = dist;
             data.object.shape_type = .Quad;
             data.object.shape_ind = @intCast(i);
         }
     }
-    i = 0;
-    while (i < glyph_count) : (i += 1) {
-        const dist = SDFFunc.sdIMGlyph(point, glyphs[i]);
+    for (glyphs, 0..) |glyph, i| {
+        const dist = SDFFunc.sdIMGlyph(point, glyph);
         if (dist < data.min_dist) {
             data.min_dist = dist;
             data.object.shape_type = .Glyph;
@@ -258,7 +233,7 @@ fn NextSurface(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: us
     return data;
 }
 
-fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usize, glyph_count: usize) Vec3(f32) {
+fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype) Vec3(f32) {
     const e: f32 = 0.001;
 
     const x = Vec3(f32){ .x = e, .y = 0, .z = 0 };
@@ -268,12 +243,12 @@ fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usi
     const z = Vec3(f32){ .x = 0, .y = 0, .z = e };
     const neg_z = Vec3(f32){ .x = 0, .y = 0, .z = -e };
 
-    const next_surf_x = NextSurface(point.AddVec(x), quads, glyphs, quad_count, glyph_count);
-    const next_surf_neg_x = NextSurface(point.AddVec(neg_x), quads, glyphs, quad_count, glyph_count);
-    const next_surf_y = NextSurface(point.AddVec(y), quads, glyphs, quad_count, glyph_count);
-    const next_surf_neg_y = NextSurface(point.AddVec(neg_y), quads, glyphs, quad_count, glyph_count);
-    const next_surf_z = NextSurface(point.AddVec(z), quads, glyphs, quad_count, glyph_count);
-    const next_surf_neg_z = NextSurface(point.AddVec(neg_z), quads, glyphs, quad_count, glyph_count);
+    const next_surf_x = NextSurface(point.AddVec(x), quads, glyphs);
+    const next_surf_neg_x = NextSurface(point.AddVec(neg_x), quads, glyphs);
+    const next_surf_y = NextSurface(point.AddVec(y), quads, glyphs);
+    const next_surf_neg_y = NextSurface(point.AddVec(neg_y), quads, glyphs);
+    const next_surf_z = NextSurface(point.AddVec(z), quads, glyphs);
+    const next_surf_neg_z = NextSurface(point.AddVec(neg_z), quads, glyphs);
 
     const dx = next_surf_x.min_dist - next_surf_neg_x.min_dist;
     const dy = next_surf_y.min_dist - next_surf_neg_y.min_dist;
@@ -282,4 +257,46 @@ fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype, quad_count: usi
     const vec = Vec3(f32){ .x = dx, .y = dy, .z = dz };
 
     return vec.Dir();
+}
+
+fn CalcNodeColor(self: *Self, materials: anytype, node_ind: u32) void {
+    const curr_node = self.mNodes[node_ind];
+
+    const child_accum = if (curr_node.FirstEdge == NO_EDGE) DEFAULT_COLOR else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
+
+    const material: ShadingData = materials[curr_node.MaterialHandle];
+    switch (curr_node.ShapeT) {
+        .Quad => {
+            //TODO: should also sample from texture but currently would
+            //have to hand roll asm so just going to wait a bit longer
+            //since its not huge prio
+            const color = Vec4(f32).FromVector(material.Color);
+            const alpha = color.w;
+            self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
+        },
+        .Glyph => {
+            //TODO: to actually print the glyph correctly need texture
+            //but currently would have to hand write asm to sample textures
+            //so just waiting on that
+            const color = Vec4(f32).FromVector(material.Color);
+            const alpha = color.w;
+            self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
+        },
+        else => self.mNodes[node_ind].AccumColor = child_accum,
+    }
+}
+
+fn CalcEdgeColor(self: *Self, materials: anytype, edge_ind: u32) void {
+    const curr_edge = self.mEdges[edge_ind];
+    const to_node = self.mNodes[curr_edge.ToNode];
+    const from_node = self.mNodes[curr_edge.FromNode];
+
+    const child_accum = to_node.AccumColor;
+
+    const material: ShadingData = materials[from_node.MaterialHandle];
+
+    // Beer-Lambert for absorbtion  over edge length
+    const rgb = Vec3(f32).FromVector(-material.Absorption).MulScalar(curr_edge.Length).Exp().MulVec(Vec3(f32){ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
+
+    self.mEdges[edge_ind].AccumColor = .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = child_accum.w };
 }

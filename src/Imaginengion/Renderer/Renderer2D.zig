@@ -134,7 +134,7 @@ pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
 
 pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
     self.mGameData.Deinit(engine_context);
-    self.mOverlayData.Init(engine_context);
+    self.mOverlayData.Deinit(engine_context);
 }
 
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {

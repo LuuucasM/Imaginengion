@@ -122,9 +122,10 @@ mOverlayShading: ShadingBuffers = .{},
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     self.mPlatform.Init(engine_context);
 
-    try self.mTextureManager.Init(engine_context, 2_000_000_000);
+    try self.mTextureManager.Init(engine_context, 1_000_000_000);
 
     try self.mGamePipeline.Init(engine_context);
+    try self.mOverlayPipeline.Init(engine_context);
 
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
@@ -136,9 +137,9 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
     self.mGameShading.Deinit(engine_context);
     self.mOverlayShading.Deinit(engine_context);
-    self.mSDFShader.Deinit(engine_context) catch unreachable;
     self.mTextureManager.Deinit(engine_context);
-    self.mPipeline.Deinit(engine_context);
+    self.mGamePipeline.Deinit(engine_context);
+    self.mOverlayPipeline.Deinit(engine_context);
     self.mR2D.Deinit(engine_context);
     self.mR3D.Deinit(engine_context.EngineAllocator());
     self.mPlatform.Deinit(&engine_context.mAppWindow);

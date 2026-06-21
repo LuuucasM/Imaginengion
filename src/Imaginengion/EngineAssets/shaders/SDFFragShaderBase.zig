@@ -1,5 +1,5 @@
 const std = @import("std");
-const gpu = std.gpu;
+const spirv = std.spirv;
 
 const PushConstants = @import("IM").PushConstants;
 const QuadData = @import("IM").QuadData;
@@ -10,6 +10,7 @@ const Vec2 = @import("IM").Vec2;
 const Vec3 = @import("IM").Vec3;
 const Vec4 = @import("IM").Vec4;
 const Quat = @import("IM").Quat;
+const NO_EDGE = RayMarcher.NO_EDGE;
 
 pub const Image2D = @SpirvType(
     .{ .image = .{
@@ -28,15 +29,14 @@ pub const Sampler2D = @SpirvType(.{ .sampled_image = Image2D });
 //std.lang.Type.Spirv
 
 pub fn FragShaderBase(
-    oFragColor: *addrspace(.output) @Vector(4, f32),
-    CameraUBO: *addrspace(.uniform) PushConstants,
+    CameraUBO: PushConstants,
     QuadsSSBO: [*]addrspace(.storage_buffer) QuadData,
     GlyphsSSBO: [*]addrspace(.storage_buffer) GlyphData,
     ShadingSSBO: [*]addrspace(.storage_buffer) ShadingData,
     Textures: *addrspace(.constant) Sampler2D,
-) void {
+) @Vector(4, f32) {
     _ = Textures;
-    const frag = gpu.frag_coord;
+    const frag = spirv.frag_coord;
 
     const uv = Vec2(f32).FromVector(CameraUBO.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(CameraUBO.mRayOffset));
 
@@ -54,8 +54,8 @@ pub fn FragShaderBase(
     marcher.mNodes[0] = RayMarcher.Node{
         .Point = .FromVector(CameraUBO.mPosition),
         .Normal = .{ .x = 0, .y = 0, .z = 0 },
-        .ParentEdge = -1,
-        .FirstEdge = -1,
+        .ParentEdge = NO_EDGE,
+        .FirstEdge = NO_EDGE,
         .MaterialHandle = 0,
         .AccumColor = RayMarcher.DEFAULT_COLOR,
         .TextureUV = .{ .x = 0, .y = 0 },
@@ -68,12 +68,15 @@ pub fn FragShaderBase(
         .Length = 0.0,
         .FromNode = 0,
         .ToNode = 0,
-        .SiblingEdge = -1,
+        .SiblingEdge = NO_EDGE,
         .AccumColor = RayMarcher.DEFAULT_COLOR,
     };
     marcher.mNodes[0].FirstEdge = 0;
     marcher.mEdgeCount = 1;
 
-    marcher.March(QuadsSSBO, GlyphsSSBO, CameraUBO.mQuadsCount, CameraUBO.mGlyphsCount, CameraUBO.mPerspectiveFar);
-    oFragColor.* = marcher.GenerateColor(ShadingSSBO);
+    //create the ray tree
+    marcher.March(QuadsSSBO[0..CameraUBO.mQuadsCount], GlyphsSSBO[9..CameraUBO.mGlyphsCount], CameraUBO.mPerspectiveFar);
+
+    //traverse ray tree backwards to obtain final output color
+    return marcher.GenerateColor(ShadingSSBO);
 }

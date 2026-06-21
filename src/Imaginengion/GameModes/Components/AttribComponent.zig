@@ -4,12 +4,18 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
 const AttribComponent = @This();
 
-pub const ValueTypes = union(enum) {
+pub const ValueEnum = enum {
+    uint32,
+    int32,
+    float32,
+    bool,
+};
+
+pub const ValueTypes = union(ValueEnum) {
     uint32: u32,
     int32: i32,
     float32: f32,
     bool: bool,
-
     pub const default: ValueTypes = .{ .uint32 = 0 };
 };
 
@@ -28,17 +34,16 @@ pub const Ind: usize = blk: {
 pub fn Deinit(_: *AttribComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
-    const Tag = std.meta.Tag(ValueTypes);
-    const current_tag: Tag = self.mData;
+    const current_tag = std.meta.activeTag(self.mData);
     if (imgui.igBeginCombo("Type", @tagName(current_tag), 0)) {
         defer imgui.igEndCombo();
-        inline for (std.meta.fields(Tag)) |field| {
-            const tag_value: Tag = @enumFromInt(field.value);
-            const selected = tag_value == current_tag;
+        inline for (@typeInfo(ValueEnum).@"enum".field_values, 0..) |field_value, i| {
+            const field_enum: ValueEnum = @enumFromInt(field_value);
+            const selected = field_enum == current_tag;
 
-            if (imgui.igSelectable_Bool(field.name.ptr, selected, 0, .{ .x = 0, .y = 0 })) {
-                if (tag_value != current_tag) {
-                    self.mData = switch (tag_value) {
+            if (imgui.igSelectable_Bool(@typeInfo(ValueEnum).@"enum".field_names[i], selected, 0, .{ .x = 0, .y = 0 })) {
+                if (!selected) {
+                    self.mData = switch (field_enum) {
                         .uint32 => .{ .uint32 = 0 },
                         .int32 => .{ .int32 = 0 },
                         .float32 => .{ .float32 = 0.0 },

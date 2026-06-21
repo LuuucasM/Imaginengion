@@ -70,6 +70,15 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     });
     sdl3_c.addIncludePath(b.path("src/Imaginengion/Vendor/sdl3/include/"));
     sdl3_c.addIncludePath(b.path("src/Imaginengion/Vendor/sdl3/src/"));
+    const vulkan_sdk = b.graph.environ_map.get("VULKAN_SDK");
+    if (vulkan_sdk) |sdk_path| {
+        std.log.info("[BUILD] VulkanSDK at: {s}", .{sdk_path});
+        const vulkan_path = b.graph.cwdRelativePath(b.fmt("{s}/include", .{sdk_path}));
+        sdl3_c.addIncludePath(vulkan_path);
+    } else {
+        std.log.err("Could not find VulkanSDK. Try sourcing setup-env.sh", .{});
+    }
+
     //================================================END SDL3=========================================================
 
     //-------------------------------------------------STB-------------------------------------------------------------

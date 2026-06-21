@@ -1,13 +1,4 @@
-- fix GetSurfaceColor
-	- i forgot i did actually need material data in the main march loop so i can determine if i need to spawn new rays, keep marching, etc. 
-	- I am starting to realize that my current setup is not going to scale well because i have to pass around the ssbo's in the functions instead of having them as members of RayMarcher, this will get silly quickly
-	- so instead i think I will have RayMarcher be a function that returns a ray marcher type and for the function I can give it a parameter that lets me select the type of container that the buffers will be. 
-	- I dont really want to hard code the SSBO types (with addrspace being .storage_buffer) directly into the marcher cuz for some reason i thought it would be cool if I could build it in a way where I could reuse it possibly for CPU ray marching in the future so right now i just pass the SSBO's as function parameters where the parameter type is anytype. but not only is that a bit of an abuse of anyrype but then i could have up to like maximum 16 different ssbo's in the future which is crazy so i better change it to members of marcher instead of function parameters
-- make it so that the shaders are embedded into the main program instead of loading from a file
-- change the engine program to make use of the embedded shaders
-	- I think for my shader asset I may have to create a function like "InitFromBinary" or something which instead of taking in a file path it will take in the binary for the vertex and frag shader and then skip the read file part that exists right now
-- make it so that there are different piplines like game shader, overlay shader, and custom shader (idk how or what to do this for yet)
-	- before i didnt want to have different shaders because i wanted to process all the entieis together on the cpu side but i can still do that but when doing "draw quad" or whatever I will check the scene component and then ill have double SSBOS but its ok because like before everyone was one big ssbo but now theres a couple tiny ones which i believe should be ok
-	- the only thing to note with splitting ssbo's is that vulkan only guarantees 16 bindings per set and with esplitting them ill already be using 5 so the number of primitive shapes will decrease some
+
+- fix all the bugs associated with the previous changes and make sure it actually runs
 - debug, add tests, add asserts, etc
 	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!

@@ -36,6 +36,6 @@ const GlyphsSSBO = @extern([*]addrspace(.storage_buffer) GlyphData, .{ .name = "
 //layout(set = 2, binding = 4) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
 const ShadingSSBO = @extern([*]addrspace(.storage_buffer) ShadingData, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
 
-export fn main() callconv(.spirv_fragment) void {
-    FragShaderBase(oFragColor, CameraUBO, QuadsSSBO, GlyphsSSBO, ShadingSSBO, Textures);
+export fn main() callconv(.{ .spirv_fragment = .{} }) void {
+    oFragColor.* = FragShaderBase(CameraUBO.*, QuadsSSBO, GlyphsSSBO, ShadingSSBO, Textures);
 }

@@ -45,14 +45,14 @@ pub fn GetSampler(self: TextureManager) *anyopaque {
     return self._Impl.GetSampler();
 }
 
-pub fn GetSlotIndex(_: TextureManager, texture_handle: u32) usize {
+pub fn GetSlotIndex(texture_handle: u32) usize {
     return Impl.GetSlotIndex(texture_handle);
 }
 
-pub fn GetLayerIndex(_: TextureManager, texture_handle: u32) usize {
+pub fn GetLayerIndex(texture_handle: u32) usize {
     return Impl.GetLayerIndex(texture_handle);
 }
 
-pub fn GetBinIndex(_: TextureManager, texture_handle: u32) usize {
+pub fn GetBinIndex(texture_handle: u32) usize {
     return Impl.GetBinIndex(texture_handle);
 }

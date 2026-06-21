@@ -15,12 +15,29 @@ mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
 
 pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
-
     const vk_api_1_3_0: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0;
+
+    var features_1_0 = sdl.VkPhysicalDeviceFeatures{
+        .shaderInt16 = sdl.VK_TRUE,
+    };
+
+    var features_1_2 = sdl.VkPhysicalDeviceVulkan12Features{
+        .sType = sdl.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+        .pNext = null,
+        .shaderInt8 = sdl.VK_TRUE,
+    };
+
+    var features_1_1 = sdl.VkPhysicalDeviceVulkan11Features{
+        .sType = sdl.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES,
+        .pNext = &features_1_2,
+        .variablePointersStorageBuffer = sdl.VK_TRUE,
+        .variablePointers = sdl.VK_TRUE,
+    };
+
     var vulkan_options = sdl.SDL_GPUVulkanOptions{
         .vulkan_api_version = vk_api_1_3_0,
-        .feature_list = null,
-        .vulkan_10_physical_device_features = null,
+        .feature_list = &features_1_1,
+        .vulkan_10_physical_device_features = &features_1_0,
         .device_extension_count = 0,
         .device_extension_names = null,
         .instance_extension_count = 0,
