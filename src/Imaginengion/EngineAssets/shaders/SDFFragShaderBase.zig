@@ -12,28 +12,47 @@ const Vec4 = @import("IM").Vec4;
 const Quat = @import("IM").Quat;
 const NO_EDGE = RayMarcher.NO_EDGE;
 
-pub const Image2D = @SpirvType(
+pub const Image2DArray = @SpirvType(
     .{ .image = .{
         .usage = .{ .sampled = f32 },
         .format = .unknown,
         .dim = .@"2d",
-        .depth = .not_depth,
+        .depth = .unknown,
         .access = .unknown,
         .arrayed = true,
         .multisampled = false,
     } },
 );
 
+pub const Image2D = @SpirvType(
+    .{ .image = .{
+        .usage = .{ .sampled = f32 },
+        .dim = .@"2d",
+        .format = .unknown,
+        .depth = .unknown,
+        .access = .unknown,
+        .arrayed = false,
+        .multisampled = false,
+    } },
+);
+
+pub const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
+    .name = "oFragColor",
+    .decoration = .{ .location = 0 },
+});
+
 pub const QuadsSSBOT = @SpirvType(.{ .runtime_array = QuadData });
+
+pub const Sampler2DArray = @SpirvType(.{ .sampled_image = Image2DArray });
 
 pub const Sampler2D = @SpirvType(.{ .sampled_image = Image2D });
 
 pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 3, .binding = 0 } } });
 
 //layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
-pub const Textures = @extern(*addrspace(.constant) Sampler2D, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
+pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
 //layout(set = 2, binding = 1) uniform sampler
-pub const Overlay = @extern(*addrspace(.constant) @SpirvType(.sampler), .{ .name = "Overlay", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
+pub const Overlay = @extern(*addrspace(.constant) Sampler2D, .{ .name = "Overlay", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
 
 //layout(set = 2, binding = 2) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
 //pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
@@ -50,9 +69,8 @@ pub fn FragShaderBase(
     quads_ssbo: [*]QuadData,
     glyphs_ssbo: [*]GlyphData,
     shading_ssbo: [*]ShadingData,
-    textures: *addrspace(.constant) Sampler2D,
+    textures: *addrspace(.constant) Sampler2DArray,
 ) @Vector(4, f32) {
-    _ = textures;
     const frag = spirv.frag_coord;
 
     const uv = Vec2(f32).FromVector(camera_ubo.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(camera_ubo.mRayOffset));
@@ -95,5 +113,22 @@ pub fn FragShaderBase(
     marcher.March(quads_ssbo.*[0..camera_ubo.mQuadsCount], glyphs_ssbo.*[9..camera_ubo.mGlyphsCount], camera_ubo.mPerspectiveFar);
 
     //traverse ray tree backwards to obtain final output color
-    return marcher.GenerateColor(shading_ssbo.*);
+    return marcher.GenerateColor(shading_ssbo.*, textures);
+}
+
+pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3) Vec4 {
+    return asm volatile (
+        \\%sampler_ptr    = OpTypePointer UniformConstant %ty
+        \\%tex            = OpVariable %sampler_ptr UniformConstant
+        \\                  OpDecorate %tex DescriptorSet $set
+        \\                  OpDecorate %tex Binding $bind
+        \\%loaded_sampler = OpLoad %ty %tex
+        \\%ret            = OpImageSampleImplicitLod %v4 %loaded_sampler %uv_layer
+        : [ret] "" (-> Vec4),
+        : [uv_layer] "" (uv_layer),
+          [ty] "t" (Sampler2DArray),
+          [v4] "t" (Vec4),
+          [set] "c" (deco.descriptor.set),
+          [bind] "c" (deco.descriptor.binding),
+    );
 }

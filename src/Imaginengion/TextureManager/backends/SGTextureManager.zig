@@ -4,10 +4,14 @@ const Bin = @import("../Bin.zig").Bin;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const SkipField = @import("../../Core/SkipField.zig").StaticSkipField;
 
+const MathTypes = @import("../../Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
+const Vec3 = MathTypes.Vec3;
+
 const SGTextureManager = @This();
 
 pub const ATLAS_SIZE: u32 = 4096;
-pub const MAX_POSSIBLE_LAYERS = 512;
+pub const MAX_POSSIBLE_LAYERS = 170;
 pub const PADDING: u32 = 2;
 pub const NUM_BINS: u32 = 7;
 pub const BYTES_PER_LAYER: usize = ATLAS_SIZE * ATLAS_SIZE * 4; // RGBA8
@@ -148,7 +152,7 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
 
     const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
-    const offset_x, const offset_y = CalculateOffsets(bin_index, slot_index);
+    const offset_x, const offset_y = GetPixelOffsets(bin_index, slot_index);
 
     if (data) |d| {
         try self.UpdateToLayer(device, d, width, height, layer_index, offset_x, offset_y);
@@ -176,25 +180,6 @@ pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
     self.mLayers.items[layer_index].ChangeToUnskipped(slot_index);
 
     self.CheckReleaseLayer(bin_index, layer_index);
-}
-
-pub fn GetNormalizedOffsets(_: SGTextureManager, texture_handle: u32) struct { f32, f32 } {
-    const bin_index = GetBinIndex(texture_handle);
-    const slot_index = GetSlotIndex(texture_handle);
-
-    const x_pixel_offset, const y_pixel_offset = CalculateOffsets(bin_index, slot_index);
-
-    return .{
-        @as(f32, @floatFromInt(x_pixel_offset)) / @as(f32, @floatFromInt(ATLAS_SIZE)),
-        @as(f32, @floatFromInt(y_pixel_offset)) / @as(f32, @floatFromInt(ATLAS_SIZE)),
-    };
-}
-
-pub fn GetPixelOffsets(_: SGTextureManager, texture_handle: u32) struct { usize, usize } {
-    const bin_index = GetBinIndex(texture_handle);
-    const slot_index = GetSlotIndex(texture_handle);
-
-    return CalculateOffsets(bin_index, slot_index);
 }
 
 pub fn GetTexture(self: SGTextureManager) *sdl.SDL_GPUTexture {
@@ -242,10 +227,21 @@ fn CheckReleaseLayer(self: *SGTextureManager, bin_index: usize, layer_index: usi
     }
 }
 
-fn CalculateOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
+fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
     const slot_col = slot_index % BinIndToSlotsPerRow(bin_index);
     const slot_row = slot_index / BinIndToSlotsPerRow(bin_index);
-    return .{ slot_col * BinIndToSlotSize(bin_index) + PADDING, slot_row * BinIndToSlotSize(bin_index) + PADDING };
+    return .{
+        slot_col * BinIndToSlotSize(bin_index) + PADDING,
+        slot_row * BinIndToSlotSize(bin_index) + PADDING,
+    };
+}
+
+fn GetUVOffsets(bin_index: usize, slot_index: usize) struct { f32, f32 } {
+    const px_x, const px_y = GetPixelOffsets(bin_index, slot_index);
+    return .{
+        @as(f32, @floatFromInt(px_x)) / ATLAS_SIZE,
+        @as(f32, @floatFromInt(px_y)) / ATLAS_SIZE,
+    };
 }
 
 fn UpdateToLayer(self: *SGTextureManager, device: ?*sdl.SDL_GPUDevice, pixels: *anyopaque, width: usize, height: usize, layer_index: usize, offset_x: usize, offset_y: usize) !void {
@@ -341,14 +337,33 @@ fn BinIndToTotalSlots(bin_index: usize) usize {
     };
 }
 
-pub fn GetSlotIndex(loc: u32) usize {
+pub fn GetSlotIndex(loc: u32) usize { //slot is which slot in the layer its in
     return @intCast((loc >> (LAYER_BYTES + BINS_BYTES)) & ((1 << SLOT_BYTES) - 1));
 }
 
-pub fn GetLayerIndex(loc: u32) usize {
+pub fn GetLayerIndex(loc: u32) usize { //layer is which layer in the entire texture array
     return @intCast((loc >> BINS_BYTES) & ((1 << LAYER_BYTES) - 1));
 }
 
+//this gets us the index of the bin based on SizeBoundsList
+//this way we can calculated the exact uv the "slot" starts at
+//by using slot index in combination with getting the metadata for the bin
 pub fn GetBinIndex(loc: u32) usize {
     return @intCast(loc & ((1 << BINS_BYTES) - 1));
+}
+
+pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32)) Vec3(f32) {
+    const bin_ind = GetBinIndex(texture_handle);
+    const slot_ind = GetSlotIndex(texture_handle);
+    const offset_u, const offset_v = GetUVOffsets(bin_ind, slot_ind);
+
+    const slot_size: f32 = @floatFromInt(BinIndToSlotSize(bin_ind));
+    const scale = slot_size / ATLAS_SIZE;
+
+    const uv_2d = Vec2(f32){
+        .x = offset_u + local_uv.x * scale,
+        .y = offset_v + local_uv.y * scale,
+    };
+
+    return .{ .x = uv_2d.x, .y = uv_2d.y, .z = @floatFromInt(GetLayerIndex(texture_handle)) };
 }

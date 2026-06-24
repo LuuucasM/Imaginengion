@@ -1,4 +1,8 @@
-
+- Finish TODOs in SDFRayMarcher::March
+- change SDFFunctions uvImGlyph if neede
+- change renderer2d and material struct to have a new toggle for opaque/transparent
+	- with the imgui render stuff
+- remove cpu sided check for material color alpha, instead set based on new material toggle
 - fix all the bugs associated with the previous changes and make sure it actually runs
 - debug, add tests, add asserts, etc
 	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!

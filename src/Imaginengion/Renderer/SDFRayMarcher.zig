@@ -18,6 +18,8 @@ const THICKNESS_2D = SDFFunc.THICKNESS_2D;
 
 const Stack = @import("../Core/Stack.zig").Stack;
 
+const SampleSampler = @import("../EngineAssets/shaders/SDFFragShaderBase.zig").SampleSampler;
+
 const MAX_STEPS: u32 = 9999;
 const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 9;
@@ -33,7 +35,7 @@ pub const Node = struct {
     FirstEdge: u32,
     MaterialHandle: u32,
     AccumColor: Vec4(f32),
-    TextureUV: Vec2(f32),
+    TextureUV: Vec3(f32),
     ShapeT: ShapeType,
 };
 
@@ -138,10 +140,13 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, perspective_far: f32)
         //calculate UV if there is one
         const texture_uv = switch (march_data.object.shape_type) {
             .Quad => blk: {
+                //calculate the UV based off the texture_handle
                 const quad: QuadData = quads[march_data.object.shape_ind];
                 break :blk SDFFunc.uvIMQuad(end_point, quad);
             },
             .Glyph => blk: {
+                //TODO: i need to first get the uv for the atlas and then test the MSD
+                //if the msd > 0.5 then we need to get the
                 const glyph: GlyphData = glyphs[march_data.object.shape_ind];
                 break :blk SDFFunc.uvIMGlyph(end_point, glyph);
             },
@@ -166,7 +171,11 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, perspective_far: f32)
         //in the future can expand this to do reflectivity, lighting, shadows, refraction, whatever else exists idk
         const shading_flags = march_data.object.GetShadingFlags(quads, glyphs);
 
-        if (shading_flags & ShadingData.SHADING_FLAG_TRANSPARENT != 0 and !edge_ind_stack.IsFull()) { //if transparent bit is set, aka it is transparent
+        if (shading_flags & ShadingData.SHADING_FLAG_TRANSPARENT != 0 and !edge_ind_stack.IsFull()) { //if transparent bit is set, aka it can be some level of transparent
+            //TODO: first sample the texture to get the color and the material color and check to see if
+            //its actually transparent
+            //if its actually transparent then yes make a new edge and put it onto the stack
+            //if its actually opaque then skip adding a new edge
             const new_edge_ind = self.GetEdgeIndex();
 
             self.mEdges[new_edge_ind] = Edge{
@@ -184,7 +193,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, perspective_far: f32)
     }
 }
 
-pub fn GenerateColor(self: *Self, materials: anytype) Vec4(f32).VectorT {
+pub fn GenerateColor(self: *Self, materials: anytype, textures_array: anytype) Vec4(f32).VectorT {
     var i: usize = self.mNodeCount;
     while (i > 0) {
         i -= 1;
@@ -195,7 +204,7 @@ pub fn GenerateColor(self: *Self, materials: anytype) Vec4(f32).VectorT {
             self.CalcEdgeColor(materials, ei);
             ei = self.mEdges[@intCast(ei)].SiblingEdge;
         }
-        self.CalcNodeColor(materials, i);
+        self.CalcNodeColor(materials, i, textures_array);
     }
 
     return self.mNodes[0].AccumColor.ToVector();
@@ -267,17 +276,13 @@ fn CalcNodeColor(self: *Self, materials: anytype, node_ind: u32) void {
     const material: ShadingData = materials[curr_node.MaterialHandle];
     switch (curr_node.ShapeT) {
         .Quad => {
-            //TODO: should also sample from texture but currently would
-            //have to hand roll asm so just going to wait a bit longer
-            //since its not huge prio
-            const color = Vec4(f32).FromVector(material.Color);
+            const texture_color = SampleTexture(curr_node.TextureUV);
+            const material_color = Vec4(f32).FromVector(material.Color);
+            const color = material_color.Mul(texture_color); // tint
             const alpha = color.w;
             self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
         },
         .Glyph => {
-            //TODO: to actually print the glyph correctly need texture
-            //but currently would have to hand write asm to sample textures
-            //so just waiting on that
             const color = Vec4(f32).FromVector(material.Color);
             const alpha = color.w;
             self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
@@ -299,4 +304,10 @@ fn CalcEdgeColor(self: *Self, materials: anytype, edge_ind: u32) void {
     const rgb = Vec3(f32).FromVector(-material.Absorption).MulScalar(curr_edge.Length).Exp().MulVec(Vec3(f32){ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
 
     self.mEdges[edge_ind].AccumColor = .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = child_accum.w };
+}
+
+fn SampleTexture(texture_uv: Vec3(f32)) Vec4(f32) {
+    if (texture_uv.x < 0 or texture_uv.y < 0 or texture_uv.z < 0) return Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
+
+    return SampleSampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, texture_uv);
 }

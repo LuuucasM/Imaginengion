@@ -1,5 +1,8 @@
 const builtin = @import("builtin");
 const EngineContext = @import("../Core/EngineContext.zig");
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
+const Vec3 = MathTypes.Vec3;
 
 const TextureManager = @This();
 
@@ -55,4 +58,8 @@ pub fn GetLayerIndex(texture_handle: u32) usize {
 
 pub fn GetBinIndex(texture_handle: u32) usize {
     return Impl.GetBinIndex(texture_handle);
+}
+
+pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32)) Vec3(f32) {
+    return Impl.GetTextureUV(texture_handle, local_uv);
 }

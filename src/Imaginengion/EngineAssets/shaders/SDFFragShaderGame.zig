@@ -16,10 +16,7 @@ const Vec4 = @import("IM").Vec4;
 const Quat = @import("IM").Quat;
 
 // layout(location = 0) out vec4 oFragColor
-const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
-    .name = "oFragColor",
-    .decoration = .{ .location = 0 },
-});
+const oFragColor = FragShader.oFragColor;
 
 // layout(set = 3, binding = 0) uniform PushConstnats
 const CameraUBO = FragShader.CameraUBO;
