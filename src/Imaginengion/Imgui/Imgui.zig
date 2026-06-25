@@ -9,6 +9,10 @@ const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const ImguiManager = @This();
 
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
+
 const TEXTURE_SIZE: usize = 128;
 
 mImguiTextures: std.ArrayList(*sdl.SDL_GPUTexture) = .empty,
@@ -190,6 +194,183 @@ pub fn GetImguiTexture(self: *ImguiManager, engine_context: *EngineContext, text
         ._TexID = @as(imgui.ImTextureID, @intFromPtr(preview)),
         ._TexData = null,
     };
+}
+
+pub fn RenderVec3(vec: *Vec3(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) void {
+    const io = imgui.igGetIO_Nil();
+    const bold_font = io.*.Fonts.*.Fonts.Data[0];
+    imgui.igPushID_Str(label.ptr);
+    defer imgui.igPopID();
+
+    imgui.igColumns(2, 0, false);
+    defer imgui.igColumns(1, 0, false);
+    imgui.igSetColumnWidth(0, column_width);
+    imgui.igText(label.ptr);
+    imgui.igNextColumn();
+
+    imgui.igPushMultiItemsWidths(3, imgui.igCalcItemWidth());
+    imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemSpacing, .{ .x = 0.0, .y = 0.0 });
+    defer imgui.igPopStyleVar(1);
+
+    const line_height = bold_font.*.LegacySize + imgui.igGetStyle().*.FramePadding.y * 2.0;
+    const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
+
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.717, .y = 0.234, .z = 0.234, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.597, .y = 0.195, .z = 0.195, .w = 1.0 });
+
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
+    if (imgui.igButton("X", button_size)) {
+        vec.x = reset_value;
+    }
+    imgui.igPopFont();
+
+    imgui.igPopStyleColor(3);
+
+    imgui.igSameLine(0.0, 0.0);
+    var values_x: f32 = 0;
+    if (imgui.igDragFloat("##X", &values_x, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        vec.x = values_x;
+    }
+    imgui.igPopItemWidth();
+    imgui.igSameLine(0.0, 0.0);
+
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.156, .y = 0.478, .z = 0.156, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.717, .z = 0.234, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.597, .z = 0.195, .w = 1.0 });
+
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
+    if (imgui.igButton("Y", button_size)) {
+        vec.*.y = reset_value;
+    }
+    imgui.igPopFont();
+
+    imgui.igPopStyleColor(3);
+
+    imgui.igSameLine(0.0, 0.0);
+    var values_y: f32 = 0;
+    if (imgui.igDragFloat("##Y", &values_y, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        vec.y = values_y;
+    }
+    imgui.igPopItemWidth();
+    imgui.igSameLine(0.0, 0.0);
+
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.156, .y = 0.306, .z = 0.478, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.459, .z = 0.717, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.328, .z = 0.597, .w = 1.0 });
+
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
+    if (imgui.igButton("Z", button_size)) {
+        vec.*.z = reset_value;
+    }
+    imgui.igPopFont();
+
+    imgui.igPopStyleColor(3);
+
+    imgui.igSameLine(0.0, 0.0);
+    var values_z: f32 = 0;
+    if (imgui.igDragFloat("##Z", &values_z, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        vec.z = values_z;
+    }
+    imgui.igPopItemWidth();
+}
+
+pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) void {
+    const io = imgui.igGetIO_Nil();
+    const bold_font = io.*.Fonts.*.Fonts.Data[0];
+    imgui.igPushID_Str(label.ptr);
+    defer imgui.igPopID();
+
+    imgui.igColumns(2, 0, false);
+    defer imgui.igColumns(1, 0, false);
+    imgui.igSetColumnWidth(0, column_width);
+    imgui.igText(label.ptr);
+    imgui.igNextColumn();
+
+    imgui.igPushMultiItemsWidths(3, imgui.igCalcItemWidth());
+    imgui.igPushStyleVar_Vec2(imgui.ImGuiStyleVar_ItemSpacing, .{ .x = 0.0, .y = 0.0 });
+    defer imgui.igPopStyleVar(1);
+
+    const line_height = bold_font.*.LegacySize + imgui.igGetStyle().*.FramePadding.y * 2.0;
+    const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
+
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.717, .y = 0.234, .z = 0.234, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.597, .y = 0.195, .z = 0.195, .w = 1.0 });
+
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
+    if (imgui.igButton("X", button_size)) {
+        //TODO: before reset_value was a default quat
+        //but that is wrong and a bug but i did it cuz it was easy :)
+        //need to convert it use a single f32 value instead
+        rotation.* = reset_value;
+    }
+    imgui.igPopFont();
+
+    imgui.igPopStyleColor(3);
+
+    imgui.igSameLine(0.0, 0.0);
+    const x_ang_saved = MathUtils.RadiansToDegrees(rotation.GetPitch());
+    var x_ang = x_ang_saved;
+    if (imgui.igDragFloat("##X", &x_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        const delta_theta = x_ang_saved - x_ang;
+        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 1.0, .y = 0, .z = 0 }, delta_theta);
+        rotation.* = rotation.MulQuat(new_quat);
+    }
+    imgui.igPopItemWidth();
+    imgui.igSameLine(0.0, 0.0);
+
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.156, .y = 0.478, .z = 0.156, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.717, .z = 0.234, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.597, .z = 0.195, .w = 1.0 });
+
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
+    if (imgui.igButton("Y", button_size)) {
+        //TODO: before reset_value was a default quat
+        //but that is wrong and a bug
+        //need to convert it use a single f32 value instead
+        rotation.* = reset_value;
+    }
+    imgui.igPopFont();
+
+    imgui.igPopStyleColor(3);
+
+    imgui.igSameLine(0.0, 0.0);
+
+    const y_ang_saved = MathUtils.RadiansToDegrees(rotation.GetYaw());
+    var y_ang = y_ang_saved;
+    if (imgui.igDragFloat("##Y", &y_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        const delta_theta = y_ang_saved - y_ang;
+        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 0, .y = 1, .z = 0 }, delta_theta);
+        rotation.* = rotation.MulQuat(new_quat);
+    }
+    imgui.igPopItemWidth();
+    imgui.igSameLine(0.0, 0.0);
+
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.156, .y = 0.306, .z = 0.478, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.234, .y = 0.459, .z = 0.717, .w = 1.0 });
+    imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.195, .y = 0.328, .z = 0.597, .w = 1.0 });
+
+    imgui.igPushFont(bold_font, bold_font.*.LegacySize);
+    if (imgui.igButton("Z", button_size)) {
+        //TODO: before reset_value was a default quat
+        //but that is wrong and a bug
+        //need to convert it use a single f32 value instead
+        rotation.* = reset_value;
+    }
+    imgui.igPopFont();
+
+    imgui.igPopStyleColor(3);
+
+    imgui.igSameLine(0.0, 0.0);
+    const z_ang_saved = MathUtils.RadiansToDegrees(rotation.GetRoll());
+    var z_ang = z_ang_saved;
+    if (imgui.igDragFloat("##Z", &z_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        const delta_theta = z_ang_saved - z_ang;
+        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 0, .y = 0, .z = 1 }, delta_theta);
+        rotation.* = rotation.MulQuat(new_quat);
+    }
+    imgui.igPopItemWidth();
 }
 
 fn SetDarkThemeColors(style: *imgui.struct_ImGuiStyle) void {

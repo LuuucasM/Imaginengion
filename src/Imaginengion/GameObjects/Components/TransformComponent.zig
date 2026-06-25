@@ -57,7 +57,9 @@ pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3(f32)) void {
     self._InternalData.WorldScale = new_scale;
 }
 
-pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
+pub fn EditorRender(self: *TransformComponent, engine_context: *EngineContext) !void {
+    engine_context.mImguiManager.RenderVec3(self, 0.0, 0.075, 100.0);
+    engine_context.mImguiManager.RenderVec3(self, 0.0, 0.25, 100.0);
     DrawVec3Control("Translation", &self.Translation, 0.0, 0.075, 100.0);
     DrawVec3ControlRot("Rotation", &self.Rotation, Quat(f32){ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 }, 0.25, 100.0);
     DrawVec3Control("Scale", &self.Scale, 1.0, 0.075, 100.0);

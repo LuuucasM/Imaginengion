@@ -235,7 +235,7 @@ pub fn DrawQuad(
     };
 
     var shading_flag: u32 = 0;
-    if (quad_component.mMaterial.mSurfaceColor.w < 1.0) shading_flag |= ShadingData.SHADING_FLAG_TRANSPARENT;
+    if (quad_component.mMaterial.mOpaqueMode == .Transparent) shading_flag |= ShadingData.SHADING_FLAG_TRANSPARENT;
 
     switch (scene_scene_comp.mLayerType) {
         .GameLayer => try self.mGameData.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
@@ -300,7 +300,7 @@ pub fn DrawText(
     };
 
     var texture_shading_flags: u32 = 0;
-    if (text_component.mMaterial.mSurfaceColor.w < 1.0) texture_shading_flags |= ShadingData.SHADING_FLAG_TRANSPARENT;
+    if (text_component.mMaterial.mOpaqueMode == .Transparent) texture_shading_flags |= ShadingData.SHADING_FLAG_TRANSPARENT;
 
     const world_pos = transform_component.GetWorldPosition();
 
