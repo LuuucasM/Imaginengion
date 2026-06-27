@@ -2,6 +2,7 @@ const MathTypes = @import("../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec3 = MathTypes.Vec3;
 const EngineContext = @import("../Core/EngineContext.zig");
+const ImguiManager = @import("../Imgui/Imgui.zig");
 const Material = @This();
 
 pub const OpaqueMode = enum {
@@ -19,10 +20,9 @@ Absorption: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
 mOpaqueMode: OpaqueMode = .Opaque,
 
 pub fn ImguiRender(self: Material, engine_context: *EngineContext) void {
-    _ = self;
     _ = engine_context;
-    //TODO
-    //self.mSurfaceColor.ImguiRender(engine_context);
-    //self.Absorption.ImguiRender(engine_context);
-    //write code for rendering opaque mode
+    ImguiManager.RenderColor4Edit(&self.mSurfaceColor, "Color");
+    ImguiManager.RenderVec3(&self.Absorption, "Absorption", 0, 0.075, 100.0);
+
+    ImguiManager.RenderEnum(OpaqueMode, &self.mOpaqueMode, "Opaque Mode");
 }

@@ -42,21 +42,20 @@ const Renderer2D = @This();
 const MAX_PATH_LEN = 256;
 
 pub const QuadData = extern struct {
-    Position: Vec3(f32).VectorT,
-    ShadingHandle: u32,
     Rotation: Vec4(f32).VectorT,
+    Position: Vec3(f32).VectorT,
     HalfExtents: Vec3(f32).VectorT,
+    ShadingHandle: u32,
     ShadingFlags: u32,
 };
 
 pub const GlyphData = extern struct {
-    Position: Vec3(f32).VectorT,
-    AtlasShadingHandle: u32,
     Rotation: Vec4(f32).VectorT,
+    Position: Vec3(f32).VectorT,
     HalfExtents: Vec3(f32).VectorT,
     PlaneCenter: Vec2(f32).VectorT,
+    AtlasShadingHandle: u32,
     TextureShadingFlags: u32,
-    _pad0: f32 = 9,
 };
 
 pub const BufferKind = enum {
@@ -330,8 +329,8 @@ pub fn DrawText(
             .GameLayer => blk: {
                 try game_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
                     .TilingFactor = 1.0,
-                    .TextureUV0 = glyph.mAtlasUV0.ToVector(),
-                    .TextureUV1 = glyph.mAtlasUV1.ToVector(),
+                    .TextureUV0 = (glyph.mAtlasTexel0.ToVector() / text_asset.mAtlasSize.ToVector()),
+                    .TextureUV1 = (glyph.mAtlasTexel1.ToVector() / text_asset.mAtlasSize.ToVector()),
                     .Texturehandle = atlas_asset.GetTextureHandle(),
                     .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
                     .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },
@@ -342,8 +341,8 @@ pub fn DrawText(
             .OverlayLayer => blk: {
                 try overlay_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
                     .TilingFactor = 1.0,
-                    .TextureUV0 = glyph.mAtlasUV0.ToVector(),
-                    .TextureUV1 = glyph.mAtlasUV1.ToVector(),
+                    .TextureUV0 = (glyph.mAtlasTexel0.ToVector() / text_asset.mAtlasSize.ToVector()),
+                    .TextureUV1 = (glyph.mAtlasTexel1.ToVector() / text_asset.mAtlasSize.ToVector()),
                     .Texturehandle = atlas_asset.GetTextureHandle(),
                     .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
                     .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },

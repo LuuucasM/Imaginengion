@@ -4,6 +4,8 @@ const AssetsList = @import("../Assets.zig").AssetsList;
 const Texture2D = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
@@ -12,6 +14,11 @@ pub const TexOptions = struct {
     mTilingFactor: f32 = 1.0,
     mTextureUV0: Vec2(f32) = .{ .x = 0, .y = 0 },
     mTextureUV1: Vec2(f32) = .{ .x = 1, .y = 1 },
+
+    pub fn ImguiRender(self: *TexOptions, engine_context: *EngineContext, open: *bool, texture_asset: *Texture2D) void {
+        ImguiManager.RenderFloatDrag(&self.mTilingFactor, "Tiling Factor", 0.1, 0.0, 0.0);
+        ImguiManager.RenderUVCoords(open, &self.mTextureUV0, &self.mTextureUV1, engine_context, texture_asset);
+    }
 };
 
 pub const TextureFormat = enum(u4) {

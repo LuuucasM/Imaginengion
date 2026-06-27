@@ -12,8 +12,7 @@ const PathType = @import("../../Assets/AssetManager.zig").PathType;
 const Material = @import("../../Materials/Material.zig");
 const TextComponent = @This();
 
-//IMGUI
-const imgui = @import("../../Core/CImports.zig").imgui;
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "TextComponent";
@@ -34,6 +33,7 @@ mMaterial: Material = .{},
 mFontSize: f32 = 9,
 mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 mEngineAllocator: std.mem.Allocator = undefined,
+mShouldEditTexture: bool = false,
 
 pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
     self.mTextAssetHandle.ReleaseAsset();
@@ -42,37 +42,21 @@ pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-    //text box
-    const text = try frame_allocator.dupeSentinel(u8, self.mText.items, 0);
-    self.mEngineAllocator = engine_context.EngineAllocator();
-    if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(self))) {
-        _ = self.mText.swapRemove(self.mText.items.len - 1);
-    }
+    ImguiManager.RenderTextInput(engine_context, &self.mText, "Text");
 
     //font name just as a text that can be drag dropped onto to change the text
-    const file_data_asset = self.mTextAssetHandle.GetFileMetaData();
-    const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
-    const name_term = try frame_allocator.dupeSentinel(u8, name, 0);
-    imgui.igTextUnformatted(name_term, null);
-    //drag drop target for ttf files from content browser
+    ImguiManager.RenderAssetRef(engine_context, self.mTextAssetHandle, "Text Asset", "TextAsset");
 
-    _ = imgui.igInputFloat("Font Size", @ptrCast(&self.mFontSize), 1, 5, "%.3f", imgui.ImGuiInputTextFlags_None);
+    ImguiManager.RenderFloatInput(&self.mFontSize, "Font Size", 1, 5);
 
     //bounds, have sliders for left ([0]) and right ([1])
-    _ = imgui.igDragFloat2("Bounds L R", @ptrCast(&self.mBounds), 0.1, 0, 0, "%.3f", imgui.ImGuiSliderFlags_None);
+    ImguiManager.RenderFloat2Drag(&self.mBounds, "Bounds L R", 0.1, 0, 0);
 
-    //color, do the color picker from imgui
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mMaterial.mSurfaceColor), imgui.ImGuiColorEditFlags_None);
-}
+    const texture_asset = try self.mTexHandle.GetAsset(engine_context, Texture2D);
+    ImguiManager.RenderTexture2D(engine_context, &self.mTexHandle, texture_asset, &self.mShouldEditTexture);
+    self.mTexOptions.ImguiRender(engine_context, &self.mShouldEditTexture, texture_asset);
 
-fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {
-    if (data.*.EventFlag == imgui.ImGuiInputTextFlags_CallbackResize) {
-        const text_component: *TextComponent = @ptrCast(@alignCast(data.*.UserData.?));
-        _ = text_component.mText.resize(text_component.mEngineAllocator, @intCast(data.*.BufTextLen + 1)) catch return 0;
-        data.*.Buf = text_component.mText.items.ptr;
-    }
-    return 0;
+    self.mMaterial.ImguiRender(engine_context);
 }
 
 pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {

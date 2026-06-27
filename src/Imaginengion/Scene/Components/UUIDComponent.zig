@@ -19,11 +19,11 @@ pub const Ind: usize = blk: {
 
 pub fn Deinit(_: *UUIDComponent, _: *EngineContext) !void {}
 
-pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
-    var buff: [140]u8 = undefined;
-    const text = try std.fmt.bufPrintSentinel(&buff, "{d}\n", .{self.ID}, 0);
-    _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);
-}
+//pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
+//    var buff: [140]u8 = undefined;
+//    const text = try std.fmt.bufPrintSentinel(&buff, "{d}\n", .{self.ID}, 0);
+//    _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);
+//}
 
 pub fn jsonStringify(self: *const UUIDComponent, jw: anytype) !void {
     try jw.beginObject();

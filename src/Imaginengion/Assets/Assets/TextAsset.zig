@@ -11,8 +11,8 @@ const TextAsset = @This();
 const KerningsT = std.AutoHashMap(u16, f32);
 
 const GlyphInfo = struct {
-    mAtlasUV0: Vec2(f32) = .{ .x = -1, .y = -1 }, //top-left
-    mAtlasUV1: Vec2(f32) = .{ .x = -1, .y = -1 }, //bottom-right
+    mAtlasTexel0: Vec2(f32) = .{ .x = -1, .y = -1 }, //top-left
+    mAtlasTexel1: Vec2(f32) = .{ .x = -1, .y = -1 }, //bottom-right
     mPlaneMin: Vec2(f32) = .{ .x = -1, .y = -1 }, //left,top
     mPlaneMax: Vec2(f32) = .{ .x = -1, .y = -1 }, //right,bottom
     mAdvance: f32 = -1,
@@ -322,16 +322,16 @@ fn ProcessAtlasBounds(reader: *std.json.Reader, new_glyph: *GlyphInfo, frame_all
 
         if (std.mem.eql(u8, actual_value, "left")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasUV0.x = parsed_value;
+            new_glyph.mAtlasTexel0.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "bottom")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasUV1.y = parsed_value;
+            new_glyph.mAtlasTexel1.y = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "right")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasUV1.x = parsed_value;
+            new_glyph.mAtlasTexel1.x = parsed_value;
         } else if (std.mem.eql(u8, actual_value, "top")) {
             const parsed_value = try std.json.innerParse(f32, frame_allocator, reader, PARSE_OPTIONS);
-            new_glyph.mAtlasUV0.y = parsed_value;
+            new_glyph.mAtlasTexel0.y = parsed_value;
         }
     }
 }

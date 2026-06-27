@@ -4,8 +4,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const RigidBodyComponent = @This();
 
-//IMGUI
-const imgui = @import("../../Core/CImports.zig").imgui;
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "RigidBodyComponent";
@@ -18,20 +17,21 @@ pub const Ind: usize = blk: {
 };
 
 mMass: f32 = 0.0,
-mInvMass: f32 = 0.0,
-mVelocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
-mForce: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 mUseGravity: bool = false,
+_InvMass: f32 = 0.0,
+_Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
+_Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
-    if (imgui.igInputFloat("Mass", &self.mMass, 0.1, 1.0, "%.3f", 9)) {
+    if (ImguiManager.RenderFloatInput(&self.mMass, "Mass", 0.1, 1.0)) {
         if (self.mMass != 0.0) {
             self.mInvMass = 1.0 / self.mMass;
         } else {
             self.mInvMass = 0.0;
         }
     }
-    _ = imgui.igCheckbox("Use Gravity", &self.mUseGravity);
+
+    ImguiManager.RenderBool(&self.mUseGravity, "Use Gravity?");
 }

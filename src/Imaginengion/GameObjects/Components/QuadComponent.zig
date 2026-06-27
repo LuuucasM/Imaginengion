@@ -14,10 +14,8 @@ const Player = @import("../../Players/Player.zig");
 const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
 const PathType = @import("../../Assets/AssetManager.zig").PathType;
 const Material = @import("../../Materials/Material.zig");
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 const QuadComponent = @This();
-
-//IMGUI
-const imgui = @import("../../Core/CImports.zig").imgui;
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "QuadComponent";
@@ -40,102 +38,19 @@ pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
-    _ = imgui.igCheckbox("Should Render?", &self.mShouldRender);
+    ImguiManager.RenderBool(&self.mShouldRender, "Should Render?");
 
-    imgui.igSeparator();
+    ImguiManager.ImguiSeparator();
 
-    _ = imgui.igColorEdit4("Color", @ptrCast(&self.mMaterial.mSurfaceColor), imgui.ImGuiColorEditFlags_None);
-    _ = imgui.igDragFloat("TilingFactor", &self.mTexOptions.mTilingFactor, 0.0, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+    self.mMaterial.ImguiRender(engine_context);
+
+    ImguiManager.ImguiSeparator();
 
     const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
 
-    imgui.igImage(
-        try engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
-        .{ .x = 50.0, .y = 50.0 },
-        // Always show full texture in preview
-        .{ .x = 0.0, .y = 0.0 },
-        .{ .x = 1.0, .y = 1.0 },
-    );
+    self.mTexOptions.ImguiRender(engine_context, &self.mEditTexCoords, texture_asset);
 
-    // Open tiling editor on double-click of the image
-    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseDoubleClicked_Nil(0)) {
-        self.mEditTexCoords = true;
-    }
-
-    if (imgui.igBeginDragDropTarget() == true) {
-        if (imgui.igAcceptDragDropPayload("PNGLoad", imgui.ImGuiDragDropFlags_None)) |payload| {
-            const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            self.mTexture.ReleaseAsset();
-            self.mTexture = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
-        }
-    }
-    try self.EditTexCoords(engine_context, texture_asset);
-}
-
-fn EditTexCoords(self: *QuadComponent, engine_context: *EngineContext, texture_asset: *Texture2D) !void {
-    if (!self.mEditTexCoords) return;
-    //const window_flags = imgui.ImGuiWindowFlags_NoDecoration | imgui.ImGuiWindowFlags_NoCollapse | imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoResize | imgui.ImGuiWindowFlags_NoSavedSettings | imgui.ImGuiWindowFlags_NoBringToFrontOnFocus | imgui.ImGuiWindowFlags_NoNavFocus;
-    imgui.igSetNextWindowSize(.{ .x = @floatFromInt(texture_asset.GetWidth()), .y = @floatFromInt(texture_asset.GetHeight()) }, imgui.ImGuiCond_Once);
-
-    if (imgui.igBegin("Texture Coordinate Editor", &self.mEditTexCoords, 0)) {
-        defer imgui.igEnd();
-        // Compute image size to fit above the controls while preserving aspect ratio
-        const available = imgui.igGetContentRegionAvail();
-        const tex_w: f32 = @floatFromInt(texture_asset.GetWidth());
-        const tex_h: f32 = @floatFromInt(texture_asset.GetHeight());
-        const texture_aspect = if (tex_h > 0) tex_w / tex_h else 1.0;
-
-        const frame_h = imgui.igGetFrameHeightWithSpacing();
-        const text_h = imgui.igGetTextLineHeightWithSpacing();
-        // Reserve space for: label + two sliders + a little padding
-        const reserved_controls_h: f32 = text_h + frame_h * 2 + 8.0;
-        const allowed_h = @max(available.y - reserved_controls_h, 50.0);
-
-        var draw_w = available.x;
-        var draw_h = draw_w / texture_aspect;
-        if (draw_h > allowed_h) {
-            draw_h = allowed_h;
-            draw_w = draw_h * texture_aspect;
-        }
-
-        imgui.igImage(
-            try engine_context.mImguiManager.GetImguiTexture(engine_context, texture_asset),
-            .{ .x = draw_w, .y = draw_h },
-            .{ .x = self.mTexOptions.mTextureUV0.x, .y = 1.0 - self.mTexOptions.mTextureUV0.y },
-            .{ .x = self.mTexOptions.mTextureUV1.x, .y = 1.0 - self.mTexOptions.mTextureUV1.y },
-        );
-
-        // UV editors under the image
-        imgui.igDummy(.{ .x = 0.0, .y = 8.0 });
-        imgui.igSeparatorText("Texture Coordinates (UV)");
-
-        // UV0 (Min)
-        var uv0x: f32 = 0;
-        if (imgui.igSliderFloat2("UV0 (Min) - Slider", &uv0x, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_AlwaysClamp)) {
-            self.mTexOptions.mTextureUV0.x = uv0x;
-        }
-
-        // UV1 (Max)
-        var uv0y: f32 = 0;
-
-        if (imgui.igSliderFloat2("UV1 (Max) - Slider", &uv0y, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_AlwaysClamp)) {
-            self.mTexOptions.mTextureUV0.y = uv0y;
-        }
-
-        // Clamp and enforce min <= max per component
-        self.mTexOptions.mTextureUV0.x = std.math.clamp(self.mTexOptions.mTextureUV0.x, 0.0, 1.0);
-        self.mTexOptions.mTextureUV0.y = std.math.clamp(self.mTexOptions.mTextureUV0.y, 0.0, 1.0);
-        self.mTexOptions.mTextureUV1.x = std.math.clamp(self.mTexOptions.mTextureUV1.x, 0.0, 1.0);
-        self.mTexOptions.mTextureUV1.y = std.math.clamp(self.mTexOptions.mTextureUV1.y, 0.0, 1.0);
-        if (self.mTexOptions.mTextureUV0.x < self.mTexOptions.mTextureUV1.x) self.mTexOptions.mTextureUV0.x = self.mTexOptions.mTextureUV1.x;
-        if (self.mTexOptions.mTextureUV0.y < self.mTexOptions.mTextureUV1.y) self.mTexOptions.mTextureUV1.y = self.mTexOptions.mTextureUV1.y;
-
-        // Close editor on double-click or outside click
-        if (imgui.igIsMouseDoubleClicked_Nil(0) and imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None)) {
-            self.mEditTexCoords = false;
-        }
-    }
+    ImguiManager.RenderTexture2D(engine_context, &self.mTexture, texture_asset, &self.mEditTexCoords);
 }
 
 pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {

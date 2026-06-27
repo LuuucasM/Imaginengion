@@ -6,6 +6,9 @@ const Vec4 = MathTypes.Vec4;
 
 const GlyphData = @import("../Renderer/Renderer2D.zig").GlyphData;
 const QuadData = @import("../Renderer/Renderer2D.zig").QuadData;
+const ShadingData = @import("../Renderer/Renderer.zig").ShadingData;
+
+const SampleSampler = @import("../EngineAssets/shaders/SDFFragShaderBase.zig").SampleSampler;
 
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 
@@ -26,7 +29,7 @@ fn uvBox(point: Vec3(f32), half_extents: Vec3(f32), texture_handle: u32) Vec3(f3
             return TextureManager.GetTextureUV(texture_handle, uv);
         }
     }
-    return .{ .x = -1, .y = -1 };
+    return .{ .x = -1, .y = -1, .z = -1 };
 }
 
 pub fn GetLocalPoint(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32)) Vec3(f32) {
@@ -52,11 +55,15 @@ pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
     return sdBox(p2, .FromVector(glyph.HalfExtents));
 }
 
-pub fn uvIMQuad(point: Vec3(f32), quad: QuadData) Vec3(f32) {
-    return uvBox(GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation)), .FromVector(quad.HalfExtents), quad.ShadingHandle);
+pub fn uvIMQuad(point: Vec3(f32), quad: QuadData, texture_handle: u32) Vec3(f32) {
+    return uvBox(
+        GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation)),
+        .FromVector(quad.HalfExtents),
+        texture_handle,
+    );
 }
 
-pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData) Vec3(f32) {
+pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32) Vec3(f32) {
     const local_point = GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation));
 
     const p2: Vec3(f32) = .{
@@ -65,5 +72,21 @@ pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData) Vec3(f32) {
         .z = local_point.z,
     };
 
-    return uvBox(p2, .FromVector(glyph.HalfExtents));
+    return uvBox(
+        p2,
+        .FromVector(glyph.HalfExtents),
+        texture_handle,
+    );
+}
+
+pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: ShadingData) f32 {
+    //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
+    const raw_uv: Vec2(f32) = .FromVector(atlas_shading_data.TextureUV0 + (atlas_shading_data.TextureUV1 - atlas_shading_data.TextureUV0) * texture_uv.ToVector());
+    const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv);
+    const msd = SampleSampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, sample_uv);
+    return Median(msd.x, msd.y, msd.z);
+}
+
+fn Median(a: f32, b: f32, c: f32) f32 {
+    return @max(@min(a, b), @min(@max(a, b), c));
 }

@@ -3,13 +3,7 @@ const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const NameComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-//IMGUI
-const imgui = @import("../../Core/CImports.zig").imgui;
-
-const InputTextContext = struct {
-    name_component: *NameComponent,
-    allocator: std.mem.Allocator,
-};
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 pub const Name: []const u8 = "NameComponent";
 pub const Ind: usize = blk: {
@@ -30,20 +24,7 @@ pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
-    const text = try engine_context.FrameAllocator().dupeSentinel(u8, self.mName.items, 0);
-    var ctx = InputTextContext{ .name_component = self, .allocator = engine_context.EngineAllocator() };
-    if (imgui.igInputText("Text", text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(&ctx))) {
-        _ = self.mName.swapRemove(self.mName.items.len - 1);
-    }
-}
-fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {
-    if (data.*.EventFlag == imgui.ImGuiInputTextFlags_CallbackResize) {
-        const ctx: *InputTextContext = @ptrCast(@alignCast(data.*.UserData.?));
-        const name_component = ctx.name_component;
-        _ = name_component.mName.resize(ctx.allocator, @intCast(data.*.BufTextLen + 1)) catch return 0;
-        data.*.Buf = name_component.mName.items.ptr;
-    }
-    return 0;
+    ImguiManager.RenderTextInput(engine_context, &self.mName, "Name");
 }
 
 pub fn jsonStringify(self: *const NameComponent, jw: anytype) !void {

@@ -195,7 +195,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             try RenderImageButton(engine_context, entry_name, texture_asset, thumbnail_size);
 
-            try self.DragDropSourceBase(engine_context, entry_name, "PNGLoad");
+            try self.DragDropSourceBase(engine_context, entry_name, "Texture2D");
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(engine_context, Texture2D);

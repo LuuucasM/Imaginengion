@@ -2,6 +2,7 @@ const std = @import("std");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 const Entity = @import("../Entity.zig");
 
 //IMGUI
@@ -11,15 +12,33 @@ const ColliderComponent = @This();
 
 pub const Sphere = struct {
     mRadius: f32 = 1.0,
+
+    const default = Sphere{ .mRadius = 1.0 };
+
+    pub fn EditorRender(self: *Sphere) void {
+        ImguiManager.RenderFloat(&self.mRadius, "Radius", 0.1, 1.0);
+    }
 };
 
 pub const Box = struct {
     mHalfExtents: Vec3(f32) = Vec3(f32){ .x = 1, .y = 1, .z = 1 },
+
+    const default = Box{ .mHalfExtents = Vec3(f32){ .x = 1, .y = 1, .z = 1 } };
+
+    pub fn EditorRender(self: *Box) void {
+        ImguiManager.RenderVec3(&self.mHalfExtents, "Half Extents", 0.5, 0.075, 100.0);
+    }
 };
 
 pub const UColliderShape = union(enum) {
     Sphere: Sphere,
     Box: Box,
+    pub fn EditorRender(self: *UColliderShape) void {
+        switch (self) {
+            .Box => self.Box.EditorRender(),
+            .Sphere => self.Sphere.EditorRender(),
+        }
+    }
 };
 
 pub const Editable: bool = true;
@@ -45,45 +64,7 @@ pub fn AsBox(self: *ColliderComponent) *Box {
 }
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
-    const shape_names = [_][]const u8{ "Sphere", "Box" };
-
-    const current_tag = @as(std.meta.Tag(UColliderShape), self.mColliderShape);
-    const current_index = @intFromEnum(current_tag);
-
-    const preview_text = shape_names[current_index];
-    var preview_buf: [32]u8 = undefined;
-    const preview_cstr = try std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{preview_text}, 0);
-
-    if (imgui.igBeginCombo("Collider Type", @ptrCast(preview_cstr.ptr), 0)) {
-        defer imgui.igEndCombo();
-
-        for (shape_names, 0..) |name, i| {
-            var name_buf: [32]u8 = undefined;
-            const name_cstr = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{name}, 0);
-            const is_selected = (current_index == i);
-
-            if (imgui.igSelectable_Bool(name_cstr.ptr, is_selected, 0, .{ .x = 0, .y = 0 })) {
-                const new_tag: std.meta.Tag(UColliderShape) = @enumFromInt(i);
-                self.mColliderShape = switch (new_tag) {
-                    .Sphere => .{ .Sphere = .{} },
-                    .Box => .{ .Box = .{} },
-                };
-            }
-            if (is_selected) imgui.igSetItemDefaultFocus();
-        }
-    }
-
-    switch (self.mColliderShape) {
-        .Sphere => |*collider| {
-            _ = imgui.igInputFloat("Radius", &collider.mRadius, 0.1, 1.0, "%.3f", 0);
-        },
-        .Box => |*collider| {
-            var half_extents: f32 = 0;
-            if (imgui.igInputFloat3("Half Extents", &half_extents, "%.3f", 0)) {
-                collider.mHalfExtents.x = half_extents;
-            }
-        },
-    }
+    ImguiManager.RenderUnion(UColliderShape, &self.mColliderShape, "Collider Type");
 }
 
 pub fn jsonStringify(self: *const ColliderComponent, jw: anytype) !void {

@@ -1,7 +1,9 @@
 const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const imgui = @import("../../Core/CImports.zig").imgui;
+
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+
 const AttribComponent = @This();
 
 pub const ValueEnum = enum {
@@ -17,6 +19,14 @@ pub const ValueTypes = union(ValueEnum) {
     float32: f32,
     bool: bool,
     pub const default: ValueTypes = .{ .uint32 = 0 };
+    pub fn EditorRender(self: *ValueTypes) !void {
+        switch (self.*) {
+            .uint32 => ImguiManager.RenderScalerInput(&self.uint32, "Value", 1, 10),
+            .int32 => ImguiManager.RenderIntInput(&self.int32, "Value", 1, 10),
+            .float32 => ImguiManager.RenderFloatInput(&self.float32, "Value", 0.5, 5),
+            .bool => ImguiManager.RenderBool(&self.bool, "Value"),
+        }
+    }
 };
 
 mData: ValueTypes = .default,
@@ -34,45 +44,5 @@ pub const Ind: usize = blk: {
 pub fn Deinit(_: *AttribComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
-    const current_tag = std.meta.activeTag(self.mData);
-    if (imgui.igBeginCombo("Type", @tagName(current_tag), 0)) {
-        defer imgui.igEndCombo();
-        inline for (@typeInfo(ValueEnum).@"enum".field_values, 0..) |field_value, i| {
-            const field_enum: ValueEnum = @enumFromInt(field_value);
-            const selected = field_enum == current_tag;
-
-            if (imgui.igSelectable_Bool(@typeInfo(ValueEnum).@"enum".field_names[i], selected, 0, .{ .x = 0, .y = 0 })) {
-                if (!selected) {
-                    self.mData = switch (field_enum) {
-                        .uint32 => .{ .uint32 = 0 },
-                        .int32 => .{ .int32 = 0 },
-                        .float32 => .{ .float32 = 0.0 },
-                        .bool => .{ .bool = false },
-                    };
-                }
-            }
-
-            if (selected) imgui.igSetItemDefaultFocus();
-        }
-    }
-
-    switch (self.mData) {
-        .uint32 => |*v| {
-            var temp: i32 = @intCast(v.*);
-            if (imgui.igInputInt("Value", &temp, 1, 10, 0)) {
-                if (temp >= 0) {
-                    v.* = @intCast(temp);
-                }
-            }
-        },
-        .int32 => |*v| {
-            _ = imgui.igInputInt("Value", v, 1, 10, 0);
-        },
-        .float32 => |*v| {
-            _ = imgui.igInputFloat("Value", v, 0.1, 1.0, "%.3f", 0);
-        },
-        .bool => |*v| {
-            _ = imgui.igCheckbox("Value", v);
-        },
-    }
+    ImguiManager.RenderUnion(ValueTypes, self.mData, "Type");
 }

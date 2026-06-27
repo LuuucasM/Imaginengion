@@ -8,8 +8,7 @@ const Vec4 = MathTypes.Vec4;
 
 const ViewpointComponent = @This();
 
-//IMGUI
-const imgui = @import("../../Core/CImports.zig").imgui;
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 pub const Editable = true;
 pub const Name: []const u8 = "LensComponent";
@@ -65,28 +64,24 @@ fn RecalculateProjection(self: *ViewpointComponent) void {
 pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
 
     //aspect ratio
-    _ = imgui.igCheckbox("Set fixed aspect ratio", &self.mIsFixedAspectRatio);
+    ImguiManager.RenderBool(&self.mIsFixedAspectRatio, "Is Fixed Aspect Ratio?");
 
     //print the size/far/near variables depending on projection type
     var perspective_degrees = MathUtils.RadiansToDegrees(self.mPerspectiveFOVRad);
-    if (imgui.igDragFloat("FOV", &perspective_degrees, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+    if (ImguiManager.RenderFloatDrag(&perspective_degrees, "FOV", 1.0, 0, 180.0)) {
         self.mPerspectiveFOVRad = MathUtils.DegreesToRadians(perspective_degrees);
         self.RecalculateProjection();
     }
 
-    if (imgui.igDragFloat("Near", &self.mPerspectiveNear, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+    if (ImguiManager.RenderFloatDrag(&self.mPerspectiveNear, "Perspective Near", 1.0, 0.0, 1.0)) {
         self.RecalculateProjection();
     }
 
-    if (imgui.igDragFloat("Far", &self.mPerspectiveFar, 1.0, 0.0, 0.0, "%.3f", imgui.ImGuiSliderFlags_None) == true) {
+    if (ImguiManager.RenderFloatDrag(&self.mPerspectiveFar, "Perspective Far", 1.0, 2.0, 0.0)) {
         self.RecalculateProjection();
     }
 
-    var rect_area: [4]f32 = [4]f32{ self.mAreaRect.x, self.mAreaRect.y, self.mAreaRect.z, self.mAreaRect.w };
-
-    if (imgui.igDragFloat4("Area Rect", &rect_area[0], 0.01, 0.0, 1.0, "%.3f", imgui.ImGuiSliderFlags_None)) {
-        self.SetAreaRect(.{ .x = rect_area[0], .y = rect_area[1], .z = rect_area[2], .w = rect_area[3] });
-    }
+    ImguiManager.RenderFloat4Drag(&self.mAreaRect, "Area Rect", 0.01, 0, 1.0);
 }
 
 pub fn jsonStringify(self: *const ViewpointComponent, jw: anytype) !void {

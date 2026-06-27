@@ -756,11 +756,13 @@ pub fn Quat(comptime number_type: type) type {
             _ = options;
             try writer.print("{s} - w: {}, x: {}, y: {}, z: {}\n", .{ @typeName(Self), self.w, self.x, self.y, self.z });
         }
-        pub fn ToDegrees(self: Self) Vec3(number_type) {
+        pub fn ToRadians(self: Self) Vec3T {
+            return .{ .x = self.GetPitch(), .y = self.GetYaw(), .z = self.GetRoll() };
+        }
+        pub fn ToDegrees(self: Self) Vec3T {
             const rad = VectorT{ self.GetPitch(), self.GetYaw(), self.GetRoll() };
             const to_deg = @as(VectorT, @splat(180.0 / math.pi));
-            const res = rad * to_deg;
-            return Vec3(number_type){ .x = res[0], .y = res[1], .z = res[2] };
+            return .FromVector(rad * to_deg);
         }
         pub fn GetPitch(self: Self) number_type {
             const y = 2.0 * (self.y * self.z + self.w * self.x);

@@ -5,9 +5,11 @@ const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
 const Assets = @import("../../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
 const PathType = @import("../../Assets/AssetManager.zig").PathType;
-const imgui = @import("../../Core/CImports.zig").imgui;
 const Entity = @import("../Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
+
+const ImguiManager = @import("../../Imgui/Imgui.zig");
+
 const AudioComponent = @This();
 
 pub const PlaybackState = enum(u8) {
@@ -55,63 +57,20 @@ pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
     self.mAudioAsset.ReleaseAsset();
 }
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-
     // Volume drag
-    _ = imgui.igDragFloat("Volume", &self.mVolume, 0.01, 0.0, 1.0, "%.2f", imgui.ImGuiSliderFlags_None);
+    ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
 
     // Pitch drag
-    _ = imgui.igDragFloat("Pitch", &self.mPitch, 0.01, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None);
+    ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.0, 0.0); //0.0 for upper bounds means no upper bounds i believe
 
     // Loop toggle
-    _ = imgui.igCheckbox("Loop", &self.mLoop);
+    ImguiManager.RenderBool(&self.mLoop, "Looping?");
 
-    // Audio type dropdown
-    const audio_type_names = [_][]const u8{ "2D", "3D" };
-    var current_audio_type: i32 = @intFromEnum(self.mAudioType);
-    const preview_text: []const u8 = audio_type_names[@as(usize, @intCast(current_audio_type))];
-    var preview_buf: [16]u8 = undefined;
-    const preview_cstr = try std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{preview_text}, 0);
+    ImguiManager.RenderEnum(AudioType, &self.mAudioType, "Audio Type");
 
-    if (imgui.igBeginCombo("Audio Type", @ptrCast(preview_cstr.ptr), imgui.ImGuiComboFlags_None)) {
-        defer imgui.igEndCombo();
+    ImguiManager.ImguiSeparator();
 
-        for (audio_type_names, 0..) |name, i| {
-            var name_buf: [16]u8 = undefined;
-            const name_cstr = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{name}, 0);
-            const is_selected = (current_audio_type == @as(i32, @intCast(i)));
-            if (imgui.igSelectable_Bool(name_cstr.ptr, is_selected, 0, .{ .x = 0, .y = 0 })) {
-                current_audio_type = @as(i32, @intCast(i));
-                self.mAudioType = @enumFromInt(@as(u8, @intCast(current_audio_type)));
-            }
-            if (is_selected) {
-                imgui.igSetItemDefaultFocus();
-            }
-        }
-    }
-
-    // Audio asset display with drag-drop target
-    imgui.igSeparator();
-    if (self.mAudioAsset.mID != AssetHandle.NullHandle) {
-        const file_data_asset = self.mAudioAsset.GetFileMetaData();
-        const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
-        const name_term = try frame_allocator.dupeSentinel(u8, name, 0);
-        imgui.igTextUnformatted("Audio Asset: ", null);
-        imgui.igSameLine(0.0, 0.0);
-        imgui.igTextUnformatted(name_term, null);
-    } else {
-        imgui.igTextUnformatted("Audio Asset: None", null);
-    }
-
-    if (imgui.igBeginDragDropTarget()) {
-        if (imgui.igAcceptDragDropPayload("MP3Load", imgui.ImGuiDragDropFlags_None)) |payload| {
-            const path_len = payload.*.DataSize;
-            const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-            engine_context.mAssetManager.ReleaseAssetHandleRef(&self.mAudioAsset);
-            self.mAudioAsset = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
-        }
-        imgui.igEndDragDropTarget();
-    }
+    ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
 }
 
 pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
