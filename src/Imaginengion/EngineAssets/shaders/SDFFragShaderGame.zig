@@ -1,9 +1,8 @@
 const std = @import("std");
-const gpu = std.gpu;
+const spirv = std.spirv;
 
 const FragShader = @import("SDFFragShaderBase.zig");
 const FragShaderBase = FragShader.FragShaderBase;
-const Sampler2D = FragShader.Sampler2D;
 
 const PushConstants = @import("IM").PushConstants;
 const QuadData = @import("IM").QuadData;
@@ -36,20 +35,23 @@ const GlyphsSSBO = FragShader.GlyphsSSBO;
 const ShadingSSBO = FragShader.ShadingSSBO;
 
 export fn main() callconv(.{ .spirv_fragment = .{} }) void {
-    //const frag = gpu.frag_coord;
+    const frag = spirv.frag_coord;
 
-    //TODO: placeholder text so i dont forget since sampelrs are not out i dont actually know what it looks like exactly
-    //const uv_screen = @Vector(2, f32){
-    //    frag[0] / CameraUBO.mViewportWidth,
-    //    frag[1] / CameraUBO.mViewportHeight,
-    //};
-    //const overlay_color = OverlaySampler.sample(uv_screen);
-    //if (overlay_color.x != 0 or overlay_color.y != 0 or overlay_color.z != 0){
-    //    oFragColor.* = overlay_color;
-    //} else {
-    //    FragShaderBase(oFragColor, CameraUBO, QuadsSSBO, GlyphsSSBO, ShadingSSBO);
-    //}
+    const uv_screen = Vec2(f32){ .x = frag[0] / CameraUBO.mViewportWidth, .y = frag[1] / CameraUBO.mViewportHeight };
 
-    //NOTE: temporary while i dont have samplers
-    oFragColor.* = FragShaderBase(CameraUBO.*, QuadsSSBO.*, GlyphsSSBO.*, ShadingSSBO.*, Textures);
+    const overlay_color = FragShader.SampleTexture(.{ .descriptor = .{ .set = 2, .binding = 1 } }, uv_screen.ToVector());
+
+    //check xyz to see if its been filled or not
+    if (overlay_color[0] != 0 or overlay_color[1] != 0 or overlay_color[2] != 0) {
+        oFragColor.* = overlay_color;
+    } else {
+        oFragColor.* = FragShaderBase(
+            CameraUBO.*,
+            QuadsSSBO.*,
+            GlyphsSSBO.*,
+            ShadingSSBO.*,
+            Textures,
+            Vec4(f32){ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1.0 },
+        );
+    }
 }

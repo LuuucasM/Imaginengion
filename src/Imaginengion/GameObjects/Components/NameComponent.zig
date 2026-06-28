@@ -25,7 +25,7 @@ pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
-    ImguiManager.RenderTextInput(engine_context, &self.mName, "Text");
+    try ImguiManager.RenderTextInput(engine_context, &self.mName, "Text");
 }
 
 pub fn jsonStringify(self: *const NameComponent, jw: anytype) !void {

@@ -227,7 +227,7 @@ fn CheckReleaseLayer(self: *SGTextureManager, bin_index: usize, layer_index: usi
     }
 }
 
-fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
+pub fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
     const slot_col = slot_index % BinIndToSlotsPerRow(bin_index);
     const slot_row = slot_index / BinIndToSlotsPerRow(bin_index);
     return .{

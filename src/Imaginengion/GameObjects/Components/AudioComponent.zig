@@ -58,10 +58,10 @@ pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
 }
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
     // Volume drag
-    ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
+    _ = ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
 
     // Pitch drag
-    ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.0, 0.0); //0.0 for upper bounds means no upper bounds i believe
+    _ = ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.0, 0.0); //0.0 for upper bounds means no upper bounds i believe
 
     // Loop toggle
     ImguiManager.RenderBool(&self.mLoop, "Looping?");
@@ -70,7 +70,7 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
 
     ImguiManager.ImguiSeparator();
 
-    ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
+    try ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
 }
 
 pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {

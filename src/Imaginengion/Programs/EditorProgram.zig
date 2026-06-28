@@ -506,8 +506,8 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
             .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
             .mQuadsCount = 0,
             .mGlyphsCount = 0,
-            .mViewportWidth = @intCast(viewpoint_component.mViewportWidth),
-            .mViewportHeight = @intCast(viewpoint_component.mViewportHeight),
+            .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
+            .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
         },
         &render_component.mFrameBuffer,
     );
@@ -556,8 +556,8 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
                 .mRayOffset = Vec2(f32).VectorT{ ray_offset_x, ray_offset_y },
                 .mQuadsCount = 0,
                 .mGlyphsCount = 0,
-                .mViewportWidth = @intCast(viewpoint_component.mViewportWidth),
-                .mViewportHeight = @intCast(viewpoint_component.mViewportHeight),
+                .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
+                .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
             },
             &render_component.mFrameBuffer,
         );

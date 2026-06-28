@@ -34,5 +34,12 @@ const GlyphsSSBO = FragShader.GlyphsSSBO;
 const ShadingSSBO = FragShader.ShadingSSBO;
 
 export fn main() callconv(.{ .spirv_fragment = .{} }) void {
-    oFragColor.* = FragShaderBase(CameraUBO.*, QuadsSSBO.*, GlyphsSSBO.*, ShadingSSBO.*, TexturesArray);
+    oFragColor.* = FragShaderBase(
+        CameraUBO.*,
+        QuadsSSBO.*,
+        GlyphsSSBO.*,
+        ShadingSSBO.*,
+        TexturesArray,
+        Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 },
+    );
 }

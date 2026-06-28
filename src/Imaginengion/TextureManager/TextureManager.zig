@@ -33,12 +33,8 @@ pub fn Unregister(self: *TextureManager, texture_location: u32) void {
     self._Impl.Unregister(texture_location);
 }
 
-pub fn GetNormalizedOffsets(self: *TextureManager, texture_handle: u32) struct { f32, f32 } {
-    return self._Impl.GetNormalizedOffsets(texture_handle);
-}
-
-pub fn GetPixelOffsets(self: *TextureManager, texture_handle: u32) struct { usize, usize } {
-    return self._Impl.GetPixelOffsets(texture_handle);
+pub fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
+    return Impl.GetPixelOffsets(bin_index, slot_index);
 }
 
 pub fn GetTexture(self: TextureManager) *anyopaque {

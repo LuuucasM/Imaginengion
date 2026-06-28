@@ -148,9 +148,11 @@ pub fn GetImguiTexture(self: *ImguiManager, engine_context: *EngineContext, text
     const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
     const preview = try self.getOrCreatePreviewTexture(engine_context.EngineAllocator(), device);
-
-    const offset_x, const offset_y = engine_context.mRenderer.mTextureManager.GetPixelOffsets(texture.GetTextureHandle());
-    const layer = TextureManager.GetLayerIndex(texture.GetTextureHandle());
+    const texture_handle = texture.GetTextureHandle();
+    const bin_index = TextureManager.GetBinIndex(texture_handle);
+    const slot_index = TextureManager.GetSlotIndex(texture_handle);
+    const offset_x, const offset_y = TextureManager.GetPixelOffsets(bin_index, slot_index);
+    const layer = TextureManager.GetLayerIndex(texture_handle);
 
     const copy_w = @min(texture.GetWidth(), TEXTURE_SIZE);
     const copy_h = @min(texture.GetHeight(), TEXTURE_SIZE);
@@ -474,11 +476,11 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
 }
 
 pub fn RenderFloatInput(val: *f32, label: []const u8, speed: f32, speed_fast: f32) bool {
-    return imgui.igInputFloat(label, &val, speed, speed_fast, "%.3f", 0);
+    return imgui.igInputFloat(label, val, speed, speed_fast, "%.3f", 0);
 }
 
 pub fn RenderFloatDrag(val: *f32, label: []const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) bool {
-    return imgui.igDragFloat(label, &val, speed, lower_bounds, upper_bounds, "%.3f", 0);
+    return imgui.igDragFloat(@ptrCast(label), val, speed, lower_bounds, upper_bounds, "%.3f", 0);
 }
 
 pub fn RenderFloat2Drag(val: *Vec2(f32), label: []const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) void {
@@ -510,16 +512,15 @@ pub fn RenderEnum(comptime T: type, value: *T, label: []const u8) void {
     const current_index = @intFromEnum(value.*);
 
     var preview_buf: [32]u8 = undefined;
-    const preview_cstr = std.fmt.bufPrintZ(&preview_buf, "{s}", .{@tagName(value.*)}) catch unreachable;
+    const preview_cstr = std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{@tagName(value.*)}, 0) catch unreachable;
 
     if (imgui.igBeginCombo(label.ptr, preview_cstr.ptr, 0)) {
         defer imgui.igEndCombo();
 
-        inline for (field_names, 0..) |field_name, i| {
-            const name_cstr: [*:0]const u8 = field_name ++ "\x00";
+        for (field_names, 0..) |field_name, i| {
             const is_selected = (current_index == i);
 
-            if (imgui.igSelectable_Bool(name_cstr, is_selected, 0, .{ .x = 0, .y = 0 })) {
+            if (imgui.igSelectable_Bool(field_name, is_selected, 0, .{ .x = 0, .y = 0 })) {
                 value.* = @enumFromInt(i);
             }
             if (is_selected) imgui.igSetItemDefaultFocus();
@@ -528,8 +529,8 @@ pub fn RenderEnum(comptime T: type, value: *T, label: []const u8) void {
 }
 
 pub fn RenderUnion(comptime T: type, value: *T, label: []const u8) !void {
-    const field_names = std.meta.fieldNames(T);
-    const field_types = std.meta.fieldTypes(T);
+    const field_names = @typeInfo(T).@"union".field_names;
+    const field_types = @typeInfo(T).@"union".field_types;
     const current_index = @intFromEnum(@as(std.meta.Tag(T), value.*));
 
     var preview_buf: [32]u8 = undefined;
@@ -539,10 +540,9 @@ pub fn RenderUnion(comptime T: type, value: *T, label: []const u8) !void {
         defer imgui.igEndCombo();
 
         inline for (field_names, 0..) |field_name, i| {
-            const name_cstr: [*:0]const u8 = field_name.name ++ "\x00";
             const is_selected = (current_index == i);
 
-            if (imgui.igSelectable_Bool(name_cstr, is_selected, 0, .{ .x = 0, .y = 0 })) {
+            if (imgui.igSelectable_Bool(field_name, is_selected, 0, .{ .x = 0, .y = 0 })) {
                 value.* = @unionInit(T, field_name, defaultOf(field_types[i]));
             }
             if (is_selected) imgui.igSetItemDefaultFocus();
@@ -558,7 +558,7 @@ fn defaultOf(comptime PayloadT: type) PayloadT {
 }
 
 pub fn RenderBool(value: *bool, label: []const u8) void {
-    _ = imgui.igCheckbox(label, value);
+    _ = imgui.igCheckbox(@ptrCast(label), value);
 }
 
 pub fn ImguiSeparator() void {

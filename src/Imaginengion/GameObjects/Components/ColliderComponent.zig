@@ -15,8 +15,8 @@ pub const Sphere = struct {
 
     const default = Sphere{ .mRadius = 1.0 };
 
-    pub fn EditorRender(self: *Sphere) void {
-        ImguiManager.RenderFloat(&self.mRadius, "Radius", 0.1, 1.0);
+    pub fn EditorRender(self: *Sphere) !void {
+        try ImguiManager.RenderFloatInput(&self.mRadius, "Radius", 0.1, 1.0);
     }
 };
 
@@ -33,10 +33,10 @@ pub const Box = struct {
 pub const UColliderShape = union(enum) {
     Sphere: Sphere,
     Box: Box,
-    pub fn EditorRender(self: *UColliderShape) void {
-        switch (self) {
+    pub fn EditorRender(self: *UColliderShape) !void {
+        switch (self.*) {
             .Box => self.Box.EditorRender(),
-            .Sphere => self.Sphere.EditorRender(),
+            .Sphere => try self.Sphere.EditorRender(),
         }
     }
 };
@@ -64,7 +64,7 @@ pub fn AsBox(self: *ColliderComponent) *Box {
 }
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
-    ImguiManager.RenderUnion(UColliderShape, &self.mColliderShape, "Collider Type");
+    try ImguiManager.RenderUnion(UColliderShape, &self.mColliderShape, "Collider Type");
 }
 
 pub fn jsonStringify(self: *const ColliderComponent, jw: anytype) !void {

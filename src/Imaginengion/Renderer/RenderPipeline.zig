@@ -29,8 +29,8 @@ pub const SDFPushConstants = extern struct {
     mRayOffset: Vec2(f32).VectorT,
     mQuadsCount: u32,
     mGlyphsCount: u32,
-    mViewportWidth: u32,
-    mViewportHeight: u32,
+    mViewportWidth: f32,
+    mViewportHeight: f32,
 };
 
 pub fn Pipeline(pipeline_t: PipelineType) type {

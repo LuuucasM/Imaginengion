@@ -81,7 +81,7 @@ pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: ShadingData, sample_sam
     //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
     const raw_uv: Vec2(f32) = .FromVector(atlas_shading_data.TextureUV0 + (atlas_shading_data.TextureUV1 - atlas_shading_data.TextureUV0) * texture_uv.ToVector());
     const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv);
-    const msd = sample_sampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, sample_uv);
+    const msd = sample_sampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, sample_uv.ToVector());
     return Median(msd.x, msd.y, msd.z);
 }
 

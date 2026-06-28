@@ -6,7 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
 
-pub const Editable: bool = true;
+pub const Editable: bool = false;
 pub const Name: []const u8 = "UUIDComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {

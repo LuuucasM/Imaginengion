@@ -22,7 +22,6 @@ const MAX_STEPS: u32 = 9999;
 const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 9;
 pub const MAX_EDGES: u32 = 8;
-pub const DEFAULT_COLOR = Vec4(f32){ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1.0 };
 pub const NO_EDGE: u32 = std.math.maxInt(u32);
 
 //NOTE: This represents a surface that we hit
@@ -88,6 +87,7 @@ mNodes: NodeArr,
 mEdges: EdgeArr,
 mNodeCount: usize,
 mEdgeCount: usize,
+mDefaultColor: Vec4(f32),
 
 pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype, perspective_far: f32, sample_sampler: anytype) void {
     var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
@@ -122,7 +122,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype
                 .ParentEdge = @intCast(curr_edge_ind),
                 .FirstEdge = NO_EDGE,
                 .MaterialHandle = 0,
-                .AccumColor = DEFAULT_COLOR,
+                .AccumColor = self.mDefaultColor,
                 .TextureUV = .{ .x = 0, .y = 0 },
                 .ShapeT = .None,
             };
@@ -172,7 +172,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype
             .ParentEdge = @intCast(curr_edge_ind),
             .FirstEdge = NO_EDGE,
             .MaterialHandle = shading_handle,
-            .AccumColor = DEFAULT_COLOR,
+            .AccumColor = self.mDefaultColor,
             .TextureUV = texture_uv,
             .ShapeT = march_data.object.shape_type,
         };
@@ -202,7 +202,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype
                     .FromNode = @intCast(new_node_ind),
                     .ToNode = 0,
                     .SiblingEdge = NO_EDGE,
-                    .AccumColor = DEFAULT_COLOR,
+                    .AccumColor = self.mDefaultColor,
                 };
 
                 self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
@@ -290,7 +290,7 @@ fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype) Vec3(f32) {
 fn CalcNodeColor(self: *Self, materials: anytype, node_ind: u32, sample_sampler: anytype) void {
     const curr_node = self.mNodes[node_ind];
 
-    const child_accum = if (curr_node.FirstEdge == NO_EDGE) DEFAULT_COLOR else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
+    const child_accum = if (curr_node.FirstEdge == NO_EDGE) self.mDefaultColor else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
 
     const material: ShadingData = materials[curr_node.MaterialHandle];
     const texture_color = SampleTexture(curr_node.TextureUV, sample_sampler);
@@ -319,5 +319,5 @@ fn CalcEdgeColor(self: *Self, materials: anytype, edge_ind: u32) void {
 fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype) Vec4(f32) {
     if (texture_uv.x < 0 or texture_uv.y < 0 or texture_uv.z < 0) return Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
 
-    return sample_sampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, texture_uv);
+    return sample_sampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, texture_uv.ToVector());
 }

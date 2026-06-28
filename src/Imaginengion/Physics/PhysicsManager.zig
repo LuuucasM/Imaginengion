@@ -88,7 +88,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
                     if (q_rb_origin) |rb_origin| {
                         if (q_rb_target) |rb_target| {
-                            if (rb_origin.mInvMass == 0 and rb_target.mInvMass == 0) continue;
+                            if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
 
                             ResolveCollisions(contact, rb_origin, rb_target);
                             PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
@@ -170,8 +170,8 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = entity_scene_comp.mScene;
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
-        if (entity_rb.mInvMass != 0) {
-            entity_rb.mForce.AddEqVec(physics_component.mGravity.MulScalar(entity_rb.mMass));
+        if (entity_rb._InvMass != 0) {
+            entity_rb._Force.AddEqVec(physics_component.mGravity.MulScalar(entity_rb.mMass));
         }
     }
 }
@@ -179,15 +179,15 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
     const zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
     defer zone.Deinit();
-    entity_rb.mVelocity.AddEqVec(entity_rb.mForce.MulScalar(entity_rb.mInvMass * dt));
-    entity_rb.mForce = std.mem.zeroes(Vec3(f32));
+    entity_rb._Velocity.AddEqVec(entity_rb._Force.MulScalar(entity_rb._InvMass * dt));
+    entity_rb._Force = std.mem.zeroes(Vec3(f32));
 }
 
 fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) void {
     const zone = Tracy.ZoneInit("PhysicsManager::IntegratePositions", @src());
     defer zone.Deinit();
     const transform = entity.GetComponent(EntityTransformComponent).?;
-    transform.Translation.AddEqVec(entity_rb.mVelocity.MulScalar(dt));
+    transform.Translation.AddEqVec(entity_rb._Velocity.MulScalar(dt));
 }
 
 fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, colliders_arr: std.ArrayList(Entity.Type)) !void {
@@ -246,30 +246,30 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
 fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("PhysicsManager::ResolveCollisions", @src());
     defer zone.Deinit();
-    const rv = rb_target.mVelocity.SubVec(rb_origin.mVelocity);
+    const rv = rb_target._Velocity.SubVec(rb_origin._Velocity);
 
     const vel_along_norm = rv.Dot(contact.mNormal);
     if (vel_along_norm > 0) return; //they are already moving apart
 
     const e: f32 = 0.0; //coefficient of restitution
 
-    const j = (-(1.0 + e) * vel_along_norm) / (rb_origin.mInvMass + rb_target.mInvMass); //magnitude of the impulse
+    const j = (-(1.0 + e) * vel_along_norm) / (rb_origin._InvMass + rb_target._InvMass); //magnitude of the impulse
 
     const impulse = contact.mNormal.MulScalar(j);
 
-    rb_origin.mVelocity.SubEqVec(impulse.MulScalar(rb_origin.mInvMass));
-    rb_target.mVelocity.AddEqVec(impulse.MulScalar(rb_target.mInvMass));
+    rb_origin._Velocity.SubEqVec(impulse.MulScalar(rb_origin._InvMass));
+    rb_target._Velocity.AddEqVec(impulse.MulScalar(rb_target._InvMass));
 }
 
 fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("PhysicsManager::PositionCorrection", @src());
     defer zone.Deinit();
-    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin.mInvMass + rb_target.mInvMass) * PERCENT;
+    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin._InvMass + rb_target._InvMass) * PERCENT;
     const correction = contact.mNormal.MulScalar(correction_mag);
 
     const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
     const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
 
-    transform_origin.Translation.SubEqVec(correction.MulScalar(rb_origin.mInvMass));
-    transform_target.Translation.AddEqVec(correction.MulScalar(rb_target.mInvMass));
+    transform_origin.Translation.SubEqVec(correction.MulScalar(rb_origin._InvMass));
+    transform_target.Translation.AddEqVec(correction.MulScalar(rb_target._InvMass));
 }
