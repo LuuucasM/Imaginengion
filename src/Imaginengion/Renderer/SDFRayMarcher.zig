@@ -18,8 +18,6 @@ const THICKNESS_2D = SDFFunc.THICKNESS_2D;
 
 const Stack = @import("../Core/Stack.zig").Stack;
 
-const SampleSampler = @import("../EngineAssets/shaders/SDFFragShaderBase.zig").SampleSampler;
-
 const MAX_STEPS: u32 = 9999;
 const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 9;
@@ -91,7 +89,7 @@ mEdges: EdgeArr,
 mNodeCount: usize,
 mEdgeCount: usize,
 
-pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype, perspective_far: f32) void {
+pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype, perspective_far: f32, sample_sampler: anytype) void {
     var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
     edge_ind_stack.Push(0);
 
@@ -154,7 +152,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype
                 const uv = SDFFunc.uvIMGlyph(end_point, glyph, texture_shading_handle);
 
                 if (uv.x >= 0.0 and uv.y >= 0.0) {
-                    const msd = SDFFunc.GetMSD(.{ .x = uv.x, .y = uv.y }, atlas_shading_data);
+                    const msd = SDFFunc.GetMSD(.{ .x = uv.x, .y = uv.y }, atlas_shading_data, sample_sampler);
                     if (msd >= 0.5) {
                         break :blk uv;
                     } else {
@@ -214,7 +212,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype
     }
 }
 
-pub fn GenerateColor(self: *Self, materials: anytype, textures_array: anytype) Vec4(f32).VectorT {
+pub fn GenerateColor(self: *Self, materials: anytype, textures_array: anytype, sample_sampler: anytype) Vec4(f32).VectorT {
     var i: usize = self.mNodeCount;
     while (i > 0) {
         i -= 1;
@@ -225,7 +223,7 @@ pub fn GenerateColor(self: *Self, materials: anytype, textures_array: anytype) V
             self.CalcEdgeColor(materials, ei);
             ei = self.mEdges[@intCast(ei)].SiblingEdge;
         }
-        self.CalcNodeColor(materials, i, textures_array);
+        self.CalcNodeColor(materials, i, textures_array, sample_sampler);
     }
 
     return self.mNodes[0].AccumColor.ToVector();
@@ -289,13 +287,13 @@ fn CalcNormal(point: Vec3(f32), quads: anytype, glyphs: anytype) Vec3(f32) {
     return vec.Dir();
 }
 
-fn CalcNodeColor(self: *Self, materials: anytype, node_ind: u32) void {
+fn CalcNodeColor(self: *Self, materials: anytype, node_ind: u32, sample_sampler: anytype) void {
     const curr_node = self.mNodes[node_ind];
 
     const child_accum = if (curr_node.FirstEdge == NO_EDGE) DEFAULT_COLOR else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
 
     const material: ShadingData = materials[curr_node.MaterialHandle];
-    const texture_color = SampleTexture(curr_node.TextureUV);
+    const texture_color = SampleTexture(curr_node.TextureUV, sample_sampler);
     const material_color = Vec4(f32).FromVector(material.Color);
     const color = material_color.Mul(texture_color); // tint
     const alpha = color.w;
@@ -318,8 +316,8 @@ fn CalcEdgeColor(self: *Self, materials: anytype, edge_ind: u32) void {
     self.mEdges[edge_ind].AccumColor = .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = child_accum.w };
 }
 
-fn SampleTexture(texture_uv: Vec3(f32)) Vec4(f32) {
+fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype) Vec4(f32) {
     if (texture_uv.x < 0 or texture_uv.y < 0 or texture_uv.z < 0) return Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
 
-    return SampleSampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, texture_uv);
+    return sample_sampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, texture_uv);
 }

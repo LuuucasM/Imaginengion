@@ -8,8 +8,6 @@ const GlyphData = @import("../Renderer/Renderer2D.zig").GlyphData;
 const QuadData = @import("../Renderer/Renderer2D.zig").QuadData;
 const ShadingData = @import("../Renderer/Renderer.zig").ShadingData;
 
-const SampleSampler = @import("../EngineAssets/shaders/SDFFragShaderBase.zig").SampleSampler;
-
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 
 pub const THICKNESS_2D: f32 = 0.001;
@@ -79,11 +77,11 @@ pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32) Vec3(f
     );
 }
 
-pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: ShadingData) f32 {
+pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: ShadingData, sample_sampler: anytype) f32 {
     //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
     const raw_uv: Vec2(f32) = .FromVector(atlas_shading_data.TextureUV0 + (atlas_shading_data.TextureUV1 - atlas_shading_data.TextureUV0) * texture_uv.ToVector());
     const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv);
-    const msd = SampleSampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, sample_uv);
+    const msd = sample_sampler(.{ .descriptor = .{ .set = 2, .binding = 0 } }, sample_uv);
     return Median(msd.x, msd.y, msd.z);
 }
 

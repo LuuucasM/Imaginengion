@@ -110,13 +110,13 @@ pub fn FragShaderBase(
     marcher.mEdgeCount = 1;
 
     //create the ray tree
-    marcher.March(quads_ssbo.*[0..camera_ubo.mQuadsCount], glyphs_ssbo.*[9..camera_ubo.mGlyphsCount], camera_ubo.mPerspectiveFar);
+    marcher.March(quads_ssbo.*[0..camera_ubo.mQuadsCount], glyphs_ssbo.*[9..camera_ubo.mGlyphsCount], camera_ubo.mPerspectiveFar, SampleSampler);
 
     //traverse ray tree backwards to obtain final output color
-    return marcher.GenerateColor(shading_ssbo.*, textures);
+    return marcher.GenerateColor(shading_ssbo.*, textures, SampleSampler);
 }
 
-pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3) Vec4 {
+pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3(f32)) Vec4(f32) {
     return asm volatile (
         \\%sampler_ptr    = OpTypePointer UniformConstant %ty
         \\%tex            = OpVariable %sampler_ptr UniformConstant
