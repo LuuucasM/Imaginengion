@@ -124,7 +124,7 @@ pub fn FragShaderBase(
     return marcher.GenerateColor(shading_ssbo.*, textures, SampleSampler);
 }
 
-pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3(f32).VectorT) Vec4(f32) {
+pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3(f32).VectorT) Vec4(f32).VectorT {
     return asm volatile (
         \\%sampler_ptr    = OpTypePointer UniformConstant %ty
         \\%tex            = OpVariable %sampler_ptr UniformConstant
@@ -132,10 +132,10 @@ pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_lay
         \\                  OpDecorate %tex Binding $bind
         \\%loaded_sampler = OpLoad %ty %tex
         \\%ret            = OpImageSampleImplicitLod %v4 %loaded_sampler %uv_layer
-        : [ret] "" (-> Vec4),
+        : [ret] "" (-> Vec4(f32).VectorT),
         : [uv_layer] "" (uv_layer),
           [ty] "t" (Sampler2DArray),
-          [v4] "t" (Vec4),
+          [v4] "t" (Vec4(f32).VectorT),
           [set] "c" (deco.descriptor.set),
           [bind] "c" (deco.descriptor.binding),
     );
