@@ -52,6 +52,7 @@ pub const ShadingData = extern struct {
 
     //material volume data
     Absorption: Vec3(f32).VectorT,
+    Scatter: Vec3(f32).VectorT,
 
     //material surface data
     Color: Vec4(f32).VectorT,

@@ -35,6 +35,7 @@ const InternalData = struct {
     Accumulator: f32,
     Contacts: std.ArrayList(Contact),
 };
+
 const PHYSICS_DT: f32 = 1.0 / 60.0;
 const PERCENT: f32 = 0.8;
 const SLOP: f32 = 0.01;
@@ -171,7 +172,7 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
     const scene_layer = entity_scene_comp.mScene;
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
         if (entity_rb._InvMass != 0) {
-            entity_rb._Force.AddEqVec(physics_component.mGravity.MulScalar(entity_rb.mMass));
+            entity_rb.ApplyForce(physics_component.mGravity.MulScalar(entity_rb.mMass));
         }
     }
 }
@@ -179,7 +180,7 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
     const zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
     defer zone.Deinit();
-    entity_rb._Velocity.AddEqVec(entity_rb._Force.MulScalar(entity_rb._InvMass * dt));
+    entity_rb.AddVelocity(entity_rb._Force.MulScalar(entity_rb._InvMass * dt));
     entity_rb._Force = std.mem.zeroes(Vec3(f32));
 }
 
@@ -209,7 +210,7 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
             const collider_target = entity_target.GetComponent(ColliderComponent).?;
 
             var contact: ?Contact = blk: {
-                if (std.meta.activeTag(collider_origin.mColliderShape) == .Sphere and std.meta.activeTag(collider_target.mColliderShape) == .Sphere) {
+                if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
                     const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
                     const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
                     break :blk Collisions.SphereSphere(
@@ -218,7 +219,7 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
                         target_transform.GetWorldPosition(),
                         target_transform.GetWorldScale(),
                     );
-                } else if (std.meta.activeTag(collider_origin.mColliderShape) == .Box and std.meta.activeTag(collider_target.mColliderShape) == .Box) {
+                } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
                     const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
                     const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
                     break :blk Collisions.BoxBox(
@@ -228,7 +229,7 @@ fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.Wo
                         target_transform.GetWorldScale(),
                     );
                 } else {
-                    std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mColliderShape), @tagName(collider_target.mColliderShape) });
+                    std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mShape), @tagName(collider_target.mShape) });
                     break :blk null;
                 }
             };
@@ -257,8 +258,8 @@ fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target
 
     const impulse = contact.mNormal.MulScalar(j);
 
-    rb_origin._Velocity.SubEqVec(impulse.MulScalar(rb_origin._InvMass));
-    rb_target._Velocity.AddEqVec(impulse.MulScalar(rb_target._InvMass));
+    rb_origin.ApplyImpulse(impulse.Neg());
+    rb_target.ApplyImpulse(impulse);
 }
 
 fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {

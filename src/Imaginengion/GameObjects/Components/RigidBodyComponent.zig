@@ -2,6 +2,8 @@ const std = @import("std");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
+const SurfaceMaterial = @import("../../Physics/SurfaceMaterial.zig");
+const MediumMaterial = @import("../../Physics/MediumMaterial.zig");
 const RigidBodyComponent = @This();
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -16,8 +18,19 @@ pub const Ind: usize = blk: {
     }
 };
 
+pub const BodyType = union(enum) {
+    Surface: struct {
+        material: SurfaceMaterial.SurfaceMaterials,
+        data: SurfaceMaterial.SurfMatData,
+    },
+    Medium: struct {
+        material: MediumMaterial.MediumMaterials,
+        data: MediumMaterial.MedMatData,
+    },
+};
+
 mMass: f32 = 0.0,
-mUseGravity: bool = false,
+
 _InvMass: f32 = 0.0,
 _Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
@@ -32,6 +45,54 @@ pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
             self.mInvMass = 0.0;
         }
     }
+    ImguiManager.RenderFloatInput(&self.mRestitution, "Restitution", 0.01, 0.1);
+    ImguiManager.RenderFloatInput(&self.mFriction, "Friction", 0.01, 0.1);
+}
 
-    ImguiManager.RenderBool(&self.mUseGravity, "Use Gravity?");
+/// Applies continuous force to the rigid body physically accurate
+/// Force must be in newtons form
+///
+/// INPUT:
+///     self: The rigid body self
+///     force: The force being applied in newtons
+/// OUTPUT: VOID
+pub fn ApplyForce(self: *RigidBodyComponent, force: Vec3(f32)) void {
+    self._Force.AddEqVec(force);
+}
+
+/// Applies a one time force to the rigid body
+///
+/// INPUT:
+///     self: the rigid body
+///     impulse: the impulse to add
+/// OUTPUT: VOID
+pub fn ApplyImpulse(self: *RigidBodyComponent, impulse: Vec3(f32)) void {
+    self._Velocity.AddEqVec(impulse.MulScalar(self._InvMass));
+}
+
+/// Directly set the velocity of the rigid body. This shouldnt be used to simply move an object
+/// But rather in less common situations where the velocity change does not need to be physically accurate
+///
+/// INPUT:
+///     self: the rigid body
+///     velocity: the new velocity to be set
+/// OUTPUT: VOID
+pub fn SetVelocity(self: *RigidBodyComponent, velocity: Vec3(f32)) void {
+    self._Velocity = velocity;
+}
+
+/// Directly add velocity to the rigid body. This skips applying math so is not
+/// physically accurate but has use cases
+///
+/// INPUT:
+///     self: the rigid body
+///     velocity: the velocity to be added to the current velocity
+/// OUTPUT: void
+pub fn AddVelocity(self: *RigidBodyComponent, velocity: Vec3(f32)) void {
+    self._Velocity.AddEqVec(velocity);
+}
+
+///Get the velocity
+pub fn GetVelocity(self: *const RigidBodyComponent) Vec3(f32) {
+    return self._Velocity;
 }

@@ -41,17 +41,18 @@ pub const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
     .decoration = .{ .location = 0 },
 });
 
-pub const QuadsSSBOT = @SpirvType(.{ .runtime_array = QuadData });
-
 pub const Sampler2DArray = @SpirvType(.{ .sampled_image = Image2DArray });
 
 pub const Sampler2D = @SpirvType(.{ .sampled_image = Image2D });
 
-pub const QuadsArray = @SpirvType(.{ .runtime_array = QuadData });
+const QuadsArray = @SpirvType(.{ .runtime_array = QuadData });
+pub const QuadsBuf = extern struct { ptr: QuadsArray };
 
-pub const GlyphsArray = @SpirvType(.{ .runtime_array = GlyphData });
+const GlyphsArray = @SpirvType(.{ .runtime_array = GlyphData });
+pub const GlyphsBuf = extern struct { ptr: GlyphsArray };
 
-pub const ShadingArray = @SpirvType(.{ .runtime_array = ShadingData });
+const ShadingArray = @SpirvType(.{ .runtime_array = ShadingData });
+pub const ShadingBuf = extern struct { ptr: ShadingArray };
 
 pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 3, .binding = 0 } } });
 
@@ -62,13 +63,13 @@ pub const Overlay = @extern(*addrspace(.constant) Sampler2D, .{ .name = "Overlay
 
 //layout(set = 2, binding = 2) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
 //pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadData, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
-pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsArray, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
+pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
 
 //layout(set = 2, binding = 3) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
-pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsArray, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
+pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
 
 //layout(set = 2, binding = 4) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
-pub const ShadingSSBO = @extern(*addrspace(.storage_buffer) ShadingArray, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
+pub const ShadingSSBO = @extern(*addrspace(.storage_buffer) ShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
 
 pub fn FragShaderBase(
     camera_ubo: PushConstants,
@@ -118,10 +119,10 @@ pub fn FragShaderBase(
     marcher.mEdgeCount = 1;
 
     //create the ray tree
-    marcher.March(quads_ssbo.*[0..camera_ubo.mQuadsCount], glyphs_ssbo.*[9..camera_ubo.mGlyphsCount], camera_ubo.mPerspectiveFar, SampleSampler);
+    marcher.March(quads_ssbo.ptr, glyphs_ssbo.ptr, camera_ubo.mPerspectiveFar, SampleSampler);
 
     //traverse ray tree backwards to obtain final output color
-    return marcher.GenerateColor(shading_ssbo.*, textures, SampleSampler);
+    return marcher.GenerateColor(shading_ssbo.ptr, textures, SampleSampler);
 }
 
 pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3(f32).VectorT) Vec4(f32).VectorT {

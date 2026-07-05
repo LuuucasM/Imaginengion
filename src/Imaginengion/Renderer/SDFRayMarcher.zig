@@ -23,6 +23,7 @@ const SURF_DIST: f32 = 0.00099;
 pub const MAX_NODES: u32 = 9;
 pub const MAX_EDGES: u32 = 8;
 pub const NO_EDGE: u32 = std.math.maxInt(u32);
+const SKY_COLOR: Vec3(f32) = .{ .x = 0.53, .y = 0.81, .z = 0.92 };
 
 //NOTE: This represents a surface that we hit
 pub const Node = struct {
@@ -311,9 +312,19 @@ fn CalcEdgeColor(self: *Self, materials: anytype, edge_ind: u32) void {
     const material: ShadingData = materials[from_node.MaterialHandle];
 
     // Beer-Lambert for absorbtion  over edge length
-    const rgb = Vec3(f32).FromVector(-material.Absorption).MulScalar(curr_edge.Length).Exp().MulVec(Vec3(f32){ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
+    const extinction = material.Absorption + material.Scattering;
+    const transmittance = Vec3(f32).FromVector(-extinction).MulScalar(curr_edge.Length).Exp();
 
-    self.mEdges[edge_ind].AccumColor = .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = child_accum.w };
+    //scattering
+    const ONE = Vec3(f32){ .x = 1, .y = 1, .z = 1 };
+    const scatter_amount = ONE.SubVec(.FromVector(-material.Scattering * curr_edge.Length).Exp());
+
+    const transmitted = transmittance.MulVec(.{ .x = child_accum.x, .y = child_accum.y, .z = child_accum.z });
+    const inscattered = scatter_amount.MulVec(SKY_COLOR);
+
+    const color_out = transmitted.AddVec(inscattered);
+
+    self.mEdges[edge_ind].AccumColor = .{ .x = color_out.x, .y = color_out.y, .z = color_out.z, .w = child_accum.w };
 }
 
 fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype) Vec4(f32) {

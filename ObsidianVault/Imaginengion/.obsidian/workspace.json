@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Engine Notes/2026 6 June/24.md",
+                "file": "immediate things to do or fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "24"
+              "title": "immediate things to do or fix"
             }
           },
           {
@@ -199,12 +199,15 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
+    "Engine Notes/2026 7 July/5.md",
+    "Engine Notes/2026 7 July/1.md",
     "immediate things to do or fix.md",
+    "longer term things to do or fix.md",
+    "Useful commands.md",
+    "Engine Notes/2026 7 July",
     "Engine Notes/2026 6 June/24.md",
     "Engine Notes/2026 3 March/2026.03.28.md",
-    "Useful commands.md",
     "Engine Notes/2026 6 June/13.md",
-    "longer term things to do or fix.md",
     "Engine Notes/2026 6 June/3.md",
     "Engine Notes/2026 6 June",
     "Engine Notes/2026 5 May/15.md",
@@ -229,8 +232,6 @@
     "Imgui.md",
     "Scene Manager.md",
     "Bugs.md",
-    "Adding new components to engine.md",
-    "Player control.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

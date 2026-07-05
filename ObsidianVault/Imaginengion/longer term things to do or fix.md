@@ -1,8 +1,3 @@
-- make the rendering pipline in stages
-	- I am reintroducing the overlay/game layer split because i believe its the only realistic way to truly have the overlay stuff always on top for sure with no weird edge cases with the camera
-	- but i have a new idea that will help mitigate some of the performance of running 2 sdf passes.
-	- originally i thought to do the overlay shader, then game shader, the compose them together. but now i am realizing what if i computed the overlay shader first, then add it into the texture atlas. Then it can be a texture for the game layer pass. and for each pixel before marching I check to see if the pixel has been filled in on the overlay texture. if so then i will simply use that color instead of doing a full ray march. if its empty the continue with normal full ray march.
-	- this means instead of doing 2 full sdf passes I do one and then in the second I do whatever is not already done, and then i can skip the final composition shader fully
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine
 - i can split rendering into 2 parts one for overlay layer and one for game layer and then a 3rd pass to compose the overlay layer on top

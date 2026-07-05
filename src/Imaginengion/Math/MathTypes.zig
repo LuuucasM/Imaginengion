@@ -184,6 +184,15 @@ pub fn Vec3(comptime number_type: type) type {
         }
 
         //TODO: no test
+        pub fn Neg(self: Self) Self {
+            return Self{
+                .x = -self.x,
+                .y = -self.y,
+                .z = -self.z,
+            };
+        }
+
+        //TODO: no test
         pub fn Exp(self: Self) Self {
             return FromVector(@exp(self.ToVector()));
         }
