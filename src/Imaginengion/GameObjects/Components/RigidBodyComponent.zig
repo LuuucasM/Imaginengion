@@ -18,17 +18,6 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub const BodyType = union(enum) {
-    Surface: struct {
-        material: SurfaceMaterial.SurfaceMaterials,
-        data: SurfaceMaterial.SurfMatData,
-    },
-    Medium: struct {
-        material: MediumMaterial.MediumMaterials,
-        data: MediumMaterial.MedMatData,
-    },
-};
-
 mMass: f32 = 0.0,
 
 _InvMass: f32 = 0.0,

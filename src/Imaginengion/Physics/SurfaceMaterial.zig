@@ -39,6 +39,16 @@ pub const SurfaceShading = struct {
     KineticFriction: f32,
 };
 
+pub const SurfaceScaleIdentity: SurfMatData = .{
+    .PhysicsData = .{
+        .Restitution = 1.0,
+        .StaticFriction = 1.0,
+        .KineticFriction = 1.0,
+    },
+    .SoundData = .{},
+    .RenderData = .{},
+};
+
 const SurfaceDatabaseT = std.EnumArray(SurfaceMaterials, SurfMatData);
 
 pub const SurfaceDatabase: SurfaceDatabaseT = .init(.{

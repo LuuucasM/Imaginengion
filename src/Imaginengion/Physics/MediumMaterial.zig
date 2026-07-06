@@ -36,6 +36,15 @@ pub const MediumShading = struct {
     Scattering: Vec3(f32).VectorT,
 };
 
+pub const MediumScaleIdentity: MedMatData = .{
+    .PhysicsData = .{},
+    .SoundData = .{},
+    .RenderData = .{
+        .Absorption = .{ 1.0, 1.0, 1.0 },
+        .Scattering = .{ 1.0, 1.0, 1.0 },
+    },
+};
+
 const MediumDatabaseT = std.EnumArray(MediumMaterials, MedMatData);
 
 pub const MediumDatabase: MediumDatabaseT = .init(.{
