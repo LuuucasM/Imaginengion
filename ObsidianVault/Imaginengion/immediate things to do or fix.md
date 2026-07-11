@@ -1,11 +1,6 @@
 - I am mid changing over my material system to something else
-	- i am going to do like a material library that is just constant and can always be looked at
-	- then for things regarding materials like rigid body, various render components, sound components, etc will have an enum for what type of material it is
-	- then it will also have another struct that is like similar values used to be able to scale the material default values.
-	- I am also going to split it into 2, surface materials and mediums. because my renderer sort of already has the concept of a surface and a medium, i realized when doing physics that I should be considering the material/medium for physics as well. and i bet for audio i will need it as well to make more realistic sounding audio/render/physics. 
-	- I currently need to finish changing rigid body to use new material system
-		- I think first I need to make a struct in the Surface/Medium material .zig files first, structs to be modifiers, or i could use the SurMatData struct but have it all just be initialized to 1.0. I havnt decided yet
-	- then I will need to change rendering becuase I am going to split ShadingData into surface and medium SSBOs (separate them) which means I will need to modify QuadData, GlyphData, etc,
+	- With the new BodyMaterial struct I need to add it to Rigid body, quad/glyph
+	- then I will need to change rendering because I am going to split ShadingData into surface and medium SSBOs (separate them) which means I will need to modify QuadData, GlyphData, etc,
 	- I will also need to change setting the data in the buffers to accomodate new system
 	- also for materials I will have to make sure to not just update the values but also use the modifiers as well
 - fix all the bugs associated with the previous changes and make sure it actually runs

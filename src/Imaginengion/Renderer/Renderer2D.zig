@@ -204,6 +204,8 @@ pub fn DrawQuad(
     const world_rot = transform_component.GetWorldRotation();
     const world_scale = transform_component.GetWorldScale();
 
+    const scaled_material = quad_component.mMaterial.GetScaledMaterial();
+
     const shading_handle = switch (scene_scene_comp.mLayerType) {
         .GameLayer => blk: {
             try game_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{

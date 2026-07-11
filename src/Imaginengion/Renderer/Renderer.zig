@@ -32,6 +32,8 @@ const TextureManager = @import("../TextureManager/TextureManager.zig");
 const RenderPipeline = @import("RenderPipeline.zig");
 const PushConstants = RenderPipeline.SDFPushConstants;
 
+const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
+
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -42,24 +44,21 @@ pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
 pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayPipeline);
 
-pub const ShadingData = extern struct {
-    pub const SHADING_FLAG_TRANSPARENT: u32 = 1 << 0;
+pub const SurfShadingData = extern struct {
+    pub const SURFACE_TRANSPARENT: u32 = 1 << 0;
 
-    //texture data
+    Color: Vec4(f32).VectorT,
     TextureUV0: Vec2(f32).VectorT,
     TextureUV1: Vec2(f32).VectorT,
-    TilingFactor: f32, //note this one has to be a single f32 so that it packs into the Absorption Vec3 well
-
-    //material volume data
-    Absorption: Vec3(f32).VectorT,
-    Scatter: Vec3(f32).VectorT,
-
-    //material surface data
-    Color: Vec4(f32).VectorT,
-
+    TilingFactor: f32,
     Texturehandle: u32,
     SiblingShading: u32,
-    _pad0: [2]f32 = [2]f32{ 0, 0 },
+    _pad0: f32 = 9.9,
+};
+
+pub const MedShadingData = extern struct {
+    Absorption: Vec3(f32).VectorT,
+    Scattering: Vec3(f32).VectorT,
 };
 
 pub const ShapeType = enum(u32) {
@@ -69,27 +68,38 @@ pub const ShapeType = enum(u32) {
 };
 
 pub const ShadingBuffers = struct {
-    mShadingBuffer: SSBO = .{},
-    mShadingBufferBase: std.ArrayList(ShadingData) = .empty,
+    mSurfShadingBuff: SSBO = .{},
+    mSurfShadingBuffBase: std.ArrayList(SurfShadingData) = .empty,
+    mMedShadingBuff: SSBO = .{},
+    mMedShadingBuffBase: std.ArrayList(MedShadingData) = .empty,
     pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
-        self.mShadingBuffer.Init(engine_context, @sizeOf(ShadingData) * 100, 4, .Fragment);
-        self.mShadingBufferBase = try std.ArrayList(ShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+        self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 4, .Fragment);
+        self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.EngineAllocator(), 100);
+
+        self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 4, .Fragment);
+        self.mMedShadingBuffBase = try std.ArrayList(MedShadingData).initCapacity(engine_context.EngineAllocator(), 100);
     }
     pub fn Deinit(self: *ShadingBuffers, engine_context: *EngineContext) void {
-        self.mShadingBuffer.Deinit(engine_context);
-        self.mShadingBufferBase.deinit(engine_context.EngineAllocator());
+        self.mSurfShadingBuff.Deinit(engine_context);
+        self.mSurfShadingBuffBase.deinit(engine_context.EngineAllocator());
+
+        self.mMedShadingBuff.Deinit(engine_context);
+        self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
     }
     pub fn ClearAndFree(self: *ShadingBuffers, engine_allocator: std.mem.Allocator) void {
-        self.mShadingBufferBase.clearAndFree(engine_allocator);
+        self.mSurfShadingBuffBase.clearAndFree(engine_allocator);
+        self.mMedShadingBuffBase.clearAndFree(engine_allocator);
     }
     pub fn SetBuffers(self: *ShadingBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
         defer zone.Deinit();
 
-        const shading_byte_size = self.mShadingBufferBase.items.len * @sizeOf(ShadingData);
+        const surf_byte_size = self.mSurfShadingBuffBase.items.len * @sizeOf(SurfShadingData);
+        const med_byte_size = self.mMedShadingBuffBase.items.len * @sizeOf(MedShadingData);
 
         //shadings
-        _ = self.mShadingBuffer.SetData(engine_context, self.mShadingBufferBase.items.ptr, shading_byte_size, 0);
+        _ = self.mSurfShadingBuff.SetData(engine_context, self.mSurfShadingBuffBase.items.ptr, surf_byte_size, 0);
+        _ = self.mSurfShadingBuff.SetData(engine_context, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
 
         //fill out stats
         switch (world_type) {
@@ -111,14 +121,13 @@ pub const ShadingBuffers = struct {
 
 mPlatform: RenderPlatform = .{},
 mTextureManager: TextureManager = .{},
-mGamePipeline: GamePipielineT = .{},
-mOverlayPipeline: OverlayPipelineT = .{},
+mOverlayPipeline: SDFPipeline(.Overlay) = .empty,
+mGamePipeline: SDFPipeline(.Game) = .empty,
 mIntermediateFB: OutputFrameBuffer = .empty,
 mSDFPushConstants: PushConstants = undefined,
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
-mGameShading: ShadingBuffers = .{},
-mOverlayShading: ShadingBuffers = .{},
+mSDFShading: ShadingBuffers = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     self.mPlatform.Init(engine_context);
@@ -182,14 +191,15 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         .Simulate => engine_context.mEngineStats.SimulateWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
     }
 
-    //TODO: culling
-    //TODO: sorting
-    //TODO: other optimizsations?
-
     for (shapes_ids.items) |shape_id| {
+        //TODO: distance based culling
+        //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
         const shape_entity = scene_manager.GetEntity(shape_id);
         try self.DrawShape(engine_context, shape_entity);
     }
+
+    //TODO: sorting
+    //TODO: other optimizsations?
 
     try self.EndRendering(world_type, engine_context, frame_buffer);
 }

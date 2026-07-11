@@ -13,7 +13,7 @@ const Entity = @import("../Entity.zig");
 const Player = @import("../../Players/Player.zig");
 const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
 const PathType = @import("../../Assets/AssetManager.zig").PathType;
-const Material = @import("../../Materials/Material.zig");
+const Material = @import("../../Physics/Material.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const QuadComponent = @This();
 
@@ -30,7 +30,7 @@ pub const Ind: usize = blk: {
 mShouldRender: bool = true,
 mTexture: AssetHandle = .empty,
 mTexOptions: Texture2D.TexOptions = .{},
-mMaterial: Material = .{},
+mMaterial: Material.RenderMaterial = .default,
 mEditTexCoords: bool = false,
 
 pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
@@ -40,11 +40,7 @@ pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
 pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
     ImguiManager.RenderBool(&self.mShouldRender, "Should Render?");
 
-    ImguiManager.ImguiSeparator();
-
-    self.mMaterial.ImguiRender(engine_context);
-
-    ImguiManager.ImguiSeparator();
+    self.mMaterial.ImguiRender();
 
     const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
 

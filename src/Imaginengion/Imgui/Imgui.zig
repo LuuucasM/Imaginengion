@@ -549,7 +549,7 @@ pub fn RenderUnion(comptime T: type, value: *T, label: []const u8) !void {
         }
     }
 
-    try value.EditorRender();
+    try value.ImguiRender();
 }
 
 fn defaultOf(comptime PayloadT: type) PayloadT {
@@ -673,6 +673,10 @@ pub fn RenderTextInput(engine_context: *EngineContext, array: *std.ArrayList(u8)
     if (imgui.igInputText(label.ptr, text.ptr, text.len + 1, imgui.ImGuiInputTextFlags_CallbackResize, InputTextCallback, @ptrCast(&ctx))) {
         _ = array.swapRemove(array.items.len - 1);
     }
+}
+
+pub fn RenderText(text: []const u8) void {
+    imgui.igText(text);
 }
 
 fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {

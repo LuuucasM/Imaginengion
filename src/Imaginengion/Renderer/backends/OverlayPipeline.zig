@@ -14,8 +14,8 @@ const Vec4 = MathTypes.Vec4;
 const Vec3 = MathTypes.Vec3;
 const Vec2 = MathTypes.Vec2;
 
-const VertexShader = @embedFile("../../EngineAssets/shaders/SDFVertShader.spv");
-const FragmentShader = @embedFile("../../EngineAssets/shaders/SDFFragShaderOverlay.spv");
+const VertexShader = @import("SDFVertShader");
+const FragmentShader = @import("SDFVertShader");
 
 const VertexStageInfo: StageInfo = .{
     .mStage = .Vertex,

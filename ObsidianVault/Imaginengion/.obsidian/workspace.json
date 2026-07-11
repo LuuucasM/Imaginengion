@@ -199,9 +199,10 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
+    "Engine Notes/2026 7 July/6.md",
+    "immediate things to do or fix.md",
     "Engine Notes/2026 7 July/5.md",
     "Engine Notes/2026 7 July/1.md",
-    "immediate things to do or fix.md",
     "longer term things to do or fix.md",
     "Useful commands.md",
     "Engine Notes/2026 7 July",
@@ -231,7 +232,6 @@
     "ECS Manager.md",
     "Imgui.md",
     "Scene Manager.md",
-    "Bugs.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

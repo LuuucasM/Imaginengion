@@ -2,8 +2,7 @@ const std = @import("std");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
-const SurfaceMaterial = @import("../../Physics/SurfaceMaterial.zig");
-const MediumMaterial = @import("../../Physics/MediumMaterial.zig");
+const Material = @import("../../Physics/Material.zig");
 const RigidBodyComponent = @This();
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -19,6 +18,7 @@ pub const Ind: usize = blk: {
 };
 
 mMass: f32 = 0.0,
+mMaterialData: Material.PhysicsMaterial = .default,
 
 _InvMass: f32 = 0.0,
 _Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
@@ -34,8 +34,7 @@ pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
             self.mInvMass = 0.0;
         }
     }
-    ImguiManager.RenderFloatInput(&self.mRestitution, "Restitution", 0.01, 0.1);
-    ImguiManager.RenderFloatInput(&self.mFriction, "Friction", 0.01, 0.1);
+    ImguiManager.RenderUnion(Material.PhysicsMaterial, &self.mMaterialData, "Material");
 }
 
 /// Applies continuous force to the rigid body physically accurate

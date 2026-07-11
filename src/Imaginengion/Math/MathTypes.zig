@@ -369,6 +369,10 @@ pub fn Vec4(comptime number_type: type) type {
             }
         }
 
+        pub fn ToVec3(self: Self) Vec3(number_type) {
+            return .{ .x = self.x, .y = self.y, .z = self.z };
+        }
+
         pub fn FromScalar(scalar: number_type) Self {
             return FromVector(@splat(scalar));
         }

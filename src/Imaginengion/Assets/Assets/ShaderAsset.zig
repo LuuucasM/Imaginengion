@@ -30,10 +30,15 @@ const ShaderSources = struct {
 };
 
 pub const StageInfo = struct {
-    mStage: Stage,
-    mNumUniformBuffers: u32,
-    mNumStorageBuffers: u32,
     mNumSamplers: u32,
+    mNumROStorageTextures: u32,
+    mNumROStorageBuffers: u32,
+    mNumRWStorageTextures: u32,
+    mNumRWStorageBuffers: u32,
+    mNumUniformBuffers: u32,
+    mThreadCountX: u32,
+    mThreadCountY: u32,
+    mThreadCountZ: u32,
 };
 
 pub const Name: []const u8 = "ShaderAsset";

@@ -1,7 +1,7 @@
 const std = @import("std");
 
-const build_options = @import("build_options");
-pub const enable_tracy = build_options.enable_tracy;
+const debug_build_options = @import("debug_build_options");
+pub const enable_tracy = debug_build_options.enable_tracy;
 pub const tracy = if (enable_tracy) @import("Tracy") else void;
 
 pub const Zone = if (enable_tracy) struct {

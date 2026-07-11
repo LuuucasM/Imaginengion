@@ -7,7 +7,7 @@ const shaders = .{
     .{ "SDFFragShaderGame", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderGame.zig", "frag_game" },
 };
 
-pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
+pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, eng_module: *std.Build.Module) void {
     const shaders_step = b.step("shaders", "Build all SPIR-V shaders");
 
     const base_module = b.createModule(.{
@@ -32,6 +32,9 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
                 },
             }),
         });
+
+        eng_module.addAnonymousImport(s[0], .{ .root_source_file = obj.getEmittedBin() });
+
         const install = b.addInstallFile(
             obj.getEmittedBin(),
             "../src/Imaginengion/EngineAssets/shaders/" ++ s[0] ++ ".spv",
