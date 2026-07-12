@@ -509,7 +509,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
             .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
             .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
         },
-        &render_component.mFrameBuffer,
+        &render_component.mComputeTexture,
     );
 }
 
@@ -559,7 +559,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
                 .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
                 .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
             },
-            &render_component.mFrameBuffer,
+            &render_component.mComputeTexture,
         );
     }
 }

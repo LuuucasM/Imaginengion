@@ -88,20 +88,57 @@ pub const PhysicsMaterial = union(enum) {
         }
     }
 };
-pub const RenderMaterial = union(enum) {
-    Surface: struct {
-        Kind: SurfMat.SurfaceMaterials,
-        Scale: SurfMat.SurfRenderData,
-    },
-    Medium: struct {
-        Kind: MedMat.MediumMaterials,
-        Scale: MedMat.MedRenderData,
-    },
 
-    pub const default: RenderMaterial = .{ .Surface = .{
+pub const SurfaceRenderMat = struct {
+    Kind: SurfMat.SurfaceMaterials,
+    Scale: SurfMat.SurfRenderData,
+
+    pub const default: SurfaceRenderMat = .{
         .Kind = .Wood,
-        .Scale = SurfMat.SurfaceScaleIdentity,
-    } };
+        .Scale = SurfMat.SurfaceScaleIdentity.RenderData,
+    };
+
+    pub fn ImguiRender(self: SurfaceRenderMat) void {
+        ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
+        self.Scale.ImguiRender("Scale");
+    }
+
+    pub fn GetMaterialData(self: SurfaceRenderMat) SurfMat.SurfRenderData {
+        SurfMat.SurfaceDatabase.get(self.Kind).RenderData;
+    }
+
+    pub fn GetScaleData(self: SurfaceRenderMat) SurfMat.SurfRenderData {
+        return self.Scale;
+    }
+
+    pub fn GetScaledMaterial(self: SurfaceRenderMat) SurfMat.SurfRenderData {
+        _ = self;
+        return .{};
+    }
+};
+
+pub const MediumRenderMat = struct {
+    Kind: MedMat.MediumMaterials,
+    Scale: MedMat.MedRenderData,
+
+    pub const default: MediumRenderMat = .{
+        .Kind = .Wood,
+        .Scale = MedMat.MediumScaleIdentity.RenderData,
+    };
+
+    pub fn ImguiRender(self: MediumRenderMat) void {
+        ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
+        self.Scale.ImguiRender("Scale");
+    }
+};
+
+pub const RenderMaterial = union(enum) {
+    Surface: SurfaceRenderMat,
+    Medium: MediumRenderMat,
+
+    pub const default: RenderMaterial = .{
+        .Surface = .default,
+    };
 
     pub fn GetMaterialData(self: RenderMaterial) union(enum) {
         Surface: SurfMat.SurfRenderData,
@@ -149,14 +186,8 @@ pub const RenderMaterial = union(enum) {
 
     pub fn ImguiRender(self: RenderMaterial) void {
         switch (self) {
-            .Surface => |s| {
-                ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &s.Kind, "Surface Material");
-                s.Scale.ImguiRender("Scale");
-            },
-            .Medium => |m| {
-                ImguiManager.RenderEnum(MedMat.MediumMaterials, &m.Kind, "Medium Material");
-                m.Scale.ImguiRender("Scale");
-            },
+            .Surface => |s| s.ImguiRender(),
+            .Medium => |m| m.ImguiRender(),
         }
     }
 };

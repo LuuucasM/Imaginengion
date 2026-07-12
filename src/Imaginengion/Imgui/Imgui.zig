@@ -675,8 +675,8 @@ pub fn RenderTextInput(engine_context: *EngineContext, array: *std.ArrayList(u8)
     }
 }
 
-pub fn RenderText(text: []const u8) void {
-    imgui.igText(text);
+pub fn RenderText(text: [:0]const u8) void {
+    imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
 }
 
 fn InputTextCallback(data: [*c]imgui.ImGuiInputTextCallbackData) callconv(.c) c_int {

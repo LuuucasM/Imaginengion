@@ -6,6 +6,7 @@ const Tracy = @import("../Core/Tracy.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const EngineContext = @import("../Core/EngineContext.zig");
+const ComputeOutput = @import("Renderer.zig").ComputeOutput;
 const PushConstants = @import("RenderPipeline.zig");
 
 pub const StorageBufferBinding = struct {
@@ -29,8 +30,12 @@ pub fn Deinit(self: *Platform, window: *Window) void {
     self._Impl.Deinit(window);
 }
 
-pub fn BeginFrame(self: *Platform, window: *Window) bool {
-    return self._Impl.BeginFrame(window);
+pub fn BeginFrame(self: *Platform, window: *Window) void {
+    self._Impl.BeginFrame(window);
+}
+
+pub fn HasFrame(self: Platform) bool {
+    return self._Impl.HasFrame();
 }
 
 pub fn EndFrame(self: *Platform) void {
@@ -43,6 +48,10 @@ pub fn GetMaxTextureImageSlots(self: Platform) usize {
 
 pub fn GetDevice(self: Platform) *anyopaque {
     return self._Impl.GetDevice();
+}
+
+pub fn Present(self: Platform, compute_texture: *ComputeOutput) void {
+    self._Impl.Present(compute_texture);
 }
 
 pub fn GetCommandBuff(self: Platform) *anyopaque {

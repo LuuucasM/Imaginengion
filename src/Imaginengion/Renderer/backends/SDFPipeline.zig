@@ -19,28 +19,28 @@ pub const PipelineType = enum {
     Game,
 };
 
+const ShaderInfo: StageInfo = .{
+    .mNumSamplers = 2,
+    .mNumROStorageTextures = 0,
+    .mNumROStorageBuffers = 3,
+    .mNumRWStorageTextures = 1,
+    .mNumRWStorageBuffers = 0,
+    .mNumUniformBuffers = 1,
+    .mThreadCountX = 8,
+    .mThreadCountY = 8,
+    .mThreadCountZ = 1,
+};
+
+const Config: PipelineConfig = .{
+    .color_format = .RGBA8,
+    .enable_blend = true,
+};
+
 pub fn SDFPipeline(pipeline_type: PipelineType) type {
     return struct {
         const ComputeShader = switch (pipeline_type) {
             .Overlay => @import("OverlayCompute"),
             .Game => @import("GameCompute"),
-        };
-
-        const ShaderInfo: StageInfo = .{
-            .mNumSamplers = 2,
-            .mNumROStorageTextures = 0,
-            .mNumROStorageBuffers = 3,
-            .mNumRWStorageTextures = 1,
-            .mNumRWStorageBuffers = 0,
-            .mNumUniformBuffers = 1,
-            .mThreadCountX = 8,
-            .mThreadCountY = 8,
-            .mThreadCountZ = 1,
-        };
-
-        const Config: PipelineConfig = .{
-            .color_format = .RGBA8,
-            .enable_blend = true,
         };
 
         const Self = @This();
@@ -55,6 +55,7 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
 
             std.debug.assert(ComputeShader.len % 4 == 0);
+
             const create_info = sdl.SDL_GPUComputePipelineCreateInfo{
                 .code_size = ComputeShader.len,
                 .code = ComputeShader.ptr,
@@ -86,26 +87,8 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
             self.mPipeline = null;
         }
 
-        pub fn Begin(self: Self, cmd: *anyopaque, output_texture: *sdl.SDL_GPUTexture) *sdl.SDL_GPUComputePass {
-            const sdl_cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(cmd);
-
-            const storage_tex_binding = sdl.SDL_GPUStorageTextureReadWriteBinding{
-                .texture = output_texture,
-                .mip_level = 0,
-                .layer = 0,
-                .cycle = true,
-            };
-
-            const pass = sdl.SDL_BeginGPUComputePass(
-                sdl_cmd,
-                &storage_tex_binding,
-                1,
-                null, // no readwrite storage buffers
-                0,
-            ).?;
-
+        pub fn Bind(self: Self, pass: *sdl.SDL_GPUComputePass) void {
             sdl.SDL_BindGPUComputePipeline(pass, self.mPipeline);
-            return pass;
         }
 
         pub fn PushUniforms(_: Self, cmd: *anyopaque, push: PushConstants) void {
@@ -119,15 +102,11 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
             );
         }
 
-        /// group counts, not pixel counts — divide screen dims by threadcount, round up.
+        // group counts, not pixel counts — divide screen dims by threadcount, round up.
         pub fn Dispatch(_: Self, pass: *sdl.SDL_GPUComputePass, screen_w: u32, screen_h: u32) void {
             const groups_x = (screen_w + ShaderInfo.mThreadCountX - 1) / ShaderInfo.mThreadCountX;
             const groups_y = (screen_h + ShaderInfo.mThreadCountY - 1) / ShaderInfo.mThreadCountY;
             sdl.SDL_DispatchGPUCompute(pass, groups_x, groups_y, 1);
-        }
-
-        pub fn End(_: Self, pass: *sdl.SDL_GPUComputePass) void {
-            sdl.SDL_EndGPUComputePass(pass);
         }
     };
 }

@@ -30,7 +30,7 @@ pub const Ind: usize = blk: {
 mShouldRender: bool = true,
 mTexture: AssetHandle = .empty,
 mTexOptions: Texture2D.TexOptions = .{},
-mMaterial: Material.RenderMaterial = .default,
+mMaterial: Material.SurfaceRenderMat = .default,
 mEditTexCoords: bool = false,
 
 pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {

@@ -7,9 +7,9 @@ const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const ShadingData = @import("Renderer.zig").ShadingData;
 const PipelineType = @import("RenderPipeline.zig").PipelineType;
 const ShadingBuffers = @import("Renderer.zig").ShadingBuffers;
+const EShadingFlags = @import("Renderer.zig").EShadingFlags;
 
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
@@ -191,8 +191,7 @@ pub fn DrawQuad(
     transform_component: *EntityTransformComponent,
     quad_component: *QuadComponent,
     entity_scene_comp: *EntitySceneComponent,
-    game_shading: *ShadingBuffers,
-    overlay_shading: *ShadingBuffers,
+    shading_buff: *ShadingBuffers,
 ) !void {
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
@@ -204,39 +203,18 @@ pub fn DrawQuad(
     const world_rot = transform_component.GetWorldRotation();
     const world_scale = transform_component.GetWorldScale();
 
-    const scaled_material = quad_component.mMaterial.GetScaledMaterial();
-
-    const shading_handle = switch (scene_scene_comp.mLayerType) {
-        .GameLayer => blk: {
-            try game_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-                .TilingFactor = quad_component.mTexOptions.mTilingFactor,
-                .TextureUV0 = quad_component.mTexOptions.mTextureUV0.ToVector(),
-                .TextureUV1 = quad_component.mTexOptions.mTextureUV1.ToVector(),
-                .Texturehandle = texture_asset.GetTextureHandle(),
-                .Color = quad_component.mMaterial.mSurfaceColor.ToVector(),
-                .Absorption = quad_component.mMaterial.Absorption.ToVector(),
-                .SiblingShading = std.math.maxInt(u32),
-            });
-
-            break :blk game_shading.mShadingBufferBase.items.len - 1;
-        },
-        .OverlayLayer => blk: {
-            try overlay_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-                .TilingFactor = quad_component.mTexOptions.mTilingFactor,
-                .TextureUV0 = quad_component.mTexOptions.mTextureUV0.ToVector(),
-                .TextureUV1 = quad_component.mTexOptions.mTextureUV1.ToVector(),
-                .Texturehandle = texture_asset.GetTextureHandle(),
-                .Color = quad_component.mMaterial.mSurfaceColor.ToVector(),
-                .Absorption = quad_component.mMaterial.Absorption.ToVector(),
-                .SiblingShading = std.math.maxInt(u32),
-            });
-
-            break :blk overlay_shading.mShadingBufferBase.items.len - 1;
-        },
-    };
+    const shading_handle = shading_buff.AddSurface(
+        engine_context.EngineAllocator(),
+        quad_component.mTexOptions.mTilingFactor,
+        quad_component.mTexOptions.mTextureUV0,
+        quad_component.mTexOptions.mTextureUV1,
+        quad_component.mTexOptions.mTilingFactor,
+        texture_asset.GetTextureHandle(),
+        std.math.maxInt(u32),
+    );
 
     var shading_flag: u32 = 0;
-    if (quad_component.mMaterial.mOpaqueMode == .Transparent) shading_flag |= ShadingData.SHADING_FLAG_TRANSPARENT;
+    if (quad_component.mMaterial.mOpaqueMode == .Transparent) shading_flag |= EShadingFlags.SURFACE_TRANSPARENT.ToInt();
 
     switch (scene_scene_comp.mLayerType) {
         .GameLayer => try self.mGameData.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
@@ -262,8 +240,7 @@ pub fn DrawText(
     transform_component: *EntityTransformComponent,
     text_component: *TextComponent,
     entity_scene_comp: *EntitySceneComponent,
-    game_shading: *ShadingBuffers,
-    overlay_shading: *ShadingBuffers,
+    shading_buff: *ShadingBuffers,
 ) !void {
     const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
     defer zone.Deinit();
@@ -273,35 +250,18 @@ pub fn DrawText(
     const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
     const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
-    const texture_shading_handle: u32 = switch (scene_scene_comp.mLayerType) {
-        .GameLayer => blk: {
-            try game_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-                .TilingFactor = text_component.mTexOptions.mTilingFactor,
-                .TextureUV0 = text_component.mTexOptions.mTextureUV0.ToVector(),
-                .TextureUV1 = text_component.mTexOptions.mTextureUV1.ToVector(),
-                .Texturehandle = texture_asset.GetTextureHandle(),
-                .Color = text_component.mMaterial.mSurfaceColor.ToVector(),
-                .Absorption = text_component.mMaterial.Absorption.ToVector(),
-                .SiblingShading = std.math.maxInt(u32),
-            });
-            break :blk @intCast(game_shading.mShadingBufferBase.items.len - 1);
-        },
-        .OverlayLayer => blk: {
-            try overlay_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-                .TilingFactor = text_component.mTexOptions.mTilingFactor,
-                .TextureUV0 = text_component.mTexOptions.mTextureUV0.ToVector(),
-                .TextureUV1 = text_component.mTexOptions.mTextureUV1.ToVector(),
-                .Texturehandle = texture_asset.GetTextureHandle(),
-                .Color = text_component.mMaterial.mSurfaceColor.ToVector(),
-                .Absorption = text_component.mMaterial.Absorption.ToVector(),
-                .SiblingShading = std.math.maxInt(u32),
-            });
-            break :blk @intCast(overlay_shading.mShadingBufferBase.items.len - 1);
-        },
-    };
+    const texture_shading_handle = shading_buff.AddSurface(
+        engine_context.EngineAllocator(),
+        text_component.mTexOptions.mColor,
+        text_component.mTexOptions.mTextureUV0,
+        text_component.mTexOptions.mTextureUV1,
+        text_component.mTexOptions.mTilingFactor,
+        texture_asset.GetTextureHandle(),
+        std.math.maxInt(u32),
+    );
 
     var texture_shading_flags: u32 = 0;
-    if (text_component.mMaterial.mOpaqueMode == .Transparent) texture_shading_flags |= ShadingData.SHADING_FLAG_TRANSPARENT;
+    if (text_component.mMaterial.mOpaqueMode == .Transparent) texture_shading_flags |= EShadingFlags.SURFACE_TRANSPARENT.ToInt();
 
     const world_pos = transform_component.GetWorldPosition();
 
@@ -327,32 +287,15 @@ pub fn DrawText(
             pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
-        const atlas_shading_handle: u32 = switch (scene_scene_comp.mLayerType) {
-            .GameLayer => blk: {
-                try game_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-                    .TilingFactor = 1.0,
-                    .TextureUV0 = (glyph.mAtlasTexel0.ToVector() / text_asset.mAtlasSize.ToVector()),
-                    .TextureUV1 = (glyph.mAtlasTexel1.ToVector() / text_asset.mAtlasSize.ToVector()),
-                    .Texturehandle = atlas_asset.GetTextureHandle(),
-                    .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
-                    .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },
-                    .SiblingShading = texture_shading_handle,
-                });
-                break :blk @intCast(game_shading.mShadingBufferBase.items.len - 1);
-            },
-            .OverlayLayer => blk: {
-                try overlay_shading.mShadingBufferBase.append(engine_context.EngineAllocator(), .{
-                    .TilingFactor = 1.0,
-                    .TextureUV0 = (glyph.mAtlasTexel0.ToVector() / text_asset.mAtlasSize.ToVector()),
-                    .TextureUV1 = (glyph.mAtlasTexel1.ToVector() / text_asset.mAtlasSize.ToVector()),
-                    .Texturehandle = atlas_asset.GetTextureHandle(),
-                    .Color = Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
-                    .Absorption = Vec3(f32).VectorT{ 0.0, 0.0, 0.0 },
-                    .SiblingShading = texture_shading_handle,
-                });
-                break :blk @intCast(overlay_shading.mShadingBufferBase.items.len - 1);
-            },
-        };
+        const atlas_shading_handle = shading_buff.AddSurface(
+            engine_context.EngineAllocator(),
+            Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
+            (glyph.mAtlasTexel0.ToVector() / text_asset.mAtlasSize.ToVector()),
+            (glyph.mAtlasTexel1.ToVector() / text_asset.mAtlasSize.ToVector()),
+            1.0,
+            atlas_asset.GetTextureHandle(),
+            texture_shading_handle,
+        );
 
         const left = glyph.mPlaneMin.x;
         const top = glyph.mPlaneMin.y;

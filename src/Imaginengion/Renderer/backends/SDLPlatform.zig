@@ -4,6 +4,7 @@ const Window = @import("../../Windows/Window.zig");
 const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
+const ComputeOutput = @import("../Renderer.zig").ComputeOutput;
 const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
 
 const sdl = @import("../../Core/CImports.zig").sdl;
@@ -12,6 +13,9 @@ const SDLPlatform = @This();
 
 mDevice: *sdl.SDL_GPUDevice = undefined,
 mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
+mSwapchainTexture: ?*sdl.SDL_GPUTexture = null,
+mSwapchainWidth: u32 = 0,
+mSwapchainHeight: u32 = 0,
 
 pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
@@ -94,7 +98,18 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
         return false;
     }
 
+    self.mSwapchainTexture = swapchain_tex;
+    self.mSwapchainWidth = width;
+    self.mSwapchainHeight = height;
+
     return true;
+}
+
+pub fn HasFrame(self: SDLPlatform) bool {
+    if (self.mCurrentCmdBuffer != null and self.mSwapchainTexture != null) {
+        return true;
+    }
+    return false;
 }
 
 pub fn EndFrame(self: *SDLPlatform) void {
@@ -103,6 +118,35 @@ pub fn EndFrame(self: *SDLPlatform) void {
     _ = sdl.SDL_SubmitGPUCommandBuffer(self.mCurrentCmdBuffer);
 
     self.mCurrentCmdBuffer = null;
+}
+
+pub fn Present(self: SDLPlatform, compute_texture: *ComputeOutput) void {
+    const blit_info = sdl.SDL_GPUBlitInfo{
+        .source = .{
+            .texture = compute_texture.GetTexture(),
+            .mip_level = 0,
+            .layer_or_depth_plane = 0,
+            .x = 0,
+            .y = 0,
+            .w = @intCast(compute_texture.GetWidth()),
+            .h = @intCast(compute_texture.GetHeight()),
+        },
+        .destination = .{
+            .texture = self.mSwapchainTexture.?,
+            .mip_level = 0,
+            .layer_or_depth_plane = 0,
+            .x = 0,
+            .y = 0,
+            .w = self.mPlatform.mSwapchainWidth,
+            .h = self.mPlatform.mSwapchainHeight,
+        },
+        .load_op = sdl.SDL_GPU_LOADOP_DONT_CARE,
+        .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 0 },
+        .flip_mode = sdl.SDL_FLIP_NONE,
+        .filter = sdl.SDL_GPU_FILTER_NEAREST,
+        .cycle = false,
+    };
+    sdl.SDL_BlitGPUTexture(self.mCurrentCmdBuffer.?, &blit_info);
 }
 
 pub fn GetDevice(self: SDLPlatform) *sdl.SDL_GPUDevice {

@@ -5,7 +5,7 @@ const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const OutputFrameBuffer = @import("../../Renderer/Renderer.zig").OutputFrameBuffer;
+const ComputeOutput = @import("../../Renderer/Renderer.zig").ComputeOutput;
 
 const RenderTargetComponent = @This();
 
@@ -18,14 +18,14 @@ pub const Ind: usize = blk: {
     }
 };
 
-mFrameBuffer: OutputFrameBuffer = .empty,
+mComputeTexture: ComputeOutput = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
-    try self.mFrameBuffer.Deinit(engine_context);
+    try self.mComputeTexture.Deinit(engine_context);
 }
 
 pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, width: usize, height: usize) !void {
-    try self.mFrameBuffer.Resize(engine_context, width, height);
+    try self.mComputeTexture.Resize(engine_context, width, height);
 }
 
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
@@ -37,10 +37,8 @@ pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!RenderTargetComponent {
+pub fn jsonParse(_: std.mem.Allocator, reader: anytype, _: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!RenderTargetComponent {
     if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
 
     while (true) {
         const token = try reader.next();
@@ -56,7 +54,5 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.jso
         }
     }
 
-    return RenderTargetComponent{
-        .mFrameBuffer = .empty.Init(engine_context, 1600, 900),
-    };
+    return RenderTargetComponent{};
 }

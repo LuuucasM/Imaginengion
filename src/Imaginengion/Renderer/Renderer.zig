@@ -30,6 +30,7 @@ const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const RenderPipeline = @import("RenderPipeline.zig");
+const ComputeTexture = @import("../ComputeTexture/ComputeTexture.zig").ComputeStorageTexture;
 const PushConstants = RenderPipeline.SDFPushConstants;
 
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
@@ -40,13 +41,21 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const Renderer = @This();
 
+pub const ComputeOutput = ComputeTexture(.BGRA8);
+
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
 pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayPipeline);
 
-pub const SurfShadingData = extern struct {
-    pub const SURFACE_TRANSPARENT: u32 = 1 << 0;
+pub const EShadingFlags = enum(u32) {
+    SURFACE_TRANSPARENT = 1 << 0,
 
+    pub fn ToInt(self: EShadingFlags) u32 {
+        return @intFromEnum(self);
+    }
+};
+
+pub const SurfShadingData = extern struct {
     Color: Vec4(f32).VectorT,
     TextureUV0: Vec2(f32).VectorT,
     TextureUV1: Vec2(f32).VectorT,
@@ -86,6 +95,24 @@ pub const ShadingBuffers = struct {
         self.mMedShadingBuff.Deinit(engine_context);
         self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
     }
+    pub fn AddSurface(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), texture_uv0: Vec2(f32), texture_uv1: Vec2(f32), tiling_factor: f32, texture_handle: u32, sibling_shading: u32) usize {
+        self.mSurfShadingBuffBase.append(engine_allocator, .{
+            .Color = color.ToVector(),
+            .TextureUV0 = texture_uv0.ToVector(),
+            .TextureUV1 = texture_uv1.ToVector(),
+            .TilingFactor = tiling_factor,
+            .Texturehandle = texture_handle,
+            .SiblingShading = sibling_shading,
+        });
+
+        return self.mSurfShadingBuffBase.items.len - 1;
+    }
+    pub fn AddMedium(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, absorption: Vec3(f32), scattering: Vec3(f32)) void {
+        self.mMedShadingBuffBase.append(engine_allocator, .{
+            .Absorption = absorption.ToVector(),
+            .Scattering = scattering.ToVector(),
+        });
+    }
     pub fn ClearAndFree(self: *ShadingBuffers, engine_allocator: std.mem.Allocator) void {
         self.mSurfShadingBuffBase.clearAndFree(engine_allocator);
         self.mMedShadingBuffBase.clearAndFree(engine_allocator);
@@ -104,18 +131,25 @@ pub const ShadingBuffers = struct {
         //fill out stats
         switch (world_type) {
             .Game => {
-                engine_context.mEngineStats.GameWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
+                engine_context.mEngineStats.GameWorldStats.mRenderStats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
             },
             .Editor => {
-                engine_context.mEngineStats.EditorWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
+                engine_context.mEngineStats.EditorWorldStats.mRenderStats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
             },
             .Simulate => {
-                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.ShadingsNum = @intCast(self.mShadingBufferBase.items.len);
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
+                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
             },
         }
     }
     pub fn BindBuffers(self: ShadingBuffers, render_pass: *anyopaque) void {
-        self.mShadingBuffer.Bind(render_pass);
+        self.mSurfShadingBuff.Bind(render_pass);
+        self.mMedShadingBuff.Bind(render_pass);
     }
 };
 
@@ -123,7 +157,6 @@ mPlatform: RenderPlatform = .{},
 mTextureManager: TextureManager = .{},
 mOverlayPipeline: SDFPipeline(.Overlay) = .empty,
 mGamePipeline: SDFPipeline(.Game) = .empty,
-mIntermediateFB: OutputFrameBuffer = .empty,
 mSDFPushConstants: PushConstants = undefined,
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
@@ -140,13 +173,11 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     try self.mR2D.Init(engine_context);
     self.mR3D.Init();
 
-    try self.mGameShading.Init(engine_context);
-    try self.mOverlayShading.Init(engine_context);
+    try self.mSDFShading.Init(engine_context);
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
-    self.mGameShading.Deinit(engine_context);
-    self.mOverlayShading.Deinit(engine_context);
+    self.mSDFShading.Deinit(engine_context);
     self.mTextureManager.Deinit(engine_context);
     self.mGamePipeline.Deinit(engine_context);
     self.mOverlayPipeline.Deinit(engine_context);
@@ -156,11 +187,13 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, frame_buffer: *OutputFrameBuffer) !void {
+pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput) !void {
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
 
-    if (!self.mPlatform.BeginFrame(&engine_context.mAppWindow)) return;
+    self.mPlatform.BeginFrame(&engine_context.mAppWindow);
+
+    if (!self.mPlatform.HasFrame()) return;
 
     self.mPlatform.PushDebugGroup("Frame\x00");
 
@@ -201,7 +234,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     //TODO: sorting
     //TODO: other optimizsations?
 
-    try self.EndRendering(world_type, engine_context, frame_buffer);
+    try self.EndRendering(world_type, engine_context, compute_texture);
 }
 
 fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
@@ -209,8 +242,7 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
     defer zone.Deinit();
 
     self.mR2D.StartBatch(engine_allocator);
-    self.mGameShading.ClearAndFree(engine_allocator);
-    self.mOverlayShading.ClearAndFree(engine_allocator);
+    self.mSDFShading.ClearAndFree(engine_allocator);
 }
 
 fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) anyerror!void {
@@ -227,8 +259,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
             transform_component,
             quad_component,
             entity_scene_comp,
-            &self.mGameShading,
-            &self.mOverlayShading,
+            &self.mSDFShading,
         );
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
@@ -237,73 +268,66 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
             transform_component,
             text_component,
             entity_scene_comp,
-            &self.mGameShading,
-            &self.mOverlayShading,
+            &self.mSDFShading,
         );
     }
 }
 
-fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, frame_buffer: *OutputFrameBuffer) !void {
+fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, compute_texture: *ComputeOutput) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
     self.mPlatform.PushDebugGroup("End Rendering\x00");
 
     const cmd = self.mPlatform.GetCommandBuff();
-    try self.mIntermediateFB.Resize(engine_context, frame_buffer.GetWidth(), frame_buffer.GetHeight());
 
     //====================first overlay render pipeline======================================
     self.mPlatform.PushDebugGroup("Upload Buffers - Overlay\x00");
     try self.mR2D.SetBuffers(world_type, engine_context, .OverlayPipeline);
-    try self.mOverlayShading.SetBuffers(world_type, engine_context);
+    try self.mSDFShading.SetBuffers(world_type, engine_context);
     self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw - Overlay\x00");
-    const overlay_render_pass = self.mIntermediateFB.BeginRenderPass(engine_context);
+    const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
 
-    self.mOverlayPipeline.Bind(overlay_render_pass);
-
-    self.mR2D.BindBuffers(overlay_render_pass, .OverlayPipeline);
-    self.mOverlayShading.BindBuffers(overlay_render_pass);
-
-    self.mTextureManager.Bind(overlay_render_pass);
+    self.mOverlayPipeline.Bind(overlay_compute_pass);
+    self.mR2D.BindBuffers(overlay_compute_pass, .OverlayPipeline);
+    self.mSDFShading.BindBuffers(overlay_compute_pass);
+    self.mTextureManager.Bind(overlay_compute_pass);
 
     self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
     self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
     self.mOverlayPipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
-    self.mOverlayPipeline.Draw(overlay_render_pass);
-    self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
+    self.mOverlayPipeline.Dispatch(overlay_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
 
-    self.mIntermediateFB.EndRenderPass(overlay_render_pass);
+    compute_texture.EndComputePass(overlay_compute_pass);
+    self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
     //=======================================end overlay render pipeline============================
 
     //=====================================now for game layer render pipeline======================================================
     self.mPlatform.PushDebugGroup("Upload Buffers - Game\x00");
     try self.mR2D.SetBuffers(world_type, engine_context, .GamePipeline);
-    try self.mGameShading.SetBuffers(world_type, engine_context);
+    try self.mSDFShading.SetBuffers(world_type, engine_context);
     self.mPlatform.PopDebugGroup();
 
     self.mPlatform.PushDebugGroup("Draw - Game\x00");
-    const game_render_pass = frame_buffer.BeginRenderPass(engine_context);
+    const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);
 
-    self.mGamePipeline.Bind(game_render_pass);
-
-    self.mR2D.BindBuffers(game_render_pass, .GamePipeline);
-    self.mGameShading.BindBuffers(game_render_pass);
-
-    self.mTextureManager.Bind(game_render_pass);
-
-    self.mIntermediateFB.Bind(game_render_pass, 0, 1);
+    self.mGamePipeline.Bind(game_compute_pass);
+    self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
+    self.mSDFShading.BindBuffers(game_compute_pass);
+    self.mTextureManager.Bind(game_compute_pass);
 
     self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .GamePipeline);
     self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .GamePipeline);
     self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
-    self.mGamePipeline.Draw(game_render_pass);
-    self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
+    self.mGamePipeline.Dispatch(game_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
 
-    frame_buffer.EndRenderPass(game_render_pass);
+    compute_texture.EndComputePass(game_compute_pass);
+    self.mPlatform.Present(compute_texture);
+    self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
     //=====================================end game layer render pipeline ========================================================
 
     self.mPlatform.PopDebugGroup(); //pop end rendering group

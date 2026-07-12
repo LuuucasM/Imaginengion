@@ -9,7 +9,7 @@ const FileMetaData = AssetsList.FileMetaData;
 const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PathType = @import("../../Assets/AssetManager.zig").PathType;
-const Material = @import("../../Materials/Material.zig");
+const Material = @import("../../Physics/Material.zig");
 const TextComponent = @This();
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -29,7 +29,7 @@ mText: std.ArrayList(u8) = .empty,
 mTextAssetHandle: AssetHandle = .{},
 mTexHandle: AssetHandle = .{},
 mTexOptions: Texture2D.TexOptions = .{},
-mMaterial: Material = .{},
+mMaterial: Material.SurfaceRenderMat = .{},
 mFontSize: f32 = 9,
 mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 mEngineAllocator: std.mem.Allocator = undefined,
