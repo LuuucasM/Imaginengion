@@ -65,6 +65,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .ToNode = 0,
         .SiblingEdge = RayMarcher.NO_EDGE,
         .AccumColor = default_color,
+        .MaterialHandle = 0,
     };
     marcher.mNodes[0].FirstEdge = 0;
     marcher.mEdgeCount = 1;

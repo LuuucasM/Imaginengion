@@ -27,24 +27,25 @@ const SKY_COLOR: Vec3(f32) = .{ .x = 0.53, .y = 0.81, .z = 0.92 };
 
 //NOTE: This represents a surface that we hit
 pub const Node = struct {
+    AccumColor: Vec4(f32),
     Point: Vec3(f32),
     Normal: Vec3(f32),
+    TextureUV: Vec3(f32),
     ParentEdge: u32,
     FirstEdge: u32,
     MaterialHandle: u32,
-    AccumColor: Vec4(f32),
-    TextureUV: Vec3(f32),
     ShapeT: ShapeType,
 };
 
 //NOTE: This represents travelling through volume
 pub const Edge = struct {
+    AccumColor: Vec4(f32),
     Direction: Vec3(f32),
     Length: f32,
     FromNode: u32,
     ToNode: u32,
     SiblingEdge: u32,
-    AccumColor: Vec4(f32),
+    MaterialHandle: u32,
 };
 
 const ObjectData = extern struct {
@@ -204,6 +205,7 @@ pub fn March(self: *Self, quads: anytype, glyphs: anytype, shading_data: anytype
                     .ToNode = 0,
                     .SiblingEdge = NO_EDGE,
                     .AccumColor = self.mDefaultColor,
+                    .MaterialHandle = 0,
                 };
 
                 self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);

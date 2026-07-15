@@ -33,6 +33,8 @@ const RenderPipeline = @import("RenderPipeline.zig");
 const ComputeTexture = @import("../ComputeTexture/ComputeTexture.zig").ComputeStorageTexture;
 const PushConstants = RenderPipeline.SDFPushConstants;
 
+const MediumMaterial = @import("../Physics/MediumMaterial.zig");
+
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
@@ -46,6 +48,12 @@ pub const ComputeOutput = ComputeTexture(.BGRA8);
 pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
 pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayPipeline);
+
+pub const RenderingMode = enum {
+    Overlay,
+    Game,
+    OverlayGame,
+};
 
 pub const EShadingFlags = enum(u32) {
     SURFACE_TRANSPARENT = 1 << 0,
@@ -187,7 +195,7 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput) !void {
+pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
 
@@ -234,7 +242,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     //TODO: sorting
     //TODO: other optimizsations?
 
-    try self.EndRendering(world_type, engine_context, compute_texture);
+    try self.EndRendering(world_type, engine_context, compute_texture, rendering_mode);
 }
 
 fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
@@ -243,6 +251,10 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) void {
 
     self.mR2D.StartBatch(engine_allocator);
     self.mSDFShading.ClearAndFree(engine_allocator);
+
+    //NOTE: temporary just add air as the medium
+    const air_mat = MediumMaterial.MediumDatabase.get(.Air);
+    self.mSDFShading.AddMedium(engine_allocator, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
 }
 
 fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) anyerror!void {
@@ -273,7 +285,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
     }
 }
 
-fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, compute_texture: *ComputeOutput) !void {
+fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
@@ -282,6 +294,10 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     const cmd = self.mPlatform.GetCommandBuff();
 
     //====================first overlay render pipeline======================================
+    switch (rendering_mode) {
+        .Overlay, .OverlayGame => {},
+        .Game => {},
+    }
     self.mPlatform.PushDebugGroup("Upload Buffers - Overlay\x00");
     try self.mR2D.SetBuffers(world_type, engine_context, .OverlayPipeline);
     try self.mSDFShading.SetBuffers(world_type, engine_context);
