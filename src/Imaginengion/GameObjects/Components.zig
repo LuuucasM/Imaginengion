@@ -15,6 +15,7 @@ pub const ScriptComponent = @import("Components/ScriptComponent.zig");
 pub const TextComponent = @import("Components/TextComponent.zig");
 pub const ViewpointComponent = @import("Components/ViewpointComponent.zig");
 pub const RenderTargetComponent = @import("Components/RenderTargetComponent.zig");
+pub const MainEntityComponent = @import("Components/MainEntityComponent.zig");
 
 const TagComponents = @import("Components/TagComponents.zig");
 pub const OnKeyPressedScript = TagComponents.OnKeyPressedScript;
@@ -27,6 +28,7 @@ pub const ComponentsList = [_]type{
     ColliderComponent,
     UUIDComponent,
     NameComponent,
+    MainEntityComponent,
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
@@ -48,6 +50,7 @@ pub const SerializeList = [_]type{
     ColliderComponent,
     UUIDComponent,
     RenderTargetComponent,
+    MainEntityComponent,
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
@@ -63,6 +66,7 @@ pub const ComponentPanelList = [_]type{
     AudioComponent,
     ColliderComponent,
     UUIDComponent,
+    MainEntityComponent,
     RenderTargetComponent,
     NameComponent,
     PlayerSlotComponent,
@@ -84,6 +88,7 @@ pub const EComponents = enum(u16) {
     ColliderComponent = ColliderComponent.Ind,
     UUIDComponent = UUIDComponent.Ind,
     NameComponent = NameComponent.Ind,
+    MainEntityComponent = MainEntityComponent.Ind,
     PlayerSlotComponent = PlayerSlotComponent.Ind,
     QuadComponent = QuadComponent.Ind,
     RigidBodyComponent = RigidBodyComponent.Ind,

@@ -90,10 +90,10 @@ pub const ShadingBuffers = struct {
     mMedShadingBuff: SSBO = .{},
     mMedShadingBuffBase: std.ArrayList(MedShadingData) = .empty,
     pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
-        self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 4, .Fragment);
+        self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 2, .Fragment);
         self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.EngineAllocator(), 100);
 
-        self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 4, .Fragment);
+        self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 3, .Fragment);
         self.mMedShadingBuffBase = try std.ArrayList(MedShadingData).initCapacity(engine_context.EngineAllocator(), 100);
     }
     pub fn Deinit(self: *ShadingBuffers, engine_context: *EngineContext) void {

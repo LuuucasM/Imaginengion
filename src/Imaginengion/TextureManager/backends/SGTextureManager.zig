@@ -168,7 +168,7 @@ pub fn Bind(self: SGTextureManager, render_pass: *anyopaque) void {
         .texture = self.mTexture,
         .sampler = self.mSampler,
     };
-    sdl.SDL_BindGPUFragmentSamplers(sdl_render_pass, 0, &binding, 1);
+    sdl.SDL_BindGPUFragmentSamplers(sdl_render_pass, 0, &binding, 0);
 }
 
 pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {

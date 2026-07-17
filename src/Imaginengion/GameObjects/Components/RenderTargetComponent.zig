@@ -4,7 +4,7 @@ const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const OutputFrameBuffer = @import("../../Renderer/Renderer.zig").OutputFrameBuffer;
+const ComputeOutput = @import("../../Renderer/Renderer.zig").ComputeOutput;
 const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
 
 const RenderTargetComponent = @This();
@@ -19,14 +19,14 @@ pub const Ind: usize = blk: {
     }
 };
 
-mFrameBuffer: OutputFrameBuffer = .empty,
+mComputeTexture: ComputeOutput = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
-    try self.mFrameBuffer.Deinit(engine_context);
+    try self.mComputeTexture.Deinit(engine_context);
 }
 
 pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
-    return self.mFrameBuffer.GetColorTexture(0);
+    return self.mComputeTexture.GetColorTexture(0);
 }
 
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
@@ -57,11 +57,11 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.jso
         }
     }
 
-    var frame_buffer: OutputFrameBuffer = .empty;
-    frame_buffer.Init(engine_context, 1600, 900) catch |err| {
+    var compute_texture: ComputeOutput = .empty;
+    compute_texture.Init(engine_context, 1600, 900) catch |err| {
         std.debug.print("{}", .{err});
         @panic("couldnt make frame buffer ahhh!");
     };
 
-    return RenderTargetComponent{ .mFrameBuffer = frame_buffer };
+    return RenderTargetComponent{ .mComputeTexture = compute_texture };
 }

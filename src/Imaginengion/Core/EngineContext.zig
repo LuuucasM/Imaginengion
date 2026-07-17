@@ -101,6 +101,8 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mAudioManager.Init();
     try self.mInputManager.Init(self.EngineAllocator());
 
+    try self.mPhysicsManager.Init(self.EngineAllocator());
+
     try self.mGameWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mEditorWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
     try self.mSimulateWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());

@@ -2,7 +2,8 @@ const std = @import("std");
 const PushConstants = @import("IM").PushConstants;
 const QuadData = @import("IM").QuadData;
 const GlyphData = @import("IM").GlyphData;
-const ShadingData = @import("IM").ShadingData;
+const SurfShadingData = @import("IM").SurfShadingData;
+const MedShadingData = @import("IM").MedShadingData;
 const RayMarcher = @import("IM").RayMarcher;
 const Vec2 = @import("IM").Vec2;
 const Vec3 = @import("IM").Vec3;
@@ -49,8 +50,11 @@ pub const QuadsBuf = extern struct { ptr: QuadsArray };
 const GlyphsArray = @SpirvType(.{ .runtime_array = GlyphData });
 pub const GlyphsBuf = extern struct { ptr: GlyphsArray };
 
-const ShadingArray = @SpirvType(.{ .runtime_array = ShadingData });
-pub const ShadingBuf = extern struct { ptr: ShadingArray };
+const SurfShadingArray = @SpirvType(.{ .runtime_array = SurfShadingData });
+pub const SurfShadingBuf = extern struct { ptr: SurfShadingArray };
+
+const MedShadingArray = @SpirvType(.{ .runtime_array = MedShadingData });
+pub const MedShadingBuf = extern struct { ptr: MedShadingArray };
 
 pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 3, .binding = 0 } } });
 
@@ -59,14 +63,18 @@ pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name
 //layout(set = 2, binding = 1) uniform sampler
 pub const OutTexture = @extern(*addrspace(.constant) Sampler2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
 
-//layout(set = 2, binding = 2) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
-pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
+//layout(set = 2, binding = 2) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
+pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
 
-//layout(set = 2, binding = 3) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
-pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
+//layout(set = 2, binding = 3) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
+pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
 
-//layout(set = 2, binding = 4) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
-pub const ShadingSSBO = @extern(*addrspace(.storage_buffer) ShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
+//layout(set = 2, binding = 4) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
+pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
+
+//layout(set = 2, binding = 5) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
+pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 5 } } });
+
 pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3(f32).VectorT) Vec4(f32).VectorT {
     return asm volatile (
         \\%sampler_ptr    = OpTypePointer UniformConstant %ty

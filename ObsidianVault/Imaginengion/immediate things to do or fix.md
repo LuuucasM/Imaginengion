@@ -6,4 +6,4 @@
 - fix all the bugs associated with the previous changes and make sure it actually runs
 	- note i may have to wait a bit still for this because there are some bugs with master that i think will prevent the shader from producing valid spirv still so just hold on :)
 - debug, add tests, add asserts, etc
-	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!
+	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!'

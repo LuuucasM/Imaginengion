@@ -56,7 +56,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             const pass = sdl.SDL_BeginGPUComputePass(
                 cmd,
                 &storage_tex_binding,
-                1,
+                1, //NOTE: maigc number 1 here is that the binding for output texture is set to 1 on the shader
                 null,
                 0,
             );

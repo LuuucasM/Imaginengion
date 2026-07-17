@@ -94,7 +94,7 @@ pub const SurfaceRenderMat = struct {
     Scale: SurfMat.SurfRenderData,
 
     pub const default: SurfaceRenderMat = .{
-        .Kind = .Wood,
+        .Kind = .Custom,
         .Scale = SurfMat.SurfaceScaleIdentity.RenderData,
     };
 
@@ -122,7 +122,7 @@ pub const MediumRenderMat = struct {
     Scale: MedMat.MedRenderData,
 
     pub const default: MediumRenderMat = .{
-        .Kind = .Wood,
+        .Kind = .Custom,
         .Scale = MedMat.MediumScaleIdentity.RenderData,
     };
 

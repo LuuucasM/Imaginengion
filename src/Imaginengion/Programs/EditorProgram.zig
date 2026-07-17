@@ -485,8 +485,8 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
     const world_pos = transform_component.GetWorldPosition();
 
     try switch (viewport_type) {
-        .ViewportPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-        .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+        .ViewportPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+        .PlayPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
     };
 
     const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
@@ -535,8 +535,8 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
         const world_pos = transform_component.GetWorldPosition();
 
         try switch (viewport_type) {
-            .ViewportPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-            .PlayPanel => render_component.mFrameBuffer.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+            .ViewportPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
+            .PlayPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
         };
 
         const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
@@ -573,7 +573,7 @@ fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, vi
     var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
     var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
-    try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mFrameBuffer);
+    try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mComputeTexture);
     try area_rects.append(engine_context.FrameAllocator(), viewpoint_component.mAreaRect);
 
     switch (viewport_type) {
@@ -604,7 +604,7 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
         const possess_component = player.GetComponent(PossessComponent).?;
         const render_component = player.GetComponent(PlayerRenderComponent).?;
         const viewpoint_component = possess_component.mPossessedEntity.GetComponent(ViewpointComponent).?;
-        try frame_buffers.append(frame_allocator, &render_component.mFrameBuffer);
+        try frame_buffers.append(frame_allocator, &render_component.mComputeTexture);
         try area_rects.append(frame_allocator, viewpoint_component.mAreaRect);
     }
 

@@ -304,6 +304,13 @@ pub fn StaticSkipField(size: usize) type {
             if (self.mSkipField[0] >= size) return null else return self.mSkipField[0];
         }
 
+        pub fn GetFirstSkipped(self: Self) ?usize {
+            for (self.mSkipField, 0..) |ele, i| {
+                if (ele != 0) return i;
+            }
+            return null;
+        }
+
         fn _ValidateIndexType(index_t: type) void {
             const type_info = @typeInfo(index_t);
 

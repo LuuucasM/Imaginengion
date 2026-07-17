@@ -14,6 +14,7 @@ const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const SceneComponents = @import("../Scene/SceneComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
+const CollisionManager = @import("CollisionManager.zig");
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -29,25 +30,27 @@ const PhysicsManager = @This();
 const InternalData = struct {
     pub const empty: InternalData = .{
         .Accumulator = 0,
-        .Contacts = .empty,
     };
 
     Accumulator: f32,
-    Contacts: std.ArrayList(Contact),
 };
 
 const PHYSICS_DT: f32 = 1.0 / 60.0;
-const PERCENT: f32 = 0.8;
-const SLOP: f32 = 0.01;
-const SOLVER_ITERS: u32 = 4;
+
 const SUB_STEPS: u32 = 4;
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
+
+_CollisionManager: CollisionManager = .empty,
 _InternalData: InternalData = .empty,
+
+pub fn Init(self: *PhysicsManager, engine_allocator: std.mem.Allocator) !void {
+    try self._CollisionManager.Init(engine_allocator);
+}
 
 pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("PhysicsManager::Deinit", @src());
     defer zone.Deinit();
-    self._InternalData.Contacts.deinit(engine_allocator);
+    self._CollisionManager.Deinit(engine_allocator);
 }
 
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime world_type: EngineContext.WorldType) !void {
@@ -61,7 +64,6 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
     self._InternalData.Accumulator += engine_context.mDT;
 
     const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
-    const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
         for (0..SUB_STEPS) |_| {
@@ -75,35 +77,17 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
                 IntegratePositions(entity, entity_rb, SUB_STEP_DT);
             }
 
-            try self.UpdateWorldTransforms(world_type, engine_context);
+            try UpdateWorldTransforms(world_type, engine_context);
 
-            try self.DetectCollisions(world_type, engine_context, colliders_arr);
+            self._CollisionManager.DetectCollisions(engine_context, scene_manager);
+            self._CollisionManager.ResolveCollisions();
 
-            for (0..SOLVER_ITERS) |_| {
-                for (self._InternalData.Contacts.items) |contact| {
-                    const entity_origin = contact.mOrigin;
-                    const entity_target = contact.mTarget;
-
-                    const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
-                    const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
-
-                    if (q_rb_origin) |rb_origin| {
-                        if (q_rb_target) |rb_target| {
-                            if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
-
-                            ResolveCollisions(contact, rb_origin, rb_target);
-                            PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
-                        }
-                    }
-                }
-                try self.UpdateWorldTransforms(world_type, engine_context);
-            }
-            self._InternalData.Contacts.clearAndFree(engine_context.EngineAllocator());
+            self._CollisionManager.Reset(engine_context.EngineAllocator());
         }
     }
 }
 
-pub fn UpdateWorldTransforms(_: *PhysicsManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransform", @src());
     defer zone.Deinit();
 
@@ -170,6 +154,7 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
     defer zone.Deinit();
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = entity_scene_comp.mScene;
+
     if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
         if (entity_rb._InvMass != 0) {
             entity_rb.ApplyForce(physics_component.mGravity.MulScalar(entity_rb.mMass));
@@ -189,88 +174,4 @@ fn IntegratePositions(entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) v
     defer zone.Deinit();
     const transform = entity.GetComponent(EntityTransformComponent).?;
     transform.Translation.AddEqVec(entity_rb._Velocity.MulScalar(dt));
-}
-
-fn DetectCollisions(self: *PhysicsManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, colliders_arr: std.ArrayList(Entity.Type)) !void {
-    const zone = Tracy.ZoneInit("PhysicsManager::DetectCollisions", @src());
-    defer zone.Deinit();
-
-    var scene_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
-    };
-
-    for (0..colliders_arr.items.len) |i| {
-        const entity_origin = scene_manager.GetEntity(colliders_arr.items[i]);
-        for (i + 1..colliders_arr.items.len) |j| {
-            const entity_target = scene_manager.GetEntity(colliders_arr.items[j]);
-
-            const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
-            const collider_target = entity_target.GetComponent(ColliderComponent).?;
-
-            var contact: ?Contact = blk: {
-                if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
-                    const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
-                    const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
-                    break :blk Collisions.SphereSphere(
-                        origin_transform.GetWorldPosition(),
-                        origin_transform.GetWorldScale(),
-                        target_transform.GetWorldPosition(),
-                        target_transform.GetWorldScale(),
-                    );
-                } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
-                    const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
-                    const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
-                    break :blk Collisions.BoxBox(
-                        origin_transform.GetWorldPosition(),
-                        origin_transform.GetWorldScale(),
-                        target_transform.GetWorldPosition(),
-                        target_transform.GetWorldScale(),
-                    );
-                } else {
-                    std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mShape), @tagName(collider_target.mShape) });
-                    break :blk null;
-                }
-            };
-
-            if (contact) |*the_contact| {
-                the_contact.mOrigin = entity_origin;
-                the_contact.mTarget = entity_target;
-
-                try self._InternalData.Contacts.append(engine_context.EngineAllocator(), the_contact.*);
-            }
-        }
-    }
-}
-
-fn ResolveCollisions(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
-    const zone = Tracy.ZoneInit("PhysicsManager::ResolveCollisions", @src());
-    defer zone.Deinit();
-    const rv = rb_target._Velocity.SubVec(rb_origin._Velocity);
-
-    const vel_along_norm = rv.Dot(contact.mNormal);
-    if (vel_along_norm > 0) return; //they are already moving apart
-
-    const e: f32 = 0.0; //coefficient of restitution
-
-    const j = (-(1.0 + e) * vel_along_norm) / (rb_origin._InvMass + rb_target._InvMass); //magnitude of the impulse
-
-    const impulse = contact.mNormal.MulScalar(j);
-
-    rb_origin.ApplyImpulse(impulse.Neg());
-    rb_target.ApplyImpulse(impulse);
-}
-
-fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
-    const zone = Tracy.ZoneInit("PhysicsManager::PositionCorrection", @src());
-    defer zone.Deinit();
-    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin._InvMass + rb_target._InvMass) * PERCENT;
-    const correction = contact.mNormal.MulScalar(correction_mag);
-
-    const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
-    const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
-
-    transform_origin.Translation.SubEqVec(correction.MulScalar(rb_origin._InvMass));
-    transform_target.Translation.AddEqVec(correction.MulScalar(rb_target._InvMass));
 }

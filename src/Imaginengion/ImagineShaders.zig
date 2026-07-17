@@ -2,7 +2,8 @@
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").SDFPushConstants;
 pub const QuadData = @import("Renderer/Renderer2D.zig").QuadData;
 pub const GlyphData = @import("Renderer/Renderer2D.zig").GlyphData;
-pub const ShadingData = @import("Renderer/Renderer.zig").ShadingData;
+pub const SurfShadingData = @import("Renderer/Renderer.zig").SurfShadingData;
+pub const MedShadingData = @import("Renderer/Renderer.zig").MedShadingData;
 pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig");
 
 //LinAlg stuff-------------------------------------
