@@ -21,6 +21,8 @@ const TagComponents = @import("Components/TagComponents.zig");
 pub const OnKeyPressedScript = TagComponents.OnKeyPressedScript;
 pub const OnUpdateScript = TagComponents.OnUpdateScript;
 
+///This is an array of all the components that Entity can have
+/// It is used to be passed to the ECS
 pub const ComponentsList = [_]type{
     //components
     AISlotComponent,
@@ -44,6 +46,7 @@ pub const ComponentsList = [_]type{
     OnUpdateScript,
 };
 
+///This is an array of components that should be serialized
 pub const SerializeList = [_]type{
     AISlotComponent,
     AudioComponent,
@@ -61,6 +64,9 @@ pub const SerializeList = [_]type{
     ViewpointComponent,
 };
 
+///This is an array of components that should be displayed
+/// from the Components Panel. Also this is used for the
+/// popup menu for adding components as well
 pub const ComponentPanelList = [_]type{
     AISlotComponent,
     AudioComponent,
@@ -77,6 +83,7 @@ pub const ComponentPanelList = [_]type{
     ViewpointComponent,
 };
 
+///A list of all the scripts
 pub const ScriptsList = [_]type{
     OnKeyPressedScript,
     OnUpdateScript,

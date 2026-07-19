@@ -56,6 +56,9 @@ pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime world_type: EngineContext.WorldType) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
+
+    self._CollisionManager.StartFrame();
+
     var scene_manager = switch (world_type) {
         .Game => engine_context.mGameWorld,
         .Editor => engine_context.mEditorWorld,

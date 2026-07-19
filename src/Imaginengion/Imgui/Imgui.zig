@@ -475,6 +475,27 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
     imgui.igPopItemWidth();
 }
 
+pub fn RenderStaticBitSet(comptime T: type, value: *T, label: []const u8) void {
+    imgui.igPushID_Str(label.ptr);
+    defer imgui.igPopID();
+
+    imgui.igText("%s", label.ptr);
+
+    var i: usize = 0;
+    while (i < T.bit_length) : (i += 1) {
+        if (i != 0) imgui.igSameLine(0, -1);
+
+        imgui.igPushID_Int(@intCast(i));
+        defer imgui.igPopID();
+
+        var on = value.isSet(i);
+        var buf: [8]u8 = undefined;
+        const id = std.fmt.bufPrintZ(&buf, "{d}", .{i}) catch "?";
+        if (imgui.igCheckbox(id.ptr, &on)) {
+            if (on) value.set(i) else value.unset(i);
+        }
+    }
+}
 pub fn RenderFloatInput(val: *f32, label: []const u8, speed: f32, speed_fast: f32) bool {
     return imgui.igInputFloat(label, val, speed, speed_fast, "%.3f", 0);
 }

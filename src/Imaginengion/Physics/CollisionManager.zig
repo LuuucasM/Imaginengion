@@ -18,42 +18,62 @@ const SLOP: f32 = 0.01;
 
 const CollisionManager = @This();
 
-pub const ChannelEnum = enum(u32) {
-    None = 0,
-    _,
-};
-
-pub const CollisionResponse = enum {
+pub const CollisionType = enum {
     Ignore,
     Overlap,
     Block,
 };
 
-pub const empty: CollisionManager = .{
-    ._NextID = .NoSkip,
-    ._Contacts = .empty,
-    ._ChannelNameToID = .empty,
+pub const CollisionFilter = struct {
+    pub const default: CollisionFilter = .{
+        .IsTrigger = false,
+        .CategoryMask = .empty,
+        .RespondMask = .empty,
+    };
+    IsTrigger: bool,
+    CategoryMask: std.StaticBitSet(32),
+    RespondMask: std.StaticBitSet(32),
 };
 
-_NextID: SkipField(64), //64 is random number
-_Contacts: std.ArrayList(Contact),
-_ChannelNameToID: std.StringHashMapUnmanaged([]const u8, usize),
+pub const empty: CollisionManager = .{
+    ._Contacts = .empty,
+};
 
-pub fn Init(self: *CollisionManager, engine_allocator: std.mem.Allocator) !void {
-    try self._ChannelNameToID.ensureTotalCapacity(engine_allocator, 64 * 2); //NOTE: this 64 is to match the SkipField
+pub const ContactCache = struct {
+    pub const empty: ContactCache = .{
+        .AccumImpulse = 0.0,
+    };
+    AccumImpulse: f32,
+};
+
+_ContactCache1: std.AutoHashMapUnmanaged(u64, ContactCache),
+_ContactCache2: std.AutoHashMapUnmanaged(u64, ContactCache),
+_LastCache: *std.AutoHashMapUnmanaged(u64, ContactCache),
+_CurrentCache: *std.AutoHashMapUnmanaged(u64, ContactCache),
+_Contacts: std.ArrayList(Contact),
+
+pub fn Init(self: *CollisionManager, _: std.mem.Allocator) !void {
+    self._CurrentCache = &self._ContactCache2;
+    self._LastCache = &self._ContactCache1;
 }
 
 pub fn Deinit(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
     self._Contacts.deinit(engine_allocator);
-    self._ChannelNameToID.deinit(engine_allocator);
 }
 
 pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
     self._Contacts.clearAndFree(engine_allocator);
 }
 
+pub fn StartFrame(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
+    const tmp = self._CurrentCache;
+    self._CurrentCache = self._LastCache;
+    self._LastCache = tmp;
+    self._CurrentCache.clearAndFree(engine_allocator);
+}
+
 pub fn DetectCollisions(self: CollisionManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
-    const zone = Tracy.ZoneInit("PhysicsManager::DetectCollisions", @src());
+    const zone = Tracy.ZoneInit("CollisionManager::DetectCollisions", @src());
     defer zone.Deinit();
 
     const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
@@ -65,6 +85,12 @@ pub fn DetectCollisions(self: CollisionManager, engine_context: *EngineContext, 
 
             const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
             const collider_target = entity_target.GetComponent(ColliderComponent).?;
+
+            const collision_type = GetCollisionType(collider_origin, collider_target);
+
+            if (collision_type == .Ignore) {
+                continue;
+            }
 
             var contact: ?Contact = blk: {
                 if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
@@ -92,9 +118,19 @@ pub fn DetectCollisions(self: CollisionManager, engine_context: *EngineContext, 
             };
 
             if (contact) {
+                contact.?.mContactType = collision_type;
                 contact.?.mOrigin = entity_origin;
                 contact.?.mTarget = entity_target;
 
+                const key: u64 = @as(u64, @intCast(entity_origin.mEntityID)) << 32 | @as(u64, @intCast(entity_target));
+
+                if (self._CurrentCache.get(key) == null) {
+                    try self._CurrentCache.put(engine_context.EngineAllocator(), key, .empty);
+
+                    if (self._LastCache.get(key) == null) {
+                        //TODO: BeginContact event
+                    }
+                }
                 try self._Contacts.append(engine_context.EngineAllocator(), contact.?);
             }
         }
@@ -102,29 +138,54 @@ pub fn DetectCollisions(self: CollisionManager, engine_context: *EngineContext, 
 }
 
 pub fn ResolveCollisions(self: CollisionManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) void {
+    //TODO: Pre-Solve events
     for (0..SOLVER_ITERS) |_| {
         for (self._Contacts.items) |contact| {
             const entity_origin = contact.mOrigin;
             const entity_target = contact.mTarget;
 
-            const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
-            const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
+            if (contact.mContactType == .Block) {
+                const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
+                const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
 
-            if (q_rb_origin) |rb_origin| {
-                if (q_rb_target) |rb_target| {
-                    if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
+                if (q_rb_origin) |rb_origin| {
+                    if (q_rb_target) |rb_target| {
+                        if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
 
-                    VelocityCorrection(contact, rb_origin, rb_target);
-                    PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
+                        VelocityCorrection(contact, rb_origin, rb_target);
+                        PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
+                    }
                 }
+            } else if (contact.mContactType == .Overlap) {
+                //only trigger event
             }
         }
         try UpdateWorldTransforms(world_type, engine_context);
     }
+
+    //TODO: Post-Solve Events
 }
 
+fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *ColliderComponent) CollisionType {
+    const intersection_a = collider_origin.mCollisionFilter.CategoryMask.intersectWith(collider_target.mCollisionFilter.RespondMask);
+    const intersection_b = collider_target.mCollisionFilter.CategoryMask.intersectWith(collider_origin.mCollisionFilter.RespondMask);
+    if (intersection_a.findFirstSet == null or intersection_b.findFirstSet == null) { //if either results in an empty bitset then they do not collide at all
+        return .Ignore;
+    }
+
+    //if we get here we collide but we need to check trigger to see first
+
+    if (collider_origin.mCollisionFilter.IsTrigger or collider_target.mCollisionFilter.IsTrigger) {
+        return .Overlap;
+    }
+
+    return .Block;
+}
+
+fn GetContact() ?Contact {}
+
 fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
-    const zone = Tracy.ZoneInit("PhysicsManager::ResolveCollisions", @src());
+    const zone = Tracy.ZoneInit("CollisionManager::ResolveCollisions", @src());
     defer zone.Deinit();
     const rv = rb_target._Velocity.SubVec(rb_origin._Velocity);
 
@@ -142,7 +203,7 @@ fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_targe
 }
 
 fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
-    const zone = Tracy.ZoneInit("PhysicsManager::PositionCorrection", @src());
+    const zone = Tracy.ZoneInit("CollisionManager::PositionCorrection", @src());
     defer zone.Deinit();
     const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin._InvMass + rb_target._InvMass) * PERCENT;
     const correction = contact.mNormal.MulScalar(correction_mag);
@@ -152,19 +213,4 @@ fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *Rigid
 
     transform_origin.Translation.SubEqVec(correction.MulScalar(rb_origin._InvMass));
     transform_target.Translation.AddEqVec(correction.MulScalar(rb_target._InvMass));
-}
-
-pub fn RegisterChannel(self: *CollisionManager, name: []const u8) usize {
-    if (self._ChannelNameToID.get(name)) |id| {
-        return id;
-    } else {
-        const new_id = self._NextID.GetFirstUnskipped();
-        self._ChannelNameToID.putAssumeCapacity(name, new_id);
-        self._NextID.ChangeToSkipped(new_id);
-        return new_id;
-    }
-}
-
-pub fn RemoveChannel(self: *CollisionManager, name: []const u8) void {
-    _ = self._ChannelNameToID.remove(name);
 }
