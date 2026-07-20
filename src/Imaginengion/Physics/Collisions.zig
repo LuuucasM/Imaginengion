@@ -9,11 +9,22 @@ const Box = ColliderComponent.Box;
 
 const MathUtils = @import("../Math/MathUtils.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
-const CollisionType = @import("CollisionManager.zig").CollisionType;
 const Vec3 = MathTypes.Vec3;
+
+pub const CollisionType = enum {
+    Ignore,
+    Overlap,
+    Block,
+};
+
+pub const ContactState = enum {
+    Being,
+    Sustained,
+};
 
 pub const Contact = struct {
     mContactType: CollisionType,
+    mContactState: ContactState,
     mOrigin: Entity = .{},
     mTarget: Entity = .{},
     mNormal: Vec3(f32),

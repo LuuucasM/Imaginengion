@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const PushConstants = @import("IM").PushConstants;
 const QuadData = @import("IM").QuadData;
 const GlyphData = @import("IM").GlyphData;
@@ -61,7 +62,7 @@ pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "Ca
 //layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
 pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
 //layout(set = 2, binding = 1) uniform sampler
-pub const OutTexture = @extern(*addrspace(.constant) Sampler2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
+pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
 
 //layout(set = 2, binding = 2) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
 pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
@@ -75,60 +76,43 @@ pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "
 //layout(set = 2, binding = 5) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
 pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 5 } } });
 
-pub fn SampleSampler(comptime deco: std.builtin.ExternOptions.Decoration, uv_layer: Vec3(f32).VectorT) Vec4(f32).VectorT {
+/// Read a texel from an image without a sampler.
+/// The type of `image` must be a pointer to a SPIR-V image.
+pub fn imageRead(
+    image: anytype,
+    T: type,
+    coordinate: std.spirv.ImageCoordinate(std.meta.Child(@TypeOf(image)), T),
+) @Vector(4, std.spirv.ImageSampledType(std.meta.Child(@TypeOf(image)))) {
+    switch (T) {
+        u32, i32 => {},
+        f32 => if (builtin.target.os.tag != .opencl) {
+            @compileError("Floating point image coordinates only supported by OpenCL");
+        },
+        else => @compileError("Expected one of u32, i32 and f32 types. Found '" ++ @typeName(T) ++ "'"),
+    }
+    const Image = switch (@typeInfo(@TypeOf(image))) {
+        .pointer => |pointer| pointer.child,
+        else => @compileError("Expected a pointer to SPIR-V image type, found '" ++ @typeName(@TypeOf(image)) ++ "'"),
+    };
+    const image_info = switch (@typeInfo(Image)) {
+        .spirv => |spirv| switch (spirv) {
+            .image => |info| info,
+            else => @compileError("Expected SPIR-V image type, found '" ++ @typeName(Image) ++ "'"),
+        },
+        else => @compileError("Expected SPIR-V image type, found '" ++ @typeName(Image) ++ "'"),
+    };
+    switch (image_info.usage) {
+        .unknown, .storage => {},
+        else => @compileError("SPIR-V image must have unknown or storage usage"),
+    }
+    const Result = @Vector(4, std.spirv.ImageSampledType(Image));
     return asm volatile (
-        \\%sampler_ptr    = OpTypePointer UniformConstant %ty
-        \\%tex            = OpVariable %sampler_ptr UniformConstant
-        \\                  OpDecorate %tex DescriptorSet $set
-        \\                  OpDecorate %tex Binding $bind
-        \\%loaded_sampler = OpLoad %ty %tex
-        \\%ret            = OpImageSampleImplicitLod %v4 %loaded_sampler %uv_layer
-        : [ret] "" (-> Vec4(f32).VectorT),
-        : [uv_layer] "" (uv_layer),
-          [ty] "t" (Sampler2DArray),
-          [v4] "t" (Vec4(f32).VectorT),
-          [set] "c" (deco.descriptor.set),
-          [bind] "c" (deco.descriptor.binding),
-    );
-}
-
-pub fn LoadTexturePixel(
-    comptime deco: std.builtin.ExternOptions.Decoration,
-    pixel: @Vector(2, i32),
-) Vec4(f32).VectorT {
-    return asm volatile (
-        \\%image_ptr = OpTypePointer UniformConstant %ty 
-        \\%image = OpVariable %image_ptr UniformConstant 
-        \\ OpDecorate %image DescriptorSet $set 
-        \\ OpDecorate %image Binding $bind 
-        \\%loaded_image = OpLoad %ty %image 
-        \\%ret = OpImageRead %v4 %loaded_image %pixel 
-        : [ret] "" (-> Vec4(f32).VectorT),
-        : [pixel] "" (pixel),
-          [ty] "t" (Sampler2D),
-          [v4] "t" (Vec4(f32).VectorT),
-          [set] "c" (deco.descriptor.set),
-          [bind] "c" (deco.descriptor.binding),
-    );
-}
-
-pub fn StoreTexturePixel(
-    comptime deco: std.builtin.ExternOptions.Decoration,
-    pixel: @Vector(2, i32),
-    color: Vec4(f32).VectorT,
-) void {
-    asm volatile (
-        \\%image_ptr = OpTypePointer UniformConstant %ty 
-        \\%image = OpVariable %image_ptr UniformConstant 
-        \\ OpDecorate %image DescriptorSet $set 
-        \\ OpDecorate %image Binding $bind 
-        \\%loaded_image = OpLoad %ty %image 
-        \\ OpImageWrite %loaded_image %pixel %color 
-        :
-        : [pixel] "" (pixel),
-          [color] "" (color),
-          [ty] "t" (Sampler2D),
-          [set] "c" (deco.descriptor.set),
-          [bind] "c" (deco.descriptor.binding),
+        \\%loaded_image = OpLoad %Image %image
+        \\%ret           = OpImageRead %Result %loaded_image %coordinate
+        : [ret] "" (-> Result),
+        : [Image] "t" (Image),
+          [image] "" (image),
+          [Result] "t" (Result),
+          [coordinate] "" (coordinate),
     );
 }

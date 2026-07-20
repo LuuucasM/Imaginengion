@@ -11,18 +11,13 @@ const Entity = @import("../GameObjects/Entity.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
+const CollisionType = @import("Collisions.zig").CollisionType;
 
 const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
 const SLOP: f32 = 0.01;
 
 const CollisionManager = @This();
-
-pub const CollisionType = enum {
-    Ignore,
-    Overlap,
-    Block,
-};
 
 pub const CollisionFilter = struct {
     pub const default: CollisionFilter = .{
@@ -182,7 +177,7 @@ fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *Colli
     return .Block;
 }
 
-fn GetContact() ?Contact {}
+//fn GetContact() ?Contact {}
 
 fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("CollisionManager::ResolveCollisions", @src());

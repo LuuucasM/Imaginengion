@@ -1,8 +1,11 @@
-- I am mid changing over my material system to something else
-	- With the new BodyMaterial struct I need to add it to Rigid body, quad/glyph
-	- then I will need to change rendering because I am going to split ShadingData into surface and medium SSBOs (separate them) which means I will need to modify QuadData, GlyphData, etc,
-	- I will also need to change setting the data in the buffers to accomodate new system
-	- also for materials I will have to make sure to not just update the values but also use the modifiers as well
+- finish changing renderer to get ready for new master version with builtin functions
+	- just put on the master branch was some helper functions to sample a sampler and write to an image. unfortunately there is no read from image yet so i still need to provide that one function but I will base it off the write function and hope its right.
+	- I really just need to change RayMarcher because before i was relying on the hard coded set/binding with the hold functions so i didnt have to pass around a pointer to the actual image but now i do so so i need to add it as a parameter.
+- then finish up what i had started with the physics system
+	- i need to check for the ending of a contact
+	- i need to add the new physics events to my game event manager: BeginContact, PreSolve, PostSolve, EndContact
+	- need to add a way to trigger specific scripts on an "overlay" contact.
+		- This will be the hardest one because I am not sure how to do it efficiently yet
 - fix all the bugs associated with the previous changes and make sure it actually runs
 	- note i may have to wait a bit still for this because there are some bugs with master that i think will prevent the shader from producing valid spirv still so just hold on :)
 - debug, add tests, add asserts, etc
