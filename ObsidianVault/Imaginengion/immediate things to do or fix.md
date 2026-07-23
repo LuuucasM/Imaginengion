@@ -1,6 +1,6 @@
-- finish changing renderer to get ready for new master version with builtin functions
-	- just put on the master branch was some helper functions to sample a sampler and write to an image. unfortunately there is no read from image yet so i still need to provide that one function but I will base it off the write function and hope its right.
-	- I really just need to change RayMarcher because before i was relying on the hard coded set/binding with the hold functions so i didnt have to pass around a pointer to the actual image but now i do so so i need to add it as a parameter.
+- go over all the shader stuff now with the new material system and ensure that material data is being uploaded correctrly, and that color is being generated correctly.
+	- Right now for edge i believe there is no color but i dont see why mediums cant get a color parameter
+	- this means ill have to move color over onto the material. I had it on material but moved it into "texture_2d options" because i figured it was silly a material doesnt have a color IRL, the color is determined by something else but if edges have a color which i think they should then that means color is needed evne if its not a hard surface.
 - then finish up what i had started with the physics system
 	- i need to check for the ending of a contact
 	- i need to add the new physics events to my game event manager: BeginContact, PreSolve, PostSolve, EndContact

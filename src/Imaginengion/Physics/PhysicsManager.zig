@@ -37,7 +37,7 @@ const InternalData = struct {
 
 const PHYSICS_DT: f32 = 1.0 / 60.0;
 
-const SUB_STEPS: u32 = 4;
+const SUB_STEPS: u32 = 2;
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
 
 _CollisionManager: CollisionManager = .empty,
@@ -82,10 +82,12 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
             try UpdateWorldTransforms(world_type, engine_context);
 
-            self._CollisionManager.DetectCollisions(engine_context, scene_manager);
-            self._CollisionManager.ResolveCollisions();
-
-            self._CollisionManager.Reset(engine_context.EngineAllocator());
+            self._CollisionManager.BroadPass(engine_context, scene_manager);
+            self._CollisionManager.NarrowPass(engine_context);
+            self._CollisionManager.PreSolverPass(engine_context);
+            self._CollisionManager.SolverPass(world_type, engine_context);
+            self._CollisionManager.PostsolverPass(engine_context);
+            self._CollisionManager.EndPass(engine_context);
         }
     }
 }

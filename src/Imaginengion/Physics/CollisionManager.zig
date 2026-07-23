@@ -12,12 +12,17 @@ const SceneManager = @import("../Scene/SceneManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
 const CollisionType = @import("Collisions.zig").CollisionType;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec3 = MathTypes.Vec3;
+const Set = @import("../Vendor/ziglang-set/src/array_hash_set/unmanaged.zig").ArraySetUnmanaged;
 
 const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
 const SLOP: f32 = 0.01;
 
 const CollisionManager = @This();
+
+const CurrCollisionSet = Set(u64);
 
 pub const CollisionFilter = struct {
     pub const default: CollisionFilter = .{
@@ -32,6 +37,10 @@ pub const CollisionFilter = struct {
 
 pub const empty: CollisionManager = .{
     ._Contacts = .empty,
+    ._ContactCache1 = .empty,
+    ._ContactCache2 = .empty,
+    ._LastCache = undefined,
+    ._CurrentCache = undefined,
 };
 
 pub const ContactCache = struct {
@@ -41,34 +50,27 @@ pub const ContactCache = struct {
     AccumImpulse: f32,
 };
 
-_ContactCache1: std.AutoHashMapUnmanaged(u64, ContactCache),
-_ContactCache2: std.AutoHashMapUnmanaged(u64, ContactCache),
-_LastCache: *std.AutoHashMapUnmanaged(u64, ContactCache),
-_CurrentCache: *std.AutoHashMapUnmanaged(u64, ContactCache),
-_Contacts: std.ArrayList(Contact),
+_LastCache: std.AutoArrayHashMapUnmanaged(u64, ContactCache),
+_CurrentCache: std.AutoArrayHashMapUnmanaged(u64, ContactCache),
+_BlockingContacts: std.ArrayList(Contact),
+_OverlapContacts: std.ArrayList(Contact),
 
-pub fn Init(self: *CollisionManager, _: std.mem.Allocator) !void {
-    self._CurrentCache = &self._ContactCache2;
-    self._LastCache = &self._ContactCache1;
-}
+pub fn Init(_: *CollisionManager, _: std.mem.Allocator) !void {}
 
 pub fn Deinit(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
-    self._Contacts.deinit(engine_allocator);
+    self._BlockingContacts.deinit(engine_allocator);
+    self._OverlapContacts.deinit(engine_allocator);
 }
 
 pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
-    self._Contacts.clearAndFree(engine_allocator);
+    self._BlockingContacts.clearAndFree(engine_allocator);
+    self._OverlapContacts.clearAndFree(engine_allocator);
 }
 
-pub fn StartFrame(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
-    const tmp = self._CurrentCache;
-    self._CurrentCache = self._LastCache;
-    self._LastCache = tmp;
-    self._CurrentCache.clearAndFree(engine_allocator);
-}
-
-pub fn DetectCollisions(self: CollisionManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
-    const zone = Tracy.ZoneInit("CollisionManager::DetectCollisions", @src());
+///Checks the whole scene for objects that can possibly collide.
+/// For the contact sets the entity origin, target, and collision type.
+pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+    const zone = Tracy.ZoneInit("CollisionManager::BroadPassf", @src());
     defer zone.Deinit();
 
     const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
@@ -83,82 +85,154 @@ pub fn DetectCollisions(self: CollisionManager, engine_context: *EngineContext, 
 
             const collision_type = GetCollisionType(collider_origin, collider_target);
 
-            if (collision_type == .Ignore) {
-                continue;
-            }
+            if (collision_type == .Ignore) continue;
 
-            var contact: ?Contact = blk: {
-                if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
-                    const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
-                    const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
-                    break :blk Collisions.SphereSphere(
-                        origin_transform.GetWorldPosition(),
-                        origin_transform.GetWorldScale(),
-                        target_transform.GetWorldPosition(),
-                        target_transform.GetWorldScale(),
-                    );
-                } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
-                    const origin_transform = entity_origin.GetComponent(EntityTransformComponent).?;
-                    const target_transform = entity_target.GetComponent(EntityTransformComponent).?;
-                    break :blk Collisions.BoxBox(
-                        origin_transform.GetWorldPosition(),
-                        origin_transform.GetWorldScale(),
-                        target_transform.GetWorldPosition(),
-                        target_transform.GetWorldScale(),
-                    );
-                } else {
-                    std.log.err("Cannot handle collision type between {s} and {s} yet!\n", .{ @tagName(collider_origin.mShape), @tagName(collider_target.mShape) });
-                    break :blk null;
-                }
+            const contact: Contact = .{
+                .mOrigin = entity_origin,
+                .mTarget = entity_target,
+                .mNormal = Vec3(f32){ .x = 0, .y = 0, .z = 0 },
+                .mPenetration = 0,
             };
 
-            if (contact) {
-                contact.?.mContactType = collision_type;
-                contact.?.mOrigin = entity_origin;
-                contact.?.mTarget = entity_target;
-
-                const key: u64 = @as(u64, @intCast(entity_origin.mEntityID)) << 32 | @as(u64, @intCast(entity_target));
-
-                if (self._CurrentCache.get(key) == null) {
-                    try self._CurrentCache.put(engine_context.EngineAllocator(), key, .empty);
-
-                    if (self._LastCache.get(key) == null) {
-                        //TODO: BeginContact event
-                    }
-                }
-                try self._Contacts.append(engine_context.EngineAllocator(), contact.?);
+            switch (collision_type) {
+                .Block => {
+                    try self._BlockingContacts.append(engine_context.EngineAllocator(), contact);
+                },
+                .Overlap => {
+                    try self._OverlapContacts.append(engine_context.EngineAllocator(), contact);
+                },
+                .Ignore => unreachable,
             }
         }
     }
 }
 
-pub fn ResolveCollisions(self: CollisionManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) void {
-    //TODO: Pre-Solve events
+///Checks generated contacts list from broad pass to see if thing actually collided
+/// For the contact sets the penetration, normal, and contact state
+pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+    var i: usize = 0;
+    var end: usize = self._OverlapContacts.items.len;
+    while (i < end) {
+        const contact = self._OverlapContacts.items[i];
+        const collider_origin = contact.mOrigin.GetComponent(ColliderComponent).?;
+        const collider_target = contact.mTarget.GetComponent(ColliderComponent).?;
+
+        const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
+        const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
+
+        if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
+            Collisions.SphereSphere(contact, origin_transform, target_transform);
+            i += 1;
+        } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
+            Collisions.BoxBox(contact, origin_transform, target_transform);
+            i += 1;
+        } else {
+            self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
+            end -= 1;
+        }
+    }
+    self._OverlapContacts.items.len = end;
+
+    i = 0;
+    end = self._BlockingContacts.item.len;
+    while (i < end) {
+        const contact = self._BlockingContacts.items[i];
+        const collider_origin = contact.mOrigin.GetComponent(ColliderComponent).?;
+        const collider_target = contact.mTarget.GetComponent(ColliderComponent).?;
+
+        const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
+        const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
+
+        if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
+            Collisions.SphereSphere(contact, origin_transform, target_transform);
+            i += 1;
+        } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
+            Collisions.BoxBox(contact, origin_transform, target_transform);
+            i += 1;
+        } else {
+            self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
+            end -= 1;
+        }
+    }
+    self._BlockingContacts.items.len = end;
+
+    //check for begin collision events
+    for (self._OverlapContacts.items) |contact| {
+        const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
+        self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
+        if (!self._LastCache.contains(key)) {
+            //create new BeginCollisionEvent
+        }
+    }
+    for (self._BlockingContacts.items) |contact| {
+        const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
+        self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
+        if (!self._LastCache.contains(key)) {
+            //create new BeginCollisionEvent
+        }
+    }
+
+    //check for end collision events
+    const prev_iter = self._LastCache.iterator();
+    while (prev_iter.next()) |entry| {
+        if (!self._CurrentCache.contains(entry.key_ptr.*)) {
+            //create a new EndCOllisionEvent
+        }
+    }
+}
+
+pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+    _ = engine_context;
+    for (self._OverlapContacts.items) |contact| {
+        _ = contact;
+        //trigger a PreSolverEvent
+    }
+    for (self._BlockingContacts.items) |contact| {
+        _ = contact;
+        //trigger a PreSolverEvent
+    }
+}
+
+pub fn SolverPass(self: *CollisionManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
     for (0..SOLVER_ITERS) |_| {
-        for (self._Contacts.items) |contact| {
+        for (self._BlockingContacts.items) |contact| {
             const entity_origin = contact.mOrigin;
             const entity_target = contact.mTarget;
 
-            if (contact.mContactType == .Block) {
-                const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
-                const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
+            const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
+            const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
 
-                if (q_rb_origin) |rb_origin| {
-                    if (q_rb_target) |rb_target| {
-                        if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
+            if (q_rb_origin) |rb_origin| {
+                if (q_rb_target) |rb_target| {
+                    if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
 
-                        VelocityCorrection(contact, rb_origin, rb_target);
-                        PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
-                    }
+                    VelocityCorrection(contact, rb_origin, rb_target);
+                    PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
                 }
-            } else if (contact.mContactType == .Overlap) {
-                //only trigger event
             }
         }
         try UpdateWorldTransforms(world_type, engine_context);
     }
+}
 
-    //TODO: Post-Solve Events
+pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+    _ = engine_context;
+    for (self._OverlapContacts.items) |contact| {
+        _ = contact;
+        //trigger a PostSolverEvent
+    }
+    for (self._BlockingContacts.items) |contact| {
+        _ = contact;
+        //trigger a PostSolverEvent
+    }
+}
+
+pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+    self._LastCache.deinit(engine_context.EngineAllocator());
+    self._LastCache = self._CurrentCache;
+    self._CurrentCache = .empty;
+    self._BlockingContacts.clearAndFree(engine_context.EngineAllocator());
+    self._OverlapContacts.clearAndFree(engine_context.EngineAllocator());
 }
 
 fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *ColliderComponent) CollisionType {
@@ -176,8 +250,6 @@ fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *Colli
 
     return .Block;
 }
-
-//fn GetContact() ?Contact {}
 
 fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
     const zone = Tracy.ZoneInit("CollisionManager::ResolveCollisions", @src());

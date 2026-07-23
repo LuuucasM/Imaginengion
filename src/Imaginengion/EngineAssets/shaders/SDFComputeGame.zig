@@ -66,7 +66,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     marcher.mNodes[0].FirstEdge = 0;
     marcher.mEdgeCount = 1;
 
-    marcher.March(QuadsSSBO.ptr, GlyphsSSBO.ptr, CameraUBO.mPerspectiveFar, std.spirv.imageSampleImplicitLod);
+    marcher.March(QuadsSSBO.ptr, GlyphsSSBO.ptr, CameraUBO.mPerspectiveFar, TexturesArray, std.spirv.imageSampleImplicitLod);
 
     //traverse ray tree backwards to obtain final output color
     const march_color = marcher.GenerateColor(ShadingSSBO.ptr, TexturesArray, std.spirv.imageSampleImplicitLod);
