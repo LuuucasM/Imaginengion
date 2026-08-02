@@ -3,26 +3,30 @@ const SurfMat = @import("SurfaceMaterial.zig");
 const MedMat = @import("MediumMaterial.zig");
 const ImguiManager = @import("../Imgui/Imgui.zig");
 
-pub const MaterialData = union(enum) {
-    Surface: struct {
-        Kind: SurfMat.SurfaceMaterials,
-        Scale: SurfMat.SurfMatData, // reused type, values act as multipliers
-    },
-    Medium: struct {
-        Kind: MedMat.MediumMaterials,
-        Scale: MedMat.MedMatData,
-    },
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec4 = MathTypes.Vec4;
+
+pub const SurfacePhysicsMat = struct {
+    Kind: SurfMat.SurfaceMaterials,
+    Scale: SurfMat.SurfPhysicsData,
+
+    pub const default: SurfacePhysicsMat = .{
+        .Kind = .Custom,
+        .Scale = SurfMat.SurfaceScaleIdentity.PhysicsData,
+    };
+
+    //TODO: fill in the rest of this doing basically the same things as SurfaceRenderMat
+};
+
+pub const MediumPhysicsMat = struct {
+    Kind: SurfMat.SurfaceMaterials,
+    Scale: SurfMat.SurfPhysicsData,
+    //TODO: fill in the rest of this doing basically the same things as MediumRenderMat
 };
 
 pub const PhysicsMaterial = union(enum) {
-    Surface: struct {
-        Kind: SurfMat.SurfaceMaterials,
-        Scale: SurfMat.SurfPhysicsData,
-    },
-    Medium: struct {
-        Kind: MedMat.MediumMaterials,
-        Scale: MedMat.MedPhysicsData,
-    },
+    Surface: SurfacePhysicsMat,
+    Medium: MediumPhysicsMat,
 
     pub const default: PhysicsMaterial = .{ .Surface = .{
         .Kind = .Wood,
@@ -78,6 +82,7 @@ pub const PhysicsMaterial = union(enum) {
     pub fn ImguiRender(self: PhysicsMaterial) void {
         switch (self) {
             .Surface => |s| {
+                s.ImguiRender();
                 ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &s.Kind, "Surface Material");
                 s.Scale.ImguiRender("Scale");
             },
@@ -92,19 +97,22 @@ pub const PhysicsMaterial = union(enum) {
 pub const SurfaceRenderMat = struct {
     Kind: SurfMat.SurfaceMaterials,
     Scale: SurfMat.SurfRenderData,
+    Color: Vec4(f32),
 
     pub const default: SurfaceRenderMat = .{
         .Kind = .Custom,
         .Scale = SurfMat.SurfaceScaleIdentity.RenderData,
+        .Color = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
     };
 
     pub fn ImguiRender(self: SurfaceRenderMat) void {
         ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
         self.Scale.ImguiRender("Scale");
+        ImguiManager.RenderVec4(&self.Color, "Color", 1.0, 0.01, 100);
     }
 
     pub fn GetMaterialData(self: SurfaceRenderMat) SurfMat.SurfRenderData {
-        SurfMat.SurfaceDatabase.get(self.Kind).RenderData;
+        return SurfMat.SurfaceDatabase.get(self.Kind).RenderData;
     }
 
     pub fn GetScaleData(self: SurfaceRenderMat) SurfMat.SurfRenderData {
@@ -112,23 +120,47 @@ pub const SurfaceRenderMat = struct {
     }
 
     pub fn GetScaledMaterial(self: SurfaceRenderMat) SurfMat.SurfRenderData {
-        _ = self;
-        return .{};
+        const material_data = self.GetMaterialData();
+        const scale_data = self.GetScaleData();
+        _ = material_data;
+        _ = scale_data;
+        return .{}; //fill in once theres something for surface render data
     }
 };
 
 pub const MediumRenderMat = struct {
     Kind: MedMat.MediumMaterials,
     Scale: MedMat.MedRenderData,
+    Color: Vec4(f32),
 
     pub const default: MediumRenderMat = .{
         .Kind = .Custom,
         .Scale = MedMat.MediumScaleIdentity.RenderData,
+        .Color = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
     };
 
     pub fn ImguiRender(self: MediumRenderMat) void {
         ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
         self.Scale.ImguiRender("Scale");
+        ImguiManager.RenderVec4(&self.Color, "Color", 1.0, 0.01, 100);
+    }
+
+    pub fn GetMaterialData(self: MediumRenderMat) MedMat.MedRenderData {
+        return MedMat.MediumDatabase.get(self.Kind).RenderData;
+    }
+
+    pub fn GetScaledData(self: MediumRenderMat) MedMat.MedRenderData {
+        return self.Scale;
+    }
+
+    pub fn GetScaledMaterial(self: MediumRenderMat) MedMat.MedRenderData {
+        const material_data = self.GetMaterialData();
+        const scale_data = self.GetScaledData();
+
+        return .{
+            .Absorption = material_data.Absorption.MulVec(scale_data.Absorption),
+            .Scattering = material_data.Scattering.MulVec(scale_data.Scattering),
+        };
     }
 };
 

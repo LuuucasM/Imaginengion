@@ -29,7 +29,7 @@ pub const Ind: usize = blk: {
 
 mShouldRender: bool = true,
 mTexture: AssetHandle = .empty,
-mTexOptions: Texture2D.TexOptions = .{},
+mTexOptions: Texture2D.TexOptions = .default,
 mMaterial: Material.SurfaceRenderMat = .default,
 mEditTexCoords: bool = false,
 
