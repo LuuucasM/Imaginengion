@@ -20,7 +20,7 @@ pub fn Vec2(comptime number_type: type) type {
     return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(2, number_type);
-        pub const ArrT = [2]number_type;
+        pub const ArrayT = [2]number_type;
 
         x: number_type,
         y: number_type,
@@ -32,27 +32,22 @@ pub fn Vec2(comptime number_type: type) type {
         }
 
         pub fn FromVector(vec: VectorT) Self {
-            //NOTE: bit casting causes some validation errors
-            //likely internally due to some struct <-> vector reinterprating
-            if (is_spirv) {
-                return .{ .x = vec[0], .y = vec[1] };
-            } else {
-                return @bitCast(vec);
-            }
+            return .{ .x = vec[0], .y = vec[1] };
         }
 
         pub fn ToVector(self: Self) VectorT {
-            //NOTE: bit casting causes some validation errors
-            //likely internally due to some struct <-> vector reinterprating
-            if (is_spirv) {
-                return .{ self.x, self.y };
-            } else {
-                return @bitCast(self);
-            }
+            return .{ self.x, self.y };
         }
 
         pub fn FromScalar(scalar: number_type) Self {
             return Self{ .x = scalar, .y = scalar };
+        }
+
+        pub fn FromArray(array: ArrayT) Self {
+            return Self{ .x = array[0], .y = array[1] };
+        }
+        pub fn ToArray(self: Self) ArrayT {
+            return ArrayT{ self.x, self.y };
         }
 
         pub fn Dir(self: Self) Self {
@@ -145,34 +140,30 @@ pub fn Vec3(comptime number_type: type) type {
     return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(3, number_type);
-        pub const ArrT = [3]number_type;
+        pub const ArrayT = [3]number_type;
 
         x: number_type,
         y: number_type,
         z: number_type,
 
         pub fn FromVector(vec: VectorT) Self {
-            //NOTE: bit casting causes some validation errors
-            //likely internally due to some struct <-> vector reinterprating
-            if (is_spirv) {
-                return .{ .x = vec[0], .y = vec[1], .z = vec[2] };
-            } else {
-                return @bitCast(vec);
-            }
+            return .{ .x = vec[0], .y = vec[1], .z = vec[2] };
         }
 
         pub fn ToVector(self: Self) VectorT {
-            //NOTE: bit casting causes some validation errors
-            //likely internally due to some struct <-> vector reinterprating
-            if (is_spirv) {
-                return .{ self.x, self.y, self.z };
-            } else {
-                return @bitCast(self);
-            }
+            return .{ self.x, self.y, self.z };
         }
 
         pub fn FromScalar(scalar: number_type) Self {
             return Self{ .x = scalar, .y = scalar, .z = scalar };
+        }
+
+        pub fn FromArray(array: ArrayT) Self {
+            return Self{ .x = array[0], .y = array[1], .z = array[2] };
+        }
+
+        pub fn ToArray(self: Self) ArrayT {
+            return ArrayT{ self.x, self.y, self.z };
         }
 
         pub fn Cross(self: Self, other: Self) Self {
@@ -344,7 +335,7 @@ pub fn Vec4(comptime number_type: type) type {
     return extern struct {
         const Self = @This();
         pub const VectorT = @Vector(4, number_type);
-        pub const ArrT = [4]number_type;
+        pub const ArrayT = [4]number_type;
 
         x: number_type,
         y: number_type,
@@ -352,21 +343,11 @@ pub fn Vec4(comptime number_type: type) type {
         w: number_type,
 
         pub fn FromVector(vec: VectorT) Self {
-            if (is_spirv) {
-                return .{ .x = vec[0], .y = vec[1], .z = vec[2], .w = vec[3] };
-            } else {
-                return @bitCast(vec);
-            }
+            return .{ .x = vec[0], .y = vec[1], .z = vec[2], .w = vec[3] };
         }
 
         pub fn ToVector(self: Self) VectorT {
-            //NOTE: bit casting causes some validation errors
-            //likely internally due to some struct <-> vector reinterprating
-            if (is_spirv) {
-                return .{ self.x, self.y, self.z, self.w };
-            } else {
-                return @bitCast(self);
-            }
+            return .{ self.x, self.y, self.z, self.w };
         }
 
         pub fn ToVec3(self: Self) Vec3(number_type) {
@@ -375,6 +356,14 @@ pub fn Vec4(comptime number_type: type) type {
 
         pub fn FromScalar(scalar: number_type) Self {
             return FromVector(@splat(scalar));
+        }
+
+        pub fn FromArray(array: ArrayT) Self {
+            return Self{ .x = array[0], .y = array[1], .z = array[2], .w = array[3] };
+        }
+
+        pub fn ToArray(self: Self) ArrayT {
+            return ArrayT{ self.x, self.y, self.z, self.w };
         }
 
         pub fn Len(self: Self) number_type {
@@ -599,7 +588,7 @@ pub fn Quat(comptime number_type: type) type {
         const Self = @This();
         pub const VectorT = @Vector(4, number_type);
         pub const Vec3T = Vec3(number_type);
-        pub const ArrT = [4]number_type;
+        pub const ArrayT = [4]number_type;
 
         w: number_type,
         x: number_type,
@@ -642,16 +631,19 @@ pub fn Quat(comptime number_type: type) type {
         }
 
         pub fn FromVector(vect: VectorT) Self {
-            return Self{
-                .w = vect[0],
-                .x = vect[1],
-                .y = vect[2],
-                .z = vect[3],
-            };
+            return Self{ .w = vect[0], .x = vect[1], .y = vect[2], .z = vect[3] };
         }
 
         pub fn ToVector(self: Self) VectorT {
-            return @bitCast(self);
+            return VectorT{ self.x, self.y, self.z, self.w };
+        }
+
+        pub fn ToArray(self: Self) ArrayT {
+            return ArrayT{ self.x, self.y, self.z, self.w };
+        }
+
+        pub fn FromArray(array: ArrayT) Self {
+            return Self{ .x = array[0], .y = array[1], .z = array[2], .w = array[3] };
         }
 
         pub fn Len(self: Self) number_type {
@@ -736,7 +728,7 @@ pub fn Quat(comptime number_type: type) type {
 
         pub fn ToMat3(self: Self) Mat3(number_type) {
             const v = self.ToVector();
-            const q2: ArrT = v * v;
+            const q2: ArrayT = v * v;
             return Mat3(number_type){ .cols = [3]Vec3(number_type){
                 Vec3(number_type){
                     .x = q2[0] + q2[1] - q2[2] - q2[3],

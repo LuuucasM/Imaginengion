@@ -39,8 +39,8 @@ const Config: PipelineConfig = .{
 pub fn SDFPipeline(pipeline_type: PipelineType) type {
     return struct {
         const ComputeShader = switch (pipeline_type) {
-            .Overlay => @import("OverlayCompute"),
-            .Game => @import("GameCompute"),
+            .Overlay => @embedFile("../../EngineAssets/shaders/SDFComputeOverlay.spv"),
+            .Game => @embedFile("../../EngineAssets/shaders/SDFComputeGame.spv"),
         };
 
         const Self = @This();
@@ -49,7 +49,7 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
             .mPipeline = null,
         };
 
-        mPipeline: ?*sdl.SDL_GPUGraphicsPipeline,
+        mPipeline: ?*sdl.struct_SDL_GPUComputePipeline,
 
         pub fn Init(self: *Self, engine_context: *EngineContext) !void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
@@ -73,10 +73,11 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
                 .props = 0,
             };
 
-            self.mPipeline = sdl.SDL_CreateGPUComputePipeline(device, &create_info) orelse {
+            self.mPipeline = sdl.SDL_CreateGPUComputePipeline(device, &create_info);
+            if (self.mPipeline == null) {
                 std.log.err("GameComputePipeline: failed to create — {s}", .{sdl.SDL_GetError()});
                 return error.PipelineInitFailed;
-            };
+            }
             std.log.info("GameComputePipeline: created successfully", .{});
         }
 
@@ -87,8 +88,9 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
             self.mPipeline = null;
         }
 
-        pub fn Bind(self: Self, pass: *sdl.SDL_GPUComputePass) void {
-            sdl.SDL_BindGPUComputePipeline(pass, self.mPipeline);
+        pub fn Bind(self: Self, pass: *anyopaque) void {
+            const sdl_pass: *sdl.SDL_GPUComputePass = @ptrCast(pass);
+            sdl.SDL_BindGPUComputePipeline(sdl_pass, self.mPipeline);
         }
 
         pub fn PushUniforms(_: Self, cmd: *anyopaque, push: PushConstants) void {
@@ -103,10 +105,11 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
         }
 
         // group counts, not pixel counts — divide screen dims by threadcount, round up.
-        pub fn Dispatch(_: Self, pass: *sdl.SDL_GPUComputePass, screen_w: u32, screen_h: u32) void {
+        pub fn Dispatch(_: Self, pass: *anyopaque, screen_w: u32, screen_h: u32) void {
+            const sdl_pass: *sdl.SDL_GPUComputePass = @ptrCast(pass);
             const groups_x = (screen_w + ShaderInfo.mThreadCountX - 1) / ShaderInfo.mThreadCountX;
             const groups_y = (screen_h + ShaderInfo.mThreadCountY - 1) / ShaderInfo.mThreadCountY;
-            sdl.SDL_DispatchGPUCompute(pass, groups_x, groups_y, 1);
+            sdl.SDL_DispatchGPUCompute(sdl_pass, groups_x, groups_y, 1);
         }
     };
 }

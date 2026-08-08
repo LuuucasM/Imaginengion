@@ -22,11 +22,11 @@ pub const PipelineType = enum {
 };
 
 pub const SDFPushConstants = extern struct {
-    mPosition: Vec3(f32).VectorT,
+    mPosition: Vec3(f32).ArrayT,
     mPerspectiveFar: f32,
-    mRotation: Vec4(f32).VectorT,
-    mRayScale: Vec2(f32).VectorT,
-    mRayOffset: Vec2(f32).VectorT,
+    mRotation: Vec4(f32).ArrayT,
+    mRayScale: Vec2(f32).ArrayT,
+    mRayOffset: Vec2(f32).ArrayT,
     mQuadsCount: u32,
     mGlyphsCount: u32,
     mViewportWidth: f32,

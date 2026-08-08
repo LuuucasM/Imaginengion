@@ -11,19 +11,25 @@ const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
 
 pub const TexOptions = struct {
-    mTilingFactor: f32 = 1.0,
-    mTextureUV0: Vec2(f32) = .{ .x = 0, .y = 0 },
-    mTextureUV1: Vec2(f32) = .{ .x = 1, .y = 1 },
+    mTilingFactor: f32,
+    mTextureUV0: Vec2(f32),
+    mTextureUV1: Vec2(f32),
+    mColor: Vec4(f32),
+    mIsTransparent: bool,
 
-    const default: TexOptions = .{
+    pub const default: TexOptions = .{
         .mTilingFactor = 1.0,
         .mTextureUV0 = .{ .x = 0, .y = 0 },
         .mTextureUV1 = .{ .x = 1, .y = 1 },
+        .mColor = .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
+        .mIsTransparent = false,
     };
 
     pub fn ImguiRender(self: *TexOptions, engine_context: *EngineContext, open: *bool, texture_asset: *Texture2D) void {
+        ImguiManager.RenderColor4Edit(&self.mColor, "Color");
         ImguiManager.RenderFloatDrag(&self.mTilingFactor, "Tiling Factor", 0.1, 0.0, 0.0);
         ImguiManager.RenderUVCoords(open, &self.mTextureUV0, &self.mTextureUV1, engine_context, texture_asset);
+        ImguiManager.RenderBool(&self.mIsTransparent, "Can Be Transparent?");
     }
 };
 

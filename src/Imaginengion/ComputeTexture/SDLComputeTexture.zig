@@ -25,8 +25,8 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             try self.Create(engine_context);
         }
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            try self.Destroy(engine_context);
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
+            self.Destroy(engine_context);
         }
 
         pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
@@ -37,7 +37,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
         }
 
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) !void {
-            try self.Destroy(engine_context);
+            self.Destroy(engine_context);
             try self.Create(engine_context);
         }
 
@@ -119,7 +119,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             self.mSampler = sdl.SDL_CreateGPUSampler(device, &sampler_info) orelse return error.CreateComputeTexture;
         }
 
-        fn Destroy(self: *Self, engine_context: *EngineContext) !void {
+        fn Destroy(self: *Self, engine_context: *EngineContext) void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
             if (self.mTexture) |t| {
                 sdl.SDL_ReleaseGPUTexture(device, t);

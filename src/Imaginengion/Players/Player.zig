@@ -163,7 +163,7 @@ pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config:
 pub fn AddRenderTarget(self: Player, engine_context: *EngineContext) !*RenderTargetComponent {
     var new_render_comp = RenderTargetComponent{};
 
-    try new_render_comp.mFrameBuffer.Init(engine_context, 1600, 600);
+    try new_render_comp.mComputeTexture.Init(engine_context, 1600, 600);
 
     try new_render_comp.SetViewportSize(engine_context, 1600, 900);
     return try self.AddComponent(engine_context, new_render_comp);

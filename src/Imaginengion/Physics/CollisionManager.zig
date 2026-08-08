@@ -15,6 +15,7 @@ const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Set = @import("../Vendor/ziglang-set/src/array_hash_set/unmanaged.zig").ArraySetUnmanaged;
+const ImguiManager = @import("../Imgui/Imgui.zig");
 
 const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
@@ -30,17 +31,21 @@ pub const CollisionFilter = struct {
         .CategoryMask = .empty,
         .RespondMask = .empty,
     };
+    pub fn ImguiRender(self: CollisionFilter) void {
+        ImguiManager.RenderBool(&self.IsTrigger, "Is Trigger?");
+        ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.CategoryMask, "Category Mask");
+        ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.RespondMask, "Response Mask");
+    }
     IsTrigger: bool,
     CategoryMask: std.StaticBitSet(32),
     RespondMask: std.StaticBitSet(32),
 };
 
 pub const empty: CollisionManager = .{
-    ._Contacts = .empty,
-    ._ContactCache1 = .empty,
-    ._ContactCache2 = .empty,
     ._LastCache = undefined,
     ._CurrentCache = undefined,
+    ._BlockingContacts = .empty,
+    ._OverlapContacts = .empty,
 };
 
 pub const ContactCache = struct {
@@ -113,19 +118,27 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
     var i: usize = 0;
     var end: usize = self._OverlapContacts.items.len;
     while (i < end) {
-        const contact = self._OverlapContacts.items[i];
+        const contact = &self._OverlapContacts.items[i];
         const collider_origin = contact.mOrigin.GetComponent(ColliderComponent).?;
         const collider_target = contact.mTarget.GetComponent(ColliderComponent).?;
 
         const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
-        if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
-            Collisions.SphereSphere(contact, origin_transform, target_transform);
-            i += 1;
-        } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
-            Collisions.BoxBox(contact, origin_transform, target_transform);
-            i += 1;
+        if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
+            if (Collisions.SphereSphere(contact, origin_transform, target_transform)) {
+                i += 1;
+            } else {
+                self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
+                end -= 1;
+            }
+        } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
+            if (Collisions.BoxBox(contact, origin_transform, target_transform)) {
+                i += 1;
+            } else {
+                self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
+                end -= 1;
+            }
         } else {
             self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
             end -= 1;
@@ -134,21 +147,39 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
     self._OverlapContacts.items.len = end;
 
     i = 0;
-    end = self._BlockingContacts.item.len;
+    end = self._BlockingContacts.items.len;
     while (i < end) {
-        const contact = self._BlockingContacts.items[i];
+        const contact = &self._BlockingContacts.items[i];
         const collider_origin = contact.mOrigin.GetComponent(ColliderComponent).?;
         const collider_target = contact.mTarget.GetComponent(ColliderComponent).?;
 
         const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
-        if (std.meta.activeTag(collider_origin.mShape) == .Sphere and std.meta.activeTag(collider_target.mShape) == .Sphere) {
-            Collisions.SphereSphere(contact, origin_transform, target_transform);
-            i += 1;
-        } else if (std.meta.activeTag(collider_origin.mShape) == .Box and std.meta.activeTag(collider_target.mShape) == .Box) {
-            Collisions.BoxBox(contact, origin_transform, target_transform);
-            i += 1;
+        if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
+            if (Collisions.SphereSphere(contact, origin_transform, target_transform)) {
+                const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
+                try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
+                if (!self._LastCache.contains(key)) {
+                    //create new begin collision event
+                }
+                i += 1;
+            } else {
+                self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
+                end -= 1;
+            }
+        } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
+            if (Collisions.BoxBox(contact, origin_transform, target_transform)) {
+                const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
+                try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
+                if (!self._LastCache.contains(key)) {
+                    //create new begin collision event
+                }
+                i += 1;
+            } else {
+                self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
+                end -= 1;
+            }
         } else {
             self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
             end -= 1;
@@ -156,24 +187,8 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
     }
     self._BlockingContacts.items.len = end;
 
-    //check for begin collision events
-    for (self._OverlapContacts.items) |contact| {
-        const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
-        self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
-        if (!self._LastCache.contains(key)) {
-            //create new BeginCollisionEvent
-        }
-    }
-    for (self._BlockingContacts.items) |contact| {
-        const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
-        self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
-        if (!self._LastCache.contains(key)) {
-            //create new BeginCollisionEvent
-        }
-    }
-
     //check for end collision events
-    const prev_iter = self._LastCache.iterator();
+    var prev_iter = self._LastCache.iterator();
     while (prev_iter.next()) |entry| {
         if (!self._CurrentCache.contains(entry.key_ptr.*)) {
             //create a new EndCOllisionEvent
@@ -227,7 +242,7 @@ pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !
     }
 }
 
-pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) void {
     self._LastCache.deinit(engine_context.EngineAllocator());
     self._LastCache = self._CurrentCache;
     self._CurrentCache = .empty;
@@ -238,7 +253,7 @@ pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) !void {
 fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *ColliderComponent) CollisionType {
     const intersection_a = collider_origin.mCollisionFilter.CategoryMask.intersectWith(collider_target.mCollisionFilter.RespondMask);
     const intersection_b = collider_target.mCollisionFilter.CategoryMask.intersectWith(collider_origin.mCollisionFilter.RespondMask);
-    if (intersection_a.findFirstSet == null or intersection_b.findFirstSet == null) { //if either results in an empty bitset then they do not collide at all
+    if (intersection_a.findFirstSet() == null or intersection_b.findFirstSet() == null) { //if either results in an empty bitset then they do not collide at all
         return .Ignore;
     }
 

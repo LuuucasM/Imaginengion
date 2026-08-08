@@ -4,7 +4,9 @@ pub const QuadData = @import("Renderer/Renderer2D.zig").QuadData;
 pub const GlyphData = @import("Renderer/Renderer2D.zig").GlyphData;
 pub const SurfShadingData = @import("Renderer/Renderer.zig").SurfShadingData;
 pub const MedShadingData = @import("Renderer/Renderer.zig").MedShadingData;
-pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig");
+pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig").RayMarcher;
+pub const Node = @import("Renderer/SDFRayMarcher.zig").Node;
+pub const Edge = @import("Renderer/SDFRayMarcher.zig").Edge;
 
 //LinAlg stuff-------------------------------------
 const MathTypes = @import("Math/MathTypes.zig");

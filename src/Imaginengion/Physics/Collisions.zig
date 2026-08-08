@@ -25,7 +25,7 @@ pub const Contact = struct {
     mPenetration: f32,
 };
 
-pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponent, target_transform_comp: *TransformComponent) void {
+pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponent, target_transform_comp: *TransformComponent) bool {
     const origin_pos = origin_transform_comp.GetWorldPosition();
     const target_pos = target_transform_comp.GetWorldPosition();
     const origin_scale = origin_transform_comp.GetWorldScale();
@@ -36,7 +36,7 @@ pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponen
     const dist = delta.Len();
     const radius_sum = origin_scale.x + target_scale.x;
 
-    if (dist >= radius_sum) return null; //not a collision
+    if (dist >= radius_sum) return false; //not a collision
 
     const penetration = radius_sum - dist;
 
@@ -50,9 +50,11 @@ pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponen
 
     contact.mNormal = normal;
     contact.mPenetration = penetration;
+
+    return true;
 }
 
-pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, target_transform_comp: *TransformComponent) ?Contact {
+pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, target_transform_comp: *TransformComponent) bool {
     const origin_pos = origin_transform_comp.GetWorldPosition();
     const target_pos = target_transform_comp.GetWorldPosition();
     const origin_scale = origin_transform_comp.GetWorldScale();
@@ -64,7 +66,7 @@ pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, tar
     const overlap_y = (origin_scale.y + target_scale.y) - @abs(delta.y);
     const overlap_z = (origin_scale.z + target_scale.z) - @abs(delta.z);
 
-    if (overlap_x <= 0 or overlap_y <= 0 or overlap_z <= 0) return null; //not a collision
+    if (overlap_x <= 0 or overlap_y <= 0 or overlap_z <= 0) return false; //not a collision
 
     var penetration = overlap_x;
     var normal = Vec3(f32){ .x = MathUtils.Sign(delta.x), .y = 0.0, .z = 0.0 };
@@ -80,4 +82,6 @@ pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, tar
 
     contact.mNormal = normal;
     contact.mPenetration = penetration;
+
+    return true;
 }

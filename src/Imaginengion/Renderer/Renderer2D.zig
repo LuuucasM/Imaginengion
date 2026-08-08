@@ -9,7 +9,8 @@ const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const PipelineType = @import("RenderPipeline.zig").PipelineType;
 const ShadingBuffers = @import("Renderer.zig").ShadingBuffers;
-const EShadingFlags = @import("Renderer.zig").EShadingFlags;
+const SurfShadingData = @import("Renderer.zig").SurfShadingData;
+const MedShadingData = @import("Renderer.zig").MedShadingData;
 
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
@@ -42,18 +43,18 @@ const Renderer2D = @This();
 const MAX_PATH_LEN = 256;
 
 pub const QuadData = extern struct {
-    Rotation: Vec4(f32).VectorT,
-    Position: Vec3(f32).VectorT,
-    HalfExtents: Vec3(f32).VectorT,
+    Rotation: Vec4(f32).ArrayT,
+    Position: Vec3(f32).ArrayT,
+    HalfExtents: Vec3(f32).ArrayT,
     ShadingHandle: u32,
     ShadingFlags: u32,
 };
 
 pub const GlyphData = extern struct {
-    Rotation: Vec4(f32).VectorT,
-    Position: Vec3(f32).VectorT,
-    HalfExtents: Vec3(f32).VectorT,
-    PlaneCenter: Vec2(f32).VectorT,
+    Rotation: Vec4(f32).ArrayT,
+    Position: Vec3(f32).ArrayT,
+    HalfExtents: Vec3(f32).ArrayT,
+    PlaneCenter: Vec2(f32).ArrayT,
     AtlasShadingHandle: u32,
     TextureShadingFlags: u32,
 };
@@ -203,9 +204,9 @@ pub fn DrawQuad(
     const world_rot = transform_component.GetWorldRotation();
     const world_scale = transform_component.GetWorldScale();
 
-    const shading_handle = shading_buff.AddSurface(
+    const shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
-        quad_component.mTexOptions.mTilingFactor,
+        quad_component.mTexOptions.mColor,
         quad_component.mTexOptions.mTextureUV0,
         quad_component.mTexOptions.mTextureUV1,
         quad_component.mTexOptions.mTilingFactor,
@@ -214,24 +215,20 @@ pub fn DrawQuad(
     );
 
     var shading_flag: u32 = 0;
-    if (quad_component.mMaterial.mOpaqueMode == .Transparent) shading_flag |= EShadingFlags.SURFACE_TRANSPARENT.ToInt();
+    if (quad_component.mTexOptions.mIsTransparent) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
 
-    switch (scene_scene_comp.mLayerType) {
-        .GameLayer => try self.mGameData.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
-            .Position = world_pos.ToVector(),
-            .Rotation = world_rot.ToVector(),
-            .HalfExtents = Vec3(f32).VectorT{ world_scale.x * 0.5, world_scale.y * 0.5, THICKNESS_2D },
-            .ShadingHandle = @intCast(shading_handle),
-            .ShadingFlags = shading_flag,
-        }),
-        .OverlayLayer => try self.mGameData.mQuadBufferBase.append(engine_context.EngineAllocator(), .{
-            .Position = world_pos.ToVector(),
-            .Rotation = world_rot.ToVector(),
-            .HalfExtents = Vec3(f32).VectorT{ world_scale.x * 0.5, world_scale.y * 0.5, THICKNESS_2D },
-            .ShadingHandle = @intCast(shading_handle),
-            .ShadingFlags = shading_flag,
-        }),
-    }
+    const quad_buff_base = switch (scene_scene_comp.mLayerType) {
+        .GameLayer => &self.mGameData.mQuadBufferBase,
+        .OverlayLayer => &self.mOverlayData.mQuadBufferBase,
+    };
+
+    try quad_buff_base.append(engine_context.EngineAllocator(), .{
+        .Position = world_pos.ToArray(),
+        .Rotation = world_rot.ToArray(),
+        .HalfExtents = Vec3(f32).ArrayT{ world_scale.x * 0.5, world_scale.y * 0.5, THICKNESS_2D },
+        .ShadingHandle = @intCast(shading_handle),
+        .ShadingFlags = shading_flag,
+    });
 }
 
 pub fn DrawText(
@@ -250,7 +247,7 @@ pub fn DrawText(
     const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
     const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
-    const texture_shading_handle = shading_buff.AddSurface(
+    const texture_shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
         text_component.mTexOptions.mColor,
         text_component.mTexOptions.mTextureUV0,
@@ -261,7 +258,7 @@ pub fn DrawText(
     );
 
     var texture_shading_flags: u32 = 0;
-    if (text_component.mMaterial.mOpaqueMode == .Transparent) texture_shading_flags |= EShadingFlags.SURFACE_TRANSPARENT.ToInt();
+    if (text_component.mTexOptions.mIsTransparent) texture_shading_flags |= SurfShadingData.FLAG_TRANSPARENT;
 
     const world_pos = transform_component.GetWorldPosition();
 
@@ -289,9 +286,9 @@ pub fn DrawText(
 
         const atlas_shading_handle = shading_buff.AddSurface(
             engine_context.EngineAllocator(),
-            Vec4(f32).VectorT{ 1.0, 1.0, 1.0, 1.0 },
-            (glyph.mAtlasTexel0.ToVector() / text_asset.mAtlasSize.ToVector()),
-            (glyph.mAtlasTexel1.ToVector() / text_asset.mAtlasSize.ToVector()),
+            Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
+            glyph.mAtlasTexel0.DivVec(text_asset.mAtlasSize),
+            glyph.mAtlasTexel1.DivVec(text_asset.mAtlasSize),
             1.0,
             atlas_asset.GetTextureHandle(),
             texture_shading_handle,
@@ -312,24 +309,19 @@ pub fn DrawText(
             .y = (top + bottom) * 0.5 * text_component.mFontSize,
         };
 
-        switch (scene_scene_comp.mLayerType) {
-            .GameLayer => try self.mGameData.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
-                .Position = Vec3(f32).VectorT{ pen_x, pen_y, world_pos.z },
-                .Rotation = transform_component.Rotation.ToVector(),
-                .HalfExtents = Vec3(f32).VectorT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
-                .PlaneCenter = Vec2(f32).VectorT{ plane_center.x, plane_center.y },
-                .AtlasShadingHandle = atlas_shading_handle,
-                .TextureShadingFlags = texture_shading_flags,
-            }),
-            .OverlayLayer => try self.mOverlayData.mGlyphBufferBase.append(engine_context.FrameAllocator(), .{
-                .Position = Vec3(f32).VectorT{ pen_x, pen_y, world_pos.z },
-                .Rotation = transform_component.Rotation.ToVector(),
-                .HalfExtents = Vec3(f32).VectorT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
-                .PlaneCenter = Vec2(f32).VectorT{ plane_center.x, plane_center.y },
-                .AtlasShadingHandle = atlas_shading_handle, //
-                .TextureShadingFlags = texture_shading_flags,
-            }),
-        }
+        const glyph_buff_base = switch (scene_scene_comp.mLayerType) {
+            .GameLayer => &self.mGameData.mGlyphBufferBase,
+            .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
+        };
+
+        glyph_buff_base.append(engine_context.FrameAllocator(), .{
+            .Position = Vec3(f32).ArrayT{ pen_x, pen_y, world_pos.z },
+            .Rotation = transform_component.Rotation.ToVector(),
+            .HalfExtents = Vec3(f32).ArrayT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
+            .PlaneCenter = Vec2(f32).ArrayT{ plane_center.x, plane_center.y },
+            .AtlasShadingHandle = atlas_shading_handle,
+            .TextureShadingFlags = texture_shading_flags,
+        });
 
         var move_dist = glyph_width;
         if (i < text_component.mText.items.len - 1) {

@@ -30,7 +30,6 @@ mCollisionFilter: CollisionFilter = .default,
 pub fn Deinit(_: *ColliderComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderUnion(Shapes, &self.mShape, "Collider Type");
-    try ImguiManager.RenderStaticBitSet(std.StaticBitSet(16), &self.mCollisionFilter.CategoryMask, "Category Bits");
-    try ImguiManager.RenderStaticBitSet(std.StaticBitSet(16), &self.mCollisionFilter.RespondMask, "Response Bits");
+    ImguiManager.RenderEnum(Shapes, &self.mShape, "Collider Type");
+    self.mCollisionFilter.ImguiRender();
 }

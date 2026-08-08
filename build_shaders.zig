@@ -2,16 +2,18 @@ const std = @import("std");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
 
 const shaders = .{
-    .{ "SDFVertShader", "src/Imaginengion/EngineAssets/shaders/SDFVertShader.zig", "vert" },
-    .{ "SDFFragShaderOverlay", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderOverlay.zig", "frag_overlay" },
-    .{ "SDFFragShaderGame", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderGame.zig", "frag_game" },
+    //.{ "SDFVertShader", "src/Imaginengion/EngineAssets/shaders/SDFVertShader.zig", "vert" },
+    //.{ "SDFFragShaderOverlay", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderOverlay.zig", "frag_overlay" },
+    //.{ "SDFFragShaderGame", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderGame.zig", "frag_game" },
+    .{ "SDFComputeGame", "src/Imaginengion/EngineAssets/shaders/SDFComputeGame.zig", "compute_game" },
+    .{ "SDFComputeOverlay", "src/Imaginengion/EngineAssets/shaders/SDFComputeOverlay.zig", "compute_overlay" },
 };
 
-pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, eng_module: *std.Build.Module) void {
+pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, engine_module_eng: *std.Build.Module) void {
     const shaders_step = b.step("shaders", "Build all SPIR-V shaders");
 
     const base_module = b.createModule(.{
-        .root_source_file = b.path("src/Imaginengion/EngineAssets/shaders/SDFFragShaderBase.zig"),
+        .root_source_file = b.path("src/Imaginengion/EngineAssets/shaders/SDFSharedData.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
@@ -27,13 +29,14 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
                 .target = target,
                 .optimize = optimize,
                 .imports = &.{
-                    .{ .name = "FragShaderBase", .module = base_module },
+                    .{ .name = "SDFSharedData", .module = base_module },
                     .{ .name = "IM", .module = module },
                 },
             }),
         });
 
-        eng_module.addAnonymousImport(s[0], .{ .root_source_file = obj.getEmittedBin() });
+        //module.addAnonymousImport(s[0], .{ .root_source_file = obj.getEmittedBin() });
+        engine_module_eng.addAnonymousImport(s[0], .{ .root_source_file = obj.getEmittedBin() });
 
         const install = b.addInstallFile(
             obj.getEmittedBin(),

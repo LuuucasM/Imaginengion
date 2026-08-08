@@ -34,7 +34,7 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.SDLInitFail;
     }
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         sdl.SDL_SetLogOutputFunction(SDLLogCallback, null);
         sdl.SDL_SetLogPriority(sdl.SDL_LOG_CATEGORY_GPU, sdl.SDL_LOG_PRIORITY_VERBOSE);
     }

@@ -14,6 +14,8 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const GameMode = @import("../GameModes/GameMode.zig");
 
+const PhysicsManager = @import("../Physics/PhysicsManager.zig");
+
 const Assets = @import("../Assets/Assets.zig");
 const AudioAsset = Assets.AudioAsset;
 
@@ -236,10 +238,10 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const assets_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer assets_zone.Deinit();
-        try engine_context.mPhysicsManager.UpdateWorldTransforms(.Game, engine_context);
-        try engine_context.mPhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+        try PhysicsManager.UpdateWorldTransforms(.Game, engine_context);
+        try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
         if (self.mEditorState == .Play) {
-            try engine_context.mPhysicsManager.UpdateWorldTransforms(.Simulate, engine_context);
+            try PhysicsManager.UpdateWorldTransforms(.Simulate, engine_context);
         }
     }
     //---------------End World Transform Update ------------
@@ -499,10 +501,10 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
         self.mActiveWorldType,
         engine_context,
         .{
-            .mPosition = world_pos.ToVector(),
-            .mRotation = world_rot.ToVector(),
-            .mRayScale = Vec2(f32).VectorT{ ray_scale_x, ray_scale_y },
-            .mRayOffset = Vec2(f32).VectorT{ ray_offset_x, ray_offset_y },
+            .mPosition = world_pos.ToArray(),
+            .mRotation = world_rot.ToArray(),
+            .mRayScale = Vec2(f32).ArrayT{ ray_scale_x, ray_scale_y },
+            .mRayOffset = Vec2(f32).ArrayT{ ray_offset_x, ray_offset_y },
             .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
             .mQuadsCount = 0,
             .mGlyphsCount = 0,
@@ -510,6 +512,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
             .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
         },
         &render_component.mComputeTexture,
+        .OverlayGame,
     );
 }
 
@@ -549,17 +552,18 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             self.mActiveWorldType,
             engine_context,
             .{
-                .mRotation = world_rot.ToVector(),
-                .mPosition = world_pos.ToVector(),
+                .mRotation = world_rot.ToArray(),
+                .mPosition = world_pos.ToArray(),
                 .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-                .mRayScale = Vec2(f32).VectorT{ ray_scale_x, ray_scale_y },
-                .mRayOffset = Vec2(f32).VectorT{ ray_offset_x, ray_offset_y },
+                .mRayScale = Vec2(f32).ArrayT{ ray_scale_x, ray_scale_y },
+                .mRayOffset = Vec2(f32).ArrayT{ ray_offset_x, ray_offset_y },
                 .mQuadsCount = 0,
                 .mGlyphsCount = 0,
                 .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
                 .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
             },
             &render_component.mComputeTexture,
+            .OverlayGame,
         );
     }
 }

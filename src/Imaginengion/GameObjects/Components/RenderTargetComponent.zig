@@ -22,7 +22,7 @@ pub const Ind: usize = blk: {
 mComputeTexture: ComputeOutput = .empty,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) !void {
-    try self.mComputeTexture.Deinit(engine_context);
+    self.mComputeTexture.Deinit(engine_context);
 }
 
 pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {

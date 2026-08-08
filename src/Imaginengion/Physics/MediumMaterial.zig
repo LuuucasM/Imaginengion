@@ -54,8 +54,8 @@ pub const MediumScaleIdentity: MedMatData = .{
     .PhysicsData = .{},
     .SoundData = .{},
     .RenderData = .{
-        .Absorption = .{ 1.0, 1.0, 1.0 },
-        .Scattering = .{ 1.0, 1.0, 1.0 },
+        .Absorption = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
+        .Scattering = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
     },
 };
 

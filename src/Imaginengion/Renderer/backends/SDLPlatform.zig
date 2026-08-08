@@ -14,8 +14,8 @@ const SDLPlatform = @This();
 mDevice: *sdl.SDL_GPUDevice = undefined,
 mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
 mSwapchainTexture: ?*sdl.SDL_GPUTexture = null,
-mSwapchainWidth: u32 = 0,
-mSwapchainHeight: u32 = 0,
+mSwapchainWidth: usize = 0,
+mSwapchainHeight: usize = 0,
 
 pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
@@ -73,7 +73,7 @@ pub fn Deinit(self: *SDLPlatform, window: *Window) void {
     sdl.SDL_DestroyGPUDevice(self.mDevice);
 }
 
-pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
+pub fn BeginFrame(self: *SDLPlatform, window: *Window) void {
     std.debug.assert(self.mCurrentCmdBuffer == null);
     self.mCurrentCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
     std.debug.assert(self.mCurrentCmdBuffer != null);
@@ -95,14 +95,11 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
     if (!acquired) {
         _ = sdl.SDL_CancelGPUCommandBuffer(self.mCurrentCmdBuffer);
         self.mCurrentCmdBuffer = null;
-        return false;
     }
 
     self.mSwapchainTexture = swapchain_tex;
     self.mSwapchainWidth = width;
     self.mSwapchainHeight = height;
-
-    return true;
 }
 
 pub fn HasFrame(self: SDLPlatform) bool {
@@ -121,9 +118,10 @@ pub fn EndFrame(self: *SDLPlatform) void {
 }
 
 pub fn Present(self: SDLPlatform, compute_texture: *ComputeOutput) void {
+    const sdl_gpu_texture: *sdl.struct_SDL_GPUTexture = @ptrCast(compute_texture.GetTexture());
     const blit_info = sdl.SDL_GPUBlitInfo{
         .source = .{
-            .texture = compute_texture.GetTexture(),
+            .texture = sdl_gpu_texture,
             .mip_level = 0,
             .layer_or_depth_plane = 0,
             .x = 0,
@@ -137,8 +135,8 @@ pub fn Present(self: SDLPlatform, compute_texture: *ComputeOutput) void {
             .layer_or_depth_plane = 0,
             .x = 0,
             .y = 0,
-            .w = self.mPlatform.mSwapchainWidth,
-            .h = self.mPlatform.mSwapchainHeight,
+            .w = @intCast(self.mSwapchainWidth),
+            .h = @intCast(self.mSwapchainHeight),
         },
         .load_op = sdl.SDL_GPU_LOADOP_DONT_CARE,
         .clear_color = .{ .r = 0, .g = 0, .b = 0, .a = 0 },

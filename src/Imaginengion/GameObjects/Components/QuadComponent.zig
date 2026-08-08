@@ -56,7 +56,7 @@ pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
     try jw.write(self.mShouldRender);
 
     try jw.objectField("Color");
-    try jw.write(self.mMaterial.mSurfaceColor);
+    try jw.write(self.mTexOptions.mColor);
 
     try jw.objectField("TilingFactor");
     try jw.write(self.mTexOptions.mTilingFactor);
@@ -91,7 +91,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
         if (std.mem.eql(u8, field_name, "ShouldRender")) {
             result.mShouldRender = try std.json.innerParse(bool, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mMaterial.mSurfaceColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
+            result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
             result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TextureUV0")) {

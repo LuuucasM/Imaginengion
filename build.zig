@@ -36,6 +36,14 @@ pub fn build(b: *std.Build) void {
     engine_module_shader.addOptions("compute_build_options", compute_build_options);
     //=======================================END OPTIONS========================================================
 
+    //=========================================SHADER STEP=========================================
+    build_shaders.BuildShader(b, engine_module_shader, spirv_target, optimize, engine_module_eng);
+    //=========================================END SHADER STEP=====================================
+
+    //=========================================SCRIPT STEP=========================================
+    build_script.BuildScript(b, engine_module_script, target, optimize);
+    //=========================================END SCRIPT STEP=====================================
+
     //=========================================EDITOR STEP=========================================
     const editor_exe = b.addExecutable(.{
         .name = "ImaginEditor",
@@ -55,14 +63,6 @@ pub fn build(b: *std.Build) void {
         b.installArtifact(editor_exe);
     }
     //=========================================END EDITOR STEP=====================================
-
-    //=========================================SHADER STEP=========================================
-    build_shaders.BuildShader(b, engine_module_shader, spirv_target, optimize, engine_module_eng);
-    //=========================================END SHADER STEP=====================================
-
-    //=========================================SCRIPT STEP=========================================
-    build_script.BuildScript(b, engine_module_script, target, optimize);
-    //=========================================END SCRIPT STEP=====================================
 
     //================================================RUN STEP=======================================
     const run_cmd = b.addRunArtifact(editor_exe);

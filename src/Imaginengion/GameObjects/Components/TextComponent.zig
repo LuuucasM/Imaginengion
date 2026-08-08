@@ -26,10 +26,10 @@ pub const Ind: usize = blk: {
 
 mShouldRender: bool = true,
 mText: std.ArrayList(u8) = .empty,
-mTextAssetHandle: AssetHandle = .{},
-mTexHandle: AssetHandle = .{},
-mTexOptions: Texture2D.TexOptions = .{},
-mMaterial: Material.SurfaceRenderMat = .{},
+mTextAssetHandle: AssetHandle = .empty,
+mTexHandle: AssetHandle = .empty,
+mTexOptions: Texture2D.TexOptions = .default,
+mMaterial: Material.SurfaceRenderMat = .default,
 mFontSize: f32 = 9,
 mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 mEngineAllocator: std.mem.Allocator = undefined,
@@ -82,7 +82,7 @@ pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {
 
     //texture options
     try jw.objectField("Color");
-    try jw.write(self.mMaterial.mSurfaceColor);
+    try jw.write(self.mTexOptions.mColor);
 
     try jw.objectField("TilingFactor");
     try jw.write(self.mTexOptions.mTilingFactor);
@@ -149,7 +149,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
                 @panic("error appending slice, error out of memory");
             };
         } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mMaterial.mSurfaceColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
+            result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
             result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
         } else if (std.mem.eql(u8, field_name, "TextureUV0")) {

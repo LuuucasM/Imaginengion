@@ -7,7 +7,7 @@ const Vec3 = MathTypes.Vec3;
 const TextureManager = @This();
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("backends/SGTextureManager.zig"),
+    .windows, .vulkan => @import("backends/SGTextureManager.zig"),
     else => @compileError("Not supported platform"),
 };
 

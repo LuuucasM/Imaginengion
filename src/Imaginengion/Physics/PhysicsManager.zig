@@ -57,12 +57,10 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
 
-    self._CollisionManager.StartFrame();
-
     var scene_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
     };
     self._InternalData.Accumulator += engine_context.mDT;
 
@@ -82,11 +80,11 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
             try UpdateWorldTransforms(world_type, engine_context);
 
-            self._CollisionManager.BroadPass(engine_context, scene_manager);
-            self._CollisionManager.NarrowPass(engine_context);
-            self._CollisionManager.PreSolverPass(engine_context);
-            self._CollisionManager.SolverPass(world_type, engine_context);
-            self._CollisionManager.PostsolverPass(engine_context);
+            try self._CollisionManager.BroadPass(engine_context, scene_manager);
+            try self._CollisionManager.NarrowPass(engine_context);
+            try self._CollisionManager.PreSolverPass(engine_context);
+            try self._CollisionManager.SolverPass(world_type, engine_context);
+            try self._CollisionManager.PostsolverPass(engine_context);
             self._CollisionManager.EndPass(engine_context);
         }
     }

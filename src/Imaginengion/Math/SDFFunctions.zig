@@ -6,7 +6,7 @@ const Vec4 = MathTypes.Vec4;
 
 const GlyphData = @import("../Renderer/Renderer2D.zig").GlyphData;
 const QuadData = @import("../Renderer/Renderer2D.zig").QuadData;
-const ShadingData = @import("../Renderer/Renderer.zig").ShadingData;
+const SurfShadingData = @import("../Renderer/Renderer.zig").SurfShadingData;
 
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 
@@ -77,11 +77,11 @@ pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32) Vec3(f
     );
 }
 
-pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: ShadingData, textures_array: anytype, sample_sampler: anytype) f32 {
+pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: SurfShadingData, textures_array: anytype, sample_sampler: anytype) f32 {
     //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
-    const raw_uv: Vec2(f32) = .FromVector(atlas_shading_data.TextureUV0 + (atlas_shading_data.TextureUV1 - atlas_shading_data.TextureUV0) * texture_uv.ToVector());
+    const raw_uv: Vec2(f32) = Vec2(f32).FromArray(atlas_shading_data.TextureUV0).AddVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV1).SubVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV0))).MulVec(texture_uv);
     const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv);
-    const msd = sample_sampler(textures_array, sample_uv);
+    const msd = sample_sampler(textures_array, sample_uv.ToVector());
     return Median(msd[0], msd[1], msd[2]);
 }
 

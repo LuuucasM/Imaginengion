@@ -18,23 +18,23 @@ pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
         };
 
         pub fn Init(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
-            self._Impl.Init(engine_context, width, height);
+            try self._Impl.Init(engine_context, width, height);
         }
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             self._Impl.Deinit(engine_context);
         }
 
         pub fn Resize(self: *Self, engine_context: *EngineContext, width: usize, height: usize) !void {
-            self._Impl.Resize(engine_context, width, height);
+            try self._Impl.Resize(engine_context, width, height);
         }
 
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) !void {
-            self._Impl.Invalidate(engine_context);
+            try self._Impl.Invalidate(engine_context);
         }
 
         pub fn BeginComputePass(self: *Self, engine_context: *EngineContext, cycle: bool) *anyopaque {
-            self._Impl.BeginComputePass(engine_context, cycle);
+            return self._Impl.BeginComputePass(engine_context, cycle);
         }
 
         pub fn EndComputePass(self: Self, pass: *anyopaque) void {
@@ -46,15 +46,15 @@ pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
         }
 
         pub fn GetTexture(self: Self) *anyopaque {
-            self._Impl.GetTexture();
+            return self._Impl.GetTexture();
         }
 
         pub fn GetWidth(self: Self) usize {
-            self._Impl.GetWidth();
+            return self._Impl.GetWidth();
         }
 
         pub fn GetHeight(self: Self) usize {
-            self._Impl.GetHeight();
+            return self._Impl.GetHeight();
         }
     };
 }

@@ -26,7 +26,7 @@ pub const Image2DArray = @SpirvType(
 
 pub const Image2D = @SpirvType(
     .{ .image = .{
-        .usage = .{ .sampled = f32 },
+        .usage = .{ .storage = f32 },
         .dim = .@"2d",
         .format = .unknown,
         .depth = .unknown,
@@ -42,8 +42,6 @@ pub const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
 });
 
 pub const Sampler2DArray = @SpirvType(.{ .sampled_image = Image2DArray });
-
-pub const Sampler2D = @SpirvType(.{ .sampled_image = Image2D });
 
 const QuadsArray = @SpirvType(.{ .runtime_array = QuadData });
 pub const QuadsBuf = extern struct { ptr: QuadsArray };
@@ -68,7 +66,7 @@ pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTex
 pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
 
 //layout(set = 2, binding = 3) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
-pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
+pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
 
 //layout(set = 2, binding = 4) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
 pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
@@ -81,8 +79,8 @@ pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name =
 pub fn imageRead(
     image: anytype,
     T: type,
-    coordinate: std.spirv.ImageCoordinate(std.meta.Child(@TypeOf(image)), T),
-) @Vector(4, std.spirv.ImageSampledType(std.meta.Child(@TypeOf(image)))) {
+    coordinate: ImageCoordinate(std.meta.Child(@TypeOf(image)), T),
+) @Vector(4, ImageSampledType(std.meta.Child(@TypeOf(image)))) {
     switch (T) {
         u32, i32 => {},
         f32 => if (builtin.target.os.tag != .opencl) {
@@ -105,7 +103,7 @@ pub fn imageRead(
         .unknown, .storage => {},
         else => @compileError("SPIR-V image must have unknown or storage usage"),
     }
-    const Result = @Vector(4, std.spirv.ImageSampledType(Image));
+    const Result = @Vector(4, ImageSampledType(Image));
     return asm volatile (
         \\%loaded_image = OpLoad %Image %image
         \\%ret           = OpImageRead %Result %loaded_image %coordinate
@@ -115,4 +113,36 @@ pub fn imageRead(
           [Result] "t" (Result),
           [coordinate] "" (coordinate),
     );
+}
+
+fn ImageCoordinate(Image: type, Element: type) type {
+    const image_info = switch (@typeInfo(Image)) {
+        .spirv => |spirv| switch (spirv) {
+            .sampled_image => |sampled_image| @typeInfo(sampled_image).spirv.image,
+            .image => |image| image,
+            else => @compileError("Expected SPIR-V image or sampled image type, found '" ++ @typeName(Image) ++ "'"),
+        },
+        else => @compileError("Expected SPIR-V image or sampled image type, found '" ++ @typeName(Image) ++ "'"),
+    };
+    const dim = switch (image_info.dim) {
+        .@"1d" => 1 + @as(u8, @intFromBool(image_info.arrayed)),
+        .@"2d" => 2 + @as(u8, @intFromBool(image_info.arrayed)),
+        .@"3d", .cube => 3 + @as(u8, @intFromBool(image_info.arrayed)),
+    };
+    if (dim == 1) return Element else return @Vector(dim, Element);
+}
+
+/// The type of the components that result from sampling or reading from the given SPIR-V image or sampled image type.
+fn ImageSampledType(Image: type) type {
+    const image_info = switch (@typeInfo(Image)) {
+        .spirv => |spirv| switch (spirv) {
+            .sampled_image => |sampled_image| @typeInfo(sampled_image).spirv.image,
+            .image => |image| image,
+            else => @compileError("Expected SPIR-V image or sampled image type, found '" ++ @typeName(Image) ++ "'"),
+        },
+        else => @compileError("Expected SPIR-V image or sampled image type, found '" ++ @typeName(Image) ++ "'"),
+    };
+    return switch (image_info.usage) {
+        inline else => |usage| usage,
+    };
 }
