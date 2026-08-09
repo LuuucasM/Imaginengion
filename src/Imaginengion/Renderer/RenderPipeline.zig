@@ -21,12 +21,14 @@ pub const PipelineType = enum {
     //CustomShader, one day when i konw what to even do with this
 };
 
+const is_spirv = builtin.target.cpu.arch.isSpirV();
+
 pub const SDFPushConstants = extern struct {
-    mPosition: Vec3(f32).ArrayT,
+    mPosition: if (is_spirv) @Vector(3, f32) else [3]f32,
     mPerspectiveFar: f32,
-    mRotation: Vec4(f32).ArrayT,
-    mRayScale: Vec2(f32).ArrayT,
-    mRayOffset: Vec2(f32).ArrayT,
+    mRotation: if (is_spirv) @Vector(4, f32) else [4]f32,
+    mRayScale: if (is_spirv) @Vector(2, f32) else [2]f32,
+    mRayOffset: if (is_spirv) @Vector(2, f32) else [2]f32,
     mQuadsCount: u32,
     mGlyphsCount: u32,
     mViewportWidth: f32,

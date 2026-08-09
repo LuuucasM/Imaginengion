@@ -73,10 +73,10 @@ pub const RenderBuffers = struct {
     mGlyphBufferBase: std.ArrayList(GlyphData) = .empty,
 
     pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
-        self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 4, .Fragment);
+        self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 2, .Compute);
         self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_context.EngineAllocator(), 100);
 
-        self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 5, .Fragment);
+        self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 3, .Compute);
         self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {

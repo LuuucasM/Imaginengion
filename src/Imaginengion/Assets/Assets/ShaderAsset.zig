@@ -9,6 +9,7 @@ const ShaderAsset = @This();
 pub const Stage = enum {
     Vertex,
     Fragment,
+    Compute,
 };
 
 const ShaderManifest = struct {

@@ -95,6 +95,7 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) void {
     if (!acquired) {
         _ = sdl.SDL_CancelGPUCommandBuffer(self.mCurrentCmdBuffer);
         self.mCurrentCmdBuffer = null;
+        return;
     }
 
     self.mSwapchainTexture = swapchain_tex;
@@ -103,10 +104,10 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) void {
 }
 
 pub fn HasFrame(self: SDLPlatform) bool {
-    if (self.mCurrentCmdBuffer != null and self.mSwapchainTexture != null) {
-        return true;
+    if (self.mCurrentCmdBuffer == null or self.mSwapchainTexture == null) {
+        return false;
     }
-    return false;
+    return true;
 }
 
 pub fn EndFrame(self: *SDLPlatform) void {

@@ -57,7 +57,6 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mSurfShading = &SurfShadingSSBO.ptr,
         .mMedShading = &MedShadingSSBO.ptr,
         .mPerspectiveFar = CameraUBO.mPerspectiveFar,
-        .mTexturesArray = TexturesArray,
     };
 
     //setup initial node and edge
@@ -85,10 +84,10 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     marcher.mNodes[0].FirstEdge = 0;
     marcher.mEdgeCount = 1;
 
-    marcher.March(std.spirv.imageSampleImplicitLod);
+    marcher.March(SDFShared.imageSampleExplicitLod, TexturesArray);
 
     //traverse ray tree backwards to obtain final output color
-    const march_color = marcher.GenerateColor(std.spirv.imageSampleImplicitLod);
+    const march_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
 
     const out_a = march_color.w + sample.w * (1.0 - march_color.w);
 

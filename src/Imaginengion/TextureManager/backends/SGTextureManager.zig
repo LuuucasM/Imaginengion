@@ -171,6 +171,16 @@ pub fn Bind(self: SGTextureManager, render_pass: *anyopaque) void {
     sdl.SDL_BindGPUFragmentSamplers(sdl_render_pass, 0, &binding, 0);
 }
 
+pub fn BindCompute(self: SGTextureManager, compute_pass: *anyopaque) void {
+    const sdl_compute_pass: *sdl.SDL_GPUComputePass = @ptrCast(compute_pass);
+
+    const binding = sdl.SDL_GPUTextureSamplerBinding{
+        .texture = self.mTexture,
+        .sampler = self.mSampler,
+    };
+    sdl.SDL_BindGPUComputeSamplers(sdl_compute_pass, 0, &binding, 1);
+}
+
 pub fn Unregister(self: *SGTextureManager, texture_location: u32) void {
     const layer_index = GetLayerIndex(texture_location);
     const slot_index = GetSlotIndex(texture_location);

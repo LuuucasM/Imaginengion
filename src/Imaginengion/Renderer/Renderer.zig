@@ -43,7 +43,7 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const Renderer = @This();
 
-pub const ComputeOutput = ComputeTexture(.BGRA8);
+pub const ComputeOutput = ComputeTexture(.RGBA8);
 
 //pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
@@ -85,10 +85,10 @@ pub const ShadingBuffers = struct {
     mMedShadingBuff: SSBO = .{},
     mMedShadingBuffBase: std.ArrayList(MedShadingData) = .empty,
     pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
-        self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 2, .Fragment);
+        self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 0, .Compute);
         self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.EngineAllocator(), 100);
 
-        self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 3, .Fragment);
+        self.mMedShadingBuff.Init(engine_context, @sizeOf(MedShadingData) * 100, 1, .Compute);
         self.mMedShadingBuffBase = try std.ArrayList(MedShadingData).initCapacity(engine_context.EngineAllocator(), 100);
     }
     pub fn Deinit(self: *ShadingBuffers, engine_context: *EngineContext) void {
@@ -199,7 +199,10 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
 
     self.mPlatform.BeginFrame(&engine_context.mAppWindow);
 
-    if (!self.mPlatform.HasFrame()) return;
+    if (!self.mPlatform.HasFrame()) {
+        self.mPlatform.EndFrame();
+        return;
+    }
 
     self.mPlatform.PushDebugGroup("Frame\x00");
 
@@ -305,7 +308,7 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
             self.mOverlayPipeline.Bind(overlay_compute_pass);
             self.mR2D.BindBuffers(overlay_compute_pass, .OverlayPipeline);
             self.mSDFShading.BindBuffers(overlay_compute_pass);
-            self.mTextureManager.Bind(overlay_compute_pass);
+            self.mTextureManager.BindCompute(overlay_compute_pass);
 
             self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
             self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
@@ -332,7 +335,7 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
             self.mGamePipeline.Bind(game_compute_pass);
             self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
             self.mSDFShading.BindBuffers(game_compute_pass);
-            self.mTextureManager.Bind(game_compute_pass);
+            self.mTextureManager.BindCompute(game_compute_pass);
 
             self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .GamePipeline);
             self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .GamePipeline);

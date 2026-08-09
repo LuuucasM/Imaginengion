@@ -35,12 +35,12 @@ pub fn Deinit(self: *SDLSSBO, engine_context: *EngineContext) void {
     }
 }
 
-pub fn Bind(self: SDLSSBO, render_pass: *anyopaque) void {
+pub fn Bind(self: SDLSSBO, pass: *anyopaque) void {
     if (self.mBuffer == null) return;
-    const pass: *sdl.SDL_GPURenderPass = @ptrCast(@alignCast(render_pass));
     switch (self.mStage) {
-        .Vertex => sdl.SDL_BindGPUVertexStorageBuffers(pass, @intCast(self.mSlot), &self.mBuffer, 1),
-        .Fragment => sdl.SDL_BindGPUFragmentStorageBuffers(pass, @intCast(self.mSlot), &self.mBuffer, 1),
+        .Vertex => sdl.SDL_BindGPUVertexStorageBuffers(@ptrCast(@alignCast(pass)), @intCast(self.mSlot), &self.mBuffer, 1),
+        .Fragment => sdl.SDL_BindGPUFragmentStorageBuffers(@ptrCast(@alignCast(pass)), @intCast(self.mSlot), &self.mBuffer, 1),
+        .Compute => sdl.SDL_BindGPUComputeStorageBuffers(@ptrCast(@alignCast(pass)), @intCast(self.mSlot), &self.mBuffer, 1),
     }
 }
 

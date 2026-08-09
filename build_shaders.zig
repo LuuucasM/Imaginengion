@@ -22,7 +22,7 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
     });
 
     inline for (shaders) |s| {
-        const obj = b.addObject(.{
+        const obj = b.addExecutable(.{
             .name = s[0],
             .root_module = b.createModule(.{
                 .root_source_file = b.path(s[1]),

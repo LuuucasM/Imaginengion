@@ -20,9 +20,9 @@ pub const PipelineType = enum {
 };
 
 const ShaderInfo: StageInfo = .{
-    .mNumSamplers = 2,
+    .mNumSamplers = 1,
     .mNumROStorageTextures = 0,
-    .mNumROStorageBuffers = 3,
+    .mNumROStorageBuffers = 4,
     .mNumRWStorageTextures = 1,
     .mNumRWStorageBuffers = 0,
     .mNumUniformBuffers = 1,

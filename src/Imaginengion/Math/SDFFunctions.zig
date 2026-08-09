@@ -81,7 +81,7 @@ pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: SurfShadingData, textur
     //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
     const raw_uv: Vec2(f32) = Vec2(f32).FromArray(atlas_shading_data.TextureUV0).AddVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV1).SubVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV0))).MulVec(texture_uv);
     const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv);
-    const msd = sample_sampler(textures_array, sample_uv.ToVector());
+    const msd = sample_sampler(textures_array, sample_uv.ToVector(), 0.0);
     return Median(msd[0], msd[1], msd[2]);
 }
 

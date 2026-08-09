@@ -101,9 +101,8 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
-        mTexturesArray: textures_array_type,
 
-        pub fn March(self: *Self, sample_sampler: anytype) void {
+        pub fn March(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) void {
             var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
             edge_ind_stack.Push(0);
 
@@ -166,7 +165,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                         const uv = SDFFunc.uvIMGlyph(end_point, glyph, texture_shading_handle);
 
                         if (uv.x >= 0.0 and uv.y >= 0.0) {
-                            const msd = SDFFunc.GetMSD(.{ .x = uv.x, .y = uv.y }, atlas_shading_data, self.mTexturesArray, sample_sampler);
+                            const msd = SDFFunc.GetMSD(.{ .x = uv.x, .y = uv.y }, atlas_shading_data, textures_array, sample_sampler);
                             if (msd >= 0.5) {
                                 break :blk uv;
                             } else {
@@ -203,7 +202,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                     const material_handle = new_node.MaterialHandle;
                     const material = self.mSurfShading[material_handle];
 
-                    const texture_color = self.SampleTexture(new_node.TextureUV, sample_sampler);
+                    const texture_color = SampleTexture(new_node.TextureUV, sample_sampler, textures_array);
                     const material_color = Vec4(f32).FromVector(material.Color);
                     const color = material_color.MulVec(texture_color); // tint
                     const alpha = color.w;
@@ -227,7 +226,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             }
         }
 
-        pub fn GenerateColor(self: *Self, sample_sampler: anytype) Vec4(f32) {
+        pub fn GenerateColor(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
             var i: usize = self.mNodeCount;
             while (i > 0) {
                 i -= 1;
@@ -238,7 +237,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                     self.CalcEdgeColor(ei);
                     ei = self.mEdges[@intCast(ei)].SiblingEdge;
                 }
-                self.CalcNodeColor(i, sample_sampler);
+                self.CalcNodeColor(i, sample_sampler, textures_array);
             }
 
             return self.mNodes[0].AccumColor;
@@ -305,13 +304,13 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             return vec.Dir();
         }
 
-        fn CalcNodeColor(self: *Self, node_ind: u32, sample_sampler: anytype) void {
+        fn CalcNodeColor(self: *Self, node_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) void {
             const curr_node = self.mNodes[node_ind];
 
             const child_accum = if (curr_node.FirstEdge == NO_EDGE) self.mDefaultColor else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
 
             const material = self.mSurfShading[curr_node.MaterialHandle];
-            const texture_color = self.SampleTexture(curr_node.TextureUV, sample_sampler);
+            const texture_color = SampleTexture(curr_node.TextureUV, sample_sampler, textures_array);
             const material_color = Vec4(f32).FromVector(material.Color);
             const color = material_color.MulVec(texture_color); // tint
             const alpha = color.w;
@@ -344,10 +343,10 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             self.mEdges[edge_ind].AccumColor = .{ .x = color_out.x, .y = color_out.y, .z = color_out.z, .w = child_accum.w };
         }
 
-        fn SampleTexture(self: Self, texture_uv: Vec3(f32), sample_sampler: anytype) Vec4(f32) {
+        fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
             if (texture_uv.x < 0 or texture_uv.y < 0 or texture_uv.z < 0) return Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
 
-            return .FromVector(sample_sampler(self.mTexturesArray, texture_uv.ToVector()));
+            return .FromVector(sample_sampler(textures_array, texture_uv.ToVector(), 0.0));
         }
 
         fn GetShadingHandle(self: Self, obj_data: ObjectData) u32 {

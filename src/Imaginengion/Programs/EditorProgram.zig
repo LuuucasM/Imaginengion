@@ -142,7 +142,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
     self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
     self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
-    try self.mEditorViewportEntity.AddComponentScript(engine_context, "assets/scripts/EditorCameraInput.zig", .Eng);
+    try self.mEditorViewportEntity.AddComponentScript(engine_context, "src/Imaginengion/EngineAssets/scripts/EditorCameraInput.zig", .Eng);
     try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, ViewpointComponent{});

@@ -15,7 +15,7 @@ const NO_EDGE = RayMarcher.NO_EDGE;
 pub const Image2DArray = @SpirvType(
     .{ .image = .{
         .usage = .{ .sampled = f32 },
-        .format = .unknown,
+        .format = .rgba8unorm,
         .dim = .@"2d",
         .depth = .unknown,
         .access = .unknown,
@@ -24,22 +24,19 @@ pub const Image2DArray = @SpirvType(
     } },
 );
 
+//std.lang.Type.Spirv
+
 pub const Image2D = @SpirvType(
     .{ .image = .{
         .usage = .{ .storage = f32 },
         .dim = .@"2d",
-        .format = .unknown,
+        .format = .rgba8unorm,
         .depth = .unknown,
         .access = .unknown,
         .arrayed = false,
         .multisampled = false,
     } },
 );
-
-pub const oFragColor = @extern(*addrspace(.output) @Vector(4, f32), .{
-    .name = "oFragColor",
-    .decoration = .{ .location = 0 },
-});
 
 pub const Sampler2DArray = @SpirvType(.{ .sampled_image = Image2DArray });
 
@@ -55,24 +52,16 @@ pub const SurfShadingBuf = extern struct { ptr: SurfShadingArray };
 const MedShadingArray = @SpirvType(.{ .runtime_array = MedShadingData });
 pub const MedShadingBuf = extern struct { ptr: MedShadingArray };
 
-pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 3, .binding = 0 } } });
+pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 0, .binding = 0 } } });
 
-//layout(set = 2, binding = 0) uniform sampler2DArray uTextures;
-pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
-//layout(set = 2, binding = 1) uniform sampler
-pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 2, .binding = 1 } } });
+pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 1 } } });
+pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 2 } } });
+pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
+pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
 
-//layout(set = 2, binding = 2) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
-pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 2 } } });
+pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 1, .binding = 0 } } });
 
-//layout(set = 2, binding = 3) readonly buffer ShadingSSBO { ShadingData data[]; } Shading;
-pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 3 } } });
-
-//layout(set = 2, binding = 4) readonly buffer QuadsSSBO { QuadData data[]; } Quads;
-pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 4 } } });
-
-//layout(set = 2, binding = 5) readonly buffer GlyphSSBO { GlyphData data[]; } Glyphs;
-pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 5 } } });
+pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
 
 /// Read a texel from an image without a sampler.
 /// The type of `image` must be a pointer to a SPIR-V image.
@@ -112,6 +101,43 @@ pub fn imageRead(
           [image] "" (image),
           [Result] "t" (Result),
           [coordinate] "" (coordinate),
+    );
+}
+
+/// The type of `sampled_image` must be a pointer to a SPIR-V sampled image.
+pub fn imageSampleExplicitLod(
+    sampled_image: anytype,
+    coordinate: ImageCoordinate(std.meta.Child(@TypeOf(sampled_image)), f32),
+    lod: f32,
+) @Vector(4, ImageSampledType(std.meta.Child(@TypeOf(sampled_image)))) {
+    const SampledImage = switch (@typeInfo(@TypeOf(sampled_image))) {
+        .pointer => |pointer| pointer.child,
+        else => @compileError("Expected a pointer to SPIR-V sampled image type, found '" ++ @typeName(@TypeOf(sampled_image)) ++ "'"),
+    };
+    const Result = @Vector(4, ImageSampledType(SampledImage));
+
+    const image_info = switch (@typeInfo(SampledImage)) {
+        .spirv => |spirv| switch (spirv) {
+            .sampled_image => |sampled_image_info| @typeInfo(sampled_image_info).spirv.image,
+            else => @compileError("Expected SPIR-V sampled image type, found '" ++ @typeName(SampledImage) ++ "'"),
+        },
+        else => @compileError("Expected SPIR-V sampled image type, found '" ++ @typeName(SampledImage) ++ "'"),
+    };
+
+    if (image_info.multisampled)
+        @compileError("Can not explicitly sample a sampled image that was multisampled");
+
+    // TOOD: If buffer dim is added, throw a compile error if the dimension is a buffer.
+
+    return asm volatile (
+        \\%loaded_sampler = OpLoad %SampledImage %sampled_image
+        \\%ret            = OpImageSampleExplicitLod %Result %loaded_sampler %coordinate Lod %lod
+        : [ret] "" (-> Result),
+        : [SampledImage] "t" (SampledImage),
+          [sampled_image] "" (sampled_image),
+          [Result] "t" (Result),
+          [coordinate] "" (coordinate),
+          [lod] "" (lod),
     );
 }
 
