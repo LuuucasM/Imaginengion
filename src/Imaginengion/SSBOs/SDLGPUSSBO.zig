@@ -49,7 +49,7 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyo
 
     var resize: bool = false;
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetCommandBuff()));
+    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetWorkCmdBuff()));
 
     if (size + offset > self.mSize) {
         if (self.mBuffer) |buf| sdl.SDL_ReleaseGPUBuffer(device, buf);

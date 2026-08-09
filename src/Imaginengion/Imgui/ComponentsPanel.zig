@@ -115,7 +115,6 @@ fn NewObjectComponentPopup(comptime ObjectType: type, engine_context: *EngineCon
 fn ObjectTraits(comptime T: type) type {
     if (T == Entity) {
         const EntityComponents = @import("../GameObjects/Components.zig");
-
         return struct {
             const ComponentsPanelList = EntityComponents.ComponentPanelList;
         };

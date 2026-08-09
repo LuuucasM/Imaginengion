@@ -30,12 +30,16 @@ pub fn Deinit(self: *Platform, window: *Window) void {
     self._Impl.Deinit(window);
 }
 
-pub fn BeginFrame(self: *Platform, window: *Window) void {
-    self._Impl.BeginFrame(window);
+pub fn BeginFrame(self: *Platform, window: *Window) bool {
+    return self._Impl.BeginFrame(window);
 }
 
-pub fn HasFrame(self: Platform) bool {
-    return self._Impl.HasFrame();
+pub fn StartCmdBuff(self: *Platform) void {
+    self._Impl.StartCmdBuff();
+}
+
+pub fn EndCmdBuff(self: *Platform) void {
+    self._Impl.EndCmdBuff();
 }
 
 pub fn EndFrame(self: *Platform) void {
@@ -54,11 +58,19 @@ pub fn Present(self: Platform, compute_texture: *ComputeOutput) void {
     self._Impl.Present(compute_texture);
 }
 
-pub fn GetCommandBuff(self: Platform) *anyopaque {
-    return self._Impl.GetCommandBuff();
+pub fn GetFrameCmdBuff(self: Platform) *anyopaque {
+    return self._Impl.GetFrameCmdBuff();
 }
 
-pub fn PushDebugGroup(self: Platform, message: []const u8) void {
+pub fn GetWorkCmdBuff(self: Platform) *anyopaque {
+    return self._Impl.GetWorkCmdBuff();
+}
+
+pub fn GetSwapchain(self: Platform) *anyopaque {
+    return self._Impl.GetSwapchain();
+}
+
+pub fn PushDebugGroup(self: Platform, message: [:0]const u8) void {
     self._Impl.PushDebugGroup(message);
 }
 

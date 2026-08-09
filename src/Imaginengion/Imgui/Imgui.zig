@@ -96,27 +96,16 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
 
     imgui.igRender();
     const draw_data = imgui.igGetDrawData();
-    const is_minimized: bool = draw_data.*.DisplaySize.x <= 0.0 or draw_data.*.DisplaySize.y <= 0.0;
 
-    const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-
-    const cmd_buffer: ?*sdl.SDL_GPUCommandBuffer = sdl.SDL_AcquireGPUCommandBuffer(device);
-    const sdl_window: *sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
-
-    var swapchain_texture: ?*sdl.SDL_GPUTexture = null;
-    _ = sdl.SDL_AcquireGPUSwapchainTexture(cmd_buffer, sdl_window, &swapchain_texture, null, null);
-
-    if (swapchain_texture == null or is_minimized) {
-        _ = sdl.SDL_CancelGPUCommandBuffer(cmd_buffer);
-        return;
-    }
+    const cmd_buffer = engine_context.mRenderer.mPlatform.GetFrameCmdBuff();
+    const swapchain_texture = engine_context.mRenderer.mPlatform.GetSwapchain();
 
     imgui.ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, @ptrCast(cmd_buffer));
 
     const target_info = sdl.SDL_GPUColorTargetInfo{
-        .texture = swapchain_texture,
+        .texture = @ptrCast(swapchain_texture),
         .clear_color = .{ .r = 0.1, .g = 0.1, .b = 0.1, .a = 1.0 },
-        .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+        .load_op = sdl.SDL_GPU_LOADOP_LOAD, // was CLEAR
         .store_op = sdl.SDL_GPU_STOREOP_STORE,
         .mip_level = 0,
         .layer_or_depth_plane = 0,
@@ -129,14 +118,9 @@ pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
         .padding2 = 0,
     };
 
-    const render_pass = sdl.SDL_BeginGPURenderPass(cmd_buffer, &target_info, 1, null);
-
+    const render_pass = sdl.SDL_BeginGPURenderPass(@ptrCast(cmd_buffer), &target_info, 1, null);
     imgui.ImGui_ImplSDLGPU3_RenderDrawData(draw_data, @ptrCast(cmd_buffer), @ptrCast(render_pass), null);
-
     sdl.SDL_EndGPURenderPass(render_pass);
-
-    // Submit the command buffer
-    _ = sdl.SDL_SubmitGPUCommandBuffer(cmd_buffer);
 
     if (io.ConfigFlags & imgui.ImGuiConfigFlags_ViewportsEnable != 0) {
         imgui.igUpdatePlatformWindows();
@@ -751,8 +735,8 @@ fn getOrCreatePreviewTexture(self: *ImguiManager, engine_allocator: std.mem.Allo
             .type = sdl.SDL_GPU_TEXTURETYPE_2D,
             .format = sdl.SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
             .usage = sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
-            .width = 256,
-            .height = 256,
+            .width = TEXTURE_SIZE,
+            .height = TEXTURE_SIZE,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = sdl.SDL_GPU_SAMPLECOUNT_1,

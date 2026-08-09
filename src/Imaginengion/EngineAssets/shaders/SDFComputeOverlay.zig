@@ -17,7 +17,7 @@ const MedShadingSSBO = SDFShared.MedShadingSSBO;
 const OutTexture = SDFShared.OutTexture;
 const TexturesArray = SDFShared.TexturesArray;
 
-const default_color = Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
+const default_color = Vec4(f32){ .x = 5.0, .y = 4.0, .z = 3.0, .w = 1.0 };
 
 const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&QuadsSSBO.ptr),

@@ -44,7 +44,7 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
         /// Begins a compute pass with this texture bound read-write at slot 0.
         /// cycle: true for overlay pass (fresh write), false for game pass (must see overlay's writes).
         pub fn BeginComputePass(self: *Self, engine_context: *EngineContext, cycle: bool) *sdl.SDL_GPUComputePass {
-            const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetCommandBuff()));
+            const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetWorkCmdBuff()));
 
             const storage_tex_binding = sdl.SDL_GPUStorageTextureReadWriteBinding{
                 .texture = self.mTexture.?,

@@ -182,6 +182,14 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     try self.mSDFShading.Init(engine_context);
 }
 
+pub fn BeginFrame(self: *Renderer, engine_context: *EngineContext) bool {
+    return self.mPlatform.BeginFrame(&engine_context.mAppWindow);
+}
+
+pub fn EndFrame(self: *Renderer) void {
+    self.mPlatform.EndFrame();
+}
+
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
     self.mSDFShading.Deinit(engine_context);
     self.mTextureManager.Deinit(engine_context);
@@ -196,16 +204,6 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
-
-    self.mPlatform.BeginFrame(&engine_context.mAppWindow);
-
-    if (!self.mPlatform.HasFrame()) {
-        self.mPlatform.EndFrame();
-        return;
-    }
-
-    self.mPlatform.PushDebugGroup("Frame\x00");
-
     const scene_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
@@ -290,19 +288,20 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
     defer zone.Deinit();
 
-    self.mPlatform.PushDebugGroup("End Rendering\x00");
+    self.mPlatform.StartCmdBuff();
 
-    const cmd = self.mPlatform.GetCommandBuff();
+    self.mPlatform.PushDebugGroup("End Rendering");
+
+    const cmd = self.mPlatform.GetWorkCmdBuff();
 
     //====================first overlay render pipeline======================================
     mode_switch: switch (rendering_mode) {
         .Overlay, .OverlayGame => {
-            self.mPlatform.PushDebugGroup("Upload Buffers - Overlay\x00");
+            self.mPlatform.PushDebugGroup("Upload Buffers - Overlay");
             try self.mR2D.SetBuffers(world_type, engine_context, .OverlayPipeline);
             try self.mSDFShading.SetBuffers(world_type, engine_context);
             self.mPlatform.PopDebugGroup();
 
-            self.mPlatform.PushDebugGroup("Draw - Overlay\x00");
             const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
 
             self.mOverlayPipeline.Bind(overlay_compute_pass);
@@ -314,22 +313,23 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
             self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
             self.mOverlayPipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
+            self.mPlatform.PushDebugGroup("Draw - Overlay");
+
             self.mOverlayPipeline.Dispatch(overlay_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
 
             compute_texture.EndComputePass(overlay_compute_pass);
-            self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
+            self.mPlatform.PopDebugGroup(); //pop Draw - Overlay
 
             if (rendering_mode == .OverlayGame) {
                 continue :mode_switch .Game;
             }
         },
         .Game => {
-            self.mPlatform.PushDebugGroup("Upload Buffers - Game\x00");
+            self.mPlatform.PushDebugGroup("Upload Buffers - Game");
             try self.mR2D.SetBuffers(world_type, engine_context, .GamePipeline);
             try self.mSDFShading.SetBuffers(world_type, engine_context);
             self.mPlatform.PopDebugGroup();
 
-            self.mPlatform.PushDebugGroup("Draw - Game\x00");
             const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);
 
             self.mGamePipeline.Bind(game_compute_pass);
@@ -341,15 +341,14 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
             self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .GamePipeline);
             self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
+            self.mPlatform.PushDebugGroup("Draw - Game");
             self.mGamePipeline.Dispatch(game_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
 
             compute_texture.EndComputePass(game_compute_pass);
-            self.mPlatform.Present(compute_texture);
             self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
         },
     }
     self.mPlatform.PopDebugGroup(); //pop end rendering group
-    self.mPlatform.PopDebugGroup(); //pop frame group
 
-    self.mPlatform.EndFrame();
+    self.mPlatform.EndCmdBuff();
 }

@@ -251,9 +251,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const render_zone = Tracy.ZoneInit("Render Section", @src());
         defer render_zone.Deinit();
-        if (!engine_context.mAppWindow.IsMinimized()) {
+        if (engine_context.mRenderer.BeginFrame(engine_context)) {
             try self.RenderRenderTargets(engine_context);
-
             const current_world = switch (self.mEditorState) {
                 .Play => EngineContext.WorldType.Simulate,
                 .Stop => EngineContext.WorldType.Game,
@@ -283,6 +282,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             Dockspace.End();
             engine_context.mImguiManager.End(engine_context);
+            engine_context.mRenderer.EndFrame();
         }
     }
     //--------------Render End-------------------

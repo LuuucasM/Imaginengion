@@ -24,6 +24,7 @@ const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const EntityComponents = @import("Components.zig");
 const Player = @import("../Players/Player.zig");
 const SceneManager = @import("../Scene/SceneManager.zig");
+const AssetHandle = @import("../Assets/AssetHandle.zig");
 
 pub const Iterator = struct {
     pub const IterType = enum {
@@ -67,8 +68,15 @@ mSceneManager: *SceneManager = undefined,
 
 pub fn AddComponent(self: Entity, engine_context: *EngineContext, new_component: anytype) !*@TypeOf(new_component) {
     const component_type = @TypeOf(new_component);
+    const type_info = @typeInfo(component_type);
+    var component = new_component;
     _ValidateComponent(component_type);
-    return try self.mSceneManager.mECSManagerGO.AddComponent(engine_context.EngineAllocator(), self.mEntityID, new_component);
+    inline for (type_info.@"struct".field_types, type_info.@"struct".field_names) |field_type, field_name| {
+        if (field_type == AssetHandle) {
+            @field(component, field_name).mAssetManager = &engine_context.mAssetManager;
+        }
+    }
+    return self.mSceneManager.mECSManagerGO.AddComponent(engine_context.EngineAllocator(), self.mEntityID, component);
 }
 pub fn RemoveComponent(self: Entity, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
     try self.mSceneManager.mECSManagerGO.RemoveComponent(engine_allocator, component_type, self.mEntityID);

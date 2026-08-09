@@ -12,7 +12,8 @@ const sdl = @import("../../Core/CImports.zig").sdl;
 const SDLPlatform = @This();
 
 mDevice: *sdl.SDL_GPUDevice = undefined,
-mCurrentCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
+mFrameCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
+mWorkCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
 mSwapchainTexture: ?*sdl.SDL_GPUTexture = null,
 mSwapchainWidth: usize = 0,
 mSwapchainHeight: usize = 0,
@@ -68,15 +69,16 @@ pub fn Deinit(self: *SDLPlatform, window: *Window) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
 
     _ = sdl.SDL_WaitForGPUIdle(self.mDevice);
-    _ = if (self.mCurrentCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
+    _ = if (self.mFrameCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
+    _ = if (self.mWorkCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
     sdl.SDL_ReleaseWindowFromGPUDevice(self.mDevice, sdl_window);
     sdl.SDL_DestroyGPUDevice(self.mDevice);
 }
 
-pub fn BeginFrame(self: *SDLPlatform, window: *Window) void {
-    std.debug.assert(self.mCurrentCmdBuffer == null);
-    self.mCurrentCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
-    std.debug.assert(self.mCurrentCmdBuffer != null);
+pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
+    std.debug.assert(self.mFrameCmdBuffer == null);
+    self.mFrameCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
+    std.debug.assert(self.mFrameCmdBuffer != null);
 
     var swapchain_tex: ?*sdl.SDL_GPUTexture = null;
     var width: usize = 0;
@@ -85,7 +87,7 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) void {
     const sdl_window: *sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
 
     const acquired = sdl.SDL_AcquireGPUSwapchainTexture(
-        self.mCurrentCmdBuffer,
+        self.mFrameCmdBuffer,
         sdl_window,
         @ptrCast(&swapchain_tex),
         @ptrCast(&width),
@@ -93,29 +95,41 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) void {
     );
 
     if (!acquired) {
-        _ = sdl.SDL_CancelGPUCommandBuffer(self.mCurrentCmdBuffer);
-        self.mCurrentCmdBuffer = null;
-        return;
+        _ = sdl.SDL_CancelGPUCommandBuffer(self.mFrameCmdBuffer);
+        self.mFrameCmdBuffer = null;
+        return false;
     }
 
     self.mSwapchainTexture = swapchain_tex;
     self.mSwapchainWidth = width;
     self.mSwapchainHeight = height;
-}
 
-pub fn HasFrame(self: SDLPlatform) bool {
-    if (self.mCurrentCmdBuffer == null or self.mSwapchainTexture == null) {
+    if (self.mSwapchainTexture == null) {
+        self.EndFrame();
         return false;
     }
+
     return true;
 }
 
+pub fn StartCmdBuff(self: *SDLPlatform) void {
+    std.debug.assert(self.mWorkCmdBuffer == null);
+    self.mWorkCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
+    std.debug.assert(self.mWorkCmdBuffer != null);
+}
+
+pub fn EndCmdBuff(self: *SDLPlatform) void {
+    std.debug.assert(self.mWorkCmdBuffer != null);
+    _ = sdl.SDL_SubmitGPUCommandBuffer(self.mWorkCmdBuffer);
+    self.mWorkCmdBuffer = null;
+}
+
 pub fn EndFrame(self: *SDLPlatform) void {
-    std.debug.assert(self.mCurrentCmdBuffer != null);
+    std.debug.assert(self.mFrameCmdBuffer != null);
 
-    _ = sdl.SDL_SubmitGPUCommandBuffer(self.mCurrentCmdBuffer);
+    _ = sdl.SDL_SubmitGPUCommandBuffer(self.mFrameCmdBuffer);
 
-    self.mCurrentCmdBuffer = null;
+    self.mFrameCmdBuffer = null;
 }
 
 pub fn Present(self: SDLPlatform, compute_texture: *ComputeOutput) void {
@@ -145,24 +159,33 @@ pub fn Present(self: SDLPlatform, compute_texture: *ComputeOutput) void {
         .filter = sdl.SDL_GPU_FILTER_NEAREST,
         .cycle = false,
     };
-    sdl.SDL_BlitGPUTexture(self.mCurrentCmdBuffer.?, &blit_info);
+    sdl.SDL_BlitGPUTexture(self.mFrameCmdBuffer.?, &blit_info);
 }
 
 pub fn GetDevice(self: SDLPlatform) *sdl.SDL_GPUDevice {
     return self.mDevice;
 }
 
-pub fn GetCommandBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
-    std.debug.assert(self.mCurrentCmdBuffer != null);
-    return self.mCurrentCmdBuffer.?;
+pub fn GetFrameCmdBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
+    std.debug.assert(self.mFrameCmdBuffer != null);
+    return self.mFrameCmdBuffer.?;
 }
 
-pub fn PushDebugGroup(self: SDLPlatform, message: []const u8) void {
-    std.debug.assert(self.mCurrentCmdBuffer != null);
-    sdl.SDL_PushGPUDebugGroup(self.mCurrentCmdBuffer, message.ptr);
+pub fn GetWorkCmdBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
+    std.debug.assert(self.mWorkCmdBuffer != null);
+    return self.mWorkCmdBuffer.?;
+}
+
+pub fn GetSwapchain(self: SDLPlatform) *sdl.SDL_GPUTexture {
+    return self.mSwapchainTexture.?;
+}
+
+pub fn PushDebugGroup(self: SDLPlatform, message: [:0]const u8) void {
+    std.debug.assert(self.mFrameCmdBuffer != null);
+    sdl.SDL_PushGPUDebugGroup(self.mFrameCmdBuffer, message.ptr);
 }
 
 pub fn PopDebugGroup(self: SDLPlatform) void {
-    std.debug.assert(self.mCurrentCmdBuffer != null);
-    sdl.SDL_PopGPUDebugGroup(self.mCurrentCmdBuffer);
+    std.debug.assert(self.mFrameCmdBuffer != null);
+    sdl.SDL_PopGPUDebugGroup(self.mFrameCmdBuffer);
 }
