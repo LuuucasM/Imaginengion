@@ -9,7 +9,6 @@ const TransformComponent = Components.TransformComponent;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const RenderTargetComponent = Components.RenderTargetComponent;
-const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");

@@ -284,7 +284,7 @@ pub fn DrawText(
             pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
-        const atlas_shading_handle = shading_buff.AddSurface(
+        const atlas_shading_handle = try shading_buff.AddSurface(
             engine_context.EngineAllocator(),
             Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
             glyph.mAtlasTexel0.DivVec(text_asset.mAtlasSize),
@@ -314,13 +314,13 @@ pub fn DrawText(
             .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
         };
 
-        glyph_buff_base.append(engine_context.FrameAllocator(), .{
+        try glyph_buff_base.append(engine_context.FrameAllocator(), .{
             .Position = Vec3(f32).ArrayT{ pen_x, pen_y, world_pos.z },
             .Rotation = transform_component.Rotation.ToVector(),
             .HalfExtents = Vec3(f32).ArrayT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
             .PlaneCenter = Vec2(f32).ArrayT{ plane_center.x, plane_center.y },
-            .AtlasShadingHandle = atlas_shading_handle,
-            .TextureShadingFlags = texture_shading_flags,
+            .AtlasShadingHandle = @intCast(atlas_shading_handle),
+            .TextureShadingFlags = @intCast(texture_shading_flags),
         });
 
         var move_dist = glyph_width;

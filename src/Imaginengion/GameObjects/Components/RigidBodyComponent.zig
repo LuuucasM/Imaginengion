@@ -27,14 +27,14 @@ _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
-    if (ImguiManager.RenderFloatInput(&self.mMass, "Mass", 0.1, 1.0)) {
+    if (try ImguiManager.RenderFloatInput(&self.mMass, "Mass", 0.1, 1.0)) {
         if (self.mMass != 0.0) {
-            self.mInvMass = 1.0 / self.mMass;
+            self._InvMass = 1.0 / self.mMass;
         } else {
-            self.mInvMass = 0.0;
+            self._InvMass = 0.0;
         }
     }
-    ImguiManager.RenderUnion(Material.PhysicsMaterial, &self.mMaterialData, "Material");
+    try ImguiManager.RenderUnion(Material.PhysicsMaterial, &self.mMaterialData, "Material");
 }
 
 /// Applies continuous force to the rigid body physically accurate

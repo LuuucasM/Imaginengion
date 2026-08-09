@@ -15,9 +15,9 @@ pub const SurfacePhysicsMat = struct {
         .Scale = SurfMat.SurfaceScaleIdentity.PhysicsData,
     };
 
-    pub fn ImguiRender(self: SurfacePhysicsMat) void {
-        ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
-        self.Scale.ImguiRender("Scale");
+    pub fn ImguiRender(self: *SurfacePhysicsMat) !void {
+        try ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
+        try self.Scale.ImguiRender("Scale");
     }
 
     pub fn GetMaterialData(self: SurfacePhysicsMat) SurfMat.SurfPhysicsData {
@@ -40,17 +40,17 @@ pub const SurfacePhysicsMat = struct {
 };
 
 pub const MediumPhysicsMat = struct {
-    Kind: SurfMat.SurfaceMaterials,
-    Scale: SurfMat.SurfPhysicsData,
+    Kind: MedMat.MediumMaterials,
+    Scale: MedMat.MedPhysicsData,
 
     pub const default: MediumPhysicsMat = .{
         .Kind = .Custom,
         .Scale = MedMat.MediumScaleIdentity.PhysicsData,
     };
 
-    pub fn ImguiRender(self: MediumPhysicsMat) void {
-        ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
-        self.Scale.ImguiRender("Scale");
+    pub fn ImguiRender(self: *MediumPhysicsMat) !void {
+        try ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
+        try self.Scale.ImguiRender("Scale");
     }
 
     pub fn GetMaterialData(self: MediumPhysicsMat) MedMat.MedPhysicsData {
@@ -109,10 +109,10 @@ pub const PhysicsMaterial = union(enum) {
         };
     }
 
-    pub fn ImguiRender(self: PhysicsMaterial) void {
-        switch (self) {
-            .Surface => |s| s.ImguiRender(),
-            .Medium => |m| m.ImguiRender(),
+    pub fn ImguiRender(self: *PhysicsMaterial) !void {
+        switch (self.*) {
+            .Surface => |*s| try s.ImguiRender(),
+            .Medium => |*m| try m.ImguiRender(),
         }
     }
 };
@@ -126,9 +126,9 @@ pub const SurfaceRenderMat = struct {
         .Scale = SurfMat.SurfaceScaleIdentity.RenderData,
     };
 
-    pub fn ImguiRender(self: SurfaceRenderMat) void {
-        ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
-        self.Scale.ImguiRender("Scale");
+    pub fn ImguiRender(self: *SurfaceRenderMat) !void {
+        try ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
+        try self.Scale.ImguiRender("Scale");
     }
 
     pub fn GetMaterialData(self: SurfaceRenderMat) SurfMat.SurfRenderData {
@@ -157,10 +157,10 @@ pub const MediumRenderMat = struct {
         .Scale = MedMat.MediumScaleIdentity.RenderData,
     };
 
-    pub fn ImguiRender(self: MediumRenderMat) void {
-        ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
-        self.Scale.ImguiRender("Scale");
-        ImguiManager.RenderVec4(&self.Color, "Color", 1.0, 0.01, 100);
+    pub fn ImguiRender(self: *MediumRenderMat) !void {
+        try ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
+        try self.Scale.ImguiRender("Scale");
+        try ImguiManager.RenderVec4(&self.Color, "Color", 1.0, 0.01, 100);
     }
 
     pub fn GetMaterialData(self: MediumRenderMat) MedMat.MedRenderData {
@@ -220,10 +220,10 @@ pub const RenderMaterial = union(enum) {
         };
     }
 
-    pub fn ImguiRender(self: RenderMaterial) void {
+    pub fn ImguiRender(self: *RenderMaterial) !void {
         switch (self) {
-            .Surface => |s| s.ImguiRender(),
-            .Medium => |m| m.ImguiRender(),
+            .Surface => |s| try s.ImguiRender(),
+            .Medium => |m| try m.ImguiRender(),
         }
     }
 };

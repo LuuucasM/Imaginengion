@@ -30,6 +30,6 @@ mCollisionFilter: CollisionFilter = .default,
 pub fn Deinit(_: *ColliderComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
-    ImguiManager.RenderEnum(Shapes, &self.mShape, "Collider Type");
-    self.mCollisionFilter.ImguiRender();
+    try ImguiManager.RenderEnum(Shapes, &self.mShape, "Collider Type");
+    try self.mCollisionFilter.ImguiRender();
 }

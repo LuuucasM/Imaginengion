@@ -20,12 +20,12 @@ pub const SurfPhysicsData = struct {
     StaticFriction: f32,
     KineticFriction: f32,
 
-    pub fn ImguiRender(self: SurfPhysicsData, label: []const u8) void {
-        ImguiManager.ImguiSeparator();
-        ImguiManager.RenderText(label);
-        ImguiManager.RenderFloatInput(&self.Restitution, "Restitution", 0.01, 0.1);
-        ImguiManager.RenderFloatInput(&self.StaticFriction, "Static Friction", 0.01, 0.1);
-        ImguiManager.RenderFloatInput(&self.KineticFriction, "Kinetic Friction", 0.01, 0.1);
+    pub fn ImguiRender(self: *SurfPhysicsData, label: [:0]const u8) !void {
+        try ImguiManager.ImguiSeparator();
+        try ImguiManager.RenderText(label);
+        _ = try ImguiManager.RenderFloatInput(&self.Restitution, "Restitution", 0.01, 0.1);
+        _ = try ImguiManager.RenderFloatInput(&self.StaticFriction, "Static Friction", 0.01, 0.1);
+        _ = try ImguiManager.RenderFloatInput(&self.KineticFriction, "Kinetic Friction", 0.01, 0.1);
     }
 };
 
@@ -35,10 +35,10 @@ pub const SurfSoundData = struct {
 
 pub const SurfRenderData = struct {
     //nothing yet
-    pub fn ImguiRender(self: SurfRenderData, label: []const u8) void {
+    pub fn ImguiRender(self: SurfRenderData, label: [:0]const u8) !void {
         _ = self;
-        ImguiManager.ImguiSeparator();
-        ImguiManager.RenderText(label);
+        try ImguiManager.ImguiSeparator();
+        try ImguiManager.RenderText(label);
     }
 };
 

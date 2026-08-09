@@ -21,10 +21,10 @@ pub const ValueTypes = union(ValueEnum) {
     pub const default: ValueTypes = .{ .uint32 = 0 };
     pub fn EditorRender(self: *ValueTypes) !void {
         switch (self.*) {
-            .uint32 => ImguiManager.RenderScalerInput(&self.uint32, "Value", 1, 10),
-            .int32 => ImguiManager.RenderIntInput(&self.int32, "Value", 1, 10),
-            .float32 => ImguiManager.RenderFloatInput(&self.float32, "Value", 0.5, 5),
-            .bool => ImguiManager.RenderBool(&self.bool, "Value"),
+            .uint32 => try ImguiManager.RenderScalerInput(&self.uint32, "Value", 1, 10),
+            .int32 => try ImguiManager.RenderIntInput(&self.int32, "Value", 1, 10),
+            .float32 => try ImguiManager.RenderFloatInput(&self.float32, "Value", 0.5, 5),
+            .bool => try ImguiManager.RenderBool(&self.bool, "Value"),
         }
     }
 };
@@ -43,6 +43,6 @@ pub const Ind: usize = blk: {
 
 pub fn Deinit(_: *AttribComponent, _: *EngineContext) !void {}
 
-pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
-    ImguiManager.RenderUnion(ValueTypes, self.mData, "Type");
+pub fn ImguiRender(self: *AttribComponent, _: *EngineContext) !void {
+    try ImguiManager.RenderUnion(ValueTypes, &self.mData, "Type");
 }

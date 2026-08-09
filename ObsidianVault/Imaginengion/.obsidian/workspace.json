@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "immediate things to do or fix.md",
+                "file": "the idea of the engine.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "immediate things to do or fix"
+              "title": "the idea of the engine"
             }
           },
           {
@@ -69,7 +69,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "byModifiedTime",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -199,13 +201,14 @@
   },
   "active": "e839352918761b3f",
   "lastOpenFiles": [
-    "Engine Notes/2026 7 July/21.md",
+    "longer term things to do or fix.md",
+    "the idea of the engine.md",
     "immediate things to do or fix.md",
+    "Engine Notes/2026 7 July/21.md",
     "Engine Notes/2026 7 July/19.md",
     "Engine Notes/2026 7 July/6.md",
     "Engine Notes/2026 7 July/5.md",
     "Engine Notes/2026 7 July/1.md",
-    "longer term things to do or fix.md",
     "Useful commands.md",
     "Engine Notes/2026 7 July",
     "Engine Notes/2026 6 June/24.md",
@@ -231,7 +234,6 @@
     "Weekly Notes/2025.08.25-31.md",
     "Engine Notes",
     "QuadComponent.md",
-    "ECS Manager.md",
     "Scene Manager.canvas",
     "ECS.canvas",
     "Home.canvas"

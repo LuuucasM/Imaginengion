@@ -19,5 +19,5 @@ mGravity: Vec3(f32) = .{ .x = 0.0, .y = -9.81, .z = 0.0 },
 pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) !void {}
 
 pub fn EditorRender(self: *PhysicsComponent, _: *EngineContext) !void {
-    ImguiManager.RenderFloat3Input(&self.mGravity, "Gravity");
+    try ImguiManager.RenderFloat3Input(&self.mGravity, "Gravity");
 }

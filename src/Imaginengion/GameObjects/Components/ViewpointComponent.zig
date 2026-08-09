@@ -64,24 +64,24 @@ fn RecalculateProjection(self: *ViewpointComponent) void {
 pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
 
     //aspect ratio
-    ImguiManager.RenderBool(&self.mIsFixedAspectRatio, "Is Fixed Aspect Ratio?");
+    try ImguiManager.RenderBool(&self.mIsFixedAspectRatio, "Is Fixed Aspect Ratio?");
 
     //print the size/far/near variables depending on projection type
     var perspective_degrees = MathUtils.RadiansToDegrees(self.mPerspectiveFOVRad);
-    if (ImguiManager.RenderFloatDrag(&perspective_degrees, "FOV", 1.0, 0, 180.0)) {
+    if (try ImguiManager.RenderFloatDrag(&perspective_degrees, "FOV", 1.0, 0, 180.0)) {
         self.mPerspectiveFOVRad = MathUtils.DegreesToRadians(perspective_degrees);
         self.RecalculateProjection();
     }
 
-    if (ImguiManager.RenderFloatDrag(&self.mPerspectiveNear, "Perspective Near", 1.0, 0.0, 1.0)) {
+    if (try ImguiManager.RenderFloatDrag(&self.mPerspectiveNear, "Perspective Near", 1.0, 0.0, 1.0)) {
         self.RecalculateProjection();
     }
 
-    if (ImguiManager.RenderFloatDrag(&self.mPerspectiveFar, "Perspective Far", 1.0, 2.0, 0.0)) {
+    if (try ImguiManager.RenderFloatDrag(&self.mPerspectiveFar, "Perspective Far", 1.0, 2.0, 0.0)) {
         self.RecalculateProjection();
     }
 
-    ImguiManager.RenderFloat4Drag(&self.mAreaRect, "Area Rect", 0.01, 0, 1.0);
+    try ImguiManager.RenderFloat4Drag(&self.mAreaRect, "Area Rect", 0.01, 0, 1.0);
 }
 
 pub fn jsonStringify(self: *const ViewpointComponent, jw: anytype) !void {

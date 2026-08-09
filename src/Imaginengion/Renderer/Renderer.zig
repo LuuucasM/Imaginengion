@@ -45,7 +45,7 @@ const Renderer = @This();
 
 pub const ComputeOutput = ComputeTexture(.BGRA8);
 
-pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
+//pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
 pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
 pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayPipeline);
 
@@ -98,14 +98,14 @@ pub const ShadingBuffers = struct {
         self.mMedShadingBuff.Deinit(engine_context);
         self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
     }
-    pub fn AddSurface(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), texture_uv0: Vec2(f32), texture_uv1: Vec2(f32), tiling_factor: f32, texture_handle: u32, sibling_shading: u32) !usize {
+    pub fn AddSurface(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), texture_uv0: Vec2(f32), texture_uv1: Vec2(f32), tiling_factor: f32, texture_handle: usize, sibling_shading: usize) !usize {
         try self.mSurfShadingBuffBase.append(engine_allocator, .{
             .Color = color.ToArray(),
             .TextureUV0 = texture_uv0.ToArray(),
             .TextureUV1 = texture_uv1.ToArray(),
             .TilingFactor = tiling_factor,
-            .Texturehandle = texture_handle,
-            .SiblingShading = sibling_shading,
+            .Texturehandle = @intCast(texture_handle),
+            .SiblingShading = @intCast(sibling_shading),
         });
 
         return self.mSurfShadingBuffBase.items.len - 1;

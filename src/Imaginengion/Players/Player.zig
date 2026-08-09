@@ -9,7 +9,6 @@ const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerNameComponent = PlayerComponents.NameComponent;
 const UUIDComponent = PlayerComponents.UUIDComponent;
 const PlayerMic = PlayerComponents.MicComponent;
-const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");

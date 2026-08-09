@@ -38,15 +38,15 @@ pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
-    ImguiManager.RenderBool(&self.mShouldRender, "Should Render?");
+    try ImguiManager.RenderBool(&self.mShouldRender, "Should Render?");
 
-    self.mMaterial.ImguiRender();
+    try self.mMaterial.ImguiRender();
 
     const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
 
-    self.mTexOptions.ImguiRender(engine_context, &self.mEditTexCoords, texture_asset);
+    try self.mTexOptions.ImguiRender(engine_context, &self.mEditTexCoords, texture_asset);
 
-    ImguiManager.RenderTexture2D(engine_context, &self.mTexture, texture_asset, &self.mEditTexCoords);
+    try ImguiManager.RenderTexture2D(engine_context, &self.mTexture, texture_asset, &self.mEditTexCoords);
 }
 
 pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {

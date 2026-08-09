@@ -58,17 +58,17 @@ pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
 }
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
     // Volume drag
-    _ = ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
+    _ = try ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
 
     // Pitch drag
-    _ = ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.0, 0.0); //0.0 for upper bounds means no upper bounds i believe
+    _ = try ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.0, 0.0); //0.0 for upper bounds means no upper bounds i believe
 
     // Loop toggle
-    ImguiManager.RenderBool(&self.mLoop, "Looping?");
+    try ImguiManager.RenderBool(&self.mLoop, "Looping?");
 
-    ImguiManager.RenderEnum(AudioType, &self.mAudioType, "Audio Type");
+    try ImguiManager.RenderEnum(AudioType, &self.mAudioType, "Audio Type");
 
-    ImguiManager.ImguiSeparator();
+    try ImguiManager.ImguiSeparator();
 
     try ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
 }

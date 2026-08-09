@@ -202,7 +202,7 @@ pub fn GetImguiTexture(self: *ImguiManager, engine_context: *EngineContext, text
     };
 }
 
-pub fn RenderVec3(vec: *Vec3(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) void {
+pub fn RenderVec3(vec: *Vec3(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) !void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
@@ -281,7 +281,7 @@ pub fn RenderVec3(vec: *Vec3(f32), label: []const u8, reset_value: f32, speed: f
     imgui.igPopItemWidth();
 }
 
-pub fn RenderVec4(vec: *Vec4(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) void {
+pub fn RenderVec4(vec: *Vec4(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) !void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
@@ -380,7 +380,7 @@ pub fn RenderVec4(vec: *Vec4(f32), label: []const u8, reset_value: f32, speed: f
     imgui.igPopItemWidth();
 }
 
-pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) void {
+pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) !void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
     imgui.igPushID_Str(label.ptr);
@@ -475,7 +475,7 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
     imgui.igPopItemWidth();
 }
 
-pub fn RenderStaticBitSet(comptime T: type, value: *T, label: []const u8) void {
+pub fn RenderStaticBitSet(comptime T: type, value: *T, label: []const u8) !void {
     imgui.igPushID_Str(label.ptr);
     defer imgui.igPopID();
 
@@ -490,45 +490,45 @@ pub fn RenderStaticBitSet(comptime T: type, value: *T, label: []const u8) void {
 
         var on = value.isSet(i);
         var buf: [8]u8 = undefined;
-        const id = std.fmt.bufPrintZ(&buf, "{d}", .{i}) catch "?";
+        const id = std.fmt.bufPrintSentinel(&buf, "{d}", .{i}, 0) catch "?";
         if (imgui.igCheckbox(id.ptr, &on)) {
             if (on) value.set(i) else value.unset(i);
         }
     }
 }
-pub fn RenderFloatInput(val: *f32, label: []const u8, speed: f32, speed_fast: f32) bool {
+pub fn RenderFloatInput(val: *f32, label: [:0]const u8, speed: f32, speed_fast: f32) !bool {
     return imgui.igInputFloat(label, val, speed, speed_fast, "%.3f", 0);
 }
 
-pub fn RenderFloatDrag(val: *f32, label: []const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) bool {
+pub fn RenderFloatDrag(val: *f32, label: [:0]const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) !bool {
     return imgui.igDragFloat(@ptrCast(label), val, speed, lower_bounds, upper_bounds, "%.3f", 0);
 }
 
-pub fn RenderFloat2Drag(val: *Vec2(f32), label: []const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) void {
+pub fn RenderFloat2Drag(val: *Vec2(f32), label: [:0]const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) !void {
     _ = imgui.igDragFloat2(label, @ptrCast(val), speed, lower_bounds, upper_bounds, "%.3f", imgui.ImGuiSliderFlags_None);
 }
 
-pub fn RenderFloat4Drag(val: *Vec4(f32), label: []const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) void {
+pub fn RenderFloat4Drag(val: *Vec4(f32), label: [:0]const u8, speed: f32, lower_bounds: f32, upper_bounds: f32) !void {
     _ = imgui.igDragFloat4(label, @ptrCast(val), speed, lower_bounds, upper_bounds, "%.3f", imgui.ImGuiSliderFlags_None);
 }
 
-pub fn RenderColor4Edit(val: *Vec4(f32), label: []const u8) void {
-    _ = imgui.igColorEdit4(label, val, imgui.ImGuiColorEditFlags_None);
+pub fn RenderColor4Edit(val: *Vec4(f32), label: [:0]const u8) !void {
+    _ = imgui.igColorEdit4(label.ptr, @ptrCast(val), imgui.ImGuiColorEditFlags_None);
 }
 
-pub fn RenderIntInput(val: *u32, label: []const u8, speed: f32, speed_fast: f32) bool {
+pub fn RenderIntInput(val: *u32, label: [:0]const u8, speed: f32, speed_fast: f32) !bool {
     return imgui.igInputInt(label, val, speed, speed_fast, 0);
 }
 
-pub fn RenderScalerInput(val: *u32, label: []const u8, speed: u32, speed_fast: u32) bool {
+pub fn RenderScalerInput(val: *u32, label: [:0]const u8, speed: u32, speed_fast: u32) !bool {
     return imgui.igInputScalar(label, imgui.ImGuiDataType_U32, val, speed, speed_fast, "%u", 0);
 }
 
-pub fn RenderFloat3Input(val: *Vec3(f32), label: []const u8) void {
-    _ = imgui.igInputFloat3(label, val, "%.3f", 0);
+pub fn RenderFloat3Input(val: *Vec3(f32), label: [:0]const u8) !void {
+    _ = imgui.igInputFloat3(label, @ptrCast(val), "%.3f", 0);
 }
 
-pub fn RenderEnum(comptime T: type, value: *T, label: []const u8) void {
+pub fn RenderEnum(comptime T: type, value: *T, label: [:0]const u8) !void {
     const field_names = std.meta.fieldNames(T);
     const current_index = @intFromEnum(value.*);
 
@@ -549,7 +549,7 @@ pub fn RenderEnum(comptime T: type, value: *T, label: []const u8) void {
     }
 }
 
-pub fn RenderUnion(comptime T: type, value: *T, label: []const u8) !void {
+pub fn RenderUnion(comptime T: type, value: *T, label: [:0]const u8) !void {
     const field_names = @typeInfo(T).@"union".field_names;
     const field_types = @typeInfo(T).@"union".field_types;
     const current_index = @intFromEnum(@as(std.meta.Tag(T), value.*));
@@ -574,15 +574,15 @@ pub fn RenderUnion(comptime T: type, value: *T, label: []const u8) !void {
 }
 
 fn defaultOf(comptime PayloadT: type) PayloadT {
-    if (@hasField(PayloadT, "default")) return .default;
+    if (@typeInfo(PayloadT) == .@"struct" and @hasField(PayloadT, "default")) return .default;
     return std.mem.zeroes(PayloadT);
 }
 
-pub fn RenderBool(value: *bool, label: []const u8) void {
+pub fn RenderBool(value: *bool, label: [:0]const u8) !void {
     _ = imgui.igCheckbox(@ptrCast(label), value);
 }
 
-pub fn ImguiSeparator() void {
+pub fn ImguiSeparator() !void {
     imgui.igSeparator();
 }
 
@@ -696,7 +696,7 @@ pub fn RenderTextInput(engine_context: *EngineContext, array: *std.ArrayList(u8)
     }
 }
 
-pub fn RenderText(text: [:0]const u8) void {
+pub fn RenderText(text: [:0]const u8) !void {
     imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
 }
 

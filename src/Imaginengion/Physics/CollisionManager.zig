@@ -31,10 +31,10 @@ pub const CollisionFilter = struct {
         .CategoryMask = .empty,
         .RespondMask = .empty,
     };
-    pub fn ImguiRender(self: CollisionFilter) void {
-        ImguiManager.RenderBool(&self.IsTrigger, "Is Trigger?");
-        ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.CategoryMask, "Category Mask");
-        ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.RespondMask, "Response Mask");
+    pub fn ImguiRender(self: *CollisionFilter) !void {
+        try ImguiManager.RenderBool(&self.IsTrigger, "Is Trigger?");
+        try ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.CategoryMask, "Category Mask");
+        try ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.RespondMask, "Response Mask");
     }
     IsTrigger: bool,
     CategoryMask: std.StaticBitSet(32),

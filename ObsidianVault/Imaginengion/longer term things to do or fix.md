@@ -32,6 +32,9 @@
 	- attribute component (multi)
 	- particle component (dont know yet its so far away)
 - maybe in the future i can introduce like saved editor states where you can like hotkey or save specific scene setups so you can use later that way you can hot swap like if you want to start a game from the main menu screen after working on some other scene you can quick load the main menu setup and play from there and when it ends you can quick load back to the setup that ur editing currently
+- re-design the asset system / general resource system
+	- i imagine some sort of resource manager where as the dev you set some sort of resource limits for both gpu and cpu, maybe it can even implement its own frame timing system, like just all of the system resources. and then as the dev you can adjust to use different system resources, and so other systems like the asset system and the texture system can request resources, and if theres not enough resouces then have to do some maybe streaming or swapping resources in and out of different layers of memory. can also do networking bandwidth as a resource. just anything that could potentially be a resource
+	- this wont be needed for a while tho until needed to set resource limits is needed which i probably wont be making games that need that for a long while lol
 - does alt + f4 work natively with every program or does it need to be implemented?
 - make it so u cant make scenes or anything until you have a project selected first
 - Editor settings config file that gets saved file

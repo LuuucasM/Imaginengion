@@ -58,9 +58,9 @@ pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3(f32)) void {
 }
 
 pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
-    ImguiManager.RenderVec3(&self.Translation, "Translation", 0.0, 0.075, 100.0);
-    ImguiManager.RenderQuat(&self.Rotation, "Rotation", 0, 0.25, 100.0);
-    ImguiManager.RenderVec3(&self.Scale, "Scale", 1.0, 0.075, 100.0);
+    try ImguiManager.RenderVec3(&self.Translation, "Translation", 0.0, 0.075, 100.0);
+    try ImguiManager.RenderQuat(&self.Rotation, "Rotation", 0, 0.25, 100.0);
+    try ImguiManager.RenderVec3(&self.Scale, "Scale", 1.0, 0.075, 100.0);
 }
 
 pub fn jsonStringify(self: *const TransformComponent, jw: anytype) !void {

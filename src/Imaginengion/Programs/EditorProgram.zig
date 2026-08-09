@@ -63,10 +63,11 @@ const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const SceneManager = @import("../Scene/SceneManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
-const OutputFrameBuffer = @import("../Renderer/Renderer.zig").OutputFrameBuffer;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EditorProgram = @This();
 const Tracy = @import("../Core/Tracy.zig");
+
+const ComputeOutput = @import("../Renderer/Renderer.zig").ComputeOutput;
 
 pub const SelectedObject = union(enum) {
     entity: Entity,
@@ -574,7 +575,7 @@ fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, vi
     const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
 
-    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
+    var frame_buffers: std.ArrayList(*ComputeOutput) = .empty;
     var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
     try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mComputeTexture);
@@ -597,7 +598,7 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     const scene_manager = self.mActiveWorld;
     const frame_allocator = engine_context.FrameAllocator();
 
-    var frame_buffers: std.ArrayList(*OutputFrameBuffer) = .empty;
+    var frame_buffers: std.ArrayList(*ComputeOutput) = .empty;
     var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
     var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });

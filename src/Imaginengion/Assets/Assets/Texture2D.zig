@@ -25,11 +25,11 @@ pub const TexOptions = struct {
         .mIsTransparent = false,
     };
 
-    pub fn ImguiRender(self: *TexOptions, engine_context: *EngineContext, open: *bool, texture_asset: *Texture2D) void {
-        ImguiManager.RenderColor4Edit(&self.mColor, "Color");
-        ImguiManager.RenderFloatDrag(&self.mTilingFactor, "Tiling Factor", 0.1, 0.0, 0.0);
-        ImguiManager.RenderUVCoords(open, &self.mTextureUV0, &self.mTextureUV1, engine_context, texture_asset);
-        ImguiManager.RenderBool(&self.mIsTransparent, "Can Be Transparent?");
+    pub fn ImguiRender(self: *TexOptions, engine_context: *EngineContext, open: *bool, texture_asset: *Texture2D) !void {
+        try ImguiManager.RenderColor4Edit(&self.mColor, "Color");
+        _ = try ImguiManager.RenderFloatDrag(&self.mTilingFactor, "Tiling Factor", 0.1, 0.0, 0.0);
+        try ImguiManager.RenderUVCoords(open, &self.mTextureUV0, &self.mTextureUV1, engine_context, texture_asset);
+        try ImguiManager.RenderBool(&self.mIsTransparent, "Can Be Transparent?");
     }
 };
 

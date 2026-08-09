@@ -40,7 +40,7 @@ pub fn OnImguiRender(self: StatsPanel, engine_context: *EngineContext) !void {
     imgui.igSeparator();
 
     //WORLD STATS
-    engine_context.mEngineStats.ImguiRender(frame_allocator);
+    try engine_context.mEngineStats.ImguiRender(frame_allocator);
 }
 pub fn OnTogglePanelEvent(self: *StatsPanel) void {
     self._P_Open = !self._P_Open;

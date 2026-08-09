@@ -42,21 +42,21 @@ pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
 }
 
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
-    ImguiManager.RenderTextInput(engine_context, &self.mText, "Text");
+    try ImguiManager.RenderTextInput(engine_context, &self.mText, "Text");
 
     //font name just as a text that can be drag dropped onto to change the text
-    ImguiManager.RenderAssetRef(engine_context, self.mTextAssetHandle, "Text Asset", "TextAsset");
+    try ImguiManager.RenderAssetRef(engine_context, &self.mTextAssetHandle, "Text Asset", "TextAsset");
 
-    ImguiManager.RenderFloatInput(&self.mFontSize, "Font Size", 1, 5);
+    _ = try ImguiManager.RenderFloatInput(&self.mFontSize, "Font Size", 1, 5);
 
     //bounds, have sliders for left ([0]) and right ([1])
-    ImguiManager.RenderFloat2Drag(&self.mBounds, "Bounds L R", 0.1, 0, 0);
+    try ImguiManager.RenderFloat2Drag(&self.mBounds, "Bounds L R", 0.1, 0, 0);
 
     const texture_asset = try self.mTexHandle.GetAsset(engine_context, Texture2D);
-    ImguiManager.RenderTexture2D(engine_context, &self.mTexHandle, texture_asset, &self.mShouldEditTexture);
-    self.mTexOptions.ImguiRender(engine_context, &self.mShouldEditTexture, texture_asset);
+    try ImguiManager.RenderTexture2D(engine_context, &self.mTexHandle, texture_asset, &self.mShouldEditTexture);
+    try self.mTexOptions.ImguiRender(engine_context, &self.mShouldEditTexture, texture_asset);
 
-    self.mMaterial.ImguiRender(engine_context);
+    try self.mMaterial.ImguiRender();
 }
 
 pub fn jsonStringify(self: *const TextComponent, jw: anytype) !void {

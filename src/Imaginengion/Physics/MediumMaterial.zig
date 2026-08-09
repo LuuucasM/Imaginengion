@@ -16,10 +16,10 @@ pub const MediumMaterials = enum {
 pub const MedPhysicsData = struct {
     //nothing yet
 
-    pub fn ImguiRender(self: MedPhysicsData, label: []const u8) void {
+    pub fn ImguiRender(self: MedPhysicsData, label: [:0]const u8) !void {
         _ = self;
-        ImguiManager.ImguiSeparator();
-        ImguiManager.RenderText(label);
+        try ImguiManager.ImguiSeparator();
+        try ImguiManager.RenderText(label);
     }
 };
 
@@ -31,11 +31,11 @@ pub const MedRenderData = struct {
     Absorption: Vec3(f32),
     Scattering: Vec3(f32),
 
-    pub fn ImguiRender(self: MedRenderData, label: []const u8) void {
-        ImguiManager.ImguiSeparator();
-        ImguiManager.RenderText(label);
-        ImguiManager.RenderVec3(&self.Absorption, "Absorbtion", 0.0, 0.01, 100);
-        ImguiManager.RenderVec3(&self.Scattering, "Scattering", 0, 0.01, 100);
+    pub fn ImguiRender(self: MedRenderData, label: []const u8) !void {
+        try ImguiManager.ImguiSeparator();
+        try ImguiManager.RenderText(label);
+        try ImguiManager.RenderVec3(&self.Absorption, "Absorbtion", 0.0, 0.01, 100);
+        try ImguiManager.RenderVec3(&self.Scattering, "Scattering", 0, 0.01, 100);
     }
 };
 
