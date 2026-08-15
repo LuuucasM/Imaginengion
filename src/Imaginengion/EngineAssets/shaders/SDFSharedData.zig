@@ -54,8 +54,8 @@ pub const MedShadingBuf = extern struct { ptr: MedShadingArray };
 
 pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name = "Textures", .decoration = .{ .descriptor = .{ .set = 0, .binding = 0 } } });
 
-pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 1 } } });
-pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "ShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 2 } } });
+pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "SurfShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 1 } } });
+pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "MedShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 2 } } });
 pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
 pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
 

@@ -1,12 +1,7 @@
-- go over all the shader stuff now with the new material system and ensure that material data is being uploaded correctrly, and that color is being generated correctly.
-	- Right now for edge i believe there is no color but i dont see why mediums cant get a color parameter
-	- this means ill have to move color over onto the material. I had it on material but moved it into "texture_2d options" because i figured it was silly a material doesnt have a color IRL, the color is determined by something else but if edges have a color which i think they should then that means color is needed even if its not a hard surface.
-- then finish up what i had started with the physics system
-	- i need to check for the ending of a contact and make an end contact event
-	- i need to add the new physics events to my game event manager: BeginContact, PreSolve, PostSolve, EndContact
-	- need to add a way to trigger specific scripts on an "overlay" contact.
-		- This will be the hardest one because I am not sure how to do it efficiently yet
-- fix all the bugs associated with the previous changes and make sure it actually runs
-	- note i may have to wait a bit still for this because there are some bugs with master that i think will prevent the shader from producing valid spirv still so just hold on :)
+- fix ECS panel bug where there is fighting between right clicking on an element in the panel, and right clicking of the panel.
+	- currently if you right click on an element first the popup for the panel appears, then the popup for the element replaces it.
+	- should just have one popup
+- fix bug where nothing is appearing on the screen 
 - debug, add tests, add asserts, etc
 	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!'
+	- 

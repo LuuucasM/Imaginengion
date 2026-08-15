@@ -1,7 +1,9 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const Window = @import("../Windows/Window.zig");
 const SSBO = @import("../SSBOs/SSBO.zig");
+const GPUAsserts = @import("../Core/GPUAsserts.zig");
 
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
@@ -55,23 +57,30 @@ pub const RenderingMode = enum {
     OverlayGame,
 };
 
+const is_spirv = builtin.target.cpu.arch.isSpirV();
+
 pub const SurfShadingData = extern struct {
     pub const FLAG_TRANSPARENT: u32 = 1 << 0;
 
-    Color: Vec4(f32).ArrayT,
-    TextureUV0: Vec2(f32).ArrayT,
-    TextureUV1: Vec2(f32).ArrayT,
+    Color: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    TextureUV0: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
+    TextureUV1: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     TilingFactor: f32,
     Texturehandle: u32,
     SiblingShading: u32,
-    _pad0: f32 = 9.9,
+    _pad0: f32 = 0,
 };
 
 pub const MedShadingData = extern struct {
-    Color: Vec4(f32).ArrayT,
-    Absorption: Vec3(f32).ArrayT,
-    Scattering: Vec3(f32).ArrayT,
+    Color: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    Absorption: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
+    Scattering: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
 };
+
+comptime {
+    GPUAsserts.AssertGPULayout(SurfShadingData);
+    GPUAsserts.AssertGPULayout(MedShadingData);
+}
 
 pub const ShapeType = enum(u32) {
     None = 0,
@@ -124,7 +133,7 @@ pub const ShadingBuffers = struct {
         self.mMedShadingBuffBase.clearAndFree(engine_allocator);
     }
     pub fn SetBuffers(self: *ShadingBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
-        const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
+        const zone = Tracy.ZoneInit("ShadingBuffers::SetBuffers", @src());
         defer zone.Deinit();
 
         const surf_byte_size = self.mSurfShadingBuffBase.items.len * @sizeOf(SurfShadingData);

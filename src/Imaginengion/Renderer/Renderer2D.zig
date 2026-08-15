@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const SSBO = @import("../SSBOs/SSBO.zig");
 const sdl = @import("../Core/CImports.zig").sdl;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
@@ -11,6 +12,7 @@ const PipelineType = @import("RenderPipeline.zig").PipelineType;
 const ShadingBuffers = @import("Renderer.zig").ShadingBuffers;
 const SurfShadingData = @import("Renderer.zig").SurfShadingData;
 const MedShadingData = @import("Renderer.zig").MedShadingData;
+const GPUAsserts = @import("../Core/GPUAsserts.zig");
 
 const Assets = @import("../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
@@ -42,22 +44,29 @@ const Renderer2D = @This();
 
 const MAX_PATH_LEN = 256;
 
+const is_spirv = builtin.target.cpu.arch.isSpirV();
+
 pub const QuadData = extern struct {
-    Rotation: Vec4(f32).ArrayT,
-    Position: Vec3(f32).ArrayT,
-    HalfExtents: Vec3(f32).ArrayT,
+    Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
+    HalfExtents: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
     ShadingHandle: u32,
     ShadingFlags: u32,
 };
 
 pub const GlyphData = extern struct {
-    Rotation: Vec4(f32).ArrayT,
-    Position: Vec3(f32).ArrayT,
-    HalfExtents: Vec3(f32).ArrayT,
-    PlaneCenter: Vec2(f32).ArrayT,
+    Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
+    HalfExtents: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
+    PlaneCenter: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
     AtlasShadingHandle: u32,
     TextureShadingFlags: u32,
 };
+
+comptime {
+    GPUAsserts.AssertGPULayout(QuadData);
+    GPUAsserts.AssertGPULayout(GlyphData);
+}
 
 pub const BufferKind = enum {
     Quad,

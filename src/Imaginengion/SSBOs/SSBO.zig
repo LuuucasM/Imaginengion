@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Stage = @import("../Assets/Assets.zig").ShaderAsset.Stage;
+const Tracy = @import("../Core/Tracy.zig");
 const SSBO = @This();
 
 const Impl = switch (builtin.os.tag) {
@@ -28,6 +29,8 @@ pub fn Unbind(self: SSBO) void {
 }
 
 pub fn SetData(self: *SSBO, engine_context: *EngineContext, data: *anyopaque, size: usize, offset: u32) bool {
+    const setdata_zone = Tracy.ZoneInit("SSBO::SetData", @src());
+    defer setdata_zone.Deinit();
     return self.mImpl.SetData(engine_context, data, size, offset);
 }
 

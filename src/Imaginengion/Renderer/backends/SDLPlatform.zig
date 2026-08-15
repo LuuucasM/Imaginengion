@@ -6,6 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
 const ComputeOutput = @import("../Renderer.zig").ComputeOutput;
 const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
+const Tracy = @import("../../Core/Tracy.zig");
 
 const sdl = @import("../../Core/CImports.zig").sdl;
 
@@ -67,7 +68,6 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
 
 pub fn Deinit(self: *SDLPlatform, window: *Window) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
-
     _ = sdl.SDL_WaitForGPUIdle(self.mDevice);
     _ = if (self.mFrameCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
     _ = if (self.mWorkCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
@@ -126,9 +126,7 @@ pub fn EndCmdBuff(self: *SDLPlatform) void {
 
 pub fn EndFrame(self: *SDLPlatform) void {
     std.debug.assert(self.mFrameCmdBuffer != null);
-
     _ = sdl.SDL_SubmitGPUCommandBuffer(self.mFrameCmdBuffer);
-
     self.mFrameCmdBuffer = null;
 }
 

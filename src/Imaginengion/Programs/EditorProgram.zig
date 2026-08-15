@@ -487,11 +487,17 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
     const world_rot = transform_component.GetWorldRotation();
     const world_pos = transform_component.GetWorldPosition();
 
-    try switch (viewport_type) {
-        .ViewportPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-        .PlayPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
-    };
-
+    switch (viewport_type) {
+        .ViewportPanel => {
+            viewpoint_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+            try render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+        },
+        .PlayPanel => {
+            viewpoint_component.SetViewportSize(self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight);
+            try render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight);
+        },
+    }
+    viewpoint_component.mPerspectiveFar = 1000.0;
     const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
     const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5)); //note here we use aspect ratio cuz its editor
     const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
@@ -503,10 +509,10 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
         engine_context,
         .{
             .mPosition = world_pos.ToArray(),
+            .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
             .mRotation = world_rot.ToArray(),
             .mRayScale = Vec2(f32).ArrayT{ ray_scale_x, ray_scale_y },
             .mRayOffset = Vec2(f32).ArrayT{ ray_offset_x, ray_offset_y },
-            .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
             .mQuadsCount = 0,
             .mGlyphsCount = 0,
             .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
@@ -542,7 +548,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             .ViewportPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
             .PlayPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
         };
-
+        viewpoint_component.mPerspectiveFar = 1000.0;
         const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
         const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5)); //note here we use aspect ratio cuz its editor
         const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
@@ -553,9 +559,9 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             self.mActiveWorldType,
             engine_context,
             .{
-                .mRotation = world_rot.ToArray(),
                 .mPosition = world_pos.ToArray(),
                 .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
+                .mRotation = world_rot.ToArray(),
                 .mRayScale = Vec2(f32).ArrayT{ ray_scale_x, ray_scale_y },
                 .mRayOffset = Vec2(f32).ArrayT{ ray_offset_x, ray_offset_y },
                 .mQuadsCount = 0,

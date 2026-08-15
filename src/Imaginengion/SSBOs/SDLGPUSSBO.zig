@@ -8,12 +8,16 @@ mSize: usize,
 mSlot: usize,
 mStage: Stage,
 mBuffer: ?*sdl.SDL_GPUBuffer,
+mTransferBuff: ?*sdl.SDL_GPUTransferBuffer,
+mTransferSize: usize,
 
 pub const empty: SDLSSBO = .{
     .mBuffer = null,
     .mStage = undefined,
     .mSize = undefined,
     .mSlot = undefined,
+    .mTransferBuff = null,
+    .mTransferSize = 0,
 };
 
 pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: usize, stage: Stage) void {
@@ -25,13 +29,18 @@ pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: u
 
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
     self.mBuffer = CreateBuffer(device, size);
+    self.mTransferBuff = CreateTransferBuffer(device, size);
 }
 
 pub fn Deinit(self: *SDLSSBO, engine_context: *EngineContext) void {
+    const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
     if (self.mBuffer) |buf| {
-        const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
         sdl.SDL_ReleaseGPUBuffer(device, buf);
         self.mBuffer = null;
+    }
+    if (self.mTransferBuff) |tb| {
+        sdl.SDL_ReleaseGPUTransferBuffer(device, tb);
+        self.mTransferBuff = null;
     }
 }
 
@@ -58,28 +67,25 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyo
         resize = true;
     }
 
-    const transfer_info = sdl.SDL_GPUTransferBufferCreateInfo{
-        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-        .size = @intCast(size),
-        .props = 0,
-    };
-    const transfer_buf = sdl.SDL_CreateGPUTransferBuffer(device, &transfer_info);
-    std.debug.assert(transfer_buf != null);
-    defer sdl.SDL_ReleaseGPUTransferBuffer(device, transfer_buf);
+    if (size > self.mTransferSize) {
+        if (self.mTransferBuff) |tb| sdl.SDL_ReleaseGPUTransferBuffer(device, tb);
+        self.mTransferSize = size;
+        self.mTransferBuff = CreateTransferBuffer(device, size);
+    }
 
-    const mapped = sdl.SDL_MapGPUTransferBuffer(device, transfer_buf, false);
+    const mapped = sdl.SDL_MapGPUTransferBuffer(device, self.mTransferBuff, true);
     std.debug.assert(mapped != null);
     @memcpy(
         @as([*]u8, @ptrCast(mapped))[0..size],
         @as([*]const u8, @ptrCast(data))[0..size],
     );
-    sdl.SDL_UnmapGPUTransferBuffer(device, transfer_buf);
+    sdl.SDL_UnmapGPUTransferBuffer(device, self.mTransferBuff);
 
     const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd);
     std.debug.assert(copy_pass != null);
 
     const src = sdl.SDL_GPUTransferBufferLocation{
-        .transfer_buffer = transfer_buf,
+        .transfer_buffer = self.mTransferBuff,
         .offset = 0,
     };
     const dst = sdl.SDL_GPUBufferRegion{
@@ -109,6 +115,17 @@ fn CreateBuffer(device: *sdl.SDL_GPUDevice, size: usize) ?*sdl.SDL_GPUBuffer {
         .props = 0,
     };
     const buffer = sdl.SDL_CreateGPUBuffer(device, &buffer_info);
+    std.debug.assert(buffer != null);
+    return buffer;
+}
+
+fn CreateTransferBuffer(device: *sdl.SDL_GPUDevice, size: usize) ?*sdl.SDL_GPUTransferBuffer {
+    const info = sdl.SDL_GPUTransferBufferCreateInfo{
+        .usage = sdl.SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = @intCast(size),
+        .props = 0,
+    };
+    const buffer = sdl.SDL_CreateGPUTransferBuffer(device, &info);
     std.debug.assert(buffer != null);
     return buffer;
 }

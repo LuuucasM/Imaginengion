@@ -4,6 +4,11 @@ pub fn Stack(comptime T: type, comptime size: usize) type {
     return struct {
         const Self = @This();
 
+        pub const empty: Self = .{
+            .items = @splat(0),
+            .len = 0,
+        };
+
         items: [size]T = undefined,
         len: usize = 0,
 

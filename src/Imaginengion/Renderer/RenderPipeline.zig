@@ -4,6 +4,7 @@ const sdl = @import("../Core/CImports.zig").sdl;
 const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
 const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
 const EngineContext = @import("../Core/EngineContext.zig");
+const GPUAsserts = @import("../Core/GPUAsserts.zig");
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
@@ -24,16 +25,20 @@ pub const PipelineType = enum {
 const is_spirv = builtin.target.cpu.arch.isSpirV();
 
 pub const SDFPushConstants = extern struct {
-    mPosition: if (is_spirv) @Vector(3, f32) else [3]f32,
+    mRotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    mPosition: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
+    mRayScale: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
+    mRayOffset: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     mPerspectiveFar: f32,
-    mRotation: if (is_spirv) @Vector(4, f32) else [4]f32,
-    mRayScale: if (is_spirv) @Vector(2, f32) else [2]f32,
-    mRayOffset: if (is_spirv) @Vector(2, f32) else [2]f32,
     mQuadsCount: u32,
     mGlyphsCount: u32,
     mViewportWidth: f32,
     mViewportHeight: f32,
 };
+
+comptime {
+    GPUAsserts.AssertGPULayout(SDFPushConstants);
+}
 
 pub fn Pipeline(pipeline_t: PipelineType) type {
     return switch (pipeline_t) {

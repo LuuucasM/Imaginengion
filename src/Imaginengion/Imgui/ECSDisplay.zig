@@ -60,10 +60,10 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     }
     imgui.igEndChild();
 
-    if (imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false)) {
+    if (already_popup == false and imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false)) {
         imgui.igOpenPopup_Str(@tagName(ecs_type), imgui.ImGuiPopupFlags_None);
     }
-    if (imgui.igBeginPopup(@tagName(ecs_type), imgui.ImGuiWindowFlags_None)) {
+    if (already_popup == false and imgui.igBeginPopup(@tagName(ecs_type), imgui.ImGuiWindowFlags_None)) {
         defer imgui.igEndPopup();
         already_popup = true;
         switch (ecs_type) {

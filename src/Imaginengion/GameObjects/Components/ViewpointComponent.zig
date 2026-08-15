@@ -47,6 +47,7 @@ pub fn SetAreaRect(self: *ViewpointComponent, new_area: Vec4(f32)) void {
 }
 
 pub fn SetViewportSize(self: *ViewpointComponent, width: usize, height: usize) void {
+    if (width == self.mViewportWidth and height == self.mViewportHeight) return;
     self.mViewportWidth = width;
     self.mViewportHeight = height;
     if (height > 0) {

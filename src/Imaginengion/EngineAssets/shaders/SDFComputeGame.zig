@@ -20,7 +20,7 @@ const TexturesArray = SDFShared.TexturesArray;
 
 const imageRead = SDFShared.imageRead;
 
-const default_color = Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
+const default_color = Vec4(f32){ .x = 0.7, .y = 0.5, .z = 0.3, .w = 1.0 };
 
 const GameRayMarcher = RayMarcherFn(
     @TypeOf(&QuadsSSBO.ptr),
@@ -67,7 +67,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .FirstEdge = GameRayMarcher.NO_EDGE,
         .MaterialHandle = 0,
         .AccumColor = default_color,
-        .TextureUV = .{ .x = 0, .y = 0, .z = 0 },
+        .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
         .ShapeT = .None,
     };
     marcher.mNodeCount = 1;

@@ -17,7 +17,7 @@ const MedShadingSSBO = SDFShared.MedShadingSSBO;
 const OutTexture = SDFShared.OutTexture;
 const TexturesArray = SDFShared.TexturesArray;
 
-const default_color = Vec4(f32){ .x = 5.0, .y = 4.0, .z = 3.0, .w = 1.0 };
+const default_color = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 };
 
 const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&QuadsSSBO.ptr),
@@ -34,7 +34,6 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     const frag: @Vector(2, f32) = @Vector(2, f32){ @as(f32, @floatFromInt(global[0])) + 0.5, @as(f32, @floatFromInt(global[1])) + 0.5 };
 
     const uv = Vec2(f32).FromVector(CameraUBO.mRayScale).MulVec(Vec2(f32){ .x = frag[0], .y = frag[1] }).AddVec(Vec2(f32).FromVector(CameraUBO.mRayOffset));
-
     const dir = Vec3(f32).Dir(.{ .x = uv.x, .y = uv.y, .z = -1.0 });
     const ray_dir = dir.QuatRotate(.FromVector(CameraUBO.mRotation));
 
@@ -61,7 +60,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .FirstEdge = OverlayRayMarcher.NO_EDGE,
         .MaterialHandle = 0,
         .AccumColor = default_color,
-        .TextureUV = .{ .x = 0, .y = 0, .z = 0 },
+        .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
         .ShapeT = .None,
     };
     marcher.mNodeCount = 1;
@@ -78,10 +77,13 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     marcher.mNodes[0].FirstEdge = 0;
     marcher.mEdgeCount = 1;
 
+    std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, @Vector(4, f32){ 1.0, 0.0, 0.0, 1.0 });
+
     marcher.March(SDFShared.imageSampleExplicitLod, TexturesArray);
 
     //traverse ray tree backwards to obtain final output color
     const final_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
+    //const final_color = Vec4(f32){ .x = 1.0, .y = 0.0, .z = 0.0, .w = 1.0 };
 
     std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, final_color.ToVector());
 }

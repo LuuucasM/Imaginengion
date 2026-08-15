@@ -103,7 +103,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         mPerspectiveFar: f32,
 
         pub fn March(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) void {
-            var edge_ind_stack: Stack(usize, MAX_EDGES) = undefined;
+            var edge_ind_stack: Stack(usize, MAX_EDGES) = .empty;
             edge_ind_stack.Push(0);
 
             while (edge_ind_stack.len > 0) {
@@ -136,7 +136,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                         .FirstEdge = NO_EDGE,
                         .MaterialHandle = 0,
                         .AccumColor = self.mDefaultColor,
-                        .TextureUV = .{ .x = 0, .y = 0, .z = 0 },
+                        .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
                         .ShapeT = .None,
                     };
                     self.mEdges[curr_edge_ind].ToNode = @intCast(miss_node_ind);
