@@ -141,7 +141,7 @@ pub const ShadingBuffers = struct {
 
         //shadings
         _ = self.mSurfShadingBuff.SetData(engine_context, self.mSurfShadingBuffBase.items.ptr, surf_byte_size, 0);
-        _ = self.mSurfShadingBuff.SetData(engine_context, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
+        _ = self.mMedShadingBuff.SetData(engine_context, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
 
         //fill out stats
         switch (world_type) {

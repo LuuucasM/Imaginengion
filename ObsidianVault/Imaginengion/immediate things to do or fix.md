@@ -1,7 +1,10 @@
+- fix bug where screen is blue until there is an object and then it turns orange
+- fix bug where there is this artifact some sort of squares like radiating from the main quad
+- fix bug where rotation appears to be rotating around a corner like top left corner rather than from the center
+- fix bug where resetting individual x, y, breaks the object, but then z is ok?
 - fix ECS panel bug where there is fighting between right clicking on an element in the panel, and right clicking of the panel.
 	- currently if you right click on an element first the popup for the panel appears, then the popup for the element replaces it.
 	- should just have one popup
-- fix bug where nothing is appearing on the screen 
 - debug, add tests, add asserts, etc
 	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!'
 	- 
