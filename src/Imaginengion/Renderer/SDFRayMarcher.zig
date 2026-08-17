@@ -128,6 +128,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
 
                 //case a and b - ray dies
                 if (i >= MAX_STEPS or dist_origin >= self.mPerspectiveFar) {
+                    self.mEdges[curr_edge_ind].Length = self.mPerspectiveFar;
                     const miss_node_ind = self.GetNodeIndex();
                     self.mNodes[miss_node_ind] = .{
                         .Point = end_point,
@@ -154,15 +155,28 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                         //calculate the UV based off the texture_handle
                         const quad: QuadData = self.mQuads[march_data.object.shape_ind];
                         const texture_shading_data = self.mSurfShading[quad.ShadingHandle];
-                        break :blk SDFFunc.uvIMQuad(end_point, quad, texture_shading_data.Texturehandle);
+                        break :blk SDFFunc.uvIMQuad(
+                            end_point,
+                            quad,
+                            texture_shading_data.Texturehandle,
+                            texture_shading_data.TextureWidth,
+                            texture_shading_data.TextureHeight,
+                        );
                     },
                     .Glyph => blk: {
                         const glyph: GlyphData = self.mGlyphs[march_data.object.shape_ind];
                         const atlas_shading_handle = glyph.AtlasShadingHandle;
                         const atlas_shading_data = self.mSurfShading[atlas_shading_handle];
                         const texture_shading_handle = atlas_shading_data.SiblingShading;
+                        const texture_shading_data = self.mSurfShading[texture_shading_handle];
 
-                        const uv = SDFFunc.uvIMGlyph(end_point, glyph, texture_shading_handle);
+                        const uv = SDFFunc.uvIMGlyph(
+                            end_point,
+                            glyph,
+                            texture_shading_data.Texturehandle,
+                            texture_shading_data.TextureWidth,
+                            texture_shading_data.TextureHeight,
+                        );
 
                         if (uv.x >= 0.0 and uv.y >= 0.0) {
                             const msd = SDFFunc.GetMSD(.{ .x = uv.x, .y = uv.y }, atlas_shading_data, textures_array, sample_sampler);
@@ -254,8 +268,8 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         }
 
         fn NextSurface(self: Self, point: Vec3(f32)) MarchData {
-            var data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
-
+            var data = MarchData{ .min_dist = self.mPerspectiveFar, .object = .{ .shape_type = .None, .shape_ind = 0 } };
+            if (self.mQuadsCount == 0 and self.mGlyphsCount == 0) return data;
             for (0..self.mQuadsCount) |i| {
                 const dist = SDFFunc.sdIMQuad(point, self.mQuads[i]);
                 if (dist < data.min_dist) {

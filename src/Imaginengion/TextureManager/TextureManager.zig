@@ -60,6 +60,6 @@ pub fn GetBinIndex(texture_handle: u32) usize {
     return Impl.GetBinIndex(texture_handle);
 }
 
-pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32)) Vec3(f32) {
-    return Impl.GetTextureUV(texture_handle, local_uv);
+pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32), tex_width: usize, tex_height: usize) Vec3(f32) {
+    return Impl.GetTextureUV(texture_handle, local_uv, tex_width, tex_height);
 }

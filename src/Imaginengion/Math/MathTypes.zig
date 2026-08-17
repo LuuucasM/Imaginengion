@@ -635,11 +635,11 @@ pub fn Quat(comptime number_type: type) type {
         }
 
         pub fn ToVector(self: Self) VectorT {
-            return VectorT{ self.x, self.y, self.z, self.w };
+            return VectorT{ self.w, self.x, self.y, self.z };
         }
 
         pub fn ToArray(self: Self) ArrayT {
-            return ArrayT{ self.x, self.y, self.z, self.w };
+            return ArrayT{ self.w, self.x, self.y, self.z };
         }
 
         pub fn FromArray(array: ArrayT) Self {

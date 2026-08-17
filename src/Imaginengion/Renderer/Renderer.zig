@@ -67,8 +67,10 @@ pub const SurfShadingData = extern struct {
     TextureUV1: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     TilingFactor: f32,
     Texturehandle: u32,
+    TextureWidth: u32,
+    TextureHeight: u32,
     SiblingShading: u32,
-    _pad0: f32 = 0,
+    _pad0: [3]f32 = std.mem.zeroes([3]f32),
 };
 
 pub const MedShadingData = extern struct {
@@ -107,7 +109,18 @@ pub const ShadingBuffers = struct {
         self.mMedShadingBuff.Deinit(engine_context);
         self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
     }
-    pub fn AddSurface(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), texture_uv0: Vec2(f32), texture_uv1: Vec2(f32), tiling_factor: f32, texture_handle: usize, sibling_shading: usize) !usize {
+    pub fn AddSurface(
+        self: *ShadingBuffers,
+        engine_allocator: std.mem.Allocator,
+        color: Vec4(f32),
+        texture_uv0: Vec2(f32),
+        texture_uv1: Vec2(f32),
+        tiling_factor: f32,
+        texture_handle: usize,
+        sibling_shading: usize,
+        texture_width: usize,
+        texture_height: usize,
+    ) !usize {
         try self.mSurfShadingBuffBase.append(engine_allocator, .{
             .Color = color.ToArray(),
             .TextureUV0 = texture_uv0.ToArray(),
@@ -115,6 +128,8 @@ pub const ShadingBuffers = struct {
             .TilingFactor = tiling_factor,
             .Texturehandle = @intCast(texture_handle),
             .SiblingShading = @intCast(sibling_shading),
+            .TextureWidth = @intCast(texture_width),
+            .TextureHeight = @intCast(texture_height),
         });
 
         return self.mSurfShadingBuffBase.items.len - 1;
