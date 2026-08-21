@@ -20,7 +20,7 @@ const TexturesArray = SDFShared.TexturesArray;
 
 const imageRead = SDFShared.imageRead;
 
-const default_color = Vec4(f32){ .x = 0.7, .y = 0.5, .z = 0.3, .w = 1.0 };
+const default_color = Vec4(f32){ .x = 0, .y = 0.28, .z = 0.39, .w = 1.0 };
 
 const GameRayMarcher = RayMarcherFn(
     @TypeOf(&QuadsSSBO.ptr),

@@ -362,18 +362,16 @@ pub fn GetBinIndex(loc: u32) usize {
     return @intCast(loc & ((1 << BINS_BYTES) - 1));
 }
 
-pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32)) Vec3(f32) {
+pub fn GetTextureUV(texture_handle: u32, local_uv: Vec2(f32), tex_width: u32, tex_height: u32) Vec3(f32) {
     const bin_ind = GetBinIndex(texture_handle);
     const slot_ind = GetSlotIndex(texture_handle);
     const offset_u, const offset_v = GetUVOffsets(bin_ind, slot_ind);
 
-    const slot_size: f32 = @floatFromInt(BinIndToSlotSize(bin_ind));
-    const scale = slot_size / ATLAS_SIZE;
+    const scale_x: f32 = @as(f32, @floatFromInt(tex_width)) / ATLAS_SIZE;
+    const scale_y: f32 = @as(f32, @floatFromInt(tex_height)) / ATLAS_SIZE;
 
-    const uv_2d = Vec2(f32){
-        .x = offset_u + local_uv.x * scale,
-        .y = offset_v + local_uv.y * scale,
-    };
+    const uv_x = offset_u + local_uv.x * scale_x;
+    const uv_y = offset_v + local_uv.y * scale_y;
 
-    return .{ .x = uv_2d.x, .y = uv_2d.y, .z = @floatFromInt(GetLayerIndex(texture_handle)) };
+    return .{ .x = uv_x, .y = uv_y, .z = @floatFromInt(GetLayerIndex(texture_handle)) };
 }

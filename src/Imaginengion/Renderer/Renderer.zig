@@ -8,8 +8,10 @@ const GPUAsserts = @import("../Core/GPUAsserts.zig");
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
 
-const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
+const Assets = @import("../Assets/Assets.zig");
 const AssetHandle = @import("../Assets/AssetHandle.zig");
+const ShaderAsset = Assets.ShaderAsset;
+const Texture2D = Assets.Texture2D;
 
 const SceneManager = @import("../Scene/SceneManager.zig");
 
@@ -68,7 +70,8 @@ pub const SurfShadingData = extern struct {
     TilingFactor: f32,
     Texturehandle: u32,
     SiblingShading: u32,
-    _pad0: f32 = 0,
+    TextureWidth: u32,
+    TextureHeight: u32 align(16),
 };
 
 pub const MedShadingData = extern struct {
@@ -107,14 +110,22 @@ pub const ShadingBuffers = struct {
         self.mMedShadingBuff.Deinit(engine_context);
         self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
     }
-    pub fn AddSurface(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), texture_uv0: Vec2(f32), texture_uv1: Vec2(f32), tiling_factor: f32, texture_handle: usize, sibling_shading: usize) !usize {
+    pub fn AddSurface(
+        self: *ShadingBuffers,
+        engine_allocator: std.mem.Allocator,
+        tex_options: *Texture2D.TexOptions,
+        texture_asset: *Texture2D,
+        sibling_shading: usize,
+    ) !usize {
         try self.mSurfShadingBuffBase.append(engine_allocator, .{
-            .Color = color.ToArray(),
-            .TextureUV0 = texture_uv0.ToArray(),
-            .TextureUV1 = texture_uv1.ToArray(),
-            .TilingFactor = tiling_factor,
-            .Texturehandle = @intCast(texture_handle),
+            .Color = tex_options.mColor.ToArray(),
+            .TextureUV0 = tex_options.mTextureUV0.ToArray(),
+            .TextureUV1 = tex_options.mTextureUV1.ToArray(),
+            .TilingFactor = tex_options.mTilingFactor,
+            .Texturehandle = @intCast(texture_asset.GetTextureHandle()),
             .SiblingShading = @intCast(sibling_shading),
+            .TextureWidth = @intCast(texture_asset.GetWidth()),
+            .TextureHeight = @intCast(texture_asset.GetHeight()),
         });
 
         return self.mSurfShadingBuffBase.items.len - 1;

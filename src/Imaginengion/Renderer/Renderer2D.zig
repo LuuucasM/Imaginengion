@@ -215,11 +215,8 @@ pub fn DrawQuad(
 
     const shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
-        quad_component.mTexOptions.mColor,
-        quad_component.mTexOptions.mTextureUV0,
-        quad_component.mTexOptions.mTextureUV1,
-        quad_component.mTexOptions.mTilingFactor,
-        texture_asset.GetTextureHandle(),
+        &quad_component.mTexOptions,
+        texture_asset,
         std.math.maxInt(u32),
     );
 
@@ -252,17 +249,14 @@ pub fn DrawText(
     defer zone.Deinit();
 
     const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
-    const atlas_asset = text_asset.mAtlas;
+    const atlas_asset = &text_asset.mAtlas;
     const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
     const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
     const texture_shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
-        text_component.mTexOptions.mColor,
-        text_component.mTexOptions.mTextureUV0,
-        text_component.mTexOptions.mTextureUV1,
-        text_component.mTexOptions.mTilingFactor,
-        texture_asset.GetTextureHandle(),
+        &text_component.mTexOptions,
+        texture_asset,
         std.math.maxInt(u32),
     );
 
@@ -293,13 +287,18 @@ pub fn DrawText(
             pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
         }
 
+        var tex_options = Texture2D.TexOptions{
+            .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
+            .mIsTransparent = false,
+            .mTextureUV0 = glyph.mAtlasTexel0.DivVec(text_asset.mAtlasSize),
+            .mTextureUV1 = glyph.mAtlasTexel1.DivVec(text_asset.mAtlasSize),
+            .mTilingFactor = 1.0,
+        };
+
         const atlas_shading_handle = try shading_buff.AddSurface(
             engine_context.EngineAllocator(),
-            Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-            glyph.mAtlasTexel0.DivVec(text_asset.mAtlasSize),
-            glyph.mAtlasTexel1.DivVec(text_asset.mAtlasSize),
-            1.0,
-            atlas_asset.GetTextureHandle(),
+            &tex_options,
+            atlas_asset,
             texture_shading_handle,
         );
 

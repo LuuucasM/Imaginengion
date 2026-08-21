@@ -17,14 +17,14 @@ fn sdBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
     return q.ClampScalar(0).Len() + @min(@max(q.x, @max(q.y, q.z)), 0.0);
 }
 
-fn uvBox(point: Vec3(f32), half_extents: Vec3(f32), texture_handle: u32) Vec3(f32) {
+fn uvBox(point: Vec3(f32), half_extents: Vec3(f32), texture_handle: u32, tex_width: u32, tex_height: u32) Vec3(f32) {
     const local_point_xy: Vec2(f32) = .{ .x = point.x, .y = point.y };
     const half_extents_xy: Vec2(f32) = .{ .x = half_extents.x, .y = half_extents.y };
 
     if (@abs(point.z - THICKNESS_2D) < THICKNESS_2D) { //check to ensure its the front face only
         const uv = local_point_xy.AddVec(half_extents_xy).DivVec(half_extents_xy.MulScalar(2.0));
         if (uv.x >= 0 and uv.x <= 1 and uv.y >= 0 and uv.y <= 1) {
-            return TextureManager.GetTextureUV(texture_handle, uv);
+            return TextureManager.GetTextureUV(texture_handle, uv, tex_width, tex_height);
         }
     }
     return .{ .x = -1, .y = -1, .z = -1 };
@@ -53,15 +53,17 @@ pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
     return sdBox(p2, .FromVector(glyph.HalfExtents));
 }
 
-pub fn uvIMQuad(point: Vec3(f32), quad: QuadData, texture_handle: u32) Vec3(f32) {
+pub fn uvIMQuad(point: Vec3(f32), quad: QuadData, texture_handle: u32, tex_width: u32, tex_height: u32) Vec3(f32) {
     return uvBox(
         GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation)),
         .FromVector(quad.HalfExtents),
         texture_handle,
+        tex_width,
+        tex_height,
     );
 }
 
-pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32) Vec3(f32) {
+pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32, tex_width: u32, tex_height: u32) Vec3(f32) {
     const local_point = GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation));
 
     const p2: Vec3(f32) = .{
@@ -74,13 +76,15 @@ pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32) Vec3(f
         p2,
         .FromVector(glyph.HalfExtents),
         texture_handle,
+        tex_width,
+        tex_height,
     );
 }
 
 pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: SurfShadingData, textures_array: anytype, sample_sampler: anytype) f32 {
     //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
     const raw_uv: Vec2(f32) = Vec2(f32).FromArray(atlas_shading_data.TextureUV0).AddVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV1).SubVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV0))).MulVec(texture_uv);
-    const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv);
+    const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv, atlas_shading_data.TextureWidth, atlas_shading_data.TextureHeight);
     const msd = sample_sampler(textures_array, sample_uv.ToVector(), 0.0);
     return Median(msd[0], msd[1], msd[2]);
 }
