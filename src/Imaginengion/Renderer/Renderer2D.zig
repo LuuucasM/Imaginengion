@@ -218,6 +218,8 @@ pub fn DrawQuad(
         &quad_component.mTexOptions,
         texture_asset,
         std.math.maxInt(u32),
+        texture_asset.GetWidth(),
+        texture_asset.GetHeight(),
     );
 
     var shading_flag: u32 = 0;
@@ -258,6 +260,8 @@ pub fn DrawText(
         &text_component.mTexOptions,
         texture_asset,
         std.math.maxInt(u32),
+        texture_asset.GetWidth(),
+        texture_asset.GetHeight(),
     );
 
     var texture_shading_flags: u32 = 0;
@@ -300,6 +304,8 @@ pub fn DrawText(
             &tex_options,
             atlas_asset,
             texture_shading_handle,
+            atlas_asset.GetWidth(),
+            atlas_asset.GetHeight(),
         );
 
         const left = glyph.mPlaneMin.x;

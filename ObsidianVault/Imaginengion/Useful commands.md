@@ -6,6 +6,9 @@
 - Fragment Shaders:
 	- zig build-obj -ODebug -target spirv64-vulkan -mcpu baseline+variable_pointers --dep IM "-Mroot=src\Imaginengion\EngineAssets\shaders\SDFFragShaderOverlay.zig" "-MIM=src\Imaginengion\ImagineShaders.zig" --name SDFFragShaderOverlay
 	- zig build-obj -ODebug -target spirv64-vulkan -mcpu baseline+variable_pointers --dep IM "-Mroot=src\Imaginengion\EngineAssets\shaders\SDFFragShaderGame.zig" "-MIM=src\Imaginengion\ImagineShaders.zig" --name SDFFragShaderGame
+- compute shaders:
+	- zig build-obj -ODebug -target spirv64-vulkan -mcpu baseline+variable_pointers --dep IM "-Mroot=src\Imaginengion\EngineAssets\shaders\SDFFragShaderGame.zig" "-MIM=src\Imaginengion\ImagineShaders.zig" --name SDFFragShaderGame
+
 
 
 
