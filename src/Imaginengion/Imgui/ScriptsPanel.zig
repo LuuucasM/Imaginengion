@@ -32,7 +32,7 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
             .entity => |e| try RenderBegin(Entity, engine_context, e),
             .scene_layer => |s| try RenderBegin(SceneLayer, engine_context, s),
             .player => |p| try RenderBegin(Player, engine_context, p),
-            .gamemode => |g| try RenderBegin(GameMode, engine_context, g),
+            .gamecontext => |g| try RenderBegin(GameMode, engine_context, g),
         }
         defer imgui.igEnd();
 
@@ -44,7 +44,7 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
                 .entity => |e| try RenderScript(Entity, engine_context, e),
                 .scene_layer => |s| try RenderScript(SceneLayer, engine_context, s),
                 .player => |p| try RenderScript(Player, engine_context, p),
-                .gamemode => |g| try RenderScript(GameMode, engine_context, g),
+                .gamecontext => |g| try RenderScript(GameMode, engine_context, g),
             }
         }
         imgui.igEndChild();
@@ -53,7 +53,7 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
             .entity => |e| try ObjectTraits(Entity).HandleDragDropTarget(engine_context, e),
             .scene_layer => |s| try ObjectTraits(SceneLayer).HandleDragDropTarget(engine_context, s),
             .player => |p| try ObjectTraits(Player).HandleDragDropTarget(engine_context, p),
-            .gamemode => |g| try ObjectTraits(GameMode).HandleDragDropTarget(engine_context, g),
+            .gamecontext => |g| try ObjectTraits(GameMode).HandleDragDropTarget(engine_context, g),
         }
     } else {
         _ = imgui.igBegin("Scripts - No Entity###Scripts", null, 0);

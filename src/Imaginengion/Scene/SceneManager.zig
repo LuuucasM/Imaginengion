@@ -313,7 +313,7 @@ pub fn GetEntityGroup(self: *const SceneManager, frame_allocator: std.mem.Alloca
 
 //==================================ECS MANAGER GAME MODE START===========================================
 pub fn CreateGameMode(self: *SceneManager, engine_context: *EngineContext, config: GameMode.NewGameModeConfig) !GameMode {
-    var new_game_mode = GameMode{ .mEntityID = try self.mECSManagerPL.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
+    var new_game_mode = GameMode{ .mEntityID = try self.mECSManagerGM.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
     try new_game_mode.CreateGameModeConfig(engine_context, config);
     return new_game_mode;
 }
@@ -322,6 +322,12 @@ pub fn GetGameModeGroup(self: *const SceneManager, frame_allocator: std.mem.Allo
 }
 pub fn GetGameMode(self: *SceneManager, gamemode_id: GameMode.Type) GameMode {
     return GameMode{ .mEntityID = gamemode_id, .mScenemanager = self };
+}
+pub fn GameECSCallback(scene_manager: *anyopaque, engine_context: *EngineContext, event: ECSManagerGameMode.ECSEventManager.EventType) anyerror!bool {
+    _ = scene_manager;
+    _ = engine_context;
+    _ = event;
+    return true;
 }
 //========================================ECS MANAGER GAME MODE END=========================================
 
@@ -394,6 +400,12 @@ pub fn ProcessRemovedObj(self: *SceneManager, engine_context: *EngineContext) !v
     var player_event_callback = ECSManagerPlayer.ECSEventCallback{ .mCtx = self, .mCallbackFn = PlayerECSCallback };
     callback_list.append(&player_event_callback.mNode);
     try self.mECSManagerPL.ProcessEvents(engine_context, .Remove, callback_list);
+    callback_list.first = null;
+    callback_list.last = null;
+
+    var game_event_callback = ECSManagerGameMode.ECSEventCallback{ .mCtx = self, .mCallbackFn = GameECSCallback };
+    callback_list.append(&game_event_callback.mNode);
+    try self.mECSManagerGM.ProcessEvents(engine_context, .Remove, callback_list);
 }
 
 pub fn Copy(self: *SceneManager, engine_context: *EngineContext, other_scene: *SceneManager) !void {

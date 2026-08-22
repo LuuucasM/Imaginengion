@@ -31,7 +31,7 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, sele
             .entity => |e| try RenderBegin(Entity, engine_context, e),
             .scene_layer => |s| try RenderBegin(SceneLayer, engine_context, s),
             .player => |p| try RenderBegin(Player, engine_context, p),
-            .gamemode => |g| try RenderBegin(GameMode, engine_context, g),
+            .gamecontext => |g| try RenderBegin(GameMode, engine_context, g),
         }
         defer imgui.igEnd();
 
@@ -39,7 +39,7 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, sele
             .entity => |e| try RenderComponents(Entity, engine_context, e),
             .scene_layer => |s| try RenderComponents(SceneLayer, engine_context, s),
             .player => |p| try RenderComponents(Player, engine_context, p),
-            .gamemode => |g| try RenderComponents(GameMode, engine_context, g),
+            .gamecontext => |g| try RenderComponents(GameMode, engine_context, g),
         }
     } else {
         _ = imgui.igBegin("Components - No Entity###Components\x00", null, 0);

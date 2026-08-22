@@ -190,6 +190,11 @@ fn ObjectTraits(comptime T: type) type {
 
                 if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
                     try object.Delete(engine_context);
+                    try engine_context.mGameEventManager.Insert(
+                        engine_context.EngineAllocator(),
+                        .FrameEnd,
+                        .{ .DestroyEntityEvent = .{ .mEntity = object } },
+                    );
                 }
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, selected_object: *?SelectedObject, _: *SceneManager) !void {
@@ -240,6 +245,11 @@ fn ObjectTraits(comptime T: type) type {
 
                 if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
                     try object.Delete(engine_context);
+                    try engine_context.mGameEventManager.Insert(
+                        engine_context.EngineAllocator(),
+                        .FrameEnd,
+                        .{ .DestroySceneEvent = .{ .mScene = object } },
+                    );
                 }
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
@@ -281,6 +291,11 @@ fn ObjectTraits(comptime T: type) type {
 
                 if (imgui.igMenuItem_Bool("Delete Player", "", false, true)) {
                     try object.Delete(engine_context);
+                    try engine_context.mGameEventManager.Insert(
+                        engine_context.EngineAllocator(),
+                        .FrameEnd,
+                        .{ .DestroyPlayerEvent = .{ .mPlayer = object } },
+                    );
                 }
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
@@ -320,8 +335,13 @@ fn ObjectTraits(comptime T: type) type {
                     _ = try object.CreateChild(engine_context, .Entity, .{});
                 }
 
-                if (imgui.igMenuItem_Bool("Delete Game Mode", "", false, true)) {
+                if (imgui.igMenuItem_Bool("Delete Game Context", "", false, true)) {
                     try object.Delete(engine_context);
+                    try engine_context.mGameEventManager.Insert(
+                        engine_context.EngineAllocator(),
+                        .FrameEnd,
+                        .{ .DestroyGameContextEvent = .{ .mGameContext = object } },
+                    );
                 }
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
@@ -332,7 +352,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn SelectObject(engine_context: *EngineContext, obj: GameMode) !void {
                 try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
                     .SelectObjectEvent = .{
-                        .mObject = .{ .gamemode = obj },
+                        .mObject = .{ .gamecontext = obj },
                     },
                 });
             }

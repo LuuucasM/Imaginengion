@@ -12,7 +12,7 @@ const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const AssetHandle = @import("../Assets/AssetHandle.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
-const GameMode = @import("../GameModes/GameMode.zig");
+const GameContext = @import("../GameModes/GameMode.zig");
 
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 
@@ -73,7 +73,7 @@ pub const SelectedObject = union(enum) {
     entity: Entity,
     scene_layer: SceneLayer,
     player: Player,
-    gamemode: GameMode,
+    gamecontext: GameContext,
 };
 
 pub const ViewportType = enum {
@@ -351,10 +351,25 @@ fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
 }
 
 pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: GameEvent) anyerror!bool {
-    const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
-    _ = self;
     _ = engine_context;
-    _ = event;
+    const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
+
+    switch (event) {
+        .DestroySceneEvent, .DestroyEntityEvent, .DestroyPlayerEvent, .DestroyGameContextEvent => {
+            if (self.mSelectedObj) |*selected_obj| {
+                if (selected_obj.* == .entity and event == .DestroyEntityEvent) {
+                    self.mSelectedObj = null;
+                } else if (selected_obj.* == .scene_layer and event == .DestroySceneEvent) {
+                    self.mSelectedObj = null;
+                } else if (selected_obj.* == .player and event == .DestroyPlayerEvent) {
+                    self.mSelectedObj = null;
+                } else if (selected_obj.* == .gamecontext and event == .DestroyGameContextEvent) {
+                    self.mSelectedObj = null;
+                }
+            }
+        },
+        else => std.log.err("This event type has not been handled by EditorProgram.OnGameEvent: {s}", .{@tagName(event)}),
+    }
     return true;
 }
 
