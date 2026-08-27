@@ -49,6 +49,7 @@ const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 const PlayerComponents = @import("../Players/Components.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerRenderComponent = PlayerComponents.RenderTargetComponent;
+const PlayerNameComponent = PlayerComponents.NameComponent;
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -99,10 +100,10 @@ mEntityPanel: ECSDisplayPanel = .{},
 mPlayerPanel: ECSDisplayPanel = .{},
 mGameModePanel: ECSDisplayPanel = .{},
 
-mRunSettings: RunSettings = .{},
-
 mSelectedObj: ?SelectedObject = null,
+
 mEditorState: EditorState = .Stop,
+mRunPlayer: ?Player = null,
 
 //editor UI stuff
 mEditorUIScene: SceneLayer = .{},
@@ -448,7 +449,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         self.mActiveWorld = &engine_context.mGameWorld;
         try engine_context.mSimulateWorld.clearAndFree(engine_context);
     } else {
-        if (self.mRunSettings.mRunPlayer) |run_player| {
+        if (self.mRunPlayer) |run_player| {
             if (run_player.GetComponent(PossessComponent)) |poss_comp| {
                 if (poss_comp.mPossessedEntity.IsActive()) {
                     try engine_context.mGameWorld.Copy(engine_context, &engine_context.mSimulateWorld);
@@ -789,8 +790,32 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
         }
         if (imgui.igBeginMenu("Editor", true) == true) {
             defer imgui.igEndMenu();
+            if (imgui.igBeginMenu("Play Menu", true) == true) {
+                defer imgui.igEndMenu();
+                const has_selected = if (self.mRunPlayer) |_| true else false;
+                if (imgui.igMenuItem_Bool("Play/Stop", "Ctrl+G", false, has_selected) == true) {
+                    self.OnChangeEditorStateEvent(engine_context);
+                }
+            }
             if (imgui.igMenuItem_Bool("Use Preview Panel", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenPlay, true) == true) {
                 self._ViewportPanel.mP_OpenPlay = !self._ViewportPanel.mP_OpenPlay;
+            }
+            if (imgui.igBeginMenu("Player Camera", true) == true) {
+                defer imgui.igEndMenu();
+                //need to add a "None" options
+
+                const player_group = try engine_context.mGameWorld.GetPlayerGroup(engine_context.FrameAllocator(), .{ .Component = PossessComponent });
+                for (player_group.items) |player_id| {
+                    const player = engine_context.mGameWorld.GetPlayer(player_id);
+                    const possess_component = player.GetComponent(PossessComponent).?;
+                    if (possess_component.mPossessedEntity.IsActive()) {
+                        const selected = if (self.mRunPlayer) |p| if (player.mEntityID == p.mEntityID) true else false else false;
+                        const name_component = player.GetComponent(PlayerNameComponent).?;
+                        if (imgui.igMenuItem_Bool(name_component.mName.items.ptr, null, selected, true) == true) {
+                            self.mRunPlayer = player;
+                        }
+                    }
+                }
             }
         }
     }
