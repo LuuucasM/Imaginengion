@@ -1,10 +1,31 @@
-- fix bug where screen is blue until there is an object and then it turns orange
-- fix bug where there is this artifact some sort of squares like radiating from the main quad
-- fix bug where rotation appears to be rotating around a corner like top left corner rather than from the center
+- change ECS Objects, ECS Managers, and ECS Components to unify them and use comptime generation when possible
+	- this follows in line with the formalization that was established as part of the UI rework
+	- I think by making these changes I am sort of "choosing" how my engine will be aka the heavy use of ECS for different game features. 
+	- This is me just further committing to the goal of the engine where one of the pillars is ECS and the other is Events
+	- I am not actually changing any behavior but just again unifying everything to use comptime generation for shared parts (which there is a lot of since they all share the same generic ECS). This will result in less code to debug and more consistent rules across the different game objects.
+- Finish changing ECSObjects to use "Core" for shared functinality
+- ensure ECSObjects have their unique functions preserved
+- change all ECSManagers to use ECSObjects. 
+	- I am not sure if I should make a generic ECSMangaer as well.
+	- It would be basically the same thing as ECSObjects in that certain things would be shared between managers but there might be object specific implementation details and member functions
+- Ensure that asset manager retains the same ability that the current asset manager has
+- Implement WorldManager in /Core
+	- Before SceneManager use to manage scenes, and entities, and everythinb but now that SceneManager is just only for scenes I needed a new level of object that brought everything together. This is because the engine will have multiple Scene/Entity/etc Managers due to the way playing/simulation works by just copying the whole world.
+	- also will need a world for editor when I move to replace imgui as well so need a world manager 
+- I need to re-add features so i can test the play/simulation part of the engine. Some things i have yet to test/add
+	- adding a player and an entity and having the player possess the entity
+	- seeing if adding a camera to the entity and seeing if i can get a preview in the play panel
+	- then actually doing the play/simulation
+	- when hitting stop everything returns to its pre-play state
+- I need to fix different systems that iterate over the hierarchy and add checks for the "MainEntityComponent" (or whatever i called it).
+	- I added a component so you can tag entities to determine where main components are.
+	- This is because the way entity hierarchies and the way the ECS is suppose to be used is like for example with attribute components, if you want multiple attributes then you create multiple children that each have just an attribute component. So this entity isnt really a game object but a convenience entity to represent some bundle of components.
+	- This can apply to all kinds of different components
+	- so because of this you could have a hierarchy of entities where some of the children/parents are not actually suppose to be a game object but really just a convenience entity.
+
+---
+###### These are shelfed changes for now because they are not totally broken just dont work the way I expect but may be solved from other changes down the line
 - fix bug where resetting individual x, y, breaks the object, but then z is ok?
 - fix ECS panel bug where there is fighting between right clicking on an element in the panel, and right clicking of the panel.
 	- currently if you right click on an element first the popup for the panel appears, then the popup for the element replaces it.
 	- should just have one popup
-- debug, add tests, add asserts, etc
-	- at this point a lot will have changed + upgraded compiler version so there will be so many errors :) have fun!'
-	- 

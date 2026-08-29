@@ -25,9 +25,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         const Self = @This();
 
+        pub const empty: Self = .{
+            .mNextID = 0,
+            .mComponentManager = .empty,
+            .mECSEventManager = .empty,
+        };
+
         mNextID: entity_t = 0,
-        mComponentManager: ComponentManagerT = .{},
-        mECSEventManager: ECSEventManager = .{},
+        mComponentManager: ComponentManagerT,
+        mECSEventManager: ECSEventManager,
 
         pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             _ValidateCompList(components_types);

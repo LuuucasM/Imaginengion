@@ -1,25 +1,25 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub const AISlotComponent = @import("Components/AISlotComponent.zig");
-pub const AudioComponent = @import("Components/AudioComponent.zig");
-pub const ColliderComponent = @import("Components/ColliderComponent.zig");
-pub const UUIDComponent = @import("Components/UUIDComponent.zig");
-pub const NameComponent = @import("Components/NameComponent.zig");
-pub const PlayerSlotComponent = @import("Components/PlayerSlotComponent.zig");
-pub const QuadComponent = @import("Components/QuadComponent.zig");
-pub const RigidBodyComponent = @import("Components/RigidBodyComponent.zig");
-pub const EntitySceneComponent = @import("Components/EntitySceneComponent.zig");
-pub const TransformComponent = @import("Components/TransformComponent.zig");
-pub const ScriptComponent = @import("Components/ScriptComponent.zig");
-pub const TextComponent = @import("Components/TextComponent.zig");
-pub const ViewpointComponent = @import("Components/ViewpointComponent.zig");
-pub const RenderTargetComponent = @import("Components/RenderTargetComponent.zig");
-pub const MainEntityComponent = @import("Components/MainEntityComponent.zig");
+pub const AISlotComponent = @import("Entity/AISlotComponent.zig");
+pub const AudioComponent = @import("Entity/AudioComponent.zig");
+pub const ColliderComponent = @import("Entity/ColliderComponent.zig");
+pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
+pub const NameComponent = @import("Shared/NameComponent.zig");
+pub const PlayerSlotComponent = @import("Entity/PlayerSlotComponent.zig");
+pub const QuadComponent = @import("Entity/QuadComponent.zig");
+pub const RigidBodyComponent = @import("Entity/RigidBodyComponent.zig");
+pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
+pub const TransformComponent = @import("Shared/TransformComponent.zig");
+pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
+pub const TextComponent = @import("Entity/TextComponent.zig");
+pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
+pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
+pub const MainEntityComponent = @import("Entity/MainEntityComponent.zig");
 
-const TagComponents = @import("Components/TagComponents.zig");
-pub const OnKeyPressedScript = TagComponents.OnKeyPressedScript;
-pub const OnUpdateScript = TagComponents.OnUpdateScript;
+const ScriptTags = @import("Shared/ScriptTags.zig");
+pub const OnKeyPressedScript = ScriptTags.OnKeyPressedScript;
+pub const OnUpdateScript = ScriptTags.EntityOnUpdateScript;
 
 ///This is an array of all the components that Entity can have
 /// It is used to be passed to the ECS

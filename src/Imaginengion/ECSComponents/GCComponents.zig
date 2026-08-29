@@ -1,7 +1,7 @@
-pub const AttribComponent = @import("Components/AttribComponent.zig");
-pub const NameComponent = @import("Components/NameComponent.zig");
-pub const UUIDComponent = @import("Components/UUIDComponent.zig");
-pub const ScriptComponent = @import("Components/ScriptComponent.zig");
+pub const AttribComponent = @import("Shared/AttribComponent.zig");
+pub const NameComponent = @import("Shared/NameComponent.zig");
+pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
+pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 const This = @This();
 
 pub const ComponentsList = [_]type{

@@ -1,9 +1,9 @@
-pub const RenderTargetComponent = @import("Components/RenderTargetComponent.zig");
-pub const MicComponent = @import("Components/MicComponent.zig");
-pub const PossessComponent = @import("Components/PossessComponent.zig");
-pub const NameComponent = @import("Components/NameComponent.zig");
-pub const UUIDComponent = @import("Components/UUIDComponent.zig");
-pub const ScriptComponent = @import("Components/ScriptComponent.zig");
+pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
+pub const MicComponent = @import("Player/MicComponent.zig");
+pub const PossessComponent = @import("Player/PossessComponent.zig");
+pub const NameComponent = @import("Shared/NameComponent.zig");
+pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
+pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 
 pub const ComponentsList = [_]type{
     RenderTargetComponent,

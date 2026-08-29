@@ -2,6 +2,7 @@ const std = @import("std");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const UUIDComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
+const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -20,11 +21,9 @@ ID: u64 = std.math.maxInt(u64),
 
 pub fn Deinit(_: *UUIDComponent, _: *EngineContext) !void {}
 
-//pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
-//    var buff: [140]u8 = undefined;
-//    const text = try std.fmt.bufPrintSentinel(&buff, "{d}\n", .{self.ID}, 0);
-//    _ = imgui.igInputText("ID", text.ptr, text.len, imgui.ImGuiInputTextFlags_ReadOnly, null, null);
-//}
+pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
+    try ImguiManager.RenderUUID(&self.ID, "UUID");
+}
 
 pub fn jsonStringify(self: *const UUIDComponent, jw: anytype) !void {
     try jw.beginObject();
@@ -53,11 +52,11 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
         //deserialize UUID
         if (std.mem.eql(u8, field_name, "UUID")) {
-            const player_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
-            std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Player);
-            const player = engine_context.mSerializer.mCurrDeserialize.requester.Player;
-            player.mSceneManager.AddUUID(engine_context.EngineAllocator(), player_uuid, player.mEntityID) catch @panic("this failed");
-            result.ID = player_uuid;
+            const entity_uuid = try std.json.innerParse(u64, frame_allocator, reader, options);
+            std.debug.assert(engine_context.mSerializer.mCurrDeserialize.requester == .Entity);
+            const entity = engine_context.mSerializer.mCurrDeserialize.requester.Entity;
+            entity.mSceneManager.AddUUID(engine_context.EngineAllocator(), entity_uuid, entity.mEntityID) catch @panic("this failed");
+            result.ID = entity_uuid;
         }
     }
 

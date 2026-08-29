@@ -1,9 +1,11 @@
 const std = @import("std");
-const ECSManagerScenes = @import("SceneManager.zig").ECSManagerScenes;
-const ECSManagerGameObj = @import("SceneManager.zig").ECSManagerGameObj;
+const SceneManager = @import("../Scene/SceneManager.zig");
+
+const ECSManagerScenes = SceneManager.ECSManagerScenes;
+const ECSManagerEntities = SceneManager.ECSManagerEntities;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const SceneComponents = @import("SceneComponents.zig");
-const EntityComponents = @import("../GameObjects/Components.zig");
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const SceneUUIDComponent = SceneComponents.UUIDComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const SceneComponent = SceneComponents.SceneComponent;
@@ -13,8 +15,7 @@ const EntityNameComponent = EntityComponents.NameComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntityScriptComponent = EntityComponents.ScriptComponent;
-const Entity = @import("../GameObjects/Entity.zig");
-const GenUUID = @import("../Serializer/Serializer.zig").GenUUID;
+const Entity = @import("Entity.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
@@ -22,7 +23,6 @@ const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(Type
 const PathType = @import("../Assets/AssetManager.zig").PathType;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
-const SceneManager = @import("SceneManager.zig");
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 const NewEntityConfig = Entity.NewEntityConfig;
 

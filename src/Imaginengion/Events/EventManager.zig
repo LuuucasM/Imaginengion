@@ -22,7 +22,11 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
         const Self = @This();
         pub const EventsArrayT = std.EnumArray(EventCategoriesType, std.ArrayList(EventUnionType));
 
-        mEventsArray: EventsArrayT = EventsArrayT.initFill(.empty),
+        pub const empty: Self = .{
+            .mEventsArray = EventsArrayT.initFill(.empty),
+        };
+
+        mEventsArray: EventsArrayT,
 
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
             var iter = self.mEventsArray.iterator();

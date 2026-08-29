@@ -480,6 +480,27 @@ pub fn RenderStaticBitSet(comptime T: type, value: *T, label: []const u8) !void 
         }
     }
 }
+
+pub fn RenderUUID(uuid: *u64, label: [:0]const u8) !void {
+    var buf: [32]u8 = undefined;
+    var id_buf: [32]u8 = undefined;
+
+    const formatted = try std.fmt.bufPrintSentinel(&buf, "{d}", .{uuid.*}, 0);
+    const input_id = try std.fmt.bufPrintSentinel(&id_buf, "##{s}", .{formatted}, 0);
+
+    imgui.igText("%s", label.ptr);
+    imgui.igSameLine(0.0, 8.0);
+
+    _ = imgui.igInputText(
+        input_id.ptr,
+        buf[0..].ptr,
+        buf.len,
+        imgui.ImGuiInputTextFlags_ReadOnly,
+        null,
+        null,
+    );
+}
+
 pub fn RenderFloatInput(val: *f32, label: [:0]const u8, speed: f32, speed_fast: f32) !bool {
     return imgui.igInputFloat(label, val, speed, speed_fast, "%.3f", 0);
 }

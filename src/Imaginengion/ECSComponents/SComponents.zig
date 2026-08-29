@@ -1,17 +1,17 @@
 const std = @import("std");
-pub const UUIDComponent = @import("Components/UUIDComponent.zig");
-pub const NameComponent = @import("Components/NameComponent.zig");
-pub const PhysicsComponent = @import("Components/PhysicsComponent.zig");
-pub const SceneComponent = @import("Components/SceneComponent.zig");
-pub const ScriptComponent = @import("Components/ScriptComponent.zig");
-pub const SpawnPossComponent = @import("Components/SpawnPossComponent.zig");
-pub const StackPosComponent = @import("Components/StackPosComponent.zig");
+pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
+pub const NameComponent = @import("Shared/NameComponent.zig");
+pub const PhysicsComponent = @import("Scene/PhysicsComponent.zig");
+pub const SceneComponent = @import("Scene/SceneComponent.zig");
+pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
+pub const SpawnPossComponent = @import("Scene/SpawnPossComponent.zig");
+pub const StackPosComponent = @import("Scene/StackPosComponent.zig");
 //pub const TransformComponent = @import("Components/TransformComponent.zig");
 
-const TagComponents = @import("Components/TagComponents.zig");
-pub const OnSceneStartScript = TagComponents.OnSceneStartScript;
-pub const OnUpdateScript = TagComponents.OnUpdateScript;
-pub const InputPressedScript = TagComponents.InputPressedScript;
+const ScriptTags = @import("Shared/ScriptTags.zig");
+pub const OnSceneStartScript = ScriptTags.OnSceneStartScript;
+pub const OnUpdateScript = ScriptTags.SceneOnUpdateScript;
+pub const InputPressedScript = ScriptTags.InputPressedScript;
 
 pub const ComponentsList = [_]type{
     //SceneLayer

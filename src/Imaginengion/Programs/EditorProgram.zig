@@ -794,7 +794,7 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
                 defer imgui.igEndMenu();
                 const has_selected = if (self.mRunPlayer) |_| true else false;
                 if (imgui.igMenuItem_Bool("Play/Stop", "Ctrl+G", false, has_selected) == true) {
-                    self.OnChangeEditorStateEvent(engine_context);
+                    try self.OnChangeEditorStateEvent(engine_context);
                 }
             }
             if (imgui.igMenuItem_Bool("Use Preview Panel", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenPlay, true) == true) {

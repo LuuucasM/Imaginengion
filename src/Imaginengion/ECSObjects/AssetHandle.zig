@@ -1,18 +1,20 @@
 const std = @import("std");
-const AssetManager = @import("AssetManager.zig");
+const AssetManager = @import("../ECSManagers/AManager.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const FileMetaData = @import("Assets/FileMetaData.zig");
+const Components = @import("../ECSComponents/AComponents.zig");
+const FileMetaData = Components.FileMetaData;
+const ECSCore = @import("ECSObject.zig").Core;
 
 const AssetHandle = @This();
-pub const NullHandle = std.math.maxInt(AssetManager.AssetType);
+pub const Type = u32;
+pub const NullHandle: Type = std.math.maxInt(Type);
 
-pub const empty: AssetHandle = .{
-    .mID = NullHandle,
-    .mAssetManager = undefined,
-};
+const Core = ECSCore(AssetHandle);
 
-mID: AssetManager.AssetType = NullHandle,
-mAssetManager: *AssetManager = undefined,
+pub const empty = Core.empty;
+
+mID: AssetManager.AssetType,
+mManager: *AssetManager,
 
 pub fn GetAsset(self: AssetHandle, engine_context: *EngineContext, comptime component_type: type) !*component_type {
     return try self.mAssetManager.GetAsset(engine_context, component_type, self.mID);
@@ -30,7 +32,7 @@ pub fn ReleaseAsset(self: *AssetHandle) void {
 
 pub fn jsonStringify(self: *const AssetHandle, jw: anytype) !void {
     const fmd = self.GetFileMetaData();
-    try jw.objectField("Texture");
+    try jw.objectField("AssetPath");
     try jw.write(fmd.mRelPath.items);
     try jw.objectField("PathType");
     try jw.write(fmd.mPathType);
