@@ -37,7 +37,10 @@ pub const Type = u32;
 pub const NullObject: Type = std.math.maxInt(Type);
 const Entity = @This();
 
-pub const empty = Core.empty;
+pub const uninit: Entity = .{
+    .mID = NullObject,
+    .mManager = undefined,
+};
 
 mID: Type,
 mManager: *WorldManager,
@@ -82,7 +85,7 @@ pub const GetIterator = Core.GetIterator;
 pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
     const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
     const script_type = script_asset.GetScriptType();
-    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate);
+    _ValidateScriptType(script_type);
 
     const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
 
@@ -151,3 +154,7 @@ pub const IsActive = Core.IsActive;
 pub const Invalidate = Core.Invalidate;
 
 pub const IsIDValid = Core.IsIDValid;
+
+fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
+    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate);
+}

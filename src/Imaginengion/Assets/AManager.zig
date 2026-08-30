@@ -146,7 +146,7 @@ pub fn GetAssetHandleRef(self: *AssetManager, engine_context: *EngineContext, as
     const asset_hash = switch (asset_source) {
         .File => |f| ComputePathHash(f.rel_path),
         .Computed => |c| ComputePathHash(c.id),
-        .Default => @panic("shouldnt happen"),
+        .Default => unreachable,
     };
 
     const entity_id = switch (asset_source.GetPathType()) {

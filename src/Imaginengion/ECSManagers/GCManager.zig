@@ -13,3 +13,18 @@ mECSManagerSC: ECSManagerGC = .empty,
 
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, usize) = .empty,
 mResolveUUIDList: std.ArrayList(ResolveReq) = .empty,
+
+pub fn CreateGameMode(self: *SceneManager, engine_context: *EngineContext, config: GameContext.NewGameModeConfig) !GameContext {
+    var new_game_mode = GameMode{ .mEntityID = try self.mECSManagerGM.CreateEntity(engine_context.EngineAllocator()), .mScenemanager = self };
+    try new_game_mode.CreateGameModeConfig(engine_context, config);
+    return new_game_mode;
+}
+pub fn GetGameModeGroup(self: *const SceneManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameContext.Type) {
+    return try self.mECSManagerGM.GetGroup(frame_allocator, query);
+}
+pub fn GameECSCallback(scene_manager: *anyopaque, engine_context: *EngineContext, event: ECSManagerGameContexts.ECSEventManager.EventType) anyerror!bool {
+    _ = scene_manager;
+    _ = engine_context;
+    _ = event;
+    return true;
+}

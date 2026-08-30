@@ -9,11 +9,16 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
             ClearRetainingCapacity,
         };
 
+        pub const EventResult = enum {
+            Continue,
+            Consume,
+        };
+
         pub const CallbackList = std.DoublyLinkedList;
 
         pub const EventCallback = struct {
             mCtx: *anyopaque,
-            mCallbackFn: *const fn (*anyopaque, *EngineContext, EventUnionType) anyerror!bool,
+            mCallbackFn: *const fn (*anyopaque, *EngineContext, EventUnionType) anyerror!EventResult,
             mNode: CallbackList.Node = .{},
         };
 

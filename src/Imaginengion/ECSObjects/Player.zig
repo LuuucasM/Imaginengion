@@ -1,7 +1,7 @@
 const std = @import("std");
 pub const Type = u32;
 pub const ECSManagerPlayer = @import("../Scene/SceneManager.zig").ECSManagerPlayer;
-pub const NullPlayer: Type = std.math.maxInt(Type);
+pub const NullObject: Type = std.math.maxInt(Type);
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("Entity.zig");
 const PlayerComponents = @import("../ECSComponents/PComponents.zig");
@@ -23,70 +23,46 @@ const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const PathType = @import("../Assets//AssetManager.zig").PathType;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
+const AssetHandle = @import("AssetHandle.zig");
 const ScriptComponent = PlayerComponents.ScriptComponent;
 const Player = @This();
+const ECSCore = @import("ECSObject.zig").Core;
+const WorldManager = @import("../Core/WorldManager.zig");
 
-pub const Iterator = struct {
-    pub const IterType = enum {
-        Child,
-        Script,
-    };
-    _CurrentPlayer: Player,
-    _FirstID: Type,
-    _IsFirst: bool = true,
-
-    pub fn next(self: *Iterator) ?Player {
-        if (self._IsFirst) {
-            @branchHint(.cold);
-            self._IsFirst = false;
-        } else {
-            if (self._CurrentPlayer.mEntityID == self._FirstID) return null;
-        }
-
-        const player = self._CurrentPlayer;
-
-        const player_child_component = player.GetComponent(PlayerChildComponent).?;
-
-        self._CurrentPlayer = Player{ .mEntityID = player_child_component.mNext, .mScenemanager = player.mScenemanager };
-
-        return player;
-    }
-};
+const Core = ECSCore(Player);
 
 pub const NewPlayerConfig = struct {
-    bAddNameComponent: bool = true,
-    bAddUUIDComponent: bool = true,
-    bAddPossessComponent: bool = true,
-    bAddMicComponent: bool = true,
-    bAddRenderComponent: bool = true,
+    bAddNameComponent: bool = false,
+    bAddUUIDComponent: bool = false,
+    bAddPossessComponent: bool = false,
+    bAddMicComponent: bool = false,
+    bAddRenderComponent: bool = false,
 };
 
-mEntityID: Type = NullPlayer,
-mScenemanager: *SceneManager = undefined,
+pub const uninit: Player = .{
+    .mID = NullObject,
+    .mManager = undefined,
+};
 
-pub fn AddComponent(self: Player, engine_context: *EngineContext, new_component: anytype) !*@TypeOf(new_component) {
-    return try self.mScenemanager.mECSManagerPL.AddComponent(engine_context.EngineAllocator(), self.mEntityID, new_component);
-}
-pub fn RemoveComponent(self: Player, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
-    try self.mScenemanager.mECSManagerPL.RemoveComponent(engine_allocator, component_type, self.mEntityID);
-}
-pub fn GetComponent(self: Player, comptime component_type: type) ?*component_type {
-    return self.mScenemanager.mECSManagerPL.GetComponent(component_type, self.mEntityID);
-}
-pub fn HasComponent(self: Player, comptime component_type: type) bool {
-    return self.mScenemanager.mECSManagerPL.HasComponent(component_type, self.mEntityID);
-}
+mID: Type,
+mManager: *WorldManager,
 
-pub fn GetName(self: Player) []const u8 {
-    return self.mScenemanager.mECSManagerPL.GetComponent(PlayerNameComponent, self.mEntityID).?.*.mName.items;
-}
+pub const AddComponent = Core.AddComponent;
 
-pub fn Duplicate(self: Player) !Player {
-    return try self.mScenemanager.mECSManagerPL.DuplicateEntity(self.mEntityID);
-}
-pub fn Delete(self: Player, engine_context: *EngineContext) !void {
-    try self.mScenemanager.mECSManagerPL.DestroyEntity(engine_context.EngineAllocator(), self.mEntityID);
-}
+pub const RemoveCOmponent = Core.RemoveComponent;
+
+pub const GetComponent = Core.GetComponent;
+
+pub const HasComponent = Core.HasComponent;
+
+pub const GetName = Core.GetName;
+
+pub const GetUUID = Core.GetUUID;
+
+pub const Duplicate = Core.Duplicate;
+
+pub const Delete = Core.Delete;
+
 pub fn Possess(self: Player, entity: Entity) void {
     if (entity.GetComponent(PlayerSlotComponent)) |ps_component| {
         self.GetComponent(PossessComponent).?.mPossessedEntity = entity;
@@ -96,81 +72,45 @@ pub fn Possess(self: Player, entity: Entity) void {
     }
 }
 
-pub fn CreateChild(self: Player, engine_context: *EngineContext, child_type: ChildType, new_player_config: NewPlayerConfig) !Player {
-    var child_player = Player{ .mEntityID = try self.mScenemanager.mECSManagerSC.AddChild(engine_context.EngineAllocator(), self.mEntityID, child_type), .mScenemanager = self.mScenemanager };
-    try child_player.CreatePlayerConfig(engine_context, new_player_config);
-    return child_player;
-}
+//NOTE: no scripts for players yet
+//pub fn AddComponentScript(self: Player, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
+//    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
+//    const script_type = script_asset.GetScriptType();
+//    _ValidateScriptType() //add assert to make sure the type is an allowed type
+//
+//    const new_script_entity = Core.AddScript(self, engine_context, new_script_handle);
+//
+//    _ = switch (script_asset.GetScriptType()) {
+//        else => @panic("This shouldnt happen!"),
+//    };
+//}
 
-pub fn AddComponentScript(self: Player, engine_context: *EngineContext, script_asset_path: []const u8, path_type: PathType) !void {
-    var new_script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = script_asset_path, .path_type = path_type } });
-    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
+//TODO: Move to PManager
+//pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config: NewPlayerConfig) !void {
+//    if (config.bAddUUIDComponent) {
+//        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+//        const new_random = io_source.interface();
+//        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
+//        try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+//    }
+//    if (config.bAddNameComponent) {
+//        var new_name_component: PlayerNameComponent = .empty;
+//        _ = try new_name_component.mName.print(engine_context.EngineAllocator(), "New Entity", .{});
+//        _ = try self.AddComponent(engine_context, new_name_component);
+//    }
+//    if (config.bAddPossessComponent) {
+//        _ = try self.AddComponent(engine_context, PossessComponent{});
+//    }
+//    if (config.bAddMicComponent) {
+//        _ = try self.AddComponent(engine_context, PlayerMic{});
+//    }
+//    if (config.bAddRenderComponent) {
+//        _ = try self.AddRenderTarget(engine_context);
+//    }
+//}
 
-    const new_script_component = ScriptComponent{
-        .mScriptAssetHandle = new_script_handle,
-    };
+pub const IsActive = Core.IsActive;
 
-    const new_script_player = try self.CreateChild(engine_context, .Script, .{ .bAddMicComponent = false, .bAddPossessComponent = false, .bAddRenderComponent = false });
+pub const IsValidID = Core.IsIDValid;
 
-    _ = try new_script_player.AddComponent(engine_context, new_script_component);
-
-    _ = switch (script_asset.GetScriptType()) {
-        else => @panic("This shouldnt happen!"),
-    };
-}
-
-pub fn GetIterator(self: Player, comptime iter_type: Iterator.IterType) ?Iterator {
-    if (self.GetComponent(PlayerParentComponent)) |parent_component| {
-        const first = switch (iter_type) {
-            .Child => parent_component.mFirstEntity,
-            .Script => parent_component.mFirstScript,
-        };
-        if (first == NullPlayer) return null;
-        return Iterator{
-            ._CurrentPlayer = Player{ .mEntityID = first, .mScenemanager = self.mScenemanager },
-            ._FirstID = first,
-        };
-    } else {
-        return null;
-    }
-}
-
-pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config: NewPlayerConfig) !void {
-    if (config.bAddUUIDComponent) {
-        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
-        const new_random = io_source.interface();
-        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
-    }
-    if (config.bAddNameComponent) {
-        var new_name_component: PlayerNameComponent = .empty;
-        _ = try new_name_component.mName.print(engine_context.EngineAllocator(), "New Entity", .{});
-        _ = try self.AddComponent(engine_context, new_name_component);
-    }
-    if (config.bAddPossessComponent) {
-        _ = try self.AddComponent(engine_context, PossessComponent{});
-    }
-    if (config.bAddMicComponent) {
-        _ = try self.AddComponent(engine_context, PlayerMic{});
-    }
-    if (config.bAddRenderComponent) {
-        _ = try self.AddRenderTarget(engine_context);
-    }
-}
-
-pub fn AddRenderTarget(self: Player, engine_context: *EngineContext) !*RenderTargetComponent {
-    var new_render_comp = RenderTargetComponent{};
-
-    try new_render_comp.mComputeTexture.Init(engine_context, 1600, 600);
-
-    try new_render_comp.SetViewportSize(engine_context, 1600, 900);
-    return try self.AddComponent(engine_context, new_render_comp);
-}
-
-pub fn IsActive(self: Player) bool {
-    return self.IsValidID() and self.mScenemanager.mECSManagerPL.IsActiveEntity(self.mEntityID);
-}
-
-pub fn IsValidID(self: Player) bool {
-    return self.mEntityID != NullPlayer;
-}
+pub const Invalidate = Core.Invalidate;

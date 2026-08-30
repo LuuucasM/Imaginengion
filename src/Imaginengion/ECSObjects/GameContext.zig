@@ -24,9 +24,12 @@ pub const NewGameModeConfig = struct {
     bAddNameComponent: bool = false,
 };
 
-pub const empty = Core.empty;
+pub const uninit: GameContext = .{
+    .mID = NullObject,
+    .MManager = undefined,
+};
 
-mEntityID: Type,
+mID: Type,
 mManager: *WorldManager,
 
 pub const AddComponent = Core.AddComponent;
@@ -62,7 +65,7 @@ pub fn CreateChild(self: GameContext, engine_context: *EngineContext, child_type
 //pub fn AddScript(self: GameContext, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
 //    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
 //    const script_type = script_asset.GetScriptType();
-//    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate); //change when game context has scripts
+//    _ValidateScriptType() //add assert to make sure the type is an allowed type
 //
 //    const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
 //
@@ -72,6 +75,7 @@ pub fn CreateChild(self: GameContext, engine_context: *EngineContext, child_type
 //    }
 //}
 
+//TODO: move to GCManager
 //pub fn CreateGameModeConfig(self: *GameMode, engine_context: *EngineContext, config: NewGameModeConfig) !void {
 //    if (config.bAddUUIDComponent) {
 //        const io_source = std.Random.IoSource{ .io = engine_context.Io() };

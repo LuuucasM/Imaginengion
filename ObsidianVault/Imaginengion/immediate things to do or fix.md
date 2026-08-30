@@ -1,3 +1,4 @@
+- change Player and Scene to use new ECSObject.zig Core functions
 - change ECS Objects, ECS Managers, and ECS Components to unify them and use comptime generation when possible
 	- this follows in line with the formalization that was established as part of the UI rework
 	- I think by making these changes I am sort of "choosing" how my engine will be aka the heavy use of ECS for different game features. 
@@ -12,6 +13,9 @@
 - Implement WorldManager in /Core
 	- Before SceneManager use to manage scenes, and entities, and everythinb but now that SceneManager is just only for scenes I needed a new level of object that brought everything together. This is because the engine will have multiple Scene/Entity/etc Managers due to the way playing/simulation works by just copying the whole world.
 	- also will need a world for editor when I move to replace imgui as well so need a world manager 
+- Modify various event callback functions in the engine to instead of returning bool it now returns an "EventResult" enum
+	- instead of just putting true or false and having to remember, it is easier to reason what is happening with enum names.
+	- In case I need to add more types of results later I can easily as well
 - I need to re-add features so i can test the play/simulation part of the engine. Some things i have yet to test/add
 	- adding a player and an entity and having the player possess the entity
 	- seeing if adding a camera to the entity and seeing if i can get a preview in the play panel

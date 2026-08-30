@@ -1,6 +1,7 @@
 # ECS Manager
 ---
 ### TODO
+- fix why does it take a try to deinit an ECS manager. zig philosophy says deinit can never fail
 - Add an iterator method to the ECS
 	- right now its all GetGroup which gets an array of entity IDs and then you work with the entity IDs
 	- what if there was a like GetIterator where the type of object in the iterator was generated at compile time using the comptime parameters and then you can do direct access instead of always having to do a get component? 

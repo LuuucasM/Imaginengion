@@ -68,29 +68,21 @@ pub fn Core(comptime Self: type) type {
         pub const UUIDType = u64;
         pub const IDType = u32;
 
-        pub const empty: Self = .{
-            .mID = Self.NullObject,
-            .mManager = undefined,
-        };
-
         pub fn AddComponent(self: Self, engine_context: *EngineContext, new_component: anytype) !*@TypeOf(new_component) {
             const component_type = @TypeOf(new_component);
             const type_info = @typeInfo(component_type);
             var component = new_component;
             _ValidateComponent(Self, component_type);
-
             if (component_type == ScriptComponent) @compileError(std.fmt.comptimePrint("Use AddScript instead of AddComponent for {s}", .{@typeName(Self)}));
 
             inline for (type_info.@"struct".field_types, type_info.@"struct".field_names) |field_type, field_name| {
                 if (field_type == AssetHandle) {
                     @field(component, field_name).mManager = &engine_context.mAManager;
-                } else if (field_type == Entity) {
-                    @field(component, field_name).mManager = self.mManager;
-                } else if (field_type == GameContext) {
-                    @field(component, field_name).mManager = self.mManager;
-                } else if (field_type == Player) {
-                    @field(component, field_name).mManager = self.mManager;
-                } else if (field_type == Scene) {
+                } else if (field_type == Entity or
+                    field_type == GameContext or
+                    field_type == Player or
+                    field_type == Scene)
+                {
                     @field(component, field_name).mManager = self.mManager;
                 }
             }
@@ -105,6 +97,8 @@ pub fn Core(comptime Self: type) type {
                 return self.mManager.mPManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
             } else if (Self == Scene) {
                 return self.mManager.mSManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
         pub fn RemoveComponent(self: Self, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
@@ -119,11 +113,18 @@ pub fn Core(comptime Self: type) type {
                 self.mManager.mPManager.RemoveComponent(engine_allocator, component_type, self.mID);
             } else if (Self == Scene) {
                 self.mManager.mSManager.RemoveComponent(engine_allocator, component_type, self.mID);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type) ?*component_type {
             _ValidateComponent(Self, component_type);
+            if (!IsActive(self)) {
+                std.log.err("Add Component called for invalid entity", .{});
+                return error.InvalidEntity;
+            }
+
             if (Self == AssetHandle) {
                 self.mManager.GetComponent(component_type, self.mID);
             } else if (Self == Entity) {
@@ -134,6 +135,8 @@ pub fn Core(comptime Self: type) type {
                 self.mManager.mPManager.GetComponent(component_type, self.mID);
             } else if (Self == Scene) {
                 self.mManager.mSManager.GetComponent(component_type, self.mID);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
 
@@ -149,6 +152,8 @@ pub fn Core(comptime Self: type) type {
                 self.mManager.mPManager.HasComponent(component_type, self.mID);
             } else if (Self == Scene) {
                 self.mManager.mSManager.HasComponent(component_type, self.mID);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
 
@@ -170,6 +175,8 @@ pub fn Core(comptime Self: type) type {
                 return .{ .mID = try self.mManager.mPManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
             } else if (Self == Scene) {
                 return .{ .mID = try self.mManager.mSManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
 
@@ -198,6 +205,8 @@ pub fn Core(comptime Self: type) type {
                 try self.mManager.mPManager.Delete(engine_context.EngineAllocator(), self.mID);
             } else if (Self == Scene) {
                 try self.mManager.mSManager.Delete(engine_context.EngineAllocator(), self.mID);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
 
@@ -243,6 +252,8 @@ pub fn Core(comptime Self: type) type {
                     break :blk try self.mManager.mPManager.IsActiveEntity(self.mID);
                 } else if (Self == Scene) {
                     break :blk try self.mManager.mSManager.IsActiveEntity(self.mID);
+                } else {
+                    @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
                 }
             };
             return is_id_valid and is_active_obj;
@@ -254,6 +265,14 @@ pub fn Core(comptime Self: type) type {
 
         pub fn Invalidate(self: *Self) void {
             self.mID = Self.NullObject;
+        }
+
+        pub fn _ValidateEntity(self: Self, label: []const u8) !void {
+            if (!IsActive(self)) {
+                std.log.err("Made call on invalid Entity. Call: {s}", .{label});
+                return error.InvalidEntity;
+            }
+            return;
         }
 
         fn _ValidateComponent(obj_t: type, comptime component_type: type) void {
@@ -271,7 +290,7 @@ pub fn Core(comptime Self: type) type {
                 } else if (obj_t == Scene) {
                     break :blk SComponents.ComponentsList;
                 } else {
-                    @compileError(std.fmt.comptimePrint("ECSObject currently does not support: {s}", .{@typeName(Self)}));
+                    @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
                 }
             };
 
@@ -300,7 +319,7 @@ pub fn Core(comptime Self: type) type {
             }
 
             if (!is_valid) {
-                @compileError(std.fmt.comptimePrint("Type is not a valid ECS Object {s}", .{@typeName(obj_t)}));
+                @compileError(std.fmt.comptimePrint("Type is not yet a valid ECS Object {s}", .{@typeName(obj_t)}));
             }
         }
     };

@@ -47,8 +47,17 @@ pub fn SkipFieldComponent(comptime components_len: comptime_int) type {
     };
 }
 
-pub const EntityTagComponent = struct {
+pub const MainObjectComponent = struct {
     pub const Ind: usize = 3;
+    pub const Name: []const u8 = "MainObjectComponent";
+
+    mBit: u1 = 0,
+
+    pub fn Deinit(_: *MainObjectComponent, _: *EngineContext) !void {}
+};
+
+pub const EntityTagComponent = struct {
+    pub const Ind: usize = 4;
     pub const Name: []const u8 = "EntityTagComponent";
 
     mBit: u1 = 0,
@@ -57,7 +66,7 @@ pub const EntityTagComponent = struct {
 };
 
 pub const ScriptTagComponent = struct {
-    pub const Ind: usize = 4;
+    pub const Ind: usize = 5;
     pub const Name: []const u8 = "ScriptTagComponent";
 
     mBit: u1 = 0,

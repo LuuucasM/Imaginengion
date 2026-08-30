@@ -7,11 +7,14 @@ const ECSCore = @import("ECSObject.zig").Core;
 
 const AssetHandle = @This();
 pub const Type = u32;
-pub const NullHandle: Type = std.math.maxInt(Type);
+pub const NullObject: Type = std.math.maxInt(Type);
 
 const Core = ECSCore(AssetHandle);
 
-pub const empty = Core.empty;
+pub const uninit: AssetHandle = .{
+    .mID = NullObject,
+    .mManager = undefined,
+};
 
 mID: AssetManager.AssetType,
 mManager: *AssetManager,
@@ -25,10 +28,15 @@ pub fn GetFileMetaData(self: AssetHandle) *FileMetaData {
 }
 
 pub fn ReleaseAsset(self: *AssetHandle) void {
-    if (self.mID != NullHandle) {
+    if (self.mID != NullObject) {
         self.mAssetManager.ReleaseAssetHandleRef(self);
     }
 }
+
+pub const GetName = Core.GetName;
+pub const IsActive = Core.IsActive;
+pub const Invalidate = Core.Invalidate;
+pub const IsIDValid = Core.IsIDValid;
 
 pub fn jsonStringify(self: *const AssetHandle, jw: anytype) !void {
     const fmd = self.GetFileMetaData();

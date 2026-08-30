@@ -23,7 +23,3 @@ pub fn Init(self: *AudioAsset, engine_context: *EngineContext, _: []const u8, re
 pub fn Deinit(self: *AudioAsset, _: *EngineContext) !void {
     try self.mAudioBuffer.Deinit();
 }
-
-pub fn Setup(self: *AudioAsset) !void {
-    try self.mAudioBuffer.Setup();
-}

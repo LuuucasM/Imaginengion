@@ -389,8 +389,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 if (!@hasDecl(component_type, "Ind")) {
                     @compileError(type_name ++ "Type needs 'Ind' pub const declaration ");
                 }
-                if (component_type.Ind <= 4) {
-                    @compileError(type_name ++ "Type's 'Ind' needs to be greater than 4 because 0 is parent component, 1 is child component, and 2 is skipfield component, 3 is entity tag, 4 is script tag");
+                if (component_type.Ind <= 5) {
+                    @compileError(type_name ++ "Type's 'Ind' needs to be greater than 5 because 0 is parent component, 1 is child component, and 2 is skipfield component, 3 is MainObjectComponent, 4 is entity tag, 5 is script tag");
                 }
                 if (!std.meta.hasFn(component_type, "Deinit")) {
                     @compileError(type_name ++ "Type needs 'Deinit' member function ");
