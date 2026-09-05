@@ -25,9 +25,10 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            try self.mECSManager.Deinit(engine_context);
+            try self.mECSManager.Deinit(engine_context.EngineAllocator());
             self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
             self.mResolveUUIDList.deinit(engine_context.EngineAllocator());
+            self.mEventManager.Deinit(engine_context.EngineAllocator());
         }
 
         pub fn CreateObject(self: *Self, engine_allocator: std.mem.Allocator) ObjectReturnType(Self) {
@@ -38,11 +39,21 @@ pub fn Core(comptime Self: type) type {
 
         //pub fn SaveObjectAs()
 
-        //pub fn GetGroup()
+        //pub fn GetGroup(self: *AManager, engine_context: *EngineContext) std.ArrayList(AssetHandle.Type) {}
 
-        //pub fn AddUUID()
+        //pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) !void {}
 
-        //pub fn
+        //pub fn Copy(self: *AManager, engine_context: *EngineContext, other_scene: *AManager) !void {}
+
+        pub fn AddUUID(self: *Self, engine_allocator: std.mem.Allocator, uuid: u64, world_id: Self.WorldIDT) !void {
+            try self.mUUIDToWlrdID.put(engine_allocator, uuid, world_id);
+        }
+
+        //pub fn RemoveUUID(self: *AManager, uuid: u64) void {}
+
+        //pub fn GetWorldID(self: *AManager, uuid: u64) ?usize {}
+
+        //pub fn AddResolveUUID(self: *AManager, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {}
 
         fn _ValidateObject(manager_t: type) void {
             comptime var is_valid = false;

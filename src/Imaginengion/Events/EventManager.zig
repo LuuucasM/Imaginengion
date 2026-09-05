@@ -2,18 +2,18 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const builtin = @import("builtin");
 
+pub const ClearMode = enum {
+    ClearAndFree,
+    ClearRetainingCapacity,
+};
+
+pub const EventResult = enum {
+    Continue,
+    Consume,
+};
+
 pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
     return struct {
-        pub const ClearMode = enum {
-            ClearAndFree,
-            ClearRetainingCapacity,
-        };
-
-        pub const EventResult = enum {
-            Continue,
-            Consume,
-        };
-
         pub const CallbackList = std.DoublyLinkedList;
 
         pub const EventCallback = struct {

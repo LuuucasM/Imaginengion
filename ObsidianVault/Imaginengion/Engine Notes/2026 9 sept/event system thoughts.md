@@ -1,0 +1,19 @@
+- Process Event builds a callback list that can be started from any point and then once it reaches the actual event manager, it will then go through the event queue processing each event starting from the first element in the callback list all the way to the last
+- the callback list is just a doubly linked list of stack allocated callback objects. and that doubly linked list is passed from function to function call. This is ok for life times because 
+- This is similar to behavior to The Chernos event system from his game engine hazel but the advantage is the event manager does not need a specific callback function instead it relies on the callers callback list
+- This lets the event manager be a bit more general purpose as The Chernos as his needed a dedicated callback function that was at the very top of the application hierarchy whereas using a callback list you can actually invoke a processing of the event queue whenever and where ever.
+- I want this behavior because I plan to have many smaller more dedicated event managers riddled throughout the engine then one catch all event manager and so they all can easily have their own scopes as the event manager doesnt really know or care about what is touching it as thats up to the user of the event manager.
+- another difference is that The Chernos is immediate dispatch events only where mine is queued event and batched process only.
+- My problem is I want to add immediate dispatch to my event manager, but I like my current architecture.
+- This means that when inserting an event the caller can choose to queue it or immeidately run the event. This means suddenly events could be run from anywhere arbitrarily because insert can happen anywhere arbitrarily which means a proper callback list is not constructed unlike for queued deferred events
+- I want the immediate dispatch to be able to somehow use the same callback list as if it were an event that was being run from the event queue, but of course if we are doing immediate dispatch from some arbitrary call location you cant know how to build said list
+- The only idea I can think of is to cave for immeidate dispatch events and on event manager init hold a reference to a long living higher level engine system where sync events can be routed through, and then sync events follow a cherno style event system, and then i can keep how deferred events work.
+- Breaking it down there are only 3 ways I think to be able to get the callback list
+	- Follow the function hierarchy path the same as used for deferred events
+		- but this isnt possible for immediate dispatch
+	- the event manager keeps reference to a single source of running events like the cherno style and then it can be run through there
+	- a function that can build a callback list that is separated from the deferred callback hierarchy 
+		- this sounds like it might be possible but then it feels like im dealing with some overhead of dealing with different cases when I could just have the above method with one reference to a single source of running evnets and just directly run events rather than going through hoops to make a callback list for the sake of having a callback list
+- if I provide some sort of default function call for immediate dispatch though then why would I even need to do a callback list for deferred events because at that point I could just unify everything under one stored callback function that can be comptime typed to optimized for different types of events 
+- Do you have any ideas on a way to possibly implement immediate dispatch events while following the philosophy of the already implemented deferred event system?
+- what if instead of trying to add sync events I create a way where I can possibly trigger an event category right away maybe..?
