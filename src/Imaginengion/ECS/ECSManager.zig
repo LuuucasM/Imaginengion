@@ -1,6 +1,5 @@
 const std = @import("std");
 const ComponentManager = @import("ComponentManager.zig").ComponentManager;
-const GroupQuery = @import("ComponentManager.zig").GroupQuery;
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -13,16 +12,25 @@ pub const ChildType = enum {
     Script,
 };
 
+pub const GroupQuery = union(enum) {
+    And: []const GroupQuery,
+    Or: []const GroupQuery,
+    Not: struct {
+        mFirst: *const GroupQuery,
+        mSecond: *const GroupQuery,
+    },
+    Component: type,
+};
+
 pub fn ECSManager(entity_t: type, comptime components_types: []const type) type {
     return struct {
-        pub const ECSEventManager = @import("../Events/EventManager.zig").EventManager(ECSEventData.EventCategories, ECSEventData.EventT(entity_t));
+        pub const ECSEventManager = @import("../Events/EventManager.zig").EventManager(ECSEventData);
         pub const ParentComponent = @import("Components.zig").ParentComponent(entity_t);
         pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
         pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types.len);
         pub const ComponentManagerT = ComponentManager(entity_t, components_types);
         pub const ECSCallbackList = ECSEventManager.CallbackList;
         pub const ECSEventCallback = ECSEventManager.EventCallback;
-
         const Self = @This();
 
         pub const empty: Self = .{
@@ -49,10 +57,10 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mECSEventManager.Deinit(engine_context.EngineAllocator());
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
-            try self.mComponentManager.clearAndFree(engine_context);
+            self.mComponentManager.clearAndFree(engine_context);
         }
 
         //---------------EntityManager--------------
@@ -82,11 +90,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return new_entity_id;
         }
 
-        pub fn DestroyEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
-            const zone = Tracy.ZoneInit("ECSM DestroyEntity", @src());
+            const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
+            try self._InternalRemoveFromHierarchy(engine_context, entity_id);
+            try self._InternalRemoveScripts(engine_context, entity_id);
+            try self.mComponentManager.DestroyEntity(engine_context, entity_id);
+
+            try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .Remove, .{ .DestroyEntity = .{ .mEntityID = entity_id } });
         }
 
         pub fn GetAllEntities(self: Self, allocator: std.mem.Allocator) ArraySet(entity_t) {
@@ -221,12 +233,15 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
             return try self.mComponentManager.AddComponent(engine_allocator, entity_id, new_component);
         }
-        pub fn RemoveComponent(self: *Self, engine_allocator: std.mem.Allocator, comptime component_type: type, entity_id: entity_t) !void {
-            _ValidateType(component_type);
+
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
-            const zone = Tracy.ZoneInit("ECSM RemoveComponent", @src());
+            std.debug.assert(components_types.len > component_ind);
+            const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
             defer zone.Deinit();
-            try self.mECSEventManager.Insert(engine_allocator, .Remove, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_type.Ind } });
+            try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
+
+            try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .Remove, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
         }
 
         pub fn RemoveComponentInd(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component_ind: usize) !void {
@@ -263,7 +278,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mComponentManager.ResetComponent(entity_id, component);
         }
 
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, comptime event_category: ECSEventData.EventCategories, callback_list: ECSCallbackList) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, comptime event_category: ECSEventData.EventCategories, callback_list: std.DoublyLinkedList) !void {
             const zone = Tracy.ZoneInit("ECSM ProcessEvents", @src());
             defer zone.Deinit();
 
@@ -272,8 +287,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             var event_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent };
             callbacks.append(&event_callback.mNode);
             try self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list);
-
-            self.mECSEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
         }
 
         pub fn OnECSEvent(ecs_manager: *anyopaque, engine_context: *EngineContext, event: ECSEventData.EventT(entity_t)) anyerror!bool {
@@ -290,23 +303,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 },
             }
             return true;
-        }
-
-        fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
-            std.debug.assert(self.IsActiveEntity(entity_id));
-            std.debug.assert(components_types.len > component_ind);
-            const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
-            defer zone.Deinit();
-            try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
-        }
-
-        fn _InternalDestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
-            std.debug.assert(self.IsActiveEntity(entity_id));
-            const zone = Tracy.ZoneInit("ECSM Internal Destroy Entity", @src());
-            defer zone.Deinit();
-            try self._InternalRemoveFromHierarchy(engine_context, entity_id);
-            try self._InternalRemoveScripts(engine_context, entity_id);
-            try self.mComponentManager.DestroyEntity(engine_context, entity_id);
         }
 
         fn _InternalRemoveFromHierarchy(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {

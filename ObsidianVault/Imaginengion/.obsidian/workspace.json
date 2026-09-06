@@ -139,7 +139,7 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "Second note.md",
+                "file": "Engine Notes/2026 9 sept/event system thoughts.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -149,7 +149,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "Backlinks for Second note"
+              "title": "Backlinks"
             }
           },
           {
@@ -214,11 +214,12 @@
       "command-palette:Open command palette": false
     }
   },
-  "active": "227b09fd17928a22",
+  "active": "8ea343d6d8bd7c6b",
   "lastOpenFiles": [
+    "Untitled.base",
+    "Engine Notes/2026 9 sept/event system thoughts.md",
     "Engine Notes/2026 9 sept",
     "immediate things to do or fix.md",
-    "Engine Notes/2026 9 sept/event system thoughts.md",
     "ECS Manager.md",
     "Useful commands.md",
     "SSBO.md",

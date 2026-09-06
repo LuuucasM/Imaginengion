@@ -22,7 +22,7 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const AssetManager = @This();
 
-const ASSET_DELETE_TIMEOUT_NS: i128 = 1_000_000_000;
+const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
 const MAX_FILE_SIZE: usize = 4_000_000_000;
 
 pub const AssetType = u32;

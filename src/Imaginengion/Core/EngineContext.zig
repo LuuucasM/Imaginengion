@@ -1,6 +1,6 @@
 const std = @import("std");
 const Window = @import("../Windows/Window.zig");
-const AssetManager = @import("../Assets/AssetManager.zig");
+const AssetManager = @import("../ECSManagers/AManager.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");

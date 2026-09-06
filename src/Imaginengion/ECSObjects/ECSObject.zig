@@ -77,7 +77,7 @@ pub fn Core(comptime Self: type) type {
 
             inline for (type_info.@"struct".field_types, type_info.@"struct".field_names) |field_type, field_name| {
                 if (field_type == AssetHandle) {
-                    @field(component, field_name).mManager = &engine_context.mAManager;
+                    @field(component, field_name).mManager = &engine_context.mAssetManager;
                 } else if (field_type == Entity or
                     field_type == GameContext or
                     field_type == Player or
@@ -87,9 +87,7 @@ pub fn Core(comptime Self: type) type {
                 }
             }
 
-            if (Self == AssetHandle) {
-                return self.mManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 return self.mManager.mEManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
             } else if (Self == GameContext) {
                 return self.mManager.mGCManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
@@ -103,9 +101,7 @@ pub fn Core(comptime Self: type) type {
         }
         pub fn RemoveComponent(self: Self, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
             _ValidateComponent(Self, component_type);
-            if (Self == AssetHandle) {
-                self.mManager.RemoveComponent(engine_allocator, component_type, self.mID);
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 self.mManager.mEManager.RemoveComponent(engine_allocator, component_type, self.mID);
             } else if (Self == GameContext) {
                 self.mManager.mGCManager.RemoveComponent(engine_allocator, component_type, self.mID);
@@ -125,9 +121,7 @@ pub fn Core(comptime Self: type) type {
                 return error.InvalidEntity;
             }
 
-            if (Self == AssetHandle) {
-                self.mManager.GetComponent(component_type, self.mID);
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 self.mManager.mEManager.GetComponent(component_type, self.mID);
             } else if (Self == GameContext) {
                 self.mManager.mGCManager.GetComponent(component_type, self.mID);
@@ -142,9 +136,7 @@ pub fn Core(comptime Self: type) type {
 
         pub fn HasComponent(self: Self, comptime component_type: type) bool {
             _ValidateComponent(Self, component_type);
-            if (Self == AssetHandle) {
-                self.mManager.HasComponent(component_type, self.mID);
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 self.mManager.mEManager.HasComponent(component_type, self.mID);
             } else if (Self == GameContext) {
                 self.mManager.mGCManager.HasComponent(component_type, self.mID);
@@ -165,9 +157,7 @@ pub fn Core(comptime Self: type) type {
             return GetComponent(self, NameComponent).?.*.mName.items;
         }
         pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType) !Self {
-            if (Self == AssetHandle) {
-                return .{ .mID = try self.mManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 return .{ .mID = try self.mManager.mEManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
             } else if (Self == GameContext) {
                 return .{ .mID = try self.mManager.mGCManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
@@ -181,9 +171,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn Duplicate(self: Self) !Self {
-            if (Self == AssetHandle) {
-                return .{ .mID = try self.mManager.Duplicate(self.mID), .mManager = self.mManager };
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 return .{ .mID = try self.mManager.mAManager.Duplicate(self.mID), .mManager = self.mManager };
             } else if (Self == GameContext) {
                 return .{ .mID = try self.mManager.mEManager.Duplicate(self.mID), .mManager = self.mManager };
@@ -195,9 +183,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn Delete(self: Self, engine_context: *EngineContext) !void {
-            if (Self == AssetHandle) {
-                try self.mManager.Delete(engine_context.EngineAllocator(), self.mID);
-            } else if (Self == Entity) {
+            if (Self == Entity) {
                 try self.mManager.mAManager.Delete(engine_context.EngineAllocator(), self.mID);
             } else if (Self == GameContext) {
                 try self.mManager.mEManager.Delete(engine_context.EngineAllocator(), self.mID);

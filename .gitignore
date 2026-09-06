@@ -4,3 +4,4 @@
 zig-out
 GameEngine.exe
 .cursor/
+.claude/

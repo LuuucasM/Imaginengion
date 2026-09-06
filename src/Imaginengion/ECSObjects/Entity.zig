@@ -27,10 +27,16 @@ const Core = ECSCore(Entity);
 
 pub const Iterator = Core.Iterator;
 
-pub const NewEntityConfig = struct {
-    bAddUUID: bool = false,
-    bAddName: bool = false,
-    bAddTransform: bool = false,
+pub const CreateConfig = struct {
+    bAddUUID: bool,
+    bAddName: bool,
+    bAddTransform: bool,
+};
+
+pub const DefaultConfig: CreateConfig = .{
+    .bAddUUID = true,
+    .bAddName = true,
+    .bAddTransform = true,
 };
 
 pub const Type = u32;
@@ -57,7 +63,7 @@ pub const GetUUID = Core.GetUUID;
 
 pub const GetName = Core.GetName;
 
-pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: NewEntityConfig) !Entity {
+pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: CreateConfig) !Entity {
     const child_entity = try Core.CreateChild(self, engine_context, child_type);
     try child_entity.CreateEntityConfig(engine_context, config);
     _ = try child_entity.AddComponent(engine_context, self.GetComponent(EntitySceneComponent).?.*);
@@ -132,7 +138,7 @@ pub fn _CalculateWorldTransform(self: Entity) void {
     }
 }
 
-pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: NewEntityConfig) !void {
+pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: CreateConfig) !void {
     if (config.bAddUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();

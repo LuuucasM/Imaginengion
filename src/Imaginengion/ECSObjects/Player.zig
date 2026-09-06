@@ -31,12 +31,20 @@ const WorldManager = @import("../Core/WorldManager.zig");
 
 const Core = ECSCore(Player);
 
-pub const NewPlayerConfig = struct {
-    bAddNameComponent: bool = false,
-    bAddUUIDComponent: bool = false,
-    bAddPossessComponent: bool = false,
-    bAddMicComponent: bool = false,
-    bAddRenderComponent: bool = false,
+pub const CreateConfig = struct {
+    bAddNameComponent: bool,
+    bAddUUIDComponent: bool,
+    bAddPossessComponent: bool,
+    bAddMicComponent: bool,
+    bAddRenderComponent: bool,
+};
+
+pub const DefaultConfig: CreateConfig = .{
+    .bAddNameComponent = true,
+    .bAddUUIDComponent = true,
+    .bAddPossessComponent = false,
+    .bAddMicComponent = false,
+    .bAddRenderComponent = false,
 };
 
 pub const uninit: Player = .{

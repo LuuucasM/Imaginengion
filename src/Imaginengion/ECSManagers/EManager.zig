@@ -3,6 +3,9 @@ const std = @import("std");
 const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
+const EventManager = @import("../Events/EventManager.zig");
+const EventResult = EventManager.EventResult;
+const EventData = @import("../Events/EManagerData.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
@@ -11,7 +14,8 @@ const ECSCore = @import("ECSManager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub const ECSManagerE = ECSManager(Entity.Type, &EntityComponentsList);
+pub const ECSManagerT = ECSManager(Entity.Type, &EntityComponentsList);
+pub const EventManagerT = EventManager.EventManager(EventData);
 
 const EManager = @This();
 
@@ -23,51 +27,47 @@ pub const empty: EManager = .{
     .mResolveUUIDList = .empty,
 };
 
-mECSManager: ECSManagerE,
+mECSManager: ECSManagerT,
+mEventManager: EventManagerT,
 
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, usize),
 mResolveUUIDList: std.ArrayList(ResolveReq),
 
 pub const Init = Core.Init;
+
 pub const Deinit = Core.Deinit;
 
-pub fn SaveEntity(self: *EManager, engine_context: *EngineContext, entity: Entity) !void {}
+pub const AddComponent = Core.AddComponent;
 
-pub fn SaveEntityAs(_: *EManager, engine_context: *EngineContext, entity: Entity) !void {}
+pub const GetComponent = Core.GetComponent;
 
-pub fn GetGroup(self: *EManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Entity.Type) {}
+pub const HasComponent = Core.HasComponent;
 
-pub fn AddUUID(self: *EManager, engine_allocator: std.mem.Allocator, uuid: u64, world_id: usize) !void {}
+pub const IsActiveEntity = Core.IsActiveObj;
 
-pub fn RemoveUUID(self: *EManager, uuid: u64) void {}
+//Create and delete and Add Child and DUplicate functions but not for EManager because SManager holds the lifetime of entities
 
-pub fn GetWorldID(self: EManager, uuid: u64) ?usize {}
+pub const SaveEntity = Core.SaveObject;
 
-pub fn AddResolveUUID(self: *EManager, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {}
-pub fn clearAndFree(self: *EManager, engine_context: *EngineContext) !void {}
+pub const SaveEntityAs = Core.SaveObjectAs;
 
-pub fn RmEntityComp(self: *EManager, engine_allocator: std.mem.Allocator, scene_id: Entity.Type, component_ind: EEntityComponents) !void {}
+pub const GetGroup = Core.GetGroup;
 
-pub fn ProcessEvents(self: *EManager, engine_context: *EngineContext, event_type: EventType) !void {}
+pub const AddUUID = Core.AddUUID;
 
-pub fn Copy(self: *EManager, engine_context: *EngineContext, other_scene: *EManager) !void {}
+pub const RemoveUUID = Core.RemoveUUID;
 
-pub fn EntityECSCallback(scene_manager: *anyopaque, _: *EngineContext, event: ECSManagerE.ECSEventManager.EventType) anyerror!bool {
-    const self: *EManager = @ptrCast(@alignCast(scene_manager));
+pub const GetWorldID = Core.GetWorldID;
+
+pub const AddResolveUUID = Core.AddResolveUUID;
+
+pub const clearAndFree = Core.clearAndFree;
+
+pub const ProcessEvents = Core.ProcessEvents;
+
+pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {
-        .DestroyEntity => |e| {
-            const entity = self.GetEntity(e.mEntityID);
-            self.RemoveUUID(entity.GetUUID());
-        },
-        .RemoveComponent => |e| {
-            const entity = self.GetEntity(e.mEntityID);
-            if (e.mComponentInd == EntityUUIDComponent.Ind) {
-                self.RemoveUUID(entity.GetUUID());
-            }
-        },
-        .Default => {
-            @panic("this musnt happen\n");
-        },
+        .Default => unreachable,
     }
-    return true;
+    return .Continue;
 }

@@ -58,9 +58,9 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             try entity_set.appendSlice(allocator, self.mComponents.mDenseToSparse.items);
             return entity_set;
         }
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponents.mValues.items) |*component| {
-                try component.Deinit(engine_context);
+                component.Deinit(engine_context);
             }
             self.mComponents.clearAndFree(engine_context.EngineAllocator());
         }

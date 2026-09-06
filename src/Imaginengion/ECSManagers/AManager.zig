@@ -2,10 +2,12 @@ const std = @import("std");
 
 const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
-const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
+const ECSManager = @import("../ECS/ECSManager.zig");
+const GroupQuery = ECSManager.GroupQuery;
 
-const EventManager = @import("../Events/EventManager.zig").EventManager;
-const EventData = @import("../Events/AManagerData.zig");
+const EventManager = @import("../Events/EventManager.zig");
+const EventResult = EventManager.EventResult;
+pub const EventData = @import("../Events/AManagerData.zig");
 
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const AssetComponents = @import("../ECSComponents/AComponents.zig");
@@ -13,12 +15,22 @@ const AssetComponentsList = AssetComponents.ComponentsList;
 const FileMetaData = AssetComponents.FileMetaData;
 const AssetMetaData = AssetComponents.AssetMetaData;
 const GenMetaData = AssetComponents.GenMetaData;
+const Texture2D = AssetComponents.Texture2D;
+const TextAsset = AssetComponents.TextAsset;
+const AudioAsset = AssetComponents.AudioAsset;
 const EngineContext = @import("../Core/EngineContext.zig");
+
+const Entity = @import("../ECSObjects/Entity.zig");
+const GameContext = @import("../ECSObjects/GameContext.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
 
 const AManager = @This();
 
-pub const ECSManagerT = ECSManager(AssetHandle.Type, &AssetComponentsList);
-pub const EventManagerT = EventManager(EventData.EventCategories, EventData.EventT(AssetHandle.Type));
+const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
+
+pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponentsList);
+pub const EventManagerT = EventManager.EventManager(EventData.EventCategories, EventData.EventT(AssetHandle.Type));
 
 pub const WorldIDT = AssetHandle.Type;
 
@@ -41,8 +53,32 @@ pub const FileSource = struct {
     path_type: PathType,
 };
 
-pub const ComputedSource = struct {
-    id: []const u8,
+pub const ComputedSource = union(enum) {
+    Entity: Entity,
+    GameContext: GameContext,
+    Player: Player,
+    Scene: Scene,
+
+    pub fn GetUUID(self: *ComputedSource) u64 {
+        return switch (self.*) {
+            .Entity => |*entity| entity.GetUUID(),
+            .GameContext => |*context| context.GetUUID(),
+            .Player => |*player| player.GetUUID(),
+            .Scene => |*scene| scene.GetUUID(),
+        };
+    }
+};
+
+pub const PendingDelete = struct {
+    Reason: u32,
+    Time: std.Io.Timestamp,
+};
+
+pub const AssetErrorFlags = struct {
+    pub const Reason = enum {
+        FileNotFound,
+    };
+    pub const FileNotFound: u32 = 1 << 0;
 };
 
 pub const AssetSource = union(enum) {
@@ -58,18 +94,30 @@ pub const AssetSource = union(enum) {
     }
 };
 
+const InternalData = struct {
+    const uninit: InternalData = .{
+        .DefaultFileMetaData = .{},
+        .DefaultTexture2D = .{},
+        .DefaultTextAsset = .{},
+        .DefaultAudioAsset = .{},
+    };
+    DefaultFileMetaData: FileMetaData,
+    DefaultTexture2D: Texture2D,
+    DefaultTextAsset: TextAsset,
+    DefaultAudioAsset: AudioAsset,
+};
+
 pub const uninit: AManager = .{
     .mECSManager = .empty,
     .mEventManager = .empty,
     .mUUIDToWorldID = .empty,
     .mResolveUUIDList = .empty,
-    .mPathToIDEng = .empty,
-    .mPathToIDPrj = .empty,
-    .mPathToGen = .empty,
     .mCWD = undefined,
     .mCWDPath = .empty,
     .mProjectDirectory = null,
     .mProjectPath = .empty,
+    .mPendingDelete = .empty,
+    ._internal = .uninit,
 };
 
 const Core = ECSCore(AManager);
@@ -85,6 +133,8 @@ mCWD: std.Io.Dir,
 mCWDPath: std.ArrayList(u8),
 mProjectDirectory: ?std.Io.Dir,
 mProjectPath: std.ArrayList(u8),
+mPendingDelete: std.AutoArrayHashMapUnmanaged(AssetHandle.Type, PendingDelete),
+_internal: InternalData,
 
 pub fn Init(self: *AManager, engine_context: *EngineContext) !void {
     self.mECSManager.Init(engine_context.EngineAllocator());
@@ -94,7 +144,6 @@ pub fn Init(self: *AManager, engine_context: *EngineContext) !void {
     _ = try self.mCWDPath.print(engine_context.EngineAllocator(), "{s}", .{cwd_path});
 }
 
-//From current Asset Manager
 ///Setup needed to initialize "default" assets
 pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
     const frame_allocator = engine_context.FrameAllocator();
@@ -132,9 +181,10 @@ pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
 
     self.mCWD.close(engine_context.Io());
     if (self.mProjectDirectory) |p_dir| p_dir.close(engine_context.Io());
+    self.mPendingDelete.deinit(engine_context.EngineAllocator());
 }
 
-pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_source: AssetSource) !void {
+pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_source: AssetSource) !AssetHandle {
     if (asset_source == .Default) {
         return AssetHandle{
             .mID = AssetHandle.NullHandle,
@@ -147,11 +197,11 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
             const abs_path = self.GetAbsPath(engine_context.FrameAllocator(), f.rel_path, f.path_type);
             break :blk ComputePathHash(abs_path);
         },
-        .Computed => |c| ComputePathHash(c.id),
+        .Computed => |c| c.GetUUID(),
         .Default => unreachable,
     };
 
-    const asset_id = self.mUUIDToWorldID.get(asset_hash);
+    const asset_id = self.GetWorldID(asset_hash);
 
     const engine_allocator = engine_context.EngineAllocator();
 
@@ -178,23 +228,120 @@ pub fn ReleaseAssetHandle(self: *AManager, asset_handle: *AssetHandle) void {
     const asset_meta_data = self.mECSManager.GetComponent(AssetMetaData, asset_handle.mID).?;
     asset_meta_data.mRefs -= 1;
     asset_handle.mID = AssetHandle.NullHandle;
+}
 
-    if (asset_meta_data.mRefs == 0) {
-        //add a pending delete array to AManager
-        //if refs is 0, add to pending delete array
-        //in the OnUpdate function we can check for deletions and what not
+pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
+    const zone = Tracy.ZoneInit("AssetManager::GetAsset", @src());
+    defer zone.Deinit();
+
+    _ValidateAssetType(asset_type);
+
+    if (self.mECSManager.IsActiveEntity(asset_id)) {
+        if (self.mECSManager.GetComponent(asset_type, asset_id)) |asset| {
+            return asset;
+        } else {
+            const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
+            //TODO: maybe a check to ensure rel path is valid?
+
+            const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
+
+            const asset_file = try self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType);
+            defer self.CloseFile(engine_context.Io(), asset_file);
+
+            var asset_component = asset_type{};
+            asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file) catch |err| {
+                if (err == error.AssetInitFailed) {
+                    std.log.err("Failed To initialize asset {s} for asset type {s}\n", .{ abs_path, @typeName(asset_type) });
+                    return try self.GetDefaultAsset(asset_type);
+                } else return err;
+            };
+
+            return self.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, asset_component);
+        }
+    } else {
+        return try self.GetDefaultAsset(asset_type);
     }
 }
 
-pub fn GetAsset(self: *AManager, engine_context: *EngineContext) !void {}
+pub fn GetFileMetaData(self: *AManager, id: AssetHandle.Type) *FileMetaData {
+    if (self.mECSManager.IsActiveEntity(id)) {
+        return self.mECSManager.GetComponent(FileMetaData, id).?;
+    } else {
+        return &self._internal.DefaultFileMetaData;
+    }
+}
 
-pub fn GetFileMetaData(self: *AManager, id: AssetHandle.Type) *FileMetaData {}
+pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("AssetManager OnUpdate", @src());
+    defer zone.Deinit();
 
-pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {}
+    const frame_allocator = engine_context.FrameAllocator();
 
-pub fn OnNewProjectEvent(self: *AManager, engine_context: *EngineContext, abs_path: []const u8) !void {}
+    //check through all the assets we currently have to see if they are still valid/need to be updated
+    const group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
+    for (group.items) |asset_id| {
+        const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
+        if (self.OpenFile(engine_context, file_data.mRelPath, file_data.mRelPath)) |file| {
+            if (GetFileStats(file)) |stat| {
+                if (!try file_data.Eql(engine_context, file, stat)) {
+                    file_data.UpdateMetaData(engine_context, file, stat);
+                    self.mEventManager.Insert(engine_context.EngineAllocator(), .Remove, .{ .FileUpdate = asset_id });
+                }
+            } else |err| {
+                return err;
+            }
+        } else |err| {
+            if (err == error.FileNotFound) {
+                self.MarkForDelete(engine_context.EngineAllocator(), asset_id, .FileNotFound);
+            } else {
+                return err;
+            }
+        }
+    }
 
-pub fn OnOpenProjectEvent(self: *AManager, engine_context: *EngineContext, abs_path: []const u8) !void {}
+    var iter = self.mPendingDelete.iterator();
+    while (iter.next()) |entry| {
+        const asset_id = entry.key_ptr.*;
+        const pending_delete = entry.value_ptr.*;
+
+        //TODO: here I can add different things to see if I can possibly recover the file based on its different reasons
+
+        const t1 = std.Io.Timestamp.now(engine_context.Io(), .awake);
+        const duration = pending_delete.Time.durationTo(t1);
+        const ns = duration.toNanoseconds();
+        if (ns > ASSET_DELETE_TIMEOUT_NS) {
+            self.mEventManager.Insert(engine_context.EngineAllocator(), .Remove, .{ .ToDestroyAsset = .{ .mAssetID = asset_id } });
+        }
+    }
+}
+
+pub fn OnNewProjectEvent(self: *AManager, engine_context: *EngineContext, abs_path: []const u8) !void {
+    if (self.mProjectDirectory) |*dir| {
+        dir.close(engine_context.Io());
+        self.mProjectDirectory = null;
+    }
+
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
+
+    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{});
+
+    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
+}
+
+pub fn OnOpenProjectEvent(self: *AManager, engine_context: *EngineContext, abs_path: []const u8) !void {
+    if (self.mProjectDirectory) |*dir| {
+        dir.close(engine_context.Io());
+        self.mProjectDirectory = null;
+    }
+
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
+
+    const dir_name = std.fs.path.dirname(abs_path).?;
+
+    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{});
+
+    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
+}
 
 pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File.Stat {
     const zone = Tracy.ZoneInit("AssetManager OpenFileStats", @src());
@@ -213,7 +360,7 @@ pub fn OpenFile(self: *AManager, engine_context: *EngineContext, rel_path: []con
     switch (path_type) {
         .Eng => return try self.mCWD.openFile(engine_context.Io(), rel_path, .{}),
         .Prj => return try self.mProjectDirectory.?.openFile(engine_context.Io(), rel_path, .{}),
-        .Gen => @panic("This shouldnt happen!"),
+        .Gen => unreachable,
     }
 }
 
@@ -223,10 +370,10 @@ pub fn CloseFile(_: *AManager, io: std.Io, file: std.Io.File) void {
     file.close(io);
 }
 
-pub fn GetFileStats(_: *AManager, file: std.fs.File) !std.fs.File.Stat {
+pub fn GetFileStats(_: *AManager, file: std.Io.File) !std.Io.File.Stat {
     const zone = Tracy.ZoneInit("AssetManager GetFileStats", @src());
     defer zone.Deinit();
-    return file.stat();
+    return try file.stat();
 }
 
 pub fn GetAbsPath(self: *AManager, allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) ![]const u8 {
@@ -255,21 +402,47 @@ pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []
 }
 
 //From general managers
-pub fn GetGroup(self: *AManager, engine_context: *EngineContext) std.ArrayList(AssetHandle.Type) {}
+pub const GetGroup = Core.GetGroup;
 
-pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) !void {}
+pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) !void {
+    Core.clearAndFree(self, engine_context);
+    self.mPendingDelete.clearAndFree(engine_context.EngineAllocator());
+    if (self.mProjectDirectory) |dir| {
+        dir.close(engine_context.Io());
+        self.mProjectDirectory = null;
+    }
+    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
+}
 
-pub fn ProcessEvents(self: *AManager, engine_context: *EngineContext, event_type: EventType) !void {}
+pub const ProcessEvents = Core.ProcessEvents;
 
-pub fn Copy(self: *AManager, engine_context: *EngineContext, other_scene: *AManager) !void {}
+pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventManager.EventResult {
+    switch (event) {
+        .FileUpdate => |e| {
+            inline for (AssetComponents.FileUpdateList) |comp_type| {
+                if (self.mECSManager.HasComponent(comp_type, e.mAssetID)) {
+                    self.mECSManager.RemoveComponent(engine_context, e.mAssetID, comp_type.Ind);
+                }
+            }
+        },
+        .ToDestroyAsset => |e| {
+            const file_data = self.mECSManager.GetComponent(FileMetaData, e.mAssetID).?;
+            const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath, file_data.mPathType);
+            const asset_hash = ComputePathHash(abs_path);
+            self.RemoveUUID(asset_hash);
+            self.mECSManager.DestroyEntity(engine_context.EngineAllocator(), e.mAssetID);
+        },
+        .Default => unreachable,
+    }
+}
 
 pub const AddUUID = Core.AddUUID;
 
-pub fn RemoveUUID(self: *AManager, uuid: u64) void {}
+pub const RemoveUUID = Core.RemoveUUID;
 
-pub fn GetWorldID(self: *AManager, uuid: u64) ?usize {}
+pub const GetWorldID = Core.GetWorldID;
 
-pub fn AddResolveUUID(self: *AManager, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {}
+pub const AddResolveUUID = Core.AddResolveUUID;
 
 fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source: FileSource) !AssetHandle.Type {
     const zone = Tracy.ZoneInit("AssetManager CreateAssetFile", @src());
@@ -280,20 +453,18 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
     const new_asset_id = try self.mECSManager.CreateEntity(engine_allocator);
 
     _ = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, AssetMetaData{ .mRefs = 0 });
-    const file_meta_data = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, FileMetaData{
-        .mLastModified = .zero,
-        .mSize = 0,
-        .mHash = 0,
-        .mPathType = file_source.path_type,
-    });
 
-    _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
+    const file_meta_data = FileMetaData{
+        .mPathType = file_source.path_type,
+    };
+    file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
+    const new_file_data = try self.mECSManager.AddComponent(engine_allocator, new_asset_id, file_meta_data);
 
     const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
     defer self.CloseFile(engine_context.Io(), file);
     const fstats = try file.stat(engine_context.Io());
 
-    try UpdateAsset(engine_context, file_meta_data, file, fstats);
+    new_file_data.UpdateMetaData(engine_context, file, fstats);
 
     return new_asset_id;
 }
@@ -310,24 +481,55 @@ fn CreateAssetGen(self: *AManager, engine_allocator: std.mem.Allocator) !AssetHa
     return new_asset_id;
 }
 
-fn UpdateAsset(engine_context: *EngineContext, file_data: *FileMetaData, file: std.Io.File, fstats: std.Io.File.Stat) !void {
-    const zone = Tracy.ZoneInit("AssetManager UpdateAsset", @src());
-    defer zone.Deinit();
-
-    var file_hasher = std.hash.Fnv1a_64.init();
-    var file_reader = file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), std.Io.Limit.unlimited);
-    file_hasher.update(contents);
-
-    file_data.mHash = file_hasher.final();
-    file_data.mLastModified = fstats.mtime;
-    file_data.mSize = fstats.size;
-}
-
 fn ComputePathHash(path: []const u8) u64 {
     const zone = Tracy.ZoneInit("AssetManager ComputePathHas", @src());
     defer zone.Deinit();
     var hasher = std.hash.Fnv1a_64.init();
     hasher.update(path);
     return hasher.final();
+}
+
+fn GetDefaultAsset(self: *AManager, asset_type: type) !*asset_type {
+    if (asset_type == FileMetaData) {
+        return &self._internal.DefaultFileMetaData;
+    } else if (asset_type == Texture2D) {
+        return &self._internal.DefaultTexture2D;
+    } else if (asset_type == TextAsset) {
+        return &self._internal.DefaultTextAsset;
+    } else if (asset_type == AudioAsset) {
+        return &self._internal.DefaultAudioAsset;
+    } else {
+        @compileError("No Default asset available for this asset type!");
+    }
+}
+
+fn MarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: AssetHandle.Type, reason: AssetErrorFlags.Reason) void {
+    if (self.mPendingDelete.getPtr(asset_id)) |pending_data| {
+        switch (reason) {
+            .FileNotFound => pending_data.Reason |= AssetErrorFlags.FileNotFound,
+        }
+    } else {
+        const error_flags = switch (reason) {
+            .FileNotFound => AssetErrorFlags.FileNotFound,
+        };
+        self.mPendingDelete.put(
+            engine_context.EngineAllocator(),
+            asset_id,
+            .{ .Reason = error_flags, .Time = std.Io.Timestamp.now(engine_context.Io(), .awake) },
+        );
+    }
+}
+
+fn _ValidateAssetType(asset_type: type) void {
+    comptime var is_valid = false;
+
+    for (AssetComponentsList) |c| {
+        if (asset_type == c) {
+            is_valid = true;
+        }
+    }
+
+    if (is_valid == false) {
+        @compileError(std.fmt.comptimePrint("Invalid asset type: {s}", @typeName(asset_type)));
+    }
 }

@@ -8,16 +8,7 @@ const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSe
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
-
-pub const GroupQuery = union(enum) {
-    And: []const GroupQuery,
-    Or: []const GroupQuery,
-    Not: struct {
-        mFirst: *const GroupQuery,
-        mSecond: *const GroupQuery,
-    },
-    Component: type,
-};
+const GroupQuery = @import("ECSManager.zig").GroupQuery;
 
 pub fn ComponentManager(entity_t: type, comptime components_types: []const type) type {
     return struct {
@@ -67,9 +58,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             self.mComponentsArrays.deinit(engine_context.EngineAllocator());
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponentsArrays.items) |component_array| {
-                try component_array.clearAndFree(engine_context);
+                component_array.clearAndFree(engine_context);
             }
         }
 

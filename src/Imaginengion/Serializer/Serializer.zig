@@ -15,10 +15,14 @@ const WriteStream = std.json.Stringify;
 const StringifyOptions = std.json.Stringify.Options{ .whitespace = .indent_2 };
 const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
 
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
 const TextSerializer = @import("TextSerializer.zig");
 const BinarySerializer = @import("BinarySerializer.zig");
+
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const Serializer = @This();
 
@@ -43,36 +47,65 @@ pub const ResolveReq = struct {
 };
 
 pub const DeserializeContext = struct {
-    requester: Requester = Requester.default,
-    component_ptr: *anyopaque = undefined,
+    requester: Requester,
+    component_ptr: *anyopaque,
+
+    pub const empty: DeserializeContext = .{
+        .requester = .default,
+        .component_ptr = undefined,
+    };
 };
 
 pub const empty: Serializer = .{
-    .mCurrDeserialize = DeserializeContext{},
+    .mCurrDeserialize = .empty,
+    .mFileObjects = .empty,
 };
 
+mFileObjects: std.AutoHashMapUnmanaged(u64, AssetHandle),
 mCurrDeserialize: DeserializeContext,
 
-pub fn Deinit(_: Serializer, _: std.mem.Allocator) void {}
-
-pub fn SerializeScene(_: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
-    try TextSerializer.SerializeScene(engine_context, scene_layer, abs_path);
+pub fn Deinit(self: Serializer, engine_allocator: std.mem.Allocator) void {
+    self.mFileObjects.deinit(engine_allocator);
 }
 
-pub fn SerializeEntity(_: Serializer, engine_context: *EngineContext, entity: Entity, abs_path: []const u8, _: SerializeType) !void {
-    try TextSerializer.SerializeEntity(engine_context, entity, abs_path);
+pub fn SaveECSObject(self: Serializer, engine_context: *EngineContext, object: anytype) !void {
+    const uuid = object.GetUUID();
+    if (self.mFileObjects.get(uuid)) |asset_handle| {
+        const file_data = asset_handle.GetFileMetaData();
+        const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath, file_data.mPathType);
+        SerializeECSObject(self, engine_context, object, abs_path, .Text);
+    } else {
+        self.SaveECSObjAs(engine_context, object);
+    }
 }
 
-pub fn DeserializeScene(self: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8, _: SerializeType) !void {
-    try TextSerializer.DeserializeScene(engine_context, scene_layer, abs_path);
-    self.ResolveUUIDs(engine_context.EngineAllocator(), scene_layer.mSceneManager);
+pub fn SaveECSObjAs(self: Serializer, engine_context: *EngineContext, object: anytype) !void {
+    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imsc");
+    if (abs_path.len > 0) {
+        SerializeECSObject(self, engine_context, object, abs_path, .Text);
+        const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
+        const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
+        self.mFileObjects.put(engine_context.EngineAllocator(), object.GetUUID(), asset_handle);
+    }
 }
 
-pub fn DeserializeEntity(_: Serializer, engine_context: *EngineContext, scene_layer: SceneLayer, abs_path: []const u8) !void {
-    TextSerializer.DeserializeEntity(engine_context, scene_layer, abs_path);
+fn SerializeECSObject(_: Serializer, engine_context: *EngineContext, object: anytype, abs_path: []const u8, comptime serialize_type: SerializeType) !void {
+    switch (serialize_type) {
+        .Text => TextSerializer.SerializeECSObject(engine_context, object, abs_path),
+    }
 }
 
-pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, scene_manager: *SceneManager) void {
+pub fn DeserializeECSObj(self: Serializer, engine_context: *EngineContext, object: anytype, abs_path: []const u8, deserialize_type: SerializeType) !void {
+    switch (deserialize_type) {
+        .Text => TextSerializer.DeserializeECSObj(engine_context, object, abs_path),
+    }
+
+    const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
+    const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
+    self.mFileObjects.put(engine_context.EngineAllocator(), object.GetUUID(), asset_handle);
+}
+
+pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, world_manager: *WorldManager) void {
     var front: usize = 0;
     var back: usize = scene_manager.mResolveUUIDList.items.len;
 

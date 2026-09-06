@@ -12,20 +12,20 @@ pub const EventResult = enum {
     Consume,
 };
 
-pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
+pub fn EventManager(EventData: type) type {
     return struct {
         pub const CallbackList = std.DoublyLinkedList;
 
         pub const EventCallback = struct {
             mCtx: *anyopaque,
-            mCallbackFn: *const fn (*anyopaque, *EngineContext, EventUnionType) anyerror!EventResult,
+            mCallbackFn: *const fn (*anyopaque, *EngineContext, EventData.EventT) anyerror!EventResult,
             mNode: CallbackList.Node = .{},
         };
 
-        pub const EventType = EventUnionType;
+        pub const EventType = EventData.EventT;
 
         const Self = @This();
-        pub const EventsArrayT = std.EnumArray(EventCategoriesType, std.ArrayList(EventUnionType));
+        pub const EventsArrayT = std.EnumArray(EventData.EventCategories, std.ArrayList(EventData.EventT));
 
         pub const empty: Self = .{
             .mEventsArray = EventsArrayT.initFill(.empty),
@@ -40,13 +40,13 @@ pub fn EventManager(EventCategoriesType: type, EventUnionType: type) type {
             }
         }
 
-        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, comptime category: EventCategoriesType, event: EventUnionType) !void {
+        pub fn Insert(self: *Self, engine_allocator: std.mem.Allocator, comptime category: EventData.EventCategories, event: EventData.EventT) !void {
             try self.mEventsArray.getPtr(category).append(engine_allocator, event);
         }
 
         /// Process events for a specific phase.
         /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
-        pub fn ProcessCategory(self: *Self, comptime category: EventCategoriesType, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+        pub fn ProcessCategory(self: *Self, comptime category: EventData.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
             const events = self.mEventsArray.get(category).items;
 
             var iter = callback_list.first;

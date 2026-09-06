@@ -19,9 +19,14 @@ const AssetHandle = @import("AssetHandle.zig");
 
 const Core = ECSCore(GameContext);
 
-pub const NewGameModeConfig = struct {
-    bAddUUIDComponent: bool = false,
-    bAddNameComponent: bool = false,
+pub const CreateConfig = struct {
+    bAddUUIDComponent: bool,
+    bAddNameComponent: bool,
+};
+
+pub const DefaultConfig: CreateConfig = .{
+    .bAddUUIDComponent = true,
+    .bAddNameComponent = true,
 };
 
 pub const uninit: GameContext = .{
@@ -54,7 +59,7 @@ pub const IsValidID = Core.IsIDValid;
 
 pub const Invalidate = Core.Invalidate;
 
-pub fn CreateChild(self: GameContext, engine_context: *EngineContext, child_type: ChildType, new_gamemode_config: NewGameModeConfig) !GameContext {
+pub fn CreateChild(self: GameContext, engine_context: *EngineContext, child_type: ChildType, new_gamemode_config: CreateConfig) !GameContext {
     var child_gamemode = Core.CreateChild(self, engine_context, child_type);
     @compileLog("TODO: change to move NewGmaeModeConfig into the GCManager instead of in GameContext");
     try child_gamemode.CreateGameModeConfig(engine_context, new_gamemode_config);

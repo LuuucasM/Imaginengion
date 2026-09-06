@@ -20,3 +20,5 @@ pub fn GetPlayer(self: *WorldManager, player_id: Player.Type) Player {
 pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
     return Scene{ .mID = scene_id, .mManager = self };
 }
+
+//pub fn Copy
