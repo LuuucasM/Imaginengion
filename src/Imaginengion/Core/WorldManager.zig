@@ -5,6 +5,16 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 
+const EManager = @import("../ECSManagers/EManager.zig");
+const GCManager = @import("../ECSManagers/GCManager.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
+
+mEManager: EManager = .empty,
+mGCManager: GCManager = .empty,
+mPManager: PManager = .empty,
+mSManager: SManager = .empty,
+
 pub fn GetEntity(self: *WorldManager, entity_id: Entity.Type) Entity {
     return Entity{ .mID = entity_id, .mManager = self };
 }

@@ -59,6 +59,11 @@ pub const RenderingMode = enum {
     OverlayGame,
 };
 
+const ResetOptions = enum {
+    ClearAndFree,
+    ClearRetainingCapacity,
+};
+
 const is_spirv = builtin.target.cpu.arch.isSpirV();
 
 pub const SurfShadingData = extern struct {
@@ -139,9 +144,17 @@ pub const ShadingBuffers = struct {
 
         return self.mMedShadingBuffBase.items.len - 1;
     }
-    pub fn ClearAndFree(self: *ShadingBuffers, engine_allocator: std.mem.Allocator) void {
-        self.mSurfShadingBuffBase.clearAndFree(engine_allocator);
-        self.mMedShadingBuffBase.clearAndFree(engine_allocator);
+    pub fn Reset(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
+        switch (reset_options) {
+            .ClearAndFree => {
+                self.mSurfShadingBuffBase.clearAndFree(engine_allocator);
+                self.mMedShadingBuffBase.clearAndFree(engine_allocator);
+            },
+            .ClearRetainingCapacity => {
+                self.mSurfShadingBuffBase.clearRetainingCapacity();
+                self.mMedShadingBuffBase.clearRetainingCapacity();
+            },
+        }
     }
     pub fn SetBuffers(self: *ShadingBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("ShadingBuffers::SetBuffers", @src());
@@ -269,7 +282,7 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
     defer zone.Deinit();
 
     self.mR2D.StartBatch(engine_allocator);
-    self.mSDFShading.ClearAndFree(engine_allocator);
+    self.mSDFShading.Reset(engine_allocator, .ClearRetainingCapacity);
 
     //NOTE: temporary just add air as the medium
     const air_mat = MediumMaterial.MediumDatabase.get(.Air);

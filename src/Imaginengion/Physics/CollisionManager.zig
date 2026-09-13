@@ -68,8 +68,9 @@ pub fn Deinit(self: *CollisionManager, engine_allocator: std.mem.Allocator) void
 }
 
 pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
-    self._BlockingContacts.clearAndFree(engine_allocator);
-    self._OverlapContacts.clearAndFree(engine_allocator);
+    self._BlockingContacts.clearRetainingCapacity();
+    self._OverlapContacts.clearRetainingCapacity();
+    _ = engine_allocator;
 }
 
 ///Checks the whole scene for objects that can possibly collide.
@@ -246,8 +247,8 @@ pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) void {
     self._LastCache.deinit(engine_context.EngineAllocator());
     self._LastCache = self._CurrentCache;
     self._CurrentCache = .empty;
-    self._BlockingContacts.clearAndFree(engine_context.EngineAllocator());
-    self._OverlapContacts.clearAndFree(engine_context.EngineAllocator());
+    self._BlockingContacts.clearRetainingCapacity();
+    self._OverlapContacts.clearRetainingCapacity();
 }
 
 fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *ColliderComponent) CollisionType {

@@ -8,6 +8,8 @@ const GCManager = @import("GCManager.zig");
 const PManager = @import("PManager.zig");
 const SManager = @import("SManager.zig");
 
+const ECSManager = @import("../ECS/ECSManager.zig");
+
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
@@ -41,13 +43,21 @@ pub fn Core(comptime Self: type) type {
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
             //TODO
+            //creates the object in the ecs
+            //runs Self's config function for init config
         }
 
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
             //TODO
+            //this function should only create a  new event for deletion
+            //then at the end of the frame when we process deleted stuff
         }
 
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) UnderlyingObj(Self) {
+            //TODO
+        }
+
+        pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType) !UnderlyingObj(Self) {
             //TODO
         }
 
@@ -75,25 +85,12 @@ pub fn Core(comptime Self: type) type {
             engine_context.mSerializer.SaveECSObjAs(engine_context, object);
         }
 
-        pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
-            return self.mECSManager.GetGroup(frame_allocator, query);
+        pub fn LoadObject(_: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
+            //TODO
         }
 
-        pub fn ProcessEvents(self: *Self, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
-            if (event_data == Self.EventData) {
-                const callback = Self.EventManagerT.EventCallback{
-                    .mCtx = self,
-                    .mCallbackFn = struct {
-                        fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
-                            return @as(EManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
-                        }
-                    }.thunk,
-                };
-                callback_list.append(&callback.mNode);
-                self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
-            } else {
-                std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
-            }
+        pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
+            return self.mECSManager.GetGroup(frame_allocator, query);
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {

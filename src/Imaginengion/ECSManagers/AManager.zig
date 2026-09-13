@@ -300,13 +300,13 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     }
 
     var iter = self.mPendingDelete.iterator();
+    const t1 = std.Io.Timestamp.now(engine_context.Io(), .awake);
     while (iter.next()) |entry| {
         const asset_id = entry.key_ptr.*;
         const pending_delete = entry.value_ptr.*;
 
         //TODO: here I can add different things to see if I can possibly recover the file based on its different reasons
 
-        const t1 = std.Io.Timestamp.now(engine_context.Io(), .awake);
         const duration = pending_delete.Time.durationTo(t1);
         const ns = duration.toNanoseconds();
         if (ns > ASSET_DELETE_TIMEOUT_NS) {
@@ -414,7 +414,22 @@ pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) !void {
     self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
 }
 
-pub const ProcessEvents = Core.ProcessEvents;
+pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+    if (event_data == EventData) {
+        const callback = EventManagerT.EventCallback{
+            .mCtx = self,
+            .mCallbackFn = struct {
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
+                    return @as(AManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                }
+            }.thunk,
+        };
+        callback_list.append(&callback.mNode);
+        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+    } else {
+        std.log.err("AManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+    }
+}
 
 pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventManager.EventResult {
     switch (event) {

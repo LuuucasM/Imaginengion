@@ -48,6 +48,7 @@ pub fn EventManager(EventData: type) type {
         /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
         pub fn ProcessCategory(self: *Self, comptime category: EventData.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
             const events = self.mEventsArray.get(category).items;
+            if (events.len == 0) return;
 
             var iter = callback_list.first;
             while (iter) |node| : (iter = node.next) {

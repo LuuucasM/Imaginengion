@@ -81,7 +81,7 @@ pub fn Init(self: *AssetManager, engine_context: *EngineContext) !void {
 
     self.mCWD = std.Io.Dir.cwd();
     const cwd_path = try self.mCWD.realPathFileAlloc(engine_context.Io(), ".", engine_context.FrameAllocator());
-    _ = try self.mCWDPath.print(engine_allocator, "{s}", .{cwd_path});
+    try self.mCWDPath.appendSlice(engine_allocator, cwd_path);
 }
 
 pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
@@ -89,7 +89,7 @@ pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
     const io = engine_context.Io();
 
     //FILE META DATA =======================
-    _ = try self._internal.DefaultFileMetaData.mRelPath.print(engine_context.EngineAllocator(), "default", .{});
+    try self._internal.DefaultFileMetaData.mRelPath.appendSlice(engine_context.EngineAllocator(), "default");
 
     //TEXTURE 2D =========================
     const texture2d_rel_path = "src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
@@ -262,7 +262,7 @@ pub fn OnNewProjectEvent(self: *AssetManager, engine_context: *EngineContext, ab
 
     self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{});
 
-    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
+    try self.mProjectPath.appendSlice(engine_context.EngineAllocator(), abs_path);
 }
 
 pub fn OnOpenProjectEvent(self: *AssetManager, engine_context: *EngineContext, abs_path: []const u8) !void {
@@ -277,7 +277,7 @@ pub fn OnOpenProjectEvent(self: *AssetManager, engine_context: *EngineContext, a
 
     self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{});
 
-    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
+    try self.mProjectPath.appendSlice(engine_context.EngineAllocator(), dir_name);
 }
 
 pub fn OpenFileStats(self: *AssetManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File.Stat {
@@ -409,7 +409,7 @@ fn CreateAssetFile(self: *AssetManager, engine_context: *EngineContext, file_sou
         .mPathType = file_source.path_type,
     });
 
-    _ = try file_meta_data.mRelPath.print(engine_allocator, "{s}", .{file_source.rel_path});
+    try file_meta_data.mRelPath.appendSlice(engine_allocator, file_source.rel_path);
 
     const file = try self.OpenFile(engine_context, file_source.rel_path, file_source.path_type);
     defer self.CloseFile(engine_context.Io(), file);

@@ -226,8 +226,8 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn IsActive(self: Self) bool {
-            const is_id_valid = self.IsIDValid();
-            const is_active_obj = blk: {
+            if (!self.IsIDValid()) false;
+            return blk: {
                 if (Self == AssetHandle) {
                     break :blk try self.mManager.IsActiveEntity(self.mID);
                 } else if (Self == Entity) {
@@ -242,7 +242,6 @@ pub fn Core(comptime Self: type) type {
                     @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
                 }
             };
-            return is_id_valid and is_active_obj;
         }
 
         pub fn IsIDValid(self: Self) bool {

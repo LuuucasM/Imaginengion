@@ -73,20 +73,9 @@ pub fn OnUpdate(self: *AudioManager, delta_time: f32, scene_manager: *SceneManag
         const samples_read = frames_read * AUDIO_CHANNELS;
 
         for (0..samples_read) |i| {
-            var source = source_buffer[i];
-            SourceVolume(audio_component, &source);
-            mixed_buffer[i] += source;
-
-            ClampMix(&mixed_buffer[i]);
+            const source = source_buffer[i] * audio_component.mVolume;
+            mixed_buffer[i] = std.math.clamp(mixed_buffer[i] + source, -1.0, 1.0);
         }
     }
     _ = mic_component.mAudioBuffer.PushSlice(mixed_buffer);
-}
-
-fn ClampMix(source: *f32) void {
-    source.* = std.math.clamp(source.*, -1.0, 1.0);
-}
-
-fn SourceVolume(audio_component: *AudioComponent, source: *f32) void {
-    source.* = source.* * audio_component.mVolume;
 }

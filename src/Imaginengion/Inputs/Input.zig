@@ -66,11 +66,8 @@ pub fn GetMouseScrolledDelta(self: *InputManager) Vec2(f32) {
 }
 
 pub fn SetKeyPressed(self: *InputManager, key: InputEnums.ScanCodes) !void {
-    if (self._KeyPressedSet.contains(key) == true) {
-        try self._KeyPressedSet.putAssumeCapacity(key, 1);
-    } else {
-        try self._KeyPressedSet.putAssumeCapacity(key, 0);
-    }
+    const gop = self._KeyPressedSet.getOrPutAssumeCapacity(key);
+    gop.value_ptr.* = if (gop.found_existing) 1 else 0;
 }
 
 pub fn SetKeyReleased(self: *InputManager, key: InputEnums.ScanCodes) void {
@@ -78,11 +75,8 @@ pub fn SetKeyReleased(self: *InputManager, key: InputEnums.ScanCodes) void {
 }
 
 pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes) !void {
-    if (self._MousePressedSet.contains(button) == true) {
-        try self._MousePressedSet.putAssumeCapacity(button, 1);
-    } else {
-        try self._MousePressedSet.putAssumeCapacity(button, 0);
-    }
+    const gop = self._MousePressedSet.getOrPutAssumeCapacity(button);
+    gop.value_ptr.* = if (gop.found_existing) 1 else 0;
 }
 
 pub fn SetMousePosition(self: *InputManager, new_pos: Vec2(f32)) void {

@@ -99,9 +99,10 @@ pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_
         return error.InitFailed;
     };
 
+    try self.mLayers.ensureTotalCapacityPrecise(engine_context.EngineAllocator(), self.mMaxLayers);
     for (0..self.mMaxLayers) |i| {
         _ = i;
-        try self.mLayers.append(engine_context.EngineAllocator(), .NoSkip);
+        self.mLayers.appendAssumeCapacity(.NoSkip);
     }
 
     for (0..NUM_BINS) |i| {
@@ -238,11 +239,13 @@ fn CheckReleaseLayer(self: *SGTextureManager, bin_index: usize, layer_index: usi
 }
 
 pub fn GetPixelOffsets(bin_index: usize, slot_index: usize) struct { usize, usize } {
-    const slot_col = slot_index % BinIndToSlotsPerRow(bin_index);
-    const slot_row = slot_index / BinIndToSlotsPerRow(bin_index);
+    const slots_per_row = BinIndToSlotsPerRow(bin_index);
+    const slot_size = BinIndToSlotSize(bin_index);
+    const slot_col = slot_index % slots_per_row;
+    const slot_row = slot_index / slots_per_row;
     return .{
-        slot_col * BinIndToSlotSize(bin_index) + PADDING,
-        slot_row * BinIndToSlotSize(bin_index) + PADDING,
+        slot_col * slot_size + PADDING,
+        slot_row * slot_size + PADDING,
     };
 }
 

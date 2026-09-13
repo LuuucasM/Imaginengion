@@ -9,6 +9,16 @@
 		- quit button
 		- bgm
 		- background image
+- Add tag support into the ECS
+	- right now tags are just regular components that are 1 bit in size.
+	- this is because for sparse set, for the value array, tags need a size for the array
+	- so what i need to do is check in the sparse set i need to check value type. if the size of value type is 0 then do not make a value array and all operations that operate on the value array become unable to be used
+	- then i can remove the 1 bit. then move tags from being in the components list to their own tags list
+	- then just like i pass components list right now i will also pass tags list to the ECS
+	- then when something like add component or remove component is called, they use anytype. we check if the component is of type type, then we can check if its a valid tag, if it is then we propegate. at the sparse set level we already modified it above to handle 0 sized value types so we dont need to change anything i dont think
+- add tags when possible in place of things like filtering
+	- for example when updating transforms instead of going through each one and checking if its dirty flag was set or not, when updating a transform we can ensure we instead add a TransformDirty tag
+	- then when we want to ensure world transforms are updated we can query the ecs for DirtyTransform tags instead of looping over all the transforms or creating some specialized structure to keep track of dirty transforms
 - add sound
 	- likely to use mini audio
 	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform

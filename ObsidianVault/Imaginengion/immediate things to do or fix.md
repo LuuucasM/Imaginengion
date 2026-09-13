@@ -1,21 +1,8 @@
-- change Player and Scene to use new ECSObject.zig Core functions
-- change ECS Objects, ECS Managers, and ECS Components to unify them and use comptime generation when possible
-	- this follows in line with the formalization that was established as part of the UI rework
-	- I think by making these changes I am sort of "choosing" how my engine will be aka the heavy use of ECS for different game features. 
-	- This is me just further committing to the goal of the engine where one of the pillars is ECS and the other is Events
-	- I am not actually changing any behavior but just again unifying everything to use comptime generation for shared parts (which there is a lot of since they all share the same generic ECS). This will result in less code to debug and more consistent rules across the different game objects.
-- Finish changing ECSObjects to use "Core" for shared functinality
-- ensure ECSObjects have their unique functions preserved
-- change all ECSManagers to use ECSObjects. 
-	- I am not sure if I should make a generic ECSMangaer as well.
-	- It would be basically the same thing as ECSObjects in that certain things would be shared between managers but there might be object specific implementation details and member functions
-- Ensure that asset manager retains the same ability that the current asset manager has
 - Implement WorldManager in /Core
 	- Before SceneManager use to manage scenes, and entities, and everythinb but now that SceneManager is just only for scenes I needed a new level of object that brought everything together. This is because the engine will have multiple Scene/Entity/etc Managers due to the way playing/simulation works by just copying the whole world.
 	- also will need a world for editor when I move to replace imgui as well so need a world manager 
-- Modify various event callback functions in the engine to instead of returning bool it now returns an "EventResult" enum
-	- instead of just putting true or false and having to remember, it is easier to reason what is happening with enum names.
-	- In case I need to add more types of results later I can easily as well
+- fix compile bugs and errors
+	- theres going to be a lot this time since I changed a pretty big core but the individual systems logic is the same so once I get over compile time stuff It should be ok
 - I need to re-add features so i can test the play/simulation part of the engine. Some things i have yet to test/add
 	- adding a player and an entity and having the player possess the entity
 	- seeing if adding a camera to the entity and seeing if i can get a preview in the play panel

@@ -116,7 +116,6 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                 var dist_origin: f32 = 0;
 
                 while (i < MAX_STEPS and dist_origin < self.mPerspectiveFar and march_data.min_dist > SURF_DIST) : (i += 1) {
-                    march_data = MarchData{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
                     const point = from_point.AddVec(curr_edge.Direction.MulScalar(dist_origin));
                     march_data = self.NextSurface(point);
                     dist_origin += march_data.min_dist;

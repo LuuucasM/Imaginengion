@@ -67,6 +67,10 @@ pub const Delete = Core.Delete;
 
 pub const Duplicate = Core.Duplicate;
 
+pub fn GetSceneComponent(self: Scene) SceneComponent {
+    return self.mManager.mSManager.GetSceneComponent(self.mID);
+}
+
 //TODO: move to SManager
 //pub fn CreateSceneConfig(self: *Scene, engine_context: *EngineContext, config: NewSceneConfig) !void {
 //    if (config.bAddSceneUUID) {

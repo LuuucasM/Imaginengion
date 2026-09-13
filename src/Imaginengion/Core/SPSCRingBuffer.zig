@@ -107,13 +107,13 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
 
         //utility
         pub fn IsEmpty(self: *Self) bool {
+            const read = self.mReadIndex.load(.monotonic);
             const write = self.mWriteIndex.load(.acquire);
-            const read = self.mReadIndex.load(.acquire);
 
             return write == read;
         }
         pub fn isFull(self: *Self) bool {
-            const write = self.mWriteIndex.load(.acquire);
+            const write = self.mWriteIndex.load(.monotonic);
             const read = self.mReadIndex.load(.acquire);
 
             return write - read == size;

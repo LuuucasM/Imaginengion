@@ -5,10 +5,11 @@ const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
-const EventData = @import("../Events/GCEventData.zig");
+const EventData = @import("../Events/GCManagerData.zig");
 
 const GameContext = @import("../ECSObjects/GameContext.zig");
-const GCComponentsList = @import("../ECSComponents/GCComponents.zig").ComponentsList;
+const GCComponents = @import("../ECSComponents/GCComponents.zig");
+const GCComponentsList = GCComponents.ComponentsList;
 const ECSCore = @import("ECSManager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -61,15 +62,38 @@ pub const Init = Core.Init;
 
 pub const IsActiveObj = Core.IsActiveObj;
 
-pub const ProcessEvents = Core.ProcessEvents;
-
 pub const RemoveUUID = Core.RemoveUUID;
 
 pub const SaveObject = Core.SaveObject;
 
 pub const SaveObjectAs = Core.SaveObjectAs;
 
-pub fn ProcessConfig(self: GameContext, engine_context: *EngineContext, config: GameContext.CreateConfig) !void {}
+pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+    if (event_data == EventData) {
+        const callback = EventManagerT.EventCallback{
+            .mCtx = self,
+            .mCallbackFn = struct {
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
+                    return @as(GCManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                }
+            }.thunk,
+        };
+        callback_list.append(&callback.mNode);
+        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+    } else {
+        std.log.err("GCManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+    }
+}
+
+pub fn ProcessConfig(self: GCManager, engine_context: *EngineContext, gamecontext_id: GameContext.Type, config: GameContext.CreateConfig) !void {
+    if (config.bAddUUIDComponent) {
+        _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), gamecontext_id, GCComponents.UUIDComponent.empty);
+    }
+    if (config.bAddNameComponent) {
+        const name_component = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), gamecontext_id, GCComponents.NameComponent.empty);
+        name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Game Context");
+    }
+}
 
 pub fn OnManagerEvents(_: *GCManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {

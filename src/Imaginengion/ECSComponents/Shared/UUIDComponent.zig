@@ -17,6 +17,10 @@ pub const Ind: usize = blk: {
     }
 };
 
+pub const empty: UUIDComponent = .{
+    .ID = std.math.maxInt(u64),
+};
+
 ID: u64 = std.math.maxInt(u64),
 
 pub fn Deinit(_: *UUIDComponent, _: *EngineContext) !void {}

@@ -83,7 +83,8 @@ pub fn uvIMGlyph(point: Vec3(f32), glyph: GlyphData, texture_handle: u32, tex_wi
 
 pub fn GetMSD(texture_uv: Vec2(f32), atlas_shading_data: SurfShadingData, textures_array: anytype, sample_sampler: anytype) f32 {
     //component wise lerp where a = atlas_uv0 and b = atlas_uv1 and t = texture_uv
-    const raw_uv: Vec2(f32) = Vec2(f32).FromArray(atlas_shading_data.TextureUV0).AddVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV1).SubVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV0))).MulVec(texture_uv);
+    const atlas_uv0 = Vec2(f32).FromArray(atlas_shading_data.TextureUV0);
+    const raw_uv: Vec2(f32) = atlas_uv0.AddVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV1).SubVec(atlas_uv0)).MulVec(texture_uv);
     const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv, atlas_shading_data.TextureWidth, atlas_shading_data.TextureHeight);
     const msd = sample_sampler(textures_array, sample_uv.ToVector(), 0.0);
     return Median(msd[0], msd[1], msd[2]);

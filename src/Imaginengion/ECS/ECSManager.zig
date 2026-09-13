@@ -131,7 +131,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             const zone = Tracy.ZoneInit("ECSM GetGroup", @src());
             defer zone.Deinit();
 
-            const mask = ComponentManagerT.GetGroupMask(query);
+            const mask = comptime ComponentManagerT.GetGroupMask(query);
             return try self.mComponentManager.GetGroup(query, &mask, allocator);
         }
 

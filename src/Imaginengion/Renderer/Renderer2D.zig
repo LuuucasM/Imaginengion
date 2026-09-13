@@ -46,6 +46,11 @@ const MAX_PATH_LEN = 256;
 
 const is_spirv = builtin.target.cpu.arch.isSpirV();
 
+const ResetOptions = enum {
+    ClearAndFree,
+    ClearRetainingCapacity,
+};
+
 pub const QuadData = extern struct {
     Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
     Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
@@ -95,9 +100,17 @@ pub const RenderBuffers = struct {
         self.mGlyphBuffer.Deinit(engine_context);
         self.mGlyphBufferBase.deinit(engine_context.EngineAllocator());
     }
-    pub fn ClearAndFree(self: *RenderBuffers, engine_allocator: std.mem.Allocator) void {
-        self.mQuadBufferBase.clearAndFree(engine_allocator);
-        self.mGlyphBufferBase.clearAndFree(engine_allocator);
+    pub fn Reset(self: *RenderBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
+        switch (reset_options) {
+            .ClearAndFree => {
+                self.mQuadBufferBase.clearAndFree(engine_allocator);
+                self.mGlyphBufferBase.clearAndFree(engine_allocator);
+            },
+            .ClearRetainingCapacity => {
+                self.mQuadBufferBase.clearRetainingCapacity();
+                self.mGlyphBufferBase.clearRetainingCapacity();
+            },
+        }
     }
     pub fn SetBuffers(self: *RenderBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
@@ -147,8 +160,8 @@ pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
 }
 
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
-    self.mGameData.ClearAndFree(engine_allocator);
-    self.mOverlayData.ClearAndFree(engine_allocator);
+    self.mGameData.Reset(engine_allocator, .ClearRetainingCapacity);
+    self.mOverlayData.Reset(engine_allocator, .ClearRetainingCapacity);
 }
 
 pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine_context: *EngineContext, pipeline_t: PipelineType) !void {
@@ -322,7 +335,7 @@ pub fn DrawText(
             .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
         };
 
-        try glyph_buff_base.append(engine_context.FrameAllocator(), .{
+        try glyph_buff_base.append(engine_context.EngineAllocator(), .{
             .Position = Vec3(f32).ArrayT{ pen_x, pen_y, world_pos.z },
             .Rotation = transform_component.Rotation.ToVector(),
             .HalfExtents = Vec3(f32).ArrayT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },

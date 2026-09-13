@@ -77,8 +77,6 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     marcher.mNodes[0].FirstEdge = 0;
     marcher.mEdgeCount = 1;
 
-    std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, @Vector(4, f32){ 1.0, 0.0, 0.0, 1.0 });
-
     marcher.March(SDFShared.imageSampleExplicitLod, TexturesArray);
 
     //traverse ray tree backwards to obtain final output color

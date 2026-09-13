@@ -30,7 +30,7 @@ pub fn Unbind(self: VertexBuffer) void {
     self.mImpl.Unbind();
 }
 
-pub fn SetData(self: VertexBuffer, data: *anyopaque, size: usize, offset: u32) void {
+pub fn SetData(self: *VertexBuffer, data: *anyopaque, size: usize, offset: u32) void {
     self.mImpl.SetData(data, size, offset);
 }
 

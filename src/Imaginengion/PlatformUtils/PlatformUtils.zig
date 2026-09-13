@@ -17,6 +17,7 @@ pub fn OpenFolder(allocator: std.mem.Allocator) ![]const u8 {
     const path_result = try allocator.alloc(u8, len);
 
     @memcpy(path_result, outPath[0..len]);
+    std.c.free(outPath);
     return path_result;
 }
 
@@ -35,6 +36,7 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
     const path_result = try allocator.alloc(u8, path_len);
 
     @memcpy(path_result[0..path_len], outPath[0..path_len]);
+    std.c.free(outPath);
 
     return path_result;
 }
@@ -57,11 +59,13 @@ pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
     if (std.mem.eql(u8, ext_slice, filter[0..filter_len]) == true) {
         const path_result = try allocator.alloc(u8, path_len);
         @memcpy(path_result, outPath[0..path_len]);
+        std.c.free(outPath);
         return path_result;
     } else {
         const path_result = try allocator.alloc(u8, path_len + filter_len);
         @memcpy(path_result[0..path_len], outPath[0..path_len]);
         @memcpy(path_result[path_len..], filter[0..filter_len]);
+        std.c.free(outPath);
         return path_result;
     }
 }

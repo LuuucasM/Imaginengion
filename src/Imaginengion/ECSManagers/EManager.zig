@@ -37,6 +37,14 @@ pub const Init = Core.Init;
 
 pub const Deinit = Core.Deinit;
 
+pub const CreateEntity = Core.CreateObj;
+
+pub const DeleteEntity = Core.DeleteObj;
+
+pub const CreateChild = Core.CreateChild;
+
+pub const Duplicate = Core.Duplicate;
+
 pub const AddComponent = Core.AddComponent;
 
 pub const GetComponent = Core.GetComponent;
@@ -44,8 +52,6 @@ pub const GetComponent = Core.GetComponent;
 pub const HasComponent = Core.HasComponent;
 
 pub const IsActiveEntity = Core.IsActiveObj;
-
-//Create and delete and Add Child and DUplicate functions but not for EManager because SManager holds the lifetime of entities
 
 pub const SaveEntity = Core.SaveObject;
 
@@ -63,7 +69,22 @@ pub const AddResolveUUID = Core.AddResolveUUID;
 
 pub const clearAndFree = Core.clearAndFree;
 
-pub const ProcessEvents = Core.ProcessEvents;
+pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+    if (event_data == EventData) {
+        const callback = EventManagerT.EventCallback{
+            .mCtx = self,
+            .mCallbackFn = struct {
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
+                    return @as(EManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                }
+            }.thunk,
+        };
+        callback_list.append(&callback.mNode);
+        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+    } else {
+        std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+    }
+}
 
 pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {

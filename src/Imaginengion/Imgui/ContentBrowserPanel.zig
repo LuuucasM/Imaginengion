@@ -174,6 +174,8 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
     var iter = self.mCurrentDirectory.?.iterate();
     while (try iter.next(engine_context.Io())) |entry| {
+        const entry_extension = std.fs.path.extension(entry.name);
+
         if (entry.kind == .directory) {
             const texture_asset = try self.mDirTextureHandle.GetAsset(engine_context, Texture2D);
 
@@ -188,7 +190,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
                 new_curr_dir = true;
             }
             NextColumn(entry_name);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".png") == true) {
+        } else if (std.mem.eql(u8, entry_extension, ".png") == true) {
             const texture_asset = try self.mPngTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
@@ -197,7 +199,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             try self.DragDropSourceBase(engine_context, entry_name, "Texture2D");
             NextColumn(entry_name);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".imsc") == true) {
+        } else if (std.mem.eql(u8, entry_extension, ".imsc") == true) {
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
@@ -206,7 +208,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             try self.DragDropSourceBase(engine_context, entry_name, "IMSCLoad");
             NextColumn(entry_name);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".zig") == true) {
+        } else if (std.mem.eql(u8, entry_extension, ".zig") == true) {
             const texutre_asset = try self.mScriptTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
@@ -215,7 +217,7 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             try self.DragDropSourceScript(engine_context, entry_name);
             NextColumn(entry_name);
-        } else if (std.mem.eql(u8, std.fs.path.extension(entry.name), ".mp3") == true) {
+        } else if (std.mem.eql(u8, entry_extension, ".mp3") == true) {
             const texutre_asset = try self.mAudioTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
