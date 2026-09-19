@@ -1,3 +1,4 @@
+const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const FileMetaData = @This();
@@ -8,7 +9,7 @@ pub const Name: []const u8 = "FileMetaData";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
         if (asset_type == FileMetaData) {
-            break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            break :blk i + BuiltinComponentCount;
         }
     }
 };

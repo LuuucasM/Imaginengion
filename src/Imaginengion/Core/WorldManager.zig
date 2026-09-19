@@ -17,6 +17,13 @@ const GCManager = @import("../ECSManagers/GCManager.zig");
 const PManager = @import("../ECSManagers/PManager.zig");
 const SManager = @import("../ECSManagers/SManager.zig");
 
+const ClearAndFreeOptions = enum {
+    EManager,
+    GCManager,
+    PManager,
+    SManager,
+};
+
 mEManager: EManager = .empty,
 mGCManager: GCManager = .empty,
 mPManager: PManager = .empty,
@@ -38,23 +45,27 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
     return Scene{ .mID = scene_id, .mManager = self };
 }
 
-pub fn Init(self: *WorldManager, width: usize, height: usize, engine_allocator: std.mem.Allocator) !void {
+pub fn Init(self: *WorldManager, engine_allocator: std.mem.Allocator) !void {
     self.mEManager.Init(engine_allocator);
     self.mGCManager.Init(engine_allocator);
     self.mPManager.Init(engine_allocator);
     self.mSManager.Init(engine_allocator);
-    _ = .{ self, width, height, engine_allocator };
-    @panic("WorldManager.Init not implemented");
 }
 
-pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) !void {
-    _ = .{ self, engine_context };
-    @panic("WorldManager.Deinit not implemented");
+pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
+    self.mEManager.Deinit(engine_context);
+    self.mGCManager.Deinit(engine_context);
+    self.mPManager.Deinit(engine_context);
+    self.mSManager.Deinit(engine_context);
 }
 
-pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext) !void {
-    _ = .{ self, engine_context };
-    @panic("WorldManager.clearAndFree not implemented");
+pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) !void {
+    switch (options) {
+        .EManager => self.mEManager.clearAndFree(engine_context),
+        .GCManager => self.mGCManager.clearAndFree(engine_context),
+        .PManager => self.mPManager.clearAndFree(engine_context),
+        .SManager => self.mSManager.clearAndFree(engine_context),
+    }
 }
 
 pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *WorldManager) !void {

@@ -1,3 +1,4 @@
+const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const ComponentsList = @import("../AComponents.zig").ComponentsList;
 const EntityAsset = @This();
@@ -16,7 +17,7 @@ pub const Name: []const u8 = "EntityAsset";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |asset_type, i| {
         if (asset_type == EntityAsset) {
-            break :blk i + 5;
+            break :blk i + BuiltinComponentCount;
         }
     }
 };

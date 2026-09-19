@@ -2,6 +2,8 @@ const std = @import("std");
 const InternalComponentArray = @import("InternalComponentArray.zig").InternalComponentArray;
 const ComponentArray = @import("ComponentArray.zig").ComponentArray;
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
+const BuiltinComponentCount = @import("Components.zig").BuiltinComponentCount;
+const MainObjectComponent = @import("Components.zig").MainObjectComponent;
 const EntityTagComponent = @import("Components.zig").EntityTagComponent;
 const ScriptTagComponent = @import("Components.zig").ScriptTagComponent;
 const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
@@ -37,11 +39,16 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             const skip_array = try ComponentArray(entity_t).Init(engine_allocator, SkipFieldComponent);
             try self.mComponentsArrays.append(engine_allocator, skip_array);
 
+            const main_object_array = try ComponentArray(entity_t).Init(engine_allocator, MainObjectComponent);
+            try self.mComponentsArrays.append(engine_allocator, main_object_array);
+
             const entity_tag_array = try ComponentArray(entity_t).Init(engine_allocator, EntityTagComponent);
             try self.mComponentsArrays.append(engine_allocator, entity_tag_array);
 
             const script_tag_array = try ComponentArray(entity_t).Init(engine_allocator, ScriptTagComponent);
             try self.mComponentsArrays.append(engine_allocator, script_tag_array);
+
+            std.debug.assert(self.mComponentsArrays.items.len == BuiltinComponentCount);
 
             inline for (components_types) |component_type| {
                 const new_component_array = try ComponentArray(entity_t).Init(engine_allocator, component_type);
@@ -65,27 +72,38 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            const internal_array: *InternalComponentArray(entity_t, SkipFieldComponent) = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
-            _ = try internal_array.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+            try self._AddSkipField(engine_allocator, entity_id);
 
             _ = try self.AddComponent(engine_allocator, entity_id, EntityTagComponent{});
         }
 
         pub fn CreateScript(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
-            const internal_array: *InternalComponentArray(entity_t, SkipFieldComponent) = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
-            _ = try internal_array.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+            try self._AddSkipField(engine_allocator, entity_id);
 
             _ = try self.AddComponent(engine_allocator, entity_id, ScriptTagComponent{});
         }
 
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
-            // Remove all components from this entity
-            const entity_skipfield_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
+            // iterate a copy of the skipfield because removing the SkipFieldComponent swap-removes it
+            // inside its array, which would move another entity's skipfield under the iterator
+            var entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?.mSkipField;
 
-            var field_iter = entity_skipfield_comp.mSkipField.Iterator();
+            var field_iter = entity_skipfield.Iterator();
             while (field_iter.next()) |comp_arr_ind| {
+                if (comp_arr_ind == SkipFieldComponent.Ind) continue;
                 try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
             }
+
+            // remove the skipfield last so the entity stays active while its other components deinit
+            try self.mComponentsArrays.items[SkipFieldComponent.Ind].DestroyEntity(engine_context, entity_id);
+        }
+
+        fn _AddSkipField(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t) !void {
+            const internal_array: *InternalComponentArray(entity_t, SkipFieldComponent) = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
+            const skipfield_comp = try internal_array.AddComponent(engine_allocator, entity_id, SkipFieldComponent{});
+
+            // the skipfield tracks itself so it shows up in queries and gets removed in DestroyEntity
+            skipfield_comp.mSkipField.ChangeToUnskipped(SkipFieldComponent.Ind);
         }
 
         pub fn DuplicateEntity(self: *Self, engine_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) !void {
@@ -112,8 +130,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
+            std.debug.assert(component_ind < components_types.len + BuiltinComponentCount);
+            std.debug.assert(component_ind != SkipFieldComponent.Ind); // only removed through DestroyEntity
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
-            std.debug.assert(component_ind < components_types.len + 3);
 
             const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?;
             entity_skipfield.mSkipField.ChangeToSkipped(component_ind);

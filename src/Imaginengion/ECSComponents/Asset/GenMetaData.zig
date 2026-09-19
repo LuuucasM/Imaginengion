@@ -1,3 +1,4 @@
+const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const AssetsList = @import("../Assets.zig").AssetsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -7,7 +8,7 @@ pub const Name: []const u8 = "GenMetaData";
 pub const Ind: usize = blk: {
     for (AssetsList, 0..) |asset_type, i| {
         if (asset_type == GenMetaData) {
-            break :blk i + 5; // add 5 because ECS internals
+            break :blk i + BuiltinComponentCount;
         }
     }
 };

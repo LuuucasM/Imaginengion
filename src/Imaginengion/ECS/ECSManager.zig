@@ -4,6 +4,8 @@ const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig")
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
+pub const BuiltinComponentCount = @import("Components.zig").BuiltinComponentCount;
+pub const MainObjectComponent = @import("Components.zig").MainObjectComponent;
 pub const EntityTagComponent = @import("Components.zig").EntityTagComponent;
 pub const ScriptTagComponent = @import("Components.zig").ScriptTagComponent;
 
@@ -236,7 +238,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
             std.debug.assert(self.IsActiveEntity(entity_id));
-            std.debug.assert(components_types.len > component_ind);
+            std.debug.assert(components_types.len + BuiltinComponentCount > component_ind);
             const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
             defer zone.Deinit();
             try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
@@ -385,8 +387,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                 if (!@hasDecl(component_type, "Ind")) {
                     @compileError(type_name ++ "Type needs 'Ind' pub const declaration ");
                 }
-                if (component_type.Ind <= 5) {
-                    @compileError(type_name ++ "Type's 'Ind' needs to be greater than 5 because 0 is parent component, 1 is child component, and 2 is skipfield component, 3 is MainObjectComponent, 4 is entity tag, 5 is script tag");
+                if (component_type.Ind < BuiltinComponentCount) {
+                    @compileError(type_name ++ "Type's 'Ind' must be at least " ++ std.fmt.comptimePrint("{d}", .{BuiltinComponentCount}) ++ " because 0 is parent component, 1 is child component, 2 is skipfield component, 3 is MainObjectComponent, 4 is entity tag, 5 is script tag");
                 }
                 if (!std.meta.hasFn(component_type, "Deinit")) {
                     @compileError(type_name ++ "Type needs 'Deinit' member function ");
@@ -442,7 +444,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     is_valid_type = true;
                 }
             }
-            if (component_type == ParentComponent or component_type == ChildComponent or component_type == EntityTagComponent or component_type == ScriptTagComponent) {
+            if (component_type == ParentComponent or component_type == ChildComponent or component_type == MainObjectComponent or component_type == EntityTagComponent or component_type == ScriptTagComponent) {
                 is_valid_type = true;
             }
             if (is_valid_type == false) {

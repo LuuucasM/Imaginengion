@@ -1,3 +1,4 @@
+const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const Entity = @import("../../GameObjects/Entity.zig");
@@ -17,7 +18,7 @@ pub const Name: []const u8 = "SceneComponent";
 pub const Ind: usize = blk: {
     for (ComponentsList, 0..) |component_type, i| {
         if (component_type == SceneComponent) {
-            break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+            break :blk i + BuiltinComponentCount;
         }
     }
 };

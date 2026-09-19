@@ -1,3 +1,4 @@
+const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const ComponentsList = @import("../Components.zig").ComponentsList;
 
 const std = @import("std");
@@ -19,7 +20,7 @@ pub const OnKeyPressedScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnKeyPressedScript) {
-                break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + BuiltinComponentCount;
             }
         }
     };
@@ -35,7 +36,7 @@ pub const EntityOnUpdateScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == EntityOnUpdateScript) {
-                break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + BuiltinComponentCount;
             }
         }
     };
@@ -50,7 +51,7 @@ pub const OnSceneStartScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == OnSceneStartScript) {
-                break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + BuiltinComponentCount;
             }
         }
     };
@@ -65,7 +66,7 @@ pub const SceneOnUpdateScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == SceneOnUpdateScript) {
-                break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + BuiltinComponentCount;
             }
         }
     };
@@ -80,7 +81,7 @@ pub const InputPressedScript = struct {
     pub const Ind: usize = blk: {
         for (ComponentsList, 0..) |component_type, i| {
             if (component_type == InputPressedScript) {
-                break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
+                break :blk i + BuiltinComponentCount;
             }
         }
     };

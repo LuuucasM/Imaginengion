@@ -3,6 +3,10 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const StaticSkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 
+// number of components the ECS provides itself (Parent, Child, SkipField, MainObject, EntityTag, ScriptTag)
+// user components start at this index, so a user component's Ind is its list position + BuiltinComponentCount
+pub const BuiltinComponentCount: usize = 6;
+
 pub fn ParentComponent(entity_t: type) type {
     return struct {
         const Self = @This();
@@ -39,7 +43,7 @@ pub fn SkipFieldComponent(comptime components_len: comptime_int) type {
 
         pub const Ind: usize = 2;
         pub const Name: []const u8 = "SkipFieldComponent";
-        pub const StaticSkipFieldT = StaticSkipField(components_len + 5); // +5 because 0 is parent component, 1 is child component, and 2 is skip field component, entity tag, script tag
+        pub const StaticSkipFieldT = StaticSkipField(components_len + BuiltinComponentCount);
 
         mSkipField: StaticSkipFieldT = .AllSkip,
 
