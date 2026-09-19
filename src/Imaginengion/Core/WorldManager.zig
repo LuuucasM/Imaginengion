@@ -4,7 +4,6 @@ const std = @import("std");
 
 const EngineContext = @import("EngineContext.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
-const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
 
@@ -40,6 +39,10 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
 }
 
 pub fn Init(self: *WorldManager, width: usize, height: usize, engine_allocator: std.mem.Allocator) !void {
+    self.mEManager.Init(engine_allocator);
+    self.mGCManager.Init(engine_allocator);
+    self.mPManager.Init(engine_allocator);
+    self.mSManager.Init(engine_allocator);
     _ = .{ self, width, height, engine_allocator };
     @panic("WorldManager.Init not implemented");
 }
@@ -189,22 +192,39 @@ pub fn GameContextECSCallback(world_manager: *anyopaque, engine_context: *Engine
 }
 
 //===============================UUIDs==============================================
-pub fn AddUUID(self: *WorldManager, engine_allocator: std.mem.Allocator, uuid: u64, world_id: usize) !void {
-    _ = .{ self, engine_allocator, uuid, world_id };
-    @panic("WorldManager.AddUUID not implemented");
+//each manager owns the UUID -> ID map for its own object type, these just route to the right one
+
+/// Returns the object with the given UUID, or null if no object of that type with that UUID is loaded
+pub fn GetObjectByUUID(self: *WorldManager, comptime obj_t: type, uuid: u64) ?obj_t {
+    const obj_id = self.GetManager(obj_t).GetWorldID(uuid) orelse return null;
+    return .{ .mID = obj_id, .mManager = self };
 }
 
-pub fn RemoveUUID(self: *WorldManager, uuid: u64) void {
-    _ = .{ self, uuid };
-    @panic("WorldManager.RemoveUUID not implemented");
+/// Returns the manager that owns objects of type obj_t (Entity -> EManager, Scene -> SManager, ...)
+pub fn GetManager(self: *WorldManager, comptime obj_t: type) *ManagerT(obj_t) {
+    if (obj_t == Entity) {
+        return &self.mEManager;
+    } else if (obj_t == GameContext) {
+        return &self.mGCManager;
+    } else if (obj_t == Player) {
+        return &self.mPManager;
+    } else if (obj_t == Scene) {
+        return &self.mSManager;
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not an object type owned by the WorldManager", .{@typeName(obj_t)}));
+    }
 }
 
-pub fn GetWorldID(self: WorldManager, uuid: u64) ?usize {
-    _ = .{ self, uuid };
-    @panic("WorldManager.GetWorldID not implemented");
-}
-
-pub fn AddResolveUUID(self: *WorldManager, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
-    _ = .{ self, engine_allocator, resolve_req };
-    @panic("WorldManager.AddResolveUUID not implemented");
+pub fn ManagerT(comptime obj_t: type) type {
+    if (obj_t == Entity) {
+        return EManager;
+    } else if (obj_t == GameContext) {
+        return GCManager;
+    } else if (obj_t == Player) {
+        return PManager;
+    } else if (obj_t == Scene) {
+        return SManager;
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not an object type owned by the WorldManager", .{@typeName(obj_t)}));
+    }
 }

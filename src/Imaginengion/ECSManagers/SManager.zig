@@ -9,7 +9,6 @@ const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
 const EventData = @import("../Events/SManagerData.zig");
 
-const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -56,14 +55,12 @@ pub const uninit: SManager = .{
     .mGameLayerInsertIndex = 0,
     .mNumofLayers = 0,
     .mUUIDToWorldID = .empty,
-    .mResolveUUIDList = .empty,
 };
 
 mECSManager: ECSManagerS,
 mEventManager: EventManagerT,
 
-mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, usize),
-mResolveUUIDList: std.ArrayList(ResolveReq),
+mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Scene.Type),
 
 mGameLayerInsertIndex: usize,
 mNumofLayers: usize,
@@ -87,7 +84,6 @@ pub const CreateChild = Core.CreateChild;
 
 pub const AddComponent = Core.AddComponent;
 
-pub const AddResolveUUID = Core.AddResolveUUID;
 
 pub const AddUUID = Core.AddUUID;
 

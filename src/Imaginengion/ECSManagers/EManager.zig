@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
@@ -27,14 +26,12 @@ const Core = ECSCore(EManager);
 pub const empty: EManager = .{
     .mECSManager = .empty,
     .mUUIDToWorldID = .empty,
-    .mResolveUUIDList = .empty,
 };
 
 mECSManager: ECSManagerT,
 mEventManager: EventManagerT,
 
-mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, usize),
-mResolveUUIDList: std.ArrayList(ResolveReq),
+mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Entity.Type),
 
 pub const Init = Core.Init;
 
@@ -68,7 +65,6 @@ pub const RemoveUUID = Core.RemoveUUID;
 
 pub const GetWorldID = Core.GetWorldID;
 
-pub const AddResolveUUID = Core.AddResolveUUID;
 
 pub const clearAndFree = Core.clearAndFree;
 

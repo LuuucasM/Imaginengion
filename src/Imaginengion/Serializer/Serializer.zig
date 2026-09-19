@@ -8,11 +8,6 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 
-const EManager = @import("../ECSManagers/EManager.zig");
-const GCManager = @import("../ECSManagers/GCManager.zig");
-const PManager = @import("../ECSManagers/PManager.zig");
-const SManager = @import("../ECSManagers/SManager.zig");
-
 const TextSerializer = @import("TextSerializer.zig");
 
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
@@ -135,36 +130,6 @@ pub fn ResolveUUIDs(self: *Serializer) void {
         } else {
             i += 1;
         }
-    }
-}
-
-/// Returns the manager that owns the given ECS object, e.g. for registering its UUID
-pub fn GetObjectManager(object: anytype) *ObjectManagerT(@TypeOf(object)) {
-    const obj_t = @TypeOf(object);
-    if (obj_t == Entity) {
-        return &object.mManager.mEManager;
-    } else if (obj_t == Scene) {
-        return &object.mManager.mSManager;
-    } else if (obj_t == Player) {
-        return &object.mManager.mPManager;
-    } else if (obj_t == GameContext) {
-        return &object.mManager.mGCManager;
-    } else {
-        @compileError(std.fmt.comptimePrint("{s} is not a valid ECS object type", .{@typeName(obj_t)}));
-    }
-}
-
-fn ObjectManagerT(comptime obj_t: type) type {
-    if (obj_t == Entity) {
-        return EManager;
-    } else if (obj_t == Scene) {
-        return SManager;
-    } else if (obj_t == Player) {
-        return PManager;
-    } else if (obj_t == GameContext) {
-        return GCManager;
-    } else {
-        @compileError(std.fmt.comptimePrint("{s} is not a valid ECS object type", .{@typeName(obj_t)}));
     }
 }
 

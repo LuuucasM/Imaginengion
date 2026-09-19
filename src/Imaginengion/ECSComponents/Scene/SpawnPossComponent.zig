@@ -53,9 +53,9 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
 fn ResolveEntityRef(requester: Serializer.Requester, entity_uuid: u64) bool {
     const scene = requester.Scene;
-    const entity_id = scene.mManager.mEManager.GetWorldID(entity_uuid) orelse return false;
+    const entity = scene.mManager.GetObjectByUUID(Entity, entity_uuid) orelse return false;
     //the component may have been removed since the request was made, nothing left to resolve
     const spawn_poss = scene.GetComponent(SpawnPossComponent) orelse return true;
-    spawn_poss.mEntityRef = scene.mManager.GetEntity(@intCast(entity_id));
+    spawn_poss.mEntityRef = entity;
     return true;
 }

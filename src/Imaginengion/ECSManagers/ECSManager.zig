@@ -17,7 +17,6 @@ const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 
 const Serializer = @import("../Serializer/Serializer.zig");
-const ResolveReq = Serializer.ResolveReq;
 
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 
@@ -37,7 +36,6 @@ pub fn Core(comptime Self: type) type {
         pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
             try self.mECSManager.Deinit(engine_context.EngineAllocator());
             self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
-            self.mResolveUUIDList.deinit(engine_context.EngineAllocator());
             self.mEventManager.Deinit(engine_context.EngineAllocator());
         }
 
@@ -85,7 +83,7 @@ pub fn Core(comptime Self: type) type {
 
         pub fn LoadObject(self: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
             const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).CreateConfig.default);
-            engine_context.mSerializer.DeserializeECSObj(engine_context, object: anytype, abs_path: []const u8, comptime deserialize_type: SerializeType)
+            engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
         }
 
         pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
@@ -95,26 +93,21 @@ pub fn Core(comptime Self: type) type {
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             self.mECSManager.clearAndFree(engine_context);
             self.mUUIDToWorldID.clearAndFree(engine_context.EngineAllocator());
-            self.mResolveUUIDList.deinit(engine_context.EngineAllocator());
             self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
         }
 
         //pub fn Copy(self: *AManager, engine_context: *EngineContext, other_scene: *AManager) !void {}
 
-        pub fn AddUUID(self: *Self, engine_allocator: std.mem.Allocator, uuid: u64, world_id: Self.WorldIDT) !void {
-            try self.mUUIDToWlrdID.put(engine_allocator, uuid, world_id);
+        pub fn AddUUID(self: *Self, engine_allocator: std.mem.Allocator, uuid: u64, world_id: UnderlyingObjType(Self)) !void {
+            try self.mUUIDToWorldID.put(engine_allocator, uuid, world_id);
         }
 
-        pub fn RemoveUUID(self: *AManager, uuid: u64) void {
+        pub fn RemoveUUID(self: *Self, uuid: u64) void {
             _ = self.mUUIDToWorldID.remove(uuid);
         }
 
-        pub fn GetWorldID(self: *AManager, uuid: u64) ?UnderlyingObjType(Self) {
+        pub fn GetWorldID(self: *Self, uuid: u64) ?UnderlyingObjType(Self) {
             return self.mUUIDToWorldID.get(uuid);
-        }
-
-        pub fn AddResolveUUID(self: *AManager, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
-            try self.mResolveUUIDList.append(engine_allocator, resolve_req);
         }
 
         fn _ValidateObject(manager_t: type) void {
@@ -165,12 +158,6 @@ pub fn Core(comptime Self: type) type {
                 return Scene.Type;
             } else {
                 @compileError("Not a valid manager type!");
-            }
-        }
-
-        fn UnderlyingCreateFn(manager_t: type) type {
-            if (manager_t == EManager){
-                return EManager.CreateEntity;
             }
         }
     };

@@ -4,7 +4,6 @@ const UUIDComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const Serializer = @import("../../Serializer/Serializer.zig");
 
 //IMGUI
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -37,5 +36,5 @@ pub const jsonParse = Json.jsonParse;
 
 /// Registers the loaded UUID with the manager of whatever object owns this component (entity, scene, ...)
 pub fn PostParse(self: *UUIDComponent, engine_context: *EngineContext, owner: anytype) !void {
-    try Serializer.GetObjectManager(owner).AddUUID(engine_context.EngineAllocator(), self.ID, owner.mID);
+    try owner.mManager.GetManager(@TypeOf(owner)).AddUUID(engine_context.EngineAllocator(), self.ID, owner.mID);
 }

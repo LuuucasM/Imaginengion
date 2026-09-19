@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
 const ECSManager = @import("../ECS/ECSManager.zig");
 const GroupQuery = ECSManager.GroupQuery;
@@ -32,7 +31,6 @@ const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
 pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponentsList);
 pub const EventManagerT = EventManager.EventManager(EventData.EventCategories, EventData.EventT(AssetHandle.Type));
 
-pub const WorldIDT = AssetHandle.Type;
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -111,7 +109,6 @@ pub const uninit: AManager = .{
     .mECSManager = .empty,
     .mEventManager = .empty,
     .mUUIDToWorldID = .empty,
-    .mResolveUUIDList = .empty,
     .mCWD = undefined,
     .mCWDPath = .empty,
     .mProjectDirectory = null,
@@ -125,7 +122,6 @@ const Core = ECSCore(AManager);
 mECSManager: ECSManagerT,
 
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, AssetHandle.Type),
-mResolveUUIDList: std.ArrayList(ResolveReq),
 
 mEventManager: EventManagerT,
 
@@ -457,7 +453,6 @@ pub const RemoveUUID = Core.RemoveUUID;
 
 pub const GetWorldID = Core.GetWorldID;
 
-pub const AddResolveUUID = Core.AddResolveUUID;
 
 fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source: FileSource) !AssetHandle.Type {
     const zone = Tracy.ZoneInit("AssetManager CreateAssetFile", @src());

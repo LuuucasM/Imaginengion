@@ -1,6 +1,5 @@
 const std = @import("std");
 
-const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
@@ -27,14 +26,12 @@ pub const empty: GCManager = .{
     .mECSmanager = .empty,
     .mEventManager = .empty,
     .mUUIDToWorldID = .empty,
-    .mResolveUUIDList = .empty,
 };
 
 mECSManager: ECSManagerT,
 mEventManager: EventManagerT,
 
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, GameContext.Type),
-mResolveUUIDList: std.ArrayList(ResolveReq),
 
 pub const CreateGameContext = Core.CreateObj;
 
@@ -44,7 +41,6 @@ pub const Duplicate = Core.Duplicate;
 
 pub const AddComponent = Core.AddComponent;
 
-pub const AddResolveUUID = Core.AddResolveUUID;
 
 pub const AddUUID = Core.AddUUID;
 
