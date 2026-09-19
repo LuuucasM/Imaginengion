@@ -10,6 +10,9 @@ const EventData = @import("../Events/EManagerData.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityComponentsList = EntityComponents.ComponentsList;
+const NameComponent = EntityComponents.NameComponent;
+const UUIDComponent = EntityComponents.UUIDComponent;
+const TransformComponent = EntityComponents.TransformComponent;
 const ECSCore = @import("ECSManager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -74,8 +77,8 @@ pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_
         const callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
-                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
-                    return @as(EManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
+                    return @as(EManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
@@ -91,4 +94,21 @@ pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT)
         .Default => unreachable,
     }
     return .Continue;
+}
+
+pub fn ApplyConfig(self: *EManager, engine_context: *EngineContext, entity_id: Entity.Type, config: Entity.CreateConfig) !void {
+    if (config.bAddName) {
+        const name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
+        self.AddComponent(engine_context, entity_id, name_component);
+    }
+    if (config.bAddUUID) {
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, entity_id, UUIDComponent{ .ID = new_random.int(u64) });
+        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, entity_id);
+    }
+    if (config.bAddTransform) {
+        self.AddComponent(engine_context, entity_id, TransformComponent.empty);
+    }
 }

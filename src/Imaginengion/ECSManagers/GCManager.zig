@@ -9,6 +9,8 @@ const EventData = @import("../Events/GCManagerData.zig");
 
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const GCComponents = @import("../ECSComponents/GCComponents.zig");
+const NameComponent = GCComponents.NameComponent;
+const UUIDComponent = GCComponents.UUIDComponent;
 const GCComponentsList = GCComponents.ComponentsList;
 const ECSCore = @import("ECSManager.zig").Core;
 
@@ -73,8 +75,8 @@ pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event
         const callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
-                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
-                    return @as(GCManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
+                    return @as(GCManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
@@ -100,4 +102,18 @@ pub fn OnManagerEvents(_: *GCManager, _: *EngineContext, event: EventData.EventT
         .Default => unreachable,
     }
     return .Continue;
+}
+
+pub fn ApplyConfig(self: *GCManager, engine_context: *EngineContext, gamecontext_id: GameContext.Type, config: GameContext.CreateConfig) !void {
+    if (config.bAddName) {
+        const name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
+        self.AddComponent(engine_context, gamecontext_id, name_component);
+    }
+    if (config.bAddUUID) {
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, gamecontext_id, UUIDComponent{ .ID = new_random.int(u64) });
+        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, gamecontext_id);
+    }
 }

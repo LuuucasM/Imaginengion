@@ -5,6 +5,7 @@ const Texture2D = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
@@ -31,6 +32,16 @@ pub const TexOptions = struct {
         try ImguiManager.RenderUVCoords(open, &self.mTextureUV0, &self.mTextureUV1, engine_context, texture_asset);
         try ImguiManager.RenderBool(&self.mIsTransparent, "Can Be Transparent?");
     }
+
+    const Json = JsonUtils.JsonFields(TexOptions, .{
+        .Color = "mColor",
+        .TilingFactor = "mTilingFactor",
+        .TextureUV0 = "mTextureUV0",
+        .TextureUV1 = "mTextureUV1",
+        .IsTransparent = "mIsTransparent",
+    });
+    pub const jsonStringify = Json.jsonStringify;
+    pub const jsonParse = Json.jsonParse;
 };
 
 pub const TextureFormat = enum(u4) {

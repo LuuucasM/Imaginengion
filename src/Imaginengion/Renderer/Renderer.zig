@@ -13,7 +13,7 @@ const AssetHandle = @import("../Assets/AssetHandle.zig");
 const ShaderAsset = Assets.ShaderAsset;
 const Texture2D = Assets.Texture2D;
 
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
@@ -237,7 +237,7 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
-    const scene_manager = switch (world_type) {
+    const world_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
@@ -248,7 +248,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     try self.BeginRendering(engine_context.EngineAllocator());
 
     //get all the shapes
-    const shapes_ids = try scene_manager.GetEntityGroup(
+    const shapes_ids = try world_manager.GetEntityGroup(
         engine_context.FrameAllocator(),
         GroupQuery{
             .Or = &[_]GroupQuery{
@@ -267,7 +267,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     for (shapes_ids.items) |shape_id| {
         //TODO: distance based culling
         //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
-        const shape_entity = scene_manager.GetEntity(shape_id);
+        const shape_entity = world_manager.GetEntity(shape_id);
         try self.DrawShape(engine_context, shape_entity);
     }
 

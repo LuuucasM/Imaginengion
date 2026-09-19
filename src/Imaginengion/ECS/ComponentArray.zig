@@ -25,9 +25,9 @@ pub fn ComponentArray(entity_t: type) type {
                     try self.Deinit(engine_context);
                     engine_context.EngineAllocator().destroy(self);
                 }
-                fn DuplicateEntity(ptr: *anyopaque, original_entity_id: entity_t, new_entity_id: entity_t) void {
+                fn DuplicateEntity(ptr: *anyopaque, eng_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.DuplicateEntity(original_entity_id, new_entity_id);
+                    self.DuplicateEntity(eng_allocator, original_entity_id, new_entity_id);
                 }
                 fn HasComponent(ptr: *anyopaque, entityID: entity_t) bool {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -66,8 +66,8 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn Deinit(self: Self, engine_context: *EngineContext) !void {
             try self.mVtable.Deinit(self.mPtr, engine_context);
         }
-        pub fn DuplicateEntity(self: Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
-            self.mVtable.DuplicateEntity(self.mPtr, original_entity_id, new_entity_id);
+        pub fn DuplicateEntity(self: Self, engine_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) void {
+            self.mVtable.DuplicateEntity(self.mPtr, engine_allocator, original_entity_id, new_entity_id);
         }
         pub fn RemoveComponent(self: Self, engine_context: *EngineContext, entityID: entity_t) anyerror!void {
             try self.mVtable.RemoveComponent(self.mPtr, engine_context, entityID);

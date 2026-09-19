@@ -1,8 +1,8 @@
 const std = @import("std");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
-const ECSManagerScenes = SceneManager.ECSManagerScenes;
-const ECSManagerEntities = SceneManager.ECSManagerEntities;
+const ECSManagerScenes = WorldManager.ECSManagerScenes;
+const ECSManagerEntities = WorldManager.ECSManagerEntities;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
@@ -26,9 +26,8 @@ const ScriptAsset = Assets.ScriptAsset;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 const SceneInputPressed = SceneComponents.InputPressedScript;
 const SceneOnUpdate = SceneComponents.OnUpdateScript;
-const NewEntityConfig = Entity.NewEntityConfig;
+const NewEntityConfig = Entity.CreateConfig;
 const ECSCore = @import("ECSObject.zig").Core;
-const WorldManager = @import("../Core/WorldManager.zig");
 const AssetHandle = @import("AssetHandle.zig");
 
 const Core = ECSCore(Scene);
@@ -67,6 +66,8 @@ pub const Delete = Core.Delete;
 
 pub const Duplicate = Core.Duplicate;
 
+pub const GetIterator = Core.GetIterator;
+
 pub fn GetSceneComponent(self: Scene) SceneComponent {
     return self.mManager.mSManager.GetSceneComponent(self.mID);
 }
@@ -78,7 +79,7 @@ pub fn GetSceneComponent(self: Scene) SceneComponent {
 //        const new_random = io_source.interface();
 //        const uuid_component = SceneUUIDComponent{ .ID = new_random.int(u64) };
 //        _ = try self.AddComponent(engine_context, uuid_component);
-//        try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
+//        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
 //    }
 //    if (config.bAddSceneName) {
 //        var scene_name_component: SceneNameComponent = .empty;

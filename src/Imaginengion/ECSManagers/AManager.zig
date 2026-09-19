@@ -187,8 +187,8 @@ pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
 pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_source: AssetSource) !AssetHandle {
     if (asset_source == .Default) {
         return AssetHandle{
-            .mID = AssetHandle.NullHandle,
-            .mAssetManager = self,
+            .mID = AssetHandle.NullObject,
+            .mManager = self,
         };
     }
 
@@ -208,7 +208,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
     if (asset_id) |id| {
         std.debug.assert(self.mECSManager.HasComponent(AssetMetaData, id));
         self.mECSManager.GetComponent(AssetMetaData, id).?.mRefs += 1;
-        return AssetHandle{ .mID = id, .mAssetManager = self };
+        return AssetHandle{ .mID = id, .mManager = self };
     } else {
         const new_asset_id = switch (asset_source) {
             .File => |f| try self.CreateAssetFile(engine_context, f),
@@ -220,7 +220,7 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
 
         try self.AddUUID(engine_allocator, asset_hash, new_asset_id);
 
-        return AssetHandle{ .mID = new_asset_id, .mAssetManager = self };
+        return AssetHandle{ .mID = new_asset_id, .mManager = self };
     }
 }
 
@@ -419,8 +419,8 @@ pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_
         const callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
-                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
-                    return @as(AManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
+                    return @as(AManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };

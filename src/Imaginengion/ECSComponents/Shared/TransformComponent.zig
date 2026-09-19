@@ -3,7 +3,8 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const MathTypes = @import("../../Math/MathTypes.zig");
 const MathUtils = @import("../../Math/MathUtils.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
-const Entity = @import("../Entity.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 //imgui stuff
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -28,6 +29,12 @@ pub const Ind: usize = blk: {
             break :blk i + 5; // add 2 because 0 is parent component and 1 is child component provided by the ECS
         }
     }
+};
+
+pub const empty: TransformComponent = .{
+    .Translation = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
+    .Rotation = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
+    .Scale = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
 };
 
 Translation: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
@@ -63,47 +70,14 @@ pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
     try ImguiManager.RenderVec3(&self.Scale, "Scale", 1.0, 0.075, 100.0);
 }
 
-pub fn jsonStringify(self: *const TransformComponent, jw: anytype) !void {
-    try jw.beginObject();
+const Json = JsonUtils.JsonFields(TransformComponent, .{
+    .Translation = "Translation",
+    .Rotation = "Rotation",
+    .Scale = "Scale",
+});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;
 
-    try jw.objectField("Translation");
-    try jw.write(self.Translation);
-
-    try jw.objectField("Rotation");
-    try jw.write(self.Rotation);
-
-    try jw.objectField("Scale");
-    try jw.write(self.Scale);
-
-    try jw.endObject();
-}
-
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!TransformComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    var result: TransformComponent = .{};
-
-    while (true) {
-        const token = try reader.next();
-
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-
-        if (std.mem.eql(u8, field_name, "Translation")) {
-            result.Translation = try std.json.innerParse(Vec3(f32), frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Rotation")) {
-            result.Rotation = try std.json.innerParse(Quat(f32), frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Scale")) {
-            result.Scale = try std.json.innerParse(Vec3(f32), frame_allocator, reader, options);
-        }
-    }
-
-    return result;
-}
-
-pub fn PostParse(_: TransformComponent, owning_entity: Entity) !void {
+pub fn PostParse(_: *TransformComponent, _: *EngineContext, owning_entity: Entity) !void {
     owning_entity._CalculateWorldTransform();
 }

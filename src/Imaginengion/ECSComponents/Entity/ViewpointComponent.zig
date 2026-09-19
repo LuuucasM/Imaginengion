@@ -9,6 +9,7 @@ const Vec4 = MathTypes.Vec4;
 const ViewpointComponent = @This();
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable = true;
 pub const Name: []const u8 = "LensComponent";
@@ -85,54 +86,16 @@ pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
     try ImguiManager.RenderFloat4Drag(&self.mAreaRect, "Area Rect", 0.01, 0, 1.0);
 }
 
-pub fn jsonStringify(self: *const ViewpointComponent, jw: anytype) !void {
-    try jw.beginObject();
+const Json = JsonUtils.JsonFields(ViewpointComponent, .{
+    .IsFixedAspectRatio = "mIsFixedAspectRatio",
+    .PerspectiveFOVRad = "mPerspectiveFOVRad",
+    .PerspectiveNear = "mPerspectiveNear",
+    .PerspectiveFar = "mPerspectiveFar",
+    .AreaRect = "mAreaRect",
+});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;
 
-    try jw.objectField("IsFixedAspectRatio");
-    try jw.write(self.mIsFixedAspectRatio);
-
-    try jw.objectField("PerspectiveFOVRad");
-    try jw.write(self.mPerspectiveFOVRad);
-
-    try jw.objectField("PerspectiveNear");
-    try jw.write(self.mPerspectiveNear);
-
-    try jw.objectField("PerspectiveFar");
-    try jw.write(self.mPerspectiveFar);
-
-    try jw.objectField("AreaRect");
-    try jw.write(self.mAreaRect);
-
-    try jw.endObject();
-}
-
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!ViewpointComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    var result: ViewpointComponent = .{};
-
-    while (true) {
-        const token = try reader.next();
-
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-
-        if (std.mem.eql(u8, field_name, "IsFixedAspectRatio")) {
-            result.mIsFixedAspectRatio = try std.json.innerParse(bool, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "PerspectiveFOVRad")) {
-            result.mPerspectiveFOVRad = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "PerspectiveNear")) {
-            result.mPerspectiveNear = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "PerspectiveFar")) {
-            result.mPerspectiveFar = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "AreaRect")) {
-            result.mAreaRect = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
-        }
-    }
-    result.RecalculateProjection();
-
-    return result;
+pub fn PostParse(self: *ViewpointComponent, _: *EngineContext, _: anytype) !void {
+    self.RecalculateProjection();
 }

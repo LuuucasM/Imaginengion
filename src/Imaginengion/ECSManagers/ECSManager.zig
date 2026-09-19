@@ -42,23 +42,21 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            //TODO
-            //creates the object in the ecs
-            //runs Self's config function for init config
+            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.EngineAllocator()), .mManager = self };
+            self.ApplyConfig(new_obj, config);
+            return new_obj;
         }
 
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            //TODO
-            //this function should only create a  new event for deletion
-            //then at the end of the frame when we process deleted stuff
+            self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .ID = obj_id });
         }
 
-        pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) UnderlyingObj(Self) {
-            //TODO
+        pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
+            return try self.mECSManager.DuplicateEntity(engine_context.EngineAllocator(), obj_id);
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType) !UnderlyingObj(Self) {
-            //TODO
+            return try self.mECSManager.AddChild(engine_context.EngineAllocator(), parent_id, child_type);
         }
 
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
@@ -78,15 +76,16 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn SaveObject(_: *Self, engine_context: *EngineContext, object: UnderlyingObj(Self)) !void {
-            engine_context.mSerializer.SaveECSObject(engine_context, object);
+            try engine_context.mSerializer.SaveECSObject(engine_context, object);
         }
 
         pub fn SaveObjectAs(_: *Self, engine_context: *EngineContext, object: UnderlyingObj(Self)) !void {
-            engine_context.mSerializer.SaveECSObjAs(engine_context, object);
+            try engine_context.mSerializer.SaveECSObjAs(engine_context, object);
         }
 
-        pub fn LoadObject(_: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
-            //TODO
+        pub fn LoadObject(self: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
+            const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).CreateConfig.default);
+            engine_context.mSerializer.DeserializeECSObj(engine_context, object: anytype, abs_path: []const u8, comptime deserialize_type: SerializeType)
         }
 
         pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
@@ -166,6 +165,12 @@ pub fn Core(comptime Self: type) type {
                 return Scene.Type;
             } else {
                 @compileError("Not a valid manager type!");
+            }
+        }
+
+        fn UnderlyingCreateFn(manager_t: type) type {
+            if (manager_t == EManager){
+                return EManager.CreateEntity;
             }
         }
     };

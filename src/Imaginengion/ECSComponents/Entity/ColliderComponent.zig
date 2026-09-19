@@ -3,6 +3,7 @@ const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const CollisionFilter = @import("../../Physics/CollisionManager.zig").CollisionFilter;
 const CollisionManager = @import("../../Physics/CollisionManager.zig");
 const Entity = @import("../Entity.zig");
@@ -33,3 +34,10 @@ pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
     try ImguiManager.RenderEnum(Shapes, &self.mShape, "Collider Type");
     try self.mCollisionFilter.ImguiRender();
 }
+
+const Json = JsonUtils.JsonFields(ColliderComponent, .{
+    .Shape = "mShape",
+    .CollisionFilter = "mCollisionFilter",
+});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;

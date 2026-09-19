@@ -62,7 +62,7 @@ const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
 const RunSettings = @import("../Imgui/RunSettings.zig");
 
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EditorProgram = @This();
@@ -117,7 +117,7 @@ mEditorViewportPlayer: Player = .{},
 
 //misc stuff
 mEditorFont: AssetHandle = .{},
-mActiveWorld: *SceneManager = undefined,
+mActiveWorld: *WorldManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
@@ -336,9 +336,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
 }
 
-pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: WindowEvent) anyerror!bool {
+pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const WindowEvent) anyerror!bool {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
-    switch (event) {
+    switch (event.*) {
         .WindowClose => _ = self.OnWindowClose(engine_context),
         .KeyboardPressed => |e| _ = try self.OnKeyboardPressedEvent(engine_context, e),
         else => {},
@@ -351,32 +351,32 @@ fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
     return false;
 }
 
-pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: GameEvent) anyerror!bool {
+pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const GameEvent) anyerror!bool {
     _ = engine_context;
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
 
-    switch (event) {
+    switch (event.*) {
         .DestroySceneEvent, .DestroyEntityEvent, .DestroyPlayerEvent, .DestroyGameContextEvent => {
             if (self.mSelectedObj) |*selected_obj| {
-                if (selected_obj.* == .entity and event == .DestroyEntityEvent) {
+                if (selected_obj.* == .entity and event.* == .DestroyEntityEvent) {
                     self.mSelectedObj = null;
-                } else if (selected_obj.* == .scene_layer and event == .DestroySceneEvent) {
+                } else if (selected_obj.* == .scene_layer and event.* == .DestroySceneEvent) {
                     self.mSelectedObj = null;
-                } else if (selected_obj.* == .player and event == .DestroyPlayerEvent) {
+                } else if (selected_obj.* == .player and event.* == .DestroyPlayerEvent) {
                     self.mSelectedObj = null;
-                } else if (selected_obj.* == .gamecontext and event == .DestroyGameContextEvent) {
+                } else if (selected_obj.* == .gamecontext and event.* == .DestroyGameContextEvent) {
                     self.mSelectedObj = null;
                 }
             }
         },
-        else => std.log.err("This event type has not been handled by EditorProgram.OnGameEvent: {s}", .{@tagName(event)}),
+        else => std.log.err("This event type has not been handled by EditorProgram.OnGameEvent: {s}", .{@tagName(event.*)}),
     }
     return true;
 }
 
-pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: ImguiEvent) anyerror!bool {
+pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const ImguiEvent) anyerror!bool {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
-    switch (event) {
+    switch (event.*) {
         .MoveSceneEvent => |e| {
             try engine_context.mGameWorld.MoveScene(engine_context.FrameAllocator(), e.Scene, e.NewPos);
         },
@@ -543,15 +543,15 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
     const zone = Tracy.ZoneInit("RenderWorldTarget", @src());
     defer zone.Deinit();
 
-    const scene_manager = self.mActiveWorld;
+    const world_manager = self.mActiveWorld;
 
     const frame_allocator = engine_context.FrameAllocator();
 
-    var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
-    try FilterPossessedPlayers(frame_allocator, &player_entites, scene_manager);
+    var player_entites = try world_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
+    try FilterPossessedPlayers(frame_allocator, &player_entites, world_manager);
 
     for (player_entites.items) |player_id| {
-        const player = scene_manager.GetPlayer(player_id);
+        const player = world_manager.GetPlayer(player_id);
         const possess_component = player.GetComponent(PossessComponent).?;
         const render_component = player.GetComponent(PlayerRenderComponent).?;
         const transform_component = possess_component.mPossessedEntity.GetComponent(TransformComponent).?;
@@ -617,17 +617,17 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     const zone = Tracy.ZoneInit("RenderViewportWorlds", @src());
     defer zone.Deinit();
 
-    const scene_manager = self.mActiveWorld;
+    const world_manager = self.mActiveWorld;
     const frame_allocator = engine_context.FrameAllocator();
 
     var frame_buffers: std.ArrayList(*ComputeOutput) = .empty;
     var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
-    var player_entites = try scene_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
-    try FilterPossessedPlayers(frame_allocator, &player_entites, scene_manager);
+    var player_entites = try world_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
+    try FilterPossessedPlayers(frame_allocator, &player_entites, world_manager);
 
     for (player_entites.items) |player_id| {
-        const player = scene_manager.GetPlayer(player_id);
+        const player = world_manager.GetPlayer(player_id);
         const possess_component = player.GetComponent(PossessComponent).?;
         const render_component = player.GetComponent(PlayerRenderComponent).?;
         const viewpoint_component = possess_component.mPossessedEntity.GetComponent(ViewpointComponent).?;
@@ -645,12 +645,12 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     }
 }
 
-fn FilterPossessedPlayers(frame_allocator: std.mem.Allocator, player_entities: *std.ArrayList(Player.Type), scene_manager: *SceneManager) !void {
+fn FilterPossessedPlayers(frame_allocator: std.mem.Allocator, player_entities: *std.ArrayList(Player.Type), world_manager: *WorldManager) !void {
     var start: usize = 0;
     var end: usize = 0;
 
     while (start < end) {
-        const player = scene_manager.GetPlayer(player_entities.items[start]);
+        const player = world_manager.GetPlayer(player_entities.items[start]);
         const possess_component = player.GetComponent(PossessComponent).?;
         if (possess_component.mPossessedEntity.IsActive()) {
             start += 1;
@@ -663,12 +663,12 @@ fn FilterPossessedPlayers(frame_allocator: std.mem.Allocator, player_entities: *
     player_entities.shrinkAndFree(frame_allocator, end);
 }
 
-fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entities: *std.ArrayList(Entity.Type), scene_manager: *SceneManager) !void {
+fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entities: *std.ArrayList(Entity.Type), world_manager: *WorldManager) !void {
     var start: usize = 0;
     var end: usize = 0;
 
     while (start < end) {
-        const entity = scene_manager.GetEntity(player_slot_entities.items[start]);
+        const entity = world_manager.GetEntity(player_slot_entities.items[start]);
         const player_slot_component = entity.GetComponent(PlayerSlotComponent).?;
         if (player_slot_component.mPlayerEntity.IsActive()) {
             const player = player_slot_component.mPlayerEntity;

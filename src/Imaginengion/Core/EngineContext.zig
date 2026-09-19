@@ -8,7 +8,7 @@ const Program = @import("../Programs/Program.zig");
 const Application = @import("../Core/Application.zig");
 const Tracy = @import("Tracy.zig");
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
@@ -65,9 +65,9 @@ mPhysicsManager: PhysicsManager = .{},
 mGameEventManager: GameEventManager = .{},
 mSystemEventManager: WindowEventManager = .{},
 
-mGameWorld: SceneManager = .{},
-mEditorWorld: SceneManager = .{},
-mSimulateWorld: SceneManager = .{},
+mGameWorld: WorldManager = .{},
+mEditorWorld: WorldManager = .{},
+mSimulateWorld: WorldManager = .{},
 
 mImguiManager: ImguiManager = .{},
 mImguiEventManager: ImguiEventManager = .{},

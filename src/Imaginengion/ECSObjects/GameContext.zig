@@ -86,7 +86,7 @@ pub fn CreateChild(self: GameContext, engine_context: *EngineContext, child_type
 //        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
 //        const new_random = io_source.interface();
 //        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-//        try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+//        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
 //    }
 //    if (config.bAddNameComponent) {
 //        var new_name_component: NameComponent = .empty;

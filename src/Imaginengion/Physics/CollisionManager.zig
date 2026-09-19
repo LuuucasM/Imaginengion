@@ -8,7 +8,7 @@ const ColliderComponent = EntityComponents.ColliderComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const Entity = @import("../GameObjects/Entity.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
 const CollisionType = @import("Collisions.zig").CollisionType;
@@ -75,18 +75,18 @@ pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void 
 
 ///Checks the whole scene for objects that can possibly collide.
 /// For the contact sets the entity origin, target, and collision type.
-pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, scene_manager: *SceneManager) !void {
+pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
     const zone = Tracy.ZoneInit("CollisionManager::BroadPassf", @src());
     defer zone.Deinit();
 
-    const colliders_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
+    const colliders_arr = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
 
     for (0..colliders_arr.items.len) |i| {
-        const entity_origin = scene_manager.GetEntity(colliders_arr.items[i]);
+        const entity_origin = world_manager.GetEntity(colliders_arr.items[i]);
+        const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
         for (i + 1..colliders_arr.items.len) |j| {
-            const entity_target = scene_manager.GetEntity(colliders_arr.items[j]);
+            const entity_target = world_manager.GetEntity(colliders_arr.items[j]);
 
-            const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
             const collider_target = entity_target.GetComponent(ColliderComponent).?;
 
             const collision_type = GetCollisionType(collider_origin, collider_target);
@@ -244,9 +244,11 @@ pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !
 }
 
 pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) void {
-    self._LastCache.deinit(engine_context.EngineAllocator());
-    self._LastCache = self._CurrentCache;
-    self._CurrentCache = .empty;
+    _ = engine_context;
+    // Swap instead of deinit+reset so the stale cache's backing storage is
+    // reused as next pass's _CurrentCache instead of being freed and regrown.
+    std.mem.swap(std.AutoArrayHashMapUnmanaged(u64, ContactCache), &self._LastCache, &self._CurrentCache);
+    self._CurrentCache.clearRetainingCapacity();
     self._BlockingContacts.clearRetainingCapacity();
     self._OverlapContacts.clearRetainingCapacity();
 }

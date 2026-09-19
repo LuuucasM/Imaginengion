@@ -33,11 +33,14 @@ pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponen
 
     const delta = target_pos.SubVec(origin_pos);
 
-    const dist = delta.Len();
     const radius_sum = origin_scale.x + target_scale.x;
 
-    if (dist >= radius_sum) return false; //not a collision
+    // Compare squared distances first to avoid paying for a sqrt on pairs
+    // that don't even overlap (the common case in a broad-phase pass).
+    const dist_sq = delta.Dot(delta);
+    if (dist_sq >= radius_sum * radius_sum) return false; //not a collision
 
+    const dist = @sqrt(dist_sq);
     const penetration = radius_sum - dist;
 
     var normal = std.mem.zeroes(Vec3(f32));

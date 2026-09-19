@@ -18,10 +18,9 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const Player = @import("Player.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const AssetHandle = @import("AssetHandle.zig");
 const ECSCore = @import("ECSObject.zig").Core;
-const WorldManager = @import("../Core/WorldManager.zig");
 
 const Core = ECSCore(Entity);
 
@@ -31,14 +30,13 @@ pub const CreateConfig = struct {
     bAddUUID: bool,
     bAddName: bool,
     bAddTransform: bool,
-};
 
-pub const DefaultConfig: CreateConfig = .{
-    .bAddUUID = true,
-    .bAddName = true,
-    .bAddTransform = true,
+    pub const default: CreateConfig = .{
+        .bAddUUID = true,
+        .bAddName = true,
+        .bAddTransform = true,
+    };
 };
-
 pub const Type = u32;
 pub const NullObject: Type = std.math.maxInt(Type);
 const Entity = @This();
@@ -119,7 +117,7 @@ pub fn _CalculateWorldTransform(self: Entity) void {
         var child_component = self.GetComponent(EntityChildComponent);
 
         while (child_component != null) {
-            const parent_entity = Entity{ .mEntityID = child_component.?.mParent, .mSceneManager = self.mSceneManager };
+            const parent_entity = Entity{ .mEntityID = child_component.?.mParent, .mWorldManager = self.mWorldManager };
 
             if (parent_entity.GetComponent(TransformComponent)) |parent_transform| {
                 translation_out = translation_out.AddVec(parent_transform.Translation);
@@ -143,7 +141,7 @@ pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: 
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-        try self.mSceneManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
     }
     if (config.bAddName) {
         var new_name_component: NameComponent = .empty;

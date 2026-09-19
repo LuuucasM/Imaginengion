@@ -24,7 +24,7 @@ pub const empty: InputManager = .{
     ._MouseScrolledDelta = .{ .x = 0.0, .y = 0.0 },
 };
 
-pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
+pub fn Init(self: InputManager, engine_allocator: std.mem.Allocator) !void {
     try self._KeyPressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.ScanCodes).@"enum".field_names.len);
     try self._MousePressedSet.ensureTotalCapacity(engine_allocator, @typeInfo(InputEnums.MouseCodes).@"enum".field_names.len);
 }
@@ -52,16 +52,16 @@ pub fn IsMouseRepeated(self: InputManager, button: InputEnums.MouseCodes) bool {
     }
     return false;
 }
-pub fn GetMousePosition(self: *InputManager) Vec2(f32) {
+pub fn GetMousePosition(self: InputManager) Vec2(f32) {
     return self._MousePosition;
 }
-pub fn GetMousePositionDelta(self: *InputManager) Vec2(f32) {
+pub fn GetMousePositionDelta(self: InputManager) Vec2(f32) {
     return self._MousePositionDelta;
 }
-pub fn GetMouseScrolled(self: *InputManager) Vec2(f32) {
+pub fn GetMouseScrolled(self: InputManager) Vec2(f32) {
     return self._MouseScrolled;
 }
-pub fn GetMouseScrolledDelta(self: *InputManager) Vec2(f32) {
+pub fn GetMouseScrolledDelta(self: InputManager) Vec2(f32) {
     return self._MouseScrolledDelta;
 }
 

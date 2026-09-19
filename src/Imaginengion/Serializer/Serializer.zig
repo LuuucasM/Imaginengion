@@ -1,26 +1,19 @@
 const std = @import("std");
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const Entity = @import("../GameObjects/Entity.zig");
-const Player = @import("../Players/Player.zig");
-const GameMode = @import("../GameModes/GameMode.zig");
-
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-
-const Renderer = @import("../Renderer/Renderer.zig");
 
 const EngineContext = @import("../Core/EngineContext.zig");
-const WorldType = EngineContext.WorldType;
-
-const WriteStream = std.json.Stringify;
-const StringifyOptions = std.json.Stringify.Options{ .whitespace = .indent_2 };
-const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
-
-const WorldManager = @import("../Core/WorldManager.zig");
-
-const TextSerializer = @import("TextSerializer.zig");
-const BinarySerializer = @import("BinarySerializer.zig");
 
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
+const GameContext = @import("../ECSObjects/GameContext.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
+
+const EManager = @import("../ECSManagers/EManager.zig");
+const GCManager = @import("../ECSManagers/GCManager.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
+
+const TextSerializer = @import("TextSerializer.zig");
 
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
@@ -31,121 +24,173 @@ pub const SerializeType = enum {
     Binary,
 };
 
+/// The ECS object that owns the component currently being deserialized
 pub const Requester = union(enum(u16)) {
     Entity: Entity,
-    Scene: SceneLayer,
+    Scene: Scene,
     Player: Player,
-    GameMode: GameMode,
+    GameContext: GameContext,
 
-    pub const default: Requester = .{ .Entity = .{} };
+    pub const default: Requester = .{ .Entity = .uninit };
+
+    pub fn Init(object: anytype) Requester {
+        const obj_t = @TypeOf(object);
+        if (obj_t == Entity) {
+            return .{ .Entity = object };
+        } else if (obj_t == Scene) {
+            return .{ .Scene = object };
+        } else if (obj_t == Player) {
+            return .{ .Player = object };
+        } else if (obj_t == GameContext) {
+            return .{ .GameContext = object };
+        } else {
+            @compileError(std.fmt.comptimePrint("{s} is not a valid requester type", .{@typeName(obj_t)}));
+        }
+    }
+
+    pub fn IsActive(self: Requester) bool {
+        return switch (self) {
+            inline else => |object| object.IsActive(),
+        };
+    }
 };
 
+/// A reference to another ECS object (stored as a UUID in the file) that cannot be turned into a world ID
+/// until the object it points at has been loaded. Resolve looks the UUID up and writes the result into the
+/// requester's component, returning false if the UUID is not loaded yet so the request is retried later.
+/// It re-fetches the component rather than holding a pointer to it because component storage can move.
 pub const ResolveReq = struct {
     Requester: Requester,
     UUID: u64,
-    SetLoc: *anyopaque,
+    Resolve: *const fn (requester: Requester, uuid: u64) bool,
 };
 
 pub const DeserializeContext = struct {
     requester: Requester,
-    component_ptr: *anyopaque,
 
     pub const empty: DeserializeContext = .{
         .requester = .default,
-        .component_ptr = undefined,
     };
 };
 
 pub const empty: Serializer = .{
-    .mCurrDeserialize = .empty,
     .mFileObjects = .empty,
+    .mPendingResolves = .empty,
+    .mCurrDeserialize = .empty,
 };
 
+/// Object UUID -> the file it was last saved to / loaded from
 mFileObjects: std.AutoHashMapUnmanaged(u64, AssetHandle),
+mPendingResolves: std.ArrayList(ResolveReq),
 mCurrDeserialize: DeserializeContext,
 
-pub fn Deinit(self: Serializer, engine_allocator: std.mem.Allocator) void {
+pub fn Deinit(self: *Serializer, engine_allocator: std.mem.Allocator) void {
     self.mFileObjects.deinit(engine_allocator);
+    self.mPendingResolves.deinit(engine_allocator);
 }
 
-pub fn SaveECSObject(self: Serializer, engine_context: *EngineContext, object: anytype) !void {
-    const uuid = object.GetUUID();
-    if (self.mFileObjects.get(uuid)) |asset_handle| {
+pub fn SaveECSObject(self: *Serializer, engine_context: *EngineContext, object: anytype) !void {
+    if (self.mFileObjects.get(object.GetUUID())) |asset_handle| {
         const file_data = asset_handle.GetFileMetaData();
-        const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath, file_data.mPathType);
-        SerializeECSObject(self, engine_context, object, abs_path, .Text);
+        const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
+        try SerializeECSObject(engine_context, object, abs_path, .Text);
     } else {
-        self.SaveECSObjAs(engine_context, object);
+        try self.SaveECSObjAs(engine_context, object);
     }
 }
 
-pub fn SaveECSObjAs(self: Serializer, engine_context: *EngineContext, object: anytype) !void {
-    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".imsc");
-    if (abs_path.len > 0) {
-        SerializeECSObject(self, engine_context, object, abs_path, .Text);
-        const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
-        const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
-        self.mFileObjects.put(engine_context.EngineAllocator(), object.GetUUID(), asset_handle);
-    }
+pub fn SaveECSObjAs(self: *Serializer, engine_context: *EngineContext, object: anytype) !void {
+    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), FileExtension(@TypeOf(object)));
+    if (abs_path.len == 0) return;
+
+    try SerializeECSObject(engine_context, object, abs_path, .Text);
+    try self.TrackFile(engine_context, object.GetUUID(), abs_path);
 }
 
-fn SerializeECSObject(_: Serializer, engine_context: *EngineContext, object: anytype, abs_path: []const u8, comptime serialize_type: SerializeType) !void {
-    switch (serialize_type) {
-        .Text => TextSerializer.SerializeECSObject(engine_context, object, abs_path),
-    }
-}
-
-pub fn DeserializeECSObj(self: Serializer, engine_context: *EngineContext, object: anytype, abs_path: []const u8, deserialize_type: SerializeType) !void {
+/// Fills an already created object from the file at abs_path. The object should be blank
+/// (created without the default UUID/Name/Transform components) since those come from the file.
+pub fn DeserializeECSObj(self: *Serializer, engine_context: *EngineContext, object: anytype, abs_path: []const u8, comptime deserialize_type: SerializeType) !void {
     switch (deserialize_type) {
-        .Text => TextSerializer.DeserializeECSObj(engine_context, object, abs_path),
+        .Text => try TextSerializer.DeserializeECSObj(engine_context, object, abs_path),
+        .Binary => @compileError("Binary deserialization is not implemented yet"),
     }
 
+    self.ResolveUUIDs();
+
+    try self.TrackFile(engine_context, object.GetUUID(), abs_path);
+}
+
+pub fn AddResolveReq(self: *Serializer, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
+    try self.mPendingResolves.append(engine_allocator, resolve_req);
+}
+
+/// Resolves every pending UUID reference whose target is now loaded. Requests whose target is not loaded
+/// yet are kept for the next call, and requests whose requester has since been destroyed are dropped.
+pub fn ResolveUUIDs(self: *Serializer) void {
+    var i: usize = 0;
+    while (i < self.mPendingResolves.items.len) {
+        const request = self.mPendingResolves.items[i];
+        if (!request.Requester.IsActive() or request.Resolve(request.Requester, request.UUID)) {
+            _ = self.mPendingResolves.swapRemove(i);
+        } else {
+            i += 1;
+        }
+    }
+}
+
+/// Returns the manager that owns the given ECS object, e.g. for registering its UUID
+pub fn GetObjectManager(object: anytype) *ObjectManagerT(@TypeOf(object)) {
+    const obj_t = @TypeOf(object);
+    if (obj_t == Entity) {
+        return &object.mManager.mEManager;
+    } else if (obj_t == Scene) {
+        return &object.mManager.mSManager;
+    } else if (obj_t == Player) {
+        return &object.mManager.mPManager;
+    } else if (obj_t == GameContext) {
+        return &object.mManager.mGCManager;
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not a valid ECS object type", .{@typeName(obj_t)}));
+    }
+}
+
+fn ObjectManagerT(comptime obj_t: type) type {
+    if (obj_t == Entity) {
+        return EManager;
+    } else if (obj_t == Scene) {
+        return SManager;
+    } else if (obj_t == Player) {
+        return PManager;
+    } else if (obj_t == GameContext) {
+        return GCManager;
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not a valid ECS object type", .{@typeName(obj_t)}));
+    }
+}
+
+fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path: []const u8, comptime serialize_type: SerializeType) !void {
+    switch (serialize_type) {
+        .Text => try TextSerializer.SerializeECSObject(engine_context, object, abs_path),
+        .Binary => @compileError("Binary serialization is not implemented yet"),
+    }
+}
+
+/// Remembers which file an object lives in so SaveECSObject can overwrite it without asking again
+fn TrackFile(self: *Serializer, engine_context: *EngineContext, uuid: u64, abs_path: []const u8) !void {
     const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
     const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
-    self.mFileObjects.put(engine_context.EngineAllocator(), object.GetUUID(), asset_handle);
+
+    const entry = try self.mFileObjects.getOrPut(engine_context.EngineAllocator(), uuid);
+    if (entry.found_existing) entry.value_ptr.ReleaseAsset();
+    entry.value_ptr.* = asset_handle;
 }
 
-pub fn ResolveUUIDs(_: Serializer, engine_allocator: std.mem.Allocator, world_manager: *WorldManager) void {
-    var front: usize = 0;
-    var back: usize = scene_manager.mResolveUUIDList.items.len;
-
-    while (front < back) {
-        const request = scene_manager.mResolveUUIDList.items[front];
-
-        const active = switch (request.Requester) {
-            .Entity => |e| e.IsActive(),
-            .Scene => |s| s.IsActive(),
-            .Player => |p| p.IsActive(),
-            .GameMode => |g| g.IsActive(),
-        };
-
-        if (!active) {
-            scene_manager.mResolveUUIDList.items[front] = scene_manager.mResolveUUIDList.items[back - 1];
-            back -= 1;
-            continue;
-        }
-
-        if (scene_manager.GetWorldID(request.UUID)) |world_id| {
-            switch (request.Requester) {
-                .Entity => {
-                    const set_loc: *Entity.Type = @ptrCast(@alignCast(request.SetLoc));
-                    set_loc.* = @intCast(world_id);
-                },
-                .Scene => {
-                    const set_loc: *SceneLayer.Type = @ptrCast(@alignCast(request.SetLoc));
-                    set_loc.* = @intCast(world_id);
-                },
-                .Player => {
-                    const set_loc: *Player.Type = @ptrCast(@alignCast(request.SetLoc));
-                    set_loc.* = @intCast(world_id);
-                },
-                .GameMode => {
-                    const set_loc: *GameMode.Type = @ptrCast(@alignCast(request.SetLoc));
-                    set_loc.* = @intCast(world_id);
-                },
-            }
-        }
-        front += 1;
+fn FileExtension(comptime obj_t: type) [*c]const u8 {
+    if (obj_t == Scene) {
+        return ".imsc";
+    } else if (obj_t == Entity) {
+        return ".imen";
+    } else {
+        @compileError(std.fmt.comptimePrint("Saving {s} to a file is not supported yet", .{@typeName(obj_t)}));
     }
-    scene_manager.mResolveUUIDList.shrinkAndFree(engine_allocator, back);
 }

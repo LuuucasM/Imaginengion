@@ -55,7 +55,8 @@ pub fn Vec2(comptime number_type: type) type {
             if (len <= 0) {
                 return Self{ .x = 0, .y = 0 };
             } else {
-                return Self{ .x = self.x / len, .y = self.y / len };
+                const inv_len = 1.0 / len;
+                return FromVector(self.ToVector() * @as(VectorT, @splat(inv_len)));
             }
         }
 
@@ -70,8 +71,8 @@ pub fn Vec2(comptime number_type: type) type {
                 self.x = 0;
                 self.y = 0;
             } else {
-                self.x /= len;
-                self.y /= len;
+                const inv_len = 1.0 / len;
+                self.* = FromVector(v * @as(VectorT, @splat(inv_len)));
             }
         }
 
@@ -176,11 +177,7 @@ pub fn Vec3(comptime number_type: type) type {
 
         //TODO: no test
         pub fn Neg(self: Self) Self {
-            return Self{
-                .x = -self.x,
-                .y = -self.y,
-                .z = -self.z,
-            };
+            return FromVector(-self.ToVector());
         }
 
         //TODO: no test
@@ -190,20 +187,12 @@ pub fn Vec3(comptime number_type: type) type {
 
         //TODO: no test
         pub fn Abs(self: Self) Self {
-            return Self{
-                .x = @abs(self.x),
-                .y = @abs(self.y),
-                .z = @abs(self.z),
-            };
+            return FromVector(@abs(self.ToVector()));
         }
 
         //TODO: no test
         pub fn ClampScalar(self: Self, scalar: number_type) Self {
-            return Self{
-                .x = @max(self.x, scalar),
-                .y = @max(self.y, scalar),
-                .z = @max(self.z, scalar),
-            };
+            return FromVector(@max(self.ToVector(), @as(VectorT, @splat(scalar))));
         }
 
         pub fn DegreesToQuat(self: Self) Quat(number_type) {
@@ -225,7 +214,8 @@ pub fn Vec3(comptime number_type: type) type {
             if (len <= 0) {
                 return Self{ .x = 0, .y = 0, .z = 0 };
             } else {
-                return Self{ .x = self.x / len, .y = self.y / len, .z = self.z / len };
+                const inv_len = 1.0 / len;
+                return FromVector(self.ToVector() * @as(VectorT, @splat(inv_len)));
             }
         }
 
@@ -241,9 +231,8 @@ pub fn Vec3(comptime number_type: type) type {
                 self.y = 0;
                 self.z = 0;
             } else {
-                self.x /= len;
-                self.y /= len;
-                self.z /= len;
+                const inv_len = 1.0 / len;
+                self.* = FromVector(v * @as(VectorT, @splat(inv_len)));
             }
         }
 
@@ -377,7 +366,8 @@ pub fn Vec4(comptime number_type: type) type {
             if (len <= 0) {
                 return Self{ .x = 0, .y = 0, .z = 0, .w = 0 };
             } else {
-                return Self{ .x = self.x / len, .y = self.y / len, .z = self.z / len, .w = self.w / len };
+                const inv_len = 1.0 / len;
+                return FromVector(self.ToVector() * @as(VectorT, @splat(inv_len)));
             }
         }
 
@@ -393,10 +383,8 @@ pub fn Vec4(comptime number_type: type) type {
                 self.z = 0;
                 self.w = 0;
             } else {
-                self.x /= len;
-                self.y /= len;
-                self.z /= len;
-                self.w /= len;
+                const inv_len = 1.0 / len;
+                self.* = FromVector(self.ToVector() * @as(VectorT, @splat(inv_len)));
             }
         }
 
@@ -567,10 +555,11 @@ pub fn Mat4(comptime number_type: type) type {
 
             const Dot1 = self.cols[0].Dot(Vec4T.FromVector(Col0));
 
-            inverse[0] /= @as(Vec4T.VectorT, @splat(Dot1));
-            inverse[1] /= @as(Vec4T.VectorT, @splat(Dot1));
-            inverse[2] /= @as(Vec4T.VectorT, @splat(Dot1));
-            inverse[3] /= @as(Vec4T.VectorT, @splat(Dot1));
+            const inv_dot1 = 1.0 / Dot1;
+            inverse[0] *= @as(Vec4T.VectorT, @splat(inv_dot1));
+            inverse[1] *= @as(Vec4T.VectorT, @splat(inv_dot1));
+            inverse[2] *= @as(Vec4T.VectorT, @splat(inv_dot1));
+            inverse[3] *= @as(Vec4T.VectorT, @splat(inv_dot1));
 
             return .{ .cols = [4]Vec4T{
                 .{ .x = inverse[0][0], .y = inverse[0][1], .z = inverse[0][2], .w = inverse[0][3] },
@@ -674,10 +663,8 @@ pub fn Quat(comptime number_type: type) type {
                 self.y = 0;
                 self.z = 0;
             } else {
-                self.w /= len;
-                self.x /= len;
-                self.y /= len;
-                self.z /= len;
+                const inv_len = 1.0 / len;
+                self.* = FromVector(self.ToVector() * @as(VectorT, @splat(inv_len)));
             }
         }
 

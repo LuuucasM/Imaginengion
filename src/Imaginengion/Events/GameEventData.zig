@@ -11,7 +11,7 @@ const GameContext = @import("../GameModes/GameMode.zig");
 const EGameContextComponents = @import("../GameModes/Components.zig").EComponents;
 
 pub const EventCategories = enum {
-    FrameEnd,
+    EndOfFrame,
 };
 
 pub const Event = union(enum) {

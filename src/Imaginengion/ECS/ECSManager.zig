@@ -107,12 +107,12 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return self.GetGroup(allocator, .{ .Component = SkipFieldComponent });
         }
 
-        pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t) !entity_t {
+        pub fn DuplicateEntity(self: *Self, engine_allocator: std.mem.Allocator, original_entity_id: entity_t) !entity_t {
             std.debug.assert(self.IsActiveEntity(original_entity_id));
             const zone = Tracy.ZoneInit("ECSM DuplicateEntity", @src());
             defer zone.Deinit();
             const new_entity_id = try self.CreateEntity();
-            self.mComponentManager.DuplicateEntity(original_entity_id, new_entity_id);
+            self.mComponentManager.DuplicateEntity(engine_allocator, original_entity_id, new_entity_id);
             return new_entity_id;
         }
 
@@ -289,9 +289,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             try self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list);
         }
 
-        pub fn OnECSEvent(ecs_manager: *anyopaque, engine_context: *EngineContext, event: ECSEventData.EventT(entity_t)) anyerror!bool {
+        pub fn OnECSEvent(ecs_manager: *anyopaque, engine_context: *EngineContext, event: *const ECSEventData.EventT(entity_t)) anyerror!bool {
             const self: *Self = @ptrCast(@alignCast(ecs_manager));
-            switch (event) {
+            switch (event.*) {
                 .DestroyEntity => |e| {
                     try self._InternalDestroyEntity(engine_context, e.mEntityID);
                 },

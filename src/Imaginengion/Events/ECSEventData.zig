@@ -1,5 +1,5 @@
 pub const EventCategories = enum(u8) {
-    Remove,
+    EndOfFrame,
 };
 
 pub fn EventT(entity_t: type) type {

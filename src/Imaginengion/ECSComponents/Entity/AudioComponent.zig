@@ -1,10 +1,10 @@
 const std = @import("std");
-const AssetHandle = @import("../../Assets/AssetHandle.zig");
+const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
 const Assets = @import("../../Assets/Assets.zig");
 const FileMetaData = Assets.FileMetaData;
-const PathType = @import("../../Assets/AssetManager.zig").PathType;
 const Entity = @import("../Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
@@ -41,7 +41,7 @@ mNext: Entity.Type = Entity.NullEntity,
 
 mAudioType: AudioType = .Audio2D,
 mPlaybackState: PlaybackState = .Ready,
-mAudioAsset: AssetHandle = .{},
+mAudioAsset: AssetHandle = .uninit,
 mCursor: u64 = 0,
 mVolume: f32 = 1.0,
 mPitch: f32 = 1.0,
@@ -73,74 +73,12 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     try ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
 }
 
-pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
-    try jw.beginObject();
-
-    try jw.objectField("AudioType");
-    try jw.write(self.mAudioType);
-
-    try jw.objectField("FilePath");
-    const asset_file_data = self.mAudioAsset.GetFileMetaData();
-    try jw.write(asset_file_data.mRelPath.items);
-
-    try jw.objectField("PathType");
-    try jw.write(asset_file_data.mPathType);
-
-    try jw.objectField("Volume");
-    try jw.write(self.mVolume);
-
-    try jw.objectField("Pitch");
-    try jw.write(self.mPitch);
-
-    try jw.objectField("Loop");
-    try jw.write(self.mLoop);
-
-    try jw.endObject();
-}
-
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AudioComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
-
-    var result: AudioComponent = .{};
-
-    while (true) {
-        const token = try reader.next();
-
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-
-        if (std.mem.eql(u8, field_name, "AudioType")) {
-            result.mAudioType = try std.json.innerParse(AudioType, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "FilePath")) {
-            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
-
-            try SkipToken(reader); //skip PathType object field
-
-            const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
-
-            result.mAudioAsset = engine_context.mAssetManager.GetAssetHandleRef(
-                engine_context,
-                .{ .File = .{ .rel_path = parsed_path, .path_type = parsed_path_type } },
-            ) catch |err| {
-                std.debug.panic("error: {}\n", .{err});
-            };
-        } else if (std.mem.eql(u8, field_name, "Volume")) {
-            result.mVolume = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Pitch")) {
-            result.mPitch = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Loop")) {
-            result.mLoop = try std.json.innerParse(bool, frame_allocator, reader, options);
-        }
-    }
-
-    return result;
-}
-
-fn SkipToken(reader: *std.json.Reader) !void {
-    _ = try reader.next();
-}
+const Json = JsonUtils.JsonFields(AudioComponent, .{
+    .AudioType = "mAudioType",
+    .Audio = "mAudioAsset",
+    .Volume = "mVolume",
+    .Pitch = "mPitch",
+    .Loop = "mLoop",
+});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;

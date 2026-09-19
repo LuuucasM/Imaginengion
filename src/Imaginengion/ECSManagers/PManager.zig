@@ -9,6 +9,8 @@ const EventData = @import("../Events/PManagerData.zig");
 
 const Player = @import("../ECSObjects/Player.zig");
 const PComponents = @import("../ECSComponents/PComponents.zig");
+const NameComponent = PComponents.NameComponent;
+const UUIDComponent = PComponents.UUIDComponent;
 const PComponentsList = PComponents.ComponentsList;
 const ECSCore = @import("ECSManager.zig").Core;
 
@@ -73,8 +75,8 @@ pub fn ProcessEvents(self: *PManager, comptime event_data: type, comptime event_
         const callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
-                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
-                    return @as(PManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
+                    return @as(PManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
@@ -100,4 +102,18 @@ pub fn OnManagerEvents(_: *PManager, _: *EngineContext, event: EventData.EventT)
         .Default => unreachable,
     }
     return .Continue;
+}
+
+pub fn ApplyConfig(self: *PManager, engine_context: *EngineContext, player_id: Player.Type, config: Player.CreateConfig) !void {
+    if (config.bAddName) {
+        const name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
+        self.AddComponent(engine_context, player_id, name_component);
+    }
+    if (config.bAddUUID) {
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });
+        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, player_id);
+    }
 }

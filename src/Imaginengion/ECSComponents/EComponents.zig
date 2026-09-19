@@ -47,6 +47,7 @@ pub const ComponentsList = [_]type{
 };
 
 ///This is an array of components that should be serialized
+/// (ScriptComponent is not listed, scripts are saved separately and recreated with AddScript)
 pub const SerializeList = [_]type{
     AISlotComponent,
     AudioComponent,
@@ -60,7 +61,6 @@ pub const SerializeList = [_]type{
     RigidBodyComponent,
     TextComponent,
     TransformComponent,
-    ScriptComponent,
     ViewpointComponent,
 };
 

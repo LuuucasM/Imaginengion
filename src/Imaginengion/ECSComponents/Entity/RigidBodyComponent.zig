@@ -6,6 +6,7 @@ const Material = @import("../../Physics/Material.zig");
 const RigidBodyComponent = @This();
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "RigidBodyComponent";
@@ -83,4 +84,16 @@ pub fn AddVelocity(self: *RigidBodyComponent, velocity: Vec3(f32)) void {
 ///Get the velocity
 pub fn GetVelocity(self: *const RigidBodyComponent) Vec3(f32) {
     return self._Velocity;
+}
+
+//only the authored values are saved, the underscore runtime state is rebuilt from them
+const Json = JsonUtils.JsonFields(RigidBodyComponent, .{
+    .Mass = "mMass",
+    .Material = "mMaterialData",
+});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;
+
+pub fn PostParse(self: *RigidBodyComponent, _: *EngineContext, _: anytype) !void {
+    self._InvMass = if (self.mMass != 0.0) 1.0 / self.mMass else 0.0;
 }

@@ -1,7 +1,7 @@
 const Player = @import("../ECSObjects/Player.zig");
 
 pub const EventCategories = enum(u8) {
-    Remove,
+    EndOfFrame,
 };
 
 pub const EventT = union(enum) {

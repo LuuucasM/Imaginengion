@@ -3,7 +3,7 @@ const std = @import("std");
 const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
 const Entity = @import("../GameObjects/Entity.zig");
 const SceneLayer = @import("../Scene/SceneLayer.zig");
@@ -28,7 +28,7 @@ pub fn Init(self: ECSDisplayPanel) void {
     _ = self;
 }
 
-pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, world_type: EngineContext.WorldType, comptime ecs_type: SceneManager.ECSType, selected_object: *?SelectedObject) !void {
+pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, world_type: EngineContext.WorldType, comptime ecs_type: WorldManager.ECSType, selected_object: *?SelectedObject) !void {
     const zone = Tracy.ZoneInit("ECS Display OIR", @src());
     defer zone.Deinit();
 
@@ -38,7 +38,7 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     var already_popup = false;
     const available_region = imgui.igGetContentRegionAvail();
 
-    const scene_manager = switch (world_type) {
+    const world_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Simulate => &engine_context.mSimulateWorld,
         .Editor => &engine_context.mEditorWorld,
@@ -52,10 +52,10 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     //child that is the width of the entire available region is needed so we can drag scenes from the content browser to load the scene
     if (imgui.igBeginChild_Str(@tagName(ecs_type), available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         switch (ecs_type) {
-            .GameObj => try RenderObjects(Entity, engine_context, scene_manager, &already_popup),
-            .Scenes => try RenderObjects(SceneLayer, engine_context, scene_manager, &already_popup),
-            .Players => try RenderObjects(Player, engine_context, scene_manager, &already_popup),
-            .GameModes => try RenderObjects(GameMode, engine_context, scene_manager, &already_popup),
+            .GameObj => try RenderObjects(Entity, engine_context, world_manager, &already_popup),
+            .Scenes => try RenderObjects(SceneLayer, engine_context, world_manager, &already_popup),
+            .Players => try RenderObjects(Player, engine_context, world_manager, &already_popup),
+            .GameModes => try RenderObjects(GameMode, engine_context, world_manager, &already_popup),
         }
     }
     imgui.igEndChild();
@@ -67,10 +67,10 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
         defer imgui.igEndPopup();
         already_popup = true;
         switch (ecs_type) {
-            .GameObj => try HandleWindowMenu(Entity, engine_context, selected_object, scene_manager),
-            .Scenes => try HandleWindowMenu(SceneLayer, engine_context, selected_object, scene_manager),
-            .Players => try HandleWindowMenu(Player, engine_context, selected_object, scene_manager),
-            .GameModes => try HandleWindowMenu(GameMode, engine_context, selected_object, scene_manager),
+            .GameObj => try HandleWindowMenu(Entity, engine_context, selected_object, world_manager),
+            .Scenes => try HandleWindowMenu(SceneLayer, engine_context, selected_object, world_manager),
+            .Players => try HandleWindowMenu(Player, engine_context, selected_object, world_manager),
+            .GameModes => try HandleWindowMenu(GameMode, engine_context, selected_object, world_manager),
         }
     }
 }
@@ -79,16 +79,16 @@ pub fn OnTogglePanelEvent(self: *ECSDisplayPanel) void {
     self._P_Open = !self._P_Open;
 }
 
-fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, scene_manager: *SceneManager, already_popup: *bool) !void {
+fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, world_manager: *WorldManager, already_popup: *bool) !void {
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
     const EntityTagQuery = GroupQuery{ .Component = EntityTagComponent };
     const ChildQuery = GroupQuery{ .Component = Traits.ChildComponent };
 
-    const objects_list = try Traits.GetGroupFn(scene_manager, frame_allocator, .{ .Not = .{ .mFirst = &EntityTagQuery, .mSecond = &ChildQuery } });
+    const objects_list = try Traits.GetGroupFn(world_manager, frame_allocator, .{ .Not = .{ .mFirst = &EntityTagQuery, .mSecond = &ChildQuery } });
     for (objects_list.items) |object_id| {
-        const object = Traits.GetObject(object_id, scene_manager);
+        const object = Traits.GetObject(object_id, world_manager);
         try RenderObject(ObjectType, engine_context, object, already_popup);
     }
 }
@@ -159,23 +159,23 @@ fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext,
     }
 }
 
-fn HandleWindowMenu(comptime ObjectType: type, engine_context: *EngineContext, selected_object: *?SelectedObject, scene_manager: *SceneManager) !void {
+fn HandleWindowMenu(comptime ObjectType: type, engine_context: *EngineContext, selected_object: *?SelectedObject, world_manager: *WorldManager) !void {
     const Traits = ObjectTraits(ObjectType);
-    try Traits.HandleWindowContextMenu(engine_context, selected_object, scene_manager);
+    try Traits.HandleWindowContextMenu(engine_context, selected_object, world_manager);
 }
 
 fn ObjectTraits(comptime T: type) type {
     if (T == Entity) {
         return struct {
-            pub const ParentComponent = SceneManager.ECSManagerGameObj.ParentComponent;
-            pub const ChildComponent = SceneManager.ECSManagerGameObj.ChildComponent;
-            pub const GetGroupFn = SceneManager.GetEntityGroup;
+            pub const ParentComponent = WorldManager.ECSManagerGameObj.ParentComponent;
+            pub const ChildComponent = WorldManager.ECSManagerGameObj.ChildComponent;
+            pub const GetGroupFn = WorldManager.GetEntityGroup;
             const Self = @This();
             pub fn ID(entity: Entity) u64 {
                 return @intCast(entity.mEntityID);
             }
-            pub fn GetObject(entity_id: u64, scene_manager: *SceneManager) Entity {
-                return scene_manager.GetEntity(@intCast(entity_id));
+            pub fn GetObject(entity_id: u64, world_manager: *WorldManager) Entity {
+                return world_manager.GetEntity(@intCast(entity_id));
             }
             pub fn HandleDragDropSource(entity: Entity) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -197,7 +197,7 @@ fn ObjectTraits(comptime T: type) type {
                     );
                 }
             }
-            pub fn HandleWindowContextMenu(engine_context: *EngineContext, selected_object: *?SelectedObject, _: *SceneManager) !void {
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, selected_object: *?SelectedObject, _: *WorldManager) !void {
                 var is_scene_layer = false;
                 if (selected_object.*) |obj| {
                     if (std.meta.activeTag(obj) == .scene_layer) {
@@ -218,15 +218,15 @@ fn ObjectTraits(comptime T: type) type {
         };
     } else if (T == SceneLayer) {
         return struct {
-            pub const ParentComponent = SceneManager.ECSManagerScenes.ParentComponent;
-            pub const ChildComponent = SceneManager.ECSManagerScenes.ChildComponent;
-            pub const GetGroupFn = SceneManager.GetSceneGroup;
+            pub const ParentComponent = WorldManager.ECSManagerScenes.ParentComponent;
+            pub const ChildComponent = WorldManager.ECSManagerScenes.ChildComponent;
+            pub const GetGroupFn = WorldManager.GetSceneGroup;
             const Self = @This();
             pub fn ID(scene_layer: SceneLayer) u64 {
                 return @intCast(scene_layer.mSceneID);
             }
-            pub fn GetObject(scene_id: u64, scene_manager: *SceneManager) SceneLayer {
-                return scene_manager.GetSceneLayer(@intCast(scene_id));
+            pub fn GetObject(scene_id: u64, world_manager: *WorldManager) SceneLayer {
+                return world_manager.GetSceneLayer(@intCast(scene_id));
             }
             pub fn HandleDragDropSource(scene_layer: SceneLayer) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -252,9 +252,9 @@ fn ObjectTraits(comptime T: type) type {
                     );
                 }
             }
-            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
                 if (imgui.igMenuItem_Bool("New Scene", "", false, true)) {
-                    _ = try scene_manager.NewScene(engine_context, .GameLayer, .{});
+                    _ = try world_manager.NewScene(engine_context, .GameLayer, .{});
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: SceneLayer) !void {
@@ -267,16 +267,16 @@ fn ObjectTraits(comptime T: type) type {
         };
     } else if (T == Player) {
         return struct {
-            pub const ParentComponent = SceneManager.ECSManagerPlayer.ParentComponent;
-            pub const ChildComponent = SceneManager.ECSManagerPlayer.ChildComponent;
-            pub const GetGroupFn = SceneManager.GetPlayerGroup;
+            pub const ParentComponent = WorldManager.ECSManagerPlayer.ParentComponent;
+            pub const ChildComponent = WorldManager.ECSManagerPlayer.ChildComponent;
+            pub const GetGroupFn = WorldManager.GetPlayerGroup;
             const Self = @This();
 
             pub fn ID(entity: Player) u64 {
                 return @intCast(entity.mEntityID);
             }
-            pub fn GetObject(player_id: u64, scene_manager: *SceneManager) Player {
-                return scene_manager.GetPlayer(@intCast(player_id));
+            pub fn GetObject(player_id: u64, world_manager: *WorldManager) Player {
+                return world_manager.GetPlayer(@intCast(player_id));
             }
             pub fn HandleDragDropSource(player: Player) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -298,9 +298,9 @@ fn ObjectTraits(comptime T: type) type {
                     );
                 }
             }
-            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
                 if (imgui.igMenuItem_Bool("New Player", "", false, true)) {
-                    _ = try scene_manager.CreatePlayer(engine_context, .{});
+                    _ = try world_manager.CreatePlayer(engine_context, .{});
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Player) !void {
@@ -313,16 +313,16 @@ fn ObjectTraits(comptime T: type) type {
         };
     } else if (T == GameMode) {
         return struct {
-            pub const ParentComponent = SceneManager.ECSManagerGameMode.ParentComponent;
-            pub const ChildComponent = SceneManager.ECSManagerGameMode.ChildComponent;
-            pub const GetGroupFn = SceneManager.GetGameModeGroup;
+            pub const ParentComponent = WorldManager.ECSManagerGameMode.ParentComponent;
+            pub const ChildComponent = WorldManager.ECSManagerGameMode.ChildComponent;
+            pub const GetGroupFn = WorldManager.GetGameModeGroup;
             const Self = @This();
 
             pub fn ID(entity: GameMode) u64 {
                 return @intCast(entity.mEntityID);
             }
-            pub fn GetObject(gamemode_id: u64, scene_manager: *SceneManager) GameMode {
-                return scene_manager.GetGameMode(@intCast(gamemode_id));
+            pub fn GetObject(gamemode_id: u64, world_manager: *WorldManager) GameMode {
+                return world_manager.GetGameMode(@intCast(gamemode_id));
             }
             pub fn HandleDragDropSource(game_mode: GameMode) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
@@ -344,9 +344,9 @@ fn ObjectTraits(comptime T: type) type {
                     );
                 }
             }
-            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, scene_manager: *SceneManager) !void {
+            pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
                 if (imgui.igMenuItem_Bool("New Game Mode", "", false, true)) {
-                    _ = try scene_manager.CreateGameMode(engine_context, .{});
+                    _ = try world_manager.CreateGameMode(engine_context, .{});
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: GameMode) !void {

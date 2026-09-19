@@ -48,7 +48,9 @@ pub fn Core(comptime Self: type) type {
             _FirstID: Self.Type,
             _IsFirst: bool = true,
 
-            pub fn next(self: *Iterator) ?Entity {
+            pub fn next(self: *Iterator) ?Self {
+                if (self._CurrentEntity.mID == Self.NullObject) return null;
+
                 if (self._IsFirst) {
                     @branchHint(.cold);
                     self._IsFirst = false;
@@ -56,13 +58,13 @@ pub fn Core(comptime Self: type) type {
                     if (self._CurrentEntity.mID == self._FirstID) return null;
                 }
 
-                const entity = self._CurrentEntity;
+                const current = self._CurrentEntity;
 
-                const entity_child_component = entity.GetComponent(ChildComponent(Self.Type)).?;
+                const child_component = GetComponent(current, ChildComponent(Self.Type)).?;
 
-                self._CurrentEntity = Entity{ .mEntityID = entity_child_component.mNext, .mSceneManager = entity.mSceneManager };
+                self._CurrentEntity.mID = child_component.mNext;
 
-                return entity;
+                return current;
             }
         };
         pub const UUIDType = u64;

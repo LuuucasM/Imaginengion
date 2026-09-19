@@ -18,7 +18,7 @@ pub fn EventManager(EventData: type) type {
 
         pub const EventCallback = struct {
             mCtx: *anyopaque,
-            mCallbackFn: *const fn (*anyopaque, *EngineContext, EventData.EventT) anyerror!EventResult,
+            mCallbackFn: *const fn (*anyopaque, *EngineContext, *const EventData.EventT) anyerror!EventResult,
             mNode: CallbackList.Node = .{},
         };
 
@@ -53,7 +53,7 @@ pub fn EventManager(EventData: type) type {
             var iter = callback_list.first;
             while (iter) |node| : (iter = node.next) {
                 const event_callback: *EventCallback = @fieldParentPtr("mNode", node);
-                for (events) |event| {
+                for (events) |*event| {
                     _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, event);
                 }
             }

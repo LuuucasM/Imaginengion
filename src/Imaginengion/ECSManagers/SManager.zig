@@ -9,51 +9,27 @@ const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
 const EventData = @import("../Events/SManagerData.zig");
 
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const Entity = @import("../ECSObjects/Entity.zig");
-const ChildType = @import("../ECS/ECSManager.zig").ChildType;
-const ECSCore = @import("ECSManager.zig").Core;
+const ResolveReq = @import("../Serializer/Serializer.zig").ResolveReq;
 
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const EntityComponentsList = EntityComponents.ComponentsList;
-const EEntityComponents = EntityComponents.EComponents;
-const EntityTransformComponent = EntityComponents.TransformComponent;
-const EntityScriptComponent = EntityComponents.ScriptComponent;
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
-const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
-const EntityAISlotComponent = EntityComponents.AISlotComponent;
-const EntityNameComponent = EntityComponents.NameComponent;
-const EntityPlayerSlotComponent = EntityComponents.PlayerSlotComponent;
-const EntityQuadComponent = EntityComponents.QuadComponent;
-const EntityUUIDComponent = EntityComponents.UUIDComponent;
+const EngineContext = @import("../Core/EngineContext.zig");
+
+const WorldManager = @import("../Core/WorldManager.zig");
+
+const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const ECSCore = @import("ECSManager.zig").Core;
 
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
-const ESceneComponents = SceneComponents.EComponents;
 const SceneComponent = SceneComponents.SceneComponent;
-const SceneUUIDComponent = SceneComponents.UUIDComponent;
-const SceneNameComponent = SceneComponents.NameComponent;
+const UUIDComponent = SceneComponents.UUIDComponent;
+const NameComponent = SceneComponents.NameComponent;
 const SceneStackPos = SceneComponents.StackPosComponent;
 //const SceneTransformComponent = SceneComponents.TransformComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 
-const GameContext = @import("../ECSObjects/GameContext.zig");
-const GameModeComponentsList = @import("../ECSComponents/GCComponents.zig").ComponentsList;
-
-const Serializer = @import("../Serializer/Serializer.zig");
-const ResolveReq = Serializer.ResolveReq;
-
-const AssetComponents = @import("../ECSComponents/AComponents.zig");
-const Asset = @import("../ECSObjects/Asset.zig");
-const ScriptAsset = AssetComponents.ScriptAsset;
-const FileMetaData = AssetComponents.FileMetaData;
-const EngineContext = @import("../Core/EngineContext.zig");
-
-const Player = @import("../ECSObjects/Player.zig");
-const PlayerComponents = @import("../ECSComponents/PComponents.zig");
-const PossessComponent = PlayerComponents.PossessComponent;
-const PlayerMic = PlayerComponents.MicComponent;
+const Entity = @import("../ECSObjects/Entity.zig");
+const EComponents = @import("../ECSComponents/EComponents.zig");
+const EntitySceneComponent = EComponents.EntitySceneComponent;
 
 pub const EventManagerT = EventManager.EventManager(EventData);
 
@@ -148,8 +124,8 @@ pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_
         const callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
-                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: event_data.EventT) anyerror!EventResult {
-                    return @as(SManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event);
+                fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
+                    return @as(SManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
@@ -162,7 +138,7 @@ pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_
 
 pub fn OnManagerEvents(self: *SManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {
-        .ToDestroySceneEvent => |destroy_event| {
+        .ToDestroyScene => |destroy_event| {
             const scene = destroy_event.Scene;
             const scene_entities = try scene.GetEntityGroup(engine_context.FrameAllocator(), EntitySceneComponent);
 
@@ -269,4 +245,18 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
         self.mGameLayerInsertIndex -= 1;
     }
     self.mNumofLayers -= 1;
+}
+
+pub fn ApplyConfig(self: *SManager, engine_context: *EngineContext, player_id: Scene.Type, config: Scene.CreateConfig) !void {
+    if (config.bAddName) {
+        const name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
+        self.AddComponent(engine_context, player_id, name_component);
+    }
+    if (config.bAddUUID) {
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const new_random = io_source.interface();
+        const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });
+        try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, player_id);
+    }
 }

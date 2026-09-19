@@ -6,6 +6,7 @@ const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComputeOutput = @import("../../Renderer/Renderer.zig").ComputeOutput;
 const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const RenderTargetComponent = @This();
 
@@ -29,38 +30,20 @@ pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
     return self.mComputeTexture.GetColorTexture(0);
 }
 
+//nothing to save, the render target is recreated on load
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
     try jw.beginObject();
-
-    try jw.objectField("IsExist");
-    try jw.write(0);
-
     try jw.endObject();
 }
 
 pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!RenderTargetComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
+    try reader.skipValue();
 
-    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
-
-    while (true) {
-        const token = try reader.next();
-
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-
-        if (std.mem.eql(u8, field_name, "IsExist")) {
-            continue;
-        }
-    }
+    const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
 
     var compute_texture: ComputeOutput = .empty;
     compute_texture.Init(engine_context, 1600, 900) catch |err| {
-        std.debug.print("{}", .{err});
-        @panic("couldnt make frame buffer ahhh!");
+        std.debug.panic("Failed to create render target while deserializing: {}", .{err});
     };
 
     return RenderTargetComponent{ .mComputeTexture = compute_texture };

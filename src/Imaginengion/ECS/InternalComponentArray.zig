@@ -16,16 +16,15 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             }
             self.mComponents.Deinit(engine_context.EngineAllocator());
         }
-        pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) void {
+        pub fn DuplicateEntity(self: *Self, engine_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(original_entity_id));
-            std.debug.assert(self.mComponents.HasSparse(new_entity_id));
 
-            self.mComponents.GetValueBySparse(new_entity_id).* = self.mComponents.GetValueBySparse(original_entity_id).*;
+            try self.AddComponent(engine_allocator, new_entity_id, self.GetComponent(original_entity_id).?.*);
         }
         pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component: component_type) !*component_type {
             std.debug.assert(!self.mComponents.HasSparse(entity_id));
 
-            return self.mComponents.AddValue(engine_allocator, entity_id, component);
+            return try self.mComponents.AddValue(engine_allocator, entity_id, component);
         }
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) !void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
@@ -42,7 +41,10 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             }
             return null;
         }
-        pub fn GetComponentRaw(self: Self, enttiy_id: entity_t) *component_type {
+        pub fn GetComponentOrErr(self: Self, enttiy_id: entity_t) !*component_type {
+            return self.mComponents.GetValueBySparse(enttiy_id);
+        }
+        pub fn GetComponentAssume(self: Self, enttiy_id: entity_t) *component_type {
             return self.mComponents.GetValueBySparse(enttiy_id);
         }
         pub fn ResetComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component: component_type) void {

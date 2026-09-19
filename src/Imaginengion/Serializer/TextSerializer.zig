@@ -1,344 +1,208 @@
 const std = @import("std");
 
-const SceneComponents = @import("../ECSComponents/SComponents.zig");
-const SceneComponent = SceneComponents.SceneComponent;
-const SceneScriptComponent = SceneComponents.ScriptComponent;
-const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(Scene.Type);
-const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(Scene.Type);
-const SceneUUIDComponent = SceneComponents.UUIDComponent;
-
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const EntityTransformComponent = EntityComponents.TransformComponent;
-const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
-const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
-const EntityTextComponent = EntityComponents.TextComponent;
-const EntityUUIDComponent = EntityComponents.UUIDComponent;
-
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const EngineContext = @import("../Core/EngineContext.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
-const EngineContext = @import("../Core/EngineContext.zig");
 
-const WriteStream = std.json.Stringify;
-const StringifyOptions = std.json.Stringify.Options{ .whitespace = .indent_2 };
-const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len };
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 
-const TextSerializer = @This();
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 
-pub fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
-    const obj_t = @TypeOf(object);
+const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2 };
+const PARSE_OPTIONS: std.json.ParseOptions = .{
+    .allocate = .alloc_if_needed,
+    .max_value_len = std.json.default_max_value_len,
+    .ignore_unknown_fields = true,
+};
 
-    if (obj_t == Scene) {
-        SerializeScene(engine_context, object, abs_path);
-    } else if (obj_t == Entity) {
-        SerializeEntity(engine_context, object, abs_path);
-    } else {
-        std.log.err("Currently do not support serialize object of type {s}", .{@typeName(obj_t)});
-    }
-}
+/// Children and scripts are created blank since all of their components come from the file
+const BLANK_ENTITY: Entity.CreateConfig = .{ .bAddUUID = false, .bAddName = false, .bAddTransform = false };
 
-pub fn DeserializeECSObj(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
-    const obj_t = @TypeOf(object);
-
-    if (obj_t == Scene) {
-        DeserializeScene(engine_context, object, abs_path);
-    } else if (obj_t == Entity) {
-        DeserializeEntity(engine_context, object, abs_path);
-    }
-}
+// File layout (the same for scenes and entities, scenes additionally have "Entities"):
+// {
+//   "<Component.Name>": { component json }, ...
+//   "Scripts": [ { ScriptComponent json }, ... ],
+//   "Children": [ { entity }, ... ],   (entities only)
+//   "Entities": [ { entity }, ... ]    (scenes only, the scene's top level entities)
+// }
 
 //==================================SERIALIZING ==================================================
-fn SerializeScene(engine_context: *EngineContext, scene_layer: Scene, abs_path: []const u8) !void {
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
+pub fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
+    const frame_allocator = engine_context.FrameAllocator();
+
+    var out: std.Io.Writer.Allocating = .init(frame_allocator);
     defer out.deinit();
 
-    var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = StringifyOptions };
+    var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = STRINGIFY_OPTIONS };
+    try SerializeObject(&write_stream, frame_allocator, object);
 
-    try SerializeSceneLayer(&write_stream, scene_layer, engine_context.FrameAllocator());
-    try WriteToFile(engine_context, abs_path, out.written());
+    //write the whole file at once so a failed serialize never leaves a half written file behind
+    try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = out.written() });
 }
 
-fn SerializeSceneLayer(write_stream: *WriteStream, scene_layer: Scene, frame_allocator: std.mem.Allocator) anyerror!void {
+fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype) anyerror!void {
+    const obj_t = @TypeOf(object);
+
     try write_stream.beginObject();
 
-    inline for (SceneComponents.SerializeList) |component_type| {
-        try SerializeSceneComponent(write_stream, scene_layer, component_type, component_type.Name);
+    inline for (SerializeList(obj_t)) |component_type| {
+        if (object.GetComponent(component_type)) |component| {
+            try write_stream.objectField(component_type.Name);
+            try write_stream.write(component);
+        }
     }
 
-    try SerializeSceneParentComp(write_stream, scene_layer, frame_allocator);
+    //script children only hold their ScriptComponent + a script type tag that AddScript recreates from the asset
+    var script_iter = object.GetIterator(.Script);
+    if (script_iter.next()) |first_script| {
+        try write_stream.objectField("Scripts");
+        try write_stream.beginArray();
+        try write_stream.write(first_script.GetComponent(ScriptComponent).?);
+        while (script_iter.next()) |script| {
+            try write_stream.write(script.GetComponent(ScriptComponent).?);
+        }
+        try write_stream.endArray();
+    }
 
-    try SerializeSceneEntities(write_stream, scene_layer, frame_allocator);
+    if (obj_t == Entity) {
+        var child_iter = object.GetIterator(.Child);
+        if (child_iter.next()) |first_child| {
+            try write_stream.objectField("Children");
+            try write_stream.beginArray();
+            try SerializeObject(write_stream, frame_allocator, first_child);
+            while (child_iter.next()) |child| {
+                try SerializeObject(write_stream, frame_allocator, child);
+            }
+            try write_stream.endArray();
+        }
+    }
+
+    if (obj_t == Scene) {
+        try SerializeSceneEntities(write_stream, frame_allocator, object);
+    }
 
     try write_stream.endObject();
 }
 
-fn SerializeSceneComponent(write_stream: *WriteStream, scene_layer: Scene, comptime component_type: type, field_name: []const u8) !void {
-    if (scene_layer.GetComponent(component_type)) |component| {
-        try write_stream.objectField(field_name);
-        try write_stream.write(component);
-    }
-}
-
-fn SerializeSceneParentComp(write_stream: *WriteStream, scene_layer: Scene, frame_allocator: std.mem.Allocator) !void {
-    if (scene_layer.GetComponent(SceneParentComponent)) |parent_component| {
-        if (parent_component.mFirstEntity != Entity.NullEntity) {
-            var curr_id = parent_component.mFirstEntity;
-
-            while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-                const child_entity = Scene{ .mSceneID = curr_id, .mSceneManager = scene_layer.mSceneManager };
-
-                try write_stream.objectField("ChildEntity");
-
-                try write_stream.beginObject();
-                try SerializeSceneLayer(write_stream, child_entity, frame_allocator);
-                try write_stream.endObject();
-
-                const child_component = child_entity.GetComponent(EntityChildComponent).?;
-                curr_id = child_component.mNext;
-            }
-        }
-        if (parent_component.mFirstScript != Scene.NullScene) {
-            var curr_id = parent_component.mFirstScript;
-
-            while (true) : (if (curr_id == parent_component.mFirstScript) break) {
-                const script_entity = Scene{ .mSceneID = curr_id, .mSceneManager = scene_layer.mSceneManager };
-
-                try write_stream.objectField("ScriptEntity");
-
-                try write_stream.beginObject();
-                try SerializeSceneLayer(write_stream, script_entity, frame_allocator);
-                try write_stream.endObject();
-
-                const child_component = script_entity.GetComponent(EntityChildComponent).?;
-                curr_id = child_component.mNext;
-            }
-        }
-    }
-}
-
-fn SerializeSceneEntities(write_stream: *WriteStream, scene_layer: Scene, frame_allocator: std.mem.Allocator) !void {
+fn SerializeSceneEntities(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, scene: Scene) !void {
+    //only the top level entities, children are written by their parent
     const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
     const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
-    const entity_list = try scene_layer.GetEntityGroup(frame_allocator, .{
+    const entity_list = try scene.GetEntityGroup(frame_allocator, .{
         .Not = .{
             .mFirst = &EntitySceneQuery,
             .mSecond = &EntityChildQuery,
         },
     });
 
+    if (entity_list.items.len == 0) return;
+
+    try write_stream.objectField("Entities");
+    try write_stream.beginArray();
     for (entity_list.items) |entity_id| {
-        const entity = Entity{ .mEntityID = entity_id, .mSceneManager = scene_layer.mSceneManager };
-
-        try write_stream.objectField("Entity");
-        try write_stream.beginObject();
-        try SerializeSceneEntity(write_stream, entity);
-        try write_stream.endObject();
+        try SerializeObject(write_stream, frame_allocator, scene.GetEntity(entity_id));
     }
-}
-
-fn SerializeSceneEntity(write_stream: *WriteStream, entity: Entity) !void {
-    inline for (EntityComponents.SerializeList) |component_type| {
-        try SerializeEntityComponent(write_stream, entity, component_type, component_type.Name);
-    }
-    try SerializeEntityParentCompo(write_stream, entity);
-}
-
-fn SerializeEntityComponent(write_stream: *WriteStream, entity: Entity, comptime component_type: type, field_name: []const u8) !void {
-    if (entity.GetComponent(component_type)) |component| {
-        try write_stream.objectField(field_name);
-        try write_stream.write(component);
-    }
-}
-
-fn SerializeEntityParentCompo(write_stream: *WriteStream, entity: Entity) anyerror!void {
-    if (entity.GetComponent(EntityParentComponent)) |parent_component| {
-        if (parent_component.mFirstEntity != Entity.NullEntity) {
-            var curr_id = parent_component.mFirstEntity;
-
-            while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-                const child_entity = Entity{ .mEntityID = curr_id, .mSceneManager = entity.mSceneManager };
-
-                try write_stream.objectField("ChildEntity");
-
-                try write_stream.beginObject();
-                try SerializeSceneEntity(write_stream, child_entity);
-                try write_stream.endObject();
-
-                const child_component = child_entity.GetComponent(EntityChildComponent).?;
-                curr_id = child_component.mNext;
-            }
-        }
-        if (parent_component.mFirstScript != Entity.NullEntity) {
-            var curr_id = parent_component.mFirstScript;
-
-            while (true) : (if (curr_id == parent_component.mFirstScript) break) {
-                const script_entity = Entity{ .mEntityID = curr_id, .mSceneManager = entity.mSceneManager };
-
-                try write_stream.objectField("ScriptEntity");
-
-                try write_stream.beginObject();
-                try SerializeSceneEntity(write_stream, script_entity);
-                try write_stream.endObject();
-
-                const child_component = script_entity.GetComponent(EntityChildComponent).?;
-                curr_id = child_component.mNext;
-            }
-        }
-    }
-}
-
-fn WriteToFile(engine_context: *EngineContext, abs_path: []const u8, data: []const u8) !void {
-    const file = try std.Io.Dir.createFileAbsolute(engine_context.Io(), abs_path, .{ .read = false, .truncate = true });
-    defer file.close(engine_context.Io());
-    try file.writeStreamingAll(engine_context.Io(), data);
-}
-
-pub fn SerializeEntity(engine_context: *EngineContext, entity: Entity, abs_path: []const u8) !void {
-    var out: std.Io.Writer.Allocating = .init(engine_context.FrameAllocator());
-    defer out.deinit();
-
-    var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = StringifyOptions };
-
-    try write_stream.beginObject();
-    try SerializeSceneEntity(&write_stream, entity);
-    try write_stream.endObject();
-
-    try WriteToFile(engine_context, abs_path, out.written());
+    try write_stream.endArray();
 }
 //========================================= END SERIALIZING ===============================================
 
 //====================================== DESRIALIZING ========================================================
-pub fn DeserializeScene(engine_context: *EngineContext, scene_layer: Scene, abs_path: []const u8) !void {
-    const scene_file = try std.Io.Dir.openFileAbsolute(engine_context.Io(), abs_path, .{ .mode = .read_only });
-
-    const scene_contents = try GetSceneContents(engine_context, scene_file);
-
-    var reader = std.Io.Reader.fixed(scene_contents);
-
-    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &reader);
-
-    try SkipToken(&json_reader); //skip the very first begin object at the top level of the file
-
-    try DeSerializeSceneLayer(engine_context, &json_reader, scene_layer);
-
-    const scene_component = scene_layer.GetComponent(SceneComponent).?;
-    _ = try scene_component.mScenePath.print(engine_context.EngineAllocator(), "{s}", .{engine_context.mAssetManager.GetRelPath(abs_path)});
-}
-
-fn GetSceneContents(engine_context: *EngineContext, scene_file: std.Io.File) ![]const u8 {
-    var file_reader = scene_file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
-    return contents;
-}
-
-fn DeSerializeSceneLayer(engine_context: *EngineContext, reader: *std.json.Reader, scene_layer: Scene) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-    while (true) {
-        const token = try reader.next();
-        const token_value = try switch (token) {
-            .end_of_document => break,
-            .object_begin => continue,
-            .object_end => break,
-            .string => |value| value,
-            .number => |value| value,
-
-            else => error.NotExpected,
-        };
-
-        const actual_value = try frame_allocator.dupe(u8, token_value);
-        defer frame_allocator.free(actual_value);
-
-        inline for (SceneComponents.SerializeList) |component_type| {
-            if (std.mem.eql(u8, actual_value, component_type.Name)) {
-                try DeSerializeSceneComp(engine_context, component_type, reader, scene_layer);
-            }
-        }
-
-        if (std.mem.eql(u8, actual_value, "Entity")) {
-            const new_entity = try scene_layer.CreateEntity(engine_context, .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
-            try DeserializeThisEntity(engine_context, reader, new_entity, scene_layer);
-        }
-        if (std.mem.eql(u8, actual_value, "ChildEntity")) {
-            const new_scene = try scene_layer.CreateChild(engine_context, .Entity, .{ .bAddSceneName = false, .bAddSceneUUID = false });
-            try DeSerializeSceneLayer(engine_context, reader, new_scene);
-        }
-        if (std.mem.eql(u8, actual_value, "ScriptEntity")) {
-            const new_scene = try scene_layer.CreateChild(engine_context, .Script, .{ .bAddSceneName = false, .bAddSceneUUID = false });
-            try DeSerializeSceneLayer(engine_context, reader, new_scene);
-        }
-    }
-}
-
-fn DeSerializeSceneComp(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, scene_layer: Scene) !void {
-    const new_component = try scene_layer.AddComponent(engine_context, component_type{});
-    engine_context.mSerializer.mCurrDeserialize = .{ .requester = .{ .Scene = scene_layer }, .component_ptr = new_component };
-    new_component.* = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
-}
-
-fn DeserializeThisEntity(engine_context: *EngineContext, reader: *std.json.Reader, entity: Entity, scene_layer: Scene) !void {
+pub fn DeserializeECSObj(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
     const frame_allocator = engine_context.FrameAllocator();
 
+    const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), abs_path, frame_allocator, .unlimited);
+
+    var scanner = std.json.Scanner.initCompleteInput(frame_allocator, contents);
+    defer scanner.deinit();
+
+    try DeserializeObject(engine_context, &scanner, object);
+
+    if (.end_of_document != try scanner.next()) return error.UnexpectedToken;
+}
+
+fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype) anyerror!void {
+    const obj_t = @TypeOf(object);
+
+    if (.object_begin != try scanner.next()) return error.UnexpectedToken;
+
     while (true) {
-        const token = try reader.nextAlloc(frame_allocator, .alloc_if_needed);
-        const token_value = switch (token) {
-            .string => |value| value,
-            .allocated_string => |value| value,
-            .number => |value| value,
-            .allocated_number => |value| value,
-            .object_begin => continue,
-            .object_end => break,
-            .end_of_document => @panic("This shouldnt happen!"),
-            else => @panic("This shouldnt happen!"),
+        const key = switch (try scanner.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed)) {
+            .object_end => return,
+            inline .string, .allocated_string => |slice| slice,
+            else => return error.UnexpectedToken,
         };
-        const actual_value = try frame_allocator.dupe(u8, token_value);
 
-        inline for (EntityComponents.SerializeList) |component_type| {
-            if (std.mem.eql(u8, actual_value, component_type.Name)) {
-                try DeserializeEntityComponent(engine_context, component_type, reader, entity);
+        if (try DeserializeComponent(engine_context, scanner, object, key)) continue;
+
+        if (std.mem.eql(u8, key, "Scripts")) {
+            try DeserializeScripts(engine_context, scanner, object);
+        } else if (obj_t == Entity and std.mem.eql(u8, key, "Children")) {
+            try DeserializeEntityList(engine_context, scanner, object);
+        } else if (obj_t == Scene and std.mem.eql(u8, key, "Entities")) {
+            try DeserializeEntityList(engine_context, scanner, object);
+        } else {
+            //a component that no longer exists or is no longer serialized, skip it so the rest of the file still loads
+            std.log.warn("Skipping unknown key '{s}' while deserializing {s}", .{ key, @typeName(obj_t) });
+            try scanner.skipValue();
+        }
+    }
+}
+
+/// Returns false if key is not the name of a serializable component for this object type
+fn DeserializeComponent(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype, key: []const u8) !bool {
+    inline for (SerializeList(@TypeOf(object))) |component_type| {
+        if (std.mem.eql(u8, key, component_type.Name)) {
+            //components that need to know their owner while parsing (e.g. to request UUID resolves) read it from here
+            engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object) };
+
+            //parse first then add, so AddComponent can hook up the manager pointers of the parsed value
+            const parsed = try std.json.innerParse(component_type, engine_context.FrameAllocator(), scanner, PARSE_OPTIONS);
+            const new_component = try object.AddComponent(engine_context, parsed);
+            if (@hasDecl(component_type, "PostParse")) {
+                try new_component.PostParse(engine_context, object);
             }
-        }
-
-        if (std.mem.eql(u8, actual_value, "ChildEntity")) {
-            const new_entity = try entity.CreateChild(engine_context, .Entity, .{});
-            try DeserializeThisEntity(engine_context, reader, new_entity, scene_layer);
-        }
-        if (std.mem.eql(u8, actual_value, "ScriptEntity")) {
-            const new_script = try entity.CreateChild(engine_context, .Script, .{ .bAddUUID = false, .bAddName = false, .bAddTransform = false });
-            try DeserializeThisEntity(engine_context, reader, new_script, scene_layer);
+            return true;
         }
     }
+    return false;
 }
 
-fn DeserializeEntityComponent(engine_context: *EngineContext, comptime component_type: type, reader: *std.json.Reader, entity: Entity) !void {
-    const new_component = try entity.AddComponent(engine_context, component_type{});
-    engine_context.mSerializer.mCurrDeserialize = .{ .requester = .{ .Entity = entity }, .component_ptr = new_component };
-    new_component.* = try std.json.innerParse(component_type, engine_context.FrameAllocator(), reader, PARSE_OPTIONS);
-    if (@hasDecl(component_type, "PostParse")) {
-        try new_component.PostParse(entity);
+fn DeserializeScripts(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype) !void {
+    if (.array_begin != try scanner.next()) return error.UnexpectedToken;
+    while (try scanner.peekNextTokenType() != .array_end) {
+        const script_component = try std.json.innerParse(ScriptComponent, engine_context.FrameAllocator(), scanner, PARSE_OPTIONS);
+        if (!script_component.mScriptAssetHandle.IsIDValid()) continue; //the script asset could not be found
+        //AddScript creates the script child and its script type tag component from the asset
+        try object.AddScript(engine_context, script_component.mScriptAssetHandle);
     }
+    _ = try scanner.next();
 }
 
-//note: this function is for deserializing prefabs, not to be confused with DeserializeThisEntity which actually deserializes an entity
-pub fn DeserializeEntity(engine_context: *EngineContext, scene_layer: Scene, abs_path: []const u8) !void {
-    const file = try std.Io.Dir.openFileAbsolute(abs_path, .{});
-    defer file.close(engine_context.Io());
-
-    var file_reader = file.reader(engine_context.Io(), &.{});
-    const contents = try file_reader.interface.allocRemaining(engine_context.FrameAllocator(), .unlimited);
-
-    var reader = std.Io.Reader.fixed(contents);
-
-    var json_reader = std.json.Reader.init(engine_context.FrameAllocator(), &reader);
-    defer json_reader.deinit();
-
-    const new_entity = try scene_layer.CreateBlankEntity();
-    try DeserializeThisEntity(engine_context, &json_reader, new_entity, scene_layer, engine_context.FrameAllocator());
+/// Reads an array of entities, creating each one as a child of parent (an Entity) or as a top level entity of parent (a Scene)
+fn DeserializeEntityList(engine_context: *EngineContext, scanner: *std.json.Scanner, parent: anytype) !void {
+    if (.array_begin != try scanner.next()) return error.UnexpectedToken;
+    while (try scanner.peekNextTokenType() != .array_end) {
+        const new_entity = if (@TypeOf(parent) == Scene)
+            try parent.CreateEntity(engine_context, BLANK_ENTITY)
+        else
+            try parent.CreateChild(engine_context, .Entity, BLANK_ENTITY);
+        try DeserializeObject(engine_context, scanner, new_entity);
+    }
+    _ = try scanner.next();
 }
-
 //======================================================= END DESERIALIZING ==============================================================
 
-fn SkipToken(reader: *std.json.Reader) !void {
-    _ = try reader.next();
+fn SerializeList(comptime obj_t: type) []const type {
+    if (obj_t == Entity) {
+        return &EntityComponents.SerializeList;
+    } else if (obj_t == Scene) {
+        return &SceneComponents.SerializeList;
+    } else {
+        @compileError(std.fmt.comptimePrint("Serializing {s} is not supported yet", .{@typeName(obj_t)}));
+    }
 }

@@ -5,7 +5,7 @@ const LayerType = @import("../Scene/Components/SceneComponent.zig").LayerType;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 pub const EventCategories = enum {
-    RenderEnd,
+    EndOfFrame,
 };
 
 pub const Event = union(enum) {

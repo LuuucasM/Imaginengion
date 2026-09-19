@@ -88,14 +88,14 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn DuplicateEntity(self: *Self, original_entity_id: entity_t, new_entity_id: entity_t) !void {
-            self.CreateEntity(new_entity_id);
+        pub fn DuplicateEntity(self: *Self, engine_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) !void {
+            self.CreateEntity(engine_allocator, new_entity_id);
 
             const original_skipfield_comp = self.GetComponent(SkipFieldComponent, original_entity_id).?;
 
             var field_iter = original_skipfield_comp.mSkipField.Iterator();
             while (field_iter.Next()) |comp_arr_ind| {
-                self.mComponentsArrays.items[comp_arr_ind].DuplicateEntity(original_entity_id, new_entity_id);
+                self.mComponentsArrays.items[comp_arr_ind].DuplicateEntity(engine_allocator, original_entity_id, new_entity_id);
             }
         }
 
@@ -239,11 +239,14 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             if (mask.mNumUnskipped >= SkipFieldComponent.StaticSkipFieldT.SkipFieldSize) return;
             if (result.items.len == 0) return;
 
+            const internal_array_t = InternalComponentArray(entity_t, SkipFieldComponent);
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
+
             var end_index: usize = result.items.len;
             var i: usize = 0;
             while (i < end_index) {
                 const entity_id = result.items[i];
-                const skip_comp = self.GetComponent(SkipFieldComponent, entity_id).?;
+                const skip_comp = internal_array.GetComponent(entity_id).?;
                 if (!skip_comp.mSkipField.IsUnskippedSuperSet(mask)) {
                     result.items[i] = result.items[end_index - 1];
                     end_index -= 1;

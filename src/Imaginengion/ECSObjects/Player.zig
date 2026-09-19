@@ -1,6 +1,6 @@
 const std = @import("std");
 pub const Type = u32;
-pub const ECSManagerPlayer = @import("../Scene/SceneManager.zig").ECSManagerPlayer;
+pub const ECSManagerPlayer = @import("../Core/WorldManager.zig").ECSManagerPlayer;
 pub const NullObject: Type = std.math.maxInt(Type);
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("Entity.zig");
@@ -14,7 +14,7 @@ const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const RenderTargetComponent = PlayerComponents.RenderTargetComponent;
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const PlayerParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
@@ -27,7 +27,6 @@ const AssetHandle = @import("AssetHandle.zig");
 const ScriptComponent = PlayerComponents.ScriptComponent;
 const Player = @This();
 const ECSCore = @import("ECSObject.zig").Core;
-const WorldManager = @import("../Core/WorldManager.zig");
 
 const Core = ECSCore(Player);
 
@@ -99,7 +98,7 @@ pub fn Possess(self: Player, entity: Entity) void {
 //        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
 //        const new_random = io_source.interface();
 //        const new_uuid_component = try self.AddComponent(engine_context, UUIDComponent{ .ID = new_random.int(u64) });
-//        try self.mScenemanager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
+//        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, self.mEntityID);
 //    }
 //    if (config.bAddNameComponent) {
 //        var new_name_component: PlayerNameComponent = .empty;

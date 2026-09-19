@@ -2,7 +2,7 @@ const std = @import("std");
 const AudioContext = @import("AudioContext.zig");
 const ECSManager = @import("../ECS/ECSManager.zig");
 const SPSCRingBuffer = @import("../Core/SPSCRingBuffer.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 const EntityComponents = @import("../GameObjects/Components.zig");
 const MicComponent = EntityComponents.MicComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
@@ -41,7 +41,7 @@ pub fn RemoveAudioBuffer(self: *AudioManager) void {
     self.mAudioContext.RemoveAudioBuffer();
 }
 
-pub fn OnUpdate(self: *AudioManager, delta_time: f32, scene_manager: *SceneManager, mic_component: *MicComponent, mic_transform: *EntityTransformComponent, frame_allocator: std.mem.Allocator) !void {
+pub fn OnUpdate(self: *AudioManager, delta_time: f32, world_manager: *WorldManager, mic_component: *MicComponent, mic_transform: *EntityTransformComponent, frame_allocator: std.mem.Allocator) !void {
     _ = mic_transform; //used later for when dealing with spacialized sounds but for now simply doing 2d sounds
 
     self.mFrameAccumulator += delta_time * SAMPLE_RATE;
@@ -54,7 +54,7 @@ pub fn OnUpdate(self: *AudioManager, delta_time: f32, scene_manager: *SceneManag
 
     if (samples_to_produce == 0) return;
 
-    const audio_entities = try scene_manager.GetEntityGroup(
+    const audio_entities = try world_manager.GetEntityGroup(
         .{ .Component = AudioComponent },
         frame_allocator,
     );
@@ -64,7 +64,7 @@ pub fn OnUpdate(self: *AudioManager, delta_time: f32, scene_manager: *SceneManag
     @memset(mixed_buffer, 0);
 
     for (audio_entities.items) |entity_id| {
-        const entity = scene_manager.GetEntity(entity_id);
+        const entity = world_manager.GetEntity(entity_id);
         const audio_component = entity.GetComponent(AudioComponent).?;
 
         if (audio_component.mPlaybackState != .Playing) continue;

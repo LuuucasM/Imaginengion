@@ -3,6 +3,7 @@ const BUFFER_CAPACITY = @import("../../AudioManager/AudioManager.zig").BUFFER_CA
 const TAudioBuffer = @import("../../AudioManager/AudioManager.zig").TAudioBuffer;
 const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const MicComponent = @This();
 
 pub const Editable: bool = false;
@@ -19,27 +20,7 @@ mAudioBuffer: TAudioBuffer = .default,
 
 pub fn Deinit(_: *MicComponent, _: *EngineContext) !void {}
 
-pub fn jsonStringify(_: *const MicComponent, jw: anytype) !void {
-    try jw.beginObject();
-
-    try jw.objectField("TempVal");
-    try jw.write(123);
-
-    try jw.endObject();
-}
-
-pub fn jsonParse(_: std.mem.Allocator, reader: anytype, _: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!MicComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    while (true) {
-        const token = try reader.next();
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-        _ = field_name;
-    }
-
-    return MicComponent{};
-}
+//nothing is saved yet
+const Json = JsonUtils.JsonFields(MicComponent, .{});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;

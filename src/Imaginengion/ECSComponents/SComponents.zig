@@ -36,13 +36,13 @@ pub const ComponentsPanelList = [_]type{
     SpawnPossComponent,
 };
 
+/// ScriptComponent is not listed, scripts are saved separately and recreated with AddScript
 pub const SerializeList = [_]type{
     UUIDComponent,
     NameComponent,
     PhysicsComponent,
     SceneComponent,
     SpawnPossComponent,
-    ScriptComponent,
 };
 
 pub const ScriptsList = [_]type{

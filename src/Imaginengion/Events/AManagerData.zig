@@ -4,7 +4,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 pub const AssetComponents = @import("../ECSComponents/AComponents.zig");
 
 pub const EventCategories = enum(u8) {
-    Remove,
+    EndOfFrame,
 };
 
 pub const EventT = union(enum) {

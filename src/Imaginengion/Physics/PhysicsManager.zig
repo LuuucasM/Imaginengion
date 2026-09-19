@@ -1,6 +1,6 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
-const SceneManager = @import("../Scene/SceneManager.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
 const Entity = @import("../GameObjects/Entity.zig");
 
@@ -57,19 +57,19 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
 
-    var scene_manager = switch (world_type) {
+    var world_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
     };
     self._InternalData.Accumulator += engine_context.mDT;
 
-    const rigid_body_arr = try scene_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
+    const rigid_body_arr = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
         for (0..SUB_STEPS) |_| {
             for (rigid_body_arr.items) |entity_id| {
-                const entity = scene_manager.GetEntity(entity_id);
+                const entity = world_manager.GetEntity(entity_id);
                 const entity_rb = entity.GetComponent(RigidBodyComponent).?;
 
                 ApplyForces(entity, entity_rb);
@@ -80,7 +80,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
             try UpdateWorldTransforms(world_type, engine_context);
 
-            try self._CollisionManager.BroadPass(engine_context, scene_manager);
+            try self._CollisionManager.BroadPass(engine_context, world_manager);
             try self._CollisionManager.NarrowPass(engine_context);
             try self._CollisionManager.PreSolverPass(engine_context);
             try self._CollisionManager.SolverPass(world_type, engine_context);
@@ -94,7 +94,7 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
     const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransform", @src());
     defer zone.Deinit();
 
-    var scene_manager = switch (world_type) {
+    var world_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
@@ -103,13 +103,13 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
     const EntityTransformQuery = GroupQuery{ .Component = EntityTransformComponent };
     const ChildQuery = GroupQuery{ .Component = ChildComponent };
 
-    const transforms_arr = try scene_manager.GetEntityGroup(
+    const transforms_arr = try world_manager.GetEntityGroup(
         engine_context.FrameAllocator(),
         .{ .Not = .{ .mFirst = &EntityTransformQuery, .mSecond = &ChildQuery } },
     );
 
     for (transforms_arr.items) |entity_id| {
-        const entity = scene_manager.GetEntity(entity_id);
+        const entity = world_manager.GetEntity(entity_id);
         const transform = entity.GetComponent(EntityTransformComponent).?;
 
         transform.SetWorldPosition(transform.Translation);
@@ -130,7 +130,7 @@ fn CalculateChildren(parent_entity: Entity, position_acc: Vec3(f32), rotation_ac
     var curr_id = parent_component.mFirstEntity;
 
     while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-        const child_entity = Entity{ .mEntityID = curr_id, .mSceneManager = parent_entity.mSceneManager };
+        const child_entity = Entity{ .mEntityID = curr_id, .mWorldManager = parent_entity.mWorldManager };
 
         CalculateChildTransform(child_entity, position_acc, rotation_acc, scale_acc);
 

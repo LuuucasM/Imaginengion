@@ -4,6 +4,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const PhysicsComponent = @This();
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Name: []const u8 = "PhysicsComponent";
 pub const Ind: usize = blk: {
@@ -21,3 +22,7 @@ pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) !void {}
 pub fn EditorRender(self: *PhysicsComponent, _: *EngineContext) !void {
     try ImguiManager.RenderFloat3Input(&self.mGravity, "Gravity");
 }
+
+const Json = JsonUtils.JsonFields(PhysicsComponent, .{ .Gravity = "mGravity" });
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;

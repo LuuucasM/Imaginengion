@@ -24,7 +24,7 @@ pub const Zone = if (enable_tracy) struct {
             };
         }.value;
         return Zone{
-            .mContext = tracy.___tracy_emit_zone_begin_callstack(src_loc, 1, 1),
+            .mContext = tracy.___tracy_emit_zone_begin(src_loc, 1),
         };
     }
 

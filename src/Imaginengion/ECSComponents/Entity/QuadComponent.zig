@@ -6,13 +6,13 @@ const Vec2 = MathTypes.Vec2;
 const Assets = @import("../../Assets/Assets.zig");
 const Texture2D = Assets.Texture2D;
 const FileMetaData = Assets.FileMetaData;
-const AssetHandle = @import("../../Assets/AssetHandle.zig");
+const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../Entity.zig");
 const Player = @import("../../Players/Player.zig");
 const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
-const PathType = @import("../../Assets/AssetManager.zig").PathType;
 const Material = @import("../../Physics/Material.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const QuadComponent = @This();
@@ -28,7 +28,7 @@ pub const Ind: usize = blk: {
 };
 
 mShouldRender: bool = true,
-mTexture: AssetHandle = .empty,
+mTexture: AssetHandle = .uninit,
 mTexOptions: Texture2D.TexOptions = .default,
 mMaterial: Material.SurfaceRenderMat = .default,
 mEditTexCoords: bool = false,
@@ -49,75 +49,11 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
     try ImguiManager.RenderTexture2D(engine_context, &self.mTexture, texture_asset, &self.mEditTexCoords);
 }
 
-pub fn jsonStringify(self: *const QuadComponent, jw: anytype) !void {
-    try jw.beginObject();
-
-    try jw.objectField("ShouldRender");
-    try jw.write(self.mShouldRender);
-
-    try jw.objectField("Color");
-    try jw.write(self.mTexOptions.mColor);
-
-    try jw.objectField("TilingFactor");
-    try jw.write(self.mTexOptions.mTilingFactor);
-
-    try self.mTexture.jsonStringify(jw);
-
-    try jw.objectField("TextureUV0");
-    try jw.write(self.mTexOptions.mTextureUV0);
-
-    try jw.objectField("TextureUV1");
-    try jw.write(self.mTexOptions.mTextureUV1);
-
-    try jw.endObject();
-}
-
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!QuadComponent {
-    if (.object_begin != try reader.next()) return error.UnexpectedToken;
-
-    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
-
-    var result: QuadComponent = .{};
-
-    while (true) {
-        const token = try reader.next();
-
-        const field_name = switch (token) {
-            .object_end => break,
-            .string => |v| v,
-            else => return error.UnexpectedToken,
-        };
-
-        if (std.mem.eql(u8, field_name, "ShouldRender")) {
-            result.mShouldRender = try std.json.innerParse(bool, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Color")) {
-            result.mTexOptions.mColor = try std.json.innerParse(Vec4(f32), frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "TilingFactor")) {
-            result.mTexOptions.mTilingFactor = try std.json.innerParse(f32, frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "TextureUV0")) {
-            result.mTexOptions.mTextureUV0 = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "TextureUV1")) {
-            result.mTexOptions.mTextureUV1 = try std.json.innerParse(Vec2(f32), frame_allocator, reader, options);
-        } else if (std.mem.eql(u8, field_name, "Texture")) {
-            const parsed_path = try std.json.innerParse([]const u8, frame_allocator, reader, options);
-
-            try SkipToken(reader); //skip PathType object field
-
-            const parsed_path_type = try std.json.innerParse(PathType, frame_allocator, reader, options);
-
-            result.mTexture = engine_context.mAssetManager.GetAssetHandleRef(
-                engine_context,
-                .{ .File = .{ .rel_path = parsed_path, .path_type = parsed_path_type } },
-            ) catch |err| {
-                std.debug.print("error: {}\n", .{err});
-                @panic("");
-            };
-        }
-    }
-
-    return result;
-}
-
-fn SkipToken(reader: *std.json.Reader) !void {
-    _ = try reader.next();
-}
+const Json = JsonUtils.JsonFields(QuadComponent, .{
+    .ShouldRender = "mShouldRender",
+    .Texture = "mTexture",
+    .TexOptions = "mTexOptions",
+    .Material = "mMaterial",
+});
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;
