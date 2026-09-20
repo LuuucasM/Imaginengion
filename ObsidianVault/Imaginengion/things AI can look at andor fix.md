@@ -1,7 +1,4 @@
-- fix bug where resetting individual x, y, breaks the object, but then z is ok?
-- - fix ECS panel bug where there is fighting between right clicking on an element in the panel, and right clicking of the panel.
-	- currently if you right click on an element first the popup for the panel appears, then the popup for the element replaces it.
-	- should just have one popup
+
 - Add tag support into the ECS
 	- right now tags are just regular components that are 1 bit in size.
 	- this is because for sparse set, for the value array, tags need a size for the array

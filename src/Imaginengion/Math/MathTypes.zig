@@ -748,37 +748,54 @@ pub fn Quat(comptime number_type: type) type {
             _ = options;
             try writer.print("{s} - w: {}, x: {}, y: {}, z: {}\n", .{ @typeName(Self), self.w, self.x, self.y, self.z });
         }
+        //ToRadians/ToDegrees are the exact inverse of FromRadians/FromDegrees: those build
+        //Qx(pitch) * Qy(yaw) * Qz(roll), so the extraction below has to decompose in that same
+        //order. Do not swap in the textbook "quaternion to euler" formulas, they decompose
+        //Qz * Qy * Qx and round-tripping through them silently mangles any rotation that is not
+        //about a single axis.
         pub fn ToRadians(self: Self) Vec3T {
             return .{ .x = self.GetPitch(), .y = self.GetYaw(), .z = self.GetRoll() };
         }
         pub fn ToDegrees(self: Self) Vec3T {
-            const rad = VectorT{ self.GetPitch(), self.GetYaw(), self.GetRoll() };
-            const to_deg = @as(VectorT, @splat(180.0 / math.pi));
-            return .FromVector(rad * to_deg);
+            const to_deg = @as(Vec3T.VectorT, @splat(180.0 / math.pi));
+            return .FromVector(self.ToRadians().ToVector() * to_deg);
         }
-        pub fn GetPitch(self: Self) number_type {
-            const y = 2.0 * (self.y * self.z + self.w * self.x);
-            const x = 1.0 - 2.0 * (self.x * self.x + self.y * self.y);
 
-            if (std.math.approxEqRel(number_type, x, 0.0, 0.0000001) and std.math.approxEqRel(number_type, y, 0.0, 0.0000001)) {
-                return math.atan2(self.x, self.w) * 2;
+        //sin(yaw), the element the whole decomposition hangs off of. Once it reaches +-1 the
+        //pitch and roll axes line up and only their sum is recoverable, which is the gimbal lock
+        //branch in GetPitch/GetRoll.
+        fn _SinYaw(self: Self) number_type {
+            return math.clamp(2.0 * (self.x * self.z + self.w * self.y), -1.0, 1.0);
+        }
+
+        const _gimbal_lock_threshold: number_type = 0.9999995;
+
+        pub fn GetPitch(self: Self) number_type {
+            const sin_yaw = self._SinYaw();
+            if (@abs(sin_yaw) > _gimbal_lock_threshold) {
+                //locked: hand the whole pitch+roll sum to pitch and zero the roll
+                const sum = math.atan2(
+                    2.0 * (self.x * self.y + self.w * self.z),
+                    1.0 - 2.0 * (self.x * self.x + self.z * self.z),
+                );
+                return if (sin_yaw > 0) sum else -sum;
             }
-            return math.atan2(y, x);
+            return math.atan2(
+                2.0 * (self.w * self.x - self.y * self.z),
+                1.0 - 2.0 * (self.x * self.x + self.y * self.y),
+            );
         }
 
         pub fn GetYaw(self: Self) number_type {
-            return math.asin(math.clamp(-2.0 * (self.x * self.z - self.w * self.y), -1.0, 1.0));
+            return math.asin(self._SinYaw());
         }
 
         pub fn GetRoll(self: Self) number_type {
-            const y = 2.0 * (self.x * self.y + self.w * self.z);
-            const sqr = self.ToVector() * self.ToVector();
-            const x = sqr[0] + sqr[1] - sqr[2] - sqr[3];
-
-            if (std.math.approxEqRel(number_type, x, 0.0, 0.0000001) and std.math.approxEqRel(number_type, y, 0.0, 0.0000001)) {
-                return 0.0;
-            }
-            return math.atan2(y, x);
+            if (@abs(self._SinYaw()) > _gimbal_lock_threshold) return 0.0;
+            return math.atan2(
+                2.0 * (self.w * self.z - self.x * self.y),
+                1.0 - 2.0 * (self.y * self.y + self.z * self.z),
+            );
         }
         pub fn Conjugate(self: Self) Self {
             return .{ .w = self.w, .x = -self.x, .y = -self.y, .z = -self.z };

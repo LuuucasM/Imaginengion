@@ -10,7 +10,6 @@ const TextureManager = @import("../TextureManager/TextureManager.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ImguiManager = @This();
 
-const MathUtils = @import("../Math/MathUtils.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;
@@ -364,6 +363,11 @@ pub fn RenderVec4(vec: *Vec4(f32), label: []const u8, reset_value: f32, speed: f
     imgui.igPopItemWidth();
 }
 
+//reset_value and speed are both in degrees. The quaternion is decomposed into euler angles once
+//per frame and every edit writes the whole triple back through FromDegrees, so the three fields
+//always agree with the quaternion they came from - editing one axis by rotating the quaternion by
+//a delta cannot work here, the middle axis of an X-Y-Z decomposition is reachable by neither a
+//pre- nor a post-multiply.
 pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) !void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
@@ -383,27 +387,24 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
     const line_height = bold_font.*.LegacySize + imgui.igGetStyle().*.FramePadding.y * 2.0;
     const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
 
+    var euler = quat.ToDegrees();
+
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.717, .y = 0.234, .z = 0.234, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonActive, imgui.ImVec4{ .x = 0.597, .y = 0.195, .z = 0.195, .w = 1.0 });
 
     imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("X", button_size)) {
-        var euler = quat.ToRadians();
         euler.x = reset_value;
-        quat.* = .FromRadians(euler);
+        quat.* = .FromDegrees(euler);
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    const x_ang_saved = MathUtils.RadiansToDegrees(quat.GetPitch());
-    var x_ang = x_ang_saved;
-    if (imgui.igDragFloat("##X", &x_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        const delta_theta = x_ang_saved - x_ang;
-        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 1.0, .y = 0, .z = 0 }, delta_theta);
-        quat.* = quat.MulQuat(new_quat);
+    if (imgui.igDragFloat("##X", &euler.x, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        quat.* = .FromDegrees(euler);
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -414,9 +415,8 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
 
     imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Y", button_size)) {
-        var euler = quat.ToRadians();
         euler.y = reset_value;
-        quat.* = .FromRadians(euler);
+        quat.* = .FromDegrees(euler);
     }
     imgui.igPopFont();
 
@@ -424,12 +424,8 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
 
     imgui.igSameLine(0.0, 0.0);
 
-    const y_ang_saved = MathUtils.RadiansToDegrees(quat.GetYaw());
-    var y_ang = y_ang_saved;
-    if (imgui.igDragFloat("##Y", &y_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        const delta_theta = y_ang_saved - y_ang;
-        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 0, .y = 1, .z = 0 }, delta_theta);
-        quat.* = quat.MulQuat(new_quat);
+    if (imgui.igDragFloat("##Y", &euler.y, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        quat.* = .FromDegrees(euler);
     }
     imgui.igPopItemWidth();
     imgui.igSameLine(0.0, 0.0);
@@ -440,21 +436,16 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
 
     imgui.igPushFont(bold_font, bold_font.*.LegacySize);
     if (imgui.igButton("Z", button_size)) {
-        var euler = quat.ToRadians();
         euler.z = reset_value;
-        quat.* = .FromRadians(euler);
+        quat.* = .FromDegrees(euler);
     }
     imgui.igPopFont();
 
     imgui.igPopStyleColor(3);
 
     imgui.igSameLine(0.0, 0.0);
-    const z_ang_saved = MathUtils.RadiansToDegrees(quat.GetRoll());
-    var z_ang = z_ang_saved;
-    if (imgui.igDragFloat("##Z", &z_ang, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
-        const delta_theta = z_ang_saved - z_ang;
-        const new_quat = Quat(f32).FromAxisAngle(Vec3(f32){ .x = 0, .y = 0, .z = 1 }, delta_theta);
-        quat.* = quat.MulQuat(new_quat);
+    if (imgui.igDragFloat("##Z", &euler.z, speed, 0.0, 0.0, "%.2f", imgui.ImGuiSliderFlags_None)) {
+        quat.* = .FromDegrees(euler);
     }
     imgui.igPopItemWidth();
 }

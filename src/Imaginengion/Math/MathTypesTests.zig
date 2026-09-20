@@ -923,3 +923,116 @@ test "quat wxyz conversions round trip" {
     try std.testing.expectEqual(q, Q.FromArray(.{ 1.0, 2.0, 3.0, 4.0 }));
     try std.testing.expectEqual(q, Q.FromVector(.{ 1.0, 2.0, 3.0, 4.0 }));
 }
+
+test "quat euler round trip" {
+    const Q = Quat(f32);
+    const V = Vec3(f32);
+    const eps: f32 = 0.005;
+
+    //ToDegrees has to be the exact inverse of FromDegrees. A decomposition that uses a different
+    //euler order still round trips single axis rotations, so only the mixed cases catch it.
+    const cases = [_]V{
+        .{ .x = 0.0, .y = 0.0, .z = 0.0 },
+        .{ .x = 30.0, .y = 0.0, .z = 0.0 },
+        .{ .x = 0.0, .y = 30.0, .z = 0.0 },
+        .{ .x = 0.0, .y = 0.0, .z = 30.0 },
+        .{ .x = 30.0, .y = 40.0, .z = 50.0 },
+        .{ .x = -120.0, .y = 65.0, .z = 15.0 },
+        .{ .x = 170.0, .y = 10.0, .z = -160.0 },
+        .{ .x = 10.0, .y = 80.0, .z = 20.0 },
+    };
+
+    //yaw comes back out of asin, so only |yaw| <= 90 round trips componentwise. Everything above
+    //that is still the same rotation, just spelled with a different euler triple - see the
+    //"canonical range" test below.
+    for (cases) |degrees| {
+        const round_tripped = Q.FromDegrees(degrees).ToDegrees();
+        try std.testing.expectApproxEqAbs(degrees.x, round_tripped.x, eps);
+        try std.testing.expectApproxEqAbs(degrees.y, round_tripped.y, eps);
+        try std.testing.expectApproxEqAbs(degrees.z, round_tripped.z, eps);
+    }
+
+    //radians path, and the same rotation rebuilt from its own decomposition
+    for (cases) |degrees| {
+        const q = Q.FromDegrees(degrees);
+        const rebuilt = Q.FromRadians(q.ToRadians());
+        try std.testing.expectApproxEqAbs(q.w, rebuilt.w, eps);
+        try std.testing.expectApproxEqAbs(q.x, rebuilt.x, eps);
+        try std.testing.expectApproxEqAbs(q.y, rebuilt.y, eps);
+        try std.testing.expectApproxEqAbs(q.z, rebuilt.z, eps);
+    }
+}
+
+test "quat euler zeroing one axis leaves the others alone" {
+    const Q = Quat(f32);
+    const V = Vec3(f32);
+    const eps: f32 = 0.005;
+
+    //this is what the X/Y/Z reset buttons in RenderQuat do: decompose, zero one angle, recompose.
+    const start = V{ .x = 30.0, .y = 40.0, .z = 50.0 };
+    const q = Q.FromDegrees(start);
+
+    var zero_x = q.ToDegrees();
+    zero_x.x = 0.0;
+    const after_x = Q.FromDegrees(zero_x).ToDegrees();
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), after_x.x, eps);
+    try std.testing.expectApproxEqAbs(start.y, after_x.y, eps);
+    try std.testing.expectApproxEqAbs(start.z, after_x.z, eps);
+
+    var zero_y = q.ToDegrees();
+    zero_y.y = 0.0;
+    const after_y = Q.FromDegrees(zero_y).ToDegrees();
+    try std.testing.expectApproxEqAbs(start.x, after_y.x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), after_y.y, eps);
+    try std.testing.expectApproxEqAbs(start.z, after_y.z, eps);
+
+    var zero_z = q.ToDegrees();
+    zero_z.z = 0.0;
+    const after_z = Q.FromDegrees(zero_z).ToDegrees();
+    try std.testing.expectApproxEqAbs(start.x, after_z.x, eps);
+    try std.testing.expectApproxEqAbs(start.y, after_z.y, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.0), after_z.z, eps);
+}
+
+test "quat euler gimbal lock stays a valid rotation" {
+    const Q = Quat(f32);
+    const V = Vec3(f32);
+    const eps: f32 = 0.05;
+
+    //yaw at +-90 collapses pitch and roll onto the same axis: only their sum survives, so the
+    //decomposition folds it all into pitch. The recomposed quaternion still has to be the same
+    //rotation even though the euler triple is not the one we started with.
+    const cases = [_]V{
+        .{ .x = 20.0, .y = 90.0, .z = 35.0 },
+        .{ .x = 20.0, .y = -90.0, .z = 35.0 },
+        .{ .x = -75.0, .y = 90.0, .z = 0.0 },
+    };
+
+    for (cases) |degrees| {
+        const q = Q.FromDegrees(degrees);
+        const rebuilt = Q.FromDegrees(q.ToDegrees());
+        //q and -q are the same rotation, so compare through the dot product
+        try std.testing.expectApproxEqAbs(@as(f32, 1.0), @abs(q.Dot(rebuilt)), eps);
+    }
+}
+
+test "quat euler out of range yaw comes back as an equivalent rotation" {
+    const Q = Quat(f32);
+    const V = Vec3(f32);
+    const eps: f32 = 0.005;
+
+    //asin only spans -90..90, so a yaw past that is re-spelled on the way back out. The euler
+    //triple changes, the rotation must not.
+    const cases = [_]V{
+        .{ .x = 0.0, .y = 120.0, .z = 0.0 },
+        .{ .x = 0.0, .y = -150.0, .z = 0.0 },
+        .{ .x = 25.0, .y = 160.0, .z = -40.0 },
+    };
+
+    for (cases) |degrees| {
+        const q = Q.FromDegrees(degrees);
+        const rebuilt = Q.FromDegrees(q.ToDegrees());
+        //q and -q are the same rotation, so compare through the dot product
+        try std.testing.expectApproxEqAbs(@as(f32, 1.0), @abs(q.Dot(rebuilt)), eps);
+    }
+}
