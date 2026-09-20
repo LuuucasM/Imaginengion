@@ -908,3 +908,18 @@ test "quat" {
         try std.testing.expectApproxEqAbs(@as(f32, 0.288675), q.z, eps);
     }
 }
+
+test "quat wxyz conversions round trip" {
+    const Q = Quat(f32);
+    const q = Q{ .w = 1.0, .x = 2.0, .y = 3.0, .z = 4.0 };
+
+    //arrays and vectors are laid out w, x, y, z to match the struct
+    try std.testing.expectEqual([4]f32{ 1.0, 2.0, 3.0, 4.0 }, q.ToArray());
+    try std.testing.expectEqual(@Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 }, q.ToVector());
+
+    try std.testing.expectEqual(q, Q.FromArray(q.ToArray()));
+    try std.testing.expectEqual(q, Q.FromVector(q.ToVector()));
+
+    try std.testing.expectEqual(q, Q.FromArray(.{ 1.0, 2.0, 3.0, 4.0 }));
+    try std.testing.expectEqual(q, Q.FromVector(.{ 1.0, 2.0, 3.0, 4.0 }));
+}

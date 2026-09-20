@@ -133,9 +133,7 @@ pub fn GetSceneStackIDs(self: *WorldManager, frame_allocator: std.mem.Allocator)
     self.mSManager.GetSceneStackIDs(frame_allocator);
 }
 
-pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {
-    self.mSManager.
-}
+pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {}
 
 fn InsertScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
     _ = .{ self, engine_context, scene };

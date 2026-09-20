@@ -348,7 +348,7 @@ pub fn Vec4(comptime number_type: type) type {
         }
 
         pub fn FromArray(array: ArrayT) Self {
-            return Self{ .x = array[0], .y = array[1], .z = array[2], .w = array[3] };
+            return Self{ .w = array[0], .x = array[1], .y = array[2], .z = array[3] };
         }
 
         pub fn ToArray(self: Self) ArrayT {
@@ -632,7 +632,7 @@ pub fn Quat(comptime number_type: type) type {
         }
 
         pub fn FromArray(array: ArrayT) Self {
-            return Self{ .x = array[0], .y = array[1], .z = array[2], .w = array[3] };
+            return Self{ .w = array[0], .x = array[1], .y = array[2], .z = array[3] };
         }
 
         pub fn Len(self: Self) number_type {
@@ -672,7 +672,7 @@ pub fn Quat(comptime number_type: type) type {
             const len = self.Len();
             if (len <= 0) return Self{ .w = 1, .x = 0, .y = 0, .z = 0 };
             const v = self.ToVector() / @as(VectorT, @splat(len));
-            return @bitCast(v);
+            return FromVector(v);
         }
 
         pub fn MulQuat(self: Self, other: Self) Self {
@@ -803,7 +803,7 @@ pub fn Quat(comptime number_type: type) type {
                 const a = self.ToVector();
                 const b = other_adj.ToVector();
                 const res = a + @as(VectorT, @splat(t)) * (b - a);
-                const q: Self = @bitCast(res);
+                const q: Self = FromVector(res);
                 return q.Normalized();
             }
 
@@ -815,7 +815,7 @@ pub fn Quat(comptime number_type: type) type {
             const a = self.ToVector();
             const b = other_adj.ToVector();
             const res = @as(VectorT, @splat(scale_a)) * a + @as(VectorT, @splat(scale_b)) * b;
-            return @bitCast(res);
+            return FromVector(res);
         }
     };
 }
@@ -832,8 +832,4 @@ pub fn _EnsureFloat(comptime number_type: type) void {
     if (type_info != .float and type_info != .comptime_float) {
         @compileError(@typeName(number_type) ++ "vector must be float");
     }
-}
-
-test "MathTypes Tests" {
-    _ = @import("MathTypesTests.zig");
 }

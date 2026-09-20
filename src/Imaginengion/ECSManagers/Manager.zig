@@ -52,7 +52,11 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .ID = obj_id });
+            //for inserting event need to figure out a way to use comptime to make the correct delete object event
+            self.mEventManager.Insert(
+                engine_context.EngineAllocator(),
+                .EndOfFrame,
+            );
         }
 
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
@@ -68,7 +72,11 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            self.mEventManager.Insert()
+            //same issue as DeleteObj, need to figure out a way to insert the correct event for an abstract manager
+            self.mEventManager.Insert(
+                engine_context.EngineAllocator(),
+                .EndOfFrame,
+            );
         }
 
         pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {

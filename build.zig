@@ -80,36 +80,24 @@ pub fn build(b: *std.Build) void {
     //=========================================TEST STEP=========================================
     const test_step = b.step("test", "Test Engine");
 
-    //skip field tests
-    const skip_field_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .target = target,
-        .optimize = .Debug,
-        .root_source_file = b.path("src/Imaginengion/Core/SkipField.zig"),
-    }) });
-    const run_skip_field_tests = b.addRunArtifact(skip_field_tests);
+    //Standalone test files, one per unit under test. Each `*Tests.zig` imports the module it
+    //covers, so the module itself carries no test code.
+    const unit_test_sources = [_][]const u8{
+        "src/Imaginengion/Core/SkipFieldTests.zig",
+        "src/Imaginengion/Core/SparseSetTests.zig",
+        "src/Imaginengion/Math/MathTypesTests.zig",
+    };
 
-    test_step.dependOn(&run_skip_field_tests.step);
+    for (unit_test_sources) |test_source| {
+        const unit_tests = b.addTest(.{ .root_module = b.createModule(.{
+            .target = target,
+            .optimize = .Debug,
+            .root_source_file = b.path(test_source),
+        }) });
+        const run_unit_tests = b.addRunArtifact(unit_tests);
 
-    //sparse set tests
-    const sparse_set_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .target = target,
-        .optimize = .Debug,
-        .root_source_file = b.path("src/Imaginengion/Core/SparseSet.zig"),
-    }) });
-    const run_sparse_set_tests = b.addRunArtifact(sparse_set_tests);
-
-    test_step.dependOn(&run_sparse_set_tests.step);
-
-    //LinAlg test_step
-    const math_types_tests = b.addTest(.{ .root_module = b.createModule(.{
-        .target = target,
-        .optimize = .Debug,
-        .root_source_file = b.path("src/Imaginengion/Math/MathTypes.zig"),
-    }) });
-
-    const run_math_types_test = b.addRunArtifact(math_types_tests);
-
-    test_step.dependOn(&run_math_types_test.step);
+        test_step.dependOn(&run_unit_tests.step);
+    }
 
     if (test_build) {
         run_step.dependOn(test_step);
