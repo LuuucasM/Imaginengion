@@ -1,12 +1,10 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const ComponentsList = @import("../Components.zig").ComponentsList;
-const AudioAsset = @import("../../Assets/Assets/AudioAsset.zig").AudioAsset;
-const Assets = @import("../../Assets/Assets.zig");
+const AudioAsset = @import("../Asset/AudioAsset.zig").AudioAsset;
+const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
-const Entity = @import("../Entity.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -27,13 +25,6 @@ pub const AudioType = enum(u8) {
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "AudioComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == AudioComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mParent: Entity.Type = Entity.NullEntity,
 mFirst: Entity.Type = Entity.NullEntity,

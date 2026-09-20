@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const NameComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
@@ -9,13 +7,6 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "NameComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == NameComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 pub const empty: NameComponent = .{
     .mName = .empty,
 };

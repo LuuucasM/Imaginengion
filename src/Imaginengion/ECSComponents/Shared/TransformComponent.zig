@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const MathTypes = @import("../../Math/MathTypes.zig");
 const MathUtils = @import("../../Math/MathUtils.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -24,13 +22,6 @@ const InternalData = struct {
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "TransformComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == TransformComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 pub const empty: TransformComponent = .{
     .Translation = .{ .x = 0.0, .y = 0.0, .z = 0.0 },

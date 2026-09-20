@@ -1,20 +1,11 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
-const Entity = @import("../../GameObjects/Entity.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const AISlotComponent = @This();
 
 pub const Editable: bool = false;
 pub const Name: []const u8 = "AISlotComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == AISlotComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mAIEntity: Entity.Type = Entity.NullEntity,
 

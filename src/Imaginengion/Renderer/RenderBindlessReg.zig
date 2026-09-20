@@ -1,13 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const RenderInterop = @import("RenderInterop.zig");
-const SDLTexture2D = @import("../../Assets/Assets/Texture2Ds/SDLTexture2D.zig");
+const SDLTexture2D = @import("../ECSComponents/Asset/Texture2Ds/SDLGPUTexture2D.zig");
 
 pub const MAX_TEXTURES: u32 = 4096;
 const BindlessReg = @This();
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("VulkanBindlessReg.zig"),
+    .windows => @import("SDL/VulkanBindlessReg.zig"),
     else => @compileError("This isnt implemented yet"),
 };
 

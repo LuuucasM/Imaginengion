@@ -1,9 +1,9 @@
 const std = @import("std");
 const Vec4 = @import("../Math/MathTypes.zig").Vec4;
-const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
+const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const sdl = @import("../Core/CImports.zig").sdl;
 const EngineContext = @import("../Core/EngineContext.zig");
-const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const Texture2D = @import("../ECSComponents/AComponents.zig").Texture2D;
 
 pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, comptime depth_texture_format: TextureFormat, comptime samples: usize) type {
     return struct {

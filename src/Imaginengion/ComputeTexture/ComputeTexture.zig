@@ -1,5 +1,5 @@
 const builtin = @import("builtin");
-const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
+const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ComputeStorageTexture(comptime format: TextureFormat) type {

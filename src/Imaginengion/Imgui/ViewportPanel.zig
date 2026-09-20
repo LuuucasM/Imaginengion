@@ -1,10 +1,10 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 
-const Entity = @import("../GameObjects/Entity.zig");
-const EntityComponents = @import("../GameObjects/Components.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
-const SceneLayer = @import("../Scene/SceneLayer.zig");
+const SceneLayer = @import("../ECSObjects/Scene.zig");
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;

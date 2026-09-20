@@ -4,19 +4,19 @@ const Window = @import("../Windows/Window.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
-const Player = @import("../Players/Player.zig");
+const Player = @import("../ECSObjects/Player.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const AssetHandle = @import("../Assets/AssetHandle.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
-const GameContext = @import("../GameModes/GameMode.zig");
+const GameContext = @import("../ECSObjects/GameContext.zig");
 
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 
-const Assets = @import("../Assets/Assets.zig");
+const Assets = @import("../ECSComponents/AComponents.zig");
 const AudioAsset = Assets.AudioAsset;
 
 const MathTypes = @import("../Math/MathTypes.zig");
@@ -25,7 +25,7 @@ const Quat = MathTypes.Quat;
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
 
-const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnKeyPressedScript = EntityComponents.OnKeyPressedScript;
@@ -42,11 +42,11 @@ const GameEvent = GameEventData.Event;
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEvent = ImguiEventData.Event;
 
-const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
-const PlayerComponents = @import("../Players/Components.zig");
+const PlayerComponents = @import("../ECSComponents/PComponents.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerRenderComponent = PlayerComponents.RenderTargetComponent;
 const PlayerNameComponent = PlayerComponents.NameComponent;
@@ -63,7 +63,7 @@ const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
 const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
-const SceneLayer = @import("../Scene/SceneLayer.zig");
+const SceneLayer = @import("../ECSObjects/Scene.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EditorProgram = @This();
 const Tracy = @import("../Core/Tracy.zig");

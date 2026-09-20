@@ -3,11 +3,11 @@ const WindowsScriptAsset = @This();
 
 const imgui = @import("../../../Core/CImports.zig").imgui;
 
-const EntityComponents = @import("../../../GameObjects/Components.zig");
+const EntityComponents = @import("../../EComponents.zig");
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
 
-const SceneComponents = @import("../../../Scene/SceneComponents.zig");
+const SceneComponents = @import("../../SComponents.zig");
 const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
 const SceneOnUpdateScript = SceneComponents.OnUpdateScript;
 const SceneInputPressedScript = SceneComponents.InputPressedScript;

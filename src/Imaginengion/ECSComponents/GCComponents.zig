@@ -1,3 +1,4 @@
+const ListInd = @import("../ECS/Components.zig").ListInd;
 pub const AttribComponent = @import("Shared/AttribComponent.zig");
 pub const NameComponent = @import("Shared/NameComponent.zig");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
@@ -20,7 +21,7 @@ pub const ComponentsPanelList = [_]type{
 pub const ScriptsList = [_]type{};
 
 pub const EComponents = enum(u16) {
-    RenderTargetComponent = AttribComponent.Ind,
-    NameComponent = NameComponent.Ind,
-    UUIDComponent = UUIDComponent.Ind,
+    AttribComponent = ListInd(&ComponentsList, AttribComponent),
+    NameComponent = ListInd(&ComponentsList, NameComponent),
+    UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
 };

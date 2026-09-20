@@ -1,8 +1,6 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const Material = @import("../../Physics/Material.zig");
 const RigidBodyComponent = @This();
 
@@ -11,13 +9,6 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "RigidBodyComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == RigidBodyComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mMass: f32 = 0.0,
 mMaterialData: Material.PhysicsMaterial = .default,

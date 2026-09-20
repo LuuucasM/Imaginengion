@@ -1,6 +1,6 @@
 const std = @import("std");
 const sdl = @import("../Core/CImports.zig").sdl;
-const Stage = @import("../Assets/Assets/ShaderAsset.zig").Stage;
+const Stage = @import("../ECSComponents/Asset/ShaderAsset.zig").Stage;
 const EngineContext = @import("../Core/EngineContext.zig");
 const SDLSSBO = @This();
 

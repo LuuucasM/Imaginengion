@@ -106,96 +106,67 @@ pub fn NewScene(self: *WorldManager, engine_context: *EngineContext, layer_type:
 }
 
 pub fn DestroyScene(self: *WorldManager, engine_context: *EngineContext, destroy_scene: Scene) !void {
-    self.mSManager.DeleteScene(engine_context, destroy_scene.mID);
+    try self.mSManager.DeleteScene(engine_context, destroy_scene.mID);
 }
 
 pub fn LoadScene(self: *WorldManager, engine_context: *EngineContext, abs_path: []const u8) !Scene {
-    self.mSManager.LoadScene(engine_context, abs_path);
+    return try self.mSManager.LoadScene(engine_context, abs_path);
 }
 
 pub fn SaveScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    self.mSManager.SaveScene(engine_context, scene);
+    try self.mSManager.SaveScene(engine_context, scene);
 }
 
 pub fn SaveSceneAs(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    self.mSManager.SaveSceneAs(engine_context, scene);
+    try self.mSManager.SaveSceneAs(engine_context, scene);
 }
 
 pub fn MoveScene(self: *WorldManager, frame_allocator: std.mem.Allocator, scene: Scene, move_to_pos: usize) !void {
-    self.mSManager.MoveScene(frame_allocator, scene, move_to_pos);
+    try self.mSManager.MoveScene(frame_allocator, scene, move_to_pos);
 }
 
-pub fn GetSceneGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Scene.Type) {
-    self.mSManager.GetGroup(frame_allocator, query);
+pub fn GetSceneGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Scene.Type) {
+    return try self.mSManager.GetGroup(frame_allocator, query);
 }
 
 pub fn GetSceneStackIDs(self: *WorldManager, frame_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
-    self.mSManager.GetSceneStackIDs(frame_allocator);
+    return try self.mSManager.GetSceneStackIDs(frame_allocator);
 }
 
-pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {}
-
-fn InsertScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    _ = .{ self, engine_context, scene };
-    @panic("WorldManager.InsertScene not implemented");
-}
-
-fn RemoveScene(self: *WorldManager, frame_allocator: std.mem.Allocator, scene: Scene) !void {
-    _ = .{ self, frame_allocator, scene };
-    @panic("WorldManager.RemoveScene not implemented");
+pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {
+    _ = .{ self, engine_allocator, scene_id, component_ind };
+    @panic("not implemented yet");
 }
 
 //===============================Entities==============================================
-pub fn GetEntityGroup(self: *const WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
-    _ = .{ self, frame_allocator, query };
-    @panic("WorldManager.GetEntityGroup not implemented");
+pub fn GetEntityGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Entity.Type) {
+    return try self.mEManager.GetGroup(frame_allocator, query);
 }
 
 pub fn SaveEntity(self: *WorldManager, engine_context: *EngineContext, entity: Entity) !void {
-    _ = .{ self, engine_context, entity };
-    @panic("WorldManager.SaveEntity not implemented");
+    try self.mEManager.SaveEntity(engine_context, entity);
 }
 
 pub fn SaveEntityAs(self: *WorldManager, engine_context: *EngineContext, entity: Entity) !void {
-    _ = .{ self, engine_context, entity };
-    @panic("WorldManager.SaveEntityAs not implemented");
-}
-
-pub fn EntityECSCallback(world_manager: *anyopaque, engine_context: *EngineContext, event: EManager.EventManagerT.EventType) anyerror!bool {
-    _ = .{ world_manager, engine_context, event };
-    @panic("WorldManager.EntityECSCallback not implemented");
+    try self.mEManager.SaveEntityAs(engine_context, entity);
 }
 
 //===============================Players==============================================
 pub fn CreatePlayer(self: *WorldManager, engine_context: *EngineContext, config: Player.CreateConfig) !Player {
-    _ = .{ self, engine_context, config };
-    @panic("WorldManager.CreatePlayer not implemented");
+    return try self.mPManager.CreatePlayer(engine_context, config);
 }
 
-pub fn GetPlayerGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Player.Type) {
-    _ = .{ self, frame_allocator, query };
-    @panic("WorldManager.GetPlayerGroup not implemented");
-}
-
-pub fn PlayerECSCallback(world_manager: *anyopaque, engine_context: *EngineContext, event: PManager.EventManagerT.EventType) anyerror!bool {
-    _ = .{ world_manager, engine_context, event };
-    @panic("WorldManager.PlayerECSCallback not implemented");
+pub fn GetPlayerGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(Player.Type) {
+    return try self.mPManager.GetGroup(frame_allocator, query);
 }
 
 //===============================Game Contexts (formerly GameModes)==============================================
 pub fn CreateGameContext(self: *WorldManager, engine_context: *EngineContext, config: GameContext.CreateConfig) !GameContext {
-    _ = .{ self, engine_context, config };
-    @panic("WorldManager.CreateGameContext not implemented");
+    return try self.mGCManager.CreateGameContext(engine_context, config);
 }
 
-pub fn GetGameContextGroup(self: *const WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameContext.Type) {
-    _ = .{ self, frame_allocator, query };
-    @panic("WorldManager.GetGameContextGroup not implemented");
-}
-
-pub fn GameContextECSCallback(world_manager: *anyopaque, engine_context: *EngineContext, event: GCManager.EventManagerT.EventType) anyerror!bool {
-    _ = .{ world_manager, engine_context, event };
-    @panic("WorldManager.GameContextECSCallback not implemented");
+pub fn GetGameContextGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(GameContext.Type) {
+    return try self.mGCManager.GetGroup(frame_allocator, query);
 }
 
 //===============================UUIDs==============================================

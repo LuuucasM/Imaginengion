@@ -36,6 +36,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
         pub const ChildComponent = @import("Components.zig").ChildComponent(entity_t);
         pub const SkipFieldComponent = @import("Components.zig").SkipFieldComponent(components_types.len);
         pub const ComponentManagerT = ComponentManager(entity_t, components_types);
+        /// A component's slot in THIS manager's arrays; see ComponentManager.ComponentInd.
+        pub const ComponentInd = ComponentManagerT.ComponentInd;
         pub const ECSCallbackList = ECSEventManager.CallbackList;
         pub const ECSEventCallback = ECSEventManager.EventCallback;
         const Self = @This();
@@ -516,12 +518,6 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
                 if (!@hasDecl(component_type, "Name")) {
                     @compileError(type_name ++ "Type needs 'Name' pub const declaration ");
-                }
-                if (!@hasDecl(component_type, "Ind")) {
-                    @compileError(type_name ++ "Type needs 'Ind' pub const declaration ");
-                }
-                if (component_type.Ind < BuiltinComponentCount) {
-                    @compileError(type_name ++ "Type's 'Ind' must be at least " ++ std.fmt.comptimePrint("{d}", .{BuiltinComponentCount}) ++ " because 0 is parent component, 1 is child component, 2 is skipfield component, 3 is MainObjectComponent, 4 is entity tag, 5 is script tag");
                 }
                 if (!std.meta.hasFn(component_type, "Deinit")) {
                     @compileError(type_name ++ "Type needs 'Deinit' member function ");

@@ -2,11 +2,11 @@ const std = @import("std");
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
-const AManager = @import("../ECSManagers.zig/AManager.zig");
-const EManager = @import("../ECSManagers.zig/EManager.zig");
-const GCManager = @import("../ECSManagers.zig/GCManager.zig");
-const PManager = @import("../ECSManagers.zig/PManager.zig");
-const SManager = @import("../ECSManagers.zig/SManager.zig");
+const AManager = @import("../ECSManagers/AManager.zig");
+const EManager = @import("../ECSManagers/EManager.zig");
+const GCManager = @import("../ECSManagers/GCManager.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
 
 const AssetHandle = @import("AssetHandle.zig");
 const Entity = @import("Entity.zig");

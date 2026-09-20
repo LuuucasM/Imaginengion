@@ -5,7 +5,7 @@ const sdl = @import("../Core/CImports.zig").sdl;
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
-const AssetHandle = @import("../Assets/AssetHandle.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const PipelineType = @import("RenderPipeline.zig").PipelineType;
@@ -14,7 +14,7 @@ const SurfShadingData = @import("Renderer.zig").SurfShadingData;
 const MedShadingData = @import("Renderer.zig").MedShadingData;
 const GPUAsserts = @import("../Core/GPUAsserts.zig");
 
-const Assets = @import("../Assets/Assets.zig");
+const Assets = @import("../ECSComponents/AComponents.zig");
 const Texture2D = Assets.Texture2D;
 const TextAsset = Assets.TextAsset;
 
@@ -27,13 +27,13 @@ const Mat4 = MathTypes.Mat4;
 
 const THICKNESS_2D = @import("../Math/SDFFunctions.zig").THICKNESS_2D;
 
-const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 
-const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneSceneComponent = SceneComponents.SceneComponent;
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;

@@ -1,6 +1,5 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const AssetsList = @import("../Assets.zig").AssetsList;
+const AssetsList = @import("../AComponents.zig").AssetsList;
 const builtin = @import("builtin");
 const VertexBufferElement = @import("../../VertexBuffers/VertexBufferElement.zig");
 const Tracy = @import("../../Core/Tracy.zig");
@@ -44,13 +43,6 @@ pub const StageInfo = struct {
 };
 
 pub const Name: []const u8 = "ShaderAsset";
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == ShaderAsset) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mShaderSources: ShaderSources = undefined,
 

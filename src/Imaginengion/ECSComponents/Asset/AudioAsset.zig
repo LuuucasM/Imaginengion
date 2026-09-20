@@ -1,19 +1,11 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const AssetsList = @import("../Assets.zig").AssetsList;
+const AssetsList = @import("../AComponents.zig").AssetsList;
 const AudioBuffer = @import("AudioBuffers/AudioBuffer.zig");
 const miniaudio = @import("../../Core/CImports.zig").miniaudio;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AudioAsset = @This();
 
 pub const Name: []const u8 = "AudioAsset";
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == AudioAsset) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mAudioBuffer: AudioBuffer = .{},
 

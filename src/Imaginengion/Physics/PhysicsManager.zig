@@ -2,9 +2,9 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
 
-const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -12,7 +12,7 @@ const EntityTransformComponent = EntityComponents.TransformComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 const CollisionManager = @import("CollisionManager.zig");
 

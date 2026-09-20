@@ -1,7 +1,6 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const AssetsList = @import("../Assets.zig").AssetsList;
-const AssetHandle = @import("../AssetHandle.zig");
+const AssetsList = @import("../AComponents.zig").AssetsList;
+const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
@@ -25,13 +24,6 @@ const PARSE_OPTIONS = std.json.ParseOptions{ .allocate = .alloc_if_needed, .max_
 const GYLPH_SET_SIZE = 2798; //note this comes from adding up all the characters from the charset.txt if that file change this number also needs to change
 
 pub const Name: []const u8 = "TextAsset";
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == TextAsset) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mGlyphs: [GYLPH_SET_SIZE]GlyphInfo = undefined,
 mDistanceRange: u32 = 0,

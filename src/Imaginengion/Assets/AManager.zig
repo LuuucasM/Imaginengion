@@ -1,7 +1,7 @@
 const std = @import("std");
 const Set = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 
-const Assets = @import("Assets.zig");
+const Assets = @import("../ECSComponents/AComponents.zig");
 const AssetMetaData = Assets.AssetMetaData;
 const FileMetaData = Assets.FileMetaData;
 const GenMetaData = Assets.GenMetaData;
@@ -12,7 +12,7 @@ const ShaderAsset = Assets.ShaderAsset;
 const AudioAsset = Assets.AudioAsset;
 
 const AssetsList = Assets.AssetsList;
-const AssetHandle = @import("AssetHandle.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ArraySet = @import("../Vendor/ziglang-set/src/array_hash_set/managed.zig").ArraySetManaged;
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;

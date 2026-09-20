@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const Player = @import("../../ECSObjects/Player.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
@@ -9,13 +7,6 @@ const PlayerSlotComponent = @This();
 
 pub const Editable: bool = false;
 pub const Name: []const u8 = "PlayerSlotComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == PlayerSlotComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mPlayerEntity: Player = .uninit,
 

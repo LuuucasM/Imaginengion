@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
 const Entity = @import("../../ECSObjects/Entity.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
@@ -8,13 +6,6 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const SpawnPossComponent = @This();
 
 pub const Name: []const u8 = "SpawnPossComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == SpawnPossComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mEntityRef: Entity = .uninit,
 

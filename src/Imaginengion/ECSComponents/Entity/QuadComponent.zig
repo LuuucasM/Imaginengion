@@ -1,32 +1,23 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
-const Assets = @import("../../Assets/Assets.zig");
+const Assets = @import("../AComponents.zig");
 const Texture2D = Assets.Texture2D;
 const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
+const AssetType = @import("../../Assets/AManager.zig").AssetType;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const Entity = @import("../Entity.zig");
-const Player = @import("../../Players/Player.zig");
-const RenderTargetComponent = @import("../Components.zig").RenderTargetComponent;
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Player = @import("../../ECSObjects/Player.zig");
+const RenderTargetComponent = @import("../EComponents.zig").RenderTargetComponent;
 const Material = @import("../../Physics/Material.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const QuadComponent = @This();
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "QuadComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == QuadComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mShouldRender: bool = true,
 mTexture: AssetHandle = .uninit,

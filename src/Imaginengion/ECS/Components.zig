@@ -7,6 +7,16 @@ const ComponentManager = @import("ComponentManager.zig").ComponentManager;
 // user components start at this index, so a user component's Ind is its list position + BuiltinComponentCount
 pub const BuiltinComponentCount: usize = 6;
 
+/// A component's slot in a given manager's component list: its position in that list,
+/// offset past the builtins. The list is passed explicitly so one shared component type
+/// (UUIDComponent, NameComponent, ...) can sit at a different position in each manager.
+pub fn ListInd(comptime components_list: []const type, comptime component_type: type) u16 {
+    for (components_list, 0..) |list_type, i| {
+        if (list_type == component_type) return @intCast(i + BuiltinComponentCount);
+    }
+    @compileError(@typeName(component_type) ++ " is not in the given components list");
+}
+
 pub fn ParentComponent(entity_t: type) type {
     return struct {
         const Self = @This();

@@ -20,6 +20,23 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         const SkipFieldArrayT = InternalComponentArray(entity_t, SkipFieldComponent);
 
+        /// A component's slot in this manager's arrays. Builtin components sit at fixed
+        /// indices; every other component's slot is its position in THIS manager's
+        /// components_types, which is what lets one component type be shared by several
+        /// managers that list it at different positions.
+        pub fn ComponentInd(comptime component_type: type) usize {
+            if (component_type == ParentComponent) return ParentComponent.Ind;
+            if (component_type == ChildComponent) return ChildComponent.Ind;
+            if (component_type == SkipFieldComponent) return SkipFieldComponent.Ind;
+            if (component_type == MainObjectComponent) return MainObjectComponent.Ind;
+            if (component_type == EntityTagComponent) return EntityTagComponent.Ind;
+            if (component_type == ScriptTagComponent) return ScriptTagComponent.Ind;
+            for (components_types, 0..) |list_type, i| {
+                if (list_type == component_type) return i + BuiltinComponentCount;
+            }
+            @compileError(@typeName(component_type) ++ " is not in this manager's components list");
+        }
+
         pub const empty: Self = .{
             .mComponentsArrays = .empty,
         };
@@ -156,9 +173,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             std.debug.assert(!self.HasComponent(component_t, entity_id));
 
             const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?;
-            entity_skipfield.mSkipField.ChangeToUnskipped(component_t.Ind);
+            entity_skipfield.mSkipField.ChangeToUnskipped(ComponentInd(component_t));
 
-            const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
+            const internal_array: *InternalComponentArray(entity_t, component_t) = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_t)].mPtr));
 
             return try internal_array.AddComponent(engine_allocator, entity_id, component);
         }
@@ -176,14 +193,14 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {
             const internal_array_t = InternalComponentArray(entity_t, component_type);
-            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
 
             return internal_array.HasComponent(entityID);
         }
 
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) ?*component_type {
             const internal_array_t = InternalComponentArray(entity_t, component_type);
-            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
 
             return internal_array.GetComponent(entityID);
         }
@@ -193,7 +210,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             std.debug.assert(self.HasComponent(component_t, entity_id));
 
             const internal_array_t = InternalComponentArray(entity_t, component_t);
-            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
+            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_t)].mPtr));
 
             internal_array.ResetComponent(engine_context, entity_id, component);
         }
@@ -207,7 +224,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             switch (query) {
                 .Component => |component_type| {
                     var empty_field: SkipFieldComponent.StaticSkipFieldT = .AllSkip;
-                    empty_field.ChangeToUnskipped(component_type.Ind);
+                    empty_field.ChangeToUnskipped(ComponentInd(component_type));
                     return empty_field;
                 },
                 .Not => |not| {
@@ -239,7 +256,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             switch (query) {
                 .Component => |component_type| {
                     const internal_array_t = InternalComponentArray(entity_t, component_type);
-                    const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_type.Ind].mPtr));
+                    const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
 
                     var result = try internal_array.GetAllEntities(allocator);
 

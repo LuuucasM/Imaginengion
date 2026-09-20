@@ -1,7 +1,7 @@
 const builtin = @import("builtin");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Stage = @import("../Assets/Assets/ShaderAsset.zig").Stage;
+const Stage = @import("../ECSComponents/Asset/ShaderAsset.zig").Stage;
 
 const Impl = switch (builtin.os.tag) {
     .windows => @import("SDLUniformBuffer.zig"),

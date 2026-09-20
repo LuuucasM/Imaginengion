@@ -9,14 +9,14 @@ pub const EngineContext = @import("Core/EngineContext.zig");
 pub const Tracy = @import("Core/Tracy.zig");
 
 //Game Object stuff -------------------------------
-pub const Entity = @import("GameObjects/Entity.zig");
-pub const EntityComponents = @import("GameObjects/Components.zig");
+pub const Entity = @import("ECSObjects/Entity.zig");
+pub const EntityComponents = @import("ECSComponents/EComponents.zig");
 
 //Scene Stuff -----------------------------------------
-pub const SceneLayer = @import("Scene/SceneLayer.zig");
+pub const SceneLayer = @import("ECSObjects/Scene.zig");
 
 //Script Stuff ----------------------------------------------
-pub const ScriptType = @import("Assets/Assets/ScriptAsset.zig").ScriptType;
+pub const ScriptType = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptType;
 pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
 
 //Rendering Stuff -------------------------------------------

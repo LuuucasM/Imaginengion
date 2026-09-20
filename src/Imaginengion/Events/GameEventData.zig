@@ -1,14 +1,14 @@
-const Entity = @import("../GameObjects/Entity.zig");
-const EEntityComponents = @import("../GameObjects/Components.zig").EComponents;
+const Entity = @import("../ECSObjects/Entity.zig");
+const EEntityComponents = @import("../ECSComponents/EComponents.zig").EComponents;
 
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const ESceneComponents = @import("../Scene/SceneComponents.zig").EComponents;
+const SceneLayer = @import("../ECSObjects/Scene.zig");
+const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
 
-const Player = @import("../Players/Player.zig");
-const EPlayerComponents = @import("../Players/Components.zig").EComponents;
+const Player = @import("../ECSObjects/Player.zig");
+const EPlayerComponents = @import("../ECSComponents/PComponents.zig").EComponents;
 
-const GameContext = @import("../GameModes/GameMode.zig");
-const EGameContextComponents = @import("../GameModes/Components.zig").EComponents;
+const GameContext = @import("../ECSObjects/GameContext.zig");
+const EGameContextComponents = @import("../ECSComponents/GCComponents.zig").EComponents;
 
 pub const EventCategories = enum {
     EndOfFrame,

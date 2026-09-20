@@ -1,6 +1,6 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
+const FileMetaData = @import("../ECSComponents/Asset/FileMetaData.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const AssetHandlePanel = @This();

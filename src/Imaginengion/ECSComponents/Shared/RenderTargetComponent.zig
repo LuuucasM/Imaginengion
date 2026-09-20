@@ -1,25 +1,16 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const VertexArray = @import("../../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../../VertexBuffers/VertexBuffer.zig");
 const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComputeOutput = @import("../../Renderer/Renderer.zig").ComputeOutput;
-const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
+const Texture2D = @import("../AComponents.zig").Texture2D;
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const RenderTargetComponent = @This();
 
 pub const Editable = false;
 pub const Name: []const u8 = "RenderTargetComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == RenderTargetComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mComputeTexture: ComputeOutput = .empty,
 

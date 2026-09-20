@@ -1,14 +1,13 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const builtin = @import("builtin");
-const AssetsList = @import("../Assets.zig").AssetsList;
+const AssetsList = @import("../AComponents.zig").AssetsList;
 const ScriptAsset = @This();
 
-const EntityComponents = @import("../../GameObjects/Components.zig");
+const EntityComponents = @import("../EComponents.zig");
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
 
-const SceneComponents = @import("../../Scene/SceneComponents.zig");
+const SceneComponents = @import("../SComponents.zig");
 const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
 const SceneOnUpdateScript = SceneComponents.OnUpdateScript;
 const SceneInputPressedScript = SceneComponents.InputPressedScript;
@@ -32,13 +31,6 @@ const Impl = switch (builtin.os.tag) {
 };
 
 pub const Name: []const u8 = "ScriptAsset";
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == ScriptAsset) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 _Impl: Impl = .{},
 

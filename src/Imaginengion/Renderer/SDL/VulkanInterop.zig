@@ -1,8 +1,8 @@
 const std = @import("std");
 const sdl = @import("../../Core/CImports.zig").sdl;
 const vk = @import("../../Core/CImports.zig").vk;
-const MAX_TEXTURES = @import("RenderBindlessReg.zig").MAX_TEXTURES;
-const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
+const MAX_TEXTURES = @import("../RenderBindlessReg.zig").MAX_TEXTURES;
+const Texture2D = @import("../../ECSComponents/AComponents.zig").Texture2D;
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
 
 const VulkanInterop = @This();

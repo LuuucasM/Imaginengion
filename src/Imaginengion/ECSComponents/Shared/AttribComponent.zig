@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -34,13 +32,6 @@ mData: ValueTypes = .default,
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "AttribComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == AttribComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
 

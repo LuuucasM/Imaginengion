@@ -1,3 +1,4 @@
+const ListInd = @import("../ECS/Components.zig").ListInd;
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -90,23 +91,23 @@ pub const ScriptsList = [_]type{
 };
 
 pub const EComponents = enum(u16) {
-    AISlotComponent = AISlotComponent.Ind,
-    AudioComponent = AudioComponent.Ind,
-    ColliderComponent = ColliderComponent.Ind,
-    UUIDComponent = UUIDComponent.Ind,
-    NameComponent = NameComponent.Ind,
-    MainEntityComponent = MainEntityComponent.Ind,
-    PlayerSlotComponent = PlayerSlotComponent.Ind,
-    QuadComponent = QuadComponent.Ind,
-    RigidBodyComponent = RigidBodyComponent.Ind,
-    EntitySceneComponent = EntitySceneComponent.Ind,
-    TextComponent = TextComponent.Ind,
-    TransformComponent = TransformComponent.Ind,
-    ScriptComponent = ScriptComponent.Ind,
-    OnInputPressedScript = OnKeyPressedScript.Ind,
-    OnUpdateScript = OnUpdateScript.Ind,
-    ViewpointComponent = ViewpointComponent.Ind,
-    RenderTargetComponent = RenderTargetComponent.Ind,
+    AISlotComponent = ListInd(&ComponentsList, AISlotComponent),
+    AudioComponent = ListInd(&ComponentsList, AudioComponent),
+    ColliderComponent = ListInd(&ComponentsList, ColliderComponent),
+    UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
+    NameComponent = ListInd(&ComponentsList, NameComponent),
+    MainEntityComponent = ListInd(&ComponentsList, MainEntityComponent),
+    PlayerSlotComponent = ListInd(&ComponentsList, PlayerSlotComponent),
+    QuadComponent = ListInd(&ComponentsList, QuadComponent),
+    RigidBodyComponent = ListInd(&ComponentsList, RigidBodyComponent),
+    EntitySceneComponent = ListInd(&ComponentsList, EntitySceneComponent),
+    TextComponent = ListInd(&ComponentsList, TextComponent),
+    TransformComponent = ListInd(&ComponentsList, TransformComponent),
+    ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
+    OnInputPressedScript = ListInd(&ComponentsList, OnKeyPressedScript),
+    OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
+    ViewpointComponent = ListInd(&ComponentsList, ViewpointComponent),
+    RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
 };
 
 comptime {

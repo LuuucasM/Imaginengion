@@ -1,3 +1,4 @@
+const ListInd = @import("../ECS/Components.zig").ListInd;
 const std = @import("std");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
 pub const NameComponent = @import("Shared/NameComponent.zig");
@@ -52,15 +53,15 @@ pub const ScriptsList = [_]type{
 };
 
 pub const EComponents = enum(u16) {
-    UUIDComponent = UUIDComponent.Ind,
-    NameComponent = NameComponent.Ind,
-    PhysicsComponent = PhysicsComponent.Ind,
-    SceneComponent = SceneComponent.Ind,
-    ScriptComponent = ScriptComponent.Ind,
-    SpawnPossComponent = SpawnPossComponent.Ind,
-    StackPosComponent = StackPosComponent.Ind,
+    UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
+    NameComponent = ListInd(&ComponentsList, NameComponent),
+    PhysicsComponent = ListInd(&ComponentsList, PhysicsComponent),
+    SceneComponent = ListInd(&ComponentsList, SceneComponent),
+    ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
+    SpawnPossComponent = ListInd(&ComponentsList, SpawnPossComponent),
+    StackPosComponent = ListInd(&ComponentsList, StackPosComponent),
 
-    OnSceneStartScript = OnSceneStartScript.Ind,
-    OnUpdateScript = OnUpdateScript.Ind,
-    InputPressedScript = InputPressedScript.Ind,
+    OnSceneStartScript = ListInd(&ComponentsList, OnSceneStartScript),
+    OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
+    InputPressedScript = ListInd(&ComponentsList, InputPressedScript),
 };

@@ -1,3 +1,4 @@
+const ListInd = @import("../ECS/Components.zig").ListInd;
 pub const AssetMetaData = @import("Asset/AssetMetaData.zig");
 pub const FileMetaData = @import("Asset/FileMetaData.zig");
 pub const GenMetaData = @import("Asset/GenMetaData.zig");
@@ -19,14 +20,14 @@ pub const ComponentsList = [_]type{
 };
 
 pub const EComponents = enum(16) {
-    Texture2D = Texture2D.Ind,
-    ScriptAsset = ScriptAsset.Ind,
-    ShaderAsset = ShaderAsset.Ind,
-    TextAsset = TextAsset.Ind,
-    AssetMetaData = AssetMetaData.Ind,
-    FileMetaData = FileMetaData.Ind,
-    GenMetaData = GenMetaData.Ind,
-    AudioAsset = AudioAsset.Ind,
+    Texture2D = ListInd(&ComponentsList, Texture2D),
+    ScriptAsset = ListInd(&ComponentsList, ScriptAsset),
+    ShaderAsset = ListInd(&ComponentsList, ShaderAsset),
+    TextAsset = ListInd(&ComponentsList, TextAsset),
+    AssetMetaData = ListInd(&ComponentsList, AssetMetaData),
+    FileMetaData = ListInd(&ComponentsList, FileMetaData),
+    GenMetaData = ListInd(&ComponentsList, GenMetaData),
+    AudioAsset = ListInd(&ComponentsList, AudioAsset),
 };
 
 pub const FileUpdateList = [_]type{

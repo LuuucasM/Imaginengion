@@ -1,11 +1,8 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
-const ComponentsList = @import("../Components.zig").ComponentsList;
-
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
-const Entity = @import("../../GameObjects/Entity.zig");
-const ScriptType = @import("../../Assets/Assets/ScriptAsset.zig").ScriptType;
-const SceneLayer = @import("../SceneLayer.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const ScriptType = @import("../Asset/ScriptAsset.zig").ScriptType;
+const SceneLayer = @import("../../ECSObjects/Scene.zig");
 
 const WindowEventData = @import("../../Events/WindowEventData.zig");
 const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
@@ -17,13 +14,6 @@ pub const OnKeyPressedScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "OnKeyPressedScript";
     pub const Scripttype: ScriptType = .EntityInputPressed;
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == OnKeyPressedScript) {
-                break :blk i + BuiltinComponentCount;
-            }
-        }
-    };
     pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext) void {}
 };
 
@@ -33,13 +23,6 @@ pub const EntityOnUpdateScript = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "EntityOnUpdateScript";
     pub const Scripttype: ScriptType = .EntityOnUpdate;
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == EntityOnUpdateScript) {
-                break :blk i + BuiltinComponentCount;
-            }
-        }
-    };
     pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext) void {}
 };
 
@@ -48,13 +31,6 @@ pub const OnSceneStartScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
     bit: u1 = 0,
     pub const Name: []const u8 = "OnSceneStartScript";
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == OnSceneStartScript) {
-                break :blk i + BuiltinComponentCount;
-            }
-        }
-    };
     pub const Scripttype: ScriptType = .SceneSceneStart;
     pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) void {}
 };
@@ -63,13 +39,6 @@ pub const SceneOnUpdateScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
     bit: u1 = 0,
     pub const Name: []const u8 = "SceneOnUpdateScript";
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == SceneOnUpdateScript) {
-                break :blk i + BuiltinComponentCount;
-            }
-        }
-    };
     pub const Scripttype: ScriptType = .SceneOnUpdate;
     pub fn Deinit(_: *SceneOnUpdateScript, _: *EngineContext) void {}
 };
@@ -78,13 +47,6 @@ pub const InputPressedScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) bool;
     bit: u1 = 0,
     pub const Name: []const u8 = "InputPressedScript";
-    pub const Ind: usize = blk: {
-        for (ComponentsList, 0..) |component_type, i| {
-            if (component_type == InputPressedScript) {
-                break :blk i + BuiltinComponentCount;
-            }
-        }
-    };
     pub const Scripttype: ScriptType = .SceneInputPressed;
     pub fn Deinit(_: *InputPressedScript, _: *EngineContext) void {}
 };

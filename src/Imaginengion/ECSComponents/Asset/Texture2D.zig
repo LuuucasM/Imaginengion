@@ -1,7 +1,6 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const builtin = @import("builtin");
-const AssetsList = @import("../Assets.zig").AssetsList;
+const AssetsList = @import("../AComponents.zig").AssetsList;
 const Texture2D = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
@@ -70,13 +69,6 @@ const Impl = switch (builtin.os.tag) {
 };
 
 pub const Name: []const u8 = "Texture2D";
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == Texture2D) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 _Impl: Impl = .{},
 

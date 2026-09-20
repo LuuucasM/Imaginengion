@@ -1,7 +1,5 @@
 - make visualizer for sphere collision and box collision
 - do next phase of physics engine
-- i can split rendering into 2 parts one for overlay layer and one for game layer and then a 3rd pass to compose the overlay layer on top
-	- this means i can split textures a little better instead of doing it all in one and dealing with 16 8k textures only
 - add entity picking in the viewport/playport using ray tracing
 	- after this is implemented then I can start making UI elements
 	- This means I can start making the UI for Pong which consists of
@@ -9,16 +7,6 @@
 		- quit button
 		- bgm
 		- background image
-- Add tag support into the ECS
-	- right now tags are just regular components that are 1 bit in size.
-	- this is because for sparse set, for the value array, tags need a size for the array
-	- so what i need to do is check in the sparse set i need to check value type. if the size of value type is 0 then do not make a value array and all operations that operate on the value array become unable to be used
-	- then i can remove the 1 bit. then move tags from being in the components list to their own tags list
-	- then just like i pass components list right now i will also pass tags list to the ECS
-	- then when something like add component or remove component is called, they use anytype. we check if the component is of type type, then we can check if its a valid tag, if it is then we propegate. at the sparse set level we already modified it above to handle 0 sized value types so we dont need to change anything i dont think
-- add tags when possible in place of things like filtering
-	- for example when updating transforms instead of going through each one and checking if its dirty flag was set or not, when updating a transform we can ensure we instead add a TransformDirty tag
-	- then when we want to ensure world transforms are updated we can query the ecs for DirtyTransform tags instead of looping over all the transforms or creating some specialized structure to keep track of dirty transforms
 - add sound
 	- likely to use mini audio
 	- likely need to create an audio manager abstraction even tho mini audio is multi platform, just like i do with opengl even though its multiplatform
@@ -31,6 +19,8 @@
 	- this way I can get the very developed filewatcher to do the file watching for assets instead, and also scripts dont have to be dynamically compiled and loaded rather just hot-reloaded as part of the watch system.
 	- 
 - add a copy component button beside the delete component button which lets you copy the values of one component so u can "paste" it into a different entities component
+	- this is copying the values not fully duplicating a component
+	- although now that im thinking about it its kind of the same thing but im not sure
 - Add an input component to Player
 	- this will create the layer between the raw hardware input and the game input
 	- This is the same as in unreal engine saying like "AttackInput" and then assigning it to a specific key

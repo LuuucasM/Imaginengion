@@ -1,11 +1,11 @@
 const builtin = @import("builtin");
-const sdl = @import("../../Core/CImports.zig").sdl;
-const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
-const PushConstants = @import("../RenderPlatform.zig").PushConstants;
+const sdl = @import("../Core/CImports.zig").sdl;
+const Texture2D = @import("../ECSComponents/AComponents.zig").Texture2D;
+const PushConstants = @import("RenderPlatform.zig").PushConstants;
 const RenderInterop = @This();
 
 const Impl = switch (builtin.os.tag) {
-    .windows => @import("VulkanInterop.zig"),
+    .windows => @import("SDL/VulkanInterop.zig"),
     else => @compileError("this shouldnt ever happen!"),
 };
 

@@ -3,10 +3,10 @@ const sdl = @import("../../Core/CImports.zig").sdl;
 const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
 const PipelineConfig = @import("../RenderPipeline.zig").PipelineConfig;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ShaderAsset = @import("../../Assets/Assets.zig").ShaderAsset;
+const ShaderAsset = @import("../../ECSComponents/AComponents.zig").ShaderAsset;
 const StageInfo = ShaderAsset.StageInfo;
 const Stage = ShaderAsset.Stage;
-const TextureFormat = @import("../../Assets/Assets.zig").Texture2D.TextureFormat;
+const TextureFormat = @import("../../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const PushConstants = @import("../RenderPipeline.zig").SDFPushConstants;
 
 const MathTypes = @import("../../Math/MathTypes.zig");

@@ -53,6 +53,7 @@ pub fn Core(comptime Self: type) type {
 
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
             //for inserting event need to figure out a way to use comptime to make the correct delete object event
+            _ = obj_id;
             self.mEventManager.Insert(
                 engine_context.EngineAllocator(),
                 .EndOfFrame,
@@ -73,6 +74,7 @@ pub fn Core(comptime Self: type) type {
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
             //same issue as DeleteObj, need to figure out a way to insert the correct event for an abstract manager
+            _ = obj_id;
             self.mEventManager.Insert(
                 engine_context.EngineAllocator(),
                 .EndOfFrame,
@@ -104,8 +106,8 @@ pub fn Core(comptime Self: type) type {
             engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
         }
 
-        pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
-            return self.mECSManager.GetGroup(frame_allocator, query);
+        pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
+            return try self.mECSManager.GetGroup(frame_allocator, query);
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {

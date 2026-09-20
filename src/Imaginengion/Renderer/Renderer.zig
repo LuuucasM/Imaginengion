@@ -8,8 +8,8 @@ const GPUAsserts = @import("../Core/GPUAsserts.zig");
 const Renderer2D = @import("Renderer2D.zig");
 const Renderer3D = @import("Renderer3D.zig");
 
-const Assets = @import("../Assets/Assets.zig");
-const AssetHandle = @import("../Assets/AssetHandle.zig");
+const Assets = @import("../ECSComponents/AComponents.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ShaderAsset = Assets.ShaderAsset;
 const Texture2D = Assets.Texture2D;
 
@@ -20,8 +20,8 @@ const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;
 
-const Entity = @import("../GameObjects/Entity.zig");
-const EntityComponents = @import("../GameObjects/Components.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
@@ -30,7 +30,7 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EngineContext = @import("../Core/EngineContext.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
-const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
+const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const RenderPipeline = @import("RenderPipeline.zig");

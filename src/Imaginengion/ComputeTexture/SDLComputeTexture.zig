@@ -1,5 +1,5 @@
 const std = @import("std");
-const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
+const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const sdl = @import("../Core/CImports.zig").sdl;
 const EngineContext = @import("../Core/EngineContext.zig");
 

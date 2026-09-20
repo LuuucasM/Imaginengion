@@ -1,18 +1,18 @@
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
-const AssetHandle = @import("../Assets/AssetHandle.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ContentBrowserPanel = @This();
-const Assets = @import("../Assets/Assets.zig");
+const Assets = @import("../ECSComponents/AComponents.zig");
 const Texture2D = Assets.Texture2D;
 const ScriptAsset = Assets.ScriptAsset;
 const Tracy = @import("../Core/Tracy.zig");
-const SceneComponent = @import("../Scene/SceneComponents.zig").SceneComponent;
+const SceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
 const EngineContext = @import("../Core/EngineContext.zig");
 
-const Entity = @import("../GameObjects/Entity.zig");
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const Player = @import("../Players/Player.zig");
-const GameMode = @import("../GameModes/GameMode.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
+const SceneLayer = @import("../ECSObjects/Scene.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const GameMode = @import("../ECSObjects/GameContext.zig");
 
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const NewScriptEvent = ImguiEventData.NewScriptEvent;
@@ -381,23 +381,23 @@ fn NewObjectScriptPopup(comptime ObjectType: type, engine_context: *EngineContex
 
 fn ObjectTraits(comptime T: type) type {
     if (T == Entity) {
-        const EntityComponents = @import("../GameObjects/Components.zig");
+        const EntityComponents = @import("../ECSComponents/EComponents.zig");
 
         return struct {
             const ScriptsList = EntityComponents.ScriptsList;
         };
     } else if (T == SceneLayer) {
-        const SceneComponents = @import("../Scene/SceneComponents.zig");
+        const SceneComponents = @import("../ECSComponents/SComponents.zig");
         return struct {
             const ScriptsList = SceneComponents.ScriptsList;
         };
     } else if (T == Player) {
-        const PlayerComponents = @import("../Players/Components.zig");
+        const PlayerComponents = @import("../ECSComponents/PComponents.zig");
         return struct {
             const ScriptsList = PlayerComponents.ScriptsList;
         };
     } else if (T == GameMode) {
-        const GameModeComponents = @import("../GameModes/Components.zig");
+        const GameModeComponents = @import("../ECSComponents/GCComponents.zig");
         return struct {
             const ScriptsList = GameModeComponents.ScriptsList;
         };

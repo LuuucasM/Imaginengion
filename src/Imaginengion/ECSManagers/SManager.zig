@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Scene = @import("../ECSObjects/Scene.zig");
-const LayerType = @import("Components/SceneComponent.zig").LayerType;
+const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
@@ -46,7 +46,7 @@ pub const ECSType = enum {
     GameModes,
 };
 
-pub const ECSManagerS = ECSManager(Scene.Type, &SceneComponentsList);
+pub const ECSManagerT = ECSManager(Scene.Type, &SceneComponentsList);
 
 //scene stuff
 pub const uninit: SManager = .{
@@ -56,7 +56,7 @@ pub const uninit: SManager = .{
     .mUUIDToWorldID = .empty,
 };
 
-mECSManager: ECSManagerS,
+mECSManager: ECSManagerT,
 mEventManager: EventManagerT,
 
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Scene.Type),
@@ -172,20 +172,20 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
         return;
     } else if (new_pos < current_pos) {
         //we are moving the scene down in position so we need to move everything between new_pos and current_pos up 1 position
-        const scene_stack_pos_list = try self.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+        const scene_stack_pos_list = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
 
         for (scene_stack_pos_list.items) |list_scene_id| {
-            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id).?;
+            const scene_stack_pos_component = self.mECSManager.GetComponent(SceneStackPos, list_scene_id).?;
             if (scene_stack_pos_component.mPosition >= new_pos and scene_stack_pos_component.mPosition < current_pos) {
                 scene_stack_pos_component.mPosition += 1;
             }
         }
     } else {
         //we are moving the scene up in position so we need to move everything between current_pos and new_pos down 1 position
-        const scene_stack_pos_list = try self.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+        const scene_stack_pos_list = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
 
         for (scene_stack_pos_list.items) |list_scene_id| {
-            const scene_stack_pos_component = self.mECSManagerSC.GetComponent(SceneStackPos, list_scene_id).?;
+            const scene_stack_pos_component = self.mECSManager.GetComponent(SceneStackPos, list_scene_id).?;
             if (scene_stack_pos_component.mPosition > current_pos and scene_stack_pos_component.mPosition <= new_pos) {
                 scene_stack_pos_component.mPosition -= 1;
             }
@@ -195,13 +195,15 @@ pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_laye
     stack_pos_component.mPosition = new_pos;
 }
 
+/// Scenes ordered for display: highest stack position first, so the topmost layer
+/// renders at the top of the list.
 pub fn GetSceneStackIDs(self: *SManager, frame_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
-    const stack_pos_scenes = try self.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
-    std.sort.insertion(Scene.Type, stack_pos_scenes.items, self.mECSManagerSC, SManager.SortScenesFunc);
+    const stack_pos_scenes = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+    std.sort.insertion(Scene.Type, stack_pos_scenes.items, &self.mECSManager, SManager.SortScenesFunc);
     return stack_pos_scenes;
 }
 
-pub fn SortScenesFunc(ecs_manager_sc: ECSManagerS, a: Scene.Type, b: Scene.Type) bool {
+pub fn SortScenesFunc(ecs_manager_sc: *ECSManagerT, a: Scene.Type, b: Scene.Type) bool {
     const a_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, a).?;
     const b_stack_pos_comp = ecs_manager_sc.GetComponent(SceneStackPos, b).?;
 
@@ -211,14 +213,16 @@ pub fn SortScenesFunc(ecs_manager_sc: ECSManagerS, a: Scene.Type, b: Scene.Type)
 fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer: Scene) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mLayerType == .GameLayer) {
-        _ = try scene_layer.AddComponent(engine_context, SceneStackPos{ .mPosition = self.mGameLayerInsertIndex });
-        const stack_pos_group = try self.mECSManagerSC.GetGroup(engine_context.FrameAllocator(), .{ .Component = SceneStackPos });
+        //shift the overlays up before adding, otherwise the new scene is in the group too
+        //and shifts itself past the slot it was just given
+        const stack_pos_group = try self.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = SceneStackPos });
         for (stack_pos_group.items) |scene_id| {
-            const stack_pos = self.mECSManagerSC.GetComponent(SceneStackPos, scene_id).?;
+            const stack_pos = self.mECSManager.GetComponent(SceneStackPos, scene_id).?;
             if (stack_pos.mPosition >= self.mGameLayerInsertIndex) {
                 stack_pos.mPosition += 1;
             }
         }
+        _ = try scene_layer.AddComponent(engine_context, SceneStackPos{ .mPosition = self.mGameLayerInsertIndex });
         self.mGameLayerInsertIndex += 1;
     } else {
         _ = try scene_layer.AddComponent(engine_context, SceneStackPos{ .mPosition = self.mNumofLayers });
@@ -231,11 +235,11 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
     const destroy_stack_pos = scene_layer.GetComponent(SceneStackPos).?;
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
 
-    var stack_pos_group = try self.mECSManagerSC.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
+    var stack_pos_group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
     defer stack_pos_group.deinit(frame_allocator);
 
     for (stack_pos_group.items) |pos_scene_id| {
-        const stack_pos = self.mECSManagerSC.GetComponent(SceneStackPos, pos_scene_id).?;
+        const stack_pos = self.mECSManager.GetComponent(SceneStackPos, pos_scene_id).?;
         if (stack_pos.mPosition > destroy_stack_pos.mPosition) {
             stack_pos.mPosition -= 1;
         }

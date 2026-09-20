@@ -1,18 +1,10 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const AssetsList = @import("../Assets.zig").AssetsList;
+const AssetsList = @import("../AComponents.zig").AssetsList;
 const FileMetaData = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
-const PathType = @import("../AssetManager.zig").PathType;
+const PathType = @import("../../Assets/AManager.zig").PathType;
 
 pub const Name: []const u8 = "FileMetaData";
-pub const Ind: usize = blk: {
-    for (AssetsList, 0..) |asset_type, i| {
-        if (asset_type == FileMetaData) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mRelPath: std.ArrayList(u8) = .empty,
 mPathType: PathType = .Eng,

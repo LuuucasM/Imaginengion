@@ -1,14 +1,12 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const ComponentsList = @import("../../GameObjects/Components.zig").ComponentsList;
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
-const AssetsList = @import("../../Assets/Assets.zig");
+const AssetsList = @import("../AComponents.zig");
 const FileMetaData = AssetsList.FileMetaData;
-const Texture2D = @import("../../Assets/Assets.zig").Texture2D;
+const Texture2D = @import("../AComponents.zig").Texture2D;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Material = @import("../../Physics/Material.zig");
 const TextComponent = @This();
@@ -17,13 +15,6 @@ const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "TextComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == TextComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mShouldRender: bool = true,
 mText: std.ArrayList(u8) = .empty,

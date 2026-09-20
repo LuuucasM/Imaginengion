@@ -1,9 +1,9 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const FileMetaData = @import("../Assets/Assets/FileMetaData.zig");
+const FileMetaData = @import("../ECSComponents/Asset/FileMetaData.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Player = @import("../Players/Player.zig");
+const Player = @import("../ECSObjects/Player.zig");
 const RunSettings = @This();
 
 _P_Open: bool = false,

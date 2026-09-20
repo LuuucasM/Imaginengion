@@ -435,7 +435,7 @@ pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: E
         .FileUpdate => |e| {
             inline for (AssetComponents.FileUpdateList) |comp_type| {
                 if (self.mECSManager.HasComponent(comp_type, e.mAssetID)) {
-                    self.mECSManager.RemoveComponent(engine_context, e.mAssetID, comp_type.Ind);
+                    self.mECSManager.RemoveComponent(engine_context, e.mAssetID, ECSManagerT.ComponentInd(comp_type));
                 }
             }
         },

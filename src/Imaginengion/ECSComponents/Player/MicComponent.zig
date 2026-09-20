@@ -1,21 +1,12 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const BUFFER_CAPACITY = @import("../../AudioManager/AudioManager.zig").BUFFER_CAPACITY;
 const TAudioBuffer = @import("../../AudioManager/AudioManager.zig").TAudioBuffer;
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const MicComponent = @This();
 
 pub const Editable: bool = false;
 pub const Name: []const u8 = "MicComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == MicComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mAudioBuffer: TAudioBuffer = .default,
 

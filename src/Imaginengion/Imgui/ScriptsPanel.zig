@@ -1,19 +1,19 @@
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
-const Entity = @import("../GameObjects/Entity.zig");
-const EntityScriptComponent = @import("../GameObjects/Components.zig").ScriptComponent;
+const Entity = @import("../ECSObjects/Entity.zig");
+const EntityScriptComponent = @import("../ECSComponents/EComponents.zig").ScriptComponent;
 const EngineContext = @import("../Core/EngineContext.zig");
-const Assets = @import("../Assets/Assets.zig");
+const Assets = @import("../ECSComponents/AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
 const ScriptAsset = Assets.ScriptAsset;
-const Components = @import("../GameObjects/Components.zig");
+const Components = @import("../ECSComponents/EComponents.zig");
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const Player = @import("../Players/Player.zig");
-const GameMode = @import("../GameModes/GameMode.zig");
+const SceneLayer = @import("../ECSObjects/Scene.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const GameMode = @import("../ECSObjects/GameContext.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -95,7 +95,7 @@ fn RenderScript(comptime ObjectType: type, engine_context: *EngineContext, objec
 
 fn ObjectTraits(comptime T: type) type {
     if (T == Entity) {
-        const EntityComponents = @import("../GameObjects/Components.zig");
+        const EntityComponents = @import("../ECSComponents/EComponents.zig");
 
         return struct {
             const ComponentsPanelList = EntityComponents.ComponentPanelList;
@@ -112,7 +112,7 @@ fn ObjectTraits(comptime T: type) type {
             }
         };
     } else if (T == SceneLayer) {
-        const SceneComponents = @import("../Scene/SceneComponents.zig");
+        const SceneComponents = @import("../ECSComponents/SComponents.zig");
         return struct {
             const ComponentsPanelList = SceneComponents.ComponentsPanelList;
             pub fn HandleDragDropTarget(engine_context: *EngineContext, scene_layer: SceneLayer) !void {
@@ -128,7 +128,7 @@ fn ObjectTraits(comptime T: type) type {
             }
         };
     } else if (T == Player) {
-        const PlayerComponents = @import("../Players/Components.zig");
+        const PlayerComponents = @import("../ECSComponents/PComponents.zig");
         return struct {
             const ComponentsPanelList = PlayerComponents.ComponentsPanelList;
             pub fn HandleDragDropTarget(engine_context: *EngineContext, player: Player) !void {
@@ -144,7 +144,7 @@ fn ObjectTraits(comptime T: type) type {
             }
         };
     } else if (T == GameMode) {
-        const GameModeComponents = @import("../GameModes/Components.zig");
+        const GameModeComponents = @import("../ECSComponents/GCComponents.zig");
         return struct {
             const ComponentsPanelList = GameModeComponents.ComponentsPanelList;
             pub fn HandleDragDropTarget(engine_context: *EngineContext, game_mode: GameMode) !void {

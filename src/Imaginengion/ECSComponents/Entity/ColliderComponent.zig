@@ -1,13 +1,11 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const CollisionFilter = @import("../../Physics/CollisionManager.zig").CollisionFilter;
 const CollisionManager = @import("../../Physics/CollisionManager.zig");
-const Entity = @import("../Entity.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
 
 const ColliderComponent = @This();
 
@@ -18,13 +16,6 @@ pub const Shapes = enum {
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "ColliderComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == ColliderComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 mShape: Shapes = .Sphere,
 mCollisionFilter: CollisionFilter = .default,

@@ -1,17 +1,15 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const ScriptComponent = @This();
 
-const Assets = @import("../../Assets/Assets.zig");
+const Assets = @import("../AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const FileMetaData = Assets.FileMetaData;
 
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
-const Entity = @import("../../GameObjects/Entity.zig");
-const AssetType = @import("../../Assets/AssetManager.zig").AssetType;
+const Entity = @import("../../ECSObjects/Entity.zig");
+const AssetType = @import("../../Assets/AManager.zig").AssetType;
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 
@@ -24,13 +22,6 @@ mScriptAssetHandle: AssetHandle = .uninit,
 
 pub const Editable: bool = false;
 pub const Name: []const u8 = "ScriptComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == ScriptComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 pub fn Deinit(self: *ScriptComponent, _: *EngineContext) void {
     self.mScriptAssetHandle.ReleaseAsset();

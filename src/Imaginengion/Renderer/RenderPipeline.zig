@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const sdl = @import("../Core/CImports.zig").sdl;
-const ShaderAsset = @import("../Assets/Assets.zig").ShaderAsset;
-const TextureFormat = @import("../Assets/Assets.zig").Texture2D.TextureFormat;
+const ShaderAsset = @import("../ECSComponents/AComponents.zig").ShaderAsset;
+const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const EngineContext = @import("../Core/EngineContext.zig");
 const GPUAsserts = @import("../Core/GPUAsserts.zig");
 

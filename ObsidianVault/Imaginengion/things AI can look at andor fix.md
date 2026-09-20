@@ -1,0 +1,25 @@
+- add a way to do deleteobj and removecomponent in Manager.zig
+- fix compile bugs and errors
+	- theres going to be a lot this time since I changed a pretty big core but the individual systems logic is the same so once I get over compile time stuff It should be ok
+- I need to fix different systems that iterate over the hierarchy and add checks for the "MainEntityComponent" (or whatever i called it).
+	- I added a component so you can tag entities to determine where main components are.
+	- This is because the way entity hierarchies and the way the ECS is suppose to be used is like for example with attribute components, if you want multiple attributes then you create multiple children that each have just an attribute component. So this entity isnt really a game object but a convenience entity to represent some bundle of components.
+	- This can apply to all kinds of different components
+	- so because of this you could have a hierarchy of entities where some of the children/parents are not actually suppose to be a game object but really just a convenience entity.
+- fix bug where resetting individual x, y, breaks the object, but then z is ok?
+- - fix ECS panel bug where there is fighting between right clicking on an element in the panel, and right clicking of the panel.
+	- currently if you right click on an element first the popup for the panel appears, then the popup for the element replaces it.
+	- should just have one popup
+- Add tag support into the ECS
+	- right now tags are just regular components that are 1 bit in size.
+	- this is because for sparse set, for the value array, tags need a size for the array
+	- so what i need to do is check in the sparse set i need to check value type. if the size of value type is 0 then do not make a value array and all operations that operate on the value array become unable to be used
+	- then i can remove the 1 bit. then move tags from being in the components list to their own tags list
+	- then just like i pass components list right now i will also pass tags list to the ECS
+	- then when something like add component or remove component is called, they use anytype. we check if the component is of type type, then we can check if its a valid tag, if it is then we propegate. at the sparse set level we already modified it above to handle 0 sized value types so we dont need to change anything i dont think
+- add tags when possible in place of things like filtering
+	- for example when updating transforms instead of going through each one and checking if its dirty flag was set or not, when updating a transform we can ensure we instead add a TransformDirty tag
+	- then when we want to ensure world transforms are updated we can query the ecs for DirtyTransform tags instead of looping over all the transforms or creating some specialized structure to keep track of dirty transforms
+- continue to build out the profiling system with tracy.
+	- ensure that there are frame profilingin appropriate places
+	- add memory profiling 

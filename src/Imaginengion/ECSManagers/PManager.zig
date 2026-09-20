@@ -32,9 +32,9 @@ mEventManager: EventManagerT,
 
 mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Player.Type),
 
-pub const CreateGameContext = Core.CreateObj;
+pub const CreatePlayer = Core.CreateObj;
 
-pub const DeleteGameContext = Core.DeleteObj;
+pub const DeletePlayer = Core.DeleteObj;
 
 pub const Duplicate = Core.Duplicate;
 

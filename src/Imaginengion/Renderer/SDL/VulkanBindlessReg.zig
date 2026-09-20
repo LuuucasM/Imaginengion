@@ -3,9 +3,9 @@ const vk = @import("../../Core/CImports.zig").vk;
 const sdl = @import("../../Core/CImports.zig").sdl;
 const SkipField = @import("../../Core/SkipField.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
-const SDLTexture2D = @import("../../Assets/Assets/Texture2Ds/SDLTexture2D.zig");
-const RenderInterop = @import("RenderInterop.zig");
-const MAX_TEXTURES = @import("RenderBindlessReg.zig").MAX_TEXTURES;
+const SDLTexture2D = @import("../../ECSComponents/Asset/Texture2Ds/SDLGPUTexture2D.zig");
+const RenderInterop = @import("../RenderInterop.zig");
+const MAX_TEXTURES = @import("../RenderBindlessReg.zig").MAX_TEXTURES;
 
 const BindlessVulkanReg = @This();
 

@@ -6,28 +6,28 @@ const WorldManager = @import("../Core/WorldManager.zig");
 const SceneType = SceneLayer.Type;
 const ECSManagerScenes = WorldManager.ECSManagerScenes;
 const ECSManagerGameObj = WorldManager.ECSManagerGameObj;
-const SceneLayer = @import("../Scene/SceneLayer.zig");
+const SceneLayer = @import("../ECSObjects/Scene.zig");
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
 
-const EntityScriptList = @import("../GameObjects/Components.zig").ScriptsList;
-const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityScriptList = @import("../ECSComponents/EComponents.zig").ScriptsList;
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityScriptComponent = EntityComponents.ScriptComponent;
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
 const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
 
-const SceneScriptList = @import("../Scene/SceneComponents.zig").ScriptsList;
-const SceneComponents = @import("../Scene/SceneComponents.zig");
+const SceneScriptList = @import("../ECSComponents/SComponents.zig").ScriptsList;
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const StackPosComponent = SceneComponents.StackPosComponent;
 const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
 
-const AssetsList = @import("../Assets/Assets.zig").AssetsList;
-const Assets = @import("../Assets/Assets.zig");
+const AssetsList = @import("../ECSComponents/AComponents.zig").AssetsList;
+const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const ScriptType = ScriptAsset.ScriptType;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 

@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const UUIDComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -11,13 +9,6 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "UUIDComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == UUIDComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 pub const empty: UUIDComponent = .{
     .ID = std.math.maxInt(u64),

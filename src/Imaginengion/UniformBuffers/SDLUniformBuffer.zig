@@ -1,7 +1,7 @@
 const sdl = @import("../Core/CImports.zig").sdl;
 const SDLUniformBuffer = @This();
 const EngineContext = @import("../Core/EngineContext.zig");
-const Stage = @import("../Assets/Assets/ShaderAsset.zig").Stage;
+const Stage = @import("../ECSComponents/Asset/ShaderAsset.zig").Stage;
 
 mSlot: u32,
 mStage: Stage,

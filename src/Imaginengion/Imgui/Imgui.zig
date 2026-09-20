@@ -5,7 +5,7 @@ const imgui = @import("../Core/CImports.zig").imgui;
 const sdl = @import("../Core/CImports.zig").sdl;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Texture2D = @import("../Assets/Assets.zig").Texture2D;
+const Texture2D = @import("../ECSComponents/AComponents.zig").Texture2D;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ImguiManager = @This();
@@ -535,7 +535,7 @@ pub fn RenderFloat3Input(val: *Vec3(f32), label: [:0]const u8) !void {
 
 pub fn RenderEnum(comptime T: type, value: *T, label: [:0]const u8) !void {
     const field_names = std.meta.fieldNames(T);
-    const current_index = @intFromEnum(value.*);
+    const current_index = @backingInt(value.*);
 
     var preview_buf: [32]u8 = undefined;
     const preview_cstr = std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{@tagName(value.*)}, 0) catch unreachable;
@@ -547,7 +547,7 @@ pub fn RenderEnum(comptime T: type, value: *T, label: [:0]const u8) !void {
             const is_selected = (current_index == i);
 
             if (imgui.igSelectable_Bool(field_name, is_selected, 0, .{ .x = 0, .y = 0 })) {
-                value.* = @enumFromInt(i);
+                value.* = @fromBackingInt(@intCast(i));
             }
             if (is_selected) imgui.igSetItemDefaultFocus();
         }
@@ -557,7 +557,7 @@ pub fn RenderEnum(comptime T: type, value: *T, label: [:0]const u8) !void {
 pub fn RenderUnion(comptime T: type, value: *T, label: [:0]const u8) !void {
     const field_names = @typeInfo(T).@"union".field_names;
     const field_types = @typeInfo(T).@"union".field_types;
-    const current_index = @intFromEnum(@as(std.meta.Tag(T), value.*));
+    const current_index = @backingInt(@as(std.meta.Tag(T), value.*));
 
     var preview_buf: [32]u8 = undefined;
     const preview_cstr = try std.fmt.bufPrintSentinel(&preview_buf, "{s}", .{@tagName(value.*)}, 0);

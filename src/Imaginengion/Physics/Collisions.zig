@@ -1,7 +1,7 @@
 const std = @import("std");
-const Entity = @import("../GameObjects/Entity.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
 
-const EntityComponents = @import("../GameObjects/Components.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 

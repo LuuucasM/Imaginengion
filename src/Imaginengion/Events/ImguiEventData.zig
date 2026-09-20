@@ -1,7 +1,7 @@
-const Entity = @import("../GameObjects/Entity.zig");
-const SceneLayer = @import("../Scene/SceneLayer.zig");
-const ScriptType = @import("../Assets/Assets/ScriptAsset.zig").ScriptType;
-const LayerType = @import("../Scene/Components/SceneComponent.zig").LayerType;
+const Entity = @import("../ECSObjects/Entity.zig");
+const SceneLayer = @import("../ECSObjects/Scene.zig");
+const ScriptType = @import("../ECSComponents/Asset/ScriptAsset.zig").ScriptType;
+const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 pub const EventCategories = enum {

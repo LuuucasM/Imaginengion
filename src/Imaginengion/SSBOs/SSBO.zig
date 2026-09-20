@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const EngineContext = @import("../Core/EngineContext.zig");
-const Stage = @import("../Assets/Assets.zig").ShaderAsset.Stage;
+const Stage = @import("../ECSComponents/AComponents.zig").ShaderAsset.Stage;
 const Tracy = @import("../Core/Tracy.zig");
 const SSBO = @This();
 

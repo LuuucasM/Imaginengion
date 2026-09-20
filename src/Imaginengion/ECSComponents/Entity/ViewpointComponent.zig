@@ -1,6 +1,4 @@
-const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
 const std = @import("std");
-const ComponentsList = @import("../Components.zig").ComponentsList;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const MathUtils = @import("../../Math/MathUtils.zig");
@@ -14,13 +12,6 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable = true;
 pub const Name: []const u8 = "LensComponent";
-pub const Ind: usize = blk: {
-    for (ComponentsList, 0..) |component_type, i| {
-        if (component_type == ViewpointComponent) {
-            break :blk i + BuiltinComponentCount;
-        }
-    }
-};
 
 //viewport stuff
 mViewportWidth: usize = 1600,

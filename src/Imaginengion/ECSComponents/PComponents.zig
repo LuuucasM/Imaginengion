@@ -1,3 +1,4 @@
+const ListInd = @import("../ECS/Components.zig").ListInd;
 pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
 pub const MicComponent = @import("Player/MicComponent.zig");
 pub const PossessComponent = @import("Player/PossessComponent.zig");
@@ -25,9 +26,9 @@ pub const ComponentsPanelList = [_]type{
 pub const ScriptsList = [_]type{};
 
 pub const EComponents = enum(u16) {
-    RenderTargetComponent = RenderTargetComponent.Ind,
-    MicComponent = MicComponent.Ind,
-    PossessComponent = PossessComponent.Ind,
-    NameComponent = NameComponent.Ind,
-    UUIDComponent = UUIDComponent.Ind,
+    RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
+    MicComponent = ListInd(&ComponentsList, MicComponent),
+    PossessComponent = ListInd(&ComponentsList, PossessComponent),
+    NameComponent = ListInd(&ComponentsList, NameComponent),
+    UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
 };
