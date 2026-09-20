@@ -19,7 +19,7 @@ pub const Ind: usize = blk: {
 
 mAudioBuffer: TAudioBuffer = .default,
 
-pub fn Deinit(_: *MicComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *MicComponent, _: *EngineContext) void {}
 
 //nothing is saved yet
 const Json = JsonUtils.JsonFields(MicComponent, .{});

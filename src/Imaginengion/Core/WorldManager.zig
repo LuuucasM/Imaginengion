@@ -65,12 +65,12 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mSManager.Deinit(engine_context);
 }
 
-pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) !void {
+pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
     switch (options) {
-        .EManager => try self.mEManager.clearAndFree(engine_context),
-        .GCManager => try self.mGCManager.clearAndFree(engine_context),
-        .PManager => try self.mPManager.clearAndFree(engine_context),
-        .SManager => try self.mSManager.clearAndFree(engine_context),
+        .EManager => self.mEManager.clearAndFree(engine_context),
+        .GCManager => self.mGCManager.clearAndFree(engine_context),
+        .PManager => self.mPManager.clearAndFree(engine_context),
+        .SManager => self.mSManager.clearAndFree(engine_context),
     }
 }
 
@@ -135,11 +135,6 @@ pub fn GetSceneStackIDs(self: *WorldManager, frame_allocator: std.mem.Allocator)
 
 pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {
     self.mSManager.
-}
-
-pub fn SceneECSCallback(world_manager: *anyopaque, engine_context: *EngineContext, event: SManager.EventManagerT.EventType) anyerror!bool {
-    _ = .{ world_manager, engine_context, event };
-    @panic("WorldManager.SceneECSCallback not implemented");
 }
 
 fn InsertScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {

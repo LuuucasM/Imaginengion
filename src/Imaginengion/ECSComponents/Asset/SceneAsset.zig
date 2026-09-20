@@ -11,7 +11,7 @@ pub const empty: SceneAsset = .{
 
 mScene: Scene,
 
-pub fn Deinit(_: *SceneAsset, _: *EngineContext) !void {}
+pub fn Deinit(_: *SceneAsset, _: *EngineContext) void {}
 
 pub const Name: []const u8 = "SceneAsset";
 pub const Ind: usize = blk: {

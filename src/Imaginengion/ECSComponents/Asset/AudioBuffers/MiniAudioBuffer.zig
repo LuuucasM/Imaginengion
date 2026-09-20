@@ -28,7 +28,7 @@ pub fn Init(self: *MiniAudioBuffer, engine_context: *EngineContext, rel_path: []
     self.mAudioConfig = ma.ma_audio_buffer_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);
 }
 
-pub fn Deinit(self: *MiniAudioBuffer) !void {
+pub fn Deinit(self: *MiniAudioBuffer) void {
     std.debug.assert(self.mPcmFrames != null);
     ma.ma_free(self.mPcmFrames, null);
 }

@@ -11,7 +11,7 @@ pub const empty: GCAsset = .{
 
 mGameContext: GameContext,
 
-pub fn Deinit(_: *GCAsset, _: *EngineContext) !void {}
+pub fn Deinit(_: *GCAsset, _: *EngineContext) void {}
 
 pub const Name: []const u8 = "GCAsset";
 pub const Ind: usize = blk: {

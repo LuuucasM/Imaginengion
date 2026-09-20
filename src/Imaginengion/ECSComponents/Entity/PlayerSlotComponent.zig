@@ -19,7 +19,7 @@ pub const Ind: usize = blk: {
 
 mPlayerEntity: Player = .uninit,
 
-pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) void {}
 
 pub fn EditorRender(_: *PlayerSlotComponent, _: *EngineContext) !void {}
 

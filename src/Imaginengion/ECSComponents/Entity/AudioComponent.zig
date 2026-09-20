@@ -54,7 +54,7 @@ pub fn ReadFrames(self: *AudioComponent, engine_context: EngineContext, frames_o
     return audio_asset.ReadFrames(frames_out, frame_count, *self.mCursor, self.mLoop);
 }
 
-pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
+pub fn Deinit(self: *AudioComponent, _: *EngineContext) void {
     self.mAudioAsset.ReleaseAsset();
 }
 

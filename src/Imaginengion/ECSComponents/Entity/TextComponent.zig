@@ -36,7 +36,7 @@ mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
 mEngineAllocator: std.mem.Allocator = undefined,
 mShouldEditTexture: bool = false,
 
-pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) void {
     self.mTextAssetHandle.ReleaseAsset();
     self.mTexHandle.ReleaseAsset();
     self.mText.deinit(engine_context.EngineAllocator());

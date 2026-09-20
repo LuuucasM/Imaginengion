@@ -59,7 +59,7 @@ pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: 
     std.log.debug("SDLGPUTexture2D.InitGen: {d}x{d}", .{ descriptor.width, descriptor.height });
 }
 
-pub fn Deinit(self: *SDLTexture2D, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *SDLTexture2D, engine_context: *EngineContext) void {
     engine_context.mRenderer.mTextureManager.Unregister(self._TextureHandle);
     self._TextureHandle = 0;
 }

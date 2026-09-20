@@ -26,7 +26,7 @@ _InvMass: f32 = 0.0,
 _Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 
-pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) void {}
 
 pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
     if (try ImguiManager.RenderFloatInput(&self.mMass, "Mass", 0.1, 1.0)) {

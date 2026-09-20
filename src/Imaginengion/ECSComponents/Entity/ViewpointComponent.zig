@@ -35,7 +35,7 @@ mPerspectiveNear: f32 = 0.01,
 mPerspectiveFar: f32 = 1000.0,
 mAreaRect: Vec4(f32) = .{ .x = 0.0, .y = 0.0, .z = 1.0, .w = 1.0 },
 
-pub fn Deinit(_: *ViewpointComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *ViewpointComponent, _: *EngineContext) void {}
 
 pub fn SetPerspective(self: *ViewpointComponent, fov_radians: f32, near_clip: f32, far_clip: f32) void {
     self.mPerspectiveFOVRad = fov_radians;

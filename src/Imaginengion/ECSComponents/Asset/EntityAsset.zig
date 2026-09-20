@@ -11,7 +11,7 @@ pub const empty: EntityAsset = .{
 
 mEntity: Entity,
 
-pub fn Deinit(_: *EntityAsset, _: *EngineContext) !void {}
+pub fn Deinit(_: *EntityAsset, _: *EngineContext) void {}
 
 pub const Name: []const u8 = "EntityAsset";
 pub const Ind: usize = blk: {

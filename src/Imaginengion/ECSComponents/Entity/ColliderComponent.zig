@@ -29,7 +29,7 @@ pub const Ind: usize = blk: {
 mShape: Shapes = .Sphere,
 mCollisionFilter: CollisionFilter = .default,
 
-pub fn Deinit(_: *ColliderComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *ColliderComponent, _: *EngineContext) void {}
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
     try ImguiManager.RenderEnum(Shapes, &self.mShape, "Collider Type");

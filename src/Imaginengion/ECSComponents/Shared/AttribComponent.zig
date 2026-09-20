@@ -42,7 +42,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn Deinit(_: *AttribComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
 
 pub fn ImguiRender(self: *AttribComponent, _: *EngineContext) !void {
     try ImguiManager.RenderUnion(ValueTypes, &self.mData, "Type");

@@ -15,4 +15,4 @@ pub const Ind: usize = blk: {
 
 mPosition: usize = std.math.maxInt(usize),
 
-pub fn Deinit(_: *StackPosComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *StackPosComponent, _: *EngineContext) void {}

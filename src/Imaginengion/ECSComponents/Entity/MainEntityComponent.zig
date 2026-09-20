@@ -14,4 +14,4 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn Deinit(_: *MainEntityComp, _: *EngineContext) !void {}
+pub fn Deinit(_: *MainEntityComp, _: *EngineContext) void {}

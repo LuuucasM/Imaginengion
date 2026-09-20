@@ -18,7 +18,7 @@ pub const Ind: usize = blk: {
 
 mAIEntity: Entity.Type = Entity.NullEntity,
 
-pub fn Deinit(_: *AISlotComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *AISlotComponent, _: *EngineContext) void {}
 
 pub fn EditorRender(_: *AISlotComponent, _: *EngineContext) !void {}
 

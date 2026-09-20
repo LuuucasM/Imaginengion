@@ -11,7 +11,7 @@ pub fn Init(self: UnsupportedProgram) !void {
     Unsupported();
 }
 
-pub fn Deinit(self: UnsupportedProgram) !void {
+pub fn Deinit(self: UnsupportedProgram) void {
     _ = self;
     Unsupported();
 }

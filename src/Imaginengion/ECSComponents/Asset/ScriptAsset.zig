@@ -46,8 +46,8 @@ pub fn Init(self: *ScriptAsset, engine_context: *EngineContext, abs_path: []cons
     try self._Impl.Init(engine_context, abs_path, rel_path, asset_file);
 }
 
-pub fn Deinit(self: *ScriptAsset, engine_context: *EngineContext) !void {
-    try self._Impl.Deinit(engine_context);
+pub fn Deinit(self: *ScriptAsset, engine_context: *EngineContext) void {
+    self._Impl.Deinit(engine_context);
 }
 
 pub fn Run(self: *ScriptAsset, comptime script_type: type, args: anytype) bool {

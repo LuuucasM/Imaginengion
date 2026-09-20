@@ -113,13 +113,13 @@ pub fn Setup(self: *AssetManager, engine_context: *EngineContext) !void {
     try self._internal.DefaultAudioAsset.Init(engine_context, audio_abs_path, audio_rel_path, audio_file);
 }
 
-pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) !void {
-    try self._internal.DefaultTexture2D.Deinit(engine_context);
-    try self._internal.DefaultTextAsset.Deinit(engine_context);
-    try self._internal.DefaultAudioAsset.Deinit(engine_context);
+pub fn Deinit(self: *AssetManager, engine_context: *EngineContext) void {
+    self._internal.DefaultTexture2D.Deinit(engine_context);
+    self._internal.DefaultTextAsset.Deinit(engine_context);
+    self._internal.DefaultAudioAsset.Deinit(engine_context);
     self._internal.DefaultFileMetaData.mRelPath.deinit(engine_context.EngineAllocator());
 
-    try self.mAssetECS.Deinit(engine_context);
+    self.mAssetECS.Deinit(engine_context);
 
     self.mPathToIDEng.deinit(engine_context.EngineAllocator());
     self.mPathToIDPrj.deinit(engine_context.EngineAllocator());

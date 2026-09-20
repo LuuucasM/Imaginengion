@@ -55,29 +55,18 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            //every array is freed even if one of them fails, the first error is reported after
-            var first_error: ?anyerror = null;
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.Deinit(engine_context) catch |err| {
-                    if (first_error == null) first_error = err;
-                };
+                component_array.Deinit(engine_context);
             }
 
             self.mComponentsArrays.deinit(engine_context.EngineAllocator());
-
-            if (first_error) |err| return err;
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
-            var first_error: ?anyerror = null;
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponentsArrays.items) |component_array| {
-                component_array.clearAndFree(engine_context) catch |err| {
-                    if (first_error == null) first_error = err;
-                };
+                component_array.clearAndFree(engine_context);
             }
-
-            if (first_error) |err| return err;
         }
 
         /// Reuses the most recently destroyed id (generation already incremented) and gives it its SkipFieldComponent.
@@ -91,7 +80,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             _ = try self._SkipFieldArray().AddComponent(engine_allocator, entity_id, _NewSkipField());
         }
 
-        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) !void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
             // iterate a copy of the skipfield because removing the SkipFieldComponent swap-removes it
             // inside its array, which would move another entity's skipfield under the iterator
             var entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?.mSkipField;
@@ -99,12 +88,12 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             var field_iter = entity_skipfield.Iterator();
             while (field_iter.next()) |comp_arr_ind| {
                 if (comp_arr_ind == SkipFieldComponent.Ind) continue;
-                try self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
+                self.mComponentsArrays.items[comp_arr_ind].DestroyEntity(engine_context, entity_id);
             }
 
             // remove the skipfield last so the entity stays active while its other components deinit.
             // this also puts the id on the skipfield sparse set's free list for ReuseFreeEntity
-            try self.mComponentsArrays.items[SkipFieldComponent.Ind].DestroyEntity(engine_context, entity_id);
+            self.mComponentsArrays.items[SkipFieldComponent.Ind].DestroyEntity(engine_context, entity_id);
         }
 
         fn _SkipFieldArray(self: Self) *SkipFieldArrayT {
@@ -129,7 +118,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 // the arrays already copied own their components, so they are emptied again
                 // rather than left as a half built ECS
                 for (other.mComponentsArrays.items[0..copied]) |component_array| {
-                    component_array.clearAndFree(engine_context) catch {};
+                    component_array.clearAndFree(engine_context);
                 }
             }
             while (copied < self.mComponentsArrays.items.len) : (copied += 1) {
@@ -174,7 +163,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return try internal_array.AddComponent(engine_allocator, entity_id, component);
         }
 
-        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) void {
             std.debug.assert(component_ind < components_types.len + BuiltinComponentCount);
             std.debug.assert(component_ind != SkipFieldComponent.Ind); // only removed through DestroyEntity
             std.debug.assert(self.mComponentsArrays.items[component_ind].HasComponent(entity_id));
@@ -182,7 +171,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             const entity_skipfield = self.GetComponent(SkipFieldComponent, entity_id).?;
             entity_skipfield.mSkipField.ChangeToSkipped(component_ind);
 
-            try self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);
+            self.mComponentsArrays.items[component_ind].RemoveComponent(engine_context, entity_id);
         }
 
         pub fn HasComponent(self: Self, comptime component_type: type, entityID: entity_t) bool {
@@ -199,14 +188,14 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return internal_array.GetComponent(entityID);
         }
 
-        pub fn ResetComponent(self: Self, engine_context: *EngineContext, entity_id: entity_t, component: anytype) !void {
+        pub fn ResetComponent(self: Self, engine_context: *EngineContext, entity_id: entity_t, component: anytype) void {
             const component_t = @TypeOf(component);
             std.debug.assert(self.HasComponent(component_t, entity_id));
 
             const internal_array_t = InternalComponentArray(entity_t, component_t);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[component_t.Ind].mPtr));
 
-            try internal_array.ResetComponent(engine_context, entity_id, component);
+            internal_array.ResetComponent(engine_context, entity_id, component);
         }
 
         pub fn IsActiveEntity(self: Self, entity_id: entity_t) bool {

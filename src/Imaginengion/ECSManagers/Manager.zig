@@ -8,6 +8,12 @@ const GCManager = @import("GCManager.zig");
 const PManager = @import("PManager.zig");
 const SManager = @import("SManager.zig");
 
+const EEventData = @import("../Events/EManagerData.zig");
+const GCEventData = @import("../Events/GCManagerData.zig");
+const PEventData = @import("../Events/PManagerData.zig");
+const SEventData = @import("../Events/SManagerData.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
+
 const ECSManager = @import("../ECS/ECSManager.zig");
 
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
@@ -33,8 +39,8 @@ pub fn Core(comptime Self: type) type {
             try self.mECSManager.Init(engine_allocator);
         }
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            try self.mECSManager.Deinit(engine_context.EngineAllocator());
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
+            self.mECSManager.Deinit(engine_context);
             self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
             self.mEventManager.Deinit(engine_context.EngineAllocator());
         }
@@ -59,6 +65,10 @@ pub fn Core(comptime Self: type) type {
 
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
             return try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, new_component);
+        }
+
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
+            self.mEventManager.Insert()
         }
 
         pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {
@@ -90,13 +100,11 @@ pub fn Core(comptime Self: type) type {
             return self.mECSManager.GetGroup(frame_allocator, query);
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
-            try self.mECSManager.clearAndFree(engine_context);
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
+            self.mECSManager.clearAndFree(engine_context);
             self.mUUIDToWorldID.clearAndFree(engine_context.EngineAllocator());
             self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
         }
-
-        //pub fn Copy(self: *AManager, engine_context: *EngineContext, other_scene: *AManager) !void {}
 
         pub fn AddUUID(self: *Self, engine_allocator: std.mem.Allocator, uuid: u64, world_id: UnderlyingObjType(Self)) !void {
             try self.mUUIDToWorldID.put(engine_allocator, uuid, world_id);

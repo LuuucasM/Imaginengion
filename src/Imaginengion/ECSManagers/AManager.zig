@@ -403,8 +403,8 @@ pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []
 //From general managers
 pub const GetGroup = Core.GetGroup;
 
-pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) !void {
-    try Core.clearAndFree(self, engine_context);
+pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) void {
+    Core.clearAndFree(self, engine_context);
     self.mPendingDelete.clearAndFree(engine_context.EngineAllocator());
     if (self.mProjectDirectory) |dir| {
         dir.close(engine_context.Io());

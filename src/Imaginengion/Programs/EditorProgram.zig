@@ -154,7 +154,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mActiveWorldType = .Game;
 }
 
-pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
     defer zone.Deinit();
     engine_context.mImguiManager.Deinit(engine_context);
@@ -447,7 +447,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     if (self.mEditorState == .Play) {
         self.mEditorState = .Stop;
         self.mActiveWorld = &engine_context.mGameWorld;
-        try engine_context.mSimulateWorld.clearAndFree(engine_context);
+        engine_context.mSimulateWorld.clearAndFree(engine_context);
     } else {
         if (self.mRunPlayer) |run_player| {
             if (run_player.GetComponent(PossessComponent)) |poss_comp| {

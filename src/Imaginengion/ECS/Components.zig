@@ -17,7 +17,7 @@ pub fn ParentComponent(entity_t: type) type {
         mFirstEntity: entity_t = std.math.maxInt(entity_t),
         mFirstScript: entity_t = std.math.maxInt(entity_t),
 
-        pub fn Deinit(_: *Self, _: *EngineContext) !void {}
+        pub fn Deinit(_: *Self, _: *EngineContext) void {}
     };
 }
 
@@ -33,7 +33,7 @@ pub fn ChildComponent(entity_t: type) type {
         mNext: entity_t = std.math.maxInt(entity_t),
         mParent: entity_t = std.math.maxInt(entity_t),
 
-        pub fn Deinit(_: *Self, _: *EngineContext) !void {}
+        pub fn Deinit(_: *Self, _: *EngineContext) void {}
     };
 }
 
@@ -48,7 +48,7 @@ pub fn SkipFieldComponent(comptime components_len: comptime_int) type {
 
         mSkipField: StaticSkipFieldT = .AllSkip,
 
-        pub fn Deinit(_: *Self, _: *EngineContext) !void {}
+        pub fn Deinit(_: *Self, _: *EngineContext) void {}
     };
 }
 
@@ -58,7 +58,7 @@ pub const MainObjectComponent = struct {
 
     mBit: u1 = 0,
 
-    pub fn Deinit(_: *MainObjectComponent, _: *EngineContext) !void {}
+    pub fn Deinit(_: *MainObjectComponent, _: *EngineContext) void {}
 };
 
 pub const EntityTagComponent = struct {
@@ -67,7 +67,7 @@ pub const EntityTagComponent = struct {
 
     mBit: u1 = 0,
 
-    pub fn Deinit(_: *EntityTagComponent, _: *EngineContext) !void {}
+    pub fn Deinit(_: *EntityTagComponent, _: *EngineContext) void {}
 };
 
 pub const ScriptTagComponent = struct {
@@ -76,5 +76,5 @@ pub const ScriptTagComponent = struct {
 
     mBit: u1 = 0,
 
-    pub fn Deinit(_: *ScriptTagComponent, _: *EngineContext) !void {}
+    pub fn Deinit(_: *ScriptTagComponent, _: *EngineContext) void {}
 };

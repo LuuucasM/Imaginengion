@@ -32,7 +32,7 @@ pub const Ind: usize = blk: {
     }
 };
 
-pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
+pub fn Deinit(self: *ScriptComponent, _: *EngineContext) void {
     self.mScriptAssetHandle.ReleaseAsset();
 }
 

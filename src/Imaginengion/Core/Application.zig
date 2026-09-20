@@ -47,13 +47,12 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
 /// Parameters:
 /// - `self`: A pointer to the `Application` instance.
 ///
-/// Returns:
-/// - `!void` on deinitialization error return the error else return nothing.
-pub fn Deinit(self: *Application) !void {
+/// Shutdown cannot fail, so nothing is returned.
+pub fn Deinit(self: *Application) void {
     const zone = Tracy.ZoneInit("Application::Deinit", @src());
     defer zone.Deinit();
-    try self.mProgram.Deinit(&self.mEngineContext);
-    try self.mEngineContext.DeInit();
+    self.mProgram.Deinit(&self.mEngineContext);
+    self.mEngineContext.DeInit();
     sdl.SDL_Quit();
 }
 

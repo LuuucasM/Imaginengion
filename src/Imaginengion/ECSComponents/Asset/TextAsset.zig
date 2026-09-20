@@ -127,11 +127,11 @@ pub fn Clone(_: *const TextAsset, _: *EngineContext) !TextAsset {
     return error.AssetNotDuplicatable;
 }
 
-pub fn Deinit(self: *TextAsset, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *TextAsset, engine_context: *EngineContext) void {
     for (self.mGlyphs, 0..) |_, i| {
         self.mGlyphs[i].mKernings.deinit();
     }
-    try self.mAtlas.Deinit(engine_context);
+    self.mAtlas.Deinit(engine_context);
 }
 
 fn ProcessTextJson(self: *TextAsset, engine_context: *EngineContext, text_json: std.Io.File) !void {

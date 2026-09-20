@@ -10,8 +10,8 @@ pub fn Init(self: *Program, engine_context: *EngineContext) !void {
     try self._Impl.Init(engine_context);
 }
 
-pub fn Deinit(self: *Program, engine_context: *EngineContext) !void {
-    try self._Impl.Deinit(engine_context);
+pub fn Deinit(self: *Program, engine_context: *EngineContext) void {
+    self._Impl.Deinit(engine_context);
 }
 
 pub fn OnUpdate(self: *Program, engine_context: *EngineContext) !void {

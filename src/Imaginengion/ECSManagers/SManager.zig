@@ -85,8 +85,8 @@ pub const AddComponent = Core.AddComponent;
 
 pub const AddUUID = Core.AddUUID;
 
-pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) !void {
-    try Core.clearAndFree(self, engine_context);
+pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) void {
+    Core.clearAndFree(self, engine_context);
     self.mGameLayerInsertIndex = 0;
     self.mNumofLayers = 0;
 }

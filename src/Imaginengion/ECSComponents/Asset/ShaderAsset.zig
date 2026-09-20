@@ -100,7 +100,7 @@ pub fn Clone(_: *const ShaderAsset, _: *EngineContext) !ShaderAsset {
     return error.AssetNotDuplicatable;
 }
 
-pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("Shader Deinit", @src());
     defer zone.Deinit();
 

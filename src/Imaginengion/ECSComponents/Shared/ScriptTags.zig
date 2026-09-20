@@ -24,7 +24,7 @@ pub const OnKeyPressedScript = struct {
             }
         }
     };
-    pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext) !void {}
+    pub fn Deinit(_: *OnKeyPressedScript, _: *EngineContext) void {}
 };
 
 pub const EntityOnUpdateScript = struct {
@@ -40,7 +40,7 @@ pub const EntityOnUpdateScript = struct {
             }
         }
     };
-    pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext) !void {}
+    pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext) void {}
 };
 
 //SCENE SCRIPTS
@@ -56,7 +56,7 @@ pub const OnSceneStartScript = struct {
         }
     };
     pub const Scripttype: ScriptType = .SceneSceneStart;
-    pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) !void {}
+    pub fn Deinit(_: *OnSceneStartScript, _: *EngineContext) void {}
 };
 
 pub const SceneOnUpdateScript = struct {
@@ -71,7 +71,7 @@ pub const SceneOnUpdateScript = struct {
         }
     };
     pub const Scripttype: ScriptType = .SceneOnUpdate;
-    pub fn Deinit(_: *SceneOnUpdateScript, _: *EngineContext) !void {}
+    pub fn Deinit(_: *SceneOnUpdateScript, _: *EngineContext) void {}
 };
 
 pub const InputPressedScript = struct {
@@ -86,5 +86,5 @@ pub const InputPressedScript = struct {
         }
     };
     pub const Scripttype: ScriptType = .SceneInputPressed;
-    pub fn Deinit(_: *InputPressedScript, _: *EngineContext) !void {}
+    pub fn Deinit(_: *InputPressedScript, _: *EngineContext) void {}
 };

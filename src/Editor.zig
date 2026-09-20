@@ -10,6 +10,6 @@ pub fn main(init: std.process.Init.Minimal) !void {
     std.log.info("Running Application", .{});
     try application.Run();
     std.log.info("Deinitializing Application", .{});
-    try application.Deinit();
+    application.Deinit();
     std.log.info("Exiting main", .{});
 }

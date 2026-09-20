@@ -18,7 +18,7 @@ pub const Ind: usize = blk: {
 
 mEntityRef: Entity = .uninit,
 
-pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext) !void {
+pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext) void {
     //deinit stuff
 }
 

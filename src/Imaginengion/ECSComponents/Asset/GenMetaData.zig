@@ -15,4 +15,4 @@ pub const Ind: usize = blk: {
 
 mLastModified: i128 = 0,
 
-pub fn Deinit(_: *GenMetaData, _: *EngineContext) !void {}
+pub fn Deinit(_: *GenMetaData, _: *EngineContext) void {}

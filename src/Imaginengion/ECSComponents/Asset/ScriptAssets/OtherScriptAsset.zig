@@ -70,7 +70,7 @@ pub fn Init(self: *OtherScriptAsset, engine_context: *EngineContext, abs_path: [
     };
 }
 
-pub fn Deinit(self: *OtherScriptAsset, _: *EngineContext) !void {
+pub fn Deinit(self: *OtherScriptAsset, _: *EngineContext) void {
     self.mLib.close();
 }
 

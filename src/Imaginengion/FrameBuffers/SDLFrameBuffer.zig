@@ -39,8 +39,8 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             self.mHeight = height;
             try self.Create(engine_context);
         }
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            try self.Destroy(engine_context);
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
+            self.Destroy(engine_context);
         }
 
         pub fn BeginRenderPass(self: *Self, engine_context: *EngineContext) *sdl.struct_SDL_GPURenderPass {
@@ -182,7 +182,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
             }
         }
 
-        fn Destroy(self: *Self, engine_context: *EngineContext) !void {
+        fn Destroy(self: *Self, engine_context: *EngineContext) void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
             inline for (0..color_texture_formats.len) |i| {
                 if (self.mTextures[i]) |t| {

@@ -22,7 +22,7 @@ pub const empty: NameComponent = .{
 
 mName: std.ArrayList(u8) = .empty,
 
-pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) void {
     self.mName.deinit(engine_context.EngineAllocator());
 }
 

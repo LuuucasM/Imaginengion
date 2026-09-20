@@ -11,7 +11,7 @@ const Position = struct {
 
     x: f32 = 0,
 
-    pub fn Deinit(_: *Position, _: *EngineContext) !void {}
+    pub fn Deinit(_: *Position, _: *EngineContext) void {}
 };
 
 /// owns memory, so it has a Clone for DuplicateEntity to use
@@ -21,7 +21,7 @@ const Label = struct {
 
     mText: std.ArrayList(u8) = .empty,
 
-    pub fn Deinit(self: *Label, engine_context: *EngineContext) !void {
+    pub fn Deinit(self: *Label, engine_context: *EngineContext) void {
         self.mText.deinit(engine_context.EngineAllocator());
     }
 
@@ -36,7 +36,7 @@ const Health = struct {
 
     mHP: u32 = 100,
 
-    pub fn Deinit(_: *Health, _: *EngineContext) !void {}
+    pub fn Deinit(_: *Health, _: *EngineContext) void {}
 };
 
 const TestComponentsList = [_]type{ Position, Label, Health };
@@ -66,7 +66,7 @@ const TestECS = struct {
     fn Deinit(self: *TestECS) !void {
         const engine_context = self.mEngineContext;
 
-        try self.mECSManager.Deinit(engine_context);
+        self.mECSManager.Deinit(engine_context);
 
         const leak_check = engine_context._Internal.EngineGPA.deinit();
 
@@ -347,7 +347,7 @@ test "ECS clearAndFree empties everything and drops queued events" {
     _ = try test_ecs.mECSManager.AddChild(allocator, entity_id, .Entity);
     try test_ecs.mECSManager.DestroyEntity(test_ecs.mEngineContext, entity_id); //leave an event queued too
 
-    try test_ecs.mECSManager.clearAndFree(test_ecs.mEngineContext);
+    test_ecs.mECSManager.clearAndFree(test_ecs.mEngineContext);
 
     try std.testing.expect(!test_ecs.mECSManager.IsActiveEntity(entity_id));
 
@@ -381,7 +381,7 @@ test "ECS copy is a deep copy that keeps every id" {
     try test_ecs.ProcessEvents();
 
     const other = try OtherECS.Init(test_ecs);
-    defer other.Deinit(test_ecs) catch unreachable;
+    defer other.Deinit(test_ecs);
 
     try test_ecs.mECSManager.Copy(engine_context, other.mECSManager);
 
@@ -430,7 +430,7 @@ test "ECS copy carries the queued events" {
     try test_ecs.mECSManager.DestroyEntity(engine_context, entity_id); //left queued on purpose
 
     const other = try OtherECS.Init(test_ecs);
-    defer other.Deinit(test_ecs) catch unreachable;
+    defer other.Deinit(test_ecs);
 
     try test_ecs.mECSManager.Copy(engine_context, other.mECSManager);
 
@@ -453,8 +453,8 @@ const OtherECS = struct {
         return .{ .mECSManager = ecs_manager };
     }
 
-    fn Deinit(self: OtherECS, test_ecs: *TestECS) !void {
-        try self.mECSManager.Deinit(test_ecs.mEngineContext);
+    fn Deinit(self: OtherECS, test_ecs: *TestECS) void {
+        self.mECSManager.Deinit(test_ecs.mEngineContext);
         std.heap.page_allocator.destroy(self.mECSManager);
     }
 };

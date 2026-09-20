@@ -20,7 +20,7 @@ mLastModified: std.Io.Timestamp = .zero,
 mSize: u64 = 0,
 mHash: u64 = 0,
 
-pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) !void {
+pub fn Deinit(self: *FileMetaData, engine_context: *EngineContext) void {
     self.mRelPath.deinit(engine_context.EngineAllocator());
 }
 

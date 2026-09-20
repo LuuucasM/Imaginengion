@@ -25,7 +25,7 @@ pub const empty: UUIDComponent = .{
 
 ID: u64 = std.math.maxInt(u64),
 
-pub fn Deinit(_: *UUIDComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *UUIDComponent, _: *EngineContext) void {}
 
 pub fn EditorRender(self: *UUIDComponent, _: *EngineContext) !void {
     try ImguiManager.RenderUUID(&self.ID, "UUID");

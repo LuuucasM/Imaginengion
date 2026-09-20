@@ -57,17 +57,17 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             try self.mComponentManager.Init(engine_allocator);
         }
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             const zone = Tracy.ZoneInit("ECSM Deinit", @src());
             defer zone.Deinit();
-            try self.mComponentManager.Deinit(engine_context);
+            self.mComponentManager.Deinit(engine_context);
             self.mECSEventManager.Deinit(engine_context.EngineAllocator());
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
-            try self.mComponentManager.clearAndFree(engine_context);
+            self.mComponentManager.clearAndFree(engine_context);
             // pending events refer to entities that no longer exist
             self.mECSEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
             self.mNextID = 0;
@@ -84,7 +84,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             std.debug.assert(other.mNextID == 0);
 
             try self.mComponentManager.CopyInto(engine_context, &other.mComponentManager);
-            errdefer other.mComponentManager.clearAndFree(engine_context) catch {};
+            errdefer other.mComponentManager.clearAndFree(engine_context);
 
             // queued events name entities by id, which the copy shares, so they carry over as they are
             try self.mECSEventManager.CopyInto(engine_context.EngineAllocator(), &other.mECSEventManager);
@@ -344,14 +344,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             return self.mComponentManager.GetComponent(component_type, entity_id);
         }
         /// Replaces a component with a new value, deinitializing the old one.
-        pub fn ResetComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component: anytype) !void {
+        pub fn ResetComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component: anytype) void {
             const zone = Tracy.ZoneInit("ECSM::ResetComponent", @src());
             defer zone.Deinit();
             _ValidateType(@TypeOf(component));
 
             std.debug.assert(self.IsActiveEntity(entity_id));
 
-            try self.mComponentManager.ResetComponent(engine_context, entity_id, component);
+            self.mComponentManager.ResetComponent(engine_context, entity_id, component);
         }
 
         /// Runs every queued event of this category, then empties the queue.
@@ -380,7 +380,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     try self._InternalDestroyEntity(engine_context, e.mEntityID);
                 },
                 .RemoveComponent => |e| {
-                    try self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd);
+                    self._InternalRemoveComponent(engine_context, e.mEntityID, e.mComponentInd);
                 },
                 else => {
                     @panic("Default Events are not allowed!\n");
@@ -403,7 +403,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             try self._InternalQueueChildren(engine_context, entity_id, .Script);
 
             try self._InternalRemoveFromHierarchy(engine_context, entity_id);
-            try self.mComponentManager.DestroyEntity(engine_context, entity_id);
+            self.mComponentManager.DestroyEntity(engine_context, entity_id);
         }
 
         // queues a destroy for every child in one of this entity's two lists
@@ -429,14 +429,14 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
 
         /// Applies a queued RemoveComponent. Does nothing if the entity or the component is already gone,
         /// which happens when the entity was destroyed, or the same removal was queued twice, in one batch.
-        fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) anyerror!void {
+        fn _InternalRemoveComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) void {
             if (!self.IsActiveEntity(entity_id)) return;
             if (!self.mComponentManager.mComponentsArrays.items[component_ind].HasComponent(entity_id)) return;
 
             const zone = Tracy.ZoneInit("ECSM Internal Remove Component", @src());
             defer zone.Deinit();
 
-            try self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
+            self.mComponentManager.RemoveComponent(engine_context, entity_id, component_ind);
         }
 
         // takes this entity out of its parent's child or script list, leaving that list valid

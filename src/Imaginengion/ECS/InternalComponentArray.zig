@@ -11,18 +11,12 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
 
         mComponents: SparseSetT = .empty,
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) !void {
-            // every component is deinitialized even if one of them fails, the first error is reported after
-            var first_error: ?anyerror = null;
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponents.mValues.items) |*component| {
-                component.Deinit(engine_context) catch |err| {
-                    if (first_error == null) first_error = err;
-                };
+                component.Deinit(engine_context);
             }
 
             self.mComponents.Deinit(engine_context.EngineAllocator());
-
-            if (first_error) |err| return err;
         }
         pub fn DuplicateEntity(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) !void {
             std.debug.assert(self.mComponents.HasSparse(original_entity_id));
@@ -51,7 +45,7 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             errdefer {
                 // only the finished clones own anything, the rest still alias this array
                 for (other.mComponents.mValues.items[0..cloned]) |*component| {
-                    component.Deinit(engine_context) catch {};
+                    component.Deinit(engine_context);
                 }
                 other.mComponents.clearAndFree(engine_context.EngineAllocator());
             }
@@ -64,10 +58,10 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
 
             return try self.mComponents.AddValue(engine_allocator, entity_id, component);
         }
-        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) !void {
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, entityID: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entityID));
             const component = self.mComponents.GetValueBySparse(entityID);
-            try component.Deinit(engine_context);
+            component.Deinit(engine_context);
             self.mComponents.Remove(entityID);
         }
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
@@ -83,9 +77,9 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
         pub fn GetComponentAssume(self: Self, entity_id: entity_t) *component_type {
             return self.mComponents.GetValueBySparse(entity_id);
         }
-        pub fn ResetComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component: component_type) !void {
+        pub fn ResetComponent(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component: component_type) void {
             const old_component = self.mComponents.GetValueBySparse(entity_id);
-            try old_component.Deinit(engine_context);
+            old_component.Deinit(engine_context);
             old_component.* = component;
         }
         pub fn NumOfComponents(self: *Self) usize {
@@ -96,22 +90,16 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             try entity_set.appendSlice(allocator, self.mComponents.mDenseToSparse.items);
             return entity_set;
         }
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
-            // every component is deinitialized even if one of them fails, the first error is reported after
-            var first_error: ?anyerror = null;
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponents.mValues.items) |*component| {
-                component.Deinit(engine_context) catch |err| {
-                    if (first_error == null) first_error = err;
-                };
+                component.Deinit(engine_context);
             }
 
             self.mComponents.clearAndFree(engine_context.EngineAllocator());
-
-            if (first_error) |err| return err;
         }
-        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
+        pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {
             std.debug.assert(self.mComponents.HasSparse(entity_id));
-            try self.RemoveComponent(engine_context, entity_id);
+            self.RemoveComponent(engine_context, entity_id);
         }
     };
 }

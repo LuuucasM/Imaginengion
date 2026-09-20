@@ -14,8 +14,8 @@ pub fn Init(self: *AudioBuffer, engine_context: *EngineContext, rel_path: []cons
     try self.mImpl.Init(engine_context, rel_path, asset_file);
 }
 
-pub fn Deinit(self: *AudioBuffer) !void {
-    try self.mImpl.Deinit();
+pub fn Deinit(self: *AudioBuffer) void {
+    self.mImpl.Deinit();
 }
 
 pub fn ReadFrames(self: *AudioBuffer, frames_out: []f32, frame_count: u64, cursor: *u64, loop: bool) u64 {

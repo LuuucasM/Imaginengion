@@ -21,7 +21,7 @@ pub const Ind: usize = blk: {
 
 mLayerType: LayerType = .GameLayer,
 
-pub fn Deinit(_: *SceneComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *SceneComponent, _: *EngineContext) void {}
 
 const Json = JsonUtils.JsonFields(SceneComponent, .{ .LayerType = "mLayerType" });
 pub const jsonStringify = Json.jsonStringify;

@@ -34,7 +34,7 @@ mTexOptions: Texture2D.TexOptions = .default,
 mMaterial: Material.SurfaceRenderMat = .default,
 mEditTexCoords: bool = false,
 
-pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
+pub fn Deinit(self: *QuadComponent, _: *EngineContext) void {
     self.mTexture.ReleaseAsset();
 }
 

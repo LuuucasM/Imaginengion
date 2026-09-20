@@ -108,13 +108,13 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mSimulateWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
 }
 
-pub fn DeInit(self: *EngineContext) !void {
+pub fn DeInit(self: *EngineContext) void {
     const zone = Tracy.ZoneInit("EngineContext::Deinit", @src());
     defer zone.Deinit();
 
-    try self.mGameWorld.Deinit(self);
-    try self.mEditorWorld.Deinit(self);
-    try self.mSimulateWorld.Deinit(self);
+    self.mGameWorld.Deinit(self);
+    self.mEditorWorld.Deinit(self);
+    self.mSimulateWorld.Deinit(self);
 
     self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mImguiEventManager.Deinit(self.EngineAllocator());
@@ -123,7 +123,7 @@ pub fn DeInit(self: *EngineContext) !void {
     self.mPhysicsManager.Deinit(self.EngineAllocator());
     self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit();
-    try self.mAssetManager.Deinit(self);
+    self.mAssetManager.Deinit(self);
 
     self.mRenderer.Deinit(self);
 

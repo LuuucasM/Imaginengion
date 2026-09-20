@@ -73,7 +73,7 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
     };
 }
 
-pub fn Deinit(self: *WindowsScriptAsset, _: *EngineContext) !void {
+pub fn Deinit(self: *WindowsScriptAsset, _: *EngineContext) void {
     _ = FreeLibrary(self.mLib);
 }
 

@@ -15,4 +15,4 @@ pub const Ind: usize = blk: {
 
 mPossessedEntity: Entity = .{},
 
-pub fn Deinit(_: *PossessComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *PossessComponent, _: *EngineContext) void {}

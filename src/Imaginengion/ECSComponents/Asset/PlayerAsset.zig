@@ -11,7 +11,7 @@ pub const empty: PlayerAsset = .{
 
 mPlayer: Player,
 
-pub fn Deinit(_: *PlayerAsset, _: *EngineContext) !void {}
+pub fn Deinit(_: *PlayerAsset, _: *EngineContext) void {}
 
 pub const Name: []const u8 = "PlayerAsset";
 pub const Ind: usize = blk: {

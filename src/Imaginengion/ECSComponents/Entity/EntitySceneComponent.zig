@@ -17,4 +17,4 @@ pub const Ind: usize = blk: {
 
 mScene: SceneLayer = undefined,
 
-pub fn Deinit(_: *EntitySceneComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *EntitySceneComponent, _: *EngineContext) void {}

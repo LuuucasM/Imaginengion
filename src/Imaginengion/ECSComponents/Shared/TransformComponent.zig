@@ -44,7 +44,7 @@ Scale: Vec3(f32) = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
 
 _InternalData: InternalData = .{},
 
-pub fn Deinit(_: *TransformComponent, _: *EngineContext) !void {}
+pub fn Deinit(_: *TransformComponent, _: *EngineContext) void {}
 
 pub fn GetWorldPosition(self: TransformComponent) Vec3(f32) {
     return self._InternalData.WorldPosition;
