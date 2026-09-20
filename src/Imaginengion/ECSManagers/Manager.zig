@@ -96,9 +96,6 @@ pub fn Core(comptime Self: type) type {
                     .{ .ToDestroyScene = .{ .Scene = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
                 );
             } else {
-                //TODO: only SManagerData has a destroy event so far. The other event unions
-                //need a ToDestroy<Obj> member and a handler in their OnManagerEvents before
-                //this can queue anything, so deletion is a no-op for them right now.
                 std.log.err("DeleteObj is not implemented for {s} yet", .{@typeName(Self)});
             }
         }

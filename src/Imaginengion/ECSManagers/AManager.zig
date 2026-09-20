@@ -91,12 +91,18 @@ pub const AssetSource = union(enum) {
 };
 
 const InternalData = struct {
-    const uninit: InternalData = .{
+    pub const uninit: InternalData = .{
         .DefaultFileMetaData = .{},
         .DefaultTexture2D = .{},
         .DefaultTextAsset = .{},
         .DefaultAudioAsset = .{},
     };
+    pub fn Deinit(self: *InternalData, engine_context: *EngineContext) void {
+        self.DefaultFileMetaData.Deinit(engine_context);
+        self.DefaultTexture2D.Deinit(engine_context);
+        self.DefaultTextAsset.Deinit(engine_context);
+        self.DefaultAudioAsset.Deinit(engine_context);
+    }
     DefaultFileMetaData: FileMetaData,
     DefaultTexture2D: Texture2D,
     DefaultTextAsset: TextAsset,
@@ -144,7 +150,7 @@ pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
     const io = engine_context.Io();
 
     //FILE META DATA =======================
-    _ = try self._internal.DefaultFileMetaData.mRelPath.print(engine_context.EngineAllocator(), "default", .{});
+    _ = try self._internal.DefaultFileMetaData.mRelPath.appendSlice(engine_context.EngineAllocator(), "default");
 
     //TEXTURE 2D =========================
     const texture2d_rel_path = "src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
@@ -176,6 +182,8 @@ pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
     self.mCWD.close(engine_context.Io());
     if (self.mProjectDirectory) |p_dir| p_dir.close(engine_context.Io());
     self.mPendingDelete.deinit(engine_context.EngineAllocator());
+
+    self._internal.Deinit();
 }
 
 pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_source: AssetSource) !AssetHandle {

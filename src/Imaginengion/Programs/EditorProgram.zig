@@ -132,7 +132,12 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
-    self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
+    self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{
+        .bAddNameComponent = true,
+        .bAddUUIDComponent = true,
+        .bAddRenderComponent = true,
+        .bAddPossessComponent = true,
+    });
     self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
     try self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
@@ -143,7 +148,12 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     //EDITOR VIEWPORT STUFF==================================================
     self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
     self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
-    self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{ .bAddNameComponent = false, .bAddUUIDComponent = false });
+    self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{
+        .bAddNameComponent = true,
+        .bAddUUIDComponent = true,
+        .bAddRenderComponent = true,
+        .bAddPossessComponent = true,
+    });
     self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "src/Imaginengion/EngineAssets/scripts/EditorCameraInput.zig", .Eng);
     try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);

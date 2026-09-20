@@ -9,6 +9,8 @@ const Player = @import("../ECSObjects/Player.zig");
 const PComponents = @import("../ECSComponents/PComponents.zig");
 const NameComponent = PComponents.NameComponent;
 const UUIDComponent = PComponents.UUIDComponent;
+const RenderComponent = PComponents.RenderTargetComponent;
+const PossessComponent = PComponents.PossessComponent;
 const PComponentsList = PComponents.ComponentsList;
 const ECSCore = @import("Manager.zig").Core;
 
@@ -117,5 +119,13 @@ pub fn ApplyConfig(self: *PManager, engine_context: *EngineContext, player_id: P
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });
         try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, player_id);
+    }
+    if (config.bAddRenderComponent) {
+        var render_component = RenderComponent{};
+        try render_component.mComputeTexture.Init(engine_context, 1600, 900);
+        _ = try self.AddComponent(engine_context, player_id, render_component);
+    }
+    if (config.bAddPossessComponent) {
+        _ = try self.AddComponent(engine_context, player_id, PossessComponent{});
     }
 }

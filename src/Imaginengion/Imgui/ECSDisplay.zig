@@ -44,7 +44,6 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     if (self._P_Open == false) return;
 
     const frame_allocator = engine_context.FrameAllocator();
-    var already_popup = false;
     const available_region = imgui.igGetContentRegionAvail();
 
     const world_manager = switch (world_type) {
@@ -61,34 +60,35 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     //child that is the width of the entire available region is needed so we can drag scenes from the content browser to load the scene
     if (imgui.igBeginChild_Str(@tagName(ecs_type), available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {
         switch (ecs_type) {
-            .GameObj => try RenderObjects(Entity, engine_context, world_manager, &already_popup),
-            .Scenes => try RenderObjects(Scene, engine_context, world_manager, &already_popup),
-            .Players => try RenderObjects(Player, engine_context, world_manager, &already_popup),
-            .GameModes => try RenderObjects(GameContext, engine_context, world_manager, &already_popup),
+            .GameObj => try RenderObjects(Entity, engine_context, world_manager),
+            .Scenes => try RenderObjects(Scene, engine_context, world_manager),
+            .Players => try RenderObjects(Player, engine_context, world_manager),
+            .GameModes => try RenderObjects(GameContext, engine_context, world_manager),
+        }
+
+        //the panel's own context menu, submitted after the rows so imgui knows which row
+        //(if any) the cursor is over. NoOpenOverItems means this only opens on a right
+        //click that landed on empty space; a click on a row is claimed by that row's
+        //BeginPopupContextItem instead. Both triggers fire on the same release, in the
+        //same frame, so only one popup ever opens.
+        if (imgui.igBeginPopupContextWindow(@tagName(ecs_type), imgui.ImGuiPopupFlags_MouseButtonRight | imgui.ImGuiPopupFlags_NoOpenOverItems)) {
+            defer imgui.igEndPopup();
+            switch (ecs_type) {
+                .GameObj => try HandleWindowMenu(Entity, engine_context, selected_object, world_manager),
+                .Scenes => try HandleWindowMenu(Scene, engine_context, selected_object, world_manager),
+                .Players => try HandleWindowMenu(Player, engine_context, selected_object, world_manager),
+                .GameModes => try HandleWindowMenu(GameContext, engine_context, selected_object, world_manager),
+            }
         }
     }
     imgui.igEndChild();
-
-    if (already_popup == false and imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None) and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false)) {
-        imgui.igOpenPopup_Str(@tagName(ecs_type), imgui.ImGuiPopupFlags_None);
-    }
-    if (already_popup == false and imgui.igBeginPopup(@tagName(ecs_type), imgui.ImGuiWindowFlags_None)) {
-        defer imgui.igEndPopup();
-        already_popup = true;
-        switch (ecs_type) {
-            .GameObj => try HandleWindowMenu(Entity, engine_context, selected_object, world_manager),
-            .Scenes => try HandleWindowMenu(Scene, engine_context, selected_object, world_manager),
-            .Players => try HandleWindowMenu(Player, engine_context, selected_object, world_manager),
-            .GameModes => try HandleWindowMenu(GameContext, engine_context, selected_object, world_manager),
-        }
-    }
 }
 
 pub fn OnTogglePanelEvent(self: *ECSDisplayPanel) void {
     self._P_Open = !self._P_Open;
 }
 
-fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, world_manager: *WorldManager, already_popup: *bool) !void {
+fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, world_manager: *WorldManager) !void {
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
@@ -100,20 +100,20 @@ fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, worl
 
     for (objects_list.items) |object_id| {
         const object = Traits.GetObject(object_id, world_manager);
-        try RenderObject(ObjectType, engine_context, object, already_popup);
+        try RenderObject(ObjectType, engine_context, object);
     }
 }
 
-fn RenderObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, already_popup: *bool) !void {
+fn RenderObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
     const Traits = ObjectTraits(ObjectType);
     if (object.HasComponent(Traits.ParentComponent)) {
-        try RenderParentObject(ObjectType, engine_context, object, already_popup);
+        try RenderParentObject(ObjectType, engine_context, object);
     } else {
-        try RenderLeafObject(ObjectType, engine_context, object, already_popup);
+        try RenderLeafObject(ObjectType, engine_context, object);
     }
 }
 
-fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, already_popup: *bool) !void {
+fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
@@ -126,10 +126,8 @@ fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext,
         try Traits.SelectObject(engine_context, object);
     }
 
-    if (!already_popup.* and imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+    if (imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
-        already_popup.* = true;
-
         try Traits.HandleObjectContextMenu(engine_context, object);
     }
 
@@ -137,11 +135,11 @@ fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext,
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
-        try RenderChildObjects(ObjectType, engine_context, object, already_popup);
+        try RenderChildObjects(ObjectType, engine_context, object);
     }
 }
 
-fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, already_popup: *bool) !void {
+fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
@@ -151,21 +149,19 @@ fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, o
         try Traits.SelectObject(engine_context, object);
     }
 
-    if (!already_popup.* and imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+    if (imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
-        already_popup.* = true;
-
         try Traits.HandleObjectContextMenu(engine_context, object);
     }
 
     Traits.HandleDragDropSource(object);
 }
 
-fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, already_popup: *bool) anyerror!void {
+fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType) anyerror!void {
     //an object with no children just yields nothing
     var iter = parent_object.GetIterator(.Child);
     while (iter.next()) |child_object| {
-        try RenderObject(ObjectType, engine_context, child_object, already_popup);
+        try RenderObject(ObjectType, engine_context, child_object);
     }
 }
 
