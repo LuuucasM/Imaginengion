@@ -337,7 +337,7 @@ pub fn DrawText(
 
         try glyph_buff_base.append(engine_context.EngineAllocator(), .{
             .Position = Vec3(f32).ArrayT{ pen_x, pen_y, world_pos.z },
-            .Rotation = transform_component.Rotation.ToVector(),
+            .Rotation = transform_component.GetWorldRotation().ToVector(),
             .HalfExtents = Vec3(f32).ArrayT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
             .PlaneCenter = Vec2(f32).ArrayT{ plane_center.x, plane_center.y },
             .AtlasShadingHandle = @intCast(atlas_shading_handle),

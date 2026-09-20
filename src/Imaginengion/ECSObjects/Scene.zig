@@ -33,10 +33,13 @@ const AssetHandle = @import("AssetHandle.zig");
 const Core = ECSCore(Scene);
 
 pub const CreateConfig = struct {
-    bAddSceneUUID: bool = true,
-    bAddSceneName: bool = true,
+    bAddSceneUUID: bool,
+    bAddSceneName: bool,
+};
 
-    pub const default: CreateConfig = .{};
+pub const DefaultConfig: CreateConfig = .{
+    .bAddSceneName = true,
+    .bAddSceneUUID = true,
 };
 
 pub const Type = u32;

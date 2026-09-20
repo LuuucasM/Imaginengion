@@ -20,10 +20,8 @@ const AssetHandle = @import("AssetHandle.zig");
 const Core = ECSCore(GameContext);
 
 pub const CreateConfig = struct {
-    bAddUUIDComponent: bool = true,
-    bAddNameComponent: bool = true,
-
-    pub const default: CreateConfig = .{};
+    bAddUUIDComponent: bool,
+    bAddNameComponent: bool,
 };
 
 pub const DefaultConfig: CreateConfig = .{

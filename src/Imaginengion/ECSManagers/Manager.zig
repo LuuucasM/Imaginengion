@@ -22,6 +22,10 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntityTransformComponent = EntityComponents.TransformComponent;
+const TransformDirtyTag = EntityComponents.TransformDirtyTag;
+
 const Serializer = @import("../Serializer/Serializer.zig");
 
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
@@ -104,12 +108,29 @@ pub fn Core(comptime Self: type) type {
             return try self.mECSManager.DuplicateEntity(engine_context, obj_id);
         }
 
-        pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType) !UnderlyingObj(Self) {
-            return .{ .mID = try self.mECSManager.AddChild(engine_context.EngineAllocator(), parent_id, child_type), .mManager = ObjManager(self) };
+        pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
+            const new_child: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.AddChild(engine_context.EngineAllocator(), parent_id, child_type), .mManager = ObjManager(self) };
+            try self.ApplyConfig(engine_context, new_child.mID, config);
+            return new_child;
         }
 
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
-            return try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, new_component);
+            const component_ptr = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, new_component);
+
+            //a transform that has just been added has never been through a transform pass, so its
+            //world values are still the InternalData defaults. Those defaults only happen to be
+            //right for a root sitting at the origin: a child needs the pass to pick up its parent's
+            //world transform, or it renders at the origin at its own local size. This is the one
+            //place every route goes through (ApplyConfig, Entity's own AddComponent, the components
+            //panel, deserialization), so none of them has to remember to tag. The tag lands in a
+            //different sparse set, so component_ptr stays valid.
+            if (comptime Self == EManager and @TypeOf(new_component) == EntityTransformComponent) {
+                if (!self.mECSManager.HasComponent(TransformDirtyTag, obj_id)) {
+                    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, TransformDirtyTag{});
+                }
+            }
+
+            return component_ptr;
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
@@ -137,7 +158,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn LoadObject(self: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
-            const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).CreateConfig.default);
+            const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).DefaultConfig);
             try engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
             return new_obj;
         }

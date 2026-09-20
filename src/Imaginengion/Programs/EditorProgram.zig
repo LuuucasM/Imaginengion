@@ -63,7 +63,7 @@ const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
 const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
-const SceneLayer = @import("../ECSObjects/Scene.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EventResult = @import("../Events/EventManager.zig").EventResult;
 
@@ -74,7 +74,7 @@ const ComputeOutput = @import("../Renderer/Renderer.zig").ComputeOutput;
 
 pub const SelectedObject = union(enum) {
     entity: Entity,
-    scene_layer: SceneLayer,
+    scene_layer: Scene,
     player: Player,
     gamecontext: GameContext,
 };
@@ -108,12 +108,12 @@ mEditorState: EditorState = .Stop,
 mRunPlayer: ?Player = null,
 
 //editor UI stuff
-mEditorUIScene: SceneLayer = .uninit,
+mEditorUIScene: Scene = .uninit,
 mEditorUIEntity: Entity = .uninit,
 mEditorUIPlayer: Player = .uninit,
 
 //Editor viewport stuff
-mEditorViewportScene: SceneLayer = .uninit,
+mEditorViewportScene: Scene = .uninit,
 mEditorViewportEntity: Entity = .uninit,
 mEditorViewportPlayer: Player = .uninit,
 
@@ -130,15 +130,16 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     //EDITOR UI STUFF================================================
 
-    self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, .{});
-    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, .{});
+    self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{
         .bAddNameComponent = true,
         .bAddUUIDComponent = true,
         .bAddRenderComponent = true,
         .bAddPossessComponent = true,
+        .bAddMicComponent = false,
     });
-    self.mEditorUIEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
+    try self.mEditorUIEntity.SetTranslation(engine_context, Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 });
     try self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
@@ -146,15 +147,16 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     //=================================================================
 
     //EDITOR VIEWPORT STUFF==================================================
-    self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, .{});
-    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, .{});
+    self.mEditorViewportScene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    self.mEditorViewportEntity = try self.mEditorViewportScene.CreateEntity(engine_context, Entity.DefaultConfig);
     self.mEditorViewportPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{
         .bAddNameComponent = true,
         .bAddUUIDComponent = true,
         .bAddRenderComponent = true,
         .bAddPossessComponent = true,
+        .bAddMicComponent = false,
     });
-    self.mEditorViewportEntity.GetComponent(TransformComponent).?.Translation = Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 };
+    try self.mEditorViewportEntity.SetTranslation(engine_context, Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 });
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "src/Imaginengion/EngineAssets/scripts/EditorCameraInput.zig", .Eng);
     try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
@@ -713,10 +715,10 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             if (imgui.igBeginMenu("New Scene", true) == true) {
                 defer imgui.igEndMenu();
                 if (imgui.igMenuItem_Bool("New Game Scene", "", false, true) == true) {
-                    _ = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, .{});
+                    _ = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
                 }
                 if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true) == true) {
-                    _ = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer, .{});
+                    _ = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
                 }
             }
             if (imgui.igMenuItem_Bool("Open Scene", "", false, true) == true) {

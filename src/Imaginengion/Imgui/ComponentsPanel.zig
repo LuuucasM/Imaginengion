@@ -12,6 +12,7 @@ const ComponentsPanel = @This();
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const Assets = @import("../ECSComponents/AComponents.zig");
+const TransformComponent = @import("../ECSComponents/Shared/TransformComponent.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -96,6 +97,14 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
         if (@hasDecl(component_type, "EditorRender")) {
             const component_ptr = object.GetComponent(component_type).?;
             try component_ptr.EditorRender(engine_context);
+
+            //the transform widgets write straight into the component, so this is the one write
+            //path that cannot go through Entity's setters. Tag it while the panel is open rather
+            //than trying to detect a change: it is a single entity, and a missed edit would leave
+            //a stale world transform.
+            if (comptime component_type == TransformComponent and @TypeOf(object) == Entity) {
+                try object.MarkTransformDirty(engine_context);
+            }
         }
     }
 }

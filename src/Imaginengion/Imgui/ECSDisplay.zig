@@ -200,7 +200,7 @@ fn ObjectTraits(comptime T: type) type {
             }
             pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Entity) !void {
                 if (imgui.igMenuItem_Bool("New Child Entity", "", false, true)) {
-                    _ = try object.CreateChild(engine_context, .Entity);
+                    _ = try object.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
                 }
 
                 if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
@@ -220,7 +220,7 @@ fn ObjectTraits(comptime T: type) type {
                     }
                 }
                 if (imgui.igMenuItem_Bool("New Entity", "", false, is_scene_layer)) {
-                    _ = try selected_object.*.?.scene_layer.CreateEntity(engine_context, .{});
+                    _ = try selected_object.*.?.scene_layer.CreateEntity(engine_context, Entity.DefaultConfig);
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Entity) !void {
@@ -269,11 +269,11 @@ fn ObjectTraits(comptime T: type) type {
             }
             pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Scene) !void {
                 if (imgui.igMenuItem_Bool("New Child Scene", "", false, true)) {
-                    _ = try object.CreateChild(engine_context, .Entity);
+                    _ = try object.CreateChild(engine_context, .Entity, Scene.DefaultConfig);
                 }
 
                 if (imgui.igMenuItem_Bool("New Entity", "", false, true)) {
-                    _ = try object.CreateEntity(engine_context, .{});
+                    _ = try object.CreateEntity(engine_context, Entity.DefaultConfig);
                 }
 
                 if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
@@ -287,7 +287,7 @@ fn ObjectTraits(comptime T: type) type {
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
                 if (imgui.igMenuItem_Bool("New Scene", "", false, true)) {
-                    _ = try world_manager.NewScene(engine_context, .GameLayer, .{});
+                    _ = try world_manager.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Scene) !void {
@@ -320,7 +320,7 @@ fn ObjectTraits(comptime T: type) type {
             }
             pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Player) !void {
                 if (imgui.igMenuItem_Bool("New Child Player", "", false, true)) {
-                    _ = try object.CreateChild(engine_context, .Entity);
+                    _ = try object.CreateChild(engine_context, .Entity, Player.DefaultConfig);
                 }
 
                 if (imgui.igMenuItem_Bool("Delete Player", "", false, true)) {
@@ -334,7 +334,7 @@ fn ObjectTraits(comptime T: type) type {
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
                 if (imgui.igMenuItem_Bool("New Player", "", false, true)) {
-                    _ = try world_manager.CreatePlayer(engine_context, .{});
+                    _ = try world_manager.CreatePlayer(engine_context, Player.DefaultConfig);
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Player) !void {
@@ -366,8 +366,8 @@ fn ObjectTraits(comptime T: type) type {
                 }
             }
             pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: GameContext) !void {
-                if (imgui.igMenuItem_Bool("New Child Game Mode", "", false, true)) {
-                    _ = try object.CreateChild(engine_context, .Entity);
+                if (imgui.igMenuItem_Bool("New Child Game Context", "", false, true)) {
+                    _ = try object.CreateChild(engine_context, .Entity, GameContext.DefaultConfig);
                 }
 
                 if (imgui.igMenuItem_Bool("Delete Game Context", "", false, true)) {
@@ -381,7 +381,7 @@ fn ObjectTraits(comptime T: type) type {
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
                 if (imgui.igMenuItem_Bool("New Game Mode", "", false, true)) {
-                    _ = try world_manager.CreateGameContext(engine_context, .{});
+                    _ = try world_manager.CreateGameContext(engine_context, GameContext.DefaultConfig);
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: GameContext) !void {

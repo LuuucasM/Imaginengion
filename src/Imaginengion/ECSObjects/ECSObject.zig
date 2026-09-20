@@ -87,14 +87,17 @@ pub fn Core(comptime Self: type) type {
                 }
             }
 
+            //the manager's AddComponent is what tags a new TransformComponent dirty, because that
+            //is the one layer every route reaches (this one, and the ApplyConfig used by
+            //CreateObj/CreateChild, which never comes through here)
             if (Self == Entity) {
-                return self.mManager.mEManager.AddComponent(engine_context, self.mID, component);
+                return try self.mManager.mEManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == GameContext) {
-                return self.mManager.mGCManager.AddComponent(engine_context, self.mID, component);
+                return try self.mManager.mGCManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == Player) {
-                return self.mManager.mPManager.AddComponent(engine_context, self.mID, component);
+                return try self.mManager.mPManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == Scene) {
-                return self.mManager.mSManager.AddComponent(engine_context, self.mID, component);
+                return try self.mManager.mSManager.AddComponent(engine_context, self.mID, component);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -156,15 +159,15 @@ pub fn Core(comptime Self: type) type {
         pub fn GetName(self: Self) []const u8 {
             return GetComponent(self, NameComponent).?.*.mName.items;
         }
-        pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType) !Self {
+        pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType, config: Self.CreateConfig) !Self {
             if (Self == Entity) {
-                return try self.mManager.mEManager.CreateChild(engine_context, self.mID, child_type);
+                return try self.mManager.mEManager.CreateChild(engine_context, self.mID, child_type, config);
             } else if (Self == GameContext) {
-                return try self.mManager.mGCManager.CreateChild(engine_context, self.mID, child_type);
+                return try self.mManager.mGCManager.CreateChild(engine_context, self.mID, child_type, config);
             } else if (Self == Player) {
-                return try self.mManager.mPManager.CreateChild(engine_context, self.mID, child_type);
+                return try self.mManager.mPManager.CreateChild(engine_context, self.mID, child_type, config);
             } else if (Self == Scene) {
-                return try self.mManager.mSManager.CreateChild(engine_context, self.mID, child_type);
+                return try self.mManager.mSManager.CreateChild(engine_context, self.mID, child_type, config);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -240,7 +243,7 @@ pub fn Core(comptime Self: type) type {
             };
 
             //call Core's CreateChild directly: Entity's wrapper takes a config, the others don't
-            const new_script_entity = try CreateChild(self, engine_context, .Script);
+            const new_script_entity = try CreateChild(self, engine_context, .Script, Self.DefaultConfig);
             //AddComponent deliberately rejects ScriptComponent to push callers here, so
             //this is the one place that goes straight to the manager
             _ = try _AddScriptComponent(new_script_entity, engine_context, new_script_component);

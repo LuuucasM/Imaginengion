@@ -12,6 +12,7 @@ pub const QuadComponent = @import("Entity/QuadComponent.zig");
 pub const RigidBodyComponent = @import("Entity/RigidBodyComponent.zig");
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Shared/TransformComponent.zig");
+pub const TransformDirtyTag = @import("Shared/TagComponents.zig").TransformDirtyTag;
 pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TextComponent = @import("Entity/TextComponent.zig");
 pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
@@ -40,6 +41,7 @@ pub const ComponentsList = [_]type{
     EntitySceneComponent,
     TextComponent,
     TransformComponent,
+    TransformDirtyTag,
     ViewpointComponent,
     RenderTargetComponent,
 
@@ -104,6 +106,7 @@ pub const EComponents = enum(u16) {
     EntitySceneComponent = ListInd(&ComponentsList, EntitySceneComponent),
     TextComponent = ListInd(&ComponentsList, TextComponent),
     TransformComponent = ListInd(&ComponentsList, TransformComponent),
+    TransformDirtyComponent = ListInd(&ComponentsList, TransformDirtyTag),
     ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
     OnInputPressedScript = ListInd(&ComponentsList, OnKeyPressedScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),

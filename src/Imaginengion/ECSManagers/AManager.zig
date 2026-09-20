@@ -183,7 +183,7 @@ pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
     if (self.mProjectDirectory) |p_dir| p_dir.close(engine_context.Io());
     self.mPendingDelete.deinit(engine_context.EngineAllocator());
 
-    self._internal.Deinit();
+    self._internal.Deinit(engine_context);
 }
 
 pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_source: AssetSource) !AssetHandle {
@@ -288,21 +288,32 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     const group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
-        if (self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType)) |file| {
-            if (self.GetFileStats(engine_context, file)) |stat| {
-                if (!try file_data.Eql(engine_context, file, stat)) {
-                    try file_data.UpdateMetaData(engine_context, file, stat);
-                    try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
-                }
-            } else |err| {
-                return err;
-            }
-        } else |err| {
+
+        //stat first: it costs no handle, and it is what tells us the file still exists
+        const stat = self.OpenFileStats(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
             if (err == error.FileNotFound) {
                 try self.MarkForDelete(engine_context, asset_id, .FileNotFound);
-            } else {
-                return err;
+                continue;
             }
+            return err;
+        };
+
+        //an edit that leaves mtime and size untouched is not detected. Catching that would mean
+        //hashing every asset's full contents every frame, which is not worth it here.
+        if (file_data.mLastModified.nanoseconds == stat.mtime.nanoseconds and file_data.mSize == stat.size) continue;
+
+        const file = self.OpenFile(engine_context, file_data.mRelPath.items, file_data.mPathType) catch |err| {
+            if (err == error.FileNotFound) {
+                try self.MarkForDelete(engine_context, asset_id, .FileNotFound);
+                continue;
+            }
+            return err;
+        };
+        defer self.CloseFile(engine_context.Io(), file);
+
+        if (!try file_data.Eql(engine_context, file, stat)) {
+            try file_data.UpdateMetaData(engine_context, file, stat);
+            try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
         }
     }
 

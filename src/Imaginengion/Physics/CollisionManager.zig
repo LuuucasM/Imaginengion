@@ -223,7 +223,7 @@ pub fn SolverPass(self: *CollisionManager, comptime world_type: EngineContext.Wo
                     if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
 
                     VelocityCorrection(contact, rb_origin, rb_target);
-                    PositionCorrection(contact, entity_origin, rb_origin, entity_target, rb_target);
+                    try PositionCorrection(engine_context, contact, entity_origin, rb_origin, entity_target, rb_target);
                 }
             }
         }
@@ -287,7 +287,7 @@ fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_targe
     rb_target.ApplyImpulse(impulse);
 }
 
-fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) void {
+fn PositionCorrection(engine_context: *EngineContext, contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) !void {
     const zone = Tracy.ZoneInit("CollisionManager::PositionCorrection", @src());
     defer zone.Deinit();
     const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin._InvMass + rb_target._InvMass) * PERCENT;
@@ -296,6 +296,11 @@ fn PositionCorrection(contact: Contact, entity_origin: Entity, rb_origin: *Rigid
     const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
     const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
 
-    transform_origin.Translation.SubEqVec(correction.MulScalar(rb_origin._InvMass));
-    transform_target.Translation.AddEqVec(correction.MulScalar(rb_target._InvMass));
+    var origin_translation = transform_origin.GetTranslation();
+    origin_translation.SubEqVec(correction.MulScalar(rb_origin._InvMass));
+    try entity_origin.SetTranslation(engine_context, origin_translation);
+
+    var target_translation = transform_target.GetTranslation();
+    target_translation.AddEqVec(correction.MulScalar(rb_target._InvMass));
+    try entity_target.SetTranslation(engine_context, target_translation);
 }

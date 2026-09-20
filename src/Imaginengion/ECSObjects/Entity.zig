@@ -5,6 +5,7 @@ const EntitySceneComponent = Components.EntitySceneComponent;
 const NameComponent = Components.NameComponent;
 const ScriptComponent = Components.ScriptComponent;
 const TransformComponent = Components.TransformComponent;
+const TransformDirtyTag = Components.TransformDirtyTag;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const RenderTargetComponent = Components.RenderTargetComponent;
@@ -21,22 +22,26 @@ const Player = @import("Player.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const AssetHandle = @import("AssetHandle.zig");
 const ECSCore = @import("ECSObject.zig").Core;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec3 = MathTypes.Vec3;
+const Quat = MathTypes.Quat;
 
 const Core = ECSCore(Entity);
 
 pub const Iterator = Core.Iterator;
 
 pub const CreateConfig = struct {
-    bAddUUID: bool = true,
-    bAddName: bool = true,
-    bAddTransform: bool = true,
-
-    pub const default: CreateConfig = .{
-        .bAddUUID = true,
-        .bAddName = true,
-        .bAddTransform = true,
-    };
+    bAddUUID: bool,
+    bAddName: bool,
+    bAddTransform: bool,
 };
+
+pub const DefaultConfig: CreateConfig = .{
+    .bAddUUID = true,
+    .bAddName = true,
+    .bAddTransform = true,
+};
+
 pub const Type = u32;
 pub const NullObject: Type = std.math.maxInt(Type);
 const Entity = @This();
@@ -61,8 +66,8 @@ pub const GetUUID = Core.GetUUID;
 
 pub const GetName = Core.GetName;
 
-pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType) !Entity {
-    const child_entity = try Core.CreateChild(self, engine_context, child_type);
+pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: CreateConfig) !Entity {
+    const child_entity = try Core.CreateChild(self, engine_context, child_type, config);
     //a child entity belongs to the same scene as its parent
     _ = try child_entity.AddComponent(engine_context, self.GetComponent(EntitySceneComponent).?.*);
     return child_entity;
@@ -106,14 +111,54 @@ pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle
     }
 }
 
+/// The only supported way to write an entity's local transform. Each one tags the entity so the
+/// next UpdateWorldTransforms pass picks it up; that is why TransformComponent's local fields are
+/// private. An entity with no TransformComponent is a no-op, matching GetComponent returning null.
+pub fn SetTranslation(self: Entity, engine_context: *EngineContext, translation: Vec3(f32)) !void {
+    const transform = self.GetComponent(TransformComponent) orelse return;
+    transform._SetLocalUntagged(translation, transform.GetRotation(), transform.GetScale());
+    try self.MarkTransformDirty(engine_context);
+}
+
+pub fn SetRotation(self: Entity, engine_context: *EngineContext, rotation: Quat(f32)) !void {
+    const transform = self.GetComponent(TransformComponent) orelse return;
+    transform._SetLocalUntagged(transform.GetTranslation(), rotation, transform.GetScale());
+    try self.MarkTransformDirty(engine_context);
+}
+
+pub fn SetScale(self: Entity, engine_context: *EngineContext, scale: Vec3(f32)) !void {
+    const transform = self.GetComponent(TransformComponent) orelse return;
+    transform._SetLocalUntagged(transform.GetTranslation(), transform.GetRotation(), scale);
+    try self.MarkTransformDirty(engine_context);
+}
+
+/// Writes all three at once, tagging only once. Prefer this over three separate setters when a
+/// caller changes more than one part of the transform.
+pub fn SetTransform(self: Entity, engine_context: *EngineContext, translation: Vec3(f32), rotation: Quat(f32), scale: Vec3(f32)) !void {
+    const transform = self.GetComponent(TransformComponent) orelse return;
+    transform._SetLocalUntagged(translation, rotation, scale);
+    try self.MarkTransformDirty(engine_context);
+}
+
+/// Adding the tag twice would trip AddComponent's assert, so this is the only way it goes on.
+pub fn MarkTransformDirty(self: Entity, engine_context: *EngineContext) !void {
+    if (self.HasComponent(TransformDirtyTag)) return;
+    _ = try self.AddComponent(engine_context, TransformDirtyTag{});
+}
+
+pub fn ClearTransformDirty(self: Entity, engine_context: *EngineContext) !void {
+    if (!self.HasComponent(TransformDirtyTag)) return;
+    try self.RemoveComponent(engine_context, TransformDirtyTag);
+}
+
 pub fn _CalculateWorldTransform(self: Entity) void {
     const zone = Tracy.ZoneInit("Entity::_CalculateWorldTransform", @src());
     defer zone.Deinit();
 
     if (self.GetComponent(TransformComponent)) |transform| {
-        var translation_out = transform.Translation;
-        var rotation_out = transform.Rotation;
-        var scale_out = transform.Scale;
+        var translation_out = transform.GetTranslation();
+        var rotation_out = transform.GetRotation();
+        var scale_out = transform.GetScale();
 
         var child_component = self.GetComponent(EntityChildComponent);
 
@@ -124,9 +169,13 @@ pub fn _CalculateWorldTransform(self: Entity) void {
             const parent_entity = Entity{ .mID = child_component.?.mParent, .mManager = self.mManager };
 
             if (parent_entity.GetComponent(TransformComponent)) |parent_transform| {
-                translation_out = translation_out.AddVec(parent_transform.Translation);
-                rotation_out = rotation_out.MulQuat(parent_transform.Rotation);
-                scale_out = scale_out.AddVec(parent_transform.Scale);
+                //the same three rules PhysicsManager.CalculateEntityTransform uses, in the same
+                //order: translations add, rotations multiply parent-first, scales multiply.
+                //Composing every ancestor's local transform here gives the same answer that pass
+                //gets from the parent's cached world transform.
+                translation_out = translation_out.AddVec(parent_transform.GetTranslation());
+                rotation_out = parent_transform.GetRotation().MulQuat(rotation_out);
+                scale_out = scale_out.MulVec(parent_transform.GetScale());
             }
 
             child_component = parent_entity.GetComponent(EntityChildComponent);

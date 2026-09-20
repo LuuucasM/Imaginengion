@@ -66,8 +66,6 @@ pub const MainObjectComponent = struct {
     pub const Ind: usize = 3;
     pub const Name: []const u8 = "MainObjectComponent";
 
-    mBit: u1 = 0,
-
     pub fn Deinit(_: *MainObjectComponent, _: *EngineContext) void {}
 };
 
@@ -75,16 +73,12 @@ pub const EntityTagComponent = struct {
     pub const Ind: usize = 4;
     pub const Name: []const u8 = "EntityTagComponent";
 
-    mBit: u1 = 0,
-
     pub fn Deinit(_: *EntityTagComponent, _: *EngineContext) void {}
 };
 
 pub const ScriptTagComponent = struct {
     pub const Ind: usize = 5;
     pub const Name: []const u8 = "ScriptTagComponent";
-
-    mBit: u1 = 0,
 
     pub fn Deinit(_: *ScriptTagComponent, _: *EngineContext) void {}
 };

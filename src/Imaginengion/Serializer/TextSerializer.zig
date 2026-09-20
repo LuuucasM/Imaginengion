@@ -190,7 +190,11 @@ fn DeserializeEntityList(engine_context: *EngineContext, scanner: *std.json.Scan
         const new_entity = if (@TypeOf(parent) == Scene)
             try parent.CreateEntity(engine_context, BLANK_ENTITY)
         else
-            try parent.CreateChild(engine_context, .Entity);
+            try parent.CreateChild(engine_context, .Entity, .{
+                .bAddUUID = false,
+                .bAddName = false,
+                .bAddTransform = false,
+            });
         try DeserializeObject(engine_context, scanner, new_entity);
     }
     _ = try scanner.next();

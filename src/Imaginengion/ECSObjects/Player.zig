@@ -31,13 +31,11 @@ const ECSCore = @import("ECSObject.zig").Core;
 const Core = ECSCore(Player);
 
 pub const CreateConfig = struct {
-    bAddNameComponent: bool = true,
-    bAddUUIDComponent: bool = true,
-    bAddPossessComponent: bool = false,
-    bAddMicComponent: bool = false,
-    bAddRenderComponent: bool = false,
-
-    pub const default: CreateConfig = .{};
+    bAddNameComponent: bool,
+    bAddUUIDComponent: bool,
+    bAddPossessComponent: bool,
+    bAddMicComponent: bool,
+    bAddRenderComponent: bool,
 };
 
 pub const DefaultConfig: CreateConfig = .{
