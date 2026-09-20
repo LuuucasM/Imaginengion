@@ -41,7 +41,7 @@ const MediumMaterial = @import("../Physics/MediumMaterial.zig");
 
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
 
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 
 const Tracy = @import("../Core/Tracy.zig");
 

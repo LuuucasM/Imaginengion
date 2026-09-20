@@ -24,6 +24,7 @@ const SEventData = @import("../Events/SManagerData.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 
 const ClearAndFreeOptions = enum {
+    All,
     EManager,
     GCManager,
     PManager,
@@ -52,10 +53,10 @@ pub fn GetScene(self: *WorldManager, scene_id: Scene.Type) Scene {
 }
 
 pub fn Init(self: *WorldManager, engine_allocator: std.mem.Allocator) !void {
-    self.mEManager.Init(engine_allocator);
-    self.mGCManager.Init(engine_allocator);
-    self.mPManager.Init(engine_allocator);
-    self.mSManager.Init(engine_allocator);
+    try self.mEManager.Init(engine_allocator);
+    try self.mGCManager.Init(engine_allocator);
+    try self.mPManager.Init(engine_allocator);
+    try self.mSManager.Init(engine_allocator);
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
@@ -67,6 +68,12 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
     switch (options) {
+        .All => {
+            self.mEManager.clearAndFree(engine_context);
+            self.mGCManager.clearAndFree(engine_context);
+            self.mPManager.clearAndFree(engine_context);
+            self.mSManager.clearAndFree(engine_context);
+        },
         .EManager => self.mEManager.clearAndFree(engine_context),
         .GCManager => self.mGCManager.clearAndFree(engine_context),
         .PManager => self.mPManager.clearAndFree(engine_context),
@@ -75,10 +82,10 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
 }
 
 pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *WorldManager) !void {
-    self.mEManager.Copy(engine_context, other_world.mEManager);
-    self.mGCManager.Copy(engine_context, other_world.mGCManager);
-    self.mPManager.Copy(engine_context, other_world.mPManager);
-    self.mSManager.Copy(engine_context, other_world.mSManager);
+    try self.mEManager.Copy(engine_context, &other_world.mEManager);
+    try self.mGCManager.Copy(engine_context, &other_world.mGCManager);
+    try self.mPManager.Copy(engine_context, &other_world.mPManager);
+    try self.mSManager.Copy(engine_context, &other_world.mSManager);
 }
 
 pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {

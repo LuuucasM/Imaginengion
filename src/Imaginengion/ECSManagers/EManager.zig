@@ -24,6 +24,7 @@ const Core = ECSCore(EManager);
 
 pub const empty: EManager = .{
     .mECSManager = .empty,
+    .mEventManager = .empty,
     .mUUIDToWorldID = .empty,
 };
 
@@ -48,9 +49,11 @@ pub const AddComponent = Core.AddComponent;
 
 pub const GetComponent = Core.GetComponent;
 
+pub const RemoveComponent = Core.RemoveComponent;
+
 pub const HasComponent = Core.HasComponent;
 
-pub const IsActiveEntity = Core.IsActiveObj;
+pub const IsActiveObj = Core.IsActiveObj;
 
 pub const SaveEntity = Core.SaveObject;
 
@@ -96,9 +99,9 @@ pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT)
 
 pub fn ApplyConfig(self: *EManager, engine_context: *EngineContext, entity_id: Entity.Type, config: Entity.CreateConfig) !void {
     if (config.bAddName) {
-        const name_component: NameComponent = .empty;
+        var name_component: NameComponent = .empty;
         try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
-        self.AddComponent(engine_context, entity_id, name_component);
+        _ = try self.AddComponent(engine_context, entity_id, name_component);
     }
     if (config.bAddUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
@@ -107,6 +110,6 @@ pub fn ApplyConfig(self: *EManager, engine_context: *EngineContext, entity_id: E
         try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, entity_id);
     }
     if (config.bAddTransform) {
-        self.AddComponent(engine_context, entity_id, TransformComponent.empty);
+        _ = try self.AddComponent(engine_context, entity_id, TransformComponent.empty);
     }
 }

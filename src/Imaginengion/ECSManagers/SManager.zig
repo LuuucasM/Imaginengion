@@ -13,7 +13,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
 
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const ECSCore = @import("Manager.zig").Core;
 
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
@@ -49,8 +49,9 @@ pub const ECSType = enum {
 pub const ECSManagerT = ECSManager(Scene.Type, &SceneComponentsList);
 
 //scene stuff
-pub const uninit: SManager = .{
+pub const empty: SManager = .{
     .mECSManager = .empty,
+    .mEventManager = .empty,
     .mGameLayerInsertIndex = 0,
     .mNumofLayers = 0,
     .mUUIDToWorldID = .empty,
@@ -70,7 +71,8 @@ pub const Deinit = Core.Deinit;
 
 pub fn CreateScene(self: *SManager, engine_context: *EngineContext, layer_type: LayerType, config: Scene.CreateConfig) !Scene {
     const new_scene: Scene = try Core.CreateObj(self, engine_context, config);
-    self.GetSceneComponent(new_scene.mID).mLayerType = layer_type;
+    //nothing else adds this, and the stack bookkeeping below reads it
+    _ = try new_scene.AddComponent(engine_context, SceneComponent{ .mLayerType = layer_type });
     try self.InsertScene(engine_context, new_scene);
     return new_scene;
 }
@@ -92,6 +94,8 @@ pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) void {
 }
 
 pub const GetComponent = Core.GetComponent;
+
+pub const RemoveComponent = Core.RemoveComponent;
 
 pub const GetGroup = Core.GetGroup;
 
@@ -115,8 +119,8 @@ pub fn Copy(self: *SManager, engine_context: *EngineContext, other: *SManager) !
     other.mGameLayerInsertIndex = self.mGameLayerInsertIndex;
 }
 
-pub fn GetSceneComponent(self: *SManager, scene_id: Scene.Type) SceneComponent {
-    return self.mECSManager.GetComponent(SceneComponent, scene_id);
+pub fn GetSceneComponent(self: *SManager, scene_id: Scene.Type) *SceneComponent {
+    return self.mECSManager.GetComponent(SceneComponent, scene_id).?;
 }
 
 pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
@@ -252,12 +256,12 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
 }
 
 pub fn ApplyConfig(self: *SManager, engine_context: *EngineContext, player_id: Scene.Type, config: Scene.CreateConfig) !void {
-    if (config.bAddName) {
-        const name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
-        self.AddComponent(engine_context, player_id, name_component);
+    if (config.bAddSceneName) {
+        var name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Scene");
+        _ = try self.AddComponent(engine_context, player_id, name_component);
     }
-    if (config.bAddUUID) {
+    if (config.bAddSceneUUID) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });

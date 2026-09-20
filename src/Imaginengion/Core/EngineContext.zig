@@ -15,15 +15,15 @@ const Serializer = @import("../Serializer/Serializer.zig");
 const ImguiManager = @import("../Imgui/Imgui.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
-const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData.EventCategories, WindowEventData.Event);
+const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData);
 pub const WindowEventCallback = WindowEventManager.EventCallback;
 
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
-const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData.EventCategories, ImguiEventData.Event);
+const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData);
 pub const ImguiEventCallback = ImguiEventManager.EventCallback;
 
 const GameEventData = @import("../Events/GameEventData.zig");
-const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData.EventCategories, GameEventData.Event);
+const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData);
 pub const GameEventCallback = GameEventManager.EventCallback;
 
 const MakeAllocatorVTable = @import("Allocators.zig").MakeAllocatorVTable;
@@ -56,21 +56,21 @@ mDT: f32 = 1.0 / 60.0,
 
 mAppWindow: Window = .{},
 
-mAssetManager: AssetManager = .{},
+mAssetManager: AssetManager = .empty,
 mAudioManager: AudioManager = .{},
 mInputManager: InputManager = .empty,
 mRenderer: Renderer = .{},
 mPhysicsManager: PhysicsManager = .{},
 
-mGameEventManager: GameEventManager = .{},
-mSystemEventManager: WindowEventManager = .{},
+mGameEventManager: GameEventManager = .empty,
+mSystemEventManager: WindowEventManager = .empty,
 
 mGameWorld: WorldManager = .{},
 mEditorWorld: WorldManager = .{},
 mSimulateWorld: WorldManager = .{},
 
 mImguiManager: ImguiManager = .{},
-mImguiEventManager: ImguiEventManager = .{},
+mImguiEventManager: ImguiEventManager = .empty,
 
 mSerializer: Serializer = .empty,
 
@@ -103,9 +103,9 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
 
     try self.mPhysicsManager.Init(self.EngineAllocator());
 
-    try self.mGameWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
-    try self.mEditorWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
-    try self.mSimulateWorld.Init(self.mAppWindow.GetWidth(), self.mAppWindow.GetHeight(), self.EngineAllocator());
+    try self.mGameWorld.Init(self.EngineAllocator());
+    try self.mEditorWorld.Init(self.EngineAllocator());
+    try self.mSimulateWorld.Init(self.EngineAllocator());
 }
 
 pub fn DeInit(self: *EngineContext) void {

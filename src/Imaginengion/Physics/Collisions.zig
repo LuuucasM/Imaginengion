@@ -19,8 +19,8 @@ pub const CollisionType = enum {
 };
 
 pub const Contact = struct {
-    mOrigin: Entity = .{},
-    mTarget: Entity = .{},
+    mOrigin: Entity = .uninit,
+    mTarget: Entity = .uninit,
     mNormal: Vec3(f32),
     mPenetration: f32,
 };

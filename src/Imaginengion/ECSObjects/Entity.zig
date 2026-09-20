@@ -11,8 +11,8 @@ const RenderTargetComponent = Components.RenderTargetComponent;
 const OnKeyPressedScript = Components.OnKeyPressedScript;
 const ViewpointComponent = Components.ViewpointComponent;
 const OnUpdateScript = Components.OnUpdateScript;
-const MainEntityComponent = Components.MainEntityComponent;
-const PathType = @import("../Assets/AManager.zig").PathType;
+const MainObjectComponent = @import("../ECS/Components.zig").MainObjectComponent;
+const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const ScriptAsset = @import("../ECSComponents/AComponents.zig").ScriptAsset;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -27,9 +27,9 @@ const Core = ECSCore(Entity);
 pub const Iterator = Core.Iterator;
 
 pub const CreateConfig = struct {
-    bAddUUID: bool,
-    bAddName: bool,
-    bAddTransform: bool,
+    bAddUUID: bool = true,
+    bAddName: bool = true,
+    bAddTransform: bool = true,
 
     pub const default: CreateConfig = .{
         .bAddUUID = true,
@@ -61,11 +61,10 @@ pub const GetUUID = Core.GetUUID;
 
 pub const GetName = Core.GetName;
 
-pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: CreateConfig) !Entity {
+pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType) !Entity {
     const child_entity = try Core.CreateChild(self, engine_context, child_type);
-    try child_entity.CreateEntityConfig(engine_context, config);
+    //a child entity belongs to the same scene as its parent
     _ = try child_entity.AddComponent(engine_context, self.GetComponent(EntitySceneComponent).?.*);
-    @compileLog("TODO to change to move functionality of NewEntityConfig to the EManager instead of on the entity directly");
     return child_entity;
 }
 
@@ -73,13 +72,15 @@ pub const Duplicate = Core.Duplicate;
 
 pub const Delete = Core.Delete;
 
-pub fn GetViewpointComponent(self: Entity) ?ViewpointComponent {
+pub fn GetViewpointComponent(self: Entity) ?*ViewpointComponent {
     if (self.GetComponent(ViewpointComponent)) |comp| return comp;
 
-    if (self.GetIterator(.Child)) |iter| {
-        while (iter.Next()) |child_entity| {
-            if (child_entity.GetComponent(ViewpointComponent)) |comp| return comp;
-        }
+    //the viewpoint may live on a convenience child instead of on the game object itself.
+    //a child that is its own MainObject is a nested game object, so its viewpoint is not ours.
+    var iter = self.GetIterator(.Child);
+    while (iter.next()) |child_entity| {
+        if (child_entity.HasComponent(MainObjectComponent)) continue;
+        if (child_entity.GetComponent(ViewpointComponent)) |comp| return comp;
     }
     return null;
 }
@@ -117,7 +118,7 @@ pub fn _CalculateWorldTransform(self: Entity) void {
         var child_component = self.GetComponent(EntityChildComponent);
 
         while (child_component != null) {
-            const parent_entity = Entity{ .mEntityID = child_component.?.mParent, .mWorldManager = self.mWorldManager };
+            const parent_entity = Entity{ .mID = child_component.?.mParent, .mManager = self.mManager };
 
             if (parent_entity.GetComponent(TransformComponent)) |parent_transform| {
                 translation_out = translation_out.AddVec(parent_transform.Translation);
@@ -125,7 +126,7 @@ pub fn _CalculateWorldTransform(self: Entity) void {
                 scale_out = scale_out.AddVec(parent_transform.Scale);
             }
 
-            if (parent_entity.HasComponent(MainEntityComponent)) break;
+            if (parent_entity.HasComponent(MainObjectComponent)) break;
 
             child_component = parent_entity.GetComponent(EntityChildComponent);
         }
@@ -152,6 +153,8 @@ pub fn CreateEntityConfig(self: Entity, engine_context: *EngineContext, config: 
         _ = try self.AddComponent(engine_context, TransformComponent{});
     }
 }
+
+pub const AddComponentScript = Core.AddComponentScript;
 
 pub const IsActive = Core.IsActive;
 

@@ -26,6 +26,7 @@ const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 
 const ScriptAsset = AComponents.ScriptAsset;
 
+const BuiltinComponents = @import("../ECS/Components.zig");
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent;
 
@@ -35,10 +36,7 @@ pub fn Core(comptime Self: type) type {
             _ValidateObject(Self);
         }
 
-        pub const ChildType = enum {
-            Entity,
-            Script,
-        };
+        pub const ChildType = @import("../ECS/ECSManager.zig").ChildType;
         pub const Iterator = struct {
             pub const IterType = enum {
                 Child,
@@ -90,27 +88,27 @@ pub fn Core(comptime Self: type) type {
             }
 
             if (Self == Entity) {
-                return self.mManager.mEManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
+                return self.mManager.mEManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == GameContext) {
-                return self.mManager.mGCManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
+                return self.mManager.mGCManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == Player) {
-                return self.mManager.mPManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
+                return self.mManager.mPManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == Scene) {
-                return self.mManager.mSManager.AddComponent(engine_context.EngineAllocator(), self.mID, component);
+                return self.mManager.mSManager.AddComponent(engine_context, self.mID, component);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
-        pub fn RemoveComponent(self: Self, engine_allocator: std.mem.Allocator, comptime component_type: type) !void {
+        pub fn RemoveComponent(self: Self, engine_context: *EngineContext, comptime component_type: type) !void {
             _ValidateComponent(Self, component_type);
             if (Self == Entity) {
-                self.mManager.mEManager.RemoveComponent(engine_allocator, component_type, self.mID);
+                try self.mManager.mEManager.RemoveComponent(engine_context, self.mID, component_type);
             } else if (Self == GameContext) {
-                self.mManager.mGCManager.RemoveComponent(engine_allocator, component_type, self.mID);
+                try self.mManager.mGCManager.RemoveComponent(engine_context, self.mID, component_type);
             } else if (Self == Player) {
-                self.mManager.mPManager.RemoveComponent(engine_allocator, component_type, self.mID);
+                try self.mManager.mPManager.RemoveComponent(engine_context, self.mID, component_type);
             } else if (Self == Scene) {
-                self.mManager.mSManager.RemoveComponent(engine_allocator, component_type, self.mID);
+                try self.mManager.mSManager.RemoveComponent(engine_context, self.mID, component_type);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -119,18 +117,18 @@ pub fn Core(comptime Self: type) type {
         pub fn GetComponent(self: Self, comptime component_type: type) ?*component_type {
             _ValidateComponent(Self, component_type);
             if (!IsActive(self)) {
-                std.log.err("Add Component called for invalid entity", .{});
-                return error.InvalidEntity;
+                std.log.err("GetComponent called for invalid entity", .{});
+                return null;
             }
 
             if (Self == Entity) {
-                self.mManager.mEManager.GetComponent(component_type, self.mID);
+                return self.mManager.mEManager.GetComponent(component_type, self.mID);
             } else if (Self == GameContext) {
-                self.mManager.mGCManager.GetComponent(component_type, self.mID);
+                return self.mManager.mGCManager.GetComponent(component_type, self.mID);
             } else if (Self == Player) {
-                self.mManager.mPManager.GetComponent(component_type, self.mID);
+                return self.mManager.mPManager.GetComponent(component_type, self.mID);
             } else if (Self == Scene) {
-                self.mManager.mSManager.GetComponent(component_type, self.mID);
+                return self.mManager.mSManager.GetComponent(component_type, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -139,13 +137,13 @@ pub fn Core(comptime Self: type) type {
         pub fn HasComponent(self: Self, comptime component_type: type) bool {
             _ValidateComponent(Self, component_type);
             if (Self == Entity) {
-                self.mManager.mEManager.HasComponent(component_type, self.mID);
+                return self.mManager.mEManager.HasComponent(component_type, self.mID);
             } else if (Self == GameContext) {
-                self.mManager.mGCManager.HasComponent(component_type, self.mID);
+                return self.mManager.mGCManager.HasComponent(component_type, self.mID);
             } else if (Self == Player) {
-                self.mManager.mPManager.HasComponent(component_type, self.mID);
+                return self.mManager.mPManager.HasComponent(component_type, self.mID);
             } else if (Self == Scene) {
-                self.mManager.mSManager.HasComponent(component_type, self.mID);
+                return self.mManager.mSManager.HasComponent(component_type, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -160,13 +158,13 @@ pub fn Core(comptime Self: type) type {
         }
         pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType) !Self {
             if (Self == Entity) {
-                return .{ .mID = try self.mManager.mEManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
+                return try self.mManager.mEManager.CreateChild(engine_context, self.mID, child_type);
             } else if (Self == GameContext) {
-                return .{ .mID = try self.mManager.mGCManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
+                return try self.mManager.mGCManager.CreateChild(engine_context, self.mID, child_type);
             } else if (Self == Player) {
-                return .{ .mID = try self.mManager.mPManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
+                return try self.mManager.mPManager.CreateChild(engine_context, self.mID, child_type);
             } else if (Self == Scene) {
-                return .{ .mID = try self.mManager.mSManager.AddChild(engine_context.EngineAllocator(), self.mID, child_type), .mManager = self.mManager };
+                return try self.mManager.mSManager.CreateChild(engine_context, self.mID, child_type);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -186,13 +184,13 @@ pub fn Core(comptime Self: type) type {
 
         pub fn Delete(self: Self, engine_context: *EngineContext) !void {
             if (Self == Entity) {
-                try self.mManager.mAManager.Delete(engine_context.EngineAllocator(), self.mID);
+                try self.mManager.mEManager.DeleteEntity(engine_context, self.mID);
             } else if (Self == GameContext) {
-                try self.mManager.mEManager.Delete(engine_context.EngineAllocator(), self.mID);
+                try self.mManager.mGCManager.DeleteGameContext(engine_context, self.mID);
             } else if (Self == Player) {
-                try self.mManager.mPManager.Delete(engine_context.EngineAllocator(), self.mID);
+                try self.mManager.mPManager.DeletePlayer(engine_context, self.mID);
             } else if (Self == Scene) {
-                try self.mManager.mSManager.Delete(engine_context.EngineAllocator(), self.mID);
+                try self.mManager.mSManager.DeleteScene(engine_context, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -215,31 +213,54 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
+        /// Convenience over AddScript for callers that have a path rather than a handle.
+        pub fn AddComponentScript(self: Self, engine_context: *EngineContext, rel_path: []const u8, path_type: AManager.PathType) !void {
+            const script_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
+            try self.AddScript(engine_context, script_handle);
+        }
+
+        fn _AddScriptComponent(self: Self, engine_context: *EngineContext, component: ScriptComponent) !*ScriptComponent {
+            if (Self == Entity) {
+                return try self.mManager.mEManager.AddComponent(engine_context, self.mID, component);
+            } else if (Self == GameContext) {
+                return try self.mManager.mGCManager.AddComponent(engine_context, self.mID, component);
+            } else if (Self == Player) {
+                return try self.mManager.mPManager.AddComponent(engine_context, self.mID, component);
+            } else if (Self == Scene) {
+                return try self.mManager.mSManager.AddComponent(engine_context, self.mID, component);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
+            }
+        }
+
         pub fn AddScript(self: Self, engine_context: *EngineContext, new_script_handle: AssetHandle) !Self {
             // Create the script component with the asset handle
             const new_script_component = ScriptComponent{
                 .mScriptAssetHandle = new_script_handle,
             };
 
-            const new_script_entity = try self.CreateChild(engine_context, .Script, .{ .bAddName = false, .bAddTransform = false, .bAddUUID = false });
-            _ = try AddComponent(new_script_entity, engine_context, new_script_component);
+            //call Core's CreateChild directly: Entity's wrapper takes a config, the others don't
+            const new_script_entity = try CreateChild(self, engine_context, .Script);
+            //AddComponent deliberately rejects ScriptComponent to push callers here, so
+            //this is the one place that goes straight to the manager
+            _ = try _AddScriptComponent(new_script_entity, engine_context, new_script_component);
 
             return new_script_entity;
         }
 
         pub fn IsActive(self: Self) bool {
-            if (!self.IsIDValid()) false;
+            if (!self.IsIDValid()) return false;
             return blk: {
                 if (Self == AssetHandle) {
-                    break :blk try self.mManager.IsActiveEntity(self.mID);
+                    break :blk self.mManager.IsActiveObj(self.mID);
                 } else if (Self == Entity) {
-                    break :blk try self.mManager.mEManager.IsActiveEntity(self.mID);
+                    break :blk self.mManager.mEManager.IsActiveObj(self.mID);
                 } else if (Self == GameContext) {
-                    break :blk try self.mManager.mGCManager.IsActiveEntity(self.mID);
+                    break :blk self.mManager.mGCManager.IsActiveObj(self.mID);
                 } else if (Self == Player) {
-                    break :blk try self.mManager.mPManager.IsActiveEntity(self.mID);
+                    break :blk self.mManager.mPManager.IsActiveObj(self.mID);
                 } else if (Self == Scene) {
-                    break :blk try self.mManager.mSManager.IsActiveEntity(self.mID);
+                    break :blk self.mManager.mSManager.IsActiveObj(self.mID);
                 } else {
                     @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
                 }
@@ -263,6 +284,13 @@ pub fn Core(comptime Self: type) type {
         }
 
         fn _ValidateComponent(obj_t: type, comptime component_type: type) void {
+            //the ECS supplies these itself, so they are in no object's component list
+            if (component_type == ParentComponent(obj_t.Type) or
+                component_type == ChildComponent(obj_t.Type) or
+                component_type == BuiltinComponents.MainObjectComponent or
+                component_type == BuiltinComponents.EntityTagComponent or
+                component_type == BuiltinComponents.ScriptTagComponent) return;
+
             comptime var is_valid = false;
 
             const components_list = blk: {

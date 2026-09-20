@@ -11,7 +11,7 @@ const GameModeComponents = @import("../ECSComponents/GCComponents.zig");
 const UUIDComponent = GameModeComponents.UUIDComponent;
 const NameComponent = GameModeComponents.NameComponent;
 const ScriptComponent = GameModeComponents.ScriptComponent;
-const PathType = @import("../Assets/AManager.zig").PathType;
+const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const ScriptAsset = @import("../ECSComponents/AComponents.zig").ScriptAsset;
 const GameContext = @This();
 const ECSCore = @import("ECSObject.zig").Core;
@@ -20,8 +20,10 @@ const AssetHandle = @import("AssetHandle.zig");
 const Core = ECSCore(GameContext);
 
 pub const CreateConfig = struct {
-    bAddUUIDComponent: bool,
-    bAddNameComponent: bool,
+    bAddUUIDComponent: bool = true,
+    bAddNameComponent: bool = true,
+
+    pub const default: CreateConfig = .{};
 };
 
 pub const DefaultConfig: CreateConfig = .{
@@ -53,18 +55,15 @@ pub const GetUUID = Core.GetUUID;
 
 pub const Delete = Core.Delete;
 
+pub const GetIterator = Core.GetIterator;
+
 pub const IsActive = Core.IsActive;
 
-pub const IsValidID = Core.IsIDValid;
+pub const IsIDValid = Core.IsIDValid;
 
 pub const Invalidate = Core.Invalidate;
 
-pub fn CreateChild(self: GameContext, engine_context: *EngineContext, child_type: ChildType, new_gamemode_config: CreateConfig) !GameContext {
-    var child_gamemode = Core.CreateChild(self, engine_context, child_type);
-    @compileLog("TODO: change to move NewGmaeModeConfig into the GCManager instead of in GameContext");
-    try child_gamemode.CreateGameModeConfig(engine_context, new_gamemode_config);
-    return child_gamemode;
-}
+pub const CreateChild = Core.CreateChild;
 
 //NOTE: no scripts yet for GameContext
 //pub fn AddScript(self: GameContext, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {

@@ -9,14 +9,14 @@ const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const Entity = @import("../../ECSObjects/Entity.zig");
-const AssetType = @import("../../Assets/AManager.zig").AssetType;
+const AssetType = @import("../../ECSManagers/AManager.zig").AssetType;
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-mParent: Entity.Type = Entity.NullEntity,
-mFirst: Entity.Type = Entity.NullEntity,
-mPrev: Entity.Type = Entity.NullEntity,
-mNext: Entity.Type = Entity.NullEntity,
+mParent: Entity.Type = Entity.NullObject,
+mFirst: Entity.Type = Entity.NullObject,
+mPrev: Entity.Type = Entity.NullObject,
+mNext: Entity.Type = Entity.NullObject,
 
 mScriptAssetHandle: AssetHandle = .uninit,
 

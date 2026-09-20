@@ -8,7 +8,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
 const VertexBuffer = @import("../VertexBuffers/VertexBuffer.zig");
 const Player = @import("../ECSObjects/Player.zig");
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
@@ -34,13 +34,13 @@ const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
-const WindowEvent = WindowEventData.Event;
+const WindowEvent = WindowEventData.EventT;
 
 const GameEventData = @import("../Events/GameEventData.zig");
-const GameEvent = GameEventData.Event;
+const GameEvent = GameEventData.EventT;
 
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
-const ImguiEvent = ImguiEventData.Event;
+const ImguiEvent = ImguiEventData.EventT;
 
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
@@ -65,6 +65,8 @@ const RunSettings = @import("../Imgui/RunSettings.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const SceneLayer = @import("../ECSObjects/Scene.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
+const EventResult = @import("../Events/EventManager.zig").EventResult;
+
 const EditorProgram = @This();
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -106,17 +108,17 @@ mEditorState: EditorState = .Stop,
 mRunPlayer: ?Player = null,
 
 //editor UI stuff
-mEditorUIScene: SceneLayer = .{},
-mEditorUIEntity: Entity = .{},
-mEditorUIPlayer: Player = .{},
+mEditorUIScene: SceneLayer = .uninit,
+mEditorUIEntity: Entity = .uninit,
+mEditorUIPlayer: Player = .uninit,
 
 //Editor viewport stuff
-mEditorViewportScene: SceneLayer = .{},
-mEditorViewportEntity: Entity = .{},
-mEditorViewportPlayer: Player = .{},
+mEditorViewportScene: SceneLayer = .uninit,
+mEditorViewportEntity: Entity = .uninit,
+mEditorViewportPlayer: Player = .uninit,
 
 //misc stuff
-mEditorFont: AssetHandle = .{},
+mEditorFont: AssetHandle = .uninit,
 mActiveWorld: *WorldManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
@@ -215,9 +217,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer game_logic_zone.Deinit();
 
         if (self.mEditorState == .Play) {
-            _ = try ScriptsProcessor.RunEntityScript(OnUpdateScript, .Simulate, engine_context, .{});
+            _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Simulate, engine_context, .{});
         }
-        _ = try ScriptsProcessor.RunEntityScript(OnUpdateScript, .Editor, engine_context, .{});
+        _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Editor, engine_context, .{});
     }
     //-------------Game Logic End----------------
 
@@ -277,7 +279,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             //process any imgui events
             var imgui_event_callback = EngineContext.ImguiEventCallback{ .mCtx = self, .mCallbackFn = OnImguiEvent };
             callback_list.append(&imgui_event_callback.mNode);
-            try engine_context.mImguiEventManager.ProcessCategory(.RenderEnd, engine_context, callback_list);
+            try engine_context.mImguiEventManager.ProcessCategory(.EndOfFrame, engine_context, callback_list);
             callback_list.first = null;
             callback_list.last = null;
 
@@ -317,7 +319,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         //handle deleted objects this frame
         var game_event_callback = EngineContext.GameEventCallback{ .mCtx = self, .mCallbackFn = OnGameEvent };
         callback_list.append(&game_event_callback.mNode);
-        try engine_context.mGameEventManager.ProcessCategory(.FrameEnd, engine_context, callback_list);
+        try engine_context.mGameEventManager.ProcessCategory(.EndOfFrame, engine_context, callback_list);
         callback_list.first = null;
         callback_list.last = null;
 
@@ -336,14 +338,14 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
 }
 
-pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const WindowEvent) anyerror!bool {
+pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const WindowEvent) anyerror!EventResult {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     switch (event.*) {
         .WindowClose => _ = self.OnWindowClose(engine_context),
         .KeyboardPressed => |e| _ = try self.OnKeyboardPressedEvent(engine_context, e),
         else => {},
     }
-    return true;
+    return .Continue;
 }
 
 fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
@@ -351,7 +353,7 @@ fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
     return false;
 }
 
-pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const GameEvent) anyerror!bool {
+pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const GameEvent) anyerror!EventResult {
     _ = engine_context;
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
 
@@ -371,10 +373,10 @@ pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, e
         },
         else => std.log.err("This event type has not been handled by EditorProgram.OnGameEvent: {s}", .{@tagName(event.*)}),
     }
-    return true;
+    return .Continue;
 }
 
-pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const ImguiEvent) anyerror!bool {
+pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const ImguiEvent) anyerror!EventResult {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     switch (event.*) {
         .MoveSceneEvent => |e| {
@@ -405,7 +407,7 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         .DeleteEntityEvent => |e| {
             if (self.mSelectedObj) |object| {
                 if (object == .entity) {
-                    if (object.entity.mEntityID == e.mEntity.mEntityID) {
+                    if (object.entity.mID == e.mEntity.mID) {
                         self.mSelectedObj = null;
                     }
                 }
@@ -414,7 +416,7 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         .DeleteSceneEvent => |e| {
             if (self.mSelectedObj) |object| {
                 if (object == .scene_layer) {
-                    if (object.scene_layer.mSceneID == e.mScene.mSceneID) {
+                    if (object.scene_layer.mID == e.mScene.mID) {
                         self.mSelectedObj = null;
                     }
                 }
@@ -425,13 +427,13 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }
-    return true;
+    return .Continue;
 }
 
 pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !bool {
-    _ = try ScriptsProcessor.RunEntityScript(OnKeyPressedScript, .Editor, engine_context, .{&e});
+    _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Editor, engine_context, .{&e});
     if (self.mEditorState == .Play) {
-        _ = try ScriptsProcessor.RunEntityScript(OnKeyPressedScript, .Simulate, engine_context, .{&e});
+        _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Simulate, engine_context, .{&e});
     }
 
     if (e._InputCode == .F5) {
@@ -447,7 +449,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     if (self.mEditorState == .Play) {
         self.mEditorState = .Stop;
         self.mActiveWorld = &engine_context.mGameWorld;
-        engine_context.mSimulateWorld.clearAndFree(engine_context);
+        engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {
         if (self.mRunPlayer) |run_player| {
             if (run_player.GetComponent(PossessComponent)) |poss_comp| {
@@ -672,7 +674,7 @@ fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entit
         const player_slot_component = entity.GetComponent(PlayerSlotComponent).?;
         if (player_slot_component.mPlayerEntity.IsActive()) {
             const player = player_slot_component.mPlayerEntity;
-            if (player.mEntityID != Player.NullPlayer) {
+            if (player.mID != Player.NullObject) {
                 start += 1;
             } else {
                 player_slot_entities.items[start] = player_slot_entities.items[end - 1];
@@ -809,7 +811,7 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
                     const player = engine_context.mGameWorld.GetPlayer(player_id);
                     const possess_component = player.GetComponent(PossessComponent).?;
                     if (possess_component.mPossessedEntity.IsActive()) {
-                        const selected = if (self.mRunPlayer) |p| if (player.mEntityID == p.mEntityID) true else false else false;
+                        const selected = if (self.mRunPlayer) |p| if (player.mID == p.mID) true else false else false;
                         const name_component = player.GetComponent(PlayerNameComponent).?;
                         if (imgui.igMenuItem_Bool(name_component.mName.items.ptr, null, selected, true) == true) {
                             self.mRunPlayer = player;

@@ -14,7 +14,7 @@ pub const EventCategories = enum {
     EndOfFrame,
 };
 
-pub const Event = union(enum) {
+pub const EventT = union(enum) {
     Default: DefaultEvent,
     DestroyEntityEvent: DestroyEntityEvent,
     DestroySceneEvent: DestroySceneEvent,

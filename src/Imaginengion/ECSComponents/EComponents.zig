@@ -16,7 +16,10 @@ pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TextComponent = @import("Entity/TextComponent.zig");
 pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
 pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
-pub const MainEntityComponent = @import("Entity/MainEntityComponent.zig");
+
+//the ECS supplies this one itself: it marks an entity as a real game object rather than a
+//convenience entity that only exists to carry a bundle of components for its parent
+pub const MainObjectComponent = @import("../ECS/Components.zig").MainObjectComponent;
 
 const ScriptTags = @import("Shared/ScriptTags.zig");
 pub const OnKeyPressedScript = ScriptTags.OnKeyPressedScript;
@@ -31,7 +34,6 @@ pub const ComponentsList = [_]type{
     ColliderComponent,
     UUIDComponent,
     NameComponent,
-    MainEntityComponent,
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
@@ -55,7 +57,7 @@ pub const SerializeList = [_]type{
     ColliderComponent,
     UUIDComponent,
     RenderTargetComponent,
-    MainEntityComponent,
+    MainObjectComponent,
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
@@ -73,7 +75,7 @@ pub const ComponentPanelList = [_]type{
     AudioComponent,
     ColliderComponent,
     UUIDComponent,
-    MainEntityComponent,
+    MainObjectComponent,
     RenderTargetComponent,
     NameComponent,
     PlayerSlotComponent,
@@ -96,7 +98,6 @@ pub const EComponents = enum(u16) {
     ColliderComponent = ListInd(&ComponentsList, ColliderComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     NameComponent = ListInd(&ComponentsList, NameComponent),
-    MainEntityComponent = ListInd(&ComponentsList, MainEntityComponent),
     PlayerSlotComponent = ListInd(&ComponentsList, PlayerSlotComponent),
     QuadComponent = ListInd(&ComponentsList, QuadComponent),
     RigidBodyComponent = ListInd(&ComponentsList, RigidBodyComponent),

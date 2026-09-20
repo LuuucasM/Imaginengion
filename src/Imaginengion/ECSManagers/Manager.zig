@@ -35,7 +35,7 @@ pub fn Core(comptime Self: type) type {
             _ValidateObject(Self);
         }
 
-        pub fn Init(self: Self, engine_allocator: std.mem.Allocator) !void {
+        pub fn Init(self: *Self, engine_allocator: std.mem.Allocator) !void {
             try self.mECSManager.Init(engine_allocator);
         }
 
@@ -45,19 +45,44 @@ pub fn Core(comptime Self: type) type {
             self.mEventManager.Deinit(engine_context.EngineAllocator());
         }
 
+        /// The manager pointer an object of this type carries. An AssetHandle points at
+        /// its AManager directly; every other object points at the WorldManager, which is
+        /// recoverable because the ECS managers live as fields of it.
+        fn ObjManager(self: *Self) @FieldType(UnderlyingObj(Self), "mManager") {
+            if (Self == AManager) {
+                return self;
+            } else if (Self == EManager) {
+                return @fieldParentPtr("mEManager", self);
+            } else if (Self == GCManager) {
+                return @fieldParentPtr("mGCManager", self);
+            } else if (Self == PManager) {
+                return @fieldParentPtr("mPManager", self);
+            } else if (Self == SManager) {
+                return @fieldParentPtr("mSManager", self);
+            } else {
+                @compileError("Not a valid manager type!");
+            }
+        }
+
         pub fn CreateObj(self: *Self, engine_context: *EngineContext, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
-            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.EngineAllocator()), .mManager = self };
-            self.ApplyConfig(new_obj, config);
+            const new_obj: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.CreateEntity(engine_context.EngineAllocator()), .mManager = ObjManager(self) };
+            try self.ApplyConfig(engine_context, new_obj.mID, config);
             return new_obj;
         }
 
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            //for inserting event need to figure out a way to use comptime to make the correct delete object event
-            _ = obj_id;
-            self.mEventManager.Insert(
-                engine_context.EngineAllocator(),
-                .EndOfFrame,
-            );
+            if (Self == SManager) {
+                try self.mEventManager.Insert(
+                    engine_context.EngineAllocator(),
+                    .EndOfFrame,
+                    .{ .ToDestroyScene = .{ .Scene = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
+                );
+            } else {
+                //TODO: only SManagerData has a destroy event so far. The other event unions
+                //need a ToDestroy<Obj> member and a handler in their OnManagerEvents before
+                //this can queue anything, so deletion is a no-op for them right now.
+                std.log.err("DeleteObj is not implemented for {s} yet", .{@typeName(Self)});
+            }
         }
 
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
@@ -65,20 +90,15 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType) !UnderlyingObj(Self) {
-            return try self.mECSManager.AddChild(engine_context.EngineAllocator(), parent_id, child_type);
+            return .{ .mID = try self.mECSManager.AddChild(engine_context.EngineAllocator(), parent_id, child_type), .mManager = ObjManager(self) };
         }
 
         pub fn AddComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), new_component: anytype) !*@TypeOf(new_component) {
             return try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, new_component);
         }
 
-        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            //same issue as DeleteObj, need to figure out a way to insert the correct event for an abstract manager
-            _ = obj_id;
-            self.mEventManager.Insert(
-                engine_context.EngineAllocator(),
-                .EndOfFrame,
-            );
+        pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
+            try self.mECSManager.RemoveComponent(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
         }
 
         pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {

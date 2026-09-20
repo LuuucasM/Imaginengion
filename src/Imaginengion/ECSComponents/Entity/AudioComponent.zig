@@ -26,10 +26,10 @@ pub const AudioType = enum(u8) {
 pub const Editable: bool = true;
 pub const Name: []const u8 = "AudioComponent";
 
-mParent: Entity.Type = Entity.NullEntity,
-mFirst: Entity.Type = Entity.NullEntity,
-mPrev: Entity.Type = Entity.NullEntity,
-mNext: Entity.Type = Entity.NullEntity,
+mParent: Entity.Type = Entity.NullObject,
+mFirst: Entity.Type = Entity.NullObject,
+mPrev: Entity.Type = Entity.NullObject,
+mNext: Entity.Type = Entity.NullObject,
 
 mAudioType: AudioType = .Audio2D,
 mPlaybackState: PlaybackState = .Ready,

@@ -545,15 +545,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
                     }
 
                     const return_type = fn_info.return_type.?;
-                    const return_type_info = @typeInfo(return_type);
-
-                    if (return_type_info != .error_union) {
-                        @compileError(type_name ++ "'s Deinit's return type must be error union");
-                    }
-
-                    const payload_type = return_type_info.error_union.payload;
-                    if (payload_type != void) {
-                        @compileError(type_name ++ "'s Deinit's return payload must be void, currently " ++ @typeName(payload_type));
+                    if (return_type != void) {
+                        @compileError(type_name ++ "'s Deinit must return void, currently " ++ @typeName(return_type));
                     }
                 }
 

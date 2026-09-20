@@ -35,12 +35,12 @@ mCurrentPath: std.ArrayList(u8) = .empty,
 mProjectFile: ?std.Io.File = null,
 
 pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
-    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .path_type = .Eng, .rel_path = "src/Imaginengion/EngineAssets/textures/foldericon.png" } });
-    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/pngicon.png", .path_type = .Eng } });
-    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/backarrowicon.png", .path_type = .Eng } });
-    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/sceneicon.png", .path_type = .Eng } });
-    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/scripticon.png", .path_type = .Eng } });
-    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/mp3.png", .path_type = .Eng } });
+    self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .path_type = .Eng, .rel_path = "src/Imaginengion/EngineAssets/textures/foldericon.png" } });
+    self.mPngTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/pngicon.png", .path_type = .Eng } });
+    self.mBackArrowTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/backarrowicon.png", .path_type = .Eng } });
+    self.mSceneTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/sceneicon.png", .path_type = .Eng } });
+    self.mScriptTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/scripticon.png", .path_type = .Eng } });
+    self.mAudioTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = "src/Imaginengion/EngineAssets/textures/mp3.png", .path_type = .Eng } });
 }
 
 pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
@@ -105,7 +105,7 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
     if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
         defer imgui.igEndPopup();
         if (imgui.igMenuItem_Bool("New Scene Layer", "", false, true) == true) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .NewSceneEvent = .{ .mLayerType = SceneComponent.LayerType.GameLayer } });
         }
         if (imgui.igBeginMenu("Scripts", true) == true) {
             defer imgui.igEndMenu();
@@ -351,8 +351,8 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
 
         const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
 
-        var script_handle = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
-        defer engine_context.mAssetManager.ReleaseAssetHandleRef(&script_handle);
+        var script_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
+        defer engine_context.mAssetManager.ReleaseAssetHandle(&script_handle);
 
         const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);
         if (script_asset.GetScriptType() == .EntityInputPressed or script_asset.GetScriptType() == .EntityOnUpdate) {
@@ -374,7 +374,7 @@ fn NewObjectScriptPopup(comptime ObjectType: type, engine_context: *EngineContex
     const traits = ObjectTraits(ObjectType);
     inline for (traits.ScriptsList) |script_type| {
         if (imgui.igMenuItem_Bool(script_type.Name.ptr, "", false, true)) {
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{ .NewScriptEvent = .{ .mScriptType = script_type.Scripttype } });
+            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .NewScriptEvent = .{ .mScriptType = script_type.Scripttype } });
         }
     }
 }

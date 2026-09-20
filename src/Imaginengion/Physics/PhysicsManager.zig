@@ -11,7 +11,7 @@ const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 const CollisionManager = @import("CollisionManager.zig");
@@ -117,7 +117,7 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
         transform.SetWorldScale(transform.Scale);
 
         if (entity.GetComponent(ParentComponent)) |parent_component| {
-            if (parent_component.mFirstEntity != Entity.NullEntity) {
+            if (parent_component.mFirstEntity != Entity.NullObject) {
                 CalculateChildren(entity, transform.GetWorldPosition(), transform.GetWorldRotation(), transform.GetWorldScale());
             }
         }
@@ -127,10 +127,13 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
 fn CalculateChildren(parent_entity: Entity, position_acc: Vec3(f32), rotation_acc: Quat(f32), scale_acc: Vec3(f32)) void {
     const parent_component = parent_entity.GetComponent(ParentComponent).?;
 
+    //an entity with only script children still has a ParentComponent, its entity list is just empty
+    if (parent_component.mFirstEntity == Entity.NullObject) return;
+
     var curr_id = parent_component.mFirstEntity;
 
     while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
-        const child_entity = Entity{ .mEntityID = curr_id, .mWorldManager = parent_entity.mWorldManager };
+        const child_entity = Entity{ .mID = curr_id, .mManager = parent_entity.mManager };
 
         CalculateChildTransform(child_entity, position_acc, rotation_acc, scale_acc);
 
@@ -140,15 +143,25 @@ fn CalculateChildren(parent_entity: Entity, position_acc: Vec3(f32), rotation_ac
 }
 
 fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3(f32), rotation_acc: Quat(f32), scale_acc: Vec3(f32)) void {
-    const transform = child_entity.GetComponent(EntityTransformComponent).?;
+    //a convenience entity is just a bundle of components hanging off its parent, so it can be
+    //missing a TransformComponent. It contributes nothing then, and its own children keep
+    //accumulating from the nearest ancestor that does have one.
+    var position_out = position_acc;
+    var rotation_out = rotation_acc;
+    var scale_out = scale_acc;
 
-    transform.SetWorldPosition(transform.Translation.AddVec(position_acc));
-    transform.SetWorldRotation(rotation_acc.MulQuat(transform.Rotation));
-    transform.SetWorldScale(transform.Scale.AddVec(scale_acc));
+    if (child_entity.GetComponent(EntityTransformComponent)) |transform| {
+        transform.SetWorldPosition(transform.Translation.AddVec(position_acc));
+        transform.SetWorldRotation(rotation_acc.MulQuat(transform.Rotation));
+        transform.SetWorldScale(transform.Scale.AddVec(scale_acc));
 
-    if (child_entity.GetComponent(ParentComponent)) |parent_component| {
-        _ = parent_component;
-        CalculateChildren(child_entity, transform.GetWorldPosition(), transform.GetWorldRotation(), transform.GetWorldScale());
+        position_out = transform.GetWorldPosition();
+        rotation_out = transform.GetWorldRotation();
+        scale_out = transform.GetWorldScale();
+    }
+
+    if (child_entity.HasComponent(ParentComponent)) {
+        CalculateChildren(child_entity, position_out, rotation_out, scale_out);
     }
 }
 

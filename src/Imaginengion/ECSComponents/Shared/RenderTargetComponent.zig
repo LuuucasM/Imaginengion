@@ -22,6 +22,10 @@ pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
     return self.mComputeTexture.GetColorTexture(0);
 }
 
+pub fn SetViewportSize(self: *RenderTargetComponent, engine_context: *EngineContext, width: usize, height: usize) !void {
+    try self.mComputeTexture.Resize(engine_context, width, height);
+}
+
 //nothing to save, the render target is recreated on load
 pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
     try jw.beginObject();

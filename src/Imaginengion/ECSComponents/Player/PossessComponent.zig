@@ -4,6 +4,6 @@ const PossessComponent = @This();
 
 pub const Name: []const u8 = "PossessComponent";
 
-mPossessedEntity: Entity = .{},
+mPossessedEntity: Entity = .uninit,
 
 pub fn Deinit(_: *PossessComponent, _: *EngineContext) void {}

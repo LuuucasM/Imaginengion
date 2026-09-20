@@ -88,7 +88,7 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {
-            try object.RemoveComponent(engine_context.EngineAllocator(), component_type);
+            try object.RemoveComponent(engine_context, component_type);
         }
     }
     if (is_tree_open) {

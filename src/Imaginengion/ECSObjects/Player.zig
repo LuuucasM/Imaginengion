@@ -20,7 +20,7 @@ const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const PlayerParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const PlayerChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
-const PathType = @import("../Assets/AManager.zig").PathType;
+const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const AssetHandle = @import("AssetHandle.zig");
@@ -31,11 +31,13 @@ const ECSCore = @import("ECSObject.zig").Core;
 const Core = ECSCore(Player);
 
 pub const CreateConfig = struct {
-    bAddNameComponent: bool,
-    bAddUUIDComponent: bool,
-    bAddPossessComponent: bool,
-    bAddMicComponent: bool,
-    bAddRenderComponent: bool,
+    bAddNameComponent: bool = true,
+    bAddUUIDComponent: bool = true,
+    bAddPossessComponent: bool = false,
+    bAddMicComponent: bool = false,
+    bAddRenderComponent: bool = false,
+
+    pub const default: CreateConfig = .{};
 };
 
 pub const DefaultConfig: CreateConfig = .{
@@ -75,7 +77,7 @@ pub fn Possess(self: Player, entity: Entity) void {
         self.GetComponent(PossessComponent).?.mPossessedEntity = entity;
         ps_component.mPlayerEntity = self;
     } else {
-        std.log.warn("Player {d} could not possess entity {d}", .{ self.mEntityID, entity.mEntityID });
+        std.log.warn("Player {d} could not possess entity {d}", .{ self.mID, entity.mID });
     }
 }
 
@@ -116,8 +118,12 @@ pub fn Possess(self: Player, entity: Entity) void {
 //    }
 //}
 
+pub const CreateChild = Core.CreateChild;
+
+pub const GetIterator = Core.GetIterator;
+
 pub const IsActive = Core.IsActive;
 
-pub const IsValidID = Core.IsIDValid;
+pub const IsIDValid = Core.IsIDValid;
 
 pub const Invalidate = Core.Invalidate;

@@ -159,7 +159,7 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
 
         if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
             if (Collisions.SphereSphere(contact, origin_transform, target_transform)) {
-                const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
+                const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
                 try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
                 if (!self._LastCache.contains(key)) {
                     //create new begin collision event
@@ -171,7 +171,7 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
             }
         } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
             if (Collisions.BoxBox(contact, origin_transform, target_transform)) {
-                const key: u64 = @as(u64, @intCast(contact.mOrigin.mEntityID)) << 32 | @as(u64, @intCast(contact.mTarget.mEntityID));
+                const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
                 try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
                 if (!self._LastCache.contains(key)) {
                     //create new begin collision event

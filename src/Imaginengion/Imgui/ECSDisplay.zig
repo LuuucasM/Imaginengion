@@ -162,11 +162,10 @@ fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, o
 }
 
 fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, already_popup: *bool) anyerror!void {
-    if (parent_object.GetIterator(.Child)) |iter_value| {
-        var iter = iter_value;
-        while (iter.next()) |child_object| {
-            try RenderObject(ObjectType, engine_context, child_object, already_popup);
-        }
+    //an object with no children just yields nothing
+    var iter = parent_object.GetIterator(.Child);
+    while (iter.next()) |child_object| {
+        try RenderObject(ObjectType, engine_context, child_object, already_popup);
     }
 }
 
@@ -212,7 +211,7 @@ fn ObjectTraits(comptime T: type) type {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
-                        .FrameEnd,
+                        .EndOfFrame,
                         .{ .DestroyEntityEvent = .{ .mEntity = object } },
                     );
                 }
@@ -229,7 +228,7 @@ fn ObjectTraits(comptime T: type) type {
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Entity) !void {
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{
                     .SelectObjectEvent = .{
                         .mObject = .{ .entity = obj },
                     },
@@ -285,7 +284,7 @@ fn ObjectTraits(comptime T: type) type {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
-                        .FrameEnd,
+                        .EndOfFrame,
                         .{ .DestroySceneEvent = .{ .mScene = object } },
                     );
                 }
@@ -296,7 +295,7 @@ fn ObjectTraits(comptime T: type) type {
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Scene) !void {
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{
                     .SelectObjectEvent = .{
                         .mObject = .{ .scene_layer = obj },
                     },
@@ -332,7 +331,7 @@ fn ObjectTraits(comptime T: type) type {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
-                        .FrameEnd,
+                        .EndOfFrame,
                         .{ .DestroyPlayerEvent = .{ .mPlayer = object } },
                     );
                 }
@@ -343,7 +342,7 @@ fn ObjectTraits(comptime T: type) type {
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Player) !void {
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{
                     .SelectObjectEvent = .{
                         .mObject = .{ .player = obj },
                     },
@@ -379,7 +378,7 @@ fn ObjectTraits(comptime T: type) type {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
-                        .FrameEnd,
+                        .EndOfFrame,
                         .{ .DestroyGameContextEvent = .{ .mGameContext = object } },
                     );
                 }
@@ -390,7 +389,7 @@ fn ObjectTraits(comptime T: type) type {
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: GameContext) !void {
-                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .RenderEnd, .{
+                try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{
                     .SelectObjectEvent = .{
                         .mObject = .{ .gamecontext = obj },
                     },

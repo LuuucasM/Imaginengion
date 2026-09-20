@@ -1,40 +1,49 @@
 //! This file exists as a location to group together all the functions that run
 //! scripts rather than cluddering up other engine files like scene manager or something
+//!
+//! A script is a child object of the thing it belongs to: it carries a ScriptComponent
+//! holding the asset handle and a tag component saying when it runs. That shape is the
+//! same for entities, scenes, players and game contexts, so RunScript covers all four.
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
-const SceneType = SceneLayer.Type;
-const ECSManagerScenes = WorldManager.ECSManagerScenes;
-const ECSManagerGameObj = WorldManager.ECSManagerGameObj;
-const SceneLayer = @import("../ECSObjects/Scene.zig");
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 
-const EntityScriptList = @import("../ECSComponents/EComponents.zig").ScriptsList;
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const EntityScriptComponent = EntityComponents.ScriptComponent;
-const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
-const EntityOnUpdateScript = EntityComponents.OnUpdateScript;
+const Entity = @import("../ECSObjects/Entity.zig");
+const GameContext = @import("../ECSObjects/GameContext.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
 
-const SceneScriptList = @import("../ECSComponents/SComponents.zig").ScriptsList;
-const SceneComponents = @import("../ECSComponents/SComponents.zig");
-const SceneScriptComponent = SceneComponents.ScriptComponent;
-const StackPosComponent = SceneComponents.StackPosComponent;
-const SceneSceneStartScript = SceneComponents.OnSceneStartScript;
+const EComponents = @import("../ECSComponents/EComponents.zig");
+const GCComponents = @import("../ECSComponents/GCComponents.zig");
+const PComponents = @import("../ECSComponents/PComponents.zig");
+const SComponents = @import("../ECSComponents/SComponents.zig");
 
-const AssetsList = @import("../ECSComponents/AComponents.zig").AssetsList;
+const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const EntitySceneComponent = EComponents.EntitySceneComponent;
+const StackPosComponent = SComponents.StackPosComponent;
+
 const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const ScriptType = ScriptAsset.ScriptType;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
-const Entity = @import("../ECSObjects/Entity.zig");
-
 const Tracy = @import("../Core/Tracy.zig");
 
-pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, args: anytype) !bool {
-    _ValidateEntityType(script_type);
-    const zone = Tracy.ZoneInit("RunEntityScript", @src());
+/// Runs every script of the given tag type belonging to objects of ObjectType, in scene
+/// stack order, and stops early if a script asks to consume the event.
+pub fn RunScript(
+    comptime ObjectType: type,
+    comptime script_type: type,
+    comptime world_type: EngineContext.WorldType,
+    engine_context: *EngineContext,
+    args: anytype,
+) !bool {
+    _ValidateScriptType(ObjectType, script_type);
+
+    const zone = Tracy.ZoneInit("RunScript", @src());
     defer zone.Deinit();
+
     const world_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
@@ -42,74 +51,90 @@ pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineCo
     };
 
     const frame_allocator = engine_context.FrameAllocator();
+    const manager = world_manager.GetManager(ObjectType);
 
-    const scene_stack_scenes = try world_manager.mECSManagerSC.GetGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
-    std.sort.insertion(SceneType, scene_stack_scenes.items, world_manager.mECSManagerSC, WorldManager.SortScenesFunc);
+    const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
+    SortByOwnerStackPos(ObjectType, world_manager, script_ids.items);
 
     var cont_bool = true;
-    for (scene_stack_scenes.items) |scene_id| {
+    for (script_ids.items) |script_id| {
         if (cont_bool == false) break;
-        const scene_layer = world_manager.GetSceneLayer(scene_id);
 
-        const scene_entity_scripts = try scene_layer.GetEntityGroup(frame_allocator, .{ .Component = script_type });
-        for (scene_entity_scripts.items) |script_id| {
-            const script_entity = scene_layer.GetEntity(script_id);
+        const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
+        if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
 
-            if (script_entity.GetComponent(EntityScriptComponent)) |script_component| {
-                if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
-                const asset_handle = script_component.mScriptAssetHandle;
-                const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
+        const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
 
-                var entity = world_manager.GetEntity(script_component.mParent);
+        var owner = ObjectType{ .mID = @intCast(script_component.mParent), .mManager = world_manager };
 
-                const combined_args = .{ engine_context, &entity } ++ args;
-                cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
-            }
-        }
+        const combined_args = .{ engine_context, &owner } ++ args;
+        cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
     }
+
     return cont_bool;
 }
 
-pub fn RunSceneScript(comptime script_type: type, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext, args: anytype) !bool {
-    _ValidateSceneType(script_type);
-    const zone = Tracy.ZoneInit("RunSceneScript", @src());
-    defer zone.Deinit();
+/// Scripts run top layer first, matching the order scenes are drawn in. The sort is
+/// stable, so scripts sharing a layer keep the order the ECS handed them back, and for
+/// object types with no place in the scene stack it leaves the list alone.
+fn SortByOwnerStackPos(comptime ObjectType: type, world_manager: *WorldManager, script_ids: []ObjectType.Type) void {
+    if (ObjectType != Entity and ObjectType != Scene) return;
 
-    const world_manager = switch (world_type) {
-        .Game => engine_context.mGameWorld,
-        .Editor => engine_context.mEditorWorld,
-        .Simulate => engine_context.mSimulateWorld,
+    const Sorter = struct {
+        fn StackPosOf(wm: *WorldManager, script_id: ObjectType.Type) usize {
+            const script_component = wm.GetManager(ObjectType).GetComponent(ScriptComponent, script_id) orelse return 0;
+            return OwnerStackPos(ObjectType, wm, @intCast(script_component.mParent));
+        }
+        fn lessThan(wm: *WorldManager, a: ObjectType.Type, b: ObjectType.Type) bool {
+            return StackPosOf(wm, b) < StackPosOf(wm, a);
+        }
     };
 
-    const frame_allocator = engine_context.FrameAllocator();
+    std.sort.insertion(ObjectType.Type, script_ids, world_manager, Sorter.lessThan);
+}
 
-    const scene_stack_scenes = try world_manager.GetSceneGroup(frame_allocator, GroupQuery{ .Component = StackPosComponent });
-    std.sort.insertion(SceneType, scene_stack_scenes.items, world_manager.mECSManagerSC, WorldManager.SortScenesFunc);
+/// Where the script's owner sits in the scene stack. A scene answers for itself, an
+/// entity answers with the scene it lives in, and anything that never went through
+/// CreateScene reports 0 so it sorts last rather than crashing.
+fn OwnerStackPos(comptime ObjectType: type, world_manager: *WorldManager, owner_id: ObjectType.Type) usize {
+    if (ObjectType == Scene) {
+        const stack_pos = world_manager.mSManager.GetComponent(StackPosComponent, owner_id) orelse return 0;
+        return stack_pos.mPosition;
+    } else if (ObjectType == Entity) {
+        const scene_component = world_manager.mEManager.GetComponent(EntitySceneComponent, owner_id) orelse return 0;
+        const stack_pos = world_manager.mSManager.GetComponent(StackPosComponent, scene_component.mScene.mID) orelse return 0;
+        return stack_pos.mPosition;
+    } else {
+        return 0;
+    }
+}
 
-    var cont_bool = true;
-    for (scene_stack_scenes.items) |scene_id| {
-        if (cont_bool == false) break;
+/// The script tags an object of this type is allowed to carry.
+fn ScriptsListFor(comptime ObjectType: type) []const type {
+    if (ObjectType == Entity) {
+        return &EComponents.ScriptsList;
+    } else if (ObjectType == GameContext) {
+        return &GCComponents.ScriptsList;
+    } else if (ObjectType == Player) {
+        return &PComponents.ScriptsList;
+    } else if (ObjectType == Scene) {
+        return &SComponents.ScriptsList;
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not a scriptable object type", .{@typeName(ObjectType)}));
+    }
+}
 
-        const scene_layer = world_manager.GetSceneLayer(scene_id);
-
-        const scene_scripts = scene_layer.GetSceneGroup(frame_allocator, GroupQuery{ .Component = script_type });
-
-        for (scene_scripts.items) |script_id| {
-            const script_scene = world_manager.GetSceneLayer(script_id);
-            if (script_scene.GetComponent(SceneScriptComponent)) |script_component| {
-                if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
-                const asset_handle = script_component.mScriptAssetHandle;
-                const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
-
-                var scene = SceneLayer{ .mSceneID = scene_id, .mECSManagerGORef = &world_manager.mECSManagerGO, .mECSManagerSCRef = &world_manager.mECSManagerSC };
-
-                const combined_args = .{ engine_context, &scene } ++ args;
-
-                cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
-            }
+fn _ValidateScriptType(comptime ObjectType: type, comptime script_type: type) void {
+    comptime var is_valid: bool = false;
+    const scripts_list = comptime ScriptsListFor(ObjectType);
+    inline for (scripts_list) |s_type| {
+        if (script_type == s_type) {
+            is_valid = true;
         }
     }
-    return cont_bool;
+    if (is_valid == false) {
+        @compileError(std.fmt.comptimePrint("{s} is not a script type for {s}\n", .{ @typeName(script_type), @typeName(ObjectType) }));
+    }
 }
 
 fn _GetFnInfo(comptime func_type_info: std.builtin.Type, comptime func_name: []const u8, comptime type_name: []const u8) std.builtin.Type.Fn {
@@ -151,31 +176,5 @@ pub fn _ValidateScript(comptime script_type: type) void {
         }
     } else {
         @compileError("GetScriptType function must return ScriptType" ++ type_name);
-    }
-}
-
-fn _ValidateEntityType(script_type: type) void {
-    comptime var is_valid: bool = false;
-    inline for (EntityScriptList) |s_type| {
-        if (script_type == s_type) {
-            is_valid = true;
-        }
-    }
-    if (is_valid == false) {
-        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
-        @compileError("Invalid type passed!" ++ type_name);
-    }
-}
-
-fn _ValidateSceneType(script_type: type) void {
-    comptime var is_valid: bool = false;
-    inline for (SceneScriptList) |s_type| {
-        if (script_type == s_type) {
-            is_valid = true;
-        }
-    }
-    if (is_valid == false) {
-        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
-        @compileError("Invalid type passed!" ++ type_name);
     }
 }

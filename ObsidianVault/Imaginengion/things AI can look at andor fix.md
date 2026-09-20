@@ -1,6 +1,3 @@
-- add a way to do deleteobj and removecomponent in Manager.zig
-- fix compile bugs and errors
-	- theres going to be a lot this time since I changed a pretty big core but the individual systems logic is the same so once I get over compile time stuff It should be ok
 - I need to fix different systems that iterate over the hierarchy and add checks for the "MainEntityComponent" (or whatever i called it).
 	- I added a component so you can tag entities to determine where main components are.
 	- This is because the way entity hierarchies and the way the ECS is suppose to be used is like for example with attribute components, if you want multiple attributes then you create multiple children that each have just an attribute component. So this entity isnt really a game object but a convenience entity to represent some bundle of components.

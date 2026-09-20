@@ -160,7 +160,7 @@ pub fn OnInputPressedEvent(self: *ViewportPanel, e: KeyboardPressedEvent) bool {
 
 pub fn OnDeleteEntity(self: *ViewportPanel, delete_entity: Entity) void {
     if (self.mSelectedEntity) |selected_entity| {
-        if (selected_entity.mEntityID == delete_entity.mEntityID) {
+        if (selected_entity.mID == delete_entity.mID) {
             self.mSelectedEntity = null;
         }
     }

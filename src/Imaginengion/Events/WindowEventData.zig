@@ -9,7 +9,7 @@ pub const EventCategories = enum {
     WindowEvent,
 };
 
-pub const Event = union(enum) {
+pub const EventT = union(enum) {
     DefaultEvent: DefaultEvent,
     WindowClose: WindowCloseEvent,
     WindowResize: WindowResizeEvent,

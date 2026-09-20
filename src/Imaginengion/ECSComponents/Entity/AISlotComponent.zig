@@ -7,7 +7,7 @@ const AISlotComponent = @This();
 pub const Editable: bool = false;
 pub const Name: []const u8 = "AISlotComponent";
 
-mAIEntity: Entity.Type = Entity.NullEntity,
+mAIEntity: Entity.Type = Entity.NullObject,
 
 pub fn Deinit(_: *AISlotComponent, _: *EngineContext) void {}
 

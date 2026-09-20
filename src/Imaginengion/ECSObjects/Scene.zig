@@ -3,7 +3,7 @@ const WorldManager = @import("../Core/WorldManager.zig");
 
 const ECSManagerScenes = WorldManager.ECSManagerScenes;
 const ECSManagerEntities = WorldManager.ECSManagerEntities;
-const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const SceneUUIDComponent = SceneComponents.UUIDComponent;
@@ -20,7 +20,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const SceneParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const SceneChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
-const PathType = @import("../Assets/AManager.zig").PathType;
+const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
@@ -35,13 +35,15 @@ const Core = ECSCore(Scene);
 pub const CreateConfig = struct {
     bAddSceneUUID: bool = true,
     bAddSceneName: bool = true,
+
+    pub const default: CreateConfig = .{};
 };
 
 pub const Type = u32;
 pub const NullObject: Type = std.math.maxInt(Type);
 const Scene = @This();
 
-const uninit: Scene = .{
+pub const uninit: Scene = .{
     .mID = NullObject,
     .mManager = undefined,
 };
@@ -66,6 +68,8 @@ pub const Delete = Core.Delete;
 
 pub const Duplicate = Core.Duplicate;
 
+pub const CreateChild = Core.CreateChild;
+
 pub const GetIterator = Core.GetIterator;
 
 pub fn GetSceneComponent(self: Scene) SceneComponent {
@@ -79,7 +83,7 @@ pub fn GetSceneComponent(self: Scene) SceneComponent {
 //        const new_random = io_source.interface();
 //        const uuid_component = SceneUUIDComponent{ .ID = new_random.int(u64) };
 //        _ = try self.AddComponent(engine_context, uuid_component);
-//        try self.mWorldManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mSceneID);
+//        try self.mManager.AddUUID(engine_context.EngineAllocator(), uuid_component.ID, self.mID);
 //    }
 //    if (config.bAddSceneName) {
 //        var scene_name_component: SceneNameComponent = .empty;
@@ -104,6 +108,8 @@ pub fn AddScript(self: Scene, engine_context: *EngineContext, new_script_handle:
     };
 }
 
+pub const AddComponentScript = Core.AddComponentScript;
+
 pub const IsActive = Core.IsActive;
 pub const Invalidate = Core.Invalidate;
 pub const IsIDValid = Core.IsIDValid;
@@ -112,7 +118,7 @@ pub const IsIDValid = Core.IsIDValid;
 //======================for the entities in the scenes=====================================
 
 pub fn CreateEntity(self: Scene, engine_context: *EngineContext, new_entity_config: NewEntityConfig) !Entity {
-    var new_entity = try self.mManager.mEManager.CreateEntity(engine_context.EngineAllocator(), new_entity_config);
+    var new_entity = try self.mManager.mEManager.CreateEntity(engine_context, new_entity_config);
     _ = try new_entity.AddComponent(engine_context, EntitySceneComponent{ .mScene = self });
     return new_entity;
 }
@@ -137,7 +143,7 @@ fn FilterEntityByScene(self: Scene, list_allocator: std.mem.Allocator, entity_re
         const script_entity = self.GetEntity(entity_result_list.items[i]);
         const scene_component = script_entity.GetComponent(EntitySceneComponent).?;
 
-        if (scene_component.mScene.mSceneID != self.mSceneID) {
+        if (scene_component.mScene.mID != self.mID) {
             entity_result_list.items[i] = entity_result_list.items[end_index - 1];
             end_index -= 1;
         } else {

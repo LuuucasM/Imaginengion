@@ -2,7 +2,7 @@ const std = @import("std");
 const AssetsList = @import("../AComponents.zig").AssetsList;
 const FileMetaData = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
-const PathType = @import("../../Assets/AManager.zig").PathType;
+const PathType = @import("../../ECSManagers/AManager.zig").PathType;
 
 pub const Name: []const u8 = "FileMetaData";
 

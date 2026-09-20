@@ -31,7 +31,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             if (component_type == MainObjectComponent) return MainObjectComponent.Ind;
             if (component_type == EntityTagComponent) return EntityTagComponent.Ind;
             if (component_type == ScriptTagComponent) return ScriptTagComponent.Ind;
-            for (components_types, 0..) |list_type, i| {
+            inline for (components_types, 0..) |list_type, i| {
                 if (list_type == component_type) return i + BuiltinComponentCount;
             }
             @compileError(@typeName(component_type) ++ " is not in this manager's components list");

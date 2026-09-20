@@ -11,7 +11,7 @@ pub const BuiltinComponentCount: usize = 6;
 /// offset past the builtins. The list is passed explicitly so one shared component type
 /// (UUIDComponent, NameComponent, ...) can sit at a different position in each manager.
 pub fn ListInd(comptime components_list: []const type, comptime component_type: type) u16 {
-    for (components_list, 0..) |list_type, i| {
+    inline for (components_list, 0..) |list_type, i| {
         if (list_type == component_type) return @intCast(i + BuiltinComponentCount);
     }
     @compileError(@typeName(component_type) ++ " is not in the given components list");

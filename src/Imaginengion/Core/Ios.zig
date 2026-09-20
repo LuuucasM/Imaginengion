@@ -235,8 +235,6 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             .netListenUnix = std.Io.failingNetListenUnix,
             .netConnectUnix = std.Io.failingNetConnectUnix,
             .netSocketCreatePair = std.Io.failingNetSocketCreatePair,
-            .netSend = std.Io.failingNetSend,
-            .netWrite = std.Io.failingNetWrite,
             .netWriteFile = std.Io.failingNetWriteFile,
             .netClose = std.Io.unreachableNetClose,
             .netShutdown = std.Io.failingNetShutdown,

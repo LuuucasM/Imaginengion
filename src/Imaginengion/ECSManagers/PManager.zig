@@ -22,7 +22,7 @@ const PManager = @This();
 const Core = ECSCore(PManager);
 
 pub const empty: PManager = .{
-    .mECSmanager = .empty,
+    .mECSManager = .empty,
     .mEventManager = .empty,
     .mUUIDToWorldID = .empty,
 };
@@ -48,6 +48,8 @@ pub const Deinit = Core.Deinit;
 
 pub const GetComponent = Core.GetComponent;
 
+pub const RemoveComponent = Core.RemoveComponent;
+
 pub const GetGroup = Core.GetGroup;
 
 pub const GetWorldID = Core.GetWorldID;
@@ -55,6 +57,8 @@ pub const GetWorldID = Core.GetWorldID;
 pub const HasComponent = Core.HasComponent;
 
 pub const Init = Core.Init;
+
+pub const CreateChild = Core.CreateChild;
 
 pub const IsActiveObj = Core.IsActiveObj;
 
@@ -103,12 +107,12 @@ pub fn OnManagerEvents(_: *PManager, _: *EngineContext, event: EventData.EventT)
 }
 
 pub fn ApplyConfig(self: *PManager, engine_context: *EngineContext, player_id: Player.Type, config: Player.CreateConfig) !void {
-    if (config.bAddName) {
-        const name_component: NameComponent = .empty;
-        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Entity");
-        self.AddComponent(engine_context, player_id, name_component);
+    if (config.bAddNameComponent) {
+        var name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_context.EngineAllocator(), "New Player");
+        _ = try self.AddComponent(engine_context, player_id, name_component);
     }
-    if (config.bAddUUID) {
+    if (config.bAddUUIDComponent) {
         const io_source = std.Random.IoSource{ .io = engine_context.Io() };
         const new_random = io_source.interface();
         const new_uuid_component = try self.AddComponent(engine_context, player_id, UUIDComponent{ .ID = new_random.int(u64) });

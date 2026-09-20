@@ -8,7 +8,7 @@ pub const EventCategories = enum {
     EndOfFrame,
 };
 
-pub const Event = union(enum) {
+pub const EventT = union(enum) {
     DefaultEvent: DefaultEvent,
     MoveSceneEvent: MoveSceneEvent,
     SelectSceneEvent: SelectSceneEvent,
