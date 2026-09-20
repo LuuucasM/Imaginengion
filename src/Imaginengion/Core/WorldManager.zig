@@ -76,9 +76,9 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
 
 pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *WorldManager) !void {
     self.mEManager.Copy(engine_context, other_world.mEManager);
-    self.mGCManager.Copy(engine_context, other_world.mEManager);
-    self.mPManager.Copy(engine_context, other_world.mEManager);
-    self.mSManager.Copy(engine_context, other_world.mEManager);
+    self.mGCManager.Copy(engine_context, other_world.mGCManager);
+    self.mPManager.Copy(engine_context, other_world.mPManager);
+    self.mSManager.Copy(engine_context, other_world.mSManager);
 }
 
 pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {

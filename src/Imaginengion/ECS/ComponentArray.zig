@@ -4,6 +4,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn ComponentArray(entity_t: type) type {
     const VTab = struct {
+        CopyInto: *const fn (*anyopaque, *EngineContext, *anyopaque) anyerror!void,
         Deinit: *const fn (*anyopaque, *EngineContext) anyerror!void,
         DuplicateEntity: *const fn (*anyopaque, *EngineContext, entity_t, entity_t) anyerror!void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
@@ -20,6 +21,11 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn Init(engine_allocator: std.mem.Allocator, comptime component_type: type) !Self {
             const internal_type = InternalComponentArray(entity_t, component_type);
             const impl = struct {
+                fn CopyInto(ptr: *anyopaque, engine_context: *EngineContext, other_ptr: *anyopaque) anyerror!void {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    const other = @as(*internal_type, @ptrCast(@alignCast(other_ptr)));
+                    try self.CopyInto(engine_context, other);
+                }
                 fn Deinit(ptr: *anyopaque, engine_context: *EngineContext) !void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     try self.Deinit(engine_context);
@@ -53,6 +59,7 @@ pub fn ComponentArray(entity_t: type) type {
             return Self{
                 .mPtr = new_component_array,
                 .mVtable = &.{
+                    .CopyInto = impl.CopyInto,
                     .Deinit = impl.Deinit,
                     .DuplicateEntity = impl.DuplicateEntity,
                     .HasComponent = impl.HasComponent,
@@ -63,6 +70,11 @@ pub fn ComponentArray(entity_t: type) type {
             };
         }
 
+        /// `other` has to be the array at the same index of another ComponentManager, so that both
+        /// hold the same component type behind their erased pointers.
+        pub fn CopyInto(self: Self, engine_context: *EngineContext, other: Self) anyerror!void {
+            try self.mVtable.CopyInto(self.mPtr, engine_context, other.mPtr);
+        }
         pub fn Deinit(self: Self, engine_context: *EngineContext) !void {
             try self.mVtable.Deinit(self.mPtr, engine_context);
         }

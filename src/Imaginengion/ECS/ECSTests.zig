@@ -360,6 +360,105 @@ test "ECS clearAndFree empties everything and drops queued events" {
     try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(fresh_entity));
 }
 
+test "ECS copy is a deep copy that keeps every id" {
+    const test_ecs = try TestECS.Init();
+    defer test_ecs.Deinit() catch unreachable;
+    const allocator = test_ecs.Allocator();
+    const engine_context = test_ecs.mEngineContext;
+
+    const root = try test_ecs.mECSManager.CreateEntity(allocator);
+    _ = try test_ecs.mECSManager.AddComponent(allocator, root, Position{ .x = 4 });
+    _ = try test_ecs.mECSManager.AddComponent(allocator, root, try MakeLabel(test_ecs, "root"));
+
+    const child = try test_ecs.mECSManager.AddChild(allocator, root, .Entity);
+    _ = try test_ecs.mECSManager.AddComponent(allocator, child, try MakeLabel(test_ecs, "child"));
+    const script = try test_ecs.mECSManager.AddChild(allocator, root, .Script);
+    _ = try test_ecs.mECSManager.AddComponent(allocator, script, Health{ .mHP = 7 });
+
+    //a destroyed id, so the free list has something in it to carry over
+    const recycled = try test_ecs.mECSManager.CreateEntity(allocator);
+    try test_ecs.mECSManager.DestroyEntity(engine_context, recycled);
+    try test_ecs.ProcessEvents();
+
+    const other = try OtherECS.Init(test_ecs);
+    defer other.Deinit(test_ecs) catch unreachable;
+
+    try test_ecs.mECSManager.Copy(engine_context, other.mECSManager);
+
+    //the same entities under the same ids
+    try std.testing.expect(other.mECSManager.IsActiveEntity(root));
+    try std.testing.expect(other.mECSManager.IsActiveEntity(child));
+    try std.testing.expect(other.mECSManager.IsActiveEntity(script));
+    try std.testing.expect(!other.mECSManager.IsActiveEntity(recycled));
+    try std.testing.expectEqual(@as(f32, 4), other.mECSManager.GetComponent(Position, root).?.x);
+    try std.testing.expectEqual(@as(u32, 7), other.mECSManager.GetComponent(Health, script).?.mHP);
+
+    //the hierarchy came with them
+    const other_parent = other.mECSManager.GetComponent(TestECSManager.ParentComponent, root).?;
+    try std.testing.expectEqual(child, other_parent.mFirstEntity);
+    try std.testing.expectEqual(script, other_parent.mFirstScript);
+    try std.testing.expectEqual(root, other.mECSManager.GetComponent(TestECSManager.ChildComponent, child).?.mParent);
+
+    //owned memory is cloned rather than shared
+    const original_label = test_ecs.mECSManager.GetComponent(Label, root).?;
+    const copied_label = other.mECSManager.GetComponent(Label, root).?;
+    try std.testing.expectEqualStrings("root", copied_label.mText.items);
+    try std.testing.expect(original_label.mText.items.ptr != copied_label.mText.items.ptr);
+
+    //both sides hand out the same next id, recycling the same freed one first
+    const next_original = try test_ecs.mECSManager.CreateEntity(allocator);
+    const next_copy = try other.mECSManager.CreateEntity(allocator);
+    try std.testing.expectEqual(next_original, next_copy);
+    try std.testing.expectEqual(recycled & ((1 << 20) - 1), next_copy & ((1 << 20) - 1));
+
+    //and the two go their own way from here on
+    try test_ecs.mECSManager.DestroyEntity(engine_context, root);
+    try test_ecs.ProcessEvents();
+    try std.testing.expect(!test_ecs.mECSManager.IsActiveEntity(root));
+    try std.testing.expect(other.mECSManager.IsActiveEntity(root));
+    try std.testing.expectEqualStrings("root", other.mECSManager.GetComponent(Label, root).?.mText.items);
+}
+
+test "ECS copy carries the queued events" {
+    const test_ecs = try TestECS.Init();
+    defer test_ecs.Deinit() catch unreachable;
+    const allocator = test_ecs.Allocator();
+    const engine_context = test_ecs.mEngineContext;
+
+    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    _ = try test_ecs.mECSManager.AddComponent(allocator, entity_id, try MakeLabel(test_ecs, "doomed"));
+    try test_ecs.mECSManager.DestroyEntity(engine_context, entity_id); //left queued on purpose
+
+    const other = try OtherECS.Init(test_ecs);
+    defer other.Deinit(test_ecs) catch unreachable;
+
+    try test_ecs.mECSManager.Copy(engine_context, other.mECSManager);
+
+    //the destroy came across still queued, and applies to the copy's own entity
+    try std.testing.expect(other.mECSManager.IsActiveEntity(entity_id));
+    try other.mECSManager.ProcessEvents(engine_context, .EndOfFrame, .{});
+    try std.testing.expect(!other.mECSManager.IsActiveEntity(entity_id));
+    try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(entity_id));
+}
+
+/// A second, empty ECS sharing the first one's EngineContext, which is what Copy needs:
+/// both sides are allocated and freed through the same engine allocator.
+const OtherECS = struct {
+    mECSManager: *TestECSManager,
+
+    fn Init(test_ecs: *TestECS) !OtherECS {
+        const ecs_manager = try std.heap.page_allocator.create(TestECSManager);
+        ecs_manager.* = .empty;
+        try ecs_manager.Init(test_ecs.Allocator());
+        return .{ .mECSManager = ecs_manager };
+    }
+
+    fn Deinit(self: OtherECS, test_ecs: *TestECS) !void {
+        try self.mECSManager.Deinit(test_ecs.mEngineContext);
+        std.heap.page_allocator.destroy(self.mECSManager);
+    }
+};
+
 fn MakeLabel(test_ecs: *TestECS, text: []const u8) !Label {
     var new_label: Label = .{};
     try new_label.mText.appendSlice(test_ecs.Allocator(), text);

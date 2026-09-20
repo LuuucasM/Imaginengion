@@ -109,6 +109,12 @@ pub const SaveSceneAs = Core.SaveObjectAs;
 
 pub const LoadScene = Core.LoadObject;
 
+pub fn Copy(self: *SManager, engine_context: *EngineContext, other: *SManager) !void {
+    try Core.Copy(self, engine_context, other);
+    other.mNumofLayers = self.mNumofLayers;
+    other.mGameLayerInsertIndex = self.mGameLayerInsertIndex;
+}
+
 pub fn GetSceneComponent(self: *SManager, scene_id: Scene.Type) SceneComponent {
     return self.mECSManager.GetComponent(SceneComponent, scene_id);
 }

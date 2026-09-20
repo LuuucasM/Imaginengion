@@ -68,6 +68,8 @@ pub const GetWorldID = Core.GetWorldID;
 
 pub const clearAndFree = Core.clearAndFree;
 
+pub const Copy = Core.Copy;
+
 pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
     if (event_data == EventData) {
         const callback = EventManagerT.EventCallback{

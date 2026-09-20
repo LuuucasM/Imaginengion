@@ -138,6 +138,36 @@ pub fn SparseSet(comptime entity_t: type, comptime index_t: type, comptime value
             return &self.mValues.items[dense_ind];
         }
 
+        /// Copies this set into `other`, which must be empty. Ids, their generations and the free id
+        /// list all carry over, so `other` holds the same ids and hands out the same ones next.
+        /// Values are copied as they are, so a value that owns memory is left aliasing this set's
+        /// and has to be replaced by the caller.
+        pub fn CopyInto(self: Self, allocator: std.mem.Allocator, other: *Self) !void {
+            std.debug.assert(other.mDenseToSparse.items.len == 0);
+            std.debug.assert(other.mValues.items.len == 0);
+
+            const free_count: usize = if (track_free_ids) self.mFreeCount else 0;
+
+            // the free ids live in the unused capacity of the dense arrays, so both of them are
+            // grown to cover the live entries and the free ones sitting behind them
+            const dense_capacity = self.mDenseToSparse.items.len + free_count;
+            try other.mDenseToSparse.ensureTotalCapacity(allocator, dense_capacity);
+            try other.mValues.ensureTotalCapacity(allocator, dense_capacity);
+            try other.mSparseToDense.resize(allocator, self.mSparseToDense.items.len);
+
+            other.mDenseToSparse.appendSliceAssumeCapacity(self.mDenseToSparse.items);
+            other.mValues.appendSliceAssumeCapacity(self.mValues.items);
+            @memcpy(other.mSparseToDense.items, self.mSparseToDense.items);
+
+            if (track_free_ids) {
+                @memcpy(
+                    other.mDenseToSparse.unusedCapacitySlice()[0..free_count],
+                    self.mDenseToSparse.unusedCapacitySlice()[0..free_count],
+                );
+                other.mFreeCount = free_count;
+            }
+        }
+
         pub fn clearAndFree(self: *Self, allocator: std.mem.Allocator) void {
             self.mDenseToSparse.clearAndFree(allocator);
             self.mSparseToDense.clearAndFree(allocator);
@@ -249,6 +279,49 @@ test "clearAndFree resets the free list" {
     try std.testing.expect(set.AddValueToFreeID(0) == null);
     _ = try set.AddValue(allocator, 0, 0);
     try std.testing.expect(set.HasSparse(0));
+}
+
+test "CopyInto reproduces the values and the free list" {
+    const allocator = std.testing.allocator;
+    var set: TrackedSet = .empty;
+    defer set.Deinit(allocator);
+
+    for (0..6) |i| _ = try set.AddValue(allocator, @intCast(i), i * 10);
+    for ([_]u32{ 1, 4 }) |entity_id| set.Remove(entity_id);
+
+    var copy: TrackedSet = .empty;
+    defer copy.Deinit(allocator);
+    try set.CopyInto(allocator, &copy);
+
+    for ([_]u32{ 0, 2, 3, 5 }) |entity_id| {
+        try std.testing.expect(copy.HasSparse(entity_id));
+        try std.testing.expectEqual(set.GetValueBySparse(entity_id).*, copy.GetValueBySparse(entity_id).*);
+    }
+    for ([_]u32{ 1, 4 }) |entity_id| try std.testing.expect(!copy.HasSparse(entity_id));
+
+    //both hand out the same free ids, in the same order
+    try std.testing.expectEqual(@as(usize, 2), copy.mFreeCount);
+    try std.testing.expectEqual(set.AddValueToFreeID(100).?, copy.AddValueToFreeID(100).?);
+    try std.testing.expectEqual(set.AddValueToFreeID(101).?, copy.AddValueToFreeID(101).?);
+    try std.testing.expect(copy.AddValueToFreeID(102) == null);
+
+    //and they are separate sets from here on
+    copy.Remove(0);
+    try std.testing.expect(set.HasSparse(0) and !copy.HasSparse(0));
+}
+
+test "CopyInto of an empty set leaves an empty set" {
+    const allocator = std.testing.allocator;
+    var set: UntrackedSet = .empty;
+    defer set.Deinit(allocator);
+
+    var copy: UntrackedSet = .empty;
+    defer copy.Deinit(allocator);
+    try set.CopyInto(allocator, &copy);
+
+    try std.testing.expect(!copy.HasSparse(0));
+    _ = try copy.AddValue(allocator, 0, 7);
+    try std.testing.expectEqual(@as(u64, 7), copy.GetValueBySparse(0).*);
 }
 
 test "generation wraps back to zero" {

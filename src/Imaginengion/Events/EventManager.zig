@@ -44,6 +44,19 @@ pub fn EventManager(EventData: type) type {
             try self.mEventsArray.getPtr(category).append(engine_allocator, event);
         }
 
+        /// Copies every queued event into `other`, which must be empty.
+        /// Events are plain values, so this only makes sense when the copy shares the ids they name.
+        pub fn CopyInto(self: *Self, engine_allocator: std.mem.Allocator, other: *Self) !void {
+            errdefer other.EventsReset(engine_allocator, .ClearAndFree);
+
+            var iter = self.mEventsArray.iterator();
+            while (iter.next()) |entry| {
+                const other_events = other.mEventsArray.getPtr(entry.key);
+                std.debug.assert(other_events.items.len == 0);
+                try other_events.appendSlice(engine_allocator, entry.value.items);
+            }
+        }
+
         /// Process events for a specific phase, in queue order: each event goes to every callback in list order.
         /// A callback may queue more events of this category while running; they are appended and processed by
         /// this same call, which is why the loop indexes the list instead of holding a slice of it.

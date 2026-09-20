@@ -118,6 +118,25 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return new_skipfield;
         }
 
+        /// Deep copies every component array into `other`, which must be initialized and empty.
+        /// Entity ids, their generations and the free id list all carry over, so the copy holds the
+        /// same entities under the same ids.
+        pub fn CopyInto(self: *Self, engine_context: *EngineContext, other: *Self) !void {
+            std.debug.assert(other.mComponentsArrays.items.len == self.mComponentsArrays.items.len);
+
+            var copied: usize = 0;
+            errdefer {
+                // the arrays already copied own their components, so they are emptied again
+                // rather than left as a half built ECS
+                for (other.mComponentsArrays.items[0..copied]) |component_array| {
+                    component_array.clearAndFree(engine_context) catch {};
+                }
+            }
+            while (copied < self.mComponentsArrays.items.len) : (copied += 1) {
+                try self.mComponentsArrays.items[copied].CopyInto(engine_context, other.mComponentsArrays.items[copied]);
+            }
+        }
+
         /// Copies the original's components onto an already created entity.
         /// The hierarchy components and the entity/script tag are left out: the caller owns those,
         /// because a copy belongs in its own place in the hierarchy rather than the original's.

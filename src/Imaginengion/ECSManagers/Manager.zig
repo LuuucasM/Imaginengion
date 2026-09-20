@@ -110,13 +110,23 @@ pub fn Core(comptime Self: type) type {
             return self.mUUIDToWorldID.get(uuid);
         }
 
+        /// Deep copies this manager into `other`, which must be initialized and empty.
+        /// Object ids are preserved by the ECS copy, which is what lets the UUID map go across as it
+        /// is, and what keeps ids stored in the other managers of the same world pointing at the
+        /// right objects once that whole world has been copied.
+        /// The manager's own event queue is left alone: its events carry objects that hold a
+        /// *WorldManager, which would still be this world's.
         pub fn Copy(self: *Self, engine_context: *EngineContext, other: *Self) !void {
+            const engine_allocator = engine_context.EngineAllocator();
+
+            try other.mUUIDToWorldID.ensureTotalCapacity(engine_allocator, self.mUUIDToWorldID.count());
             var iter = self.mUUIDToWorldID.iterator();
             while (iter.next()) |entry| {
-                other.mUUIDToWorldID.put(engine_context.EngineAllocator(), entry.key_ptr.*, entry.value_ptr.*);
+                other.mUUIDToWorldID.putAssumeCapacity(entry.key_ptr.*, entry.value_ptr.*);
             }
+            errdefer other.mUUIDToWorldID.clearAndFree(engine_allocator);
 
-            //copy ECS
+            try self.mECSManager.Copy(engine_context, &other.mECSManager);
         }
 
         fn _ValidateObject(manager_t: type) void {

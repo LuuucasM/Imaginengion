@@ -73,6 +73,25 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mNextID = 0;
         }
 
+        /// Deep copies this ECS into `other`, which must be initialized and empty.
+        /// Every entity keeps its id, generation included, so ids held outside the ECS still point at
+        /// the right entity in the copy: the manager's UUID map, and components naming objects that
+        /// live in another manager of the same world.
+        pub fn Copy(self: *Self, engine_context: *EngineContext, other: *Self) !void {
+            const zone = Tracy.ZoneInit("ECSM Copy", @src());
+            defer zone.Deinit();
+
+            std.debug.assert(other.mNextID == 0);
+
+            try self.mComponentManager.CopyInto(engine_context, &other.mComponentManager);
+            errdefer other.mComponentManager.clearAndFree(engine_context) catch {};
+
+            // queued events name entities by id, which the copy shares, so they carry over as they are
+            try self.mECSEventManager.CopyInto(engine_context.EngineAllocator(), &other.mECSEventManager);
+
+            other.mNextID = self.mNextID;
+        }
+
         //---------------entity lifetime--------------
         pub fn CreateEntity(self: *Self, engine_allocator: std.mem.Allocator) !entity_t {
             const zone = Tracy.ZoneInit("ECSM CreateEntity", @src());

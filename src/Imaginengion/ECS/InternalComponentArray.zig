@@ -38,6 +38,27 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
 
             _ = try self.AddComponent(engine_context.EngineAllocator(), new_entity_id, component_copy);
         }
+        /// Deep copies this array into `other`, which must be empty.
+        /// Entity ids and the free id list carry over, so the copy is addressed by the same ids.
+        pub fn CopyInto(self: *Self, engine_context: *EngineContext, other: *Self) !void {
+            try self.mComponents.CopyInto(engine_context.EngineAllocator(), &other.mComponents);
+
+            // a component that owns memory is still aliasing this array's copy, so it is replaced
+            // by a real clone. anything else is already a finished value copy
+            if (!@hasDecl(component_type, "Clone")) return;
+
+            var cloned: usize = 0;
+            errdefer {
+                // only the finished clones own anything, the rest still alias this array
+                for (other.mComponents.mValues.items[0..cloned]) |*component| {
+                    component.Deinit(engine_context) catch {};
+                }
+                other.mComponents.clearAndFree(engine_context.EngineAllocator());
+            }
+            while (cloned < other.mComponents.mValues.items.len) : (cloned += 1) {
+                other.mComponents.mValues.items[cloned] = try self.mComponents.mValues.items[cloned].Clone(engine_context);
+            }
+        }
         pub fn AddComponent(self: *Self, engine_allocator: std.mem.Allocator, entity_id: entity_t, component: component_type) !*component_type {
             std.debug.assert(!self.mComponents.HasSparse(entity_id));
 

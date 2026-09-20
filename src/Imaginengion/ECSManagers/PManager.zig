@@ -66,6 +66,8 @@ pub const SaveObjectAs = Core.SaveObjectAs;
 
 pub const LoadPlayer = Core.LoadObject;
 
+pub const Copy = Core.Copy;
+
 pub fn ProcessEvents(self: *PManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
     if (event_data == EventData) {
         const callback = EventManagerT.EventCallback{
