@@ -57,6 +57,15 @@ pub fn ReadFrames(self: *AudioComponent, engine_context: EngineContext, frames_o
 pub fn Deinit(self: *AudioComponent, _: *EngineContext) !void {
     self.mAudioAsset.ReleaseAsset();
 }
+
+pub fn Clone(self: *const AudioComponent, _: *EngineContext) !AudioComponent {
+    var new_component = self.*;
+
+    // the copy releases the asset itself, so it needs its own reference
+    new_component.mAudioAsset.RetainAsset();
+
+    return new_component;
+}
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
     // Volume drag
     _ = try ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);

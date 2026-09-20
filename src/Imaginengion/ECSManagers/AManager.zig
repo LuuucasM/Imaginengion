@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 const ECSManager = @import("../ECS/ECSManager.zig");
 const GroupQuery = ECSManager.GroupQuery;
 
@@ -31,10 +30,9 @@ const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
 pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponentsList);
 pub const EventManagerT = EventManager.EventManager(EventData.EventCategories, EventData.EventT(AssetHandle.Type));
 
-
 const Tracy = @import("../Core/Tracy.zig");
 
-const ECSCore = @import("ECSManager.zig").Core;
+const ECSCore = @import("Manager.zig").Core;
 
 pub const EventType = enum {
     ECSRemove,
@@ -220,10 +218,15 @@ pub fn GetAssetHandle(self: *AManager, engine_context: *EngineContext, asset_sou
     }
 }
 
+/// Takes another reference to an asset that is already loaded, for code that copies a handle it owns.
+pub fn RetainAssetHandle(self: *AManager, asset_id: AssetHandle.Type) void {
+    self.mECSManager.GetComponent(AssetMetaData, asset_id).?.mRefs += 1;
+}
+
 pub fn ReleaseAssetHandle(self: *AManager, asset_handle: *AssetHandle) void {
     const asset_meta_data = self.mECSManager.GetComponent(AssetMetaData, asset_handle.mID).?;
     asset_meta_data.mRefs -= 1;
-    asset_handle.mID = AssetHandle.NullHandle;
+    asset_handle.mID = AssetHandle.NullObject;
 }
 
 pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
@@ -401,7 +404,7 @@ pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []
 pub const GetGroup = Core.GetGroup;
 
 pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) !void {
-    Core.clearAndFree(self, engine_context);
+    try Core.clearAndFree(self, engine_context);
     self.mPendingDelete.clearAndFree(engine_context.EngineAllocator());
     if (self.mProjectDirectory) |dir| {
         dir.close(engine_context.Io());
@@ -452,7 +455,6 @@ pub const AddUUID = Core.AddUUID;
 pub const RemoveUUID = Core.RemoveUUID;
 
 pub const GetWorldID = Core.GetWorldID;
-
 
 fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source: FileSource) !AssetHandle.Type {
     const zone = Tracy.ZoneInit("AssetManager CreateAssetFile", @src());

@@ -1,9 +1,5 @@
 const BuiltinComponentCount = @import("../../ECS/Components.zig").BuiltinComponentCount;
-const std = @import("std");
 const ComponentsList = @import("../SceneComponents.zig").ComponentsList;
-const Entity = @import("../../GameObjects/Entity.zig");
-const ECSManagerScenes = @import("../../Core/WorldManager.zig").ECSManagerScenes;
-const AssetHandle = @import("../../Assets/AssetHandle.zig");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");

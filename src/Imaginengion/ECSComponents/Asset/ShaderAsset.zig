@@ -94,6 +94,12 @@ pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []cons
     };
 }
 
+/// Assets are shared through reference counted handles instead of being copied. Fails loudly rather than
+/// letting the default value copy alias the shader binaries and free them twice.
+pub fn Clone(_: *const ShaderAsset, _: *EngineContext) !ShaderAsset {
+    return error.AssetNotDuplicatable;
+}
+
 pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Shader Deinit", @src());
     defer zone.Deinit();

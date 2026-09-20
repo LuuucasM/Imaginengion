@@ -26,6 +26,10 @@ pub fn Deinit(self: *NameComponent, engine_context: *EngineContext) !void {
     self.mName.deinit(engine_context.EngineAllocator());
 }
 
+pub fn Clone(self: *const NameComponent, engine_context: *EngineContext) !NameComponent {
+    return .{ .mName = try self.mName.clone(engine_context.EngineAllocator()) };
+}
+
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
     try ImguiManager.RenderTextInput(engine_context, &self.mName, "Text");
 }

@@ -38,6 +38,15 @@ pub fn Deinit(self: *QuadComponent, _: *EngineContext) !void {
     self.mTexture.ReleaseAsset();
 }
 
+pub fn Clone(self: *const QuadComponent, _: *EngineContext) !QuadComponent {
+    var new_component = self.*;
+
+    // the copy releases the texture itself, so it needs its own reference
+    new_component.mTexture.RetainAsset();
+
+    return new_component;
+}
+
 pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
     try ImguiManager.RenderBool(&self.mShouldRender, "Should Render?");
 

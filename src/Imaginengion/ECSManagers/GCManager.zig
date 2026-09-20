@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
@@ -11,7 +10,7 @@ const GCComponents = @import("../ECSComponents/GCComponents.zig");
 const NameComponent = GCComponents.NameComponent;
 const UUIDComponent = GCComponents.UUIDComponent;
 const GCComponentsList = GCComponents.ComponentsList;
-const ECSCore = @import("ECSManager.zig").Core;
+const ECSCore = @import("Manager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -41,7 +40,6 @@ pub const Duplicate = Core.Duplicate;
 
 pub const AddComponent = Core.AddComponent;
 
-
 pub const AddUUID = Core.AddUUID;
 
 pub const clearAndFree = Core.clearAndFree;
@@ -65,6 +63,8 @@ pub const RemoveUUID = Core.RemoveUUID;
 pub const SaveObject = Core.SaveObject;
 
 pub const SaveObjectAs = Core.SaveObjectAs;
+
+pub const LoadGameContext = Core.LoadObject;
 
 pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
     if (event_data == EventData) {

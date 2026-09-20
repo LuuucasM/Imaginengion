@@ -120,6 +120,13 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
     try self.mAtlas.Init(engine_context, atlas_rel_path, atlas_abs_path, file_png.?);
 }
 
+/// Assets are shared through reference counted handles instead of being copied, and this one owns a GPU
+/// atlas and kerning tables that have no meaningful copy. Fails loudly rather than letting the default
+/// value copy alias the atlas and free it twice.
+pub fn Clone(_: *const TextAsset, _: *EngineContext) !TextAsset {
+    return error.AssetNotDuplicatable;
+}
+
 pub fn Deinit(self: *TextAsset, engine_context: *EngineContext) !void {
     for (self.mGlyphs, 0..) |_, i| {
         self.mGlyphs[i].mKernings.deinit();

@@ -36,6 +36,15 @@ pub fn Deinit(self: *ScriptComponent, _: *EngineContext) !void {
     self.mScriptAssetHandle.ReleaseAsset();
 }
 
+pub fn Clone(self: *const ScriptComponent, _: *EngineContext) !ScriptComponent {
+    var new_component = self.*;
+
+    // the copy releases the script asset itself, so it needs its own reference
+    new_component.mScriptAssetHandle.RetainAsset();
+
+    return new_component;
+}
+
 const Json = JsonUtils.JsonFields(ScriptComponent, .{ .Script = "mScriptAssetHandle" });
 pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;

@@ -44,18 +44,30 @@ pub fn EventManager(EventData: type) type {
             try self.mEventsArray.getPtr(category).append(engine_allocator, event);
         }
 
-        /// Process events for a specific phase.
-        /// If `callback_fn` returns `true`, the event is removed (swap-remove, order not preserved).
+        /// Process events for a specific phase, in queue order: each event goes to every callback in list order.
+        /// A callback may queue more events of this category while running; they are appended and processed by
+        /// this same call, which is why the loop indexes the list instead of holding a slice of it.
+        /// The EventResult a callback returns is currently ignored, so .Consume does not stop later callbacks.
+        /// Clearing the events is up to the caller (EventsReset / ClearCategory).
         pub fn ProcessCategory(self: *Self, comptime category: EventData.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
-            const events = self.mEventsArray.get(category).items;
-            if (events.len == 0) return;
+            var event_ind: usize = 0;
+            while (event_ind < self.mEventsArray.getPtr(category).items.len) : (event_ind += 1) {
+                // by value: appending to the list can move it while the callbacks below are running
+                const event = self.mEventsArray.getPtr(category).items[event_ind];
 
-            var iter = callback_list.first;
-            while (iter) |node| : (iter = node.next) {
-                const event_callback: *EventCallback = @fieldParentPtr("mNode", node);
-                for (events) |*event| {
-                    _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, event);
+                var iter = callback_list.first;
+                while (iter) |node| : (iter = node.next) {
+                    const event_callback: *EventCallback = @fieldParentPtr("mNode", node);
+                    _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, &event);
                 }
+            }
+        }
+
+        /// Same as EventsReset but for a single category, for managers that process one category at a time.
+        pub fn ClearCategory(self: *Self, engine_allocator: std.mem.Allocator, comptime category: EventData.EventCategories, clear_mode: ClearMode) void {
+            switch (clear_mode) {
+                .ClearAndFree => self.mEventsArray.getPtr(category).clearAndFree(engine_allocator),
+                .ClearRetainingCapacity => self.mEventsArray.getPtr(category).clearRetainingCapacity(),
             }
         }
 

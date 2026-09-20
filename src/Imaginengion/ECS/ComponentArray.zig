@@ -5,7 +5,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 pub fn ComponentArray(entity_t: type) type {
     const VTab = struct {
         Deinit: *const fn (*anyopaque, *EngineContext) anyerror!void,
-        DuplicateEntity: *const fn (*anyopaque, entity_t, entity_t) void,
+        DuplicateEntity: *const fn (*anyopaque, *EngineContext, entity_t, entity_t) anyerror!void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
         RemoveComponent: *const fn (*anyopaque, *EngineContext, entity_t) anyerror!void,
         clearAndFree: *const fn (*anyopaque, *EngineContext) anyerror!void,
@@ -25,9 +25,9 @@ pub fn ComponentArray(entity_t: type) type {
                     try self.Deinit(engine_context);
                     engine_context.EngineAllocator().destroy(self);
                 }
-                fn DuplicateEntity(ptr: *anyopaque, eng_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) void {
+                fn DuplicateEntity(ptr: *anyopaque, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) anyerror!void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
-                    self.DuplicateEntity(eng_allocator, original_entity_id, new_entity_id);
+                    try self.DuplicateEntity(engine_context, original_entity_id, new_entity_id);
                 }
                 fn HasComponent(ptr: *anyopaque, entityID: entity_t) bool {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -66,8 +66,8 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn Deinit(self: Self, engine_context: *EngineContext) !void {
             try self.mVtable.Deinit(self.mPtr, engine_context);
         }
-        pub fn DuplicateEntity(self: Self, engine_allocator: std.mem.Allocator, original_entity_id: entity_t, new_entity_id: entity_t) void {
-            self.mVtable.DuplicateEntity(self.mPtr, engine_allocator, original_entity_id, new_entity_id);
+        pub fn DuplicateEntity(self: Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) anyerror!void {
+            try self.mVtable.DuplicateEntity(self.mPtr, engine_context, original_entity_id, new_entity_id);
         }
         pub fn RemoveComponent(self: Self, engine_context: *EngineContext, entityID: entity_t) anyerror!void {
             try self.mVtable.RemoveComponent(self.mPtr, engine_context, entityID);
@@ -75,8 +75,8 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
             return self.mVtable.HasComponent(self.mPtr, entityID);
         }
-        pub fn clearAndFree(self: Self, engine_context: *EngineContext) void {
-            self.mVtable.clearAndFree(self.mPtr, engine_context);
+        pub fn clearAndFree(self: Self, engine_context: *EngineContext) anyerror!void {
+            try self.mVtable.clearAndFree(self.mPtr, engine_context);
         }
         pub fn DestroyEntity(self: Self, engine_context: *EngineContext, entity_id: entity_t) anyerror!void {
             try self.mVtable.DestroyEntity(self.mPtr, engine_context, entity_id);

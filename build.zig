@@ -90,6 +90,16 @@ pub fn build(b: *std.Build) void {
 
     test_step.dependOn(&run_skip_field_tests.step);
 
+    //sparse set tests
+    const sparse_set_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .target = target,
+        .optimize = .Debug,
+        .root_source_file = b.path("src/Imaginengion/Core/SparseSet.zig"),
+    }) });
+    const run_sparse_set_tests = b.addRunArtifact(sparse_set_tests);
+
+    test_step.dependOn(&run_sparse_set_tests.step);
+
     //LinAlg test_step
     const math_types_tests = b.addTest(.{ .root_module = b.createModule(.{
         .target = target,
@@ -104,5 +114,14 @@ pub fn build(b: *std.Build) void {
     if (test_build) {
         run_step.dependOn(test_step);
     }
+
+    //Tests that need the whole engine module, because they use EngineContext (see Imaginengion.zig's
+    //test block). Kept off `test` while the engine itself does not build, so `zig build test` stays usable.
+    const engine_test_step = b.step("test-engine", "Test Engine internals (needs the engine to compile)");
+
+    const engine_tests = b.addTest(.{ .root_module = engine_module_eng });
+    const run_engine_tests = b.addRunArtifact(engine_tests);
+
+    engine_test_step.dependOn(&run_engine_tests.step);
     //=========================================END TEST STEP==================================================
 }

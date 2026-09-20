@@ -43,6 +43,7 @@ pub fn SkipFieldComponent(comptime components_len: comptime_int) type {
 
         pub const Ind: usize = 2;
         pub const Name: []const u8 = "SkipFieldComponent";
+        pub const TrackFreeIDs: bool = true; // destroyed entity ids are recycled through this component's sparse set
         pub const StaticSkipFieldT = StaticSkipField(components_len + BuiltinComponentCount);
 
         mSkipField: StaticSkipFieldT = .AllSkip,

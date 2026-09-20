@@ -59,8 +59,10 @@ pub fn StaticSkipField(size: usize) type {
 
                 const current_index = self.mI;
 
+                // step past this index, then over the skipped run starting there, if any.
+                // the bounds check matters when the last index is unskipped: mI is then size
                 self.mI += 1;
-                self.mI += self.mSkipFieldRef.mSkipField[self.mI];
+                if (self.mI < size) self.mI += self.mSkipFieldRef.mSkipField[self.mI];
 
                 return current_index;
             }
@@ -79,8 +81,10 @@ pub fn StaticSkipField(size: usize) type {
         pub fn Reset(self: *Self, option: ResetOption) void {
             if (option == .AllSkip) {
                 self.mSkipField = AllSkipArr;
+                self.mNumUnskipped = 0;
             } else { //NoSkip option
                 self.mSkipField = NoSkipArr;
+                self.mNumUnskipped = size;
             }
         }
 
@@ -113,6 +117,7 @@ pub fn StaticSkipField(size: usize) type {
 
             if (size < 2) {
                 self.mSkipField[0] = 1;
+                self.mNumUnskipped -= 1;
                 return;
             }
 
@@ -166,12 +171,14 @@ pub fn StaticSkipField(size: usize) type {
             var index: SkipFieldType = @intCast(in_index);
             defer index += 0;
 
-            if (size < 2) {
-                self.mSkipField[0] = 0;
-                return;
-            }
             //alreday an unskipped index
             if (self.mSkipField[index] == 0) return;
+
+            if (size < 2) {
+                self.mSkipField[0] = 0;
+                self.mNumUnskipped += 1;
+                return;
+            }
 
             const left_non_zero = index > 0 and self.mSkipField[index - 1] > 0;
             const right_non_zero = index < size - 1 and self.mSkipField[index + 1] > 0;
@@ -213,6 +220,9 @@ pub fn StaticSkipField(size: usize) type {
             self.mNumUnskipped += 1;
         }
 
+        /// Union of the entities that match, which is the intersection of the unskipped bits:
+        /// an Or query can only require what both sides require. Keeps bits unskipped in both,
+        /// skips the rest.
         pub fn Union(self: *Self, other: *const Self) void {
             const zero_vec = @as(SkipFieldVectorT, @splat(0));
             const self_vec: Self.SkipFieldVectorT = self.mSkipField;
@@ -232,6 +242,8 @@ pub fn StaticSkipField(size: usize) type {
             }
         }
 
+        /// Intersection of the entities that match, which is the union of the unskipped bits:
+        /// an And query requires everything both sides require. Unskips bits unskipped in either.
         pub fn Intersect(self: *Self, other: *const Self) void {
             const zero_vec = @as(SkipFieldVectorT, @splat(0));
             const self_vec: Self.SkipFieldVectorT = self.mSkipField;
@@ -251,6 +263,7 @@ pub fn StaticSkipField(size: usize) type {
             }
         }
 
+        /// Keeps the bits this field requires that `other` does not, for the left side of a Not query.
         pub fn Difference(self: *Self, other: *const Self) void {
             const zero_vec = @as(SkipFieldVectorT, @splat(0));
             const self_vec: Self.SkipFieldVectorT = self.mSkipField;
@@ -427,50 +440,96 @@ test "Large Change To UnSkip" {
     try std.testing.expect(field.mSkipField[3] == 1);
 }
 
-test "Iterating Skipfield 1" {
-    const FieldSize = 5;
-    const SkipFieldT = StaticSkipField(FieldSize);
+fn ExpectIteration(field: anytype, expected: []const usize) !void {
+    var mutable_field = field;
+    var visited: [@TypeOf(field).SkipFieldSize]usize = undefined;
+    var count: usize = 0;
 
-    var field: SkipFieldT = .AllSkip;
+    var iter = mutable_field.Iterator();
+    while (iter.next()) |i| : (count += 1) {
+        try std.testing.expect(count < expected.len); //otherwise it is visiting skipped indices
+        visited[count] = i;
+    }
 
+    try std.testing.expectEqualSlices(usize, expected, visited[0..count]);
+}
+
+test "Iterating Skipfield: ends skipped" {
+    const SkipFieldT = StaticSkipField(5);
+
+    var field: SkipFieldT = .NoSkip;
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(0);
 
-    var iter = field.Iterator();
-    while (iter.next()) |i| {
-        try std.testing.expect(i == 1 or i == 2 or i == 3);
-    }
+    try ExpectIteration(field, &.{ 1, 2, 3 });
 }
 
-test "Iterating Skipfield 2" {
-    const FieldSize = 5;
-    const SkipFieldT = StaticSkipField(FieldSize);
+test "Iterating Skipfield: run at the end" {
+    const SkipFieldT = StaticSkipField(5);
 
-    var field: SkipFieldT = .AllSkip;
-
+    var field: SkipFieldT = .NoSkip;
     field.ChangeToSkipped(4);
     field.ChangeToSkipped(3);
 
-    var iter = field.Iterator();
-    while (iter.next()) |i| {
-        try std.testing.expect(i == 0 or i == 1 or i == 2);
-    }
+    try ExpectIteration(field, &.{ 0, 1, 2 });
 }
 
-test "Iterating Skipfield 3" {
-    const FieldSize = 5;
-    const SkipFieldT = StaticSkipField(FieldSize);
+test "Iterating Skipfield: run in the middle" {
+    const SkipFieldT = StaticSkipField(5);
 
-    var field: SkipFieldT = .AllSkip;
-
-    field.ChangeToSkipped(4);
+    var field: SkipFieldT = .NoSkip;
     field.ChangeToSkipped(2);
     field.ChangeToSkipped(3);
 
-    var iter = field.Iterator();
-    while (iter.next()) |i| {
-        try std.testing.expect(i == 0 or i == 1);
-    }
+    try ExpectIteration(field, &.{ 0, 1, 4 });
+}
+
+test "Iterating Skipfield: last index unskipped does not run off the end" {
+    const SkipFieldT = StaticSkipField(5);
+
+    var field: SkipFieldT = .AllSkip;
+    field.ChangeToUnskipped(4);
+
+    try ExpectIteration(field, &.{4});
+}
+
+test "Iterating Skipfield: all unskipped and all skipped" {
+    const SkipFieldT = StaticSkipField(4);
+
+    const no_skip: SkipFieldT = .NoSkip;
+    try ExpectIteration(no_skip, &.{ 0, 1, 2, 3 });
+
+    const all_skip: SkipFieldT = .AllSkip;
+    try ExpectIteration(all_skip, &.{});
+}
+
+test "mNumUnskipped tracks the field" {
+    const FieldSize = 5;
+    const SkipFieldT = StaticSkipField(FieldSize);
+
+    var field: SkipFieldT = .AllSkip;
+    try std.testing.expectEqual(@as(usize, 0), field.mNumUnskipped);
+
+    field.ChangeToUnskipped(2);
+    field.ChangeToUnskipped(2); //already unskipped, must not count twice
+    try std.testing.expectEqual(@as(usize, 1), field.mNumUnskipped);
+
+    field.ChangeToSkipped(2);
+    field.ChangeToSkipped(2); //already skipped, must not count twice
+    try std.testing.expectEqual(@as(usize, 0), field.mNumUnskipped);
+
+    field.Reset(.NoSkip);
+    try std.testing.expectEqual(@as(usize, FieldSize), field.mNumUnskipped);
+
+    field.Reset(.AllSkip);
+    try std.testing.expectEqual(@as(usize, 0), field.mNumUnskipped);
+
+    var small: StaticSkipField(1) = .AllSkip;
+    small.ChangeToUnskipped(0);
+    small.ChangeToUnskipped(0);
+    try std.testing.expectEqual(@as(usize, 1), small.mNumUnskipped);
+    small.ChangeToSkipped(0);
+    try std.testing.expectEqual(@as(usize, 0), small.mNumUnskipped);
 }
 
 test "Test Zeros Mask" {

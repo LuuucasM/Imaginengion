@@ -42,6 +42,18 @@ pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) !void {
     self.mText.deinit(engine_context.EngineAllocator());
 }
 
+pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextComponent {
+    var new_component = self.*;
+
+    new_component.mText = try self.mText.clone(engine_context.EngineAllocator());
+
+    // the copy releases these itself, so it needs its own references
+    new_component.mTextAssetHandle.RetainAsset();
+    new_component.mTexHandle.RetainAsset();
+
+    return new_component;
+}
+
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
     try ImguiManager.RenderTextInput(engine_context, &self.mText, "Text");
 

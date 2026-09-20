@@ -50,7 +50,7 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
-            return try self.mECSManager.DuplicateEntity(engine_context.EngineAllocator(), obj_id);
+            return try self.mECSManager.DuplicateEntity(engine_context, obj_id);
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType) !UnderlyingObj(Self) {
@@ -90,8 +90,8 @@ pub fn Core(comptime Self: type) type {
             return self.mECSManager.GetGroup(frame_allocator, query);
         }
 
-        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
-            self.mECSManager.clearAndFree(engine_context);
+        pub fn clearAndFree(self: *Self, engine_context: *EngineContext) !void {
+            try self.mECSManager.clearAndFree(engine_context);
             self.mUUIDToWorldID.clearAndFree(engine_context.EngineAllocator());
             self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
         }
@@ -108,6 +108,15 @@ pub fn Core(comptime Self: type) type {
 
         pub fn GetWorldID(self: *Self, uuid: u64) ?UnderlyingObjType(Self) {
             return self.mUUIDToWorldID.get(uuid);
+        }
+
+        pub fn Copy(self: *Self, engine_context: *EngineContext, other: *Self) !void {
+            var iter = self.mUUIDToWorldID.iterator();
+            while (iter.next()) |entry| {
+                other.mUUIDToWorldID.put(engine_context.EngineAllocator(), entry.key_ptr.*, entry.value_ptr.*);
+            }
+
+            //copy ECS
         }
 
         fn _ValidateObject(manager_t: type) void {

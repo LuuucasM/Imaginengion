@@ -17,6 +17,12 @@ const GCManager = @import("../ECSManagers/GCManager.zig");
 const PManager = @import("../ECSManagers/PManager.zig");
 const SManager = @import("../ECSManagers/SManager.zig");
 
+const EEventData = @import("../Events/EManagerData.zig");
+const GCEventData = @import("../Events/GCManagerData.zig");
+const PEventData = @import("../Events/PManagerData.zig");
+const SEventData = @import("../Events/SManagerData.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
+
 const ClearAndFreeOptions = enum {
     EManager,
     GCManager,
@@ -61,77 +67,74 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) !void {
     switch (options) {
-        .EManager => self.mEManager.clearAndFree(engine_context),
-        .GCManager => self.mGCManager.clearAndFree(engine_context),
-        .PManager => self.mPManager.clearAndFree(engine_context),
-        .SManager => self.mSManager.clearAndFree(engine_context),
+        .EManager => try self.mEManager.clearAndFree(engine_context),
+        .GCManager => try self.mGCManager.clearAndFree(engine_context),
+        .PManager => try self.mPManager.clearAndFree(engine_context),
+        .SManager => try self.mSManager.clearAndFree(engine_context),
     }
 }
 
 pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *WorldManager) !void {
-    _ = .{ self, engine_context, other_world };
-    @panic("WorldManager.Copy not implemented");
+    self.mEManager.Copy(engine_context, other_world.mEManager);
+    self.mGCManager.Copy(engine_context, other_world.mEManager);
+    self.mPManager.Copy(engine_context, other_world.mEManager);
+    self.mSManager.Copy(engine_context, other_world.mEManager);
 }
 
-pub fn Serialize(self: *WorldManager, engine_context: *EngineContext) !void {
-    _ = .{ self, engine_context };
-    @panic("WorldManager.Serialize not implemented");
-}
-
-pub fn ProcessRemovedObj(self: *WorldManager, engine_context: *EngineContext) !void {
-    _ = .{ self, engine_context };
-    @panic("WorldManager.ProcessRemovedObj not implemented");
+pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+    if (event_data == EEventData) {
+        self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+    } else if (event_data == GCEventData) {
+        self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+    } else if (event_data == PEventData) {
+        self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+    } else if (event_data == SEventData) {
+        self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+    } else if (event_data == ECSEventData) {
+        self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+    } else {
+        std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+    }
 }
 
 //===============================Scenes==============================================
 pub fn NewScene(self: *WorldManager, engine_context: *EngineContext, layer_type: LayerType, config: Scene.CreateConfig) !Scene {
-    _ = .{ self, engine_context, layer_type, config };
-    @panic("WorldManager.NewScene not implemented");
+    return try self.mSManager.CreateScene(engine_context, layer_type, config);
 }
 
 pub fn DestroyScene(self: *WorldManager, engine_context: *EngineContext, destroy_scene: Scene) !void {
-    _ = .{ self, engine_context, destroy_scene };
-    @panic("WorldManager.DestroyScene not implemented");
+    self.mSManager.DeleteScene(engine_context, destroy_scene.mID);
 }
 
 pub fn LoadScene(self: *WorldManager, engine_context: *EngineContext, abs_path: []const u8) !Scene {
-    _ = .{ self, engine_context, abs_path };
-    @panic("WorldManager.LoadScene not implemented");
+    self.mSManager.LoadScene(engine_context, abs_path);
 }
 
 pub fn SaveScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    _ = .{ self, engine_context, scene };
-    @panic("WorldManager.SaveScene not implemented");
+    self.mSManager.SaveScene(engine_context, scene);
 }
 
 pub fn SaveSceneAs(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    _ = .{ self, engine_context, scene };
-    @panic("WorldManager.SaveSceneAs not implemented");
+    self.mSManager.SaveSceneAs(engine_context, scene);
 }
 
 pub fn MoveScene(self: *WorldManager, frame_allocator: std.mem.Allocator, scene: Scene, move_to_pos: usize) !void {
-    _ = .{ self, frame_allocator, scene, move_to_pos };
-    @panic("WorldManager.MoveScene not implemented");
+    self.mSManager.MoveScene(frame_allocator, scene, move_to_pos);
 }
 
 pub fn GetSceneGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, query: GroupQuery) !std.ArrayList(Scene.Type) {
-    _ = .{ self, frame_allocator, query };
-    @panic("WorldManager.GetSceneGroup not implemented");
+    self.mSManager.GetGroup(frame_allocator, query);
 }
 
 pub fn GetSceneStackIDs(self: *WorldManager, frame_allocator: std.mem.Allocator) !std.ArrayList(Scene.Type) {
-    _ = .{ self, frame_allocator };
-    @panic("WorldManager.GetSceneStackIDs not implemented");
-}
-
-pub fn SortScenesFunc(s_manager: SManager, a: Scene.Type, b: Scene.Type) bool {
-    _ = .{ s_manager, a, b };
-    @panic("WorldManager.SortScenesFunc not implemented");
+    self.mSManager.GetSceneStackIDs(frame_allocator);
 }
 
 pub fn RmSceneComp(self: *WorldManager, engine_allocator: std.mem.Allocator, scene_id: Scene.Type, component_ind: ESceneComponents) !void {
-    _ = .{ self, engine_allocator, scene_id, component_ind };
-    @panic("WorldManager.RmSceneComp not implemented");
+    self.mSManager.
 }
 
 pub fn SceneECSCallback(world_manager: *anyopaque, engine_context: *EngineContext, event: SManager.EventManagerT.EventType) anyerror!bool {

@@ -9,13 +9,12 @@ const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
 const EventData = @import("../Events/SManagerData.zig");
 
-
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
 
 const GroupQuery = @import("../ECS/ComponentManager.zig").GroupQuery;
-const ECSCore = @import("ECSManager.zig").Core;
+const ECSCore = @import("Manager.zig").Core;
 
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponentsList = SceneComponents.ComponentsList;
@@ -84,11 +83,10 @@ pub const CreateChild = Core.CreateChild;
 
 pub const AddComponent = Core.AddComponent;
 
-
 pub const AddUUID = Core.AddUUID;
 
-pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) void {
-    Core.clearAndFree(self, engine_context);
+pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) !void {
+    try Core.clearAndFree(self, engine_context);
     self.mGameLayerInsertIndex = 0;
     self.mNumofLayers = 0;
 }

@@ -1,3 +1,8 @@
+//Tests that need the engine module, run by `zig build test-engine`
+test {
+    _ = @import("ECS/ECSTests.zig");
+}
+
 //Core Stuff -----------------------------------
 pub const Application = @import("Core/Application.zig");
 pub const EngineContext = @import("Core/EngineContext.zig");

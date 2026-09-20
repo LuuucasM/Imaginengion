@@ -25,7 +25,7 @@ const AssetsList = @import("../Assets/Assets.zig").AssetsList;
 const Assets = @import("../Assets/Assets.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const ScriptType = ScriptAsset.ScriptType;
-const AssetHandle = @import("../Assets/AssetHandle.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
 const Entity = @import("../GameObjects/Entity.zig");
 
@@ -56,7 +56,7 @@ pub fn RunEntityScript(comptime script_type: type, comptime world_type: EngineCo
             const script_entity = scene_layer.GetEntity(script_id);
 
             if (script_entity.GetComponent(EntityScriptComponent)) |script_component| {
-                if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
+                if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
                 const asset_handle = script_component.mScriptAssetHandle;
                 const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
 
@@ -97,7 +97,7 @@ pub fn RunSceneScript(comptime script_type: type, comptime world_type: EngineCon
         for (scene_scripts.items) |script_id| {
             const script_scene = world_manager.GetSceneLayer(script_id);
             if (script_scene.GetComponent(SceneScriptComponent)) |script_component| {
-                if (script_component.mScriptAssetHandle.mID == AssetHandle.NullHandle) continue;
+                if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
                 const asset_handle = script_component.mScriptAssetHandle;
                 const script_asset = try asset_handle.GetAsset(engine_context, ScriptAsset);
 

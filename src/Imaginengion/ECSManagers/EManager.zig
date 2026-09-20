@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
@@ -12,7 +11,7 @@ const EntityComponentsList = EntityComponents.ComponentsList;
 const NameComponent = EntityComponents.NameComponent;
 const UUIDComponent = EntityComponents.UUIDComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const ECSCore = @import("ECSManager.zig").Core;
+const ECSCore = @import("Manager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -57,6 +56,8 @@ pub const SaveEntity = Core.SaveObject;
 
 pub const SaveEntityAs = Core.SaveObjectAs;
 
+pub const LoadEntity = Core.LoadObject;
+
 pub const GetGroup = Core.GetGroup;
 
 pub const AddUUID = Core.AddUUID;
@@ -64,7 +65,6 @@ pub const AddUUID = Core.AddUUID;
 pub const RemoveUUID = Core.RemoveUUID;
 
 pub const GetWorldID = Core.GetWorldID;
-
 
 pub const clearAndFree = Core.clearAndFree;
 

@@ -28,6 +28,14 @@ pub fn GetFileMetaData(self: AssetHandle) *FileMetaData {
     return self.mManager.GetFileMetaData(self.mID);
 }
 
+/// Takes another reference for a copy of this handle. Every copy that outlives the original
+/// needs one of these, because each one calls ReleaseAsset when it goes away.
+pub fn RetainAsset(self: AssetHandle) void {
+    if (self.mID != NullObject) {
+        self.mManager.RetainAssetHandle(self.mID);
+    }
+}
+
 pub fn ReleaseAsset(self: *AssetHandle) void {
     if (self.mID != NullObject) {
         self.mManager.ReleaseAssetHandle(self);

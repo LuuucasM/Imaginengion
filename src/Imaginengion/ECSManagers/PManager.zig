@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
@@ -11,7 +10,7 @@ const PComponents = @import("../ECSComponents/PComponents.zig");
 const NameComponent = PComponents.NameComponent;
 const UUIDComponent = PComponents.UUIDComponent;
 const PComponentsList = PComponents.ComponentsList;
-const ECSCore = @import("ECSManager.zig").Core;
+const ECSCore = @import("Manager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -41,7 +40,6 @@ pub const Duplicate = Core.Duplicate;
 
 pub const AddComponent = Core.AddComponent;
 
-
 pub const AddUUID = Core.AddUUID;
 
 pub const clearAndFree = Core.clearAndFree;
@@ -65,6 +63,8 @@ pub const RemoveUUID = Core.RemoveUUID;
 pub const SaveObject = Core.SaveObject;
 
 pub const SaveObjectAs = Core.SaveObjectAs;
+
+pub const LoadPlayer = Core.LoadObject;
 
 pub fn ProcessEvents(self: *PManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
     if (event_data == EventData) {

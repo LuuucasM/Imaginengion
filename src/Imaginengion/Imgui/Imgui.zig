@@ -7,7 +7,7 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Texture2D = @import("../Assets/Assets.zig").Texture2D;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
-const AssetHandle = @import("../Assets/AssetHandle.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ImguiManager = @This();
 
 const MathUtils = @import("../Math/MathUtils.zig");
@@ -654,14 +654,14 @@ pub fn RenderTexture2D(engine_context: *EngineContext, texture_handle: *AssetHan
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             texture_handle.ReleaseAsset();
-            texture_handle.* = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
+            texture_handle.* = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
         }
     }
 }
 
 pub fn RenderAssetRef(engine_context: *EngineContext, asset_handle: *AssetHandle, label: []const u8, drag_drop_payload_id: [:0]const u8) !void {
     const frame_allocator = engine_context.FrameAllocator();
-    if (asset_handle.mID != AssetHandle.NullHandle) {
+    if (asset_handle.mID != AssetHandle.NullObject) {
         const file_data_asset = asset_handle.GetFileMetaData();
         const name = std.fs.path.stem(std.fs.path.basename(file_data_asset.mRelPath.items));
         const name_term = try frame_allocator.dupeSentinel(u8, name, 0);
@@ -680,7 +680,7 @@ pub fn RenderAssetRef(engine_context: *EngineContext, asset_handle: *AssetHandle
             const path_len = payload.*.DataSize;
             const path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
             asset_handle.ReleaseAsset();
-            asset_handle.* = try engine_context.mAssetManager.GetAssetHandleRef(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
+            asset_handle.* = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
         }
     }
 }
