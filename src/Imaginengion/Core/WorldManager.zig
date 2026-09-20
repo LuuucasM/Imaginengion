@@ -107,6 +107,15 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
     }
 }
 
+/// Applies the destroys/removals that were queued during the frame, for every object manager.
+pub fn ProcessRemovedObj(self: *WorldManager, engine_context: *EngineContext) !void {
+    const callback_list: std.DoublyLinkedList = .{};
+    try self.mEManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
+    try self.mGCManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
+    try self.mPManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
+    try self.mSManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
+}
+
 //===============================Scenes==============================================
 pub fn NewScene(self: *WorldManager, engine_context: *EngineContext, layer_type: LayerType, config: Scene.CreateConfig) !Scene {
     return try self.mSManager.CreateScene(engine_context, layer_type, config);

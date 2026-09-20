@@ -75,19 +75,17 @@ fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object
 }
 
 fn RenderScript(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
-    if (object.GetIterator(.Script)) |iter_obj| {
-        var iter = iter_obj;
-        while (iter.next()) |script_entity| {
-            const script_name = script_entity.GetName();
+    var iter = object.GetIterator(.Script);
+    while (iter.next()) |script_entity| {
+        const script_name = script_entity.GetName();
 
-            if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
+        if (imgui.igSelectable_Bool(script_name.ptr, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0.0, .y = 0.0 })) {}
 
-            if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
-                defer imgui.igEndPopup();
+        if (imgui.igBeginPopupContextItem(script_name.ptr, imgui.ImGuiPopupFlags_MouseButtonRight)) {
+            defer imgui.igEndPopup();
 
-                if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
-                    try script_entity.Delete(engine_context);
-                }
+            if (imgui.igMenuItem_Bool("Delete Script", "", false, true)) {
+                try script_entity.Delete(engine_context);
             }
         }
     }
@@ -132,13 +130,14 @@ fn ObjectTraits(comptime T: type) type {
         return struct {
             const ComponentsPanelList = PlayerComponents.ComponentsPanelList;
             pub fn HandleDragDropTarget(engine_context: *EngineContext, player: Player) !void {
-                //drag drop target for scripts
+                _ = engine_context;
+                _ = player;
+                //NOTE: Player.AddScript is not implemented yet (see Player.zig), so dropping a
+                //script here cannot do anything until it is.
                 if (imgui.igBeginDragDropTarget() == true) {
                     defer imgui.igEndDragDropTarget();
-                    if (imgui.igAcceptDragDropPayload("PlayerScript", imgui.ImGuiDragDropFlags_None)) |payload| {
-                        const path_len = payload.*.DataSize;
-                        const rel_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-                        try player.AddComponentScript(engine_context, rel_path, .Prj);
+                    if (imgui.igAcceptDragDropPayload("PlayerScript", imgui.ImGuiDragDropFlags_None)) |_| {
+                        std.log.warn("Scripts are not supported on Player objects yet", .{});
                     }
                 }
             }
@@ -148,13 +147,14 @@ fn ObjectTraits(comptime T: type) type {
         return struct {
             const ComponentsPanelList = GameModeComponents.ComponentsPanelList;
             pub fn HandleDragDropTarget(engine_context: *EngineContext, game_mode: GameMode) !void {
-                //drag drop target for scripts
+                _ = engine_context;
+                _ = game_mode;
+                //NOTE: GameContext.AddScript is not implemented yet (see GameContext.zig), so
+                //dropping a script here cannot do anything until it is.
                 if (imgui.igBeginDragDropTarget() == true) {
                     defer imgui.igEndDragDropTarget();
-                    if (imgui.igAcceptDragDropPayload("GameModeScript", imgui.ImGuiDragDropFlags_None)) |payload| {
-                        const path_len = payload.*.DataSize;
-                        const rel_path = @as([*]const u8, @ptrCast(@alignCast(payload.*.Data)))[0..@intCast(path_len)];
-                        try game_mode.AddComponentScript(engine_context, rel_path, .Prj);
+                    if (imgui.igAcceptDragDropPayload("GameModeScript", imgui.ImGuiDragDropFlags_None)) |_| {
+                        std.log.warn("Scripts are not supported on GameMode objects yet", .{});
                     }
                 }
             }

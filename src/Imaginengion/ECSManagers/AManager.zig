@@ -417,19 +417,32 @@ pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) void {
 
 pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
     if (event_data == EventData) {
-        const callback = EventManagerT.EventCallback{
+        var callbacks = callback_list;
+        var callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
                 fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
-                    return @as(AManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
+                    return @as(*AManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
-        callback_list.append(&callback.mNode);
-        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+        //the node is ours, but the rest of the list belongs to the caller, so unlink again on the way out
+        callbacks.append(&callback.mNode);
+        defer callbacks.remove(&callback.mNode);
+
+        try self.mEventManager.ProcessCategory(event_category, engine_context, callbacks);
+        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
     } else {
-        std.log.err("AManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+        std.log.err("AManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
+}
+
+/// Runs the asset destroys queued this frame: the manager events hand each dead asset to the ECS
+/// as a destroy, then the ECS events actually free it.
+pub fn ProcessDestroyedAssets(self: *AManager, engine_context: *EngineContext) !void {
+    const callback_list: std.DoublyLinkedList = .{};
+    try self.ProcessEvents(EventData, .EndOfFrame, engine_context, callback_list);
+    try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
 }
 
 pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventManager.EventResult {
@@ -437,19 +450,20 @@ pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: E
         .FileUpdate => |e| {
             inline for (AssetComponents.FileUpdateList) |comp_type| {
                 if (self.mECSManager.HasComponent(comp_type, e.mAssetID)) {
-                    self.mECSManager.RemoveComponent(engine_context, e.mAssetID, ECSManagerT.ComponentInd(comp_type));
+                    try self.mECSManager.RemoveComponent(engine_context, e.mAssetID, ECSManagerT.ComponentInd(comp_type));
                 }
             }
         },
         .ToDestroyAsset => |e| {
             const file_data = self.mECSManager.GetComponent(FileMetaData, e.mAssetID).?;
-            const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath, file_data.mPathType);
+            const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
             const asset_hash = ComputePathHash(abs_path);
             self.RemoveUUID(asset_hash);
-            self.mECSManager.DestroyEntity(engine_context.EngineAllocator(), e.mAssetID);
+            try self.mECSManager.DestroyEntity(engine_context, e.mAssetID);
         },
         .Default => unreachable,
     }
+    return .Continue;
 }
 
 pub const AddUUID = Core.AddUUID;

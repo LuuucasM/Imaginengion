@@ -11,6 +11,7 @@ const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
+const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
@@ -38,6 +39,12 @@ const InternalData = struct {
 const PHYSICS_DT: f32 = 1.0 / 60.0;
 
 const SUB_STEPS: u32 = 2;
+
+//the transform walk adds translations and scales and multiplies rotations,
+//so this is what a root of the hierarchy accumulates from
+const IDENTITY_POSITION: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 };
+const IDENTITY_ROTATION: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 };
+const IDENTITY_SCALE: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 };
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
 
 _CollisionManager: CollisionManager = .empty,
@@ -100,27 +107,18 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
         .Simulate => &engine_context.mSimulateWorld,
     };
 
-    const EntityTransformQuery = GroupQuery{ .Component = EntityTransformComponent };
+    //every entity that is not someone's child roots a transform hierarchy, whether or not it
+    //carries a TransformComponent itself. EntityTagComponent keeps script children out of it.
+    const EntityTagQuery = GroupQuery{ .Component = EntityTagComponent };
     const ChildQuery = GroupQuery{ .Component = ChildComponent };
 
-    const transforms_arr = try world_manager.GetEntityGroup(
+    const roots_arr = try world_manager.GetEntityGroup(
         engine_context.FrameAllocator(),
-        .{ .Not = .{ .mFirst = &EntityTransformQuery, .mSecond = &ChildQuery } },
+        .{ .Not = .{ .mFirst = &EntityTagQuery, .mSecond = &ChildQuery } },
     );
 
-    for (transforms_arr.items) |entity_id| {
-        const entity = world_manager.GetEntity(entity_id);
-        const transform = entity.GetComponent(EntityTransformComponent).?;
-
-        transform.SetWorldPosition(transform.Translation);
-        transform.SetWorldRotation(transform.Rotation);
-        transform.SetWorldScale(transform.Scale);
-
-        if (entity.GetComponent(ParentComponent)) |parent_component| {
-            if (parent_component.mFirstEntity != Entity.NullObject) {
-                CalculateChildren(entity, transform.GetWorldPosition(), transform.GetWorldRotation(), transform.GetWorldScale());
-            }
-        }
+    for (roots_arr.items) |entity_id| {
+        CalculateEntityTransform(world_manager.GetEntity(entity_id), IDENTITY_POSITION, IDENTITY_ROTATION, IDENTITY_SCALE);
     }
 }
 
@@ -135,22 +133,22 @@ fn CalculateChildren(parent_entity: Entity, position_acc: Vec3(f32), rotation_ac
     while (true) : (if (curr_id == parent_component.mFirstEntity) break) {
         const child_entity = Entity{ .mID = curr_id, .mManager = parent_entity.mManager };
 
-        CalculateChildTransform(child_entity, position_acc, rotation_acc, scale_acc);
+        CalculateEntityTransform(child_entity, position_acc, rotation_acc, scale_acc);
 
         const child_component = child_entity.GetComponent(ChildComponent).?;
         curr_id = child_component.mNext;
     }
 }
 
-fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3(f32), rotation_acc: Quat(f32), scale_acc: Vec3(f32)) void {
+fn CalculateEntityTransform(entity: Entity, position_acc: Vec3(f32), rotation_acc: Quat(f32), scale_acc: Vec3(f32)) void {
     //a convenience entity is just a bundle of components hanging off its parent, so it can be
-    //missing a TransformComponent. It contributes nothing then, and its own children keep
-    //accumulating from the nearest ancestor that does have one.
+    //missing a TransformComponent. It contributes nothing then, but the walk still goes through
+    //it: its own children keep accumulating from the nearest ancestor that does have one.
     var position_out = position_acc;
     var rotation_out = rotation_acc;
     var scale_out = scale_acc;
 
-    if (child_entity.GetComponent(EntityTransformComponent)) |transform| {
+    if (entity.GetComponent(EntityTransformComponent)) |transform| {
         transform.SetWorldPosition(transform.Translation.AddVec(position_acc));
         transform.SetWorldRotation(rotation_acc.MulQuat(transform.Rotation));
         transform.SetWorldScale(transform.Scale.AddVec(scale_acc));
@@ -160,8 +158,8 @@ fn CalculateChildTransform(child_entity: Entity, position_acc: Vec3(f32), rotati
         scale_out = transform.GetWorldScale();
     }
 
-    if (child_entity.HasComponent(ParentComponent)) {
-        CalculateChildren(child_entity, position_out, rotation_out, scale_out);
+    if (entity.HasComponent(ParentComponent)) {
+        CalculateChildren(entity, position_out, rotation_out, scale_out);
     }
 }
 

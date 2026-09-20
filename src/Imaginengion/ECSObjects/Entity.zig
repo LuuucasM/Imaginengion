@@ -117,6 +117,9 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
         var child_component = self.GetComponent(EntityChildComponent);
 
+        //walk all the way to the root. an ancestor without a TransformComponent (a convenience
+        //entity that only carries a bundle of components) contributes nothing, but it never stops
+        //the walk: the whole chain still has to propagate through it.
         while (child_component != null) {
             const parent_entity = Entity{ .mID = child_component.?.mParent, .mManager = self.mManager };
 
@@ -125,8 +128,6 @@ pub fn _CalculateWorldTransform(self: Entity) void {
                 rotation_out = rotation_out.MulQuat(parent_transform.Rotation);
                 scale_out = scale_out.AddVec(parent_transform.Scale);
             }
-
-            if (parent_entity.HasComponent(MainObjectComponent)) break;
 
             child_component = parent_entity.GetComponent(EntityChildComponent);
         }

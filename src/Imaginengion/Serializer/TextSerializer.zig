@@ -50,7 +50,7 @@ fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.A
 
     try write_stream.beginObject();
 
-    inline for (SerializeList(obj_t)) |component_type| {
+    inline for (comptime SerializeList(obj_t)) |component_type| {
         if (object.GetComponent(component_type)) |component| {
             try write_stream.objectField(component_type.Name);
             try write_stream.write(component);
@@ -155,7 +155,7 @@ fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner,
 
 /// Returns false if key is not the name of a serializable component for this object type
 fn DeserializeComponent(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype, key: []const u8) !bool {
-    inline for (SerializeList(@TypeOf(object))) |component_type| {
+    inline for (comptime SerializeList(@TypeOf(object))) |component_type| {
         if (std.mem.eql(u8, key, component_type.Name)) {
             //components that need to know their owner while parsing (e.g. to request UUID resolves) read it from here
             engine_context.mSerializer.mCurrDeserialize = .{ .requester = .Init(object) };
@@ -190,7 +190,7 @@ fn DeserializeEntityList(engine_context: *EngineContext, scanner: *std.json.Scan
         const new_entity = if (@TypeOf(parent) == Scene)
             try parent.CreateEntity(engine_context, BLANK_ENTITY)
         else
-            try parent.CreateChild(engine_context, .Entity, BLANK_ENTITY);
+            try parent.CreateChild(engine_context, .Entity);
         try DeserializeObject(engine_context, scanner, new_entity);
     }
     _ = try scanner.next();

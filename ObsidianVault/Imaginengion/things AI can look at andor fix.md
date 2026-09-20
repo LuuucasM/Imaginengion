@@ -1,8 +1,3 @@
-- I need to fix different systems that iterate over the hierarchy and add checks for the "MainEntityComponent" (or whatever i called it).
-	- I added a component so you can tag entities to determine where main components are.
-	- This is because the way entity hierarchies and the way the ECS is suppose to be used is like for example with attribute components, if you want multiple attributes then you create multiple children that each have just an attribute component. So this entity isnt really a game object but a convenience entity to represent some bundle of components.
-	- This can apply to all kinds of different components
-	- so because of this you could have a hierarchy of entities where some of the children/parents are not actually suppose to be a game object but really just a convenience entity.
 - fix bug where resetting individual x, y, breaks the object, but then z is ok?
 - - fix ECS panel bug where there is fighting between right clicking on an element in the panel, and right clicking of the panel.
 	- currently if you right click on an element first the popup for the panel appears, then the popup for the element replaces it.

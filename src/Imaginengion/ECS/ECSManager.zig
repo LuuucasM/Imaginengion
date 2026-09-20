@@ -491,7 +491,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             // with both lists empty the parent is no longer a parent.
             // goes straight to the component manager so this internal bookkeeping does not raise an event
             if (parent_component.mFirstEntity == std.math.maxInt(entity_t) and parent_component.mFirstScript == std.math.maxInt(entity_t)) {
-                try self.mComponentManager.RemoveComponent(engine_context, parent_entity, ParentComponent.Ind);
+                self.mComponentManager.RemoveComponent(engine_context, parent_entity, ParentComponent.Ind);
             }
         }
 

@@ -71,7 +71,25 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            if (Self == SManager) {
+            if (Self == EManager) {
+                try self.mEventManager.Insert(
+                    engine_context.EngineAllocator(),
+                    .EndOfFrame,
+                    .{ .DestroyEntity = .{ .Entity = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
+                );
+            } else if (Self == GCManager) {
+                try self.mEventManager.Insert(
+                    engine_context.EngineAllocator(),
+                    .EndOfFrame,
+                    .{ .DestroyGameContext = .{ .GameContext = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
+                );
+            } else if (Self == PManager) {
+                try self.mEventManager.Insert(
+                    engine_context.EngineAllocator(),
+                    .EndOfFrame,
+                    .{ .DestroyPlayer = .{ .Player = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
+                );
+            } else if (Self == SManager) {
                 try self.mEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .EndOfFrame,
@@ -123,7 +141,8 @@ pub fn Core(comptime Self: type) type {
 
         pub fn LoadObject(self: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
             const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).CreateConfig.default);
-            engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
+            try engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
+            return new_obj;
         }
 
         pub fn GetGroup(self: *Self, frame_allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(UnderlyingObjType(Self)) {
