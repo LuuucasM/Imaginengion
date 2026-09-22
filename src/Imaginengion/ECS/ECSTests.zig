@@ -86,6 +86,53 @@ const TestECS = struct {
     }
 };
 
+test "RemoveComponentSync takes the component off before it returns" {
+    const test_ecs = try TestECS.Init();
+    defer test_ecs.Deinit() catch unreachable;
+    const allocator = test_ecs.Allocator();
+
+    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    _ = try test_ecs.mECSManager.AddComponent(allocator, entity_id, Health{});
+    _ = try test_ecs.mECSManager.AddComponent(allocator, entity_id, Position{ .x = 3 });
+
+    //the deferred path leaves it readable until ProcessEvents, which is what the sync path exists
+    //to avoid: TransformDirtyTag has to be gone before the next transform pass in the same frame
+    try test_ecs.mECSManager.RemoveComponentSync(test_ecs.mEngineContext, entity_id, Health.Ind);
+    try std.testing.expect(!test_ecs.mECSManager.HasComponent(Health, entity_id));
+
+    //the entity and its other components are untouched
+    try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(entity_id));
+    try std.testing.expectEqual(@as(f32, 3), test_ecs.mECSManager.GetComponent(Position, entity_id).?.x);
+
+    //nothing was queued, so end of frame has nothing left to apply
+    try test_ecs.ProcessEvents();
+    try std.testing.expect(!test_ecs.mECSManager.HasComponent(Health, entity_id));
+    try std.testing.expect(test_ecs.mECSManager.HasComponent(Position, entity_id));
+
+    //and it can go back on, which is the add/clear/add cycle a dirty tag goes through across passes
+    _ = try test_ecs.mECSManager.AddComponent(allocator, entity_id, Health{});
+    try std.testing.expect(test_ecs.mECSManager.HasComponent(Health, entity_id));
+    try test_ecs.mECSManager.RemoveComponentSync(test_ecs.mEngineContext, entity_id, Health.Ind);
+    try std.testing.expect(!test_ecs.mECSManager.HasComponent(Health, entity_id));
+}
+
+test "a sync removal and a queued removal of the same component do not collide" {
+    const test_ecs = try TestECS.Init();
+    defer test_ecs.Deinit() catch unreachable;
+    const allocator = test_ecs.Allocator();
+
+    const entity_id = try test_ecs.mECSManager.CreateEntity(allocator);
+    _ = try test_ecs.mECSManager.AddComponent(allocator, entity_id, Health{});
+
+    try test_ecs.mECSManager.RemoveComponent(test_ecs.mEngineContext, entity_id, Health.Ind);
+    try test_ecs.mECSManager.RemoveComponentSync(test_ecs.mEngineContext, entity_id, Health.Ind);
+    try std.testing.expect(!test_ecs.mECSManager.HasComponent(Health, entity_id));
+
+    //the queued one still fires at end of frame and has to find the component already gone
+    try test_ecs.ProcessEvents();
+    try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(entity_id));
+}
+
 test "ECS create, add components and query groups" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;

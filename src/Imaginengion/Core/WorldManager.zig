@@ -59,6 +59,14 @@ pub fn Init(self: *WorldManager, engine_allocator: std.mem.Allocator) !void {
     try self.mSManager.Init(engine_allocator);
 }
 
+/// Points every event manager under this world at the engine-wide synchronous listener.
+pub fn SetSyncCallback(self: *WorldManager, ctx: anytype, comptime handler: anytype) void {
+    self.mEManager.SetSyncCallback(ctx, handler);
+    self.mGCManager.SetSyncCallback(ctx, handler);
+    self.mPManager.SetSyncCallback(ctx, handler);
+    self.mSManager.SetSyncCallback(ctx, handler);
+}
+
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mEManager.Deinit(engine_context);
     self.mGCManager.Deinit(engine_context);

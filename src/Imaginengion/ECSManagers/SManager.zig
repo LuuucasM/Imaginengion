@@ -67,6 +67,8 @@ mNumofLayers: usize,
 
 pub const Init = Core.Init;
 
+pub const SetSyncCallback = Core.SetSyncCallback;
+
 pub const Deinit = Core.Deinit;
 
 pub fn CreateScene(self: *SManager, engine_context: *EngineContext, layer_type: LayerType, config: Scene.CreateConfig) !Scene {
@@ -96,6 +98,7 @@ pub fn clearAndFree(self: *SManager, engine_context: *EngineContext) void {
 pub const GetComponent = Core.GetComponent;
 
 pub const RemoveComponent = Core.RemoveComponent;
+pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetGroup = Core.GetGroup;
 

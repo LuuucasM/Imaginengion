@@ -40,6 +40,7 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
     }
     try self.mEngineContext.Init(init.environ);
     try self.mProgram.Init(&self.mEngineContext);
+    self.mEngineContext.SetSyncCallbacks(&self.mProgram);
 }
 
 /// Shuts down the application and cleans up resources.

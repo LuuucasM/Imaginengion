@@ -49,6 +49,13 @@ pub fn Core(comptime Self: type) type {
             self.mEventManager.Deinit(engine_context.EngineAllocator());
         }
 
+        /// Points both of this manager's event managers (its own and its ECS manager's) at the
+        /// engine-wide synchronous listener. Called once at startup via WorldManager/EngineContext.
+        pub fn SetSyncCallback(self: *Self, ctx: anytype, comptime handler: anytype) void {
+            self.mEventManager.SetSyncCallback(ctx, handler);
+            self.mECSManager.SetSyncCallback(ctx, handler);
+        }
+
         /// The manager pointer an object of this type carries. An AssetHandle points at
         /// its AManager directly; every other object points at the WorldManager, which is
         /// recoverable because the ECS managers live as fields of it.
@@ -135,6 +142,12 @@ pub fn Core(comptime Self: type) type {
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
             try self.mECSManager.RemoveComponent(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
+        }
+
+        /// Immediate counterpart to RemoveComponent; see ECSManager.RemoveComponentSync for when
+        /// it is safe to use.
+        pub fn RemoveComponentSync(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
+            try self.mECSManager.RemoveComponentSync(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
         }
 
         pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {

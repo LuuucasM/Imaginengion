@@ -57,6 +57,7 @@ mManager: *WorldManager,
 pub const AddComponent = Core.AddComponent;
 
 pub const RemoveComponent = Core.RemoveComponent;
+pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetComponent = Core.GetComponent;
 
@@ -146,9 +147,14 @@ pub fn MarkTransformDirty(self: Entity, engine_context: *EngineContext) !void {
     _ = try self.AddComponent(engine_context, TransformDirtyTag{});
 }
 
+/// Removed synchronously, not queued. A deferred removal would leave the tag readable for the
+/// rest of the frame, so every later transform pass in that frame would walk this entity's subtree
+/// again and MarkTransformDirty would see the tag still present and skip re-tagging a genuinely
+/// new change. The tag is zero-sized, so applying the removal now moves no component storage and
+/// invalidates no pointer.
 pub fn ClearTransformDirty(self: Entity, engine_context: *EngineContext) !void {
     if (!self.HasComponent(TransformDirtyTag)) return;
-    try self.RemoveComponent(engine_context, TransformDirtyTag);
+    try self.RemoveComponentSync(engine_context, TransformDirtyTag);
 }
 
 pub fn _CalculateWorldTransform(self: Entity) void {

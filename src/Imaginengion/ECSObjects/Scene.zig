@@ -58,6 +58,7 @@ mManager: *WorldManager,
 pub const AddComponent = Core.AddComponent;
 
 pub const RemoveComponent = Core.RemoveComponent;
+pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetComponent = Core.GetComponent;
 

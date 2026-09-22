@@ -42,6 +42,22 @@ const GameEvent = GameEventData.EventT;
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEvent = ImguiEventData.EventT;
 
+const AManager = @import("../ECSManagers/AManager.zig");
+const EManager = @import("../ECSManagers/EManager.zig");
+const GCManager = @import("../ECSManagers/GCManager.zig");
+const PManager = @import("../ECSManagers/PManager.zig");
+const SManager = @import("../ECSManagers/SManager.zig");
+
+const AManagerEvent = AManager.EventManagerT.EventType;
+const EManagerEvent = EManager.EventManagerT.EventType;
+const GCManagerEvent = GCManager.EventManagerT.EventType;
+const PManagerEvent = PManager.EventManagerT.EventType;
+const SManagerEvent = SManager.EventManagerT.EventType;
+
+/// Shared by every ECS manager: Entity/Player/Scene/GameContext/AssetHandle ids are all u32, so
+/// ECSEventData.EventT(u32) is a single memoized type covering all five.
+const ECSEvent = EManager.ECSManagerT.ECSEventManager.EventType;
+
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
@@ -348,6 +364,50 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //-----------------End End of Frame-------------------
 
+}
+
+/// The single synchronous entry point for every event type in the engine. Every event manager's
+/// mSyncCallback points here, so an emitter anywhere can reach this with
+/// `some_event_manager.Dispatch(engine_context, event)` and get the result back.
+///
+/// `event` is a `*const T` where T is the firing manager's EventT. The branches are resolved at
+/// compile time, so each instantiation compiles down to just its own arm with no runtime type
+/// check. The trailing @compileError makes a missing arm a build failure rather than a silent
+/// drop, so adding an event type forces a decision here.
+///
+/// Returning .Consume stops the sync chain and tells the emitter the event was handled. Note the
+/// deferred path (ProcessCategory) ignores EventResult today, so .Consume only means something
+/// when an event arrives through here.
+///
+/// The event pointer is only valid for the duration of this call: copy, never store it.
+pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anytype) anyerror!EventResult {
+    // discards so the shell compiles before the arms are filled in; drop them as you go
+    _ = self;
+    _ = engine_context;
+
+    const T = @TypeOf(event.*);
+
+    if (T == WindowEvent) {
+        return .Continue;
+    } else if (T == GameEvent) {
+        return .Continue;
+    } else if (T == ImguiEvent) {
+        return .Continue;
+    } else if (T == AManagerEvent) {
+        return .Continue;
+    } else if (T == EManagerEvent) {
+        return .Continue;
+    } else if (T == GCManagerEvent) {
+        return .Continue;
+    } else if (T == PManagerEvent) {
+        return .Continue;
+    } else if (T == SManagerEvent) {
+        return .Continue;
+    } else if (T == ECSEvent) {
+        return .Continue;
+    } else {
+        @compileError("EditorProgram.OnEvent has no arm for " ++ @typeName(T));
+    }
 }
 
 pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const WindowEvent) anyerror!EventResult {

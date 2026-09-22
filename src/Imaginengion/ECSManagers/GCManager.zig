@@ -49,6 +49,7 @@ pub const Deinit = Core.Deinit;
 pub const GetComponent = Core.GetComponent;
 
 pub const RemoveComponent = Core.RemoveComponent;
+pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const GetGroup = Core.GetGroup;
 
@@ -57,6 +58,8 @@ pub const GetWorldID = Core.GetWorldID;
 pub const HasComponent = Core.HasComponent;
 
 pub const Init = Core.Init;
+
+pub const SetSyncCallback = Core.SetSyncCallback;
 
 pub const CreateChild = Core.CreateChild;
 

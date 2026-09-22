@@ -108,6 +108,22 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mSimulateWorld.Init(self.EngineAllocator());
 }
 
+/// Points every event manager in the engine at Program.OnEvent, the single synchronous entry
+/// point. Called once from Application.Init, after both the context and the program are
+/// initialized. The program is a member of Application, so it outlives every manager that points
+/// at it and nothing ever needs to unregister.
+pub fn SetSyncCallbacks(self: *EngineContext, program: *Program) void {
+    self.mSystemEventManager.SetSyncCallback(program, Program.OnEvent);
+    self.mGameEventManager.SetSyncCallback(program, Program.OnEvent);
+    self.mImguiEventManager.SetSyncCallback(program, Program.OnEvent);
+
+    self.mAssetManager.SetSyncCallback(program, Program.OnEvent);
+
+    self.mGameWorld.SetSyncCallback(program, Program.OnEvent);
+    self.mEditorWorld.SetSyncCallback(program, Program.OnEvent);
+    self.mSimulateWorld.SetSyncCallback(program, Program.OnEvent);
+}
+
 pub fn DeInit(self: *EngineContext) void {
     const zone = Tracy.ZoneInit("EngineContext::Deinit", @src());
     defer zone.Deinit();

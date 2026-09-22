@@ -117,6 +117,23 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
+        /// Immediate counterpart to RemoveComponent: the component is gone when this returns,
+        /// instead of at end of frame. See ECSManager.RemoveComponentSync for when that is safe.
+        pub fn RemoveComponentSync(self: Self, engine_context: *EngineContext, comptime component_type: type) !void {
+            _ValidateComponent(Self, component_type);
+            if (Self == Entity) {
+                try self.mManager.mEManager.RemoveComponentSync(engine_context, self.mID, component_type);
+            } else if (Self == GameContext) {
+                try self.mManager.mGCManager.RemoveComponentSync(engine_context, self.mID, component_type);
+            } else if (Self == Player) {
+                try self.mManager.mPManager.RemoveComponentSync(engine_context, self.mID, component_type);
+            } else if (Self == Scene) {
+                try self.mManager.mSManager.RemoveComponentSync(engine_context, self.mID, component_type);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
+            }
+        }
+
         pub fn GetComponent(self: Self, comptime component_type: type) ?*component_type {
             _ValidateComponent(Self, component_type);
             if (!IsActive(self)) {

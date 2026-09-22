@@ -422,6 +422,8 @@ pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []
 //From general managers
 pub const GetGroup = Core.GetGroup;
 
+pub const SetSyncCallback = Core.SetSyncCallback;
+
 pub const IsActiveObj = Core.IsActiveObj;
 
 pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) void {

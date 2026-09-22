@@ -33,6 +33,11 @@ pub fn EventManager(EventData: type) type {
 
         mEventsArray: EventsArrayT,
 
+        /// The one synchronous listener, set once at startup by EngineContext.SetSyncCallbacks.
+        /// Null means nothing listens synchronously and Dispatch is a no-op. The ctx it points at
+        /// is a member of Application, so it outlives this manager and never needs unregistering.
+        mSyncCallback: ?EventCallback = null,
+
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
             var iter = self.mEventsArray.iterator();
             while (iter.next()) |entry| {
@@ -74,6 +79,35 @@ pub fn EventManager(EventData: type) type {
                     _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, &event);
                 }
             }
+        }
+
+        /// Wraps `handler` on `ctx` into the type-erased callback this manager stores.
+        /// `handler` may be generic (`event: anytype`): it is a comptime value here, and the call
+        /// inside the thunk is what instantiates it with this manager's concrete event type. The
+        /// thunk itself is concrete, which is what makes it storable as a function pointer.
+        pub fn MakeCallback(comptime Ctx: type, comptime handler: anytype, ctx: *Ctx) EventCallback {
+            return .{
+                .mCtx = ctx,
+                .mCallbackFn = struct {
+                    fn thunk(ctx_ptr: *anyopaque, engine_context: *EngineContext, event: *const EventData.EventT) anyerror!EventResult {
+                        return handler(@as(*Ctx, @ptrCast(@alignCast(ctx_ptr))), engine_context, event);
+                    }
+                }.thunk,
+            };
+        }
+
+        /// Points this manager's synchronous listener at `handler` on `ctx`.
+        pub fn SetSyncCallback(self: *Self, ctx: anytype, comptime handler: anytype) void {
+            self.mSyncCallback = MakeCallback(@typeInfo(@TypeOf(ctx)).pointer.child, handler, ctx);
+        }
+
+        /// Synchronous counterpart to ProcessCategory: hands `event` to the sync listener right now
+        /// and returns its result, so .Consume is meaningful here (the deferred path ignores it).
+        /// Nothing is queued and nothing is stored, so `event` is only valid for the duration of
+        /// this call: a listener that needs it afterwards must copy it.
+        pub fn Dispatch(self: *Self, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
+            const callback = self.mSyncCallback orelse return .Continue;
+            return callback.mCallbackFn(callback.mCtx, engine_context, &event);
         }
 
         /// Same as EventsReset but for a single category, for managers that process one category at a time.

@@ -66,6 +66,11 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             self.mECSEventManager.Deinit(engine_context.EngineAllocator());
         }
 
+        /// Points this ECS manager's event manager at the engine-wide synchronous listener.
+        pub fn SetSyncCallback(self: *Self, ctx: anytype, comptime handler: anytype) void {
+            self.mECSEventManager.SetSyncCallback(ctx, handler);
+        }
+
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
             const zone = Tracy.ZoneInit("ECSM clearAndFree", @src());
             defer zone.Deinit();
@@ -327,6 +332,29 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type) type 
             defer zone.Deinit();
 
             try self.mECSEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+        }
+
+        /// Removes the component now rather than at end of frame: the sync listener is handed the
+        /// same RemoveComponent event the deferred path would have queued, and then the removal is
+        /// applied before this returns, so HasComponent is false immediately afterwards.
+        ///
+        /// Use this only where nothing holds a pointer into that component's storage. Applying a
+        /// removal swapRemoves from the dense array, which moves another entity's component and so
+        /// invalidates pointers the deferred path would have kept alive for the rest of the frame.
+        /// A zero-sized tag has no value storage to move, which is what makes it the safe case.
+        ///
+        /// The listener's EventResult is deliberately ignored: callers rely on the component being
+        /// gone when this returns, so .Consume must not be able to veto the removal.
+        pub fn RemoveComponentSync(self: *Self, engine_context: *EngineContext, entity_id: entity_t, component_ind: usize) !void {
+            std.debug.assert(self.IsActiveEntity(entity_id));
+            std.debug.assert(components_types.len + BuiltinComponentCount > component_ind);
+            std.debug.assert(component_ind != SkipFieldComponent.Ind); // entity lifetime goes through DestroyEntity
+            const zone = Tracy.ZoneInit("ECSM RemoveComponentSync", @src());
+            defer zone.Deinit();
+
+            _ = try self.mECSEventManager.Dispatch(engine_context, .{ .RemoveComponent = .{ .mEntityID = entity_id, .mComponentInd = component_ind } });
+
+            self._InternalRemoveComponent(engine_context, entity_id, component_ind);
         }
 
         pub fn HasComponent(self: Self, comptime ComponentType: type, entity_id: entity_t) bool {

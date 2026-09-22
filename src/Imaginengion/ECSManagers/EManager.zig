@@ -35,6 +35,8 @@ mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Entity.Type),
 
 pub const Init = Core.Init;
 
+pub const SetSyncCallback = Core.SetSyncCallback;
+
 pub const Deinit = Core.Deinit;
 
 pub const CreateEntity = Core.CreateObj;
@@ -50,6 +52,7 @@ pub const AddComponent = Core.AddComponent;
 pub const GetComponent = Core.GetComponent;
 
 pub const RemoveComponent = Core.RemoveComponent;
+pub const RemoveComponentSync = Core.RemoveComponentSync;
 
 pub const HasComponent = Core.HasComponent;
 

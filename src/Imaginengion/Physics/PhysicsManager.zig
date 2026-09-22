@@ -126,11 +126,11 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
         const seed = AncestorWorldTransform(entity);
         CalculateEntityTransform(entity, seed.position, seed.rotation, seed.scale);
 
-        //RemoveComponent is queued for end of frame, so the tag stays readable for the rest of this
-        //frame: the later calls in the same frame (a physics substep, a solver iteration) still see
-        //this entity and redo its subtree. That is the same repetition the old full-hierarchy walk
-        //did, only now over the dirty set instead of every root. Re-queueing a removal is harmless,
-        //ECSManager._InternalRemoveComponent drops one whose component is already gone.
+        //cleared synchronously, so this entity is clean the moment its subtree is done. The later
+        //passes in the same frame (a physics substep, a solver iteration) then see only what has
+        //moved since, and a move that happens after this point re-tags rather than being swallowed
+        //by a tag that is still sitting there waiting for end of frame.
+        //Safe to remove mid-iteration: dirty_arr is a copy of the dense array, not a view of it.
         try entity.ClearTransformDirty(engine_context);
     }
 }
