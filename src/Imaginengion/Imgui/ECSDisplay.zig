@@ -12,6 +12,7 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const StackPosComponent = @import("../ECSComponents/Scene/StackPosComponent.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
+const ImguiManager = @import("Imgui.zig");
 const ECSDisplayPanel = @This();
 
 /// Which of the world's ECS object types a given panel instance displays.
@@ -121,8 +122,11 @@ fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext,
 
     const is_entity_tree_open = imgui.igTreeNodeEx_Str(object_name, TREE_FLAGS);
 
-    //if the tree node gets left clicked it becomes the selected scene and also if the selected entity is not in the scene the selected entity becomes null
-    if (imgui.igIsItemClicked(imgui.ImGuiMouseButton_Left)) {
+    //select on release rather than press (IsItemClicked), matching the leaf Selectable. Selecting on
+    //press swaps the components panel away before a drag from this node can be dropped into it.
+    //Deactivated means the press started on this node, hovered means the release landed back on it,
+    //so a drag that ends somewhere else never selects.
+    if (imgui.igIsItemDeactivated() and imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None)) {
         try Traits.SelectObject(engine_context, object);
     }
 
@@ -195,7 +199,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn HandleDragDropSource(entity: Entity) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                     defer imgui.igEndDragDropSource();
-                    _ = imgui.igSetDragDropPayload("EntityRef", &entity, @sizeOf(Entity), 0);
+                    _ = imgui.igSetDragDropPayload(ImguiManager.ENTITY_REF_PAYLOAD, &entity, @sizeOf(Entity), 0);
                 }
             }
             pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Entity) !void {

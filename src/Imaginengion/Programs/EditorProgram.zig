@@ -521,15 +521,16 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
     if (self.mEditorState == .Play) {
         self.mEditorState = .Stop;
         self.mActiveWorld = &engine_context.mGameWorld;
+        self.mActiveWorldType = .Game;
         engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {
+        //only start when the run player can actually be drawn, otherwise play shows nothing
         if (self.mRunPlayer) |run_player| {
-            if (run_player.GetComponent(PossessComponent)) |poss_comp| {
-                if (poss_comp.mPossessedEntity.IsActive()) {
-                    try engine_context.mGameWorld.Copy(engine_context, &engine_context.mSimulateWorld);
-                    self.mActiveWorld = &engine_context.mSimulateWorld;
-                    self.mEditorState = .Play;
-                }
+            if (run_player.GetRenderView() != null) {
+                try engine_context.mGameWorld.Copy(engine_context, &engine_context.mSimulateWorld);
+                self.mActiveWorld = &engine_context.mSimulateWorld;
+                self.mActiveWorldType = .Simulate;
+                self.mEditorState = .Play;
             }
         }
     }
@@ -617,30 +618,41 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
     const zone = Tracy.ZoneInit("RenderWorldTarget", @src());
     defer zone.Deinit();
 
-    const world_manager = self.mActiveWorld;
-
     const frame_allocator = engine_context.FrameAllocator();
 
-    var player_entites = try world_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
-    try FilterPossessedPlayers(frame_allocator, &player_entites, world_manager);
+    const views = try self.GetViewportViews(frame_allocator, viewport_type);
 
-    for (player_entites.items) |player_id| {
-        const player = world_manager.GetPlayer(player_id);
-        const possess_component = player.GetComponent(PossessComponent).?;
-        const render_component = player.GetComponent(PlayerRenderComponent).?;
-        const transform_component = possess_component.mPossessedEntity.GetComponent(TransformComponent).?;
-        const viewpoint_component = possess_component.mPossessedEntity.GetComponent(ViewpointComponent).?;
+    for (views.items) |view| {
+        const render_component = view.mRenderTarget;
+        const transform_component = view.mTransform;
+        const viewpoint_component = view.mViewpoint;
 
         const world_rot = transform_component.GetWorldRotation();
         const world_pos = transform_component.GetWorldPosition();
 
-        try switch (viewport_type) {
-            .ViewportPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight),
-            .PlayPanel => render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight),
+        const panel_width, const panel_height = switch (viewport_type) {
+            .ViewportPanel => .{ self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight },
+            .PlayPanel => .{ self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight },
         };
+        //the view is displayed in its area rect's share of the panel (see ViewportPanel.OnImguiRender),
+        //so it renders at that size too. A full panel texture squeezed into half the panel would
+        //come out squashed for split screen.
+        const area_rect = viewpoint_component.mAreaRect;
+        const target_width: usize = @intFromFloat(@max(@as(f32, @floatFromInt(panel_width)) * area_rect.z, 0.0));
+        const target_height: usize = @intFromFloat(@max(@as(f32, @floatFromInt(panel_height)) * area_rect.w, 0.0));
+        //a zero sized area has nothing to show, and would put a zero into the ray math below
+        if (target_width < 1 or target_height < 1) continue;
+
+        //the viewpoint has to match the texture it renders into: the ray math below and the
+        //shader's bounds check both read its size, and its aspect ratio is only set from here
+        viewpoint_component.SetViewportSize(target_width, target_height);
+        try render_component.mComputeTexture.Resize(engine_context, target_width, target_height);
+        //a render target added at runtime has no texture until Resize creates one, and Resize
+        //skips a zero sized panel, so there may still be nothing to render into
+        if (!render_component.mComputeTexture.IsCreated()) continue;
         viewpoint_component.mPerspectiveFar = 1000.0;
         const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
-        const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5)); //note here we use aspect ratio cuz its editor
+        const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5));
         const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
         const ray_offset_x: f32 = -tan_half_fov * viewpoint_component.mAspectRatio;
         const ray_offset_y: f32 = tan_half_fov;
@@ -691,22 +703,20 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     const zone = Tracy.ZoneInit("RenderViewportWorlds", @src());
     defer zone.Deinit();
 
-    const world_manager = self.mActiveWorld;
     const frame_allocator = engine_context.FrameAllocator();
 
     var frame_buffers: std.ArrayList(*ComputeOutput) = .empty;
     var area_rects: std.ArrayList(Vec4(f32)) = .empty;
 
-    var player_entites = try world_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
-    try FilterPossessedPlayers(frame_allocator, &player_entites, world_manager);
+    const views = try self.GetViewportViews(frame_allocator, viewport_type);
 
-    for (player_entites.items) |player_id| {
-        const player = world_manager.GetPlayer(player_id);
-        const possess_component = player.GetComponent(PossessComponent).?;
-        const render_component = player.GetComponent(PlayerRenderComponent).?;
-        const viewpoint_component = possess_component.mPossessedEntity.GetComponent(ViewpointComponent).?;
-        try frame_buffers.append(frame_allocator, &render_component.mComputeTexture);
-        try area_rects.append(frame_allocator, viewpoint_component.mAreaRect);
+    for (views.items) |view| {
+        //the imgui panels run between RenderRenderTargets and here, so a player can become
+        //drawable mid frame (e.g. picked in the Player Camera menu) before anything has created
+        //its texture. It gets rendered and shown from next frame on.
+        if (!view.mRenderTarget.mComputeTexture.IsCreated()) continue;
+        try frame_buffers.append(frame_allocator, &view.mRenderTarget.mComputeTexture);
+        try area_rects.append(frame_allocator, view.mViewpoint.mAreaRect);
     }
 
     switch (viewport_type) {
@@ -719,27 +729,31 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     }
 }
 
-fn FilterPossessedPlayers(frame_allocator: std.mem.Allocator, player_entities: *std.ArrayList(Player.Type), world_manager: *WorldManager) !void {
-    var start: usize = 0;
-    var end: usize = 0;
+/// The player views a world viewport draws, each already checked by Player.GetRenderView so the
+/// render loops never have to trust a component is there. RenderWorldTarget and RenderViewportWorlds
+/// must agree on this list, since one renders the textures the other displays. While stopped the
+/// play panel is a preview of the selected run player only; otherwise it is every drawable player.
+fn GetViewportViews(self: *EditorProgram, frame_allocator: std.mem.Allocator, viewport_type: ViewportType) !std.ArrayList(Player.RenderView) {
+    var views: std.ArrayList(Player.RenderView) = .empty;
 
-    while (start < end) {
-        const player = world_manager.GetPlayer(player_entities.items[start]);
-        const possess_component = player.GetComponent(PossessComponent).?;
-        if (possess_component.mPossessedEntity.IsActive()) {
-            start += 1;
-        } else {
-            player_entities.items[start] = player_entities.items[end - 1];
-            end -= 1;
+    if (self.mEditorState == .Stop and viewport_type == .PlayPanel) {
+        if (self.mRunPlayer) |run_player| {
+            if (run_player.GetRenderView()) |view| try views.append(frame_allocator, view);
         }
+        return views;
     }
 
-    player_entities.shrinkAndFree(frame_allocator, end);
+    const world_manager = self.mActiveWorld;
+    const player_ids = try world_manager.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
+    for (player_ids.items) |player_id| {
+        if (world_manager.GetPlayer(player_id).GetRenderView()) |view| try views.append(frame_allocator, view);
+    }
+    return views;
 }
 
 fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entities: *std.ArrayList(Entity.Type), world_manager: *WorldManager) !void {
     var start: usize = 0;
-    var end: usize = 0;
+    var end: usize = player_slot_entities.items.len;
 
     while (start < end) {
         const entity = world_manager.GetEntity(player_slot_entities.items[start]);
@@ -866,8 +880,10 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             defer imgui.igEndMenu();
             if (imgui.igBeginMenu("Play Menu", true) == true) {
                 defer imgui.igEndMenu();
-                const has_selected = if (self.mRunPlayer) |_| true else false;
-                if (imgui.igMenuItem_Bool("Play/Stop", "Ctrl+G", false, has_selected) == true) {
+                //stopping is always allowed, starting needs a run player that can be drawn
+                const can_toggle = self.mEditorState == .Play or
+                    (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false);
+                if (imgui.igMenuItem_Bool("Play/Stop", "Ctrl+G", false, can_toggle) == true) {
                     try self.OnChangeEditorStateEvent(engine_context);
                 }
             }
@@ -881,12 +897,22 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
                 const player_group = try engine_context.mGameWorld.GetPlayerGroup(engine_context.FrameAllocator(), .{ .Component = PossessComponent });
                 for (player_group.items) |player_id| {
                     const player = engine_context.mGameWorld.GetPlayer(player_id);
-                    const possess_component = player.GetComponent(PossessComponent).?;
-                    if (possess_component.mPossessedEntity.IsActive()) {
+                    //only offer players the preview can actually draw
+                    if (player.GetRenderView() != null) {
                         const selected = if (self.mRunPlayer) |p| if (player.mID == p.mID) true else false else false;
+                        //mName is not null terminated, and ###id keeps players with the same name from sharing an imgui ID
                         const name_component = player.GetComponent(PlayerNameComponent).?;
-                        if (imgui.igMenuItem_Bool(name_component.mName.items.ptr, null, selected, true) == true) {
-                            self.mRunPlayer = player;
+                        const menu_name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "{s}###{d}", .{ std.mem.sliceTo(name_component.mName.items, 0), player.mID }, 0);
+                        if (imgui.igMenuItem_Bool(menu_name.ptr, null, selected, true) == true) {
+                            if (self.mRunPlayer) |p| {
+                                if (p.mID == player.mID) {
+                                    self.mRunPlayer = null;
+                                } else {
+                                    self.mRunPlayer = player;
+                                }
+                            } else {
+                                self.mRunPlayer = player;
+                            }
                         }
                     }
                 }

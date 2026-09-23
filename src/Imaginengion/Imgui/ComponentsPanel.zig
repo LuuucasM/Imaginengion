@@ -14,6 +14,8 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Assets = @import("../ECSComponents/AComponents.zig");
 const TransformComponent = @import("../ECSComponents/Shared/TransformComponent.zig");
 const RigidBodyComponent = @import("../ECSComponents/Entity/RigidBodyComponent.zig");
+const PossessComponent = @import("../ECSComponents/Player/PossessComponent.zig");
+const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -59,15 +61,16 @@ fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object
 }
 
 fn RenderComponents(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
-    if (imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None) == true and imgui.igIsMouseClicked_Bool(imgui.ImGuiMouseButton_Right, false) == true) {
-        imgui.igOpenPopup_Str("RightClickPopup", imgui.ImGuiPopupFlags_None);
-    }
-    if (imgui.igBeginPopup("RightClickPopup", imgui.ImGuiWindowFlags_None) == true) {
+    try ObjectImguiRender(ObjectType, engine_context, object);
+
+    //the panel's own context menu, submitted after the components so imgui knows which item
+    //(if any) the cursor is over. NoOpenOverItems means this only opens on a right click that
+    //landed on empty space; a click on a component is claimed by that component's
+    //BeginPopupContextItem instead, so only one popup ever opens.
+    if (imgui.igBeginPopupContextWindow("RightClickPopup", imgui.ImGuiPopupFlags_MouseButtonRight | imgui.ImGuiPopupFlags_NoOpenOverItems)) {
         defer imgui.igEndPopup();
         try NewObjectComponentPopup(ObjectType, engine_context, object);
     }
-
-    try ObjectImguiRender(ObjectType, engine_context, object);
 }
 
 pub fn OnTogglePanelEvent(self: *ComponentsPanel) void {
@@ -111,6 +114,19 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
             //derived from it have to be brought back in step
             if (comptime component_type == RigidBodyComponent and @TypeOf(object) == Entity) {
                 try object.SyncBodyTags(engine_context);
+            }
+        }
+
+        //possessing links both the player and the entity's PlayerSlotComponent, so the component
+        //cannot render itself: only here do we have the Player to call Possess on
+        if (comptime component_type == PossessComponent and @TypeOf(object) == Player) {
+            const possess_component = object.GetComponent(PossessComponent).?;
+            if (try ImguiManager.RenderEntityRef(engine_context, &possess_component.mPossessedEntity, "Possessed Entity")) |new_entity| {
+                if (new_entity.IsActive()) {
+                    object.Possess(new_entity);
+                } else {
+                    possess_component.mPossessedEntity = .uninit;
+                }
             }
         }
     }

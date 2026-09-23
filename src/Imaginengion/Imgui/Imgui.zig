@@ -8,7 +8,12 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Texture2D = @import("../ECSComponents/AComponents.zig").Texture2D;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
+const NameComponent = @import("../ECSComponents/EComponents.zig").NameComponent;
 const ImguiManager = @This();
+
+/// Drag drop payload ID for an Entity value, set by the ECS display and accepted by RenderEntityRef
+pub const ENTITY_REF_PAYLOAD = "EntityRef";
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -712,6 +717,48 @@ pub fn RenderAssetRef(engine_context: *EngineContext, asset_handle: *AssetHandle
             asset_handle.* = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = path, .path_type = .Prj } });
         }
     }
+}
+
+/// Shows the name of the entity a component references (or None) and acts as a drop target for
+/// entities dragged out of the ECS display. It does not write the ref itself: the new entity is
+/// returned so the caller can go through whatever setter keeps both sides linked. Clearing from the
+/// right click menu returns .uninit. Returns null when nothing changed this frame.
+pub fn RenderEntityRef(engine_context: *EngineContext, entity_ref: *const Entity, label: [:0]const u8) !?Entity {
+    const frame_allocator = engine_context.FrameAllocator();
+    var new_entity: ?Entity = null;
+
+    imgui.igPushID_Str(label.ptr);
+    defer imgui.igPopID();
+
+    imgui.igTextUnformatted(label.ptr, null);
+    imgui.igSameLine(0.0, 8.0);
+
+    if (entity_ref.IsActive()) {
+        //GetName assumes a NameComponent, fall back to the ID for entities without one
+        const name = if (entity_ref.HasComponent(NameComponent))
+            try std.fmt.allocPrintSentinel(frame_allocator, "{s}", .{entity_ref.GetName()}, 0)
+        else
+            try std.fmt.allocPrintSentinel(frame_allocator, "Entity {d}", .{entity_ref.mID}, 0);
+        imgui.igTextUnformatted(name.ptr, null);
+    } else {
+        imgui.igTextUnformatted("None", null);
+    }
+
+    if (imgui.igBeginPopupContextItem("EntityRefContext", imgui.ImGuiPopupFlags_MouseButtonRight)) {
+        defer imgui.igEndPopup();
+        if (imgui.igMenuItem_Bool("Clear", "", false, entity_ref.IsActive())) {
+            new_entity = .uninit;
+        }
+    }
+
+    if (imgui.igBeginDragDropTarget()) {
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload(ENTITY_REF_PAYLOAD, imgui.ImGuiDragDropFlags_None)) |payload| {
+            new_entity = @as(*const Entity, @ptrCast(@alignCast(payload.*.Data))).*;
+        }
+    }
+
+    return new_entity;
 }
 
 const InputTextContext = struct {

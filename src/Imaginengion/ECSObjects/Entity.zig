@@ -82,14 +82,21 @@ pub const Duplicate = Core.Duplicate;
 pub const Delete = Core.Delete;
 
 pub fn GetViewpointComponent(self: Entity) ?*ViewpointComponent {
-    if (self.GetComponent(ViewpointComponent)) |comp| return comp;
+    const viewpoint_entity = self.GetViewpointEntity() orelse return null;
+    return viewpoint_entity.GetComponent(ViewpointComponent);
+}
+
+/// The entity that actually holds this game object's viewpoint: itself, or a convenience child.
+/// Anything that needs the camera's transform should read it from here rather than from self.
+pub fn GetViewpointEntity(self: Entity) ?Entity {
+    if (self.HasComponent(ViewpointComponent)) return self;
 
     //the viewpoint may live on a convenience child instead of on the game object itself.
     //a child that is its own MainObject is a nested game object, so its viewpoint is not ours.
     var iter = self.GetIterator(.Child);
     while (iter.next()) |child_entity| {
         if (child_entity.HasComponent(MainObjectComponent)) continue;
-        if (child_entity.GetComponent(ViewpointComponent)) |comp| return comp;
+        if (child_entity.HasComponent(ViewpointComponent)) return child_entity;
     }
     return null;
 }

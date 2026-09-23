@@ -1,6 +1,3 @@
-- add tags when possible in place of things like filtering
-	- for example when updating transforms instead of going through each one and checking if its dirty flag was set or not, when updating a transform we can ensure we instead add a TransformDirty tag
-	- then when we want to ensure world transforms are updated we can query the ecs for DirtyTransform tags instead of looping over all the transforms or creating some specialized structure to keep track of dirty transforms
 - continue to build out the profiling system with tracy.
 	- ensure that there are frame profilingin appropriate places
 	- add memory profiling 

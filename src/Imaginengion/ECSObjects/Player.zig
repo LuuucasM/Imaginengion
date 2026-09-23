@@ -17,6 +17,8 @@ const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const ViewpointComponent = EntityComponents.ViewpointComponent;
+const TransformComponent = EntityComponents.TransformComponent;
 const PlayerParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const PlayerChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const ChildType = @import("../ECS/ECSManager.zig").ChildType;
@@ -70,6 +72,38 @@ pub const GetUUID = Core.GetUUID;
 pub const Duplicate = Core.Duplicate;
 
 pub const Delete = Core.Delete;
+
+/// Everything needed to draw what a player sees, resolved and checked in one place.
+pub const RenderView = struct {
+    mPlayer: Player,
+    mRenderTarget: *RenderTargetComponent,
+    mViewpoint: *ViewpointComponent,
+    mTransform: *TransformComponent,
+};
+
+/// Possession and rendering are separate on purpose: a player can possess something without
+/// looking through it (AI, remote players, a turret while the camera stays elsewhere), so
+/// Possess does not demand a viewpoint or render target. Anything that draws a player asks this
+/// instead, every time it draws, since the possessed entity can be deleted or lose its viewpoint
+/// after possession. Null means the player cannot currently be drawn.
+pub fn GetRenderView(self: Player) ?RenderView {
+    if (!self.IsActive()) return null;
+    const render_target = self.GetComponent(RenderTargetComponent) orelse return null;
+    const possess_component = self.GetComponent(PossessComponent) orelse return null;
+    const possessed_entity = possess_component.mPossessedEntity;
+    if (!possessed_entity.IsActive()) return null;
+
+    //the camera may sit on a child of the possessed entity, so the transform comes from
+    //whichever entity actually holds the viewpoint
+    const viewpoint_entity = possessed_entity.GetViewpointEntity() orelse return null;
+
+    return .{
+        .mPlayer = self,
+        .mRenderTarget = render_target,
+        .mViewpoint = viewpoint_entity.GetComponent(ViewpointComponent).?,
+        .mTransform = viewpoint_entity.GetComponent(TransformComponent) orelse return null,
+    };
+}
 
 pub fn Possess(self: Player, entity: Entity) void {
     if (entity.GetComponent(PlayerSlotComponent)) |ps_component| {

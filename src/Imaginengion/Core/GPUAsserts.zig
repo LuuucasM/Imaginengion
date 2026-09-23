@@ -13,7 +13,7 @@ pub fn AssertGPULayout(comptime T: type) void {
                 .{ @typeName(T), field_name, @offsetOf(T, field_name), padded_offset, align_req },
             ));
         }
-        offset = padded_offset + @sizeOf(field_type);
+        offset = padded_offset + gpuSize(field_type);
     }
 
     const base_align = gpuBaseAlign(T);
@@ -31,6 +31,16 @@ fn gpuAlign(comptime T: type) usize {
         .vector => |v| vecAlign(v.len),
         .array => |a| vecAlign(a.len),
         .@"struct" => 16,
+        else => @sizeOf(T),
+    };
+}
+
+//Zig's SPIR-V backend sizes a 3 element vector as 16 bytes, not std430's 12, so a scalar placed
+//straight after one lands 4 bytes later on the GPU than a [3]f32 puts it on the CPU
+fn gpuSize(comptime T: type) usize {
+    return switch (@typeInfo(T)) {
+        .vector => |v| if (v.len == 3) 16 else @sizeOf(T),
+        .array => |a| if (a.len == 3) 16 else @sizeOf(T),
         else => @sizeOf(T),
     };
 }

@@ -55,7 +55,8 @@ pub const QuadData = extern struct {
     Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
     Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
     HalfExtents: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
-    ShadingHandle: u32,
+    //the shader's vec3 takes 16 bytes, so on the GPU this starts at 48, not right after the 12 bytes of [3]f32
+    ShadingHandle: u32 align(16),
     ShadingFlags: u32,
 };
 

@@ -79,6 +79,11 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
             sdl.SDL_BindGPUFragmentSamplers(pass, slot, &binding, 1);
         }
 
+        /// False until the first Init or Resize with a usable size creates the GPU texture.
+        pub fn IsCreated(self: Self) bool {
+            return self.mTexture != null;
+        }
+
         pub fn GetTexture(self: Self) *sdl.SDL_GPUTexture {
             return self.mTexture.?;
         }

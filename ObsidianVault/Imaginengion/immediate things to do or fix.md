@@ -1,5 +1,9 @@
+- If there is a runplayer and that runplayer was select in the menu items, then deselect the player from Player Camera
+- fix there is no camera preview even without the play button in the play panel 
+- fix that the ECSDisplay.zig's are unique to the current world so for example when we hit play and start simulating it spawns completely unique panels instead of using the same space/size as the game ones which I think would be more intuitive for develoeprs
 - I need to re-add features so i can test the play/simulation part of the engine. Some things i have yet to test/add
 	- adding a player and an entity and having the player possess the entity
 	- seeing if adding a camera to the entity and seeing if i can get a preview in the play panel
 	- then actually doing the play/simulation
 	- when hitting stop everything returns to its pre-play state
+- the script for moving the camera around the editor is not firing

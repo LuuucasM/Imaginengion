@@ -45,6 +45,10 @@ pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
             self._Impl.BindSampler(render_pass, slot);
         }
 
+        pub fn IsCreated(self: Self) bool {
+            return self._Impl.IsCreated();
+        }
+
         pub fn GetTexture(self: Self) *anyopaque {
             return self._Impl.GetTexture();
         }
