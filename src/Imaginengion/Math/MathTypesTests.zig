@@ -909,6 +909,21 @@ test "quat" {
     }
 }
 
+test "vec4 xyzw conversions round trip" {
+    const V = Vec4(f32);
+    const v = V{ .x = 1.0, .y = 2.0, .z = 3.0, .w = 4.0 };
+
+    //arrays and vectors are laid out x, y, z, w to match the struct
+    try std.testing.expectEqual([4]f32{ 1.0, 2.0, 3.0, 4.0 }, v.ToArray());
+    try std.testing.expectEqual(@Vector(4, f32){ 1.0, 2.0, 3.0, 4.0 }, v.ToVector());
+
+    try std.testing.expectEqual(v, V.FromArray(v.ToArray()));
+    try std.testing.expectEqual(v, V.FromVector(v.ToVector()));
+
+    try std.testing.expectEqual(v, V.FromArray(.{ 1.0, 2.0, 3.0, 4.0 }));
+    try std.testing.expectEqual(v, V.FromVector(.{ 1.0, 2.0, 3.0, 4.0 }));
+}
+
 test "quat wxyz conversions round trip" {
     const Q = Quat(f32);
     const q = Q{ .w = 1.0, .x = 2.0, .y = 3.0, .z = 4.0 };

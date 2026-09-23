@@ -20,8 +20,33 @@ const THICKNESS_2D = SDFFunc.THICKNESS_2D;
 
 const Stack = @import("../Core/Stack.zig").Stack;
 
-const MAX_STEPS: u32 = 9999;
+//A ray that runs out of steps is treated as a miss, so this is a budget rather than a safety net:
+//every step costs one SDF evaluation against every quad and glyph, for every pixel. At 9999 a
+//single grazing band of pixels was enough to push one dispatch into the seconds and trip the
+//driver's watchdog. With a distance-scaled hit threshold (see SurfaceEpsilon) rays converge in
+//far fewer steps than this, so the budget is only reached by rays that were going to miss.
+const MAX_STEPS: u32 = 256;
+
+//The hit threshold at the camera. SurfaceEpsilon grows it with distance; this is the t = 0 value.
 const SURF_DIST: f32 = 0.00099;
+
+/// How close a ray has to get to a surface before it counts as a hit.
+///
+/// This grows with how far the ray has already travelled, because a pixel covers more world space
+/// the further out you look. Held constant, the threshold asks a distant ray to resolve detail far
+/// smaller than the pixel it is shading: it can never get there, so it creeps forward a fraction of
+/// a unit per step until the budget runs out. That is what let one off-centre quad hang the GPU,
+/// since rays grazing past a 0.002-thick plate stay just outside a constant threshold for hundreds
+/// of units of travel.
+///
+/// max(1, t) keeps close-up geometry at full precision and only relaxes the threshold once the ray
+/// is far enough out that the extra precision is smaller than a pixel. A truer version would take
+/// the camera's actual per-pixel cone angle rather than assuming one, which would need the ray
+/// footprint passing through from the camera UBO.
+fn SurfaceEpsilon(dist_origin: f32) f32 {
+    return SURF_DIST * @max(1.0, dist_origin);
+}
+
 pub const MAX_NODES: u32 = 9;
 pub const MAX_EDGES: u32 = 8;
 const SKY_COLOR: Vec3(f32) = .{ .x = 0.53, .y = 0.81, .z = 0.92 }; //FOR SIMULATING
@@ -47,6 +72,11 @@ pub const Edge = extern struct {
     ToNode: u32,
     SiblingEdge: u32,
     MaterialHandle: u32,
+    //the object this edge starts on, which the march ignores. A continuation edge starts within
+    //epsilon of the plate it passed through, so without this it immediately re-hits that same plate
+    //and spawns another edge, forever. Every shape is a flat plate, so a straight ray can't
+    //legitimately hit the one it just left.
+    SkipObject: ObjectData = .{ .shape_type = .None, .shape_ind = 0 },
 };
 
 const ObjectData = extern struct {
@@ -115,9 +145,14 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                 var march_data: MarchData = .{ .min_dist = std.math.floatMax(f32), .object = .{ .shape_type = .None, .shape_ind = 0 } };
                 var dist_origin: f32 = 0;
 
-                while (i < MAX_STEPS and dist_origin < self.mPerspectiveFar and march_data.min_dist > SURF_DIST) : (i += 1) {
+                //captured where min_dist was measured, not where the ray has since advanced to,
+                //because the condition below tests the previous iteration's measurement
+                var hit_dist: f32 = SURF_DIST;
+
+                while (i < MAX_STEPS and dist_origin < self.mPerspectiveFar and march_data.min_dist > hit_dist) : (i += 1) {
                     const point = from_point.AddVec(curr_edge.Direction.MulScalar(dist_origin));
-                    march_data = self.NextSurface(point);
+                    march_data = self.NextSurface(point, curr_edge.SkipObject);
+                    hit_dist = SurfaceEpsilon(dist_origin);
                     dist_origin += march_data.min_dist;
                 }
                 //once we are herer we either a) hit max steps, b) hit our max distance, c) hit a surface
@@ -209,8 +244,10 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                 //in the future can expand this to do reflectivity, lighting, shadows, refraction, whatever else exists idk
                 const shading_flags = self.GetShadingFlags(march_data.object);
 
-                //if transparent bit is set, aka it can be some level of transparent and we are not already full of edges
-                if (shading_flags & SurfShadingData.FLAG_TRANSPARENT != 0 and !edge_ind_stack.IsFull()) {
+                //if transparent bit is set, aka it can be some level of transparent and we are not already full of edges.
+                //mEdgeCount is the real bound: the stack is popped before each push so it never fills, and
+                //each edge adds exactly one node, so this also keeps mNodeCount <= MAX_NODES
+                if (shading_flags & SurfShadingData.FLAG_TRANSPARENT != 0 and self.mEdgeCount < MAX_EDGES and !edge_ind_stack.IsFull()) {
                     const new_node = self.mNodes[new_node_ind];
                     const material_handle = new_node.MaterialHandle;
                     const material = self.mSurfShading[material_handle];
@@ -230,6 +267,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                             .SiblingEdge = NO_EDGE,
                             .AccumColor = self.mDefaultColor,
                             .MaterialHandle = 0,
+                            .SkipObject = march_data.object,
                         };
 
                         self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
@@ -266,10 +304,11 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             return self.mEdgeCount;
         }
 
-        fn NextSurface(self: Self, point: Vec3(f32)) MarchData {
+        fn NextSurface(self: Self, point: Vec3(f32), skip: ObjectData) MarchData {
             var data = MarchData{ .min_dist = self.mPerspectiveFar, .object = .{ .shape_type = .None, .shape_ind = 0 } };
 
             for (0..self.mQuadsCount) |i| {
+                if (skip.shape_type == .Quad and skip.shape_ind == i) continue;
                 const dist = SDFFunc.sdIMQuad(point, self.mQuads[i]);
                 if (dist < data.min_dist) {
                     data.min_dist = dist;
@@ -278,6 +317,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                 }
             }
             for (0..self.mGlyphsCount) |i| {
+                if (skip.shape_type == .Glyph and skip.shape_ind == i) continue;
                 const dist = SDFFunc.sdIMGlyph(point, self.mGlyphs[i]);
                 if (dist < data.min_dist) {
                     data.min_dist = dist;
@@ -293,6 +333,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             //TODO: modify so that it only takes in the current object instead of calling next surface which kills performance
 
             const e: f32 = 0.001;
+            const NO_SKIP: ObjectData = .{ .shape_type = .None, .shape_ind = 0 };
 
             const x = Vec3(f32){ .x = e, .y = 0, .z = 0 };
             const neg_x = Vec3(f32){ .x = -e, .y = 0, .z = 0 };
@@ -301,12 +342,12 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             const z = Vec3(f32){ .x = 0, .y = 0, .z = e };
             const neg_z = Vec3(f32){ .x = 0, .y = 0, .z = -e };
 
-            const next_surf_x = self.NextSurface(point.AddVec(x));
-            const next_surf_neg_x = self.NextSurface(point.AddVec(neg_x));
-            const next_surf_y = self.NextSurface(point.AddVec(y));
-            const next_surf_neg_y = self.NextSurface(point.AddVec(neg_y));
-            const next_surf_z = self.NextSurface(point.AddVec(z));
-            const next_surf_neg_z = self.NextSurface(point.AddVec(neg_z));
+            const next_surf_x = self.NextSurface(point.AddVec(x), NO_SKIP);
+            const next_surf_neg_x = self.NextSurface(point.AddVec(neg_x), NO_SKIP);
+            const next_surf_y = self.NextSurface(point.AddVec(y), NO_SKIP);
+            const next_surf_neg_y = self.NextSurface(point.AddVec(neg_y), NO_SKIP);
+            const next_surf_z = self.NextSurface(point.AddVec(z), NO_SKIP);
+            const next_surf_neg_z = self.NextSurface(point.AddVec(neg_z), NO_SKIP);
 
             const dx = next_surf_x.min_dist - next_surf_neg_x.min_dist;
             const dy = next_surf_y.min_dist - next_surf_neg_y.min_dist;

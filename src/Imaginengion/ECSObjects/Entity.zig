@@ -6,6 +6,9 @@ const NameComponent = Components.NameComponent;
 const ScriptComponent = Components.ScriptComponent;
 const TransformComponent = Components.TransformComponent;
 const TransformDirtyTag = Components.TransformDirtyTag;
+const RigidBodyComponent = Components.RigidBodyComponent;
+const StaticBodyTag = Components.StaticBodyTag;
+const DynamicBodyTag = Components.DynamicBodyTag;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const RenderTargetComponent = Components.RenderTargetComponent;
@@ -155,6 +158,37 @@ pub fn MarkTransformDirty(self: Entity, engine_context: *EngineContext) !void {
 pub fn ClearTransformDirty(self: Entity, engine_context: *EngineContext) !void {
     if (!self.HasComponent(TransformDirtyTag)) return;
     try self.RemoveComponentSync(engine_context, TransformDirtyTag);
+}
+
+/// Brings StaticBodyTag/DynamicBodyTag back in step with the body's inverse mass. Exactly one of
+/// them is present while the entity has a RigidBodyComponent, and neither once it does not, so
+/// CollisionManager.BroadPass can treat "carries DynamicBodyTag" as the whole answer to whether an
+/// entity can be moved by the solver.
+///
+/// Call this after anything that changes _InvMass. The removals are synchronous on purpose: a
+/// deferred one would leave both tags on the entity until end of frame, and a broad pass running
+/// before then would find it in the dynamic set and the static set at once.
+pub fn SyncBodyTags(self: Entity, engine_context: *EngineContext) !void {
+    const rigid_body = self.GetComponent(RigidBodyComponent) orelse {
+        try self.ClearBodyTags(engine_context);
+        return;
+    };
+
+    if (rigid_body._InvMass != 0.0) {
+        if (self.HasComponent(StaticBodyTag)) try self.RemoveComponentSync(engine_context, StaticBodyTag);
+        if (!self.HasComponent(DynamicBodyTag)) _ = try self.AddComponent(engine_context, DynamicBodyTag{});
+    } else {
+        if (self.HasComponent(DynamicBodyTag)) try self.RemoveComponentSync(engine_context, DynamicBodyTag);
+        if (!self.HasComponent(StaticBodyTag)) _ = try self.AddComponent(engine_context, StaticBodyTag{});
+    }
+}
+
+/// Takes both body tags off, for when the RigidBodyComponent is going away. SyncBodyTags cannot do
+/// this itself on the removal path, because RemoveComponent only queues and the component is still
+/// readable when it returns.
+pub fn ClearBodyTags(self: Entity, engine_context: *EngineContext) !void {
+    if (self.HasComponent(StaticBodyTag)) try self.RemoveComponentSync(engine_context, StaticBodyTag);
+    if (self.HasComponent(DynamicBodyTag)) try self.RemoveComponentSync(engine_context, DynamicBodyTag);
 }
 
 pub fn _CalculateWorldTransform(self: Entity) void {

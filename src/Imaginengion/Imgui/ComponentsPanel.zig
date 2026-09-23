@@ -13,6 +13,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 const Assets = @import("../ECSComponents/AComponents.zig");
 const TransformComponent = @import("../ECSComponents/Shared/TransformComponent.zig");
+const RigidBodyComponent = @import("../ECSComponents/Entity/RigidBodyComponent.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -104,6 +105,12 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
             //a stale world transform.
             if (comptime component_type == TransformComponent and @TypeOf(object) == Entity) {
                 try object.MarkTransformDirty(engine_context);
+            }
+
+            //same story for the mass input: it recomputes _InvMass in place, so the tags that were
+            //derived from it have to be brought back in step
+            if (comptime component_type == RigidBodyComponent and @TypeOf(object) == Entity) {
+                try object.SyncBodyTags(engine_context);
             }
         }
     }

@@ -7,6 +7,8 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
+const DynamicBodyTag = EntityComponents.DynamicBodyTag;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
@@ -16,6 +18,18 @@ const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Set = @import("../Vendor/ziglang-set/src/array_hash_set/unmanaged.zig").ArraySetUnmanaged;
 const ImguiManager = @import("../Imgui/Imgui.zig");
+
+const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
+const DynamicQuery = GroupQuery{ .Component = DynamicBodyTag };
+
+//colliders the solver can actually move
+const DynamicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, DynamicQuery } };
+
+//everything else that collides: static bodies, and colliders carrying no RigidBodyComponent at
+//all. Asking for "collider and not dynamic" rather than "collider and static" is deliberate, so
+//that a collider with no rigid body (which has neither body tag) still takes part in collision
+//the way it does today, instead of silently dropping out of the broad pass.
+const OtherCollidersQuery = GroupQuery{ .Not = .{ .mFirst = &ColliderQuery, .mSecond = &DynamicQuery } };
 
 const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
@@ -79,37 +93,51 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
     const zone = Tracy.ZoneInit("CollisionManager::BroadPassf", @src());
     defer zone.Deinit();
 
-    const colliders_arr = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ColliderComponent });
+    const frame_allocator = engine_context.FrameAllocator();
 
-    for (0..colliders_arr.items.len) |i| {
-        const entity_origin = world_manager.GetEntity(colliders_arr.items[i]);
-        const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
-        for (i + 1..colliders_arr.items.len) |j| {
-            const entity_target = world_manager.GetEntity(colliders_arr.items[j]);
+    const dynamic_arr = try world_manager.GetEntityGroup(frame_allocator, DynamicCollidersQuery);
+    const other_arr = try world_manager.GetEntityGroup(frame_allocator, OtherCollidersQuery);
 
-            const collider_target = entity_target.GetComponent(ColliderComponent).?;
-
-            const collision_type = GetCollisionType(collider_origin, collider_target);
-
-            if (collision_type == .Ignore) continue;
-
-            const contact: Contact = .{
-                .mOrigin = entity_origin,
-                .mTarget = entity_target,
-                .mNormal = Vec3(f32){ .x = 0, .y = 0, .z = 0 },
-                .mPenetration = 0,
-            };
-
-            switch (collision_type) {
-                .Block => {
-                    try self._BlockingContacts.append(engine_context.EngineAllocator(), contact);
-                },
-                .Overlap => {
-                    try self._OverlapContacts.append(engine_context.EngineAllocator(), contact);
-                },
-                .Ignore => unreachable,
-            }
+    //a pair that neither side can move has nothing for the solver to do with it, so those pairs are
+    //never built rather than being built, classified, narrow-phase tested and then dropped at the
+    //_InvMass check in SolverPass. Every remaining pair has at least one dynamic body in it, which
+    //is why both loops below are anchored on the dynamic list.
+    for (0..dynamic_arr.items.len) |i| {
+        for (i + 1..dynamic_arr.items.len) |j| {
+            try self.AddBroadPair(engine_context, world_manager, dynamic_arr.items[i], dynamic_arr.items[j]);
         }
+    }
+
+    for (dynamic_arr.items) |origin_id| {
+        for (other_arr.items) |target_id| {
+            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id);
+        }
+    }
+}
+
+/// Classifies one pair and records it if the two can interact at all.
+fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin_id: Entity.Type, target_id: Entity.Type) !void {
+    const entity_origin = world_manager.GetEntity(origin_id);
+    const entity_target = world_manager.GetEntity(target_id);
+
+    const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
+    const collider_target = entity_target.GetComponent(ColliderComponent).?;
+
+    const collision_type = GetCollisionType(collider_origin, collider_target);
+
+    if (collision_type == .Ignore) return;
+
+    const contact: Contact = .{
+        .mOrigin = entity_origin,
+        .mTarget = entity_target,
+        .mNormal = Vec3(f32){ .x = 0, .y = 0, .z = 0 },
+        .mPenetration = 0,
+    };
+
+    switch (collision_type) {
+        .Block => try self._BlockingContacts.append(engine_context.EngineAllocator(), contact),
+        .Overlap => try self._OverlapContacts.append(engine_context.EngineAllocator(), contact),
+        .Ignore => unreachable,
     }
 }
 

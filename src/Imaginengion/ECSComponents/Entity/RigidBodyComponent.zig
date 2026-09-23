@@ -86,6 +86,7 @@ const Json = JsonUtils.JsonFields(RigidBodyComponent, .{
 pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;
 
-pub fn PostParse(self: *RigidBodyComponent, _: *EngineContext, _: anytype) !void {
+pub fn PostParse(self: *RigidBodyComponent, engine_context: *EngineContext, owning_entity: anytype) !void {
     self._InvMass = if (self.mMass != 0.0) 1.0 / self.mMass else 0.0;
+    try owning_entity.SyncBodyTags(engine_context);
 }

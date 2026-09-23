@@ -10,6 +10,8 @@ pub const NameComponent = @import("Shared/NameComponent.zig");
 pub const PlayerSlotComponent = @import("Entity/PlayerSlotComponent.zig");
 pub const QuadComponent = @import("Entity/QuadComponent.zig");
 pub const RigidBodyComponent = @import("Entity/RigidBodyComponent.zig");
+pub const StaticBodyTag = @import("Entity/TagComponents.zig").StaticBodyTag;
+pub const DynamicBodyTag = @import("Entity/TagComponents.zig").DynamicBodyTag;
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Shared/TransformComponent.zig");
 pub const TransformDirtyTag = @import("Shared/TagComponents.zig").TransformDirtyTag;
@@ -38,6 +40,8 @@ pub const ComponentsList = [_]type{
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
+    StaticBodyTag,
+    DynamicBodyTag,
     EntitySceneComponent,
     TextComponent,
     TransformComponent,
@@ -103,6 +107,8 @@ pub const EComponents = enum(u16) {
     PlayerSlotComponent = ListInd(&ComponentsList, PlayerSlotComponent),
     QuadComponent = ListInd(&ComponentsList, QuadComponent),
     RigidBodyComponent = ListInd(&ComponentsList, RigidBodyComponent),
+    StaticBodyTag = ListInd(&ComponentsList, StaticBodyTag),
+    DynamicBodyTag = ListInd(&ComponentsList, DynamicBodyTag),
     EntitySceneComponent = ListInd(&ComponentsList, EntitySceneComponent),
     TextComponent = ListInd(&ComponentsList, TextComponent),
     TransformComponent = ListInd(&ComponentsList, TransformComponent),

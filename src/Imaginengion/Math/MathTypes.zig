@@ -348,7 +348,7 @@ pub fn Vec4(comptime number_type: type) type {
         }
 
         pub fn FromArray(array: ArrayT) Self {
-            return Self{ .w = array[0], .x = array[1], .y = array[2], .z = array[3] };
+            return Self{ .x = array[0], .y = array[1], .z = array[2], .w = array[3] };
         }
 
         pub fn ToArray(self: Self) ArrayT {

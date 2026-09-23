@@ -363,11 +363,48 @@ pub fn RenderVec4(vec: *Vec4(f32), label: []const u8, reset_value: f32, speed: f
     imgui.igPopItemWidth();
 }
 
-//reset_value and speed are both in degrees. The quaternion is decomposed into euler angles once
-//per frame and every edit writes the whole triple back through FromDegrees, so the three fields
-//always agree with the quaternion they came from - editing one axis by rotating the quaternion by
-//a delta cannot work here, the middle axis of an X-Y-Z decomposition is reachable by neither a
-//pre- nor a post-multiply.
+//The euler triple the rotation fields show, kept in ImGui's per-window state storage so no
+//editor-only data has to live on the component. `source` is the quaternion the triple was last
+//written with; when it no longer matches, something else (a script, physics, a different entity
+//under the same ID) changed the rotation and the triple is re-derived from it.
+const QuatEulerCache = struct {
+    const euler_keys = [3][*:0]const u8{ "##euler_x", "##euler_y", "##euler_z" };
+    const source_keys = [4][*:0]const u8{ "##src_w", "##src_x", "##src_y", "##src_z" };
+
+    fn Load(quat: Quat(f32)) Vec3(f32) {
+        const storage = imgui.igGetStateStorage();
+        //NaN default: a key that has never been written can never compare equal to a real quaternion
+        const nan = std.math.nan(f32);
+        const source = Quat(f32){
+            .w = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(source_keys[0]), nan),
+            .x = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(source_keys[1]), nan),
+            .y = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(source_keys[2]), nan),
+            .z = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(source_keys[3]), nan),
+        };
+        if (!std.meta.eql(source, quat)) return quat.ToDegrees();
+        return .{
+            .x = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(euler_keys[0]), 0.0),
+            .y = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(euler_keys[1]), 0.0),
+            .z = imgui.ImGuiStorage_GetFloat(storage, imgui.igGetID_Str(euler_keys[2]), 0.0),
+        };
+    }
+
+    fn Store(euler: Vec3(f32), quat: Quat(f32)) void {
+        const storage = imgui.igGetStateStorage();
+        const euler_vals = [3]f32{ euler.x, euler.y, euler.z };
+        const source_vals = [4]f32{ quat.w, quat.x, quat.y, quat.z };
+        for (euler_keys, euler_vals) |key, val| imgui.ImGuiStorage_SetFloat(storage, imgui.igGetID_Str(key), val);
+        for (source_keys, source_vals) |key, val| imgui.ImGuiStorage_SetFloat(storage, imgui.igGetID_Str(key), val);
+    }
+};
+
+//reset_value and speed are both in degrees. Every edit writes the whole euler triple back through
+//FromDegrees - editing one axis by rotating the quaternion by a delta cannot work here, the middle
+//axis of an X-Y-Z decomposition is reachable by neither a pre- nor a post-multiply.
+//
+//The triple is not re-derived from the quaternion every frame: ToDegrees can only return a middle
+//(Y) angle in [-90, 90], so re-deriving would turn a drag to Y = 91 into (180, 89, 180) on the next
+//frame and the field could never pass 90. It lives in QuatEulerCache instead.
 pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: f32, column_width: f32) !void {
     const io = imgui.igGetIO_Nil();
     const bold_font = io.*.Fonts.*.Fonts.Data[0];
@@ -387,7 +424,8 @@ pub fn RenderQuat(quat: *Quat(f32), label: []const u8, reset_value: f32, speed: 
     const line_height = bold_font.*.LegacySize + imgui.igGetStyle().*.FramePadding.y * 2.0;
     const button_size = imgui.ImVec2{ .x = line_height, .y = line_height };
 
-    var euler = quat.ToDegrees();
+    var euler = QuatEulerCache.Load(quat.*);
+    defer QuatEulerCache.Store(euler, quat.*);
 
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_Button, imgui.ImVec4{ .x = 0.478, .y = 0.156, .z = 0.156, .w = 1.0 });
     imgui.igPushStyleColor_Vec4(imgui.ImGuiCol_ButtonHovered, imgui.ImVec4{ .x = 0.717, .y = 0.234, .z = 0.234, .w = 1.0 });

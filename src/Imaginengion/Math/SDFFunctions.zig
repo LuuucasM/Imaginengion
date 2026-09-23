@@ -21,7 +21,9 @@ fn uvBox(point: Vec3(f32), half_extents: Vec3(f32), texture_handle: u32, tex_wid
     const local_point_xy: Vec2(f32) = .{ .x = point.x, .y = point.y };
     const half_extents_xy: Vec2(f32) = .{ .x = half_extents.x, .y = half_extents.y };
 
-    if (@abs(point.z - THICKNESS_2D) < THICKNESS_2D) { //check to ensure its the front face only
+    //front face only: the marcher stops anywhere within its distance-scaled epsilon of the surface,
+    //so this can't be a tight band around z = THICKNESS_2D or oblique/distant hits lose their UV
+    if (point.z > 0.0) {
         const uv = local_point_xy.AddVec(half_extents_xy).DivVec(half_extents_xy.MulScalar(2.0));
         if (uv.x >= 0 and uv.x <= 1 and uv.y >= 0 and uv.y <= 1) {
             return TextureManager.GetTextureUV(texture_handle, uv, tex_width, tex_height);

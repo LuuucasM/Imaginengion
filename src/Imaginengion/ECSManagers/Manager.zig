@@ -25,6 +25,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
+const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 
 const Serializer = @import("../Serializer/Serializer.zig");
 
@@ -137,10 +138,25 @@ pub fn Core(comptime Self: type) type {
                 }
             }
 
+            //a new rigid body starts with whatever _InvMass it was constructed with (zero for a
+            //default one, so static), and BroadPass reads the tag rather than the mass
+            if (comptime Self == EManager and @TypeOf(new_component) == RigidBodyComponent) {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try entity.SyncBodyTags(engine_context);
+            }
+
             return component_ptr;
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
+            //the body tags describe a rigid body that is on its way out, so they come off now.
+            //SyncBodyTags would re-add one instead: this removal is only queued, so the component
+            //is still readable until the end of the frame.
+            if (comptime Self == EManager and component_type == RigidBodyComponent) {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try entity.ClearBodyTags(engine_context);
+            }
+
             try self.mECSManager.RemoveComponent(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
         }
 
