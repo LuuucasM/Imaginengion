@@ -12,7 +12,7 @@ pub fn Init(self: StatsPanel) void {
 }
 
 pub fn OnImguiRender(self: StatsPanel, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("StatsPanel OIR", @src());
+    const zone = Tracy.ZoneInit("StatsPanel::OnImguiRender", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;

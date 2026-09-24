@@ -14,7 +14,7 @@ pub fn Init(self: RunSettings) void {
 }
 
 pub fn OnImguiRender(self: RunSettings, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("RunSettings OIR", @src());
+    const zone = Tracy.ZoneInit("RunSettings::OnImguiRender", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;

@@ -5,6 +5,7 @@ const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Tracy = @import("../../Core/Tracy.zig");
 const Texture2D = @import("Texture2D.zig");
 const TextAsset = @This();
 
@@ -36,6 +37,11 @@ mAtlasSize: Vec2(f32) = .{ .x = 0, .y = 0 },
 mAtlas: Texture2D = .{},
 
 pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
+    //builds the font atlas, which makes this one of the slowest asset loads
+    const zone = Tracy.ZoneInit("TextAsset::Init", @src());
+    defer zone.Deinit();
+    zone.Text(rel_path);
+
     const frame_allocator = engine_context.FrameAllocator();
 
     const ext = std.fs.path.extension(rel_path);

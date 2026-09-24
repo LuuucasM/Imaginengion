@@ -650,8 +650,9 @@ pub fn Quat(comptime number_type: type) type {
             const vec = Vec3(f32){ .x = 0, .y = 1, .z = 0 };
             return vec.QuatRotate(self);
         }
+        /// -Z, matching the ray direction the SDF shaders cast from the camera.
         pub fn GetForwardDir(self: Self) Vec3(number_type) {
-            const vec = Vec3(f32){ .x = 1, .y = 0, .z = 0 };
+            const vec = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
             return vec.QuatRotate(self);
         }
 

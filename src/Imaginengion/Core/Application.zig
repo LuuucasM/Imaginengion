@@ -31,6 +31,8 @@ mEngineContext: EngineContext = .{},
 /// Returns:
 /// - `!void` on failure to initialize any core system returns the error else returns nothing.
 pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
+    const zone = Tracy.ZoneInit("Application::Init", @src());
+    defer zone.Deinit();
     if (!sdl.SDL_Init(sdl.SDL_INIT_VIDEO)) {
         return error.SDLInitFail;
     }

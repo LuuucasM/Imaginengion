@@ -74,14 +74,21 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
         for (0..SUB_STEPS) |_| {
-            for (rigid_body_arr.items) |entity_id| {
-                const entity = world_manager.GetEntity(entity_id);
-                const entity_rb = entity.GetComponent(RigidBodyComponent).?;
+            {
+                //one zone for the whole pass: per-body zones would cost more than the few multiply-adds they time
+                const integrate_zone = Tracy.ZoneInit("PhysicsManager::Integrate", @src());
+                defer integrate_zone.Deinit();
+                integrate_zone.Value(rigid_body_arr.items.len);
 
-                ApplyForces(entity, entity_rb);
+                for (rigid_body_arr.items) |entity_id| {
+                    const entity = world_manager.GetEntity(entity_id);
+                    const entity_rb = entity.GetComponent(RigidBodyComponent).?;
 
-                IntegrateVelocities(entity_rb, SUB_STEP_DT);
-                try IntegratePositions(engine_context, entity, entity_rb, SUB_STEP_DT);
+                    ApplyForces(entity, entity_rb);
+
+                    IntegrateVelocities(entity_rb, SUB_STEP_DT);
+                    try IntegratePositions(engine_context, entity, entity_rb, SUB_STEP_DT);
+                }
             }
 
             try UpdateWorldTransforms(world_type, engine_context);
@@ -97,7 +104,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 }
 
 pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransform", @src());
+    const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransforms", @src());
     defer zone.Deinit();
 
     var world_manager = switch (world_type) {
@@ -210,8 +217,6 @@ fn CalculateEntityTransform(entity: Entity, position_acc: Vec3(f32), rotation_ac
 }
 
 fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
-    const zone = Tracy.ZoneInit("PhysicsManager::ApplyForces", @src());
-    defer zone.Deinit();
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
     const scene_layer = entity_scene_comp.mScene;
 
@@ -223,15 +228,11 @@ fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
 }
 
 fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
-    const zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
-    defer zone.Deinit();
     entity_rb.AddVelocity(entity_rb._Force.MulScalar(entity_rb._InvMass * dt));
     entity_rb._Force = std.mem.zeroes(Vec3(f32));
 }
 
 fn IntegratePositions(engine_context: *EngineContext, entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) !void {
-    const zone = Tracy.ZoneInit("PhysicsManager::IntegratePositions", @src());
-    defer zone.Deinit();
     const transform = entity.GetComponent(EntityTransformComponent).?;
     var translation = transform.GetTranslation();
     translation.AddEqVec(entity_rb._Velocity.MulScalar(dt));

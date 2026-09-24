@@ -67,7 +67,7 @@ pub fn GetDevice(self: Platform) *anyopaque {
 }
 
 pub fn Present(self: Platform, compute_texture: *ComputeOutput) void {
-    const present_zone = Tracy.ZoneInit("RenderPlatform::PresentZone", @src());
+    const present_zone = Tracy.ZoneInit("RenderPlatform::Present", @src());
     defer present_zone.Deinit();
     self._Impl.Present(compute_texture);
 }
@@ -77,8 +77,6 @@ pub fn GetFrameCmdBuff(self: Platform) *anyopaque {
 }
 
 pub fn GetWorkCmdBuff(self: Platform) *anyopaque {
-    const getwork_zone = Tracy.ZoneInit("RenderPlatform::GetWorkCmdBuff", @src());
-    defer getwork_zone.Deinit();
     return self._Impl.GetWorkCmdBuff();
 }
 
@@ -87,13 +85,9 @@ pub fn GetSwapchain(self: Platform) *anyopaque {
 }
 
 pub fn PushDebugGroup(self: Platform, message: [:0]const u8) void {
-    const pushdebug_zone = Tracy.ZoneInit("RenderPlatform::PushDebugGroup", @src());
-    defer pushdebug_zone.Deinit();
     self._Impl.PushDebugGroup(message);
 }
 
 pub fn PopDebugGroup(self: Platform) void {
-    const popdebug_zone = Tracy.ZoneInit("RenderPlatform::PopDebugGroup", @src());
-    defer popdebug_zone.Deinit();
     self._Impl.PopDebugGroup();
 }

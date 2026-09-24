@@ -47,8 +47,9 @@ pub const Name: []const u8 = "ShaderAsset";
 mShaderSources: ShaderSources = undefined,
 
 pub fn Init(self: *ShaderAsset, engine_context: *EngineContext, abs_path: []const u8, _: []const u8, asset_file: std.Io.File) !void {
-    const zone = Tracy.ZoneInit("Shader Init", @src());
+    const zone = Tracy.ZoneInit("ShaderAsset::Init", @src());
     defer zone.Deinit();
+    zone.Text(abs_path);
 
     const file_path = std.fs.path.dirname(abs_path).?;
 
@@ -93,7 +94,7 @@ pub fn Clone(_: *const ShaderAsset, _: *EngineContext) !ShaderAsset {
 }
 
 pub fn Deinit(self: *ShaderAsset, engine_context: *EngineContext) void {
-    const zone = Tracy.ZoneInit("Shader Deinit", @src());
+    const zone = Tracy.ZoneInit("ShaderAsset::Deinit", @src());
     defer zone.Deinit();
 
     const engine_allocator = engine_context.EngineAllocator();

@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const EngineContext = @import("../Core/EngineContext.zig");
+const Tracy = @import("../Core/Tracy.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
@@ -33,6 +34,10 @@ const BLANK_ENTITY: Entity.CreateConfig = .{ .bAddUUID = false, .bAddName = fals
 
 //==================================SERIALIZING ==================================================
 pub fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
+    const zone = Tracy.ZoneInit("TextSerializer::SerializeECSObject(" ++ Tracy.ShortTypeName(@TypeOf(object)) ++ ")", @src());
+    defer zone.Deinit();
+    zone.Text(abs_path);
+
     const frame_allocator = engine_context.FrameAllocator();
 
     var out: std.Io.Writer.Allocating = .init(frame_allocator);
@@ -113,6 +118,10 @@ fn SerializeSceneEntities(write_stream: *std.json.Stringify, frame_allocator: st
 
 //====================================== DESRIALIZING ========================================================
 pub fn DeserializeECSObj(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
+    const zone = Tracy.ZoneInit("TextSerializer::DeserializeECSObj(" ++ Tracy.ShortTypeName(@TypeOf(object)) ++ ")", @src());
+    defer zone.Deinit();
+    zone.Text(abs_path);
+
     const frame_allocator = engine_context.FrameAllocator();
 
     const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), abs_path, frame_allocator, .unlimited);

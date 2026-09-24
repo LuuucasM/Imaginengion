@@ -8,16 +8,11 @@ const FileMetaData = Assets.FileMetaData;
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
-const Entity = @import("../../ECSObjects/Entity.zig");
 const AssetType = @import("../../ECSManagers/AManager.zig").AssetType;
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-mParent: Entity.Type = Entity.NullObject,
-mFirst: Entity.Type = Entity.NullObject,
-mPrev: Entity.Type = Entity.NullObject,
-mNext: Entity.Type = Entity.NullObject,
-
+//the owning object is the ECS ChildComponent's mParent: scripts are made with CreateChild(.Script)
 mScriptAssetHandle: AssetHandle = .uninit,
 
 pub const Editable: bool = false;

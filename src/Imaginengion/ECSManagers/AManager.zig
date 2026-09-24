@@ -27,7 +27,7 @@ const AManager = @This();
 
 const ASSET_DELETE_TIMEOUT_NS: i96 = 1_000_000_000;
 
-pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponentsList);
+pub const ECSManagerT = ECSManager.ECSManager(AssetHandle.Type, &AssetComponentsList, "AssetECS");
 pub const EventManagerT = EventManager.EventManager(EventData);
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -238,16 +238,18 @@ pub fn ReleaseAssetHandle(self: *AManager, asset_handle: *AssetHandle) void {
 }
 
 pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
-    const zone = Tracy.ZoneInit("AssetManager::GetAsset", @src());
-    defer zone.Deinit();
-
     _ValidateAssetType(asset_type);
 
     if (self.mECSManager.IsActiveEntity(asset_id)) {
         if (self.mECSManager.GetComponent(asset_type, asset_id)) |asset| {
             return asset;
         } else {
+            //only the load is zoned: the hit path above is a lookup that runs for every drawn shape
+            const zone = Tracy.ZoneInit("AssetManager::LoadAsset", @src());
+            defer zone.Deinit();
+
             const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
+            zone.Text(file_data.mRelPath.items);
             //TODO: maybe a check to ensure rel path is valid?
 
             const abs_path = try self.GetAbsPath(engine_context.FrameAllocator(), file_data.mRelPath.items, file_data.mPathType);
@@ -279,13 +281,14 @@ pub fn GetFileMetaData(self: *AManager, id: AssetHandle.Type) *FileMetaData {
 }
 
 pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("AssetManager OnUpdate", @src());
+    const zone = Tracy.ZoneInit("AssetManager::OnUpdate", @src());
     defer zone.Deinit();
 
     const frame_allocator = engine_context.FrameAllocator();
 
     //check through all the assets we currently have to see if they are still valid/need to be updated
     const group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
+    zone.Value(group.items.len);
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
 
@@ -362,7 +365,7 @@ pub fn OnOpenProjectEvent(self: *AManager, engine_context: *EngineContext, abs_p
 }
 
 pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File.Stat {
-    const zone = Tracy.ZoneInit("AssetManager OpenFileStats", @src());
+    const zone = Tracy.ZoneInit("AssetManager::OpenFileStats", @src());
     defer zone.Deinit();
 
     switch (path_type) {
@@ -373,7 +376,7 @@ pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: 
 }
 
 pub fn OpenFile(self: *AManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File {
-    const zone = Tracy.ZoneInit("AssetManager OpenFile", @src());
+    const zone = Tracy.ZoneInit("AssetManager::OpenFile", @src());
     defer zone.Deinit();
     switch (path_type) {
         .Eng => return try self.mCWD.openFile(engine_context.Io(), rel_path, .{}),
@@ -383,21 +386,18 @@ pub fn OpenFile(self: *AManager, engine_context: *EngineContext, rel_path: []con
 }
 
 pub fn CloseFile(_: *AManager, io: std.Io, file: std.Io.File) void {
-    const zone = Tracy.ZoneInit("AssetManager CloseFile", @src());
+    const zone = Tracy.ZoneInit("AssetManager::CloseFile", @src());
     defer zone.Deinit();
     file.close(io);
 }
 
 pub fn GetFileStats(_: *AManager, engine_context: *EngineContext, file: std.Io.File) !std.Io.File.Stat {
-    const zone = Tracy.ZoneInit("AssetManager GetFileStats", @src());
+    const zone = Tracy.ZoneInit("AssetManager::GetFileStats", @src());
     defer zone.Deinit();
     return try file.stat(engine_context.Io());
 }
 
 pub fn GetAbsPath(self: *AManager, allocator: std.mem.Allocator, rel_path: []const u8, path_type: PathType) ![]const u8 {
-    const zone = Tracy.ZoneInit("AssetManager GetAbsPath", @src());
-    defer zone.Deinit();
-
     switch (path_type) {
         .Eng => {
             return try std.fs.path.join(allocator, &[_][]const u8{ self.mCWDPath.items, rel_path });
@@ -410,8 +410,6 @@ pub fn GetAbsPath(self: *AManager, allocator: std.mem.Allocator, rel_path: []con
 }
 
 pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []const u8 {
-    const zone = Tracy.ZoneInit("AssetManager GetRelPath", @src());
-    defer zone.Deinit();
     return switch (path_type) {
         .Eng => abs_path[self.mCWDPath.items.len + 1 ..],
         .Prj => abs_path[self.mProjectPath.items.len + 1 ..],
@@ -494,7 +492,7 @@ pub const RemoveUUID = Core.RemoveUUID;
 pub const GetWorldID = Core.GetWorldID;
 
 fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source: FileSource) !AssetHandle.Type {
-    const zone = Tracy.ZoneInit("AssetManager CreateAssetFile", @src());
+    const zone = Tracy.ZoneInit("AssetManager::CreateAssetFile", @src());
     defer zone.Deinit();
 
     const engine_allocator = engine_context.EngineAllocator();
@@ -519,7 +517,7 @@ fn CreateAssetFile(self: *AManager, engine_context: *EngineContext, file_source:
 }
 
 fn CreateAssetGen(self: *AManager, engine_allocator: std.mem.Allocator) !AssetHandle.Type {
-    const zone = Tracy.ZoneInit("AssetManager CreateAssetGen", @src());
+    const zone = Tracy.ZoneInit("AssetManager::CreateAssetGen", @src());
     defer zone.Deinit();
 
     const new_asset_id = try self.mECSManager.CreateEntity(engine_allocator);
@@ -531,8 +529,6 @@ fn CreateAssetGen(self: *AManager, engine_allocator: std.mem.Allocator) !AssetHa
 }
 
 fn ComputePathHash(path: []const u8) u64 {
-    const zone = Tracy.ZoneInit("AssetManager ComputePathHas", @src());
-    defer zone.Deinit();
     var hasher = std.hash.Fnv1a_64.init();
     hasher.update(path);
     return hasher.final();

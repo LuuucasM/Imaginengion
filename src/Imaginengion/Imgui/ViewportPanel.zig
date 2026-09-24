@@ -43,7 +43,7 @@ pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize)
 }
 
 pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*ComputeOutput), area_rects: std.ArrayList(Vec4(f32))) !void {
-    const zone = Tracy.ZoneInit("ViewportPanel OIR", @src());
+    const zone = Tracy.ZoneInit("ViewportPanel::OnImguiRenderViewport", @src());
     defer zone.Deinit();
 
     std.debug.assert(frame_buffers.items.len == area_rects.items.len);
@@ -69,7 +69,7 @@ pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContex
 }
 
 pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, frame_buffers: std.ArrayList(*ComputeOutput), area_rects: std.ArrayList(Vec4(f32))) !void {
-    const zone = Tracy.ZoneInit("PlayPanel OIR", @src());
+    const zone = Tracy.ZoneInit("ViewportPanel::OnImguiRenderPlay", @src());
     defer zone.Deinit();
 
     if (self.mP_OpenPlay == false) return;
@@ -93,7 +93,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, f
 }
 
 fn OnImguiRender(_: *EngineContext, frame_buffers: std.ArrayList(*ComputeOutput), area_rects: std.ArrayList(Vec4(f32)), viewport_size: imgui.ImVec2) !void {
-    const zone = Tracy.ZoneInit("ImguiRender", @src());
+    const zone = Tracy.ZoneInit("ViewportPanel::OnImguiRender", @src());
     defer zone.Deinit();
 
     const viewport_pos = imgui.igGetCursorScreenPos();

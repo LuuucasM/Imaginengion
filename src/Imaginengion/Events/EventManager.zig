@@ -1,6 +1,7 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const builtin = @import("builtin");
+const Tracy = @import("../Core/Tracy.zig");
 
 pub const ClearMode = enum {
     ClearAndFree,
@@ -68,6 +69,9 @@ pub fn EventManager(EventData: type) type {
         /// The EventResult a callback returns is currently ignored, so .Consume does not stop later callbacks.
         /// Clearing the events is up to the caller (EventsReset / ClearCategory).
         pub fn ProcessCategory(self: *Self, comptime category: EventData.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+            const zone = Tracy.ZoneInit("EventManager::ProcessCategory(" ++ Tracy.ShortTypeName(EventData) ++ ", " ++ @tagName(category) ++ ")", @src());
+            defer zone.Deinit();
+
             var event_ind: usize = 0;
             while (event_ind < self.mEventsArray.getPtr(category).items.len) : (event_ind += 1) {
                 // by value: appending to the list can move it while the callbacks below are running
@@ -79,6 +83,8 @@ pub fn EventManager(EventData: type) type {
                     _ = try event_callback.mCallbackFn(event_callback.mCtx, engine_context, &event);
                 }
             }
+            //counted after the loop because callbacks can queue more events of this category mid-pass
+            zone.Value(event_ind);
         }
 
         /// Wraps `handler` on `ctx` into the type-erased callback this manager stores.

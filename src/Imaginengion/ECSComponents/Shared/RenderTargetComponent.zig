@@ -18,6 +18,17 @@ pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) void
     self.mComputeTexture.Deinit(engine_context);
 }
 
+/// The GPU texture is owned, so a copy gets its own at the same size. A plain value copy would
+/// share the handle, and whichever copy is deinit first frees it out from under the other.
+pub fn Clone(self: *const RenderTargetComponent, engine_context: *EngineContext) !RenderTargetComponent {
+    var compute_texture: ComputeOutput = .empty;
+    //an uncreated texture has no usable size yet, it gets one from Resize like the original would
+    if (self.mComputeTexture.IsCreated()) {
+        try compute_texture.Init(engine_context, self.mComputeTexture.GetWidth(), self.mComputeTexture.GetHeight());
+    }
+    return RenderTargetComponent{ .mComputeTexture = compute_texture };
+}
+
 pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
     return self.mComputeTexture.GetColorTexture(0);
 }

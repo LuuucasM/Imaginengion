@@ -25,7 +25,7 @@ _P_Open: bool = true,
 pub fn Init(_: *ComponentsPanel) void {}
 
 pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, selected_object_opt: *?SelectedObject) !void {
-    const zone = Tracy.ZoneInit("Components Panel OIR", @src());
+    const zone = Tracy.ZoneInit("ComponentsPanel::OnImguiRender", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;

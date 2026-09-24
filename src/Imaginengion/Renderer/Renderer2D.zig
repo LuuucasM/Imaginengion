@@ -114,7 +114,7 @@ pub const RenderBuffers = struct {
         }
     }
     pub fn SetBuffers(self: *RenderBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
-        const zone = Tracy.ZoneInit("R2D SetBuffers", @src());
+        const zone = Tracy.ZoneInit("Renderer2D::SetBuffers", @src());
         defer zone.Deinit();
 
         const quad_byte_size = self.mQuadBufferBase.items.len * @sizeOf(QuadData);
@@ -217,9 +217,6 @@ pub fn DrawQuad(
     entity_scene_comp: *EntitySceneComponent,
     shading_buff: *ShadingBuffers,
 ) !void {
-    const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
-    defer zone.Deinit();
-
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
     const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
@@ -259,7 +256,7 @@ pub fn DrawText(
     entity_scene_comp: *EntitySceneComponent,
     shading_buff: *ShadingBuffers,
 ) !void {
-    const zone = Tracy.ZoneInit("R2D DrawQuad", @src());
+    const zone = Tracy.ZoneInit("Renderer2D::DrawText", @src());
     defer zone.Deinit();
 
     const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);

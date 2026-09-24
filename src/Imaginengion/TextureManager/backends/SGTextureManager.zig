@@ -2,6 +2,7 @@ const std = @import("std");
 const sdl = @import("../../Core/CImports.zig").sdl;
 const Bin = @import("../Bin.zig").Bin;
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Tracy = @import("../../Core/Tracy.zig");
 const SkipField = @import("../../Core/SkipField.zig").StaticSkipField;
 
 const MathTypes = @import("../../Math/MathTypes.zig");
@@ -48,6 +49,9 @@ mLayersFreeList: LayersFreeListT = .NoSkip,
 mNumLayers: usize = 0,
 
 pub fn Init(self: *SGTextureManager, engine_context: *EngineContext, vram_bytes_size: usize) !void {
+    const zone = Tracy.ZoneInit("SGTextureManager::Init", @src());
+    defer zone.Deinit();
+
     self.mMaxLayers = vram_bytes_size / BYTES_PER_LAYER;
 
     std.debug.assert(self.mMaxLayers != 0);
@@ -125,6 +129,9 @@ pub fn Deinit(self: *SGTextureManager, engine_context: *EngineContext) void {
 }
 
 pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?*anyopaque, width: usize, height: usize) !u32 {
+    const zone = Tracy.ZoneInit("SGTextureManager::Register", @src());
+    defer zone.Deinit();
+
     const max_dim = @max(width, height);
     const bin_index = std.sort.lowerBound(
         usize,

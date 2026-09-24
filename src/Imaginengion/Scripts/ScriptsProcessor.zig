@@ -20,6 +20,7 @@ const PComponents = @import("../ECSComponents/PComponents.zig");
 const SComponents = @import("../ECSComponents/SComponents.zig");
 
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const ChildComponent = @import("../ECS/Components.zig").ChildComponent;
 const EntitySceneComponent = EComponents.EntitySceneComponent;
 const StackPosComponent = SComponents.StackPosComponent;
 
@@ -41,7 +42,7 @@ pub fn RunScript(
 ) !bool {
     _ValidateScriptType(ObjectType, script_type);
 
-    const zone = Tracy.ZoneInit("RunScript", @src());
+    const zone = Tracy.ZoneInit("ScriptsProcessor::RunScript(" ++ Tracy.ShortTypeName(ObjectType) ++ ", " ++ Tracy.ShortTypeName(script_type) ++ ", " ++ @tagName(world_type) ++ ")", @src());
     defer zone.Deinit();
 
     const world_manager = switch (world_type) {
@@ -65,9 +66,15 @@ pub fn RunScript(
 
         const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
 
-        var owner = ObjectType{ .mID = @intCast(script_component.mParent), .mManager = world_manager };
+        var owner = ObjectType{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager };
 
         const combined_args = .{ engine_context, &owner } ++ args;
+
+        //one zone per script, renamed to the script's file so a slow script shows up by name
+        const script_zone = Tracy.ZoneInit("ScriptsProcessor::Script", @src());
+        defer script_zone.Deinit();
+        if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
+
         cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
     }
 
@@ -82,8 +89,7 @@ fn SortByOwnerStackPos(comptime ObjectType: type, world_manager: *WorldManager, 
 
     const Sorter = struct {
         fn StackPosOf(wm: *WorldManager, script_id: ObjectType.Type) usize {
-            const script_component = wm.GetManager(ObjectType).GetComponent(ScriptComponent, script_id) orelse return 0;
-            return OwnerStackPos(ObjectType, wm, @intCast(script_component.mParent));
+            return OwnerStackPos(ObjectType, wm, OwnerOf(ObjectType, wm, script_id));
         }
         fn lessThan(wm: *WorldManager, a: ObjectType.Type, b: ObjectType.Type) bool {
             return StackPosOf(wm, b) < StackPosOf(wm, a);
@@ -91,6 +97,13 @@ fn SortByOwnerStackPos(comptime ObjectType: type, world_manager: *WorldManager, 
     };
 
     std.sort.insertion(ObjectType.Type, script_ids, world_manager, Sorter.lessThan);
+}
+
+/// The object a script belongs to. Scripts are created through CreateChild(.Script), so the
+/// ECS ChildComponent is what records the owner.
+fn OwnerOf(comptime ObjectType: type, world_manager: *WorldManager, script_id: ObjectType.Type) ObjectType.Type {
+    const child_component = world_manager.GetManager(ObjectType).GetComponent(ChildComponent(ObjectType.Type), script_id) orelse return ObjectType.NullObject;
+    return child_component.mParent;
 }
 
 /// Where the script's owner sits in the scene stack. A scene answers for itself, an

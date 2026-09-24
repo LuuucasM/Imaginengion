@@ -8,7 +8,7 @@ const Application = @import("../Core/Application.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub fn Begin() void {
-    const zone = Tracy.ZoneInit("Dockspace Begin", @src());
+    const zone = Tracy.ZoneInit("Dockspace::Begin", @src());
     defer zone.Deinit();
 
     const p_open = true;
@@ -38,7 +38,7 @@ pub fn Begin() void {
 }
 
 pub fn End() void {
-    const zone = Tracy.ZoneInit("Dockspace End", @src());
+    const zone = Tracy.ZoneInit("Dockspace::End", @src());
     defer zone.Deinit();
     imgui.igEnd();
 }

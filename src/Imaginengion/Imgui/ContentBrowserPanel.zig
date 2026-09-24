@@ -67,7 +67,7 @@ pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
 }
 
 pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("ContentBrowser OIR", @src());
+    const zone = Tracy.ZoneInit("ContentBrowserPanel::OnImguiRender", @src());
     defer zone.Deinit();
 
     if (self.mIsVisible == false) return;
@@ -131,7 +131,7 @@ fn HandlePopupContext(_: *ContentBrowserPanel, engine_context: *EngineContext) !
 }
 
 fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, thumbnail_size: f32) !void {
-    const zone = Tracy.ZoneInit("ContentBrowser RenderBackButton", @src());
+    const zone = Tracy.ZoneInit("ContentBrowserPanel::RenderBackButton", @src());
     defer zone.Deinit();
 
     const engine_allocator = engine_context.EngineAllocator();
@@ -165,7 +165,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
 }
 
 fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineContext, thumbnail_size: f32) !void {
-    const zone = Tracy.ZoneInit("ContentBrowser Render Dir Contents", @src());
+    const zone = Tracy.ZoneInit("ContentBrowserPanel::RenderDirectoryContents", @src());
     defer zone.Deinit();
 
     var name_buf: [260]u8 = undefined;
@@ -309,8 +309,6 @@ pub fn OnNewScriptEvent(self: *ContentBrowserPanel, engine_context: *EngineConte
 }
 
 fn RenderImageButton(engine_context: *EngineContext, entry_name: []const u8, texture: *Texture2D, thumbnail_size: f32) !void {
-    const zone = Tracy.ZoneInit("ContentBrowser Render Image Button", @src());
-    defer zone.Deinit();
     _ = imgui.igPushID_Str(entry_name.ptr);
     defer imgui.igPopID();
 
@@ -326,8 +324,6 @@ fn RenderImageButton(engine_context: *EngineContext, entry_name: []const u8, tex
 }
 
 fn DragDropSourceBase(self: ContentBrowserPanel, _: *EngineContext, entry_name: []const u8, payload_type: []const u8) !void {
-    const zone = Tracy.ZoneInit("ContentBrowser DragDrop Base", @src());
-    defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
         defer imgui.igEndDragDropSource();
         var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
@@ -341,10 +337,11 @@ fn DragDropSourceBase(self: ContentBrowserPanel, _: *EngineContext, entry_name: 
 }
 
 fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContext, entry_name: []const u8) !void {
-    const zone = Tracy.ZoneInit("ContentBrowser DragDrop Script", @src());
-    defer zone.Deinit();
     if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
         defer imgui.igEndDragDropSource();
+        //zoned only while dragging: this runs for every script file shown, and only a drag does real work (it can load the script)
+        const zone = Tracy.ZoneInit("ContentBrowserPanel::DragDropSourceScript", @src());
+        defer zone.Deinit();
         var buffer: [MAX_PATH_LEN * 2]u8 = undefined;
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
@@ -364,8 +361,6 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
 }
 
 fn NextColumn(entry_name: []const u8) void {
-    const zone = Tracy.ZoneInit("ContentBrowser NextColumn", @src());
-    defer zone.Deinit();
     imgui.igTextWrapped(@ptrCast(entry_name));
     imgui.igNextColumn();
 }

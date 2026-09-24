@@ -39,7 +39,7 @@ pub fn Init(self: ECSDisplayPanel) void {
 }
 
 pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, world_type: EngineContext.WorldType, comptime ecs_type: ECSType, selected_object: *?SelectedObject) !void {
-    const zone = Tracy.ZoneInit("ECS Display OIR", @src());
+    const zone = Tracy.ZoneInit("ECSDisplayPanel::OnImguiRender(" ++ @tagName(ecs_type) ++ ")", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;
@@ -53,7 +53,10 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
         .Editor => &engine_context.mEditorWorld,
     };
 
-    const window_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s} - {s}", .{ @tagName(world_type), @tagName(ecs_type) }, 0);
+    //everything after ### is the window's imgui ID, the part before is only the visible label.
+    //keying the ID on ecs_type alone means switching worlds (Game -> Simulate on play) relabels
+    //the same window instead of spawning a new one, so dock position/size/tab order carry over.
+    const window_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s} - {s}###ECSDisplay_{s}", .{ @tagName(world_type), @tagName(ecs_type), @tagName(ecs_type) }, 0);
 
     _ = imgui.igBegin(window_name.ptr, null, 0);
     defer imgui.igEnd();

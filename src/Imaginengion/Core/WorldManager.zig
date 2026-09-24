@@ -3,6 +3,7 @@ const WorldManager = @This();
 const std = @import("std");
 
 const EngineContext = @import("EngineContext.zig");
+const Tracy = @import("Tracy.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
@@ -75,6 +76,8 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
 }
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
+    const zone = Tracy.ZoneInit("WorldManager::clearAndFree", @src());
+    defer zone.Deinit();
     switch (options) {
         .All => {
             self.mEManager.clearAndFree(engine_context);
@@ -90,6 +93,8 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
 }
 
 pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *WorldManager) !void {
+    const zone = Tracy.ZoneInit("WorldManager::Copy", @src());
+    defer zone.Deinit();
     try self.mEManager.Copy(engine_context, &other_world.mEManager);
     try self.mGCManager.Copy(engine_context, &other_world.mGCManager);
     try self.mPManager.Copy(engine_context, &other_world.mPManager);
@@ -117,6 +122,8 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
 
 /// Applies the destroys/removals that were queued during the frame, for every object manager.
 pub fn ProcessRemovedObj(self: *WorldManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("WorldManager::ProcessRemovedObj", @src());
+    defer zone.Deinit();
     const callback_list: std.DoublyLinkedList = .{};
     try self.mEManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
     try self.mGCManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
@@ -134,10 +141,15 @@ pub fn DestroyScene(self: *WorldManager, engine_context: *EngineContext, destroy
 }
 
 pub fn LoadScene(self: *WorldManager, engine_context: *EngineContext, abs_path: []const u8) !Scene {
+    const zone = Tracy.ZoneInit("WorldManager::LoadScene", @src());
+    defer zone.Deinit();
+    zone.Text(abs_path);
     return try self.mSManager.LoadScene(engine_context, abs_path);
 }
 
 pub fn SaveScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
+    const zone = Tracy.ZoneInit("WorldManager::SaveScene", @src());
+    defer zone.Deinit();
     try self.mSManager.SaveScene(engine_context, scene);
 }
 
@@ -168,6 +180,8 @@ pub fn GetEntityGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, c
 }
 
 pub fn SaveEntity(self: *WorldManager, engine_context: *EngineContext, entity: Entity) !void {
+    const zone = Tracy.ZoneInit("WorldManager::SaveEntity", @src());
+    defer zone.Deinit();
     try self.mEManager.SaveEntity(engine_context, entity);
 }
 

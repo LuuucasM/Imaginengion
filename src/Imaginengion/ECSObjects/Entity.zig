@@ -199,9 +199,6 @@ pub fn ClearBodyTags(self: Entity, engine_context: *EngineContext) !void {
 }
 
 pub fn _CalculateWorldTransform(self: Entity) void {
-    const zone = Tracy.ZoneInit("Entity::_CalculateWorldTransform", @src());
-    defer zone.Deinit();
-
     if (self.GetComponent(TransformComponent)) |transform| {
         var translation_out = transform.GetTranslation();
         var rotation_out = transform.GetRotation();

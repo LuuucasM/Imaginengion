@@ -79,6 +79,10 @@ pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes) !void
     gop.value_ptr.* = if (gop.found_existing) 1 else 0;
 }
 
+pub fn SetMouseReleased(self: *InputManager, button: InputEnums.MouseCodes) void {
+    _ = self._MousePressedSet.remove(button);
+}
+
 pub fn SetMousePosition(self: *InputManager, new_pos: Vec2(f32)) void {
     self._MousePositionDelta = new_pos.SubVec(self._MousePosition);
     self._MousePosition = new_pos;

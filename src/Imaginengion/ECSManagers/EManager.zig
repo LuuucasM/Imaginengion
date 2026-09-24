@@ -15,7 +15,7 @@ const ECSCore = @import("Manager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub const ECSManagerT = ECSManager(Entity.Type, &EntityComponentsList);
+pub const ECSManagerT = ECSManager(Entity.Type, &EntityComponentsList, "EntityECS");
 pub const EventManagerT = EventManager.EventManager(EventData);
 
 const EManager = @This();

@@ -46,7 +46,7 @@ pub const ECSType = enum {
     GameModes,
 };
 
-pub const ECSManagerT = ECSManager(Scene.Type, &SceneComponentsList);
+pub const ECSManagerT = ECSManager(Scene.Type, &SceneComponentsList, "SceneECS");
 
 //scene stuff
 pub const empty: SManager = .{

@@ -90,7 +90,7 @@ pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void 
 ///Checks the whole scene for objects that can possibly collide.
 /// For the contact sets the entity origin, target, and collision type.
 pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
-    const zone = Tracy.ZoneInit("CollisionManager::BroadPassf", @src());
+    const zone = Tracy.ZoneInit("CollisionManager::BroadPass", @src());
     defer zone.Deinit();
 
     const frame_allocator = engine_context.FrameAllocator();
@@ -144,6 +144,10 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
 ///Checks generated contacts list from broad pass to see if thing actually collided
 /// For the contact sets the penetration, normal, and contact state
 pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("CollisionManager::NarrowPass", @src());
+    defer zone.Deinit();
+    zone.Value(self._OverlapContacts.items.len + self._BlockingContacts.items.len);
+
     var i: usize = 0;
     var end: usize = self._OverlapContacts.items.len;
     while (i < end) {
@@ -238,6 +242,10 @@ pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext) !v
 }
 
 pub fn SolverPass(self: *CollisionManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("CollisionManager::SolverPass", @src());
+    defer zone.Deinit();
+    zone.Value(self._BlockingContacts.items.len);
+
     for (0..SOLVER_ITERS) |_| {
         for (self._BlockingContacts.items) |contact| {
             const entity_origin = contact.mOrigin;
@@ -298,8 +306,6 @@ fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *Colli
 }
 
 fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
-    const zone = Tracy.ZoneInit("CollisionManager::ResolveCollisions", @src());
-    defer zone.Deinit();
     const rv = rb_target._Velocity.SubVec(rb_origin._Velocity);
 
     const vel_along_norm = rv.Dot(contact.mNormal);
@@ -316,8 +322,6 @@ fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_targe
 }
 
 fn PositionCorrection(engine_context: *EngineContext, contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) !void {
-    const zone = Tracy.ZoneInit("CollisionManager::PositionCorrection", @src());
-    defer zone.Deinit();
     const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin._InvMass + rb_target._InvMass) * PERCENT;
     const correction = contact.mNormal.MulScalar(correction_mag);
 

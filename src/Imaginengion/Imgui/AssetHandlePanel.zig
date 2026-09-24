@@ -12,7 +12,7 @@ pub fn Init(self: AssetHandlePanel) void {
 }
 
 pub fn OnImguiRender(self: AssetHandlePanel, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("AssetHandle OIR", @src());
+    const zone = Tracy.ZoneInit("AssetHandlePanel::OnImguiRender", @src());
     defer zone.Deinit();
 
     const frame_allocator = engine_context.FrameAllocator();

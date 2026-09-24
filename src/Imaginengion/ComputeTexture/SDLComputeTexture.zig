@@ -2,6 +2,7 @@ const std = @import("std");
 const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const sdl = @import("../Core/CImports.zig").sdl;
 const EngineContext = @import("../Core/EngineContext.zig");
+const Tracy = @import("../Core/Tracy.zig");
 
 pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
     return struct {
@@ -37,6 +38,10 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
         }
 
         pub fn Invalidate(self: *Self, engine_context: *EngineContext) !void {
+            //recreates the GPU texture, so this is what a viewport resize costs
+            const zone = Tracy.ZoneInit("SDLComputeTexture::Invalidate", @src());
+            defer zone.Deinit();
+
             self.Destroy(engine_context);
             try self.Create(engine_context);
         }

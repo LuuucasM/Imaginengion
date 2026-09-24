@@ -2,8 +2,6 @@ const std = @import("std");
 const IM = @import("IM");
 
 pub fn main(init: std.process.Init.Minimal) !void {
-    const zone = IM.Tracy.ZoneInit("Main", @src());
-    defer zone.Deinit();
     var application = IM.Application{};
     std.log.info("Initializing Application", .{});
     try application.Init(init);

@@ -2,6 +2,7 @@ const std = @import("std");
 const sdl = @import("../../../Core/CImports.zig").sdl;
 const stb = @import("../../../Core/CImports.zig").stb;
 const EngineContext = @import("../../../Core/EngineContext.zig");
+const Tracy = @import("../../../Core/Tracy.zig");
 const GenDescriptor = @import("../Texture2D.zig").GenDescriptor;
 const TextureManager = @import("../../../TextureManager/TextureManager.zig");
 const SDLTexture2D = @This();
@@ -14,6 +15,10 @@ _TextureHandle: u32 = 0,
 _TextureManager: *TextureManager = undefined,
 
 pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, rel_path: []const u8, asset_file: std.Io.File) !void {
+    const zone = Tracy.ZoneInit("SDLTexture2D::Init", @src());
+    defer zone.Deinit();
+    zone.Text(rel_path);
+
     const frame_allocator = engine_context.FrameAllocator();
 
     var width: c_int = 0;
@@ -51,6 +56,9 @@ pub fn Init(self: *SDLTexture2D, engine_context: *EngineContext, _: []const u8, 
 }
 
 pub fn InitGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
+    const zone = Tracy.ZoneInit("SDLTexture2D::InitGen", @src());
+    defer zone.Deinit();
+
     try self.RegisterTexture(engine_context, descriptor.width, descriptor.height, descriptor.data);
     self._Width = descriptor.width;
     self._Height = descriptor.height;
@@ -83,6 +91,10 @@ pub fn GetSampler(self: SDLTexture2D) *anyopaque {
 }
 
 pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_path: []const u8) !void {
+    const zone = Tracy.ZoneInit("SDLTexture2D::UpdateDataPath", @src());
+    defer zone.Deinit();
+    zone.Text(abs_path);
+
     var width: c_int = 0;
     var height: c_int = 0;
     var channels: c_int = 0;
@@ -120,6 +132,9 @@ pub fn UpdateDataPath(self: *SDLTexture2D, engine_context: *EngineContext, abs_p
 }
 
 pub fn UpdateDataGen(self: *SDLTexture2D, engine_context: *EngineContext, descriptor: GenDescriptor) !void {
+    const zone = Tracy.ZoneInit("SDLTexture2D::UpdateDataGen", @src());
+    defer zone.Deinit();
+
     self.RegisterTexture(engine_context, descriptor.width, descriptor.height, descriptor.data);
 
     self._Width = descriptor.width;

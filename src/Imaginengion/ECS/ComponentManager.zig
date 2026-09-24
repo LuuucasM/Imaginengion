@@ -293,7 +293,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT, allocator: std.mem.Allocator) !void {
-            const zone = Tracy.ZoneInit("CompMan EntityListMask", @src());
+            const zone = Tracy.ZoneInit("ComponentManager::EntityListMask", @src());
             defer zone.Deinit();
 
             // a mask that requires nothing keeps every entity, so there is nothing to filter out
@@ -320,7 +320,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn EntityListDifference(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
-            const zone = Tracy.ZoneInit("CompMan EntityListDifference", @src());
+            const zone = Tracy.ZoneInit("ComponentManager::EntityListDifference", @src());
             defer zone.Deinit();
 
             if (result.items.len == 0) return;
@@ -344,7 +344,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn EntityListUnion(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
-            const zone = Tracy.ZoneInit("CompMan EntityUnion", @src());
+            const zone = Tracy.ZoneInit("ComponentManager::EntityListUnion", @src());
             defer zone.Deinit();
 
             var result_set = HashSet(entity_t).init(allocator);
@@ -360,7 +360,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn EntityListIntersection(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
-            const zone = Tracy.ZoneInit("CompMan EntityIntersection", @src());
+            const zone = Tracy.ZoneInit("ComponentManager::EntityListIntersection", @src());
             defer zone.Deinit();
 
             var list2_set = HashSet(entity_t).init(allocator);

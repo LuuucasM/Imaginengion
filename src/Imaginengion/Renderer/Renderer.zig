@@ -157,7 +157,7 @@ pub const ShadingBuffers = struct {
         }
     }
     pub fn SetBuffers(self: *ShadingBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
-        const zone = Tracy.ZoneInit("ShadingBuffers::SetBuffers", @src());
+        const zone = Tracy.ZoneInit("Renderer::ShadingBuffers::SetBuffers", @src());
         defer zone.Deinit();
 
         const surf_byte_size = self.mSurfShadingBuffBase.items.len * @sizeOf(SurfShadingData);
@@ -202,6 +202,8 @@ mR3D: Renderer3D = .{},
 mSDFShading: ShadingBuffers = .{},
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("Renderer::Init", @src());
+    defer zone.Deinit();
     self.mPlatform.Init(engine_context);
 
     try self.mTextureManager.Init(engine_context, 1_000_000_000);
@@ -264,11 +266,18 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         .Simulate => engine_context.mEngineStats.SimulateWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
     }
 
-    for (shapes_ids.items) |shape_id| {
-        //TODO: distance based culling
-        //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
-        const shape_entity = world_manager.GetEntity(shape_id);
-        try self.DrawShape(engine_context, shape_entity);
+    {
+        //one zone for the whole loop rather than one per shape, which would swamp the timeline
+        const draw_zone = Tracy.ZoneInit("Renderer::DrawShapes", @src());
+        defer draw_zone.Deinit();
+        draw_zone.Value(shapes_ids.items.len);
+
+        for (shapes_ids.items) |shape_id| {
+            //TODO: distance based culling
+            //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
+            const shape_entity = world_manager.GetEntity(shape_id);
+            try self.DrawShape(engine_context, shape_entity);
+        }
     }
 
     //TODO: sorting
@@ -278,7 +287,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
 }
 
 fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
-    const zone = Tracy.ZoneInit("BeginFrame", @src());
+    const zone = Tracy.ZoneInit("Renderer::BeginRendering", @src());
     defer zone.Deinit();
 
     self.mR2D.StartBatch(engine_allocator);
@@ -290,9 +299,6 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
 }
 
 fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) anyerror!void {
-    const zone = Tracy.ZoneInit("Renderer Draw Shape", @src());
-    defer zone.Deinit();
-
     const transform_component = entity.GetComponent(TransformComponent).?;
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
 
@@ -318,7 +324,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
 }
 
 fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
-    const zone = Tracy.ZoneInit("Renderer EndRendering", @src());
+    const zone = Tracy.ZoneInit("Renderer::EndRendering", @src());
     defer zone.Deinit();
 
     self.mPlatform.StartCmdBuff();

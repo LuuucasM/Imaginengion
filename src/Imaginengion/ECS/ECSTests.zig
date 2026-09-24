@@ -40,7 +40,7 @@ const Health = struct {
 };
 
 const TestComponentsList = [_]type{ Position, Label, Health };
-const TestECSManager = ECS.ECSManager(u32, &TestComponentsList);
+const TestECSManager = ECS.ECSManager(u32, &TestComponentsList, "TestECS");
 
 const NullEntity = std.math.maxInt(u32);
 

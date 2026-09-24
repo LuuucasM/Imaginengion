@@ -45,8 +45,16 @@ pub fn IsMinimized(self: SDLWindow) bool {
 }
 
 pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("PollInputEvents", @src());
+    const zone = Tracy.ZoneInit("Window::PollInputEvents", @src());
     defer zone.Deinit();
+    const input_manager = &engine_context.mInputManager;
+
+    //the input manager is the polled state scripts read each frame, so it is kept in step with
+    //the events here. mouse position and scroll are committed once after the loop so their
+    //deltas cover the whole frame, and fall to zero on a frame with no motion.
+    var final_mouse_pos = input_manager.GetMousePosition();
+    var final_mouse_scroll = input_manager.GetMouseScrolled();
+
     var event: sdl.SDL_Event = undefined;
     while (sdl.SDL_PollEvent(&event)) {
         engine_context.mImguiManager.ProcessEvent(&event);
@@ -69,6 +77,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 if (self._Height < 1 or self._Width < 1) self.mIsMinimized = true else self.mIsMinimized = false;
             },
             sdl.SDL_EVENT_KEY_DOWN => {
+                try input_manager.SetKeyPressed(@enumFromInt(event.key.scancode));
                 if (event.key.repeat) {
                     try engine_context.mSystemEventManager.Insert(
                         engine_context.EngineAllocator(),
@@ -84,6 +93,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 }
             },
             sdl.SDL_EVENT_KEY_UP => {
+                input_manager.SetKeyReleased(@enumFromInt(event.key.scancode));
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,
@@ -91,7 +101,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 );
             },
             sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
-                if (event.button.down) {}
+                try input_manager.SetMousePressed(@enumFromInt(event.button.button));
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,
@@ -100,7 +110,18 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                     } },
                 );
             },
+            sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
+                input_manager.SetMouseReleased(@enumFromInt(event.button.button));
+                try engine_context.mSystemEventManager.Insert(
+                    engine_context.EngineAllocator(),
+                    .InputEvent,
+                    .{ .MouseReleased = .{
+                        ._ButtonCode = @enumFromInt(event.button.button),
+                    } },
+                );
+            },
             sdl.SDL_EVENT_MOUSE_MOTION => {
+                final_mouse_pos = .{ .x = event.motion.x, .y = event.motion.y };
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,
@@ -108,6 +129,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 );
             },
             sdl.SDL_EVENT_MOUSE_WHEEL => {
+                final_mouse_scroll = .{ .x = event.wheel.x, .y = event.wheel.y };
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,
@@ -117,4 +139,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
             else => {},
         }
     }
+
+    input_manager.SetMousePosition(final_mouse_pos);
+    input_manager.SetMouseScrolled(final_mouse_scroll);
 }

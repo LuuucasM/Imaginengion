@@ -27,7 +27,7 @@ mImguiTextures: std.ArrayList(*sdl.SDL_GPUTexture) = .empty,
 mNumUsedTextures: usize = 0,
 
 pub fn Init(_: *ImguiManager, engine_context: *EngineContext) void {
-    const zone = Tracy.ZoneInit("Imgui::Init", @src());
+    const zone = Tracy.ZoneInit("ImguiManager::Init", @src());
     defer zone.Deinit();
     _ = imgui.igCreateContext(null);
     const io = imgui.igGetIO_Nil();
@@ -64,7 +64,7 @@ pub fn Init(_: *ImguiManager, engine_context: *EngineContext) void {
     _ = imgui.ImGui_ImplSDLGPU3_Init(@ptrCast(&init_info));
 }
 pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
-    const zone = Tracy.ZoneInit("Imgui::Deinit", @src());
+    const zone = Tracy.ZoneInit("ImguiManager::Deinit", @src());
     defer zone.Deinit();
 
     const device: ?*sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
@@ -85,7 +85,7 @@ pub fn ProcessEvent(_: *ImguiManager, event: *sdl.SDL_Event) void {
     _ = imgui.ImGui_ImplSDL3_ProcessEvent(@ptrCast(event));
 }
 pub fn Begin(self: *ImguiManager) void {
-    const zone = Tracy.ZoneInit("Imgui Begin", @src());
+    const zone = Tracy.ZoneInit("ImguiManager::Begin", @src());
     defer zone.Deinit();
     imgui.ImGui_ImplSDLGPU3_NewFrame();
     imgui.ImGui_ImplSDL3_NewFrame();
@@ -93,7 +93,7 @@ pub fn Begin(self: *ImguiManager) void {
     self.mNumUsedTextures = 0;
 }
 pub fn End(_: ImguiManager, engine_context: *EngineContext) void {
-    const zone = Tracy.ZoneInit("ImguiEnd ", @src());
+    const zone = Tracy.ZoneInit("ImguiManager::End", @src());
     defer zone.Deinit();
 
     const io: *imgui.ImGuiIO = imgui.igGetIO_Nil();

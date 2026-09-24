@@ -14,7 +14,7 @@ const ECSCore = @import("Manager.zig").Core;
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
-pub const ECSManagerT = ECSManager(GameContext.Type, &GCComponentsList);
+pub const ECSManagerT = ECSManager(GameContext.Type, &GCComponentsList, "GameContextECS");
 pub const EventManagerT = EventManager.EventManager(EventData);
 
 const GCManager = @This();

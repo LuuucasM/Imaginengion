@@ -81,7 +81,7 @@ pub fn OnWindowResize(self: *WindowsWindow, width: usize, height: usize) void {
 }
 
 pub fn PollInputEvents(self: WindowsWindow) void {
-    const zone = Tracy.ZoneInit("PollInputEvents", @src());
+    const zone = Tracy.ZoneInit("Window::PollInputEvents", @src());
     defer zone.Deinit();
     _ = self;
     glfw.glfwPollEvents();

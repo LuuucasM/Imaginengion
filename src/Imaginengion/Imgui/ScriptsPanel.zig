@@ -22,7 +22,7 @@ const ScriptsPanel = @This();
 _P_Open: bool = true,
 
 pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, selected_object_opt: *?SelectedObject) !void {
-    const zone = Tracy.ZoneInit("Scripts Panel OIR", @src());
+    const zone = Tracy.ZoneInit("ScriptsPanel::OnImguiRender", @src());
     defer zone.Deinit();
 
     if (self._P_Open == false) return;

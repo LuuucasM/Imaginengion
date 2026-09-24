@@ -139,6 +139,8 @@ mActiveWorld: *WorldManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
 pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("EditorProgram::Init", @src());
+    defer zone.Deinit();
     engine_context.mImguiManager.Init(engine_context);
     self._ComponentsPanel.Init();
     try self._ContentBrowserPanel.Init(engine_context);
@@ -197,7 +199,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
 //handling the loading and unloading of assets and scene transitions
 //debug/profiling
 pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("Program OnUpdate", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::OnUpdate", @src());
     defer zone.Deinit();
 
     var callback_list: std.DoublyLinkedList = .{};
@@ -268,8 +270,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     //--------------World Transform Update --------------
     {
-        const assets_zone = Tracy.ZoneInit("World Transform Update Section", @src());
-        defer assets_zone.Deinit();
+        const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
+        defer world_transform_zone.Deinit();
         try PhysicsManager.UpdateWorldTransforms(.Game, engine_context);
         try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
         if (self.mEditorState == .Play) {
@@ -518,6 +520,10 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
 }
 
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext) !void {
+    //play copies the whole game world and stop frees the simulate one, so this is the play button hitch
+    const zone = Tracy.ZoneInit("EditorProgram::OnChangeEditorStateEvent", @src());
+    defer zone.Deinit();
+
     if (self.mEditorState == .Play) {
         self.mEditorState = .Stop;
         self.mActiveWorld = &engine_context.mGameWorld;
@@ -537,7 +543,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
 }
 
 fn RenderRenderTargets(self: *EditorProgram, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("Render Lenses", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::RenderRenderTargets", @src());
     defer zone.Deinit();
 
     if (!self._ViewportPanel.mP_OpenPlay) {
@@ -554,7 +560,7 @@ fn RenderRenderTargets(self: *EditorProgram, engine_context: *EngineContext) !vo
 
 //NOTE - the logic of this function should be the same, just calls different functions
 fn RenderViewports(self: *EditorProgram, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("Render Lenses", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::RenderViewports", @src());
     defer zone.Deinit();
 
     if (!self._ViewportPanel.mP_OpenPlay) {
@@ -570,7 +576,7 @@ fn RenderViewports(self: *EditorProgram, engine_context: *EngineContext) !void {
 }
 
 fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
-    const zone = Tracy.ZoneInit("RenderEditorTarget", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::RenderEditorTarget", @src());
     defer zone.Deinit();
     const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
@@ -615,7 +621,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
 }
 
 fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
-    const zone = Tracy.ZoneInit("RenderWorldTarget", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::RenderWorldTarget", @src());
     defer zone.Deinit();
 
     const frame_allocator = engine_context.FrameAllocator();
@@ -678,7 +684,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
 }
 
 fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
-    const zone = Tracy.ZoneInit("RenderViewportEditor", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::RenderViewportEditor", @src());
     defer zone.Deinit();
     const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
@@ -700,7 +706,7 @@ fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, vi
 }
 
 fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
-    const zone = Tracy.ZoneInit("RenderViewportWorlds", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::RenderViewportWorlds", @src());
     defer zone.Deinit();
 
     const frame_allocator = engine_context.FrameAllocator();
@@ -776,7 +782,7 @@ fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entit
 }
 
 pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("Dockspace OIR", @src());
+    const zone = Tracy.ZoneInit("EditorProgram::OnImguiRender", @src());
     defer zone.Deinit();
 
     const engine_allocator = engine_context.EngineAllocator();

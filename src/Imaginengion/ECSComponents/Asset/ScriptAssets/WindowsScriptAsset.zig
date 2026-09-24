@@ -13,6 +13,7 @@ const SceneOnUpdateScript = SceneComponents.OnUpdateScript;
 const SceneInputPressedScript = SceneComponents.InputPressedScript;
 
 const EngineContext = @import("../../../Core/EngineContext.zig");
+const Tracy = @import("../../../Core/Tracy.zig");
 const ScriptType = @import("../ScriptAsset.zig").ScriptType;
 
 mLib: std.os.windows.HMODULE = undefined,
@@ -20,6 +21,10 @@ mScriptType: ScriptType = undefined,
 mRunFunc: *anyopaque = undefined,
 
 pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8, _: std.Io.File) !void {
+    const zone = Tracy.ZoneInit("WindowsScriptAsset::Init", @src());
+    defer zone.Deinit();
+    zone.Text(rel_path);
+
     const name = std.fs.path.basename(abs_path);
     //const the_path = std.fs.path.dirname(abs_path);
 
