@@ -49,6 +49,16 @@ pub fn PollInputEvents(self: UnsupportedWindow) void {
     Unsupported();
 }
 
+pub fn GetPixelDensity(self: UnsupportedWindow) f32 {
+    _ = self;
+    return Unsupported();
+}
+
+pub fn GetDisplayScale(self: UnsupportedWindow) f32 {
+    _ = self;
+    return Unsupported();
+}
+
 fn Unsupported() noreturn {
     @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag) ++ " in Window\n");
 }

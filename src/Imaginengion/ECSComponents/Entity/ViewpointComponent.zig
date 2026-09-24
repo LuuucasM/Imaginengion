@@ -4,6 +4,7 @@ const MathTypes = @import("../../Math/MathTypes.zig");
 const MathUtils = @import("../../Math/MathUtils.zig");
 const Mat4 = MathTypes.Mat4;
 const Vec4 = MathTypes.Vec4;
+const CameraRay = @import("../../Math/CameraRay.zig");
 
 const ViewpointComponent = @This();
 
@@ -13,17 +14,27 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 pub const Editable = true;
 pub const Name: []const u8 = "LensComponent";
 
-//viewport stuff
-mViewportWidth: usize = 1600,
-mViewportHeight: usize = 900,
-mAspectRatio: f32 = 0.0,
+const DEFAULT_WIDTH: usize = 1600;
+const DEFAULT_HEIGHT: usize = 900;
+const DEFAULT_ASPECT: f32 = @as(f32, @floatFromInt(DEFAULT_WIDTH)) / @as(f32, @floatFromInt(DEFAULT_HEIGHT));
+const DEFAULT_FOV_RAD: f32 = MathUtils.DegreesToRadians(@as(f32, 60.0));
+const DEFAULT_NEAR: f32 = 0.01;
+const DEFAULT_FAR: f32 = 1000.0;
 
-mProjection: Mat4(f32) = MathUtils.Mat4Identity(f32),
+//viewport stuff
+//the defaults have to agree with each other: SetViewportSize returns early when the size is
+//unchanged, so a first call with exactly the default size would otherwise leave a zero aspect
+//ratio and an identity projection behind
+mViewportWidth: usize = DEFAULT_WIDTH,
+mViewportHeight: usize = DEFAULT_HEIGHT,
+mAspectRatio: f32 = DEFAULT_ASPECT,
+
+mProjection: Mat4(f32) = MathUtils.PerspectiveRHNO(DEFAULT_FOV_RAD, DEFAULT_ASPECT, DEFAULT_NEAR, DEFAULT_FAR),
 
 mIsFixedAspectRatio: bool = false,
-mPerspectiveFOVRad: f32 = MathUtils.DegreesToRadians(60.0),
-mPerspectiveNear: f32 = 0.01,
-mPerspectiveFar: f32 = 1000.0,
+mPerspectiveFOVRad: f32 = DEFAULT_FOV_RAD,
+mPerspectiveNear: f32 = DEFAULT_NEAR,
+mPerspectiveFar: f32 = DEFAULT_FAR,
 mAreaRect: Vec4(f32) = .{ .x = 0.0, .y = 0.0, .z = 1.0, .w = 1.0 },
 
 pub fn Deinit(_: *ViewpointComponent, _: *EngineContext) void {}
@@ -49,6 +60,12 @@ pub fn SetViewportSize(self: *ViewpointComponent, width: usize, height: usize) v
         self.mAspectRatio = 0.0;
     }
     self.RecalculateProjection();
+}
+
+/// The params that turn a pixel of this viewpoint's render target into a view space ray. Both
+/// the shaders and CPU picking go through these, so what gets clicked is what got drawn.
+pub fn GetRayParams(self: ViewpointComponent) CameraRay.RayParams {
+    return CameraRay.ComputeRayParams(self.mPerspectiveFOVRad, @floatFromInt(self.mViewportWidth), @floatFromInt(self.mViewportHeight));
 }
 
 fn RecalculateProjection(self: *ViewpointComponent) void {

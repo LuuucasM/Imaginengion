@@ -44,6 +44,17 @@ pub fn IsMinimized(self: SDLWindow) bool {
     return self.mIsMinimized;
 }
 
+/// Pixels per window coordinate. 1.0 means mouse positions, ImGui positions and render target
+/// pixels are all the same unit.
+pub fn GetPixelDensity(self: SDLWindow) f32 {
+    return sdl.SDL_GetWindowPixelDensity(self._Window);
+}
+
+/// The OS content scale for the display the window is on, e.g. 1.5 at 150% Windows scaling.
+pub fn GetDisplayScale(self: SDLWindow) f32 {
+    return sdl.SDL_GetWindowDisplayScale(self._Window);
+}
+
 pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Window::PollInputEvents", @src());
     defer zone.Deinit();

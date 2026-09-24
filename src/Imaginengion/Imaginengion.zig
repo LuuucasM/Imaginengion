@@ -30,6 +30,8 @@ pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig");
 //LinAlg stuff
 const MathTypes = @import("Math/MathTypes.zig");
 pub const MathUtils = @import("Math/MathUtils.zig");
+pub const CameraRay = @import("Math/CameraRay.zig");
+pub const RayIntersect = @import("Math/RayIntersect.zig");
 pub const Vec2 = MathTypes.Vec2;
 pub const Vec3 = MathTypes.Vec3;
 pub const Vec4 = MathTypes.Vec4;

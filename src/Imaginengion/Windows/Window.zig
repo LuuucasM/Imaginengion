@@ -37,3 +37,11 @@ pub fn PollInputEvents(self: *Window, engine_context: *EngineContext) !void {
 pub fn IsMinimized(self: Window) bool {
     return self._Impl.IsMinimized();
 }
+
+pub fn GetPixelDensity(self: Window) f32 {
+    return self._Impl.GetPixelDensity();
+}
+
+pub fn GetDisplayScale(self: Window) f32 {
+    return self._Impl.GetDisplayScale();
+}

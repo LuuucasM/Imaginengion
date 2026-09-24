@@ -3,6 +3,7 @@ const std = @import("std");
 const Window = @import("../Windows/Window.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
+const PushConstants = @import("../Renderer/RenderPipeline.zig").SDFPushConstants;
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
@@ -74,6 +75,7 @@ const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
+const PickingDebugPanel = @import("../Imgui/PickingDebugPanel.zig");
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
 const RunSettings = @import("../Imgui/RunSettings.zig");
@@ -111,6 +113,7 @@ _ComponentsPanel: ComponentsPanel = .{},
 _ContentBrowserPanel: ContentBrowserPanel = .{},
 _ScriptsPanel: ScriptsPanel = .{},
 _StatsPanel: StatsPanel = .{},
+_PickingDebugPanel: PickingDebugPanel = .{},
 _ViewportPanel: ViewportPanel = .{},
 
 mScenePanel: ECSDisplayPanel = .{},
@@ -191,6 +194,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     defer zone.Deinit();
     engine_context.mImguiManager.Deinit(engine_context);
     self._ContentBrowserPanel.Deinit(engine_context);
+    self._ViewportPanel.Deinit(engine_context.EngineAllocator());
 }
 
 //Note other systems to consider in the on update loop
@@ -303,6 +307,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self._ComponentsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             try self._StatsPanel.OnImguiRender(engine_context);
+            //before RenderViewports, so it reads last frame's view rects the way input picking will
+            try self._PickingDebugPanel.OnImguiRender(engine_context, &self._ViewportPanel);
             try self.OnImguiRender(engine_context);
             try self.RenderViewports(engine_context);
 
@@ -581,8 +587,6 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
     const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const transform_component = self.mEditorViewportEntity.GetComponent(TransformComponent).?;
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
-    const world_rot = transform_component.GetWorldRotation();
-    const world_pos = transform_component.GetWorldPosition();
 
     switch (viewport_type) {
         .ViewportPanel => {
@@ -594,27 +598,10 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
             try render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight);
         },
     }
-    viewpoint_component.mPerspectiveFar = 1000.0;
-    const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
-    const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5)); //note here we use aspect ratio cuz its editor
-    const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
-    const ray_offset_x: f32 = -tan_half_fov * viewpoint_component.mAspectRatio;
-    const ray_offset_y: f32 = tan_half_fov;
-
     try engine_context.mRenderer.OnUpdate(
         self.mActiveWorldType,
         engine_context,
-        .{
-            .mPosition = world_pos.ToArray(),
-            .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-            .mRotation = world_rot.ToArray(),
-            .mRayScale = Vec2(f32).ArrayT{ ray_scale_x, ray_scale_y },
-            .mRayOffset = Vec2(f32).ArrayT{ ray_offset_x, ray_offset_y },
-            .mQuadsCount = 0,
-            .mGlyphsCount = 0,
-            .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
-            .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
-        },
+        BuildPushConstants(transform_component, viewpoint_component),
         &render_component.mComputeTexture,
         .OverlayGame,
     );
@@ -632,9 +619,6 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
         const render_component = view.mRenderTarget;
         const transform_component = view.mTransform;
         const viewpoint_component = view.mViewpoint;
-
-        const world_rot = transform_component.GetWorldRotation();
-        const world_pos = transform_component.GetWorldPosition();
 
         const panel_width, const panel_height = switch (viewport_type) {
             .ViewportPanel => .{ self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight },
@@ -656,31 +640,33 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
         //a render target added at runtime has no texture until Resize creates one, and Resize
         //skips a zero sized panel, so there may still be nothing to render into
         if (!render_component.mComputeTexture.IsCreated()) continue;
-        viewpoint_component.mPerspectiveFar = 1000.0;
-        const tan_half_fov: f32 = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5);
-        const ray_scale_x: f32 = tan_half_fov * (viewpoint_component.mAspectRatio / (@as(f32, @floatFromInt(viewpoint_component.mViewportWidth)) * 0.5));
-        const ray_scale_y: f32 = -tan_half_fov / (@as(f32, @floatFromInt(viewpoint_component.mViewportHeight)) * 0.5);
-        const ray_offset_x: f32 = -tan_half_fov * viewpoint_component.mAspectRatio;
-        const ray_offset_y: f32 = tan_half_fov;
 
         try engine_context.mRenderer.OnUpdate(
             self.mActiveWorldType,
             engine_context,
-            .{
-                .mPosition = world_pos.ToArray(),
-                .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-                .mRotation = world_rot.ToArray(),
-                .mRayScale = Vec2(f32).ArrayT{ ray_scale_x, ray_scale_y },
-                .mRayOffset = Vec2(f32).ArrayT{ ray_offset_x, ray_offset_y },
-                .mQuadsCount = 0,
-                .mGlyphsCount = 0,
-                .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
-                .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
-            },
+            BuildPushConstants(transform_component, viewpoint_component),
             &render_component.mComputeTexture,
             .OverlayGame,
         );
     }
+}
+
+/// The per view uniforms both render paths hand the renderer. The viewpoint's size has to be set
+/// for this frame before calling, since the ray params are derived from it. The quad and glyph
+/// counts are filled in by the renderer once it knows them.
+fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
+    const ray_params = viewpoint_component.GetRayParams();
+    return .{
+        .mPosition = transform_component.GetWorldPosition().ToArray(),
+        .mRotation = transform_component.GetWorldRotation().ToArray(),
+        .mRayScale = ray_params.Scale.ToArray(),
+        .mRayOffset = ray_params.Offset.ToArray(),
+        .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
+        .mQuadsCount = 0,
+        .mGlyphsCount = 0,
+        .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
+        .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
+    };
 }
 
 fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
@@ -689,18 +675,19 @@ fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, vi
     const render_component = self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?;
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
 
-    var frame_buffers: std.ArrayList(*ComputeOutput) = .empty;
-    var area_rects: std.ArrayList(Vec4(f32)) = .empty;
-
-    try frame_buffers.append(engine_context.FrameAllocator(), &render_component.mComputeTexture);
-    try area_rects.append(engine_context.FrameAllocator(), viewpoint_component.mAreaRect);
+    //the editor camera lives in the editor world but draws the active world (see RenderEditorTarget)
+    const images = [_]ViewportPanel.PanelImage{.{
+        .FrameBuffer = &render_component.mComputeTexture,
+        .AreaRect = viewpoint_component.mAreaRect,
+        .Camera = self.mEditorViewportPlayer,
+    }};
 
     switch (viewport_type) {
         .ViewportPanel => {
-            try self._ViewportPanel.OnImguiRenderViewport(engine_context, frame_buffers, area_rects);
+            try self._ViewportPanel.OnImguiRenderViewport(engine_context, &images, self.mActiveWorldType);
         },
         .PlayPanel => {
-            try self._ViewportPanel.OnImguiRenderPlay(engine_context, frame_buffers, area_rects);
+            try self._ViewportPanel.OnImguiRenderPlay(engine_context, &images, self.mActiveWorldType);
         },
     }
 }
@@ -711,8 +698,7 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
 
     const frame_allocator = engine_context.FrameAllocator();
 
-    var frame_buffers: std.ArrayList(*ComputeOutput) = .empty;
-    var area_rects: std.ArrayList(Vec4(f32)) = .empty;
+    var images: std.ArrayList(ViewportPanel.PanelImage) = .empty;
 
     const views = try self.GetViewportViews(frame_allocator, viewport_type);
 
@@ -721,16 +707,19 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
         //drawable mid frame (e.g. picked in the Player Camera menu) before anything has created
         //its texture. It gets rendered and shown from next frame on.
         if (!view.mRenderTarget.mComputeTexture.IsCreated()) continue;
-        try frame_buffers.append(frame_allocator, &view.mRenderTarget.mComputeTexture);
-        try area_rects.append(frame_allocator, view.mViewpoint.mAreaRect);
+        try images.append(frame_allocator, .{
+            .FrameBuffer = &view.mRenderTarget.mComputeTexture,
+            .AreaRect = view.mViewpoint.mAreaRect,
+            .Camera = view.mPlayer,
+        });
     }
 
     switch (viewport_type) {
         .ViewportPanel => {
-            try self._ViewportPanel.OnImguiRenderViewport(engine_context, frame_buffers, area_rects);
+            try self._ViewportPanel.OnImguiRenderViewport(engine_context, images.items, self.mActiveWorldType);
         },
         .PlayPanel => {
-            try self._ViewportPanel.OnImguiRenderPlay(engine_context, frame_buffers, area_rects);
+            try self._ViewportPanel.OnImguiRenderPlay(engine_context, images.items, self.mActiveWorldType);
         },
     }
 }
@@ -876,6 +865,9 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             }
             if (imgui.igMenuItem_Bool("Stats", @ptrCast(@alignCast(my_null_ptr)), self._StatsPanel._P_Open, true) == true) {
                 self._StatsPanel._P_Open = !self._StatsPanel._P_Open;
+            }
+            if (imgui.igMenuItem_Bool("Picking Debug", @ptrCast(@alignCast(my_null_ptr)), self._PickingDebugPanel._P_Open, true) == true) {
+                self._PickingDebugPanel._P_Open = !self._PickingDebugPanel._P_Open;
             }
             if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenViewport, true) == true) {
                 self._ViewportPanel.mP_OpenViewport = !self._ViewportPanel.mP_OpenViewport;
