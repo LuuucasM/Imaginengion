@@ -2,6 +2,10 @@ const std = @import("std");
 const EngineStats = @This();
 const ImguiManager = @import("../Imgui/Imgui.zig");
 const EngineContext = @import("EngineContext.zig");
+const WorldManager = @import("WorldManager.zig");
+const Tracy = @import("Tracy.zig");
+const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
+const ScriptTagComponent = @import("../ECS/Components.zig").ScriptTagComponent;
 
 pub const ShadingStats = struct {
     TotalShadings: usize = 0,
@@ -91,6 +95,40 @@ pub fn ResetStats(self: *EngineStats) void {
     self.GameWorldStats.ResetStats();
     self.EditorWorldStats.ResetStats();
     self.SimulateWorldStats.ResetStats();
+}
+
+/// Fills in the stats that describe world state rather than work done during the frame. Runs at the
+/// start of the frame, since ResetStats zeroes everything at the end and the Stats panel reads these
+/// mid-frame; objects created or destroyed this frame show up from the next one.
+pub fn CollectFrameStart(self: *EngineStats, engine_context: *EngineContext) void {
+    self.GameWorldStats.mECSStats.TotalEntities = engine_context.mGameWorld.NumEntitiesWith(EntityTagComponent);
+    self.EditorWorldStats.mECSStats.TotalEntities = engine_context.mEditorWorld.NumEntitiesWith(EntityTagComponent);
+    self.SimulateWorldStats.mECSStats.TotalEntities = engine_context.mSimulateWorld.NumEntitiesWith(EntityTagComponent);
+}
+
+/// Sends this frame's stats to Tracy as plots. Runs once at the very end of the frame, before the
+/// frame arena and the stats are reset, so it sees everything the frame did.
+pub fn EmitPlots(self: EngineStats, engine_context: *EngineContext) void {
+    //the counts below are cheap but not free, so skip them outright when there is nowhere to send them
+    if (!Tracy.enable_tracy) return;
+
+    //the arena keeps its memory between frames (retain_capacity), so this is the largest any frame
+    //has needed so far: it only grows, and a jump marks the frame that set a new high
+    Tracy.Plot("Frame Arena Capacity", .{ .format = .Memory }, engine_context._Internal.FrameArena.queryCapacity());
+
+    //the editor world only holds editor objects like the viewport camera and is never rendered as a
+    //world of its own, so its render stats would be a flat zero
+    PlotWorld("Game", self.GameWorldStats, &engine_context.mGameWorld);
+    PlotWorld("Simulate", self.SimulateWorldStats, &engine_context.mSimulateWorld);
+}
+
+fn PlotWorld(comptime prefix: [:0]const u8, stats: WorldStats, world: *WorldManager) void {
+    Tracy.Plot(prefix ++ "/Entities", .{ .color = 0x4CAF50 }, stats.mECSStats.TotalEntities);
+    Tracy.Plot(prefix ++ "/Scripts", .{ .color = 0x9C27B0 }, world.NumEntitiesWith(ScriptTagComponent));
+    Tracy.Plot(prefix ++ "/Render Objects", .{ .color = 0x2196F3 }, stats.mRenderStats.TotalObjects);
+    Tracy.Plot(prefix ++ "/Quads", .{ .color = 0x03A9F4 }, stats.mRenderStats.OutputQuadNum);
+    Tracy.Plot(prefix ++ "/Glyphs", .{ .color = 0x00BCD4 }, stats.mRenderStats.OutputGlyphNum);
+    Tracy.Plot(prefix ++ "/Shadings", .{ .color = 0xFF9800 }, stats.mRenderStats.Shadings.TotalShadings);
 }
 
 pub fn ImguiRender(self: EngineStats, frame_allocator: std.mem.Allocator) !void {

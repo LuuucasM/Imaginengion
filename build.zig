@@ -24,6 +24,7 @@ pub fn build(b: *std.Build) void {
 
     //==================================OPTIONS============================================================
     const enable_tracy = b.option(bool, "enable-tracy", "Enable tracy") orelse false;
+    const tracy_callstack = b.option(u32, "tracy-callstack", "Call stack depth captured with each Tracy memory event, 0 = off") orelse 0;
     const enable_nsight = b.option(bool, "enable-nsight", "Enable nsight") orelse false;
     const no_bin = b.option(bool, "no-bin", "skip emitting binary") orelse false;
     const test_build = b.option(bool, "test-build", "run depends on tests") orelse false;
@@ -31,6 +32,7 @@ pub fn build(b: *std.Build) void {
 
     var debug_build_options = b.addOptions();
     debug_build_options.addOption(bool, "enable_tracy", enable_tracy);
+    debug_build_options.addOption(u32, "tracy_callstack", tracy_callstack);
     debug_build_options.addOption(bool, "enable_nsight", enable_nsight);
 
     engine_module_eng.addOptions("debug_build_options", debug_build_options);

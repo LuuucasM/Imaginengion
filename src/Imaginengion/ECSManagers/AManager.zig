@@ -289,6 +289,8 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     //check through all the assets we currently have to see if they are still valid/need to be updated
     const group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
     zone.Value(group.items.len);
+    Tracy.Plot("Assets/Tracked Files", .{ .color = 0x607D8B }, group.items.len);
+    Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mPendingDelete.count());
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
 

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "things AI can look at andor fix.md",
+                "file": "immediate things to do or fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "things AI can look at andor fix"
+              "title": "immediate things to do or fix"
             }
           }
         ]
@@ -174,8 +174,8 @@
   "active": "c1904df8c5a0dd68",
   "lastOpenFiles": [
     "longer term things to do or fix.md",
-    "immediate things to do or fix.md",
     "things AI can look at andor fix.md",
+    "immediate things to do or fix.md",
     "ECS Manager.md",
     "Research/matt_bentley_-_the_high_complexity_jump-counting_pattern.pdf",
     "Research/matt_bentley_-_the_low_complexity_jump-counting_pattern.pdf",

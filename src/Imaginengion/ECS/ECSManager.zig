@@ -198,6 +198,12 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.IsActiveEntity(entity_id);
         }
 
+        /// How many entities currently have `component_type`, without building a group.
+        pub fn NumWithComponent(self: Self, comptime component_type: type) usize {
+            _ValidateType(component_type);
+            return self.mComponentManager.NumWithComponent(component_type);
+        }
+
         pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {
             _ValidateGroupQuery(query);
             return ComponentManagerT.GetGroupMask(query);

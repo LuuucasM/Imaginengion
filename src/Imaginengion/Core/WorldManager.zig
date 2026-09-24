@@ -179,6 +179,11 @@ pub fn GetEntityGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, c
     return try self.mEManager.GetGroup(frame_allocator, query);
 }
 
+/// How many entities in this world have `component_type`, without building a group.
+pub fn NumEntitiesWith(self: *WorldManager, comptime component_type: type) usize {
+    return self.mEManager.mECSManager.NumWithComponent(component_type);
+}
+
 pub fn SaveEntity(self: *WorldManager, engine_context: *EngineContext, entity: Entity) !void {
     const zone = Tracy.ZoneInit("WorldManager::SaveEntity", @src());
     defer zone.Deinit();

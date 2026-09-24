@@ -71,8 +71,12 @@ pub fn Run(self: *Application) !void {
     const run_io = self.mEngineContext.Io();
     var t0: std.Io.Timestamp = .now(run_io, .awake);
 
+    self.mEngineContext.mEngineStats.CollectFrameStart(&self.mEngineContext);
     try self.mProgram.OnUpdate(&self.mEngineContext);
-    _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
+    self.mEngineContext.mEngineStats.EmitPlots(&self.mEngineContext);
+    //the arena empties all at once, so Tracy is told the whole Frame pool is gone rather than each allocation
+    Tracy.MemDiscard(.Frame);
+    _ = self.mEngineContext._Internal.FrameArena.reset(.retain_capacity);
     self.mEngineContext.mEngineStats.ResetStats();
     first_zone.Deinit();
     Tracy.FrameMark();
@@ -91,8 +95,12 @@ pub fn Run(self: *Application) !void {
 
         t0 = .now(run_io, .awake);
 
+        self.mEngineContext.mEngineStats.CollectFrameStart(&self.mEngineContext);
         try self.mProgram.OnUpdate(&self.mEngineContext);
-        _ = self.mEngineContext._Internal.FrameArena.reset(.free_all);
+        self.mEngineContext.mEngineStats.EmitPlots(&self.mEngineContext);
+        //the arena empties all at once, so Tracy is told the whole Frame pool is gone rather than each allocation
+        Tracy.MemDiscard(.Frame);
+        _ = self.mEngineContext._Internal.FrameArena.reset(.retain_capacity);
         self.mEngineContext.mEngineStats.ResetStats();
 
         t1 = .now(run_io, .awake);

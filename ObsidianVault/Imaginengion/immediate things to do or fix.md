@@ -1,5 +1,2 @@
-- I need to re-add features so i can test the play/simulation part of the engine. Some things i have yet to test/add
-	- adding a player and an entity and having the player possess the entity
-	- seeing if adding a camera to the entity and seeing if i can get a preview in the play panel
-	- then actually doing the play/simulation
-	- when hitting stop everything returns to its pre-play state
+- rotating in the engine doesnt work as intended
+	- when i rotate a parent entity i expect the child entity to rotate around the parents rotation point, but right now its just additive rotation so when a parent is rotated the child is just simply rotated by that same amount as well

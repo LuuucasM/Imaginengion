@@ -113,6 +113,8 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
             try self.AddBroadPair(engine_context, world_manager, origin_id, target_id);
         }
     }
+
+    Tracy.Plot("Physics/Broad Pairs", .{ .color = 0x795548 }, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
 }
 
 /// Classifies one pair and records it if the two can interact at all.
@@ -219,6 +221,11 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
         }
     }
     self._BlockingContacts.items.len = end;
+
+    //what survived the narrow test, against the broad pair count plotted in BroadPass: a wide gap means
+    //the broad phase is handing over many pairs that never touch
+    Tracy.Plot("Physics/Blocking Contacts", .{ .color = 0xFF5722 }, self._BlockingContacts.items.len);
+    Tracy.Plot("Physics/Overlap Contacts", .{ .color = 0xFFC107 }, self._OverlapContacts.items.len);
 
     //check for end collision events
     var prev_iter = self._LastCache.iterator();

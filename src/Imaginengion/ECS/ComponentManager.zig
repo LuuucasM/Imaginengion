@@ -220,6 +220,13 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         //provides a mask for a group query
+        /// How many entities currently have `component_type`: the length of its dense array, so no walk.
+        /// Every live entity carries a SkipFieldComponent, which makes that one the total live count.
+        pub fn NumWithComponent(self: Self, comptime component_type: type) usize {
+            const internal_array: *InternalComponentArray(entity_t, component_type) = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
+            return internal_array.NumOfComponents();
+        }
+
         pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {
             switch (query) {
                 .Component => |component_type| {

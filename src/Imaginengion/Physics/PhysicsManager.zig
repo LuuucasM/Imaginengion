@@ -71,8 +71,14 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
     self._InternalData.Accumulator += engine_context.mDT;
 
     const rigid_body_arr = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
+    Tracy.Plot("Physics/Rigid Bodies", .{ .color = 0xE91E63 }, rigid_body_arr.items.len);
+
+    //fixed steps run this frame: normally 0 or 1, and climbing means physics is falling behind real time
+    var steps: usize = 0;
+    defer Tracy.Plot("Physics/Steps Per Frame", .{ .color = 0xF44336 }, steps);
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
+        steps += 1;
         for (0..SUB_STEPS) |_| {
             {
                 //one zone for the whole pass: per-body zones would cost more than the few multiply-adds they time

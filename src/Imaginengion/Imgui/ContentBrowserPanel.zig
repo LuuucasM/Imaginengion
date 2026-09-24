@@ -57,12 +57,12 @@ pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
     self.mProjectPath.deinit(engine_context.EngineAllocator());
     if (self.mCurrentDirectory) |*dir| {
         dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
+        self.mCurrentDirectory = null;
     }
     self.mCurrentPath.deinit(engine_context.EngineAllocator());
     if (self.mProjectFile) |*file| {
         file.close(engine_context.Io());
-        self.mProjectDirectory = null;
+        self.mProjectFile = null;
     }
 }
 
@@ -249,6 +249,11 @@ pub fn OnNewProjectEvent(self: *ContentBrowserPanel, engine_context: *EngineCont
         self.mCurrentDirectory = null;
     }
 
+    if (self.mProjectFile) |*file| {
+        file.close(engine_context.Io());
+        self.mProjectFile = null;
+    }
+
     self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
     self.mCurrentPath.clearAndFree(engine_context.EngineAllocator());
 
@@ -272,6 +277,11 @@ pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, engine_context: *EngineCon
     if (self.mCurrentDirectory) |*dir| {
         dir.close(engine_context.Io());
         self.mCurrentDirectory = null;
+    }
+
+    if (self.mProjectFile) |*file| {
+        file.close(engine_context.Io());
+        self.mProjectFile = null;
     }
 
     self.mProjectPath.clearAndFree(engine_context.EngineAllocator());

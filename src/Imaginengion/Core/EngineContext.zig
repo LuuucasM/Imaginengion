@@ -33,6 +33,14 @@ const InternalData = struct {
     EngineGPA: std.heap.DebugAllocator(.{}) = std.heap.DebugAllocator(.{}).init,
     FrameArena: std.heap.ArenaAllocator = std.heap.ArenaAllocator.init(std.heap.page_allocator),
 
+    // Stored rather than taken straight from MakeAllocatorVTable inside EngineAllocator/FrameAllocator,
+    // because a script DLL compiles its own copy of those functions: taking the address there would give
+    // the DLL's copy of the vtable. These defaults are filled in by the engine binary when the context is
+    // created, so a script reading them through the context always runs the engine's allocator code, the
+    // same code (and the same Tracy memory tracking) that later frees or grows that memory.
+    EngineAllocVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Engine).vtable,
+    FrameAllocVTable: *const std.mem.Allocator.VTable = &MakeAllocatorVTable(.Frame).vtable,
+
     ThreadedIO: std.Io.Threaded = undefined,
 };
 
@@ -145,20 +153,22 @@ pub fn DeInit(self: *EngineContext) void {
 
     self.mAppWindow.Deinit();
 
+    //anything still live in the Engine pool here is a real leak and is left for Tracy to show as one
     _ = self._Internal.EngineGPA.deinit();
+    Tracy.MemDiscard(.Frame);
     self._Internal.FrameArena.deinit();
 }
 pub fn EngineAllocator(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
-        .vtable = &MakeAllocatorVTable(.Engine).vtable,
+        .vtable = self._Internal.EngineAllocVTable,
     };
 }
 
 pub fn FrameAllocator(self: *EngineContext) std.mem.Allocator {
     return .{
         .ptr = self,
-        .vtable = &MakeAllocatorVTable(.Frame).vtable,
+        .vtable = self._Internal.FrameAllocVTable,
     };
 }
 
