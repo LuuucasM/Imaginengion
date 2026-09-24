@@ -37,6 +37,7 @@ const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneSceneComponent = SceneComponents.SceneComponent;
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
+const TextLayout = @import("TextLayout.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -275,34 +276,25 @@ pub fn DrawText(
     if (text_component.mTexOptions.mIsTransparent) texture_shading_flags |= SurfShadingData.FLAG_TRANSPARENT;
 
     const world_pos = transform_component.GetWorldPosition();
+    const world_rot = transform_component.GetWorldRotation();
 
-    const left_bounds = world_pos.x - text_component.mBounds.x;
-    const right_bounds = world_pos.x + text_component.mBounds.y;
+    const glyph_buff_base = switch (scene_scene_comp.mLayerType) {
+        .GameLayer => &self.mGameData.mGlyphBufferBase,
+        .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
+    };
 
-    var pen_x = left_bounds;
-    var pen_y = world_pos.y;
+    //mBounds is how far the text runs left (x) and right (y) of the transform. layout starts its
+    //lines at x = 0, so each line is shifted left by the left bound
+    const left_bound = text_component.mBounds.x;
+    const wrap_width = text_component.mBounds.x + text_component.mBounds.y;
 
-    for (text_component.mText.items, 0..) |char, i| {
-        const array_ind = TextAsset.ToArrayIndex(char);
-        const glyph = text_asset.mGlyphs[array_ind];
-
-        if (char == 32) { //if its space just continue on
-            pen_x += glyph.mAdvance * text_component.mFontSize;
-            continue;
-        }
-
-        const glyph_width = glyph.mAdvance;
-
-        if (pen_x + glyph_width > right_bounds) {
-            pen_x = left_bounds;
-            pen_y -= (text_asset.mLineHeight * text_component.mFontSize);
-        }
-
+    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, text_component.mFontSize, wrap_width);
+    while (layout.Next()) |glyph| {
         var tex_options = Texture2D.TexOptions{
             .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
             .mIsTransparent = false,
-            .mTextureUV0 = glyph.mAtlasTexel0.DivVec(text_asset.mAtlasSize),
-            .mTextureUV1 = glyph.mAtlasTexel1.DivVec(text_asset.mAtlasSize),
+            .mTextureUV0 = glyph.UV0,
+            .mTextureUV1 = glyph.UV1,
             .mTilingFactor = 1.0,
         };
 
@@ -313,42 +305,18 @@ pub fn DrawText(
             texture_shading_handle,
         );
 
-        const left = glyph.mPlaneMin.x;
-        const top = glyph.mPlaneMin.y;
-        const right = glyph.mPlaneMax.x;
-        const bottom = glyph.mPlaneMax.y;
-
-        const plane_size: Vec2(f32) = .{
-            .x = (right - left) * text_component.mFontSize,
-            .y = (top - bottom) * text_component.mFontSize,
-        };
-
-        const plane_center: Vec2(f32) = .{
-            .x = (left + right) * 0.5 * text_component.mFontSize,
-            .y = (top + bottom) * 0.5 * text_component.mFontSize,
-        };
-
-        const glyph_buff_base = switch (scene_scene_comp.mLayerType) {
-            .GameLayer => &self.mGameData.mGlyphBufferBase,
-            .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
-        };
+        //the layout is in the text's own space, so the whole line turns with the transform instead
+        //of each glyph turning in place along world x
+        const local_pen = Vec3(f32){ .x = glyph.Pen.x - left_bound, .y = glyph.Pen.y, .z = 0 };
+        const glyph_pos = world_pos.AddVec(local_pen.QuatRotate(world_rot));
 
         try glyph_buff_base.append(engine_context.EngineAllocator(), .{
-            .Position = Vec3(f32).ArrayT{ pen_x, pen_y, world_pos.z },
-            .Rotation = transform_component.GetWorldRotation().ToVector(),
-            .HalfExtents = Vec3(f32).ArrayT{ plane_size.x * 0.5, plane_size.y * 0.5, THICKNESS_2D },
-            .PlaneCenter = Vec2(f32).ArrayT{ plane_center.x, plane_center.y },
+            .Position = glyph_pos.ToArray(),
+            .Rotation = world_rot.ToVector(),
+            .HalfExtents = Vec3(f32).ArrayT{ glyph.HalfExtents.x, glyph.HalfExtents.y, THICKNESS_2D },
+            .PlaneCenter = Vec2(f32).ArrayT{ glyph.PlaneCenter.x, glyph.PlaneCenter.y },
             .AtlasShadingHandle = @intCast(atlas_shading_handle),
             .TextureShadingFlags = @intCast(texture_shading_flags),
         });
-
-        var move_dist = glyph_width;
-        if (i < text_component.mText.items.len - 1) {
-            if (glyph.mKernings.get(text_component.mText.items[i + 1])) |kerning_advance| {
-                move_dist += kerning_advance;
-            }
-        }
-
-        pen_x += (move_dist) * text_component.mFontSize;
     }
 }

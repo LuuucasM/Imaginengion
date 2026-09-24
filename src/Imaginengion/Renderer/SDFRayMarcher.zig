@@ -204,18 +204,19 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                         const texture_shading_handle = atlas_shading_data.SiblingShading;
                         const texture_shading_data = self.mSurfShading[texture_shading_handle];
 
-                        const uv = SDFFunc.uvIMGlyph(
-                            end_point,
-                            glyph,
-                            texture_shading_data.Texturehandle,
-                            texture_shading_data.TextureWidth,
-                            texture_shading_data.TextureHeight,
-                        );
+                        //the coverage test needs where in the glyph's box the hit is. the fill texture's
+                        //UV is a different thing, a spot in its texture manager slot, and only for color
+                        const glyph_uv = SDFFunc.localUvIMGlyph(end_point, glyph);
 
-                        if (uv.x >= 0.0 and uv.y >= 0.0) {
-                            const msd = SDFFunc.GetMSD(.{ .x = uv.x, .y = uv.y }, atlas_shading_data, textures_array, sample_sampler);
+                        if (glyph_uv.x >= 0.0 and glyph_uv.y >= 0.0) {
+                            const msd = SDFFunc.GetMSD(glyph_uv, atlas_shading_data, textures_array, sample_sampler);
                             if (msd >= 0.5) {
-                                break :blk uv;
+                                break :blk SDFFunc.TextureUV(
+                                    texture_shading_data.Texturehandle,
+                                    glyph_uv,
+                                    texture_shading_data.TextureWidth,
+                                    texture_shading_data.TextureHeight,
+                                );
                             } else {
                                 continue :my_switch .None;
                             }
