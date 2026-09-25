@@ -158,14 +158,14 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
         if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
-            if (Collisions.SphereSphere(contact, origin_transform, target_transform)) {
+            if (Collisions.SphereSphere(contact, origin_transform, collider_origin, target_transform, collider_target)) {
                 i += 1;
             } else {
                 self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
                 end -= 1;
             }
         } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
-            if (Collisions.BoxBox(contact, origin_transform, target_transform)) {
+            if (Collisions.BoxBox(contact, origin_transform, collider_origin, target_transform, collider_target)) {
                 i += 1;
             } else {
                 self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
@@ -189,7 +189,7 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
         if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
-            if (Collisions.SphereSphere(contact, origin_transform, target_transform)) {
+            if (Collisions.SphereSphere(contact, origin_transform, collider_origin, target_transform, collider_target)) {
                 const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
                 try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
                 if (!self._LastCache.contains(key)) {
@@ -201,7 +201,7 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
                 end -= 1;
             }
         } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
-            if (Collisions.BoxBox(contact, origin_transform, target_transform)) {
+            if (Collisions.BoxBox(contact, origin_transform, collider_origin, target_transform, collider_target)) {
                 const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
                 try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
                 if (!self._LastCache.contains(key)) {

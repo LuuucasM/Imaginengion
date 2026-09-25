@@ -214,10 +214,12 @@ pub fn _CalculateWorldTransform(self: Entity) void {
 
             if (parent_entity.GetComponent(TransformComponent)) |parent_transform| {
                 //the same three rules PhysicsManager.CalculateEntityTransform uses, in the same
-                //order: translations add, rotations multiply parent-first, scales multiply.
-                //Composing every ancestor's local transform here gives the same answer that pass
-                //gets from the parent's cached world transform.
-                translation_out = translation_out.AddVec(parent_transform.GetTranslation());
+                //order: the position so far is an offset in this parent's space, so it is scaled and
+                //turned by the parent before the parent's own translation is added; rotations multiply
+                //parent-first; scales multiply. Applying every ancestor's local transform in turn,
+                //nearest first, gives the same answer that pass gets from the parent's cached world
+                //transform.
+                translation_out = parent_transform.GetTranslation().AddVec(translation_out.MulVec(parent_transform.GetScale()).QuatRotate(parent_transform.GetRotation()));
                 rotation_out = parent_transform.GetRotation().MulQuat(rotation_out);
                 scale_out = scale_out.MulVec(parent_transform.GetScale());
             }

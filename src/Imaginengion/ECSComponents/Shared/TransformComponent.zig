@@ -17,7 +17,7 @@ const TransformComponent = @This();
 const InternalData = struct {
     WorldPosition: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
     WorldRotation: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
-    WorldScale: Vec3(f32) = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
+    WorldScale: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
 };
 
 pub const Editable: bool = true;
@@ -26,7 +26,7 @@ pub const Name: []const u8 = "TransformComponent";
 pub const empty: TransformComponent = .{
     ._Translation = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
     ._Rotation = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
-    ._Scale = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
+    ._Scale = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
 };
 
 //the local transform is private so that every write goes through Entity's setters, which are
@@ -35,7 +35,7 @@ pub const empty: TransformComponent = .{
 //Get* accessors, or GetWorld* for the value the last transform pass produced.
 _Translation: Vec3(f32) = .{ .x = 0.0, .y = 0.0, .z = 0.0 },
 _Rotation: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 },
-_Scale: Vec3(f32) = .{ .x = 2.0, .y = 2.0, .z = 2.0 },
+_Scale: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
 
 _InternalData: InternalData = .{},
 

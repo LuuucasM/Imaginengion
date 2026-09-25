@@ -5,9 +5,6 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
-const Sphere = ColliderComponent.Sphere;
-const Box = ColliderComponent.Box;
-
 const MathUtils = @import("../Math/MathUtils.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -25,15 +22,13 @@ pub const Contact = struct {
     mPenetration: f32,
 };
 
-pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponent, target_transform_comp: *TransformComponent) bool {
+pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
     const origin_pos = origin_transform_comp.GetWorldPosition();
     const target_pos = target_transform_comp.GetWorldPosition();
-    const origin_scale = origin_transform_comp.GetWorldScale();
-    const target_scale = target_transform_comp.GetWorldScale();
 
     const delta = target_pos.SubVec(origin_pos);
 
-    const radius_sum = origin_scale.x + target_scale.x;
+    const radius_sum = origin_collider.GetWorldRadius(origin_transform_comp.GetWorldScale()) + target_collider.GetWorldRadius(target_transform_comp.GetWorldScale());
 
     // Compare squared distances first to avoid paying for a sqrt on pairs
     // that don't even overlap (the common case in a broad-phase pass).
@@ -57,17 +52,19 @@ pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponen
     return true;
 }
 
-pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, target_transform_comp: *TransformComponent) bool {
+/// Axis aligned: the boxes' rotations are ignored.
+pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
     const origin_pos = origin_transform_comp.GetWorldPosition();
     const target_pos = target_transform_comp.GetWorldPosition();
-    const origin_scale = origin_transform_comp.GetWorldScale();
-    const target_scale = target_transform_comp.GetWorldScale();
+    const origin_half = origin_collider.GetWorldHalfExtents(origin_transform_comp.GetWorldScale());
+    const target_half = target_collider.GetWorldHalfExtents(target_transform_comp.GetWorldScale());
 
     const delta = target_pos.SubVec(origin_pos);
 
-    const overlap_x = (origin_scale.x + target_scale.x) - @abs(delta.x);
-    const overlap_y = (origin_scale.y + target_scale.y) - @abs(delta.y);
-    const overlap_z = (origin_scale.z + target_scale.z) - @abs(delta.z);
+    //boxes overlap on an axis while their centers are closer than their half extents added up
+    const overlap_x = (origin_half.x + target_half.x) - @abs(delta.x);
+    const overlap_y = (origin_half.y + target_half.y) - @abs(delta.y);
+    const overlap_z = (origin_half.z + target_half.z) - @abs(delta.z);
 
     if (overlap_x <= 0 or overlap_y <= 0 or overlap_z <= 0) return false; //not a collision
 

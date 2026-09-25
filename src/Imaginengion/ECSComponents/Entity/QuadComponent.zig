@@ -20,6 +20,9 @@ pub const Editable: bool = true;
 pub const Name: []const u8 = "QuadComponent";
 
 mShouldRender: bool = true,
+//full width and height at scale 1. the transform's scale multiplies it, and the renderer halves it
+//into the half extents the GPU wants
+mSize: Vec2(f32) = .{ .x = 1, .y = 1 },
 mTexture: AssetHandle = .uninit,
 mTexOptions: Texture2D.TexOptions = .default,
 mMaterial: Material.SurfaceRenderMat = .default,
@@ -41,6 +44,9 @@ pub fn Clone(self: *const QuadComponent, _: *EngineContext) !QuadComponent {
 pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void {
     try ImguiManager.RenderBool(&self.mShouldRender, "Should Render?");
 
+    //a negative size would turn the box inside out
+    try ImguiManager.RenderFloat2Drag(&self.mSize, "Size", 0.05, 0, std.math.floatMax(f32));
+
     try self.mMaterial.ImguiRender();
 
     const texture_asset = try self.mTexture.GetAsset(engine_context, Texture2D);
@@ -52,6 +58,7 @@ pub fn EditorRender(self: *QuadComponent, engine_context: *EngineContext) !void 
 
 const Json = JsonUtils.JsonFields(QuadComponent, .{
     .ShouldRender = "mShouldRender",
+    .Size = "mSize",
     .Texture = "mTexture",
     .TexOptions = "mTexOptions",
     .Material = "mMaterial",

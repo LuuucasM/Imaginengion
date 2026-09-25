@@ -3,6 +3,7 @@ test {
     _ = @import("ECS/ECSTests.zig");
     _ = @import("Physics/TransformPassTests.zig");
     _ = @import("Physics/BodyTagTests.zig");
+    _ = @import("Physics/CollisionsTests.zig");
 }
 
 //Core Stuff -----------------------------------

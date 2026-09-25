@@ -142,8 +142,8 @@ pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engin
         //a dirty entity is not necessarily a root, so the walk starts from whatever its nearest
         //ancestor-with-a-transform already worked out. That ancestor is either clean, or dirty too
         //and its own pass rewrites this subtree; both orders land on the same answer because
-        //CalculateEntityTransform assigns world = local + accumulator instead of accumulating into
-        //itself. That is also why a parent and child both being dirty is merely redundant work
+        //CalculateEntityTransform assigns world from local and the accumulator instead of accumulating
+        //into itself. That is also why a parent and child both being dirty is merely redundant work
         //rather than wrong, so nothing here tries to skip entities that have a dirty ancestor.
         const seed = AncestorWorldTransform(entity);
         CalculateEntityTransform(entity, seed.position, seed.rotation, seed.scale);
@@ -214,7 +214,10 @@ fn CalculateEntityTransform(entity: Entity, position_acc: Vec3(f32), rotation_ac
     var scale_out = scale_acc;
 
     if (entity.GetComponent(EntityTransformComponent)) |transform| {
-        transform.SetWorldPosition(transform.GetTranslation().AddVec(position_acc));
+        //the local position is an offset in the parent's space: it stretches with the parent's scale
+        //and turns with its rotation before it is added on, so a child orbits a turning parent and
+        //moves out with a growing one instead of staying put
+        transform.SetWorldPosition(position_acc.AddVec(transform.GetTranslation().MulVec(scale_acc).QuatRotate(rotation_acc)));
         transform.SetWorldRotation(rotation_acc.MulQuat(transform.GetRotation()));
         //scale composes multiplicatively: a child is a factor of its parent, not an offset from it.
         //Entity._CalculateWorldTransform has to keep using the same three rules, or a deserialized

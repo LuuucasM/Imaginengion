@@ -225,7 +225,9 @@ pub fn DrawQuad(
 
     var world_pos = transform_component.GetWorldPosition();
     var world_rot = transform_component.GetWorldRotation();
-    var half_size = Vec2(f32){ .x = transform_component.GetWorldScale().x * 0.5, .y = transform_component.GetWorldScale().y * 0.5 };
+    //the quad's own size, grown by its scale (and everything above it in the hierarchy)
+    const world_scale = transform_component.GetWorldScale();
+    var half_size = Vec2(f32){ .x = quad_component.mSize.x * world_scale.x * 0.5, .y = quad_component.mSize.y * world_scale.y * 0.5 };
     if (canvas) |c| {
         world_pos = c.ToWorldPoint(world_pos);
         world_rot = c.ToWorldRotation(world_rot);
@@ -296,12 +298,17 @@ pub fn DrawText(
         .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
     };
 
+    //text only grows evenly, so it takes the largest scale axis, like a sphere collider. the font size
+    //and the bounds grow together, which keeps the wrapping on the same words at any scale
+    const world_scale = transform_component.GetWorldScale();
+    const text_scale = @max(world_scale.x, @max(world_scale.y, world_scale.z));
+
     //mBounds is how far the text runs left (x) and right (y) of the transform. layout starts its
     //lines at x = 0, so each line is shifted left by the left bound
-    const left_bound = text_component.mBounds.x;
-    const wrap_width = text_component.mBounds.x + text_component.mBounds.y;
+    const left_bound = text_component.mBounds.x * text_scale;
+    const wrap_width = (text_component.mBounds.x + text_component.mBounds.y) * text_scale;
 
-    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, text_component.mFontSize, wrap_width);
+    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, text_component.mFontSize * text_scale, wrap_width);
     while (layout.Next()) |glyph| {
         var tex_options = Texture2D.TexOptions{
             .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },

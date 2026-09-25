@@ -626,11 +626,13 @@ pub fn ImguiSeparator() !void {
 }
 
 pub fn RenderUVCoords(open: *bool, uv0: *Vec2(f32), uv1: *Vec2(f32), engine_context: *EngineContext, texture_asset: *Texture2D) !void {
+    if (!open.*) return;
+
     imgui.igSetNextWindowSize(.{ .x = @floatFromInt(texture_asset.GetWidth()), .y = @floatFromInt(texture_asset.GetHeight()) }, imgui.ImGuiCond_Once);
 
+    //igEnd has to pair with every igBegin, even when Begin returns false because the window is collapsed
+    defer imgui.igEnd();
     if (imgui.igBegin("Texture Coordinate Editor", open, 0)) {
-        defer imgui.igEnd();
-
         const available = imgui.igGetContentRegionAvail();
         const tex_w: f32 = @floatFromInt(texture_asset.GetWidth());
         const tex_h: f32 = @floatFromInt(texture_asset.GetHeight());
