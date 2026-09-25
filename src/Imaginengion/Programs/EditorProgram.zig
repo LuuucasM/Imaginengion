@@ -152,6 +152,8 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     //EDITOR UI STUFF================================================
 
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    //editor UI keeps its pixel size when the window grows, like ImGui does, instead of scaling up
+    self.mEditorUIScene.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{
         .bAddNameComponent = true,
@@ -602,6 +604,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
         self.mActiveWorldType,
         engine_context,
         BuildPushConstants(transform_component, viewpoint_component),
+        BuildCameraView(transform_component, viewpoint_component),
         &render_component.mComputeTexture,
         .OverlayGame,
     );
@@ -645,6 +648,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             self.mActiveWorldType,
             engine_context,
             BuildPushConstants(transform_component, viewpoint_component),
+            BuildCameraView(transform_component, viewpoint_component),
             &render_component.mComputeTexture,
             .OverlayGame,
         );
@@ -654,6 +658,16 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
 /// The per view uniforms both render paths hand the renderer. The viewpoint's size has to be set
 /// for this frame before calling, since the ray params are derived from it. The quad and glyph
 /// counts are filled in by the renderer once it knows them.
+/// The camera this view renders through, which overlay scenes place their canvases in front of. Like
+/// BuildPushConstants, the viewpoint's size has to be set for this frame first.
+fn BuildCameraView(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) Renderer.CameraView {
+    return .{
+        .Pose = .{ .Position = transform_component.GetWorldPosition(), .Rotation = transform_component.GetWorldRotation() },
+        .TanHalfFov = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5),
+        .TargetHeight = @floatFromInt(viewpoint_component.mViewportHeight),
+    };
+}
+
 fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
     const ray_params = viewpoint_component.GetRayParams();
     return .{

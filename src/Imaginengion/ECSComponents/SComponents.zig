@@ -33,6 +33,7 @@ pub const ComponentsList = [_]type{
 pub const ComponentsPanelList = [_]type{
     UUIDComponent,
     NameComponent,
+    SceneComponent,
     PhysicsComponent,
     SpawnPossComponent,
 };

@@ -23,13 +23,13 @@ const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
 const DynamicQuery = GroupQuery{ .Component = DynamicBodyTag };
 
 //colliders the solver can actually move
-const DynamicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, DynamicQuery } };
+pub const DynamicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, DynamicQuery } };
 
 //everything else that collides: static bodies, and colliders carrying no RigidBodyComponent at
 //all. Asking for "collider and not dynamic" rather than "collider and static" is deliberate, so
 //that a collider with no rigid body (which has neither body tag) still takes part in collision
 //the way it does today, instead of silently dropping out of the broad pass.
-const OtherCollidersQuery = GroupQuery{ .Not = .{ .mFirst = &ColliderQuery, .mSecond = &DynamicQuery } };
+pub const OtherCollidersQuery = GroupQuery{ .Not = .{ .mFirst = &ColliderQuery, .mSecond = &DynamicQuery } };
 
 const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
@@ -89,27 +89,24 @@ pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void 
 
 ///Checks the whole scene for objects that can possibly collide.
 /// For the contact sets the entity origin, target, and collision type.
-pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
+/// dynamic_arr and other_arr are the DynamicCollidersQuery and OtherCollidersQuery groups, fetched
+/// once by the caller for every substep rather than re-queried here each time.
+pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, dynamic_arr: []const Entity.Type, other_arr: []const Entity.Type) !void {
     const zone = Tracy.ZoneInit("CollisionManager::BroadPass", @src());
     defer zone.Deinit();
-
-    const frame_allocator = engine_context.FrameAllocator();
-
-    const dynamic_arr = try world_manager.GetEntityGroup(frame_allocator, DynamicCollidersQuery);
-    const other_arr = try world_manager.GetEntityGroup(frame_allocator, OtherCollidersQuery);
 
     //a pair that neither side can move has nothing for the solver to do with it, so those pairs are
     //never built rather than being built, classified, narrow-phase tested and then dropped at the
     //_InvMass check in SolverPass. Every remaining pair has at least one dynamic body in it, which
     //is why both loops below are anchored on the dynamic list.
-    for (0..dynamic_arr.items.len) |i| {
-        for (i + 1..dynamic_arr.items.len) |j| {
-            try self.AddBroadPair(engine_context, world_manager, dynamic_arr.items[i], dynamic_arr.items[j]);
+    for (0..dynamic_arr.len) |i| {
+        for (i + 1..dynamic_arr.len) |j| {
+            try self.AddBroadPair(engine_context, world_manager, dynamic_arr[i], dynamic_arr[j]);
         }
     }
 
-    for (dynamic_arr.items) |origin_id| {
-        for (other_arr.items) |target_id| {
+    for (dynamic_arr) |origin_id| {
+        for (other_arr) |target_id| {
             try self.AddBroadPair(engine_context, world_manager, origin_id, target_id);
         }
     }

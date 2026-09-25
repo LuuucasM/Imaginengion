@@ -39,6 +39,11 @@ const PushConstants = RenderPipeline.SDFPushConstants;
 
 const MediumMaterial = @import("../Physics/MediumMaterial.zig");
 
+const CameraRay = @import("../Math/CameraRay.zig");
+const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
+const CanvasTransform = OverlayCanvas.CanvasTransform;
+const SceneSceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
+
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
 
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
@@ -89,6 +94,13 @@ comptime {
     GPUAsserts.AssertGPULayout(SurfShadingData);
     GPUAsserts.AssertGPULayout(MedShadingData);
 }
+
+/// The camera this render looks through, which overlay scenes' canvases are placed in front of.
+pub const CameraView = struct {
+    Pose: CameraRay.Pose,
+    TanHalfFov: f32,
+    TargetHeight: f32,
+};
 
 pub const ShapeType = enum(u32) {
     None = 0,
@@ -236,7 +248,7 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 }
 
 //mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
     defer zone.Deinit();
     const world_manager = switch (world_type) {
@@ -272,11 +284,13 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         defer draw_zone.Deinit();
         draw_zone.Value(shapes_ids.items.len);
 
+        const display_scale = engine_context.mAppWindow.GetDisplayScale();
+
         for (shapes_ids.items) |shape_id| {
             //TODO: distance based culling
             //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
             const shape_entity = world_manager.GetEntity(shape_id);
-            try self.DrawShape(engine_context, shape_entity);
+            try self.DrawShape(engine_context, shape_entity, camera_view, display_scale);
         }
     }
 
@@ -298,9 +312,22 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
     _ = try self.mSDFShading.AddMedium(engine_allocator, Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 }, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
 }
 
-fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) anyerror!void {
+fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, camera_view: CameraView, display_scale: f32) anyerror!void {
     const transform_component = entity.GetComponent(TransformComponent).?;
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
+    const scene_component = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
+
+    //an overlay entity's transform is in canvas units, parented to the camera: its scene's canvas
+    //puts it in front of this view's camera. game layer transforms are already world space
+    const canvas: ?CanvasTransform = switch (scene_component.mLayerType) {
+        .GameLayer => null,
+        .OverlayLayer => OverlayCanvas.ComputeCanvasTransform(
+            camera_view.Pose,
+            camera_view.TanHalfFov,
+            camera_view.TargetHeight,
+            scene_component.GetPixelsPerUnit(camera_view.TargetHeight, display_scale),
+        ),
+    };
 
     //check for specific shapes and draw them if they exist
     if (entity.GetComponent(QuadComponent)) |quad_component| {
@@ -309,6 +336,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
             transform_component,
             quad_component,
             entity_scene_comp,
+            canvas,
             &self.mSDFShading,
         );
     }
@@ -318,6 +346,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity) an
             transform_component,
             text_component,
             entity_scene_comp,
+            canvas,
             &self.mSDFShading,
         );
     }
@@ -348,9 +377,13 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
             self.mSDFShading.BindBuffers(overlay_compute_pass);
             self.mTextureManager.BindCompute(overlay_compute_pass);
 
-            self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
-            self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
-            self.mOverlayPipeline.PushUniforms(cmd, self.mSDFPushConstants);
+            //a copy, since the game pass below still needs the camera's own far distance. the canvas
+            //always sits CANVAS_DISTANCE out, so the overlay can't depend on how far the game camera sees
+            var overlay_push_constants = self.mSDFPushConstants;
+            overlay_push_constants.mPerspectiveFar = OverlayCanvas.FAR_DISTANCE;
+            overlay_push_constants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
+            overlay_push_constants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
+            self.mOverlayPipeline.PushUniforms(cmd, overlay_push_constants);
 
             self.mPlatform.PushDebugGroup("Draw - Overlay");
 

@@ -38,6 +38,7 @@ const SceneSceneComponent = SceneComponents.SceneComponent;
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
+const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -216,14 +217,20 @@ pub fn DrawQuad(
     transform_component: *EntityTransformComponent,
     quad_component: *QuadComponent,
     entity_scene_comp: *EntitySceneComponent,
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units
     shading_buff: *ShadingBuffers,
 ) !void {
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
     const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
-    const world_pos = transform_component.GetWorldPosition();
-    const world_rot = transform_component.GetWorldRotation();
-    const world_scale = transform_component.GetWorldScale();
+    var world_pos = transform_component.GetWorldPosition();
+    var world_rot = transform_component.GetWorldRotation();
+    var half_size = Vec2(f32){ .x = transform_component.GetWorldScale().x * 0.5, .y = transform_component.GetWorldScale().y * 0.5 };
+    if (canvas) |c| {
+        world_pos = c.ToWorldPoint(world_pos);
+        world_rot = c.ToWorldRotation(world_rot);
+        half_size = half_size.MulScalar(c.Scale);
+    }
 
     const shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
@@ -243,7 +250,7 @@ pub fn DrawQuad(
     try quad_buff_base.append(engine_context.EngineAllocator(), .{
         .Position = world_pos.ToArray(),
         .Rotation = world_rot.ToArray(),
-        .HalfExtents = Vec3(f32).ArrayT{ world_scale.x * 0.5, world_scale.y * 0.5, THICKNESS_2D },
+        .HalfExtents = Vec3(f32).ArrayT{ half_size.x, half_size.y, THICKNESS_2D },
         .ShadingHandle = @intCast(shading_handle),
         .ShadingFlags = shading_flag,
     });
@@ -255,6 +262,7 @@ pub fn DrawText(
     transform_component: *EntityTransformComponent,
     text_component: *TextComponent,
     entity_scene_comp: *EntitySceneComponent,
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units
     shading_buff: *ShadingBuffers,
 ) !void {
     const zone = Tracy.ZoneInit("Renderer2D::DrawText", @src());
@@ -275,8 +283,13 @@ pub fn DrawText(
     var texture_shading_flags: u32 = 0;
     if (text_component.mTexOptions.mIsTransparent) texture_shading_flags |= SurfShadingData.FLAG_TRANSPARENT;
 
-    const world_pos = transform_component.GetWorldPosition();
-    const world_rot = transform_component.GetWorldRotation();
+    //the text's own position and rotation, in canvas units for an overlay scene
+    const text_pos = transform_component.GetWorldPosition();
+    const text_rot = transform_component.GetWorldRotation();
+
+    //every glyph turns with the text, and with the canvas on top of that
+    const glyph_rot = if (canvas) |c| c.ToWorldRotation(text_rot) else text_rot;
+    const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
 
     const glyph_buff_base = switch (scene_scene_comp.mLayerType) {
         .GameLayer => &self.mGameData.mGlyphBufferBase,
@@ -308,13 +321,14 @@ pub fn DrawText(
         //the layout is in the text's own space, so the whole line turns with the transform instead
         //of each glyph turning in place along world x
         const local_pen = Vec3(f32){ .x = glyph.Pen.x - left_bound, .y = glyph.Pen.y, .z = 0 };
-        const glyph_pos = world_pos.AddVec(local_pen.QuatRotate(world_rot));
+        var glyph_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
+        if (canvas) |c| glyph_pos = c.ToWorldPoint(glyph_pos);
 
         try glyph_buff_base.append(engine_context.EngineAllocator(), .{
             .Position = glyph_pos.ToArray(),
-            .Rotation = world_rot.ToVector(),
-            .HalfExtents = Vec3(f32).ArrayT{ glyph.HalfExtents.x, glyph.HalfExtents.y, THICKNESS_2D },
-            .PlaneCenter = Vec2(f32).ArrayT{ glyph.PlaneCenter.x, glyph.PlaneCenter.y },
+            .Rotation = glyph_rot.ToVector(),
+            .HalfExtents = Vec3(f32).ArrayT{ glyph.HalfExtents.x * size_scale, glyph.HalfExtents.y * size_scale, THICKNESS_2D },
+            .PlaneCenter = Vec2(f32).ArrayT{ glyph.PlaneCenter.x * size_scale, glyph.PlaneCenter.y * size_scale },
             .AtlasShadingHandle = @intCast(atlas_shading_handle),
             .TextureShadingFlags = @intCast(texture_shading_flags),
         });

@@ -4,7 +4,11 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ViewportPanel = @import("ViewportPanel.zig");
 const CameraRay = @import("../Math/CameraRay.zig");
+const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const PlayerNameComponent = @import("../ECSComponents/PComponents.zig").NameComponent;
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const SceneComponent = SceneComponents.SceneComponent;
+const SceneNameComponent = SceneComponents.NameComponent;
 const PickingDebugPanel = @This();
 
 _P_Open: bool = false,
@@ -63,6 +67,40 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     //what the ray at the exact center reads, to compare against while hovering the middle
     const center = CameraRay.MakeRay(pose, ray_params, view.Rect.TargetSize.MulScalar(0.5));
     try Text(frame_allocator, "Camera forward: {d:.4}, {d:.4}, {d:.4}", .{ center.Dir.x, center.Dir.y, center.Dir.z });
+
+    imgui.igSeparator();
+
+    //the canvas point under the mouse for each overlay scene, placed the same way the renderer
+    //placed it (see Renderer.DrawShape and EditorProgram.BuildCameraView)
+    const world = switch (view.World) {
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
+    };
+    const tan_half_fov = @tan(render_view.mViewpoint.mPerspectiveFOVRad * 0.5);
+    const target_height: f32 = @floatFromInt(render_view.mViewpoint.mViewportHeight);
+    const display_scale = engine_context.mAppWindow.GetDisplayScale();
+
+    var overlay_count: usize = 0;
+    const scene_ids = try world.GetSceneGroup(frame_allocator, .{ .Component = SceneComponent });
+    for (scene_ids.items) |scene_id| {
+        const scene = world.GetScene(scene_id);
+        const scene_component = scene.GetComponent(SceneComponent).?;
+        if (scene_component.mLayerType != .OverlayLayer) continue;
+        overlay_count += 1;
+
+        const pixels_per_unit = scene_component.GetPixelsPerUnit(target_height, display_scale);
+        const canvas = OverlayCanvas.ComputeCanvasTransform(pose, tan_half_fov, target_height, pixels_per_unit);
+        const scene_name = if (scene.GetComponent(SceneNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
+
+        try Text(frame_allocator, "Overlay '{s}' ({s}, {d:.2} px per unit)", .{ scene_name, @tagName(scene_component.mOverlayScaleMode), pixels_per_unit });
+        if (canvas.RayToCanvasPoint(ray)) |point| {
+            try Text(frame_allocator, "\tCanvas point: {d:.1}, {d:.1}", .{ point.x, point.y });
+        } else {
+            try Text(frame_allocator, "\tCanvas point: none", .{});
+        }
+    }
+    if (overlay_count == 0) try Text(frame_allocator, "No overlay scenes in this world", .{});
 }
 
 pub fn OnTogglePanelEvent(self: *PickingDebugPanel) void {

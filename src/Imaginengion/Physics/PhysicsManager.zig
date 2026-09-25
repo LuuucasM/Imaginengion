@@ -70,12 +70,21 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
     };
     self._InternalData.Accumulator += engine_context.mDT;
 
-    const rigid_body_arr = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
-    Tracy.Plot("Physics/Rigid Bodies", .{ .color = 0xE91E63 }, rigid_body_arr.items.len);
-
     //fixed steps run this frame: normally 0 or 1, and climbing means physics is falling behind real time
     var steps: usize = 0;
     defer Tracy.Plot("Physics/Steps Per Frame", .{ .color = 0xF44336 }, steps);
+
+    //the same condition the step loop below runs on, so a frame that will not step skips the group
+    //queries too instead of building lists nothing reads
+    if (self._InternalData.Accumulator < PHYSICS_DT) return;
+
+    const rigid_body_arr = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = RigidBodyComponent });
+    Tracy.Plot("Physics/Rigid Bodies", .{ .color = 0xE91E63 }, rigid_body_arr.items.len);
+
+    //fetched once for every substep of every step below, the same as rigid_body_arr. Nothing in here
+    //adds or removes a collider or a body tag, so the lists cannot go stale between substeps
+    const dynamic_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.DynamicCollidersQuery);
+    const other_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.OtherCollidersQuery);
 
     while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
         steps += 1;
@@ -99,7 +108,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
 
             try UpdateWorldTransforms(world_type, engine_context);
 
-            try self._CollisionManager.BroadPass(engine_context, world_manager);
+            try self._CollisionManager.BroadPass(engine_context, world_manager, dynamic_colliders.items, other_colliders.items);
             try self._CollisionManager.NarrowPass(engine_context);
             try self._CollisionManager.PreSolverPass(engine_context);
             try self._CollisionManager.SolverPass(world_type, engine_context);

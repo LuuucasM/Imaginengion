@@ -91,6 +91,7 @@ pub fn build(b: *std.Build) void {
         "src/Imaginengion/Math/CameraRayTests.zig",
         "src/Imaginengion/Math/RayIntersectTests.zig",
         "src/Imaginengion/Math/ScreenRectTests.zig",
+        "src/Imaginengion/Math/OverlayCanvasTests.zig",
         "src/Imaginengion/UnitTests.zig",
     };
 

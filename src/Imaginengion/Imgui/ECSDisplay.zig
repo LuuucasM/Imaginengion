@@ -293,8 +293,14 @@ fn ObjectTraits(comptime T: type) type {
                 }
             }
             pub fn HandleWindowContextMenu(engine_context: *EngineContext, _: *?SelectedObject, world_manager: *WorldManager) !void {
-                if (imgui.igMenuItem_Bool("New Scene", "", false, true)) {
-                    _ = try world_manager.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+                if (imgui.igBeginMenu("New Scene", true)) {
+                    defer imgui.igEndMenu();
+                    if (imgui.igMenuItem_Bool("New Game Scene", "", false, true)) {
+                        _ = try world_manager.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+                    }
+                    if (imgui.igMenuItem_Bool("New Overlay Scene", "", false, true)) {
+                        _ = try world_manager.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+                    }
                 }
             }
             pub fn SelectObject(engine_context: *EngineContext, obj: Scene) !void {

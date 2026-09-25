@@ -89,7 +89,9 @@ fn ObjectImguiRender(comptime ObjectType: type, engine_context: *EngineContext, 
 fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineContext, object: anytype) !void {
     const tree_flags = imgui.ImGuiTreeNodeFlags_OpenOnArrow;
     const is_tree_open = imgui.igTreeNodeEx_Str(@typeName(component_type), tree_flags);
-    if (imgui.igBeginPopupContextItem(@typeName(component_type), imgui.ImGuiPopupFlags_MouseButtonRight)) {
+    //a component the object can't work without declares `Removable = false` and gets no delete option
+    const is_removable = comptime !@hasDecl(component_type, "Removable") or component_type.Removable;
+    if (is_removable and imgui.igBeginPopupContextItem(@typeName(component_type), imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
 
         if (imgui.igMenuItem_Bool("Delete Component", "", false, true)) {

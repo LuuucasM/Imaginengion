@@ -55,6 +55,14 @@ fn MakeBody(engine_context: *EngineContext, scene: Scene, mass: f32) !Entity {
     return entity;
 }
 
+/// Runs both collider queries the way PhysicsManager.OnUpdate does, then the broad pass on them.
+fn RunBroadPass(collision_manager: *CollisionManager, engine_context: *EngineContext) !void {
+    const world_manager = &engine_context.mEditorWorld;
+    const dynamic_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.DynamicCollidersQuery);
+    const other_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.OtherCollidersQuery);
+    try collision_manager.BroadPass(engine_context, world_manager, dynamic_colliders.items, other_colliders.items);
+}
+
 test "body tags follow _InvMass" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -128,21 +136,21 @@ test "BroadPass skips pairs that neither side can move" {
     //four statics: six pairs, none of which the solver could ever act on
     for (0..4) |_| _ = try MakeBody(engine_context, scene, 0.0);
 
-    try collision_manager.BroadPass(engine_context, &engine_context.mEditorWorld);
+    try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 0), collision_manager._BlockingContacts.items.len);
 
     //one dynamic against those four statics is four pairs, and still nothing static against static
     collision_manager.Reset(engine_context.EngineAllocator());
     _ = try MakeBody(engine_context, scene, 2.0);
 
-    try collision_manager.BroadPass(engine_context, &engine_context.mEditorWorld);
+    try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 4), collision_manager._BlockingContacts.items.len);
 
     //a second dynamic adds its own four static pairs plus the one dynamic against dynamic pair
     collision_manager.Reset(engine_context.EngineAllocator());
     _ = try MakeBody(engine_context, scene, 3.0);
 
-    try collision_manager.BroadPass(engine_context, &engine_context.mEditorWorld);
+    try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 9), collision_manager._BlockingContacts.items.len);
 }
 
@@ -162,7 +170,7 @@ test "a collider with no rigid body still takes part in the broad pass" {
 
     _ = try MakeBody(engine_context, scene, 2.0);
 
-    try collision_manager.BroadPass(engine_context, &engine_context.mEditorWorld);
+    try RunBroadPass(&collision_manager, engine_context);
     try std.testing.expectEqual(@as(usize, 1), collision_manager._BlockingContacts.items.len);
 }
 

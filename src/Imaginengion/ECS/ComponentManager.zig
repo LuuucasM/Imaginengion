@@ -299,7 +299,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
         }
 
-        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT, allocator: std.mem.Allocator) !void {
+        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT, _: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ComponentManager::EntityListMask", @src());
             defer zone.Deinit();
 
@@ -323,7 +323,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 }
             }
 
-            result.shrinkAndFree(allocator, end_index);
+            result.shrinkRetainingCapacity(end_index);
         }
 
         pub fn EntityListDifference(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
@@ -347,7 +347,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 }
             }
 
-            result.shrinkAndFree(allocator, end_index);
+            result.shrinkRetainingCapacity(end_index);
         }
 
         pub fn EntityListUnion(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
@@ -385,7 +385,7 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
                 }
             }
 
-            result.shrinkAndFree(allocator, end_index);
+            result.shrinkRetainingCapacity(end_index);
         }
     };
 }
