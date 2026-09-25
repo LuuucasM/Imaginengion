@@ -3,4 +3,5 @@
 //source root, lets it. Tests that only import their own folder can stay listed in build.zig on their own.
 test {
     _ = @import("Renderer/TextLayoutTests.zig");
+    _ = @import("Inputs/InputTests.zig");
 }

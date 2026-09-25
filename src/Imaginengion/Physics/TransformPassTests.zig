@@ -11,6 +11,7 @@ const PhysicsManager = @import("PhysicsManager.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
+const MainObjectComponent = @import("../ECS/Components.zig").MainObjectComponent;
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -181,4 +182,27 @@ test "the transform pass and walking up the hierarchy agree" {
     const in_grandparent = (Vec3(f32){ .x = 1, .y = 2, .z = 0 }).AddVec((Vec3(f32){ .x = 0, .y = 0, .z = 4 }).MulScalar(0.5).QuatRotate(Quat(f32).FromAxisAngle(.{ .x = 0, .y = 1, .z = 0 }, std.math.degreesToRadians(45.0))));
     const expected_world = (Vec3(f32){ .x = 5, .y = -1, .z = 3 }).AddVec(in_grandparent.MulScalar(2).QuatRotate(ZRotation(30)));
     try ExpectVec3Near(expected_world, pass_position);
+}
+
+test "a hit shape's game object is its nearest main object ancestor, or the root" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    //root -> button -> label, like a button whose label is a convenience child
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const root = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const button = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    const label = try button.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+
+    //nothing tagged yet: every entity belongs to the root
+    try std.testing.expectEqual(root.mID, label.GetMainObject().mID);
+    try std.testing.expectEqual(root.mID, button.GetMainObject().mID);
+    try std.testing.expectEqual(root.mID, root.GetMainObject().mID);
+
+    //tag the button: the label now belongs to it, and the button to itself
+    _ = try button.AddComponent(engine_context, MainObjectComponent{});
+    try std.testing.expectEqual(button.mID, label.GetMainObject().mID);
+    try std.testing.expectEqual(button.mID, button.GetMainObject().mID);
+    try std.testing.expectEqual(root.mID, root.GetMainObject().mID);
 }

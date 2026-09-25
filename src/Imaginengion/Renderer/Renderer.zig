@@ -23,6 +23,7 @@ const Vec4 = MathTypes.Vec4;
 const Entity = @import("../ECSObjects/Entity.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
+const ViewpointComponent = EntityComponents.ViewpointComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -41,8 +42,7 @@ const MediumMaterial = @import("../Physics/MediumMaterial.zig");
 
 const CameraRay = @import("../Math/CameraRay.zig");
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
-const CanvasTransform = OverlayCanvas.CanvasTransform;
-const SceneSceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
+const ShapeGeometry = @import("ShapeGeometry.zig");
 
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
 
@@ -95,11 +95,32 @@ comptime {
     GPUAsserts.AssertGPULayout(MedShadingData);
 }
 
-/// The camera this render looks through, which overlay scenes' canvases are placed in front of.
+/// The camera this render looks through, which overlay scenes' canvases are placed in front of. Picking
+/// takes the same one, so what it tests is where things were drawn.
 pub const CameraView = struct {
     Pose: CameraRay.Pose,
     TanHalfFov: f32,
     TargetHeight: f32,
+    FarDistance: f32, //game layer shapes past this aren't drawn (overlay uses OverlayCanvas.FAR_DISTANCE)
+    DisplayScale: f32, //the OS display scale, what ConstantPixelSize overlays size by
+
+    /// The view of a camera entity, from its transform and viewpoint. The viewpoint's size has to
+    /// already be set for this frame, since the target height comes from it.
+    pub fn FromViewpoint(transform: *const TransformComponent, viewpoint: *const ViewpointComponent, display_scale: f32) CameraView {
+        return .{
+            .Pose = .{ .Position = transform.GetWorldPosition(), .Rotation = transform.GetWorldRotation() },
+            .TanHalfFov = @tan(viewpoint.mPerspectiveFOVRad * 0.5),
+            .TargetHeight = @floatFromInt(viewpoint.mViewportHeight),
+            .FarDistance = viewpoint.mPerspectiveFar,
+            .DisplayScale = display_scale,
+        };
+    }
+
+    /// The ray this view traces through `pixel`, the same one the shaders build for it.
+    pub fn PixelRay(transform: *const TransformComponent, viewpoint: *const ViewpointComponent, pixel: Vec2(f32)) CameraRay.Ray {
+        const pose = CameraRay.Pose{ .Position = transform.GetWorldPosition(), .Rotation = transform.GetWorldRotation() };
+        return CameraRay.MakeRay(pose, viewpoint.GetRayParams(), pixel);
+    }
 };
 
 pub const ShapeType = enum(u32) {
@@ -284,13 +305,11 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         defer draw_zone.Deinit();
         draw_zone.Value(shapes_ids.items.len);
 
-        const display_scale = engine_context.mAppWindow.GetDisplayScale();
-
         for (shapes_ids.items) |shape_id| {
             //TODO: distance based culling
             //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
             const shape_entity = world_manager.GetEntity(shape_id);
-            try self.DrawShape(engine_context, shape_entity, camera_view, display_scale);
+            try self.DrawShape(engine_context, shape_entity, camera_view);
         }
     }
 
@@ -312,26 +331,18 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
     _ = try self.mSDFShading.AddMedium(engine_allocator, Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 }, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
 }
 
-fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, camera_view: CameraView, display_scale: f32) anyerror!void {
+fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, camera_view: CameraView) anyerror!void {
     const transform_component = entity.GetComponent(TransformComponent).?;
     const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
-    const scene_component = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
     //an overlay entity's transform is in canvas units, parented to the camera: its scene's canvas
     //puts it in front of this view's camera. game layer transforms are already world space
-    const canvas: ?CanvasTransform = switch (scene_component.mLayerType) {
-        .GameLayer => null,
-        .OverlayLayer => OverlayCanvas.ComputeCanvasTransform(
-            camera_view.Pose,
-            camera_view.TanHalfFov,
-            camera_view.TargetHeight,
-            scene_component.GetPixelsPerUnit(camera_view.TargetHeight, display_scale),
-        ),
-    };
+    const canvas = ShapeGeometry.EntityCanvas(entity, camera_view);
 
-    //check for specific shapes and draw them if they exist
+    //check for specific shapes and draw them if they exist. a hidden shape is skipped here and by
+    //picking alike, so nothing can be clicked that isn't drawn
     if (entity.GetComponent(QuadComponent)) |quad_component| {
-        try self.mR2D.DrawQuad(
+        if (quad_component.mShouldRender) try self.mR2D.DrawQuad(
             engine_context,
             transform_component,
             quad_component,
@@ -341,7 +352,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, ca
         );
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        try self.mR2D.DrawText(
+        if (text_component.mShouldRender) try self.mR2D.DrawText(
             engine_context,
             transform_component,
             text_component,

@@ -5,6 +5,10 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const ViewportPanel = @import("ViewportPanel.zig");
 const CameraRay = @import("../Math/CameraRay.zig");
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
+const RayCast = @import("../Physics/RayCast.zig");
+const CameraView = @import("../Renderer/Renderer.zig").CameraView;
+const Entity = @import("../ECSObjects/Entity.zig");
+const EntityNameComponent = @import("../ECSComponents/EComponents.zig").NameComponent;
 const PlayerNameComponent = @import("../ECSComponents/PComponents.zig").NameComponent;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
@@ -54,33 +58,45 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
         try Text(frame_allocator, "Camera is no longer drawable", .{});
         return;
     };
-    const pose = CameraRay.Pose{
-        .Position = render_view.mTransform.GetWorldPosition(),
-        .Rotation = render_view.mTransform.GetWorldRotation(),
-    };
-    const ray_params = render_view.mViewpoint.GetRayParams();
-
-    const ray = CameraRay.MakeRay(pose, ray_params, view_at.Pixel);
+    //the same ray and camera view a click uses (EditorProgram.OnViewportClick), which are the ones the
+    //renderer drew this view with
+    const camera_view = CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale());
+    const ray = CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view_at.Pixel);
     try Text(frame_allocator, "Ray origin: {d:.3}, {d:.3}, {d:.3}", .{ ray.Origin.x, ray.Origin.y, ray.Origin.z });
     try Text(frame_allocator, "Ray dir: {d:.4}, {d:.4}, {d:.4}", .{ ray.Dir.x, ray.Dir.y, ray.Dir.z });
 
     //what the ray at the exact center reads, to compare against while hovering the middle
-    const center = CameraRay.MakeRay(pose, ray_params, view.Rect.TargetSize.MulScalar(0.5));
+    const center = CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view.Rect.TargetSize.MulScalar(0.5));
     try Text(frame_allocator, "Camera forward: {d:.4}, {d:.4}, {d:.4}", .{ center.Dir.x, center.Dir.y, center.Dir.z });
 
-    imgui.igSeparator();
-
-    //the canvas point under the mouse for each overlay scene, placed the same way the renderer
-    //placed it (see Renderer.DrawShape and EditorProgram.BuildCameraView)
     const world = switch (view.World) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
     };
-    const tan_half_fov = @tan(render_view.mViewpoint.mPerspectiveFOVRad * 0.5);
-    const target_height: f32 = @floatFromInt(render_view.mViewpoint.mViewportHeight);
-    const display_scale = engine_context.mAppWindow.GetDisplayScale();
 
+    imgui.igSeparator();
+
+    //exactly what a left click here would do
+    try Text(frame_allocator, "A click here selects:", .{});
+    if (try RayCast.CastRay(engine_context, world, ray, camera_view, .{})) |hit| {
+        try Text(frame_allocator, "\t{s}", .{EntityName(hit.Entity.GetMainObject())});
+        try HitText(frame_allocator, hit);
+    } else {
+        try Text(frame_allocator, "\tnothing (it clears the selection)", .{});
+    }
+
+    try Text(frame_allocator, "Collider under the mouse:", .{});
+    if (try RayCast.CastRay(engine_context, world, ray, camera_view, .{ .Targets = .Colliders })) |hit| {
+        try HitText(frame_allocator, hit);
+    } else {
+        try Text(frame_allocator, "\tnone", .{});
+    }
+
+    imgui.igSeparator();
+
+    //the canvas point under the mouse for each overlay scene, placed the same way the renderer
+    //placed it (see ShapeGeometry.EntityCanvas)
     var overlay_count: usize = 0;
     const scene_ids = try world.GetSceneGroup(frame_allocator, .{ .Component = SceneComponent });
     for (scene_ids.items) |scene_id| {
@@ -89,8 +105,8 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
         if (scene_component.mLayerType != .OverlayLayer) continue;
         overlay_count += 1;
 
-        const pixels_per_unit = scene_component.GetPixelsPerUnit(target_height, display_scale);
-        const canvas = OverlayCanvas.ComputeCanvasTransform(pose, tan_half_fov, target_height, pixels_per_unit);
+        const pixels_per_unit = scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
+        const canvas = OverlayCanvas.ComputeCanvasTransform(camera_view.Pose, camera_view.TanHalfFov, camera_view.TargetHeight, pixels_per_unit);
         const scene_name = if (scene.GetComponent(SceneNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
 
         try Text(frame_allocator, "Overlay '{s}' ({s}, {d:.2} px per unit)", .{ scene_name, @tagName(scene_component.mOverlayScaleMode), pixels_per_unit });
@@ -101,6 +117,19 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
         }
     }
     if (overlay_count == 0) try Text(frame_allocator, "No overlay scenes in this world", .{});
+}
+
+/// The shape that was hit and where, under a heading line.
+fn HitText(frame_allocator: std.mem.Allocator, hit: RayCast.RayHit) !void {
+    try Text(frame_allocator, "\thit {s} on '{s}' ({s})", .{ @tagName(hit.Kind), EntityName(hit.Entity), @tagName(hit.Layer) });
+    try Text(frame_allocator, "\tdistance {d:.3}", .{hit.T});
+    try Text(frame_allocator, "\tposition {d:.3}, {d:.3}, {d:.3}", .{ hit.Position.x, hit.Position.y, hit.Position.z });
+    try Text(frame_allocator, "\tnormal {d:.3}, {d:.3}, {d:.3}", .{ hit.Normal.x, hit.Normal.y, hit.Normal.z });
+}
+
+fn EntityName(entity: Entity) []const u8 {
+    const name_component = entity.GetComponent(EntityNameComponent) orelse return "<unnamed>";
+    return if (name_component.mName.items.len > 0) name_component.mName.items else "<unnamed>";
 }
 
 pub fn OnTogglePanelEvent(self: *PickingDebugPanel) void {

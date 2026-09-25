@@ -8,12 +8,18 @@ const InputEnums = @import("InputEnums.zig");
 const Tracy = @import("../Core/Tracy.zig");
 const InputManager = @This();
 
+/// How far the mouse can move between pressing and releasing a button and still count as a click
+/// rather than a drag, in window coordinates. A left drag rotates the editor camera, a left click selects.
+pub const CLICK_DRAG_THRESHOLD: f32 = 4.0;
+
 _KeyPressedSet: HashMap(InputEnums.ScanCodes, u1),
 _MousePressedSet: HashMap(InputEnums.MouseCodes, u1),
 _MousePosition: Vec2(f32),
 _MouseScrolled: Vec2(f32),
 _MousePositionDelta: Vec2(f32),
 _MouseScrolledDelta: Vec2(f32),
+//where each button went down, while it is held. Null when it isn't, or once its release was handled
+_MouseDownPositions: std.EnumArray(InputEnums.MouseCodes, ?Vec2(f32)),
 
 pub const empty: InputManager = .{
     ._KeyPressedSet = .empty,
@@ -22,6 +28,7 @@ pub const empty: InputManager = .{
     ._MouseScrolled = .{ .x = 0.0, .y = 0.0 },
     ._MousePositionDelta = .{ .x = 0.0, .y = 0.0 },
     ._MouseScrolledDelta = .{ .x = 0.0, .y = 0.0 },
+    ._MouseDownPositions = .initFill(null),
 };
 
 pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
@@ -74,13 +81,21 @@ pub fn SetKeyReleased(self: *InputManager, key: InputEnums.ScanCodes) void {
     _ = self._KeyPressedSet.remove(key);
 }
 
-pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes) !void {
+/// `position` is where the button went down, in window coordinates.
+pub fn SetMousePressed(self: *InputManager, button: InputEnums.MouseCodes, position: Vec2(f32)) !void {
     const gop = self._MousePressedSet.getOrPutAssumeCapacity(button);
     gop.value_ptr.* = if (gop.found_existing) 1 else 0;
+    self._MouseDownPositions.set(button, position);
 }
 
-pub fn SetMouseReleased(self: *InputManager, button: InputEnums.MouseCodes) void {
+/// `position` is where the button came up. Returns whether this press and release was a click: it went
+/// down and came up within CLICK_DRAG_THRESHOLD of the same spot, rather than dragging somewhere.
+pub fn SetMouseReleased(self: *InputManager, button: InputEnums.MouseCodes, position: Vec2(f32)) bool {
     _ = self._MousePressedSet.remove(button);
+
+    const down_position = self._MouseDownPositions.get(button) orelse return false;
+    self._MouseDownPositions.set(button, null);
+    return down_position.Distance(position) < CLICK_DRAG_THRESHOLD;
 }
 
 pub fn SetMousePosition(self: *InputManager, new_pos: Vec2(f32)) void {

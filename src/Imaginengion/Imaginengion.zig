@@ -4,6 +4,7 @@ test {
     _ = @import("Physics/TransformPassTests.zig");
     _ = @import("Physics/BodyTagTests.zig");
     _ = @import("Physics/CollisionsTests.zig");
+    _ = @import("Physics/RayCastTests.zig");
 }
 
 //Core Stuff -----------------------------------

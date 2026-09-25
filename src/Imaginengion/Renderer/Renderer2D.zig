@@ -39,6 +39,7 @@ const SceneSceneComponent = SceneComponents.SceneComponent;
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
 const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
+const ShapeGeometry = @import("ShapeGeometry.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -223,16 +224,8 @@ pub fn DrawQuad(
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
     const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
-    var world_pos = transform_component.GetWorldPosition();
-    var world_rot = transform_component.GetWorldRotation();
-    //the quad's own size, grown by its scale (and everything above it in the hierarchy)
-    const world_scale = transform_component.GetWorldScale();
-    var half_size = Vec2(f32){ .x = quad_component.mSize.x * world_scale.x * 0.5, .y = quad_component.mSize.y * world_scale.y * 0.5 };
-    if (canvas) |c| {
-        world_pos = c.ToWorldPoint(world_pos);
-        world_rot = c.ToWorldRotation(world_rot);
-        half_size = half_size.MulScalar(c.Scale);
-    }
+    //the same box picking tests against
+    const box = ShapeGeometry.QuadBox(transform_component, quad_component, canvas);
 
     const shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
@@ -250,9 +243,9 @@ pub fn DrawQuad(
     };
 
     try quad_buff_base.append(engine_context.EngineAllocator(), .{
-        .Position = world_pos.ToArray(),
-        .Rotation = world_rot.ToArray(),
-        .HalfExtents = Vec3(f32).ArrayT{ half_size.x, half_size.y, THICKNESS_2D },
+        .Position = box.Center.ToArray(),
+        .Rotation = box.Rotation.ToArray(),
+        .HalfExtents = box.HalfExtents.ToArray(),
         .ShadingHandle = @intCast(shading_handle),
         .ShadingFlags = shading_flag,
     });
@@ -298,17 +291,10 @@ pub fn DrawText(
         .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
     };
 
-    //text only grows evenly, so it takes the largest scale axis, like a sphere collider. the font size
-    //and the bounds grow together, which keeps the wrapping on the same words at any scale
-    const world_scale = transform_component.GetWorldScale();
-    const text_scale = @max(world_scale.x, @max(world_scale.y, world_scale.z));
+    //font size and bounds with the text's scale applied, the same ones picking measures the text with
+    const params = ShapeGeometry.GetTextParams(transform_component, text_component);
 
-    //mBounds is how far the text runs left (x) and right (y) of the transform. layout starts its
-    //lines at x = 0, so each line is shifted left by the left bound
-    const left_bound = text_component.mBounds.x * text_scale;
-    const wrap_width = (text_component.mBounds.x + text_component.mBounds.y) * text_scale;
-
-    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, text_component.mFontSize * text_scale, wrap_width);
+    var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, params.FontSize, params.WrapWidth);
     while (layout.Next()) |glyph| {
         var tex_options = Texture2D.TexOptions{
             .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
@@ -327,7 +313,7 @@ pub fn DrawText(
 
         //the layout is in the text's own space, so the whole line turns with the transform instead
         //of each glyph turning in place along world x
-        const local_pen = Vec3(f32){ .x = glyph.Pen.x - left_bound, .y = glyph.Pen.y, .z = 0 };
+        const local_pen = Vec3(f32){ .x = glyph.Pen.x - params.LeftBound, .y = glyph.Pen.y, .z = 0 };
         var glyph_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
         if (canvas) |c| glyph_pos = c.ToWorldPoint(glyph_pos);
 

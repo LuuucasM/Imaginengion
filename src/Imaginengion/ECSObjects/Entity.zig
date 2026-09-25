@@ -101,6 +101,18 @@ pub fn GetViewpointEntity(self: Entity) ?Entity {
     return null;
 }
 
+/// The game object this entity is part of: itself if it is a MainObject, otherwise the nearest ancestor
+/// that is, otherwise the root of its hierarchy. What a click on one of its shapes should select, since
+/// a shape may sit on a convenience child (a button's label) rather than on the object itself.
+pub fn GetMainObject(self: Entity) Entity {
+    var current = self;
+    while (!current.HasComponent(MainObjectComponent)) {
+        const child_component = current.GetComponent(EntityChildComponent) orelse return current;
+        current = Entity{ .mID = child_component.mParent, .mManager = self.mManager };
+    }
+    return current;
+}
+
 pub const GetIterator = Core.GetIterator;
 
 pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {

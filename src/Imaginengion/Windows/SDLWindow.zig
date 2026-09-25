@@ -112,7 +112,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 );
             },
             sdl.SDL_EVENT_MOUSE_BUTTON_DOWN => {
-                try input_manager.SetMousePressed(@enumFromInt(event.button.button));
+                try input_manager.SetMousePressed(@enumFromInt(event.button.button), .{ .x = event.button.x, .y = event.button.y });
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,
@@ -122,7 +122,7 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                 );
             },
             sdl.SDL_EVENT_MOUSE_BUTTON_UP => {
-                input_manager.SetMouseReleased(@enumFromInt(event.button.button));
+                const was_click = input_manager.SetMouseReleased(@enumFromInt(event.button.button), .{ .x = event.button.x, .y = event.button.y });
                 try engine_context.mSystemEventManager.Insert(
                     engine_context.EngineAllocator(),
                     .InputEvent,
@@ -130,6 +130,20 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                         ._ButtonCode = @enumFromInt(event.button.button),
                     } },
                 );
+                //SDL has no click event, only down and up. its `clicks` counts quick repeats (2 for a
+                //double click) but can't tell a click from a drag, so the input manager decides that
+                if (was_click) {
+                    try engine_context.mSystemEventManager.Insert(
+                        engine_context.EngineAllocator(),
+                        .InputEvent,
+                        .{ .MouseClicked = .{
+                            ._ButtonCode = @enumFromInt(event.button.button),
+                            ._MouseX = event.button.x,
+                            ._MouseY = event.button.y,
+                            ._Clicks = event.button.clicks,
+                        } },
+                    );
+                }
             },
             sdl.SDL_EVENT_MOUSE_MOTION => {
                 final_mouse_pos = .{ .x = event.motion.x, .y = event.motion.y };

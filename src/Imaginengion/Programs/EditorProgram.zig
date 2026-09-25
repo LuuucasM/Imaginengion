@@ -16,6 +16,7 @@ const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
+const RayCast = @import("../Physics/RayCast.zig");
 
 const Assets = @import("../ECSComponents/AComponents.zig");
 const AudioAsset = Assets.AudioAsset;
@@ -425,9 +426,36 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
     switch (event.*) {
         .WindowClose => _ = self.OnWindowClose(engine_context),
         .KeyboardPressed => |e| _ = try self.OnKeyboardPressedEvent(engine_context, e),
+        //a click, not a press: a left drag rotates the editor camera instead
+        .MouseClicked => |e| if (e._ButtonCode == .BUTTON_LEFT) try self.OnViewportClick(engine_context, .{ .x = e._MouseX, .y = e._MouseY }),
         else => {},
     }
     return .Continue;
+}
+
+/// Selects what was clicked in a viewport or play panel: the game object owning the shape under the
+/// mouse, or nothing if the click missed everything. A click outside any view is left alone.
+fn OnViewportClick(self: *EditorProgram, engine_context: *EngineContext, click_position: Vec2(f32)) !void {
+    //the view rects are from the frame the click was made on, which is what was on screen
+    const view_at = self._ViewportPanel.FindViewAt(click_position) orelse return;
+    const render_view = view_at.View.Camera.GetRenderView() orelse return;
+    const world = switch (view_at.View.World) {
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
+    };
+
+    //the same ray and camera view the renderer drew this view with, so the click lands on what was drawn
+    const ray = Renderer.CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view_at.Pixel);
+    const camera_view = Renderer.CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale());
+
+    const hit = try RayCast.CastRay(engine_context, world, ray, camera_view, .{});
+    const selected: ?Entity = if (hit) |h| h.Entity.GetMainObject() else null;
+
+    //the same event the entity list selects with, so every way of selecting goes through one path
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{
+        .SelectEntityEvent = .{ .SelectedEntity = selected },
+    });
 }
 
 fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
@@ -604,7 +632,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
         self.mActiveWorldType,
         engine_context,
         BuildPushConstants(transform_component, viewpoint_component),
-        BuildCameraView(transform_component, viewpoint_component),
+        Renderer.CameraView.FromViewpoint(transform_component, viewpoint_component, engine_context.mAppWindow.GetDisplayScale()),
         &render_component.mComputeTexture,
         .OverlayGame,
     );
@@ -648,7 +676,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
             self.mActiveWorldType,
             engine_context,
             BuildPushConstants(transform_component, viewpoint_component),
-            BuildCameraView(transform_component, viewpoint_component),
+            Renderer.CameraView.FromViewpoint(transform_component, viewpoint_component, engine_context.mAppWindow.GetDisplayScale()),
             &render_component.mComputeTexture,
             .OverlayGame,
         );
@@ -658,16 +686,6 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
 /// The per view uniforms both render paths hand the renderer. The viewpoint's size has to be set
 /// for this frame before calling, since the ray params are derived from it. The quad and glyph
 /// counts are filled in by the renderer once it knows them.
-/// The camera this view renders through, which overlay scenes place their canvases in front of. Like
-/// BuildPushConstants, the viewpoint's size has to be set for this frame first.
-fn BuildCameraView(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) Renderer.CameraView {
-    return .{
-        .Pose = .{ .Position = transform_component.GetWorldPosition(), .Rotation = transform_component.GetWorldRotation() },
-        .TanHalfFov = @tan(viewpoint_component.mPerspectiveFOVRad * 0.5),
-        .TargetHeight = @floatFromInt(viewpoint_component.mViewportHeight),
-    };
-}
-
 fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
     const ray_params = viewpoint_component.GetRayParams();
     return .{
