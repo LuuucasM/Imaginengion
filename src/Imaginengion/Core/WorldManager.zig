@@ -101,34 +101,23 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
     try self.mSManager.Copy(engine_context, &other_world.mSManager);
 }
 
-pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     if (event_data == EEventData) {
-        self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else if (event_data == GCEventData) {
-        self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else if (event_data == PEventData) {
-        self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else if (event_data == SEventData) {
-        self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else if (event_data == ECSEventData) {
-        self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
-        self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
-        self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
-        self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+        try self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else {
-        std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+        std.log.err("WorldManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
-}
-
-/// Applies the destroys/removals that were queued during the frame, for every object manager.
-pub fn ProcessRemovedObj(self: *WorldManager, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("WorldManager::ProcessRemovedObj", @src());
-    defer zone.Deinit();
-    const callback_list: std.DoublyLinkedList = .{};
-    try self.mEManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
-    try self.mGCManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
-    try self.mPManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
-    try self.mSManager.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
 }
 
 //===============================Scenes==============================================

@@ -7,6 +7,7 @@ pub const ShaderAsset = @import("Asset/ShaderAsset.zig");
 pub const Texture2D = @import("Asset/Texture2D.zig");
 pub const TextAsset = @import("Asset/TextAsset.zig");
 pub const AudioAsset = @import("Asset/AudioAsset.zig");
+pub const EntityAsset = @import("Asset/EntityAsset.zig");
 
 pub const ComponentsList = [_]type{
     Texture2D,
@@ -17,6 +18,7 @@ pub const ComponentsList = [_]type{
     FileMetaData,
     GenMetaData,
     AudioAsset,
+    EntityAsset,
 };
 
 pub const EComponents = enum(16) {
@@ -28,6 +30,7 @@ pub const EComponents = enum(16) {
     FileMetaData = ListInd(&ComponentsList, FileMetaData),
     GenMetaData = ListInd(&ComponentsList, GenMetaData),
     AudioAsset = ListInd(&ComponentsList, AudioAsset),
+    EntityAsset = ListInd(&ComponentsList, EntityAsset),
 };
 
 pub const FileUpdateList = [_]type{
@@ -36,4 +39,5 @@ pub const FileUpdateList = [_]type{
     ShaderAsset,
     TextAsset,
     AudioAsset,
+    EntityAsset,
 };

@@ -4,6 +4,7 @@ const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
 const EventData = @import("../Events/EManagerData.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
@@ -76,25 +77,35 @@ pub const clearAndFree = Core.clearAndFree;
 
 pub const Copy = Core.Copy;
 
-pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     if (event_data == EventData) {
-        const callback = EventManagerT.EventCallback{
+        var callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
                 fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
-                    return @as(EManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
+                    return @as(*EManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
+        //the list belongs to the caller, so ours comes off again on the way out
         callback_list.append(&callback.mNode);
-        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+        defer callback_list.remove(&callback.mNode);
+        try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
+        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+    } else if (event_data == ECSEventData) {
+        var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
+        callback_list.append(&uuid_callback.mNode);
+        defer callback_list.remove(&uuid_callback.mNode);
+        try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
     } else {
-        std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+        std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
 }
 
-pub fn OnManagerEvents(_: *EManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
+pub fn OnManagerEvents(self: *EManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {
+        //the ECS queues the entity's children and scripts along with it
+        .DestroyEntity => |e| try self.mECSManager.DestroyEntity(engine_context, e.Entity.mID),
         .Default => unreachable,
     }
     return .Continue;

@@ -436,9 +436,8 @@ pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) void {
     self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
 }
 
-pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     if (event_data == EventData) {
-        var callbacks = callback_list;
         var callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
@@ -447,11 +446,11 @@ pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_
                 }
             }.thunk,
         };
-        //the node is ours, but the rest of the list belongs to the caller, so unlink again on the way out
-        callbacks.append(&callback.mNode);
-        defer callbacks.remove(&callback.mNode);
+        //the node is ours, but the list belongs to the caller, so unlink again on the way out
+        callback_list.append(&callback.mNode);
+        defer callback_list.remove(&callback.mNode);
 
-        try self.mEventManager.ProcessCategory(event_category, engine_context, callbacks);
+        try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
         self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
     } else {
         std.log.err("AManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
@@ -461,9 +460,9 @@ pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_
 /// Runs the asset destroys queued this frame: the manager events hand each dead asset to the ECS
 /// as a destroy, then the ECS events actually free it.
 pub fn ProcessDestroyedAssets(self: *AManager, engine_context: *EngineContext) !void {
-    const callback_list: std.DoublyLinkedList = .{};
-    try self.ProcessEvents(EventData, .EndOfFrame, engine_context, callback_list);
-    try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, callback_list);
+    var callback_list: std.DoublyLinkedList = .{};
+    try self.ProcessEvents(EventData, .EndOfFrame, engine_context, &callback_list);
+    try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &callback_list);
 }
 
 pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventManager.EventResult {

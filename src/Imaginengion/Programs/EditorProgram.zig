@@ -44,6 +44,12 @@ const GameEvent = GameEventData.EventT;
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEvent = ImguiEventData.EventT;
 
+const EEventData = @import("../Events/EManagerData.zig");
+const GCEventData = @import("../Events/GCManagerData.zig");
+const PEventData = @import("../Events/PManagerData.zig");
+const SEventData = @import("../Events/SManagerData.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
+
 const AManager = @import("../ECSManagers/AManager.zig");
 const EManager = @import("../ECSManagers/EManager.zig");
 const GCManager = @import("../ECSManagers/GCManager.zig");
@@ -362,11 +368,24 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         callback_list.first = null;
         callback_list.last = null;
 
-        try engine_context.mGameWorld.ProcessRemovedObj(engine_context);
-        try engine_context.mEditorWorld.ProcessRemovedObj(engine_context);
-        try engine_context.mSimulateWorld.ProcessRemovedObj(engine_context);
+        //the managers' own events before the ECS's: an object's Delete is queued on its manager, and handling it
+        //queues the ECS destroy. scenes go first since deleting one deletes its entities too
+        for ([_]*WorldManager{ &engine_context.mGameWorld, &engine_context.mEditorWorld, &engine_context.mSimulateWorld }) |world| {
+            try world.ProcessEvents(SEventData, .EndOfFrame, engine_context, &callback_list);
+            try world.ProcessEvents(GCEventData, .EndOfFrame, engine_context, &callback_list);
+            try world.ProcessEvents(PEventData, .EndOfFrame, engine_context, &callback_list);
+            try world.ProcessEvents(EEventData, .EndOfFrame, engine_context, &callback_list);
+            try world.ProcessEvents(ECSEventData, .EndOfFrame, engine_context, &callback_list);
+        }
 
         try engine_context.mAssetManager.ProcessDestroyedAssets(engine_context);
+
+        //after the assets: a destroyed EntityAsset deletes its tree in here
+        try engine_context.mAssetWorld.ProcessEvents(SEventData, .EndOfFrame, engine_context, &callback_list);
+        try engine_context.mAssetWorld.ProcessEvents(GCEventData, .EndOfFrame, engine_context, &callback_list);
+        try engine_context.mAssetWorld.ProcessEvents(PEventData, .EndOfFrame, engine_context, &callback_list);
+        try engine_context.mAssetWorld.ProcessEvents(EEventData, .EndOfFrame, engine_context, &callback_list);
+        try engine_context.mAssetWorld.ProcessEvents(ECSEventData, .EndOfFrame, engine_context, &callback_list);
 
         //end of frame resets
         engine_context.mSystemEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);

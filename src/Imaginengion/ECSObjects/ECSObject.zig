@@ -190,15 +190,17 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        pub fn Duplicate(self: Self) !Self {
+        pub fn Duplicate(self: Self, engine_context: *EngineContext) !Self {
             if (Self == Entity) {
-                return .{ .mID = try self.mManager.mAManager.Duplicate(self.mID), .mManager = self.mManager };
+                return try self.mManager.mEManager.Duplicate(engine_context, self.mID);
             } else if (Self == GameContext) {
-                return .{ .mID = try self.mManager.mEManager.Duplicate(self.mID), .mManager = self.mManager };
+                return try self.mManager.mGCManager.Duplicate(engine_context, self.mID);
             } else if (Self == Player) {
-                return .{ .mID = try self.mManager.mPManager.Duplicate(self.mID), .mManager = self.mManager };
+                return try self.mManager.mPManager.Duplicate(engine_context, self.mID);
             } else if (Self == Scene) {
-                return .{ .mID = try self.mManager.mSManager.Duplicate(self.mID), .mManager = self.mManager };
+                return try self.mManager.mSManager.Duplicate(engine_context, self.mID);
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
         }
 

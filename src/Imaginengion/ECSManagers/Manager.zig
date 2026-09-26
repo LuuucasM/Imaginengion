@@ -26,6 +26,7 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
+const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 
 const Serializer = @import("../Serializer/Serializer.zig");
 
@@ -82,38 +83,51 @@ pub fn Core(comptime Self: type) type {
             return new_obj;
         }
 
+        /// Queues the object's delete for the end of the frame, when the manager's ProcessEvents hands it to
+        /// Self.OnManagerEvents, so it stays usable until then.
+        /// Deleting an object that is already gone, or that is already queued this frame, does nothing.
         pub fn DeleteObj(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !void {
-            if (Self == EManager) {
-                try self.mEventManager.Insert(
-                    engine_context.EngineAllocator(),
-                    .EndOfFrame,
-                    .{ .DestroyEntity = .{ .Entity = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
-                );
-            } else if (Self == GCManager) {
-                try self.mEventManager.Insert(
-                    engine_context.EngineAllocator(),
-                    .EndOfFrame,
-                    .{ .DestroyGameContext = .{ .GameContext = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
-                );
-            } else if (Self == PManager) {
-                try self.mEventManager.Insert(
-                    engine_context.EngineAllocator(),
-                    .EndOfFrame,
-                    .{ .DestroyPlayer = .{ .Player = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
-                );
-            } else if (Self == SManager) {
-                try self.mEventManager.Insert(
-                    engine_context.EngineAllocator(),
-                    .EndOfFrame,
-                    .{ .ToDestroyScene = .{ .Scene = .{ .mID = obj_id, .mManager = ObjManager(self) } } },
-                );
-            } else {
-                std.log.err("DeleteObj is not implemented for {s} yet", .{@typeName(Self)});
+            if (!self.mECSManager.IsActiveEntity(obj_id)) return;
+
+            const obj: UnderlyingObj(Self) = .{ .mID = obj_id, .mManager = ObjManager(self) };
+            const event: Self.EventManagerT.EventType = if (Self == EManager)
+                .{ .DestroyEntity = .{ .Entity = obj } }
+            else if (Self == GCManager)
+                .{ .DestroyGameContext = .{ .GameContext = obj } }
+            else if (Self == PManager)
+                .{ .DestroyPlayer = .{ .Player = obj } }
+            else if (Self == SManager)
+                .{ .ToDestroyScene = .{ .Scene = obj } }
+            else
+                @compileError(std.fmt.comptimePrint("DeleteObj is not implemented for {s} yet", .{@typeName(Self)}));
+
+            for (self.mEventManager.mEventsArray.getPtr(.EndOfFrame).items) |queued_event| {
+                if (std.meta.eql(queued_event, event)) return;
             }
+            try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, event);
+        }
+
+        /// ECS event listener each manager's ProcessEvents adds when it hands its ECS the ECSEventData category:
+        /// takes a destroyed object's UUID out of the manager's map. That covers children and scripts too,
+        /// which the ECS queues itself when their parent goes. Runs before the ECS's own handler, so the
+        /// object is still readable here.
+        pub fn RemoveDestroyedUUID(ctx: *anyopaque, _: *EngineContext, event: *const Self.ECSManagerT.ECSEventDataT.EventT) anyerror!EventResult {
+            const self: *Self = @ptrCast(@alignCast(ctx));
+            switch (event.*) {
+                .DestroyEntity => |e| {
+                    //the same destroy can be queued twice in one pass, and the second one finds it gone
+                    if (!self.mECSManager.IsActiveEntity(e.mEntityID)) return .Continue;
+                    const uuid_component = self.mECSManager.GetComponent(UUIDComponent, e.mEntityID) orelse return .Continue;
+                    //a duplicate carries its original's UUID without owning the map entry
+                    if (self.GetWorldID(uuid_component.ID) == e.mEntityID) self.RemoveUUID(uuid_component.ID);
+                },
+                else => {},
+            }
+            return .Continue;
         }
 
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
-            return try self.mECSManager.DuplicateEntity(engine_context, obj_id);
+            return .{ .mID = try self.mECSManager.DuplicateEntity(engine_context, obj_id), .mManager = ObjManager(self) };
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {

@@ -9,6 +9,7 @@ const Application = @import("../Core/Application.zig");
 const Tracy = @import("Tracy.zig");
 const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
 const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
@@ -77,6 +78,13 @@ mGameWorld: WorldManager = .{},
 mEditorWorld: WorldManager = .{},
 mSimulateWorld: WorldManager = .{},
 
+/// Where loaded ECS object assets live (EntityAsset, ...), so a file is parsed once and copied from after that.
+/// Nothing renders, simulates or scripts it, and it is deliberately left out of SetSyncCallbacks: nothing
+/// should react to what happens in here. Not a WorldType for the same reason.
+mAssetWorld: WorldManager = .{},
+/// The scene every EntityAsset's entity tree is created in, since an entity has to belong to a scene
+mAssetEntityScene: Scene = .uninit,
+
 mImguiManager: ImguiManager = .{},
 mImguiEventManager: ImguiEventManager = .empty,
 
@@ -114,6 +122,9 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mGameWorld.Init(self.EngineAllocator());
     try self.mEditorWorld.Init(self.EngineAllocator());
     try self.mSimulateWorld.Init(self.EngineAllocator());
+
+    try self.mAssetWorld.Init(self.EngineAllocator());
+    self.mAssetEntityScene = try self.mAssetWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
 }
 
 /// Points every event manager in the engine at Program.OnEvent, the single synchronous entry
@@ -140,6 +151,10 @@ pub fn DeInit(self: *EngineContext) void {
     self.mEditorWorld.Deinit(self);
     self.mSimulateWorld.Deinit(self);
 
+    //the objects in here hold asset handles, so they are destroyed while the asset manager is still alive.
+    //the world itself is freed after the asset manager, whose EntityAssets look at it on their way out
+    self.mAssetWorld.clearAndFree(self, .All);
+
     self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mImguiEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
@@ -148,6 +163,7 @@ pub fn DeInit(self: *EngineContext) void {
     self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit();
     self.mAssetManager.Deinit(self);
+    self.mAssetWorld.Deinit(self);
 
     self.mRenderer.Deinit(self);
 

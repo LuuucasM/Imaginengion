@@ -4,6 +4,7 @@ const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
 const EventData = @import("../Events/GCManagerData.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
 
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const GCComponents = @import("../ECSComponents/GCComponents.zig");
@@ -75,20 +76,28 @@ pub const LoadGameContext = Core.LoadObject;
 
 pub const Copy = Core.Copy;
 
-pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+pub fn ProcessEvents(self: *GCManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     if (event_data == EventData) {
-        const callback = EventManagerT.EventCallback{
+        var callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
                 fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
-                    return @as(GCManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
+                    return @as(*GCManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
+        //the list belongs to the caller, so ours comes off again on the way out
         callback_list.append(&callback.mNode);
-        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+        defer callback_list.remove(&callback.mNode);
+        try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
+        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+    } else if (event_data == ECSEventData) {
+        var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
+        callback_list.append(&uuid_callback.mNode);
+        defer callback_list.remove(&uuid_callback.mNode);
+        try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
     } else {
-        std.log.err("GCManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+        std.log.err("GCManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
 }
 
@@ -102,8 +111,9 @@ pub fn ProcessConfig(self: GCManager, engine_context: *EngineContext, gamecontex
     }
 }
 
-pub fn OnManagerEvents(_: *GCManager, _: *EngineContext, event: EventData.EventT) anyerror!EventResult {
+pub fn OnManagerEvents(self: *GCManager, engine_context: *EngineContext, event: EventData.EventT) anyerror!EventResult {
     switch (event) {
+        .DestroyGameContext => |e| try self.mECSManager.DestroyEntity(engine_context, e.GameContext.mID),
         .Default => unreachable,
     }
     return .Continue;

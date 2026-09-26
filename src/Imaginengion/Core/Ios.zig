@@ -118,6 +118,14 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             };
             return try inner_io.vtable.dirRead(inner_io.userdata, dir_reader, buffer);
         }
+        fn FileWritePositional(context: ?*anyopaque, file: std.Io.File, header: []const u8, data: []const []const u8, splat: usize, offset: u64) std.Io.File.WritePositionalError!usize {
+            const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+            const inner_io = switch (io_type) {
+                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Evented => @compileError("evented not implemented for this Io yet\n"),
+            };
+            return try inner_io.vtable.FileWritePositional(inner_io.userdata, file, header, data, splat, offset);
+        }
     };
 
     return struct {

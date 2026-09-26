@@ -377,19 +377,17 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         /// Runs every queued event of this category, then empties the queue.
         /// The ECS applies the removals itself, after the listeners in `callback_list` have seen the event.
-        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, comptime event_category: ECSEventDataT.EventCategories, callback_list: ECSCallbackList) !void {
+        pub fn ProcessEvents(self: *Self, engine_context: *EngineContext, comptime event_category: ECSEventDataT.EventCategories, callback_list: *ECSCallbackList) !void {
             const zone = Tracy.ZoneInit(debug_name ++ "::ProcessEvents", @src());
             defer zone.Deinit();
 
-            var callbacks = callback_list;
-
             // appended last so listeners still see a live entity, and unlinked again on the way out
-            // because the nodes are shared with the caller's list
+            // because the list belongs to the caller
             var event_callback = ECSEventCallback{ .mCtx = self, .mCallbackFn = OnECSEvent };
-            callbacks.append(&event_callback.mNode);
-            defer callbacks.remove(&event_callback.mNode);
+            callback_list.append(&event_callback.mNode);
+            defer callback_list.remove(&event_callback.mNode);
 
-            try self.mECSEventManager.ProcessCategory(event_category, engine_context, callbacks);
+            try self.mECSEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
 
             self.mECSEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
         }

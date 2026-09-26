@@ -82,7 +82,8 @@ const TestECS = struct {
 
     /// end of frame: applies everything queued by DestroyEntity and RemoveComponent
     fn ProcessEvents(self: *TestECS) !void {
-        try self.mECSManager.ProcessEvents(self.mEngineContext, .EndOfFrame, .{});
+        var callback_list: std.DoublyLinkedList = .{};
+        try self.mECSManager.ProcessEvents(self.mEngineContext, .EndOfFrame, &callback_list);
     }
 };
 
@@ -483,7 +484,8 @@ test "ECS copy carries the queued events" {
 
     //the destroy came across still queued, and applies to the copy's own entity
     try std.testing.expect(other.mECSManager.IsActiveEntity(entity_id));
-    try other.mECSManager.ProcessEvents(engine_context, .EndOfFrame, .{});
+    var callback_list: std.DoublyLinkedList = .{};
+    try other.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &callback_list);
     try std.testing.expect(!other.mECSManager.IsActiveEntity(entity_id));
     try std.testing.expect(test_ecs.mECSManager.IsActiveEntity(entity_id));
 }

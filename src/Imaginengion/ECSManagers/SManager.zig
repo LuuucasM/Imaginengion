@@ -8,6 +8,7 @@ const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
 const EventResult = EventManager.EventResult;
 const EventData = @import("../Events/SManagerData.zig");
+const ECSEventData = @import("../Events/ECSEventData.zig");
 
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -28,6 +29,7 @@ const SceneScriptComponent = SceneComponents.ScriptComponent;
 const Entity = @import("../ECSObjects/Entity.zig");
 const EComponents = @import("../ECSComponents/EComponents.zig");
 const EntitySceneComponent = EComponents.EntitySceneComponent;
+const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
 pub const EventManagerT = EventManager.EventManager(EventData);
 
@@ -126,20 +128,28 @@ pub fn GetSceneComponent(self: *SManager, scene_id: Scene.Type) *SceneComponent 
     return self.mECSManager.GetComponent(SceneComponent, scene_id).?;
 }
 
-pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+pub fn ProcessEvents(self: *SManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
     if (event_data == EventData) {
-        const callback = EventManagerT.EventCallback{
+        var callback = EventManagerT.EventCallback{
             .mCtx = self,
             .mCallbackFn = struct {
                 fn thunk(ctx: *anyopaque, ec: *EngineContext, event: *const event_data.EventT) anyerror!EventResult {
-                    return @as(SManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
+                    return @as(*SManager, @ptrCast(@alignCast(ctx))).OnManagerEvents(ec, event.*);
                 }
             }.thunk,
         };
+        //the list belongs to the caller, so ours comes off again on the way out
         callback_list.append(&callback.mNode);
-        self.mEventManager.ProcessCategory(event_category, engine_context, callback_list);
+        defer callback_list.remove(&callback.mNode);
+        try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
+        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+    } else if (event_data == ECSEventData) {
+        var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
+        callback_list.append(&uuid_callback.mNode);
+        defer callback_list.remove(&uuid_callback.mNode);
+        try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
     } else {
-        std.log.err("SManager.ProcessEvents does not currently handle processing events of type {s}", @typeName(event_data));
+        std.log.err("SManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
 }
 
@@ -147,18 +157,28 @@ pub fn OnManagerEvents(self: *SManager, engine_context: *EngineContext, event: E
     switch (event) {
         .ToDestroyScene => |destroy_event| {
             const scene = destroy_event.Scene;
-            const scene_entities = try scene.GetEntityGroup(engine_context.FrameAllocator(), EntitySceneComponent);
 
-            for (scene_entities) |entity_id| {
-                const e: Entity = .{ .mID = entity_id, .mManager = scene.mManager };
-                e.Delete(engine_context);
+            //the scene's entities are not its ECS children, they point at it through EntitySceneComponent.
+            //only the top level ones are deleted here, the ECS takes everything below them along
+            const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
+            const EntityChildQuery = GroupQuery{ .Component = EntityChildComponent };
+            const root_entities = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{
+                .Not = .{
+                    .mFirst = &EntitySceneQuery,
+                    .mSecond = &EntityChildQuery,
+                },
+            });
+            for (root_entities.items) |entity_id| {
+                try scene.GetEntity(entity_id).Delete(engine_context);
             }
 
-            self.RemoveScene(engine_context.FrameAllocator(), scene);
-            self.mECSManager.DestroyEntity(engine_context, scene.mID);
+            //while the scene still has its stack position to close the gap with
+            try self.RemoveScene(engine_context.FrameAllocator(), scene);
+            try self.mECSManager.DestroyEntity(engine_context, scene.mID);
         },
         .Default => unreachable,
     }
+    return .Continue;
 }
 
 pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene, move_to_pos: usize) !void {
