@@ -155,6 +155,15 @@ fn TrackFile(self: *Serializer, engine_context: *EngineContext, uuid: u64, abs_p
     entry.value_ptr.* = asset_handle;
 }
 
+/// The kind of object a file with this extension holds, the other way round from FileExtension
+pub const ObjectKind = enum { Entity, Scene, Player, GameContext };
+pub fn ObjectKindOf(extension: []const u8) ?ObjectKind {
+    inline for (.{ .{ Entity, ObjectKind.Entity }, .{ Scene, ObjectKind.Scene }, .{ Player, ObjectKind.Player }, .{ GameContext, ObjectKind.GameContext } }) |pair| {
+        if (std.mem.eql(u8, extension, std.mem.span(FileExtension(pair[0])))) return pair[1];
+    }
+    return null;
+}
+
 pub fn FileExtension(comptime obj_t: type) [*c]const u8 {
     if (obj_t == Scene) {
         return ".imsc";

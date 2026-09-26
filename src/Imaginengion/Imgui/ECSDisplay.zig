@@ -12,6 +12,7 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const StackPosComponent = @import("../ECSComponents/Scene/StackPosComponent.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
+const TmplRefComponent = @import("../ECSComponents/Shared/TmplRefComponent.zig");
 const ImguiManager = @import("Imgui.zig");
 const ECSDisplayPanel = @This();
 
@@ -104,20 +105,20 @@ fn RenderObjects(comptime ObjectType: type, engine_context: *EngineContext, worl
 
     for (objects_list.items) |object_id| {
         const object = Traits.GetObject(object_id, world_manager);
-        try RenderObject(ObjectType, engine_context, object);
+        try RenderObject(ObjectType, engine_context, object, .{});
     }
 }
 
-fn RenderObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
+pub fn RenderObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, tree: TreeOptions) !void {
     const Traits = ObjectTraits(ObjectType);
     if (object.HasComponent(Traits.ParentComponent)) {
-        try RenderParentObject(ObjectType, engine_context, object);
+        try RenderParentObject(ObjectType, engine_context, object, tree);
     } else {
-        try RenderLeafObject(ObjectType, engine_context, object);
+        try RenderLeafObject(ObjectType, engine_context, object, tree);
     }
 }
 
-fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
+fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, tree: TreeOptions) !void {
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
@@ -130,45 +131,85 @@ fn RenderParentObject(comptime ObjectType: type, engine_context: *EngineContext,
     //Deactivated means the press started on this node, hovered means the release landed back on it,
     //so a drag that ends somewhere else never selects.
     if (imgui.igIsItemDeactivated() and imgui.igIsItemHovered(imgui.ImGuiHoveredFlags_None)) {
-        try Traits.SelectObject(engine_context, object);
+        try Select(engine_context, object, tree);
     }
 
     if (imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
-        try Traits.HandleObjectContextMenu(engine_context, object);
+        try Traits.HandleObjectContextMenu(engine_context, object, !tree.mIsRoot);
     }
 
     Traits.HandleDragDropSource(object);
 
     if (is_entity_tree_open) {
         defer imgui.igTreePop();
-        try RenderChildObjects(ObjectType, engine_context, object);
+        try RenderChildObjects(ObjectType, engine_context, object, tree);
     }
 }
 
-fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
+fn RenderLeafObject(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType, tree: TreeOptions) !void {
     const Traits = ObjectTraits(ObjectType);
     const frame_allocator = engine_context.FrameAllocator();
 
     const object_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s}###{d}", .{ object.GetName(), Traits.ID(object) }, 0);
 
     if (imgui.igSelectable_Bool(object_name, false, imgui.ImGuiSelectableFlags_None, .{ .x = 0, .y = 0 })) {
-        try Traits.SelectObject(engine_context, object);
+        try Select(engine_context, object, tree);
     }
 
     if (imgui.igBeginPopupContextItem(object_name, imgui.ImGuiPopupFlags_MouseButtonRight)) {
         defer imgui.igEndPopup();
-        try Traits.HandleObjectContextMenu(engine_context, object);
+        try Traits.HandleObjectContextMenu(engine_context, object, !tree.mIsRoot);
     }
 
     Traits.HandleDragDropSource(object);
 }
 
-fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType) anyerror!void {
+fn RenderChildObjects(comptime ObjectType: type, engine_context: *EngineContext, parent_object: ObjectType, tree: TreeOptions) anyerror!void {
     //an object with no children just yields nothing
     var iter = parent_object.GetIterator(.Child);
     while (iter.next()) |child_object| {
-        try RenderObject(ObjectType, engine_context, child_object);
+        try RenderObject(ObjectType, engine_context, child_object, .{ .mSelection = tree.mSelection });
+    }
+}
+
+/// How a tree of objects is drawn. The main panels use the defaults: a click selects through the editor's own selection
+/// and anything can be deleted. A template window (TmplEditPanel) keeps its own selection and can't delete its root
+pub const TreeOptions = struct {
+    /// Where a click puts the selected object. Null means the editor's selection, through SelectObjectEvent
+    mSelection: ?*?SelectedObject = null,
+    /// The row being drawn is the window's root, which has no Delete
+    mIsRoot: bool = false,
+};
+
+fn Select(engine_context: *EngineContext, object: anytype, tree: TreeOptions) !void {
+    if (tree.mSelection) |selection| {
+        selection.* = ToSelectedObject(object);
+    } else {
+        try ObjectTraits(@TypeOf(object)).SelectObject(engine_context, object);
+    }
+}
+
+pub fn ToSelectedObject(object: anytype) SelectedObject {
+    const obj_t = @TypeOf(object);
+    return if (obj_t == Entity)
+        .{ .entity = object }
+    else if (obj_t == Scene)
+        .{ .scene_layer = object }
+    else if (obj_t == Player)
+        .{ .player = object }
+    else if (obj_t == GameContext)
+        .{ .gamecontext = object }
+    else
+        @compileError(std.fmt.comptimePrint("{s} can not be selected", .{@typeName(obj_t)}));
+}
+
+/// "Make Template" for any object type. Off without an open project, since the template goes in the content browser's
+/// folder, and on an object that is already a copy of a template
+fn MakeTmplMenuItem(engine_context: *EngineContext, object: anytype) !void {
+    const is_enabled = engine_context.mAssetManager.mProjectDirectory != null and !object.HasComponent(TmplRefComponent);
+    if (imgui.igMenuItem_Bool("Make Template", "", false, is_enabled)) {
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .MakeTmplEvent = .{ .mObject = ToSelectedObject(object) } });
     }
 }
 
@@ -205,12 +246,14 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload(ImguiManager.ENTITY_REF_PAYLOAD, &entity, @sizeOf(Entity), 0);
                 }
             }
-            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Entity) !void {
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Entity, can_delete: bool) !void {
                 if (imgui.igMenuItem_Bool("New Child Entity", "", false, true)) {
                     _ = try object.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
                 }
 
-                if (imgui.igMenuItem_Bool("Delete Entity", "", false, true)) {
+                try MakeTmplMenuItem(engine_context, object);
+
+                if (imgui.igMenuItem_Bool("Delete Entity", "", false, can_delete)) {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
@@ -274,7 +317,7 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload("SceneRef", &scene_layer, @sizeOf(Scene), 0);
                 }
             }
-            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Scene) !void {
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Scene, can_delete: bool) !void {
                 if (imgui.igMenuItem_Bool("New Child Scene", "", false, true)) {
                     _ = try object.CreateChild(engine_context, .Entity, Scene.DefaultConfig);
                 }
@@ -283,7 +326,9 @@ fn ObjectTraits(comptime T: type) type {
                     _ = try object.CreateEntity(engine_context, Entity.DefaultConfig);
                 }
 
-                if (imgui.igMenuItem_Bool("Delete Scene", "", false, true)) {
+                try MakeTmplMenuItem(engine_context, object);
+
+                if (imgui.igMenuItem_Bool("Delete Scene", "", false, can_delete)) {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
@@ -331,12 +376,14 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload("PlayerRef", &player, @sizeOf(Player), 0);
                 }
             }
-            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Player) !void {
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Player, can_delete: bool) !void {
                 if (imgui.igMenuItem_Bool("New Child Player", "", false, true)) {
                     _ = try object.CreateChild(engine_context, .Entity, Player.DefaultConfig);
                 }
 
-                if (imgui.igMenuItem_Bool("Delete Player", "", false, true)) {
+                try MakeTmplMenuItem(engine_context, object);
+
+                if (imgui.igMenuItem_Bool("Delete Player", "", false, can_delete)) {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),
@@ -378,12 +425,14 @@ fn ObjectTraits(comptime T: type) type {
                     _ = imgui.igSetDragDropPayload("GameContextRef", &game_context, @sizeOf(GameContext), 0);
                 }
             }
-            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: GameContext) !void {
+            pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: GameContext, can_delete: bool) !void {
                 if (imgui.igMenuItem_Bool("New Child Game Context", "", false, true)) {
                     _ = try object.CreateChild(engine_context, .Entity, GameContext.DefaultConfig);
                 }
 
-                if (imgui.igMenuItem_Bool("Delete Game Context", "", false, true)) {
+                try MakeTmplMenuItem(engine_context, object);
+
+                if (imgui.igMenuItem_Bool("Delete Game Context", "", false, can_delete)) {
                     try object.Delete(engine_context);
                     try engine_context.mGameEventManager.Insert(
                         engine_context.EngineAllocator(),

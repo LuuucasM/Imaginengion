@@ -3,6 +3,7 @@ const SceneLayer = @import("../ECSObjects/Scene.zig");
 const ScriptType = @import("../ECSComponents/Asset/ScriptAsset.zig").ScriptType;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
 pub const EventCategories = enum {
     EndOfFrame,
@@ -21,6 +22,8 @@ pub const EventT = union(enum) {
     NewScriptEvent: NewScriptEvent,
     NewSceneEvent: NewSceneEvent,
     SelectObjectEvent: SelectObjectEvent,
+    MakeTmplEvent: MakeTmplEvent,
+    OpenTmplEvent: OpenTmplEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -70,4 +73,16 @@ pub const NewSceneEvent = struct {
 
 pub const SelectObjectEvent = struct {
     mObject: SelectedObject,
+};
+
+/// Make Template from the hierarchy's right click menu. Handled by the editor since it saves into the content
+/// browser's current folder
+pub const MakeTmplEvent = struct {
+    mObject: SelectedObject,
+};
+
+/// Opens a template in its own edit window (see TmplEditPanel), or brings its window forward if it is already open.
+/// Carries a reference of its own on the handle, which the editor takes over or releases
+pub const OpenTmplEvent = struct {
+    mTmpl: AssetHandle,
 };

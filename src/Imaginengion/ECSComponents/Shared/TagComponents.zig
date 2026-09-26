@@ -16,3 +16,10 @@ pub const TransformDirtyTag = struct {
 
     pub fn Deinit(_: *TransformDirtyTag, _: *EngineContext) void {}
 };
+
+pub const ShouldRenderTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "ShouldRenderTag";
+
+    pub fn Deinit(_: *ShouldRenderTag, _: *EngineContext) void {}
+};

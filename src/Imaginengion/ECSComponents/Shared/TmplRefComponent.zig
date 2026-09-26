@@ -25,7 +25,13 @@ pub fn Clone(self: *const TmplRefComponent, _: *EngineContext) !TmplRefComponent
     return self.*;
 }
 
-pub fn EditorRender(self: *TmplRefComponent, _: *EngineContext) !void {
+pub fn EditorRender(self: *TmplRefComponent, engine_context: *EngineContext) !void {
+    if (self.mTmpl.IsIDValid() and imgui.igButton("Edit Template", .{ .x = 0, .y = 0 })) {
+        //the event carries a reference of its own, the editor takes it over (see EditorProgram.OpenTmpl)
+        self.mTmpl.RetainAsset();
+        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = self.mTmpl } });
+    }
+
     //shown, not edited: which template an object is a copy of is set when it is spawned
     imgui.igTextUnformatted("Template: ", null);
     imgui.igSameLine(0.0, 0.0);

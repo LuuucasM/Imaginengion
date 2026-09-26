@@ -2,9 +2,6 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Tracy = @import("../../Core/Tracy.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
-const Scene = @import("../../ECSObjects/Scene.zig");
-const Player = @import("../../ECSObjects/Player.zig");
-const GameContext = @import("../../ECSObjects/GameContext.zig");
 const TextSerializer = @import("../../Serializer/TextSerializer.zig");
 
 /// An ECS object's file (entity, scene, player or game context) loaded once into EngineContext.mAssetWorld,
@@ -54,19 +51,11 @@ pub fn ObjectAsset(comptime obj_t: type, comptime name: []const u8) type {
 
         /// Blank, every component comes from the file
         fn CreateBlank(engine_context: *EngineContext) !obj_t {
-            const asset_world = &engine_context.mAssetWorld;
             if (obj_t == Entity) {
                 //an entity has to belong to a scene
                 return try engine_context.mAssetEntityScene.CreateEntity(engine_context, Entity.BlankConfig);
-            } else if (obj_t == Scene) {
-                //left out of the stack until the file's SceneComponent slots it in
-                return try asset_world.mSManager.CreateBlankScene(engine_context);
-            } else if (obj_t == Player) {
-                return try asset_world.CreatePlayer(engine_context, Player.BlankConfig);
-            } else if (obj_t == GameContext) {
-                return try asset_world.CreateGameContext(engine_context, GameContext.BlankConfig);
             } else {
-                @compileError(std.fmt.comptimePrint("{s} can not be loaded as an asset", .{@typeName(obj_t)}));
+                return try engine_context.mAssetWorld.CreateBlank(obj_t, engine_context);
             }
         }
 

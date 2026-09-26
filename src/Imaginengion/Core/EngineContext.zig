@@ -85,6 +85,13 @@ mAssetWorld: WorldManager = .{},
 /// The scene every EntityAsset's entity tree is created in, since an entity has to belong to a scene
 mAssetEntityScene: Scene = .uninit,
 
+/// Where templates are opened for editing (see TmplEditPanel). Like mAssetWorld nothing runs on it, so a template's
+/// scripts don't run while it is being edited, and it is its own world so an open template never shares a UUID map
+/// with the loaded copy of the same file in mAssetWorld.
+mTmplEditWorld: WorldManager = .{},
+/// The scene every entity template being edited is opened in, since an entity has to belong to a scene
+mTmplEditScene: Scene = .uninit,
+
 mImguiManager: ImguiManager = .{},
 mImguiEventManager: ImguiEventManager = .empty,
 
@@ -114,7 +121,7 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mAssetManager.Init(self);
     try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
-    try self.mAudioManager.Init();
+    try self.mAudioManager.Init(self.EngineAllocator());
     try self.mInputManager.Init(self.EngineAllocator());
 
     try self.mPhysicsManager.Init(self.EngineAllocator());
@@ -125,6 +132,9 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
 
     try self.mAssetWorld.Init(self.EngineAllocator());
     self.mAssetEntityScene = try self.mAssetWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
+
+    try self.mTmplEditWorld.Init(self.EngineAllocator());
+    self.mTmplEditScene = try self.mTmplEditWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
 }
 
 /// Points every event manager in the engine at Program.OnEvent, the single synchronous entry
@@ -137,6 +147,7 @@ pub fn SetSyncCallbacks(self: *EngineContext, program: *Program) void {
     self.mImguiEventManager.SetSyncCallback(program, Program.OnEvent);
 
     self.mAssetManager.SetSyncCallback(program, Program.OnEvent);
+    self.mAudioManager.SetSyncCallback(program, Program.OnEvent);
 
     self.mGameWorld.SetSyncCallback(program, Program.OnEvent);
     self.mEditorWorld.SetSyncCallback(program, Program.OnEvent);
@@ -150,6 +161,7 @@ pub fn DeInit(self: *EngineContext) void {
     self.mGameWorld.Deinit(self);
     self.mEditorWorld.Deinit(self);
     self.mSimulateWorld.Deinit(self);
+    self.mTmplEditWorld.Deinit(self);
 
     //the objects in here hold asset handles, so they are destroyed while the asset manager is still alive.
     //the world itself is freed after the asset manager, whose object assets look at it on their way out
@@ -163,7 +175,7 @@ pub fn DeInit(self: *EngineContext) void {
 
     self.mPhysicsManager.Deinit(self.EngineAllocator());
     self.mInputManager.Deinit(self.EngineAllocator());
-    self.mAudioManager.Deinit();
+    self.mAudioManager.Deinit(self);
     self.mAssetManager.Deinit(self);
     self.mAssetWorld.Deinit(self);
 

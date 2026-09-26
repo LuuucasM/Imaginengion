@@ -3,6 +3,7 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 
 const AManager = @import("AManager.zig");
+const AudioManager = @import("../AudioManager/AudioManager.zig");
 const EManager = @import("EManager.zig");
 const GCManager = @import("GCManager.zig");
 const PManager = @import("PManager.zig");
@@ -21,6 +22,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
+const Voice = @import("../ECSObjects/Voice.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
@@ -58,11 +60,11 @@ pub fn Core(comptime Self: type) type {
             self.mECSManager.SetSyncCallback(ctx, handler);
         }
 
-        /// The manager pointer an object of this type carries. An AssetHandle points at
-        /// its AManager directly; every other object points at the WorldManager, which is
+        /// The manager pointer an object of this type carries. The engine level managers' objects (AssetHandle,
+        /// Voice) point at their manager directly; every other object points at the WorldManager, which is
         /// recoverable because the ECS managers live as fields of it.
         fn ObjManager(self: *Self) @FieldType(UnderlyingObj(Self), "mManager") {
-            if (Self == AManager) {
+            if (Self == AManager or Self == AudioManager) {
                 return self;
             } else if (Self == EManager) {
                 return @fieldParentPtr("mEManager", self);
@@ -98,6 +100,8 @@ pub fn Core(comptime Self: type) type {
                 .{ .DestroyPlayer = .{ .Player = obj } }
             else if (Self == SManager)
                 .{ .ToDestroyScene = .{ .Scene = obj } }
+            else if (Self == AudioManager)
+                .{ .DestroyVoice = .{ .Voice = obj } }
             else
                 @compileError(std.fmt.comptimePrint("DeleteObj is not implemented for {s} yet", .{@typeName(Self)}));
 
@@ -261,6 +265,8 @@ pub fn Core(comptime Self: type) type {
                 is_valid = true;
             } else if (manager_t == SManager) {
                 is_valid = true;
+            } else if (manager_t == AudioManager) {
+                is_valid = true;
             }
 
             if (!is_valid) {
@@ -279,6 +285,8 @@ pub fn Core(comptime Self: type) type {
                 return Player;
             } else if (manager_t == SManager) {
                 return Scene;
+            } else if (manager_t == AudioManager) {
+                return Voice;
             } else {
                 @compileError("Not a valid manager type!");
             }
@@ -295,6 +303,8 @@ pub fn Core(comptime Self: type) type {
                 return Player.Type;
             } else if (manager_t == SManager) {
                 return Scene.Type;
+            } else if (manager_t == AudioManager) {
+                return Voice.Type;
             } else {
                 @compileError("Not a valid manager type!");
             }

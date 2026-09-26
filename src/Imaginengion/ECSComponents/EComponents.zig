@@ -15,6 +15,7 @@ pub const DynamicBodyTag = @import("Entity/TagComponents.zig").DynamicBodyTag;
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Shared/TransformComponent.zig");
 pub const TransformDirtyTag = @import("Shared/TagComponents.zig").TransformDirtyTag;
+pub const ShouldRenderTag = @import("Shared/TagComponents.zig").ShouldRenderTag;
 pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TextComponent = @import("Entity/TextComponent.zig");
 pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
@@ -47,6 +48,7 @@ pub const ComponentsList = [_]type{
     TextComponent,
     TransformComponent,
     TransformDirtyTag,
+    ShouldRenderTag,
     ViewpointComponent,
     RenderTargetComponent,
     TmplRefComponent,
@@ -70,6 +72,7 @@ pub const SerializeList = [_]type{
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
+    ShouldRenderTag,
     TextComponent,
     TransformComponent,
     ViewpointComponent,
@@ -99,6 +102,7 @@ pub const ComponentPanelList = [_]type{
     PlayerSlotComponent,
     QuadComponent,
     RigidBodyComponent,
+    ShouldRenderTag,
     TextComponent,
     TransformComponent,
     ViewpointComponent,
@@ -125,7 +129,8 @@ pub const EComponents = enum(u16) {
     EntitySceneComponent = ListInd(&ComponentsList, EntitySceneComponent),
     TextComponent = ListInd(&ComponentsList, TextComponent),
     TransformComponent = ListInd(&ComponentsList, TransformComponent),
-    TransformDirtyComponent = ListInd(&ComponentsList, TransformDirtyTag),
+    TransformDirtyTag = ListInd(&ComponentsList, TransformDirtyTag),
+    ShouldRenderTag = ListInd(&ComponentsList, ShouldRenderTag),
     ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
     OnInputPressedScript = ListInd(&ComponentsList, OnKeyPressedScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),

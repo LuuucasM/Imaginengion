@@ -121,21 +121,28 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
     }
 }
 
+/// A new scene, player or game context with no components, for one whose components all come from somewhere else
+/// (a file, a template). A scene is left out of the stack until a SceneComponent is added through PostParse.
+/// Entities are made blank by the scene they go in (Scene.CreateEntity with Entity.BlankConfig)
+pub fn CreateBlank(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext) !obj_t {
+    if (obj_t == Scene) {
+        return try self.mSManager.CreateBlankScene(engine_context);
+    } else if (obj_t == Player) {
+        return try self.CreatePlayer(engine_context, Player.BlankConfig);
+    } else if (obj_t == GameContext) {
+        return try self.CreateGameContext(engine_context, GameContext.BlankConfig);
+    } else if (obj_t == Entity) {
+        @compileError("an entity has to belong to a scene, create it with Scene.CreateEntity(Entity.BlankConfig)");
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not an object type owned by the WorldManager", .{@typeName(obj_t)}));
+    }
+}
+
 /// A new copy of the template `tmpl` (a handle to a SceneAsset, PlayerAsset or GCAsset, going by obj_t). It has no
 /// UUID and takes the template's name. See Core.Fill. Entities are spawned by the scene they go in (Scene.Spawn)
 pub fn Spawn(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext, tmpl: AssetHandle) !obj_t {
-    const object: obj_t = if (obj_t == Scene)
-        //slotted into the stack once the template's SceneComponent is copied onto it
-        try self.mSManager.CreateBlankScene(engine_context)
-    else if (obj_t == Player)
-        try self.CreatePlayer(engine_context, Player.BlankConfig)
-    else if (obj_t == GameContext)
-        try self.CreateGameContext(engine_context, GameContext.BlankConfig)
-    else if (obj_t == Entity)
-        @compileError("an entity has to belong to a scene, spawn it with Scene.Spawn")
-    else
-        @compileError(std.fmt.comptimePrint("{s} can not be spawned", .{@typeName(obj_t)}));
-
+    if (obj_t == Entity) @compileError("an entity has to belong to a scene, spawn it with Scene.Spawn");
+    const object = try self.CreateBlank(obj_t, engine_context);
     errdefer object.Delete(engine_context) catch {};
     try object.SetTmpl(engine_context, tmpl);
     return object;

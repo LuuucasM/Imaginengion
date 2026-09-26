@@ -57,6 +57,7 @@ const PManager = @import("../ECSManagers/PManager.zig");
 const SManager = @import("../ECSManagers/SManager.zig");
 
 const AManagerEvent = AManager.EventManagerT.EventType;
+const AudioManagerEvent = @import("../AudioManager/AudioManager.zig").EventManagerT.EventType;
 const EManagerEvent = EManager.EventManagerT.EventType;
 const GCManagerEvent = GCManager.EventManagerT.EventType;
 const PManagerEvent = PManager.EventManagerT.EventType;
@@ -80,6 +81,7 @@ const Dockspace = @import("../Imgui/Dockspace.zig");
 const AssetHandlePanel = @import("../Imgui/AssethandlePanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
+const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
 const PickingDebugPanel = @import("../Imgui/PickingDebugPanel.zig");
@@ -89,6 +91,7 @@ const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
+const Serializer = @import("../Serializer/Serializer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EventResult = @import("../Events/EventManager.zig").EventResult;
 
@@ -118,6 +121,8 @@ pub const EditorState = enum(u2) {
 _AssetHandlePanel: AssetHandlePanel = .{},
 _ComponentsPanel: ComponentsPanel = .{},
 _ContentBrowserPanel: ContentBrowserPanel = .{},
+/// One per template open for editing, see OpenTmpl
+mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
 _ScriptsPanel: ScriptsPanel = .{},
 _StatsPanel: StatsPanel = .{},
 _PickingDebugPanel: PickingDebugPanel = .{},
@@ -201,6 +206,13 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     const zone = Tracy.ZoneInit("EditorProgram::Deinit", @src());
     defer zone.Deinit();
+    //open template windows save on the way out, the same as their X does
+    for (self.mTmplEditPanels.items) |*panel| {
+        panel.Close(engine_context) catch |err| {
+            std.log.err("Failed to save a template window while closing the editor: {s}", .{@errorName(err)});
+        };
+    }
+    self.mTmplEditPanels.deinit(engine_context.EngineAllocator());
     engine_context.mImguiManager.Deinit(engine_context);
     self._ContentBrowserPanel.Deinit(engine_context);
     self._ViewportPanel.Deinit(engine_context.EngineAllocator());
@@ -318,6 +330,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self._StatsPanel.OnImguiRender(engine_context);
             //before RenderViewports, so it reads last frame's view rects the way input picking will
             try self._PickingDebugPanel.OnImguiRender(engine_context, &self._ViewportPanel);
+            try self.RenderTmplEditPanels(engine_context);
             try self.OnImguiRender(engine_context);
             try self.RenderViewports(engine_context);
 
@@ -371,7 +384,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
         //the managers' own events before the ECS's: an object's Delete is queued on its manager, and handling it
         //queues the ECS destroy. scenes go first since deleting one deletes its entities too
-        for ([_]*WorldManager{ &engine_context.mGameWorld, &engine_context.mEditorWorld, &engine_context.mSimulateWorld }) |world| {
+        for ([_]*WorldManager{ &engine_context.mGameWorld, &engine_context.mEditorWorld, &engine_context.mSimulateWorld, &engine_context.mTmplEditWorld }) |world| {
             try world.ProcessEvents(SEventData, .EndOfFrame, engine_context, &callback_list);
             try world.ProcessEvents(GCEventData, .EndOfFrame, engine_context, &callback_list);
             try world.ProcessEvents(PEventData, .EndOfFrame, engine_context, &callback_list);
@@ -380,6 +393,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         }
 
         try engine_context.mAssetManager.ProcessDestroyedAssets(engine_context);
+        try engine_context.mAudioManager.ProcessDestroyedVoices(engine_context);
 
         //after the assets: a destroyed object asset deletes its object in here
         try engine_context.mAssetWorld.ProcessEvents(SEventData, .EndOfFrame, engine_context, &callback_list);
@@ -425,6 +439,8 @@ pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anyt
     } else if (T == ImguiEvent) {
         return .Continue;
     } else if (T == AManagerEvent) {
+        return .Continue;
+    } else if (T == AudioManagerEvent) {
         return .Continue;
     } else if (T == EManagerEvent) {
         return .Continue;
@@ -476,6 +492,59 @@ fn OnViewportClick(self: *EditorProgram, engine_context: *EngineContext, click_p
     try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{
         .SelectEntityEvent = .{ .SelectedEntity = selected },
     });
+}
+
+/// Opens the template in a window of its own, or brings its window forward if it is already open. Takes over the
+/// event's reference on the handle
+fn OpenTmpl(self: *EditorProgram, engine_context: *EngineContext, tmpl: AssetHandle) !void {
+    var handle = tmpl;
+    for (self.mTmplEditPanels.items) |panel| {
+        if (panel.IsTmpl(handle)) {
+            handle.ReleaseAsset();
+            imgui.igSetWindowFocus_Str((try panel.WindowName(engine_context)).ptr);
+            return;
+        }
+    }
+
+    const panel = TmplEditPanel.Open(engine_context, handle) catch |err| {
+        handle.ReleaseAsset();
+        return err;
+    };
+    try self.mTmplEditPanels.append(engine_context.EngineAllocator(), panel);
+}
+
+/// Draws every open template window, then closes the ones whose X was clicked this frame
+fn RenderTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !void {
+    for (self.mTmplEditPanels.items) |*panel| {
+        try panel.OnImguiRender(engine_context);
+    }
+
+    var i: usize = 0;
+    while (i < self.mTmplEditPanels.items.len) {
+        const panel = &self.mTmplEditPanels.items[i];
+        if (panel.mIsOpen) {
+            i += 1;
+            continue;
+        }
+        panel.Close(engine_context) catch |err| {
+            //nothing is lost: the window stays open with the edits still in it
+            std.log.err("Failed to save template, so its window stays open: {s}", .{@errorName(err)});
+            panel.mIsOpen = true;
+            i += 1;
+            continue;
+        };
+        _ = self.mTmplEditPanels.orderedRemove(i);
+    }
+}
+
+/// Saves the object as a template named after it in the content browser's current folder, overwriting a file with that
+/// name, and leaves its shell behind (see Core.MakeTmpl)
+fn MakeTmpl(self: *EditorProgram, engine_context: *EngineContext, object: anytype) !void {
+    const extension = std.mem.span(Serializer.FileExtension(@TypeOf(object)));
+    const abs_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}/{s}{s}", .{ self._ContentBrowserPanel.mCurrentPath.items, object.GetName(), extension });
+    //the content browser only ever shows folders inside the project
+    const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
+    try object.MakeTmpl(engine_context, rel_path, .Prj);
 }
 
 fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
@@ -554,6 +623,13 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         },
         .SelectObjectEvent => |e| {
             self.mSelectedObj = e.mObject;
+        },
+        .MakeTmplEvent => |e| switch (e.mObject) {
+            inline else => |object| try self.MakeTmpl(engine_context, object),
+        },
+        .OpenTmplEvent => |e| self.OpenTmpl(engine_context, e.mTmpl) catch |err| {
+            //a file that can't be opened as a template shouldn't take the editor down with it
+            std.log.err("Failed to open template: {s}", .{@errorName(err)});
         },
         else => std.debug.print("This event has not been handled by editor program!\n", .{}),
     }

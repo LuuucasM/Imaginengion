@@ -15,6 +15,7 @@ const Assets = @import("../ECSComponents/AComponents.zig");
 const TransformComponent = @import("../ECSComponents/Shared/TransformComponent.zig");
 const RigidBodyComponent = @import("../ECSComponents/Entity/RigidBodyComponent.zig");
 const PossessComponent = @import("../ECSComponents/Player/PossessComponent.zig");
+const AudioComponent = @import("../ECSComponents/Entity/AudioComponent.zig");
 const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
@@ -60,7 +61,8 @@ fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object
     _ = imgui.igBegin(name.ptr, null, 0);
 }
 
-fn RenderComponents(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
+/// The component list of one object, drawn into the current window (a template window draws its own)
+pub fn RenderComponents(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
     try ObjectImguiRender(ObjectType, engine_context, object);
 
     //the panel's own context menu, submitted after the components so imgui knows which item
@@ -129,6 +131,17 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
                 } else {
                     possess_component.mPossessedEntity = .uninit;
                 }
+            }
+        }
+
+        //playing needs the entity the component is on, which EditorRender does not get
+        if (comptime component_type == AudioComponent and @TypeOf(object) == Entity) {
+            if (imgui.igButton("Preview", .{ .x = 0.0, .y = 0.0 })) {
+                _ = try engine_context.mAudioManager.PlayVoice(engine_context, object);
+            }
+            imgui.igSameLine(0.0, -1.0);
+            if (imgui.igButton("Stop", .{ .x = 0.0, .y = 0.0 })) {
+                object.GetComponent(AudioComponent).?.StopVoices();
             }
         }
     }

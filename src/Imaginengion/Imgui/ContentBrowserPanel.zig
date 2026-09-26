@@ -6,6 +6,7 @@ const Assets = @import("../ECSComponents/AComponents.zig");
 const Texture2D = Assets.Texture2D;
 const ScriptAsset = Assets.ScriptAsset;
 const Tracy = @import("../Core/Tracy.zig");
+const Serializer = @import("../Serializer/Serializer.zig");
 const SceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
 const EngineContext = @import("../Core/EngineContext.zig");
 
@@ -199,14 +200,22 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             try self.DragDropSourceBase(engine_context, entry_name, "Texture2D");
             NextColumn(entry_name);
-        } else if (std.mem.eql(u8, entry_extension, ".imsc") == true) {
+        } else if (Serializer.ObjectKindOf(entry_extension) != null) {
+            //entity, scene, player and game context files, all with the scene icon for now
             const texutre_asset = try self.mSceneTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
-            try self.DragDropSourceBase(engine_context, entry_name, "IMSCLoad");
+            if (imgui.igIsItemHovered(0) == true and imgui.igIsMouseDoubleClicked_Nil(imgui.ImGuiMouseButton_Left) == true) {
+                try self.OpenTmpl(engine_context, entry.name);
+            }
+
+            //a scene file can still be dragged into the scenes panel to load it as a level
+            if (std.mem.eql(u8, entry_extension, ".imsc")) {
+                try self.DragDropSourceBase(engine_context, entry_name, "IMSCLoad");
+            }
             NextColumn(entry_name);
         } else if (std.mem.eql(u8, entry_extension, ".zig") == true) {
             const texutre_asset = try self.mScriptTextureHandle.GetAsset(engine_context, Texture2D);
@@ -217,14 +226,14 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
 
             try self.DragDropSourceScript(engine_context, entry_name);
             NextColumn(entry_name);
-        } else if (std.mem.eql(u8, entry_extension, ".mp3") == true) {
+        } else if (std.mem.eql(u8, entry_extension, ".mp3") or std.mem.eql(u8, entry_extension, ".wav") or std.mem.eql(u8, entry_extension, ".flac")) {
             const texutre_asset = try self.mAudioTextureHandle.GetAsset(engine_context, Texture2D);
 
             const entry_name = try std.fmt.bufPrintSentinel(&name_buf, "{s}", .{entry.name}, 0);
 
             try RenderImageButton(engine_context, entry_name, texutre_asset, thumbnail_size);
 
-            try self.DragDropSourceBase(engine_context, entry_name, "MP3Load");
+            try self.DragDropSourceBase(engine_context, entry_name, "AudioAsset");
             NextColumn(entry_name);
         }
     }
@@ -232,6 +241,15 @@ fn RenderDirectoryContents(self: *ContentBrowserPanel, engine_context: *EngineCo
         self.mCurrentDirectory.?.close(engine_context.Io());
         self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), self.mCurrentPath.items, .{ .iterate = true });
     }
+}
+
+/// Asks the editor to open a file in the current folder as a template (see TmplEditPanel)
+fn OpenTmpl(self: *ContentBrowserPanel, engine_context: *EngineContext, file_name: []const u8) !void {
+    const abs_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}/{s}", .{ self.mCurrentPath.items, file_name });
+    //the content browser only ever shows folders inside the project
+    const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
+    const tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
+    try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
 }
 
 pub fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
