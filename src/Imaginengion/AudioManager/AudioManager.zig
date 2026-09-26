@@ -41,6 +41,15 @@ pub const TARGET_FRAMES = 2400;
 /// cutting off one that is already playing
 pub const MAX_VOICES = 64;
 
+const VoiceState = union(enum) {
+    /// Will never play again, and is waiting for its destroy
+    Dead,
+    /// Plays on regardless of its source, from its own copies
+    Detached,
+    /// Plays from this AudioComponent, its source's
+    Attached: *AudioComponent,
+};
+
 comptime {
     if (TARGET_FRAMES * AUDIO_CHANNELS > BUFFER_CAPACITY) {
         @compileError("TARGET_FRAMES does not fit in the output buffer!");
@@ -86,8 +95,9 @@ pub const GetGroup = Core.GetGroup;
 const DeleteVoice = Core.DeleteObj;
 
 /// Starts playing source's AudioComponent from the beginning, as an attached or detached voice depending on the
-/// component's mStopWithSource. Returns null, and logs why, when nothing can be played: the source has no
-/// AudioComponent, the component has no asset, it is detached and looping, or MAX_VOICES are already playing
+/// component's mStopWithSource. A component with no asset plays the asset manager's default sound, like any other
+/// missing asset. Returns null, and logs why, when nothing can be played: the source has no AudioComponent, it is
+/// detached and looping, or MAX_VOICES are already playing
 pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: Entity) !?Voice {
     if (!source.IsActive()) {
         std.log.warn("PlayVoice called with an entity that no longer exists", .{});
@@ -97,11 +107,6 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: En
         std.log.warn("PlayVoice called on an entity with no AudioComponent", .{});
         return null;
     };
-    //without this an empty component would play the asset manager's default sound
-    if (!audio_component.mAudioAsset.IsIDValid()) {
-        std.log.warn("PlayVoice called on an AudioComponent with no audio asset", .{});
-        return null;
-    }
     const is_attached = audio_component.mStopWithSource;
     if (!is_attached and audio_component.mLoop) {
         std.log.warn("PlayVoice refused: a looping sound has to stop with its source, or nothing could stop it", .{});
@@ -219,8 +224,7 @@ pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
 }
 
 /// Reads the next frames of one voice into voice_buffer and returns how many were read. Queues the voice's destroy
-/// once it has nothing more to play: it is dead (see GetVoiceState), it has no asset, or it reached the end without
-/// looping
+/// once it has nothing more to play: it is dead (see GetVoiceState), or it reached the end without looping
 fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voice.Type, voice_buffer: []f32) !u64 {
     const voice_state = self.GetVoiceState(voice_id);
     if (voice_state == .Dead) {
@@ -237,14 +241,11 @@ fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
         //a detached voice always has its own asset
         .Detached, .Dead => unreachable,
     };
-    if (!asset_handle.IsIDValid()) {
-        try self.DeleteVoice(engine_context, voice_id);
-        return 0;
-    }
-
     //fetched every update rather than kept, since a hot reload can swap the asset out between updates.
-    //loading an asset only touches the asset manager's storage, so the component pointers above stay valid
-    const audio_asset = try asset_handle.GetAsset(engine_context, AudioAsset);
+    //loading an asset only touches the asset manager's storage, so the component pointers above stay valid.
+    //asked of the asset manager by id rather than through the handle: an unset handle has no manager pointer, and
+    //the asset manager answers an unset id with its default sound
+    const audio_asset = try engine_context.mAssetManager.GetAsset(engine_context, AudioAsset, asset_handle.mID);
     const frames_read = audio_asset.ReadFrames(voice_buffer, &voice_component.mCursor, loop);
 
     if (frames_read < voice_buffer.len / AUDIO_CHANNELS) {
@@ -252,15 +253,6 @@ fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
     }
     return frames_read;
 }
-
-const VoiceState = union(enum) {
-    /// Will never play again, and is waiting for its destroy
-    Dead,
-    /// Plays on regardless of its source, from its own copies
-    Detached,
-    /// Plays from this AudioComponent, its source's
-    Attached: *AudioComponent,
-};
 
 /// Whether a voice can still play, and for an attached voice the AudioComponent it plays from. A voice is dead once it
 /// is stopped, and an attached one also once its source entity or AudioComponent is gone or the component's token
