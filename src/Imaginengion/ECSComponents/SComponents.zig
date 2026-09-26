@@ -7,6 +7,7 @@ pub const SceneComponent = @import("Scene/SceneComponent.zig");
 pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const SpawnPossComponent = @import("Scene/SpawnPossComponent.zig");
 pub const StackPosComponent = @import("Scene/StackPosComponent.zig");
+pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
 //pub const TransformComponent = @import("Components/TransformComponent.zig");
 
 const ScriptTags = @import("Shared/ScriptTags.zig");
@@ -22,6 +23,7 @@ pub const ComponentsList = [_]type{
     SceneComponent,
     SpawnPossComponent,
     StackPosComponent,
+    TmplRefComponent,
 
     //Scripts
     ScriptComponent,
@@ -36,6 +38,7 @@ pub const ComponentsPanelList = [_]type{
     SceneComponent,
     PhysicsComponent,
     SpawnPossComponent,
+    TmplRefComponent,
 };
 
 /// ScriptComponent is not listed, scripts are saved separately and recreated with AddScript
@@ -45,6 +48,17 @@ pub const SerializeList = [_]type{
     PhysicsComponent,
     SceneComponent,
     SpawnPossComponent,
+    TmplRefComponent,
+};
+
+/// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
+/// else in SerializeList it gets from its template
+pub const ShellList = [_]type{
+    UUIDComponent,
+    NameComponent,
+    //its layer is what gives it its slot in the scene stack
+    SceneComponent,
+    TmplRefComponent,
 };
 
 pub const ScriptsList = [_]type{
@@ -61,6 +75,7 @@ pub const EComponents = enum(u16) {
     ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
     SpawnPossComponent = ListInd(&ComponentsList, SpawnPossComponent),
     StackPosComponent = ListInd(&ComponentsList, StackPosComponent),
+    TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
 
     OnSceneStartScript = ListInd(&ComponentsList, OnSceneStartScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),

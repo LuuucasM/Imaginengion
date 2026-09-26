@@ -124,7 +124,15 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
                 .Threaded => engine_context._Internal.ThreadedIO.io(),
                 .Evented => @compileError("evented not implemented for this Io yet\n"),
             };
-            return try inner_io.vtable.FileWritePositional(inner_io.userdata, file, header, data, splat, offset);
+            return try inner_io.vtable.fileWritePositional(inner_io.userdata, file, header, data, splat, offset);
+        }
+        fn Operate(context: ?*anyopaque, operation: std.Io.Operation) std.Io.Cancelable!std.Io.Operation.Result {
+            const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+            const inner_io = switch (io_type) {
+                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Evented => @compileError("evented not implemented for this Io yet\n"),
+            };
+            return try inner_io.vtable.operate(inner_io.userdata, operation);
         }
     };
 
@@ -150,7 +158,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             .futexWaitUncancelable = std.Io.noFutexWaitUncancelable,
             .futexWake = std.Io.noFutexWake,
 
-            .operate = std.Io.failingOperate,
+            .operate = fns.Operate,
             .batchAwaitAsync = std.Io.unreachableBatchAwaitAsync,
             .batchAwaitConcurrent = std.Io.unreachableBatchAwaitConcurrent,
             .batchCancel = std.Io.unreachableBatchCancel,
@@ -185,7 +193,7 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             .fileStat = fns.FileStat,
             .fileLength = std.Io.failingFileLength,
             .fileClose = fns.FileClose,
-            .fileWritePositional = std.Io.failingFileWritePositional,
+            .fileWritePositional = fns.FileWritePositional,
             .fileWriteFileStreaming = std.Io.noFileWriteFileStreaming,
             .fileWriteFilePositional = std.Io.noFileWriteFilePositional,
             .fileReadPositional = fns.FileReadPositional,

@@ -1,6 +1,4 @@
 const std = @import("std");
-const BUFFER_CAPACITY = @import("../../AudioManager/AudioManager.zig").BUFFER_CAPACITY;
-const TAudioBuffer = @import("../../AudioManager/AudioManager.zig").TAudioBuffer;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const MicComponent = @This();
@@ -8,7 +6,8 @@ const MicComponent = @This();
 pub const Editable: bool = false;
 pub const Name: []const u8 = "MicComponent";
 
-mAudioBuffer: TAudioBuffer = .default,
+//the player's listener. empty until 3D audio: it will hold per-player listener settings and state, but never
+//the output buffer the device thread reads from, since ECS storage can move under that thread's pointer
 
 pub fn Deinit(_: *MicComponent, _: *EngineContext) void {}
 

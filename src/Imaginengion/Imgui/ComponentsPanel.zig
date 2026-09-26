@@ -137,7 +137,9 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
 fn NewObjectComponentPopup(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
     const traits = ObjectTraits(ObjectType);
     inline for (traits.ComponentsPanelList) |component_type| {
-        if (!object.HasComponent(component_type)) {
+        //a component that only makes sense set up by the engine declares `Addable = false` and is shown but not offered here
+        const is_addable = comptime !@hasDecl(component_type, "Addable") or component_type.Addable;
+        if (is_addable and !object.HasComponent(component_type)) {
             if (imgui.igMenuItem_Bool(component_type.Name.ptr, "", false, true)) {
                 defer imgui.igCloseCurrentPopup();
                 _ = try object.AddComponent(engine_context, component_type{});

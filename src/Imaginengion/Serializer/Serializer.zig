@@ -79,7 +79,12 @@ mFileObjects: std.AutoHashMapUnmanaged(u64, AssetHandle),
 mPendingResolves: std.ArrayList(ResolveReq),
 mCurrDeserialize: DeserializeContext,
 
+/// Releases the file handles it holds, so it has to go before the asset manager does
 pub fn Deinit(self: *Serializer, engine_allocator: std.mem.Allocator) void {
+    var file_iter = self.mFileObjects.valueIterator();
+    while (file_iter.next()) |asset_handle| {
+        asset_handle.ReleaseAsset();
+    }
     self.mFileObjects.deinit(engine_allocator);
     self.mPendingResolves.deinit(engine_allocator);
 }
@@ -150,11 +155,15 @@ fn TrackFile(self: *Serializer, engine_context: *EngineContext, uuid: u64, abs_p
     entry.value_ptr.* = asset_handle;
 }
 
-fn FileExtension(comptime obj_t: type) [*c]const u8 {
+pub fn FileExtension(comptime obj_t: type) [*c]const u8 {
     if (obj_t == Scene) {
         return ".imsc";
     } else if (obj_t == Entity) {
         return ".imen";
+    } else if (obj_t == Player) {
+        return ".impl";
+    } else if (obj_t == GameContext) {
+        return ".imgc";
     } else {
         @compileError(std.fmt.comptimePrint("Saving {s} to a file is not supported yet", .{@typeName(obj_t)}));
     }

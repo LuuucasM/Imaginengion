@@ -19,6 +19,7 @@ pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TextComponent = @import("Entity/TextComponent.zig");
 pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
 pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
+pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
 
 //the ECS supplies this one itself: it marks an entity as a real game object rather than a
 //convenience entity that only exists to carry a bundle of components for its parent
@@ -48,6 +49,7 @@ pub const ComponentsList = [_]type{
     TransformDirtyTag,
     ViewpointComponent,
     RenderTargetComponent,
+    TmplRefComponent,
 
     //scripts
     ScriptComponent,
@@ -71,6 +73,16 @@ pub const SerializeList = [_]type{
     TextComponent,
     TransformComponent,
     ViewpointComponent,
+    TmplRefComponent,
+};
+
+/// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
+/// else in SerializeList it gets from its template
+pub const ShellList = [_]type{
+    UUIDComponent,
+    NameComponent,
+    TransformComponent,
+    TmplRefComponent,
 };
 
 ///This is an array of components that should be displayed
@@ -90,6 +102,7 @@ pub const ComponentPanelList = [_]type{
     TextComponent,
     TransformComponent,
     ViewpointComponent,
+    TmplRefComponent,
 };
 
 ///A list of all the scripts
@@ -118,6 +131,7 @@ pub const EComponents = enum(u16) {
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
     ViewpointComponent = ListInd(&ComponentsList, ViewpointComponent),
     RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
+    TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
 };
 
 comptime {

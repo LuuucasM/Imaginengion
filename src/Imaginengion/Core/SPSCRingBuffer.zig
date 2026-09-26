@@ -10,13 +10,18 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
         }
     }
 
+    //single producer, single consumer: one thread only ever pushes and one only ever pops.
+    //the indices only count up and are masked into the buffer, so full (write - read == size) and empty
+    //(write == read) are never confused. they are allowed to wrap past maxInt, so all index math is wrapping
     return struct {
         const Self = @This();
         const mask = size - 1;
 
         mBuffer: [size]T,
-        mWriteIndex: std.atomic.Value(usize),
-        mReadIndex: std.atomic.Value(usize),
+        //each index on its own cache line: they are written by different threads, and sharing a line would
+        //make every write by one thread invalidate the other thread's copy of the other index
+        mWriteIndex: std.atomic.Value(usize) align(std.atomic.cache_line),
+        mReadIndex: std.atomic.Value(usize) align(std.atomic.cache_line),
 
         pub const default: Self = .{
             .mBuffer = std.mem.zeroes([size]T),
@@ -28,19 +33,20 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
             const write = self.mWriteIndex.load(.monotonic);
             const read = self.mReadIndex.load(.acquire);
 
-            if (write - read >= size) {
+            if (write -% read >= size) {
                 return false;
             }
 
             self.mBuffer[write & mask] = item;
-            self.mWriteIndex.store(write + 1, .release);
+            self.mWriteIndex.store(write +% 1, .release);
+            return true;
         }
 
         pub fn PushSlice(self: *Self, items: []const T) usize {
             const write = self.mWriteIndex.load(.monotonic);
             const read = self.mReadIndex.load(.acquire);
 
-            const available = size - (write - read);
+            const available = size - (write -% read);
             const write_size = @min(items.len, available);
 
             if (write_size == 0) {
@@ -48,7 +54,7 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
             }
 
             const start_index = write & mask;
-            const end_index = (write + write_size) & mask;
+            const end_index = (write +% write_size) & mask;
 
             if (start_index < end_index or end_index == 0) {
                 @memcpy(self.mBuffer[start_index .. start_index + write_size], items[0..write_size]);
@@ -60,7 +66,7 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
                 @memcpy(self.mBuffer[0..second_slice], items[first_slice..write_size]);
             }
 
-            self.mWriteIndex.store(write + write_size, .release);
+            self.mWriteIndex.store(write +% write_size, .release);
             return write_size;
         }
 
@@ -73,7 +79,7 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
             }
 
             const item = self.mBuffer[read & mask];
-            self.mReadIndex.store(read + 1, .release);
+            self.mReadIndex.store(read +% 1, .release);
             return item;
         }
 
@@ -81,7 +87,7 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
             const read = self.mReadIndex.load(.monotonic);
             const write = self.mWriteIndex.load(.acquire);
 
-            const available = write - read;
+            const available = write -% read;
             const read_size = @min(buffer.len, available);
 
             if (read_size == 0) {
@@ -89,7 +95,7 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
             }
 
             const start_index = read & mask;
-            const end_index = (read + read_size) & mask;
+            const end_index = (read +% read_size) & mask;
 
             if (start_index < end_index or end_index == 0) {
                 @memcpy(buffer[0..read_size], self.mBuffer[start_index .. start_index + read_size]);
@@ -101,34 +107,37 @@ pub fn SPSCRingBuffer(comptime T: type, comptime size: usize) type {
                 @memcpy(buffer[first_slice..read_size], self.mBuffer[0..second_slice]);
             }
 
-            self.mReadIndex.store(read + read_size, .release);
+            self.mReadIndex.store(read +% read_size, .release);
             return read_size;
         }
 
-        //utility
+        //utility. IsEmpty and AvailableRead are written for the consumer, IsFull and AvailableWrite for the
+        //producer, but any of them is safe to call from either side: the other thread's index may be a little
+        //stale, which only ever makes the answer conservative. e.g. the producer calling AvailableRead can see an
+        //old read index, so it thinks more is buffered than really is and produces less, never more than fits
         pub fn IsEmpty(self: *Self) bool {
             const read = self.mReadIndex.load(.monotonic);
             const write = self.mWriteIndex.load(.acquire);
 
             return write == read;
         }
-        pub fn isFull(self: *Self) bool {
+        pub fn IsFull(self: *Self) bool {
             const write = self.mWriteIndex.load(.monotonic);
             const read = self.mReadIndex.load(.acquire);
 
-            return write - read == size;
+            return write -% read == size;
         }
         pub fn AvailableRead(self: *Self) usize {
             const read = self.mReadIndex.load(.monotonic);
             const write = self.mWriteIndex.load(.acquire);
 
-            return write - read;
+            return write -% read;
         }
         pub fn AvailableWrite(self: *Self) usize {
             const write = self.mWriteIndex.load(.monotonic);
             const read = self.mReadIndex.load(.acquire);
 
-            return size - (write - read);
+            return size - (write -% read);
         }
     };
 }

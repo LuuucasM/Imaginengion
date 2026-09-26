@@ -200,8 +200,10 @@ pub fn Core(comptime Self: type) type {
             try engine_context.mSerializer.SaveECSObjAs(engine_context, object);
         }
 
+        /// Blank, every component comes from the file
         pub fn LoadObject(self: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
-            const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).DefaultConfig);
+            if (Self == EManager) @compileError("an entity has to belong to a scene, load it with Scene.LoadEntity");
+            const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).BlankConfig);
             try engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
             return new_obj;
         }

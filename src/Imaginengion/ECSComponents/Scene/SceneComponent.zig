@@ -41,3 +41,9 @@ const Json = JsonUtils.JsonFields(SceneComponent, .{
 });
 pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;
+
+/// A loaded scene gets its slot in the scene stack here, once its layer type is known,
+/// the same as CreateScene does for a new one
+pub fn PostParse(_: *SceneComponent, engine_context: *EngineContext, owner: anytype) !void {
+    try owner.mManager.mSManager.InsertScene(engine_context, owner);
+}

@@ -48,6 +48,24 @@ pub const DefaultConfig: CreateConfig = .{
     .bAddRenderComponent = false,
 };
 
+/// Nothing added, for objects whose components all come from somewhere else (e.g. a file)
+pub const BlankConfig: CreateConfig = .{
+    .bAddNameComponent = false,
+    .bAddUUIDComponent = false,
+    .bAddPossessComponent = false,
+    .bAddMicComponent = false,
+    .bAddRenderComponent = false,
+};
+
+/// A script child (see Core.AddScript): no UUID, nothing looks one up and it is saved as its ScriptComponent alone
+pub const ScriptConfig: CreateConfig = .{
+    .bAddNameComponent = true,
+    .bAddUUIDComponent = false,
+    .bAddPossessComponent = false,
+    .bAddMicComponent = false,
+    .bAddRenderComponent = false,
+};
+
 pub const uninit: Player = .{
     .mID = NullObject,
     .mManager = undefined,
@@ -72,6 +90,14 @@ pub const GetUUID = Core.GetUUID;
 pub const Duplicate = Core.Duplicate;
 
 pub const Delete = Core.Delete;
+
+pub const SetTmpl = Core.SetTmpl;
+
+pub const Fill = Core.Fill;
+
+pub const Strip = Core.Strip;
+
+pub const MakeTmpl = Core.MakeTmpl;
 
 /// Everything needed to draw what a player sees, resolved and checked in one place.
 pub const RenderView = struct {

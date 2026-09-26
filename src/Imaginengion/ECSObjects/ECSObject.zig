@@ -23,12 +23,30 @@ const SComponents = @import("../ECSComponents/SComponents.zig");
 const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 const NameComponent = @import("../ECSComponents/Shared/NameComponent.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
+const TmplRefComponent = @import("../ECSComponents/Shared/TmplRefComponent.zig");
+const EntitySceneComponent = EComponents.EntitySceneComponent;
 
 const ScriptAsset = AComponents.ScriptAsset;
 
 const BuiltinComponents = @import("../ECS/Components.zig");
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent;
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent;
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
+const TextSerializer = @import("../Serializer/TextSerializer.zig");
+
+/// Template object -> its copy, built by Fill while it copies a template, so that a copied component pointing at
+/// another object inside the template can be pointed at that object's copy afterwards (a component's RemapRefs).
+/// Only entities for now: nothing a template is loaded with references any other kind of object yet.
+pub const RefMap = struct {
+    mEntities: std.AutoHashMapUnmanaged(Entity.Type, Entity) = .empty,
+
+    /// The copy of the template entity `tmpl_entity` points at, or null if that is not part of the template.
+    /// Looked up by id alone: AddComponent has already moved the reference into the copy's world by now
+    pub fn Get(self: *const RefMap, tmpl_entity: Entity) ?Entity {
+        if (!tmpl_entity.IsIDValid()) return null;
+        return self.mEntities.get(tmpl_entity.mID);
+    }
+};
 
 pub fn Core(comptime Self: type) type {
     return struct {
@@ -262,12 +280,198 @@ pub fn Core(comptime Self: type) type {
             };
 
             //call Core's CreateChild directly: Entity's wrapper takes a config, the others don't
-            const new_script_entity = try CreateChild(self, engine_context, .Script, Self.DefaultConfig);
+            const new_script_entity = try CreateChild(self, engine_context, .Script, Self.ScriptConfig);
             //AddComponent deliberately rejects ScriptComponent to push callers here, so
             //this is the one place that goes straight to the manager
             _ = try _AddScriptComponent(new_script_entity, engine_context, new_script_component);
 
             return new_script_entity;
+        }
+
+        /// Turns this object into a template: writes it and everything under it to the file at rel_path (see
+        /// TextSerializer.SerializeTmpl), strips it down to its shell and links the shell to the new file. It is not
+        /// filled back in, filled copies come from Spawn. An object that is already a copy can not be made a template.
+        pub fn MakeTmpl(self: Self, engine_context: *EngineContext, rel_path: []const u8, path_type: AManager.PathType) !void {
+            if (Self == AssetHandle) @compileError("an asset handle can not be made a template");
+            if (HasComponent(self, TmplRefComponent)) return error.AlreadyATmplCopy;
+
+            const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), rel_path, path_type);
+            try TextSerializer.SerializeTmpl(engine_context, self, abs_path);
+
+            var tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
+            errdefer tmpl.ReleaseAsset();
+            try Strip(self, engine_context);
+            _ = try AddComponent(self, engine_context, TmplRefComponent{ .mTmpl = tmpl });
+        }
+
+        /// Takes this object down to its shell (its type's ShellList): removes every other saved component, its children
+        /// and scripts, and a scene's entities. Deferred like any removal, so it all goes at the end of the frame.
+        /// Components that are not saved (a scene's stack slot, an entity's scene, tags, ...) are left alone
+        pub fn Strip(self: Self, engine_context: *EngineContext) !void {
+            if (Self == AssetHandle) @compileError("an asset handle can not be stripped");
+
+            inline for (comptime _SerializeList()) |component_type| {
+                if (comptime _InShell(component_type)) continue;
+                if (HasComponent(self, component_type)) try RemoveComponent(self, engine_context, component_type);
+            }
+
+            var script_iter = self.GetIterator(.Script);
+            while (script_iter.next()) |script| {
+                try script.Delete(engine_context);
+            }
+
+            var child_iter = self.GetIterator(.Child);
+            while (child_iter.next()) |child| {
+                try child.Delete(engine_context);
+            }
+
+            if (Self == Scene) {
+                //each one takes the rest of its tree along
+                const root_entities = try _SceneRootEntities(self, engine_context);
+                for (root_entities.items) |entity_id| {
+                    try self.GetEntity(entity_id).Delete(engine_context);
+                }
+            }
+        }
+
+        /// Links this object to the template `tmpl` and fills it from it (see Fill), taking its own reference on the handle
+        pub fn SetTmpl(self: Self, engine_context: *EngineContext, tmpl: AssetHandle) !void {
+            tmpl.RetainAsset();
+            _ = AddComponent(self, engine_context, TmplRefComponent{ .mTmpl = tmpl }) catch |err| {
+                var unused_handle = tmpl;
+                unused_handle.ReleaseAsset();
+                return err;
+            };
+            try Fill(self, engine_context);
+        }
+
+        /// Makes this object a copy of the template its TmplRefComponent points at. The loaded template's components
+        /// are copied onto it, except the ones it already has (a shell keeps its own UUID, Name, Transform, ...), and
+        /// so are the template's scripts, children and, for a scene, its entities. Nothing copied gets a UUID. A copied
+        /// component that points at another object inside the template is pointed at that object's copy (RemapRefs).
+        pub fn Fill(self: Self, engine_context: *EngineContext) !void {
+            if (Self == AssetHandle) @compileError("an asset handle can not be filled from a template");
+
+            const tmpl_ref = GetComponent(self, TmplRefComponent) orelse return error.NoTmplRef;
+            //by value: loading more assets while copying (textures, scripts, ...) can move the storage this points into
+            const tmpl = (try tmpl_ref.mTmpl.GetAsset(engine_context, AComponents.ObjectAssetFor(Self))).mObject;
+
+            var ref_map: RefMap = .{};
+            try _CopyObject(tmpl, self, engine_context, &ref_map);
+            //after everything is copied, so every copy a reference could point at exists.
+            //the shell's own components hold no references, so it is fine that they go through this too
+            try _RemapRefs(self, engine_context, &ref_map);
+        }
+
+        /// Copies the template object `tmpl` onto `target`: its components, then its scripts, children and a scene's entities
+        fn _CopyObject(tmpl: Self, target: Self, engine_context: *EngineContext, ref_map: *RefMap) anyerror!void {
+            if (Self == Entity) try ref_map.mEntities.put(engine_context.FrameAllocator(), tmpl.mID, target);
+
+            inline for (comptime _SerializeList()) |component_type| {
+                //a copy gets no UUID, and whatever the target already has stays as it is
+                if (component_type != UUIDComponent and !HasComponent(target, component_type)) {
+                    if (GetComponent(tmpl, component_type)) |tmpl_component| {
+                        //a component that owns memory copies itself, anything else is a plain value copy (as DuplicateEntity does)
+                        const component = if (@hasDecl(component_type, "Clone")) try tmpl_component.Clone(engine_context) else tmpl_component.*;
+                        const new_component = try AddComponent(target, engine_context, component);
+                        //whatever a component hooks up when it is loaded from a file it hooks up here too, e.g. a scene's stack slot
+                        if (@hasDecl(component_type, "PostParse")) try new_component.PostParse(engine_context, target);
+                    }
+                }
+            }
+
+            if (@hasDecl(Self, "AddScript")) {
+                var script_iter = tmpl.GetIterator(.Script);
+                while (script_iter.next()) |tmpl_script| {
+                    //AddScript keeps the handle it is given, and the template keeps its own
+                    var script_handle = GetComponent(tmpl_script, ScriptComponent).?.mScriptAssetHandle;
+                    script_handle.RetainAsset();
+                    errdefer script_handle.ReleaseAsset();
+                    try target.AddScript(engine_context, script_handle);
+                }
+            }
+
+            var child_iter = tmpl.GetIterator(.Child);
+            while (child_iter.next()) |tmpl_child| {
+                const child = try target.CreateChild(engine_context, .Entity, Self.BlankConfig);
+                try _CopyObject(tmpl_child, child, engine_context, ref_map);
+            }
+
+            if (Self == Scene) {
+                //only the top level entities, each one brings the rest of its tree along
+                const tmpl_roots = try _SceneRootEntities(tmpl, engine_context);
+                for (tmpl_roots.items) |tmpl_entity_id| {
+                    const entity = try target.CreateEntity(engine_context, Entity.BlankConfig);
+                    try Core(Entity)._CopyObject(tmpl.GetEntity(tmpl_entity_id), entity, engine_context, ref_map);
+                }
+            }
+        }
+
+        /// Lets each component of `target` and everything under it that references other objects point them at their copies
+        fn _RemapRefs(target: Self, engine_context: *EngineContext, ref_map: *const RefMap) anyerror!void {
+            inline for (comptime _SerializeList()) |component_type| {
+                if (@hasDecl(component_type, "RemapRefs")) {
+                    if (GetComponent(target, component_type)) |component| component.RemapRefs(ref_map);
+                }
+            }
+
+            var child_iter = target.GetIterator(.Child);
+            while (child_iter.next()) |child| {
+                try _RemapRefs(child, engine_context, ref_map);
+            }
+
+            if (Self == Scene) {
+                const root_entities = try _SceneRootEntities(target, engine_context);
+                for (root_entities.items) |entity_id| {
+                    try Core(Entity)._RemapRefs(target.GetEntity(entity_id), engine_context, ref_map);
+                }
+            }
+        }
+
+        /// The scene's entities that are not children of another entity
+        fn _SceneRootEntities(scene: Scene, engine_context: *EngineContext) !std.ArrayList(Entity.Type) {
+            const EntitySceneQuery = GroupQuery{ .Component = EntitySceneComponent };
+            const EntityChildQuery = GroupQuery{ .Component = ChildComponent(Entity.Type) };
+            return try scene.GetEntityGroup(engine_context.FrameAllocator(), .{
+                .Not = .{
+                    .mFirst = &EntitySceneQuery,
+                    .mSecond = &EntityChildQuery,
+                },
+            });
+        }
+
+        /// Whether component_type is part of this type's shell (see Strip)
+        fn _InShell(comptime component_type: type) bool {
+            const shell_list = if (Self == Entity)
+                EComponents.ShellList
+            else if (Self == GameContext)
+                GCComponents.ShellList
+            else if (Self == Player)
+                PComponents.ShellList
+            else if (Self == Scene)
+                SComponents.ShellList
+            else
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
+
+            for (shell_list) |shell_type| {
+                if (shell_type == component_type) return true;
+            }
+            return false;
+        }
+
+        /// The components an object of this type is saved with, which are also what a copy is made of
+        fn _SerializeList() []const type {
+            if (Self == Entity) {
+                return &EComponents.SerializeList;
+            } else if (Self == GameContext) {
+                return &GCComponents.SerializeList;
+            } else if (Self == Player) {
+                return &PComponents.SerializeList;
+            } else if (Self == Scene) {
+                return &SComponents.SerializeList;
+            } else {
+                @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
+            }
         }
 
         pub fn IsActive(self: Self) bool {

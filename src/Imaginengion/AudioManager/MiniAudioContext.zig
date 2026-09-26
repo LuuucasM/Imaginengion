@@ -10,6 +10,10 @@ const TAudioBuffer = @import("AudioManager.zig").TAudioBuffer;
 
 pub const DeviceContext = struct {
     mUserData: std.atomic.Value(?*TAudioBuffer) = std.atomic.Value(?*TAudioBuffer).init(null),
+    mUnderrunCount: std.atomic.Value(u32) = std.atomic.Value(u32).init(0),
+    /// only touched by the device thread. the buffer is empty until the first update fills it, and those
+    /// startup callbacks are not underruns, so counting starts once audio has arrived
+    mReceivedAudio: bool = false,
 };
 
 mDevice: ma.ma_device = undefined,
@@ -37,10 +41,14 @@ pub fn Deinit(self: *MiniAudioContext) void {
 }
 
 pub fn SetAudioBuffer(self: *MiniAudioContext, buffer: *TAudioBuffer) void {
-    self.mAudioContext.mUserData.store(buffer, .acquire);
+    self.mAudioContext.mUserData.store(buffer, .release);
 }
 pub fn RemoveAudioBuffer(self: *MiniAudioContext) void {
-    self.mAudioContext.mUserData.store(null, .acquire);
+    self.mAudioContext.mUserData.store(null, .release);
+}
+
+pub fn GetUnderrunCount(self: *MiniAudioContext) u32 {
+    return self.mAudioContext.mUnderrunCount.load(.monotonic);
 }
 
 fn DataCallback(device: [*c]ma.struct_ma_device, output: ?*anyopaque, input: ?*const anyopaque, frame_count: c_uint) callconv(.c) void {
@@ -56,8 +64,15 @@ fn DataCallback(device: [*c]ma.struct_ma_device, output: ?*anyopaque, input: ?*c
 
         const num_popped = frames_buffer.PopSlice(out_slice);
 
+        if (num_popped > 0) {
+            audio_context.mReceivedAudio = true;
+        }
+
         if (num_popped < needed_samples) {
             @memset(out_slice[num_popped..needed_samples], 0);
+            if (audio_context.mReceivedAudio) {
+                _ = audio_context.mUnderrunCount.fetchAdd(1, .monotonic);
+            }
         }
     } else {
         @memset(out_ptr[0..needed_samples], 0);

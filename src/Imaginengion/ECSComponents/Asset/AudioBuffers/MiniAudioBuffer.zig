@@ -8,7 +8,8 @@ const AUDIO_CHANNELS = @import("../../../AudioManager/AudioManager.zig").AUDIO_C
 const SAMPLE_RATE = @import("../../../AudioManager/AudioManager.zig").SAMPLE_RATE;
 const AudioFormatToMAFormat = @import("../../../AudioManager/MiniAudioContext.zig").AudioFormatToMAFormat;
 
-mAudioConfig: ma.ma_audio_buffer_config = undefined,
+//decoded straight to the output format (AUDIO_FORMAT, AUDIO_CHANNELS interleaved, SAMPLE_RATE), so reading
+//is a plain copy. mono files get upmixed to stereo here, which will need revisiting for 3D sources
 mPcmFrames: ?*anyopaque = null,
 mFrameCount: u64 = 0,
 
@@ -22,10 +23,15 @@ pub fn Init(self: *MiniAudioBuffer, engine_context: *EngineContext, rel_path: []
 
     if (ma.ma_decode_memory(contents.ptr, contents.len, &decoder_config, &self.mFrameCount, &self.mPcmFrames) != ma.MA_SUCCESS) {
         std.log.err("Failed to decode memory for MiniAudioBuffer for file {s}!\n", .{rel_path});
-        return error.AssetInitFail;
+        return error.AssetInitFailed;
     }
 
-    self.mAudioConfig = ma.ma_audio_buffer_config_init(AudioFormatToMAFormat(AUDIO_FORMAT), AUDIO_CHANNELS, self.mFrameCount, self.mPcmFrames, null);
+    if (self.mFrameCount == 0) {
+        std.log.err("Audio file {s} decoded to 0 frames!\n", .{rel_path});
+        ma.ma_free(self.mPcmFrames, null);
+        self.mPcmFrames = null;
+        return error.AssetInitFailed;
+    }
 }
 
 pub fn Deinit(self: *MiniAudioBuffer) void {
@@ -33,48 +39,38 @@ pub fn Deinit(self: *MiniAudioBuffer) void {
     ma.ma_free(self.mPcmFrames, null);
 }
 
+pub fn GetFrameCount(self: MiniAudioBuffer) u64 {
+    return self.mFrameCount;
+}
+
+/// Copies as many frames as fit in frames_out starting at cursor, and moves cursor past them. With loop set it
+/// keeps wrapping back to the start until frames_out is full, however short the sound. Without it, it stops at
+/// the end and returns fewer frames than asked for, and 0 once the sound is done.
 pub fn ReadFrames(self: *MiniAudioBuffer, frames_out: []f32, cursor: *u64, loop: bool) u64 {
     std.debug.assert(self.mPcmFrames != null);
-    std.debug.assert(self.mFrameCount > 0);
-    std.debug.assert(cursor.* <= self.mFrameCount);
-    std.debug.assert(frames_out.len % self.mAudioConfig.channels == 0);
-
-    if (frames_out.len == 0) return 0;
+    std.debug.assert(frames_out.len % AUDIO_CHANNELS == 0);
 
     const pcm_data = @as([*]const f32, @ptrCast(@alignCast(self.mPcmFrames.?)));
-    const channels = @as(usize, @intCast(self.mAudioConfig.channels));
-    const frames_requested = frames_out.len / channels;
+    const frames_requested = frames_out.len / AUDIO_CHANNELS;
 
-    if (cursor.* >= self.mFrameCount) {
-        if (!loop) return 0;
-        cursor.* = 0;
+    //a hot reload can swap in a shorter file under a playing voice
+    if (cursor.* > self.mFrameCount) cursor.* = self.mFrameCount;
+
+    var frames_written: u64 = 0;
+    while (frames_written < frames_requested) {
+        if (cursor.* == self.mFrameCount) {
+            if (!loop) break;
+            cursor.* = 0;
+        }
+
+        const frames_to_copy = @min(frames_requested - frames_written, self.mFrameCount - cursor.*);
+        const src = pcm_data[cursor.* * AUDIO_CHANNELS ..][0 .. frames_to_copy * AUDIO_CHANNELS];
+        const dst = frames_out[frames_written * AUDIO_CHANNELS ..][0 .. frames_to_copy * AUDIO_CHANNELS];
+        @memcpy(dst, src);
+
+        cursor.* += frames_to_copy;
+        frames_written += frames_to_copy;
     }
 
-    const frames_available = self.mFrameCount - cursor.*;
-    const first_frames = @min(frames_requested, frames_available);
-    const first_samples = first_frames * channels;
-
-    const start_sample_ind = cursor.* * channels;
-    const end_sample_ind = (cursor.* + first_frames) * channels;
-
-    @memcpy(frames_out[0..first_samples], pcm_data[start_sample_ind..end_sample_ind]);
-
-    cursor.* += first_frames;
-
-    var total_frames = first_frames;
-
-    if (loop and first_frames < frames_requested) {
-        cursor.* = 0;
-
-        const remaining_frames = frames_requested - first_frames;
-        const second_frames = @min(remaining_frames, self.mFrameCount);
-        const second_samples = second_frames * channels;
-
-        @memcpy(frames_out[first_samples .. first_samples + second_samples], pcm_data[0..second_samples]);
-
-        cursor.* = second_frames;
-        total_frames += second_frames;
-    }
-
-    return total_frames;
+    return frames_written;
 }

@@ -2,6 +2,9 @@
 test {
     _ = @import("ECS/ECSTests.zig");
     _ = @import("ECSObjects/DeleteTests.zig");
+    _ = @import("Serializer/SerializerTests.zig");
+    _ = @import("ECSComponents/Asset/ObjectAssetTests.zig");
+    _ = @import("ECSObjects/TmplTests.zig");
     _ = @import("Physics/TransformPassTests.zig");
     _ = @import("Physics/BodyTagTests.zig");
     _ = @import("Physics/CollisionsTests.zig");

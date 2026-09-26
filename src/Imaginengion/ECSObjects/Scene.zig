@@ -42,6 +42,18 @@ pub const DefaultConfig: CreateConfig = .{
     .bAddSceneUUID = true,
 };
 
+/// Nothing added, for objects whose components all come from somewhere else (e.g. a file)
+pub const BlankConfig: CreateConfig = .{
+    .bAddSceneName = false,
+    .bAddSceneUUID = false,
+};
+
+/// A script child (see Core.AddScript): no UUID, nothing looks one up and it is saved as its ScriptComponent alone
+pub const ScriptConfig: CreateConfig = .{
+    .bAddSceneName = true,
+    .bAddSceneUUID = false,
+};
+
 pub const Type = u32;
 pub const NullObject: Type = std.math.maxInt(Type);
 const Scene = @This();
@@ -69,6 +81,14 @@ pub const GetUUID = Core.GetUUID;
 pub const GetName = Core.GetName;
 
 pub const Delete = Core.Delete;
+
+pub const SetTmpl = Core.SetTmpl;
+
+pub const Fill = Core.Fill;
+
+pub const Strip = Core.Strip;
+
+pub const MakeTmpl = Core.MakeTmpl;
 
 pub const Duplicate = Core.Duplicate;
 
@@ -125,6 +145,22 @@ pub fn CreateEntity(self: Scene, engine_context: *EngineContext, new_entity_conf
     var new_entity = try self.mManager.mEManager.CreateEntity(engine_context, new_entity_config);
     _ = try new_entity.AddComponent(engine_context, EntitySceneComponent{ .mScene = self });
     return new_entity;
+}
+
+/// Loads an entity file as a new top level entity of this scene. Blank, every component comes from the file
+pub fn LoadEntity(self: Scene, engine_context: *EngineContext, abs_path: []const u8) !Entity {
+    const new_entity = try self.CreateEntity(engine_context, Entity.BlankConfig);
+    try engine_context.mSerializer.DeserializeECSObj(engine_context, new_entity, abs_path, .Text);
+    return new_entity;
+}
+
+/// A new top level entity that is a copy of the template `tmpl` (a handle to an EntityAsset), with a transform of
+/// its own for where it goes. It has no UUID and takes the template's name. See Core.Fill
+pub fn Spawn(self: Scene, engine_context: *EngineContext, tmpl: AssetHandle) !Entity {
+    const entity = try self.CreateEntity(engine_context, .{ .bAddUUID = false, .bAddName = false, .bAddTransform = true });
+    errdefer entity.Delete(engine_context) catch {};
+    try entity.SetTmpl(engine_context, tmpl);
+    return entity;
 }
 
 pub fn GetEntity(self: Scene, entity_id: Entity.Type) Entity {

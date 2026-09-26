@@ -81,6 +81,12 @@ pub fn CreateScene(self: *SManager, engine_context: *EngineContext, layer_type: 
     return new_scene;
 }
 
+/// A scene with no components that is not in the scene stack yet, for scenes whose components all come from
+/// a file: the file's SceneComponent slots it into the stack (SceneComponent.PostParse)
+pub fn CreateBlankScene(self: *SManager, engine_context: *EngineContext) !Scene {
+    return try Core.CreateObj(self, engine_context, Scene.BlankConfig);
+}
+
 pub const DeleteScene = Core.DeleteObj;
 
 pub const Duplicate = Core.Duplicate;
@@ -237,7 +243,8 @@ pub fn SortScenesFunc(ecs_manager_sc: *ECSManagerT, a: Scene.Type, b: Scene.Type
     return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }
 
-fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer: Scene) !void {
+/// Gives the scene its stack position from its SceneComponent's layer type
+pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer: Scene) !void {
     const scene_component = scene_layer.GetComponent(SceneComponent).?;
     if (scene_component.mLayerType == .GameLayer) {
         //shift the overlays up before adding, otherwise the new scene is in the group too

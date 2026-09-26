@@ -63,8 +63,6 @@ pub const SaveEntity = Core.SaveObject;
 
 pub const SaveEntityAs = Core.SaveObjectAs;
 
-pub const LoadEntity = Core.LoadObject;
-
 pub const GetGroup = Core.GetGroup;
 
 pub const AddUUID = Core.AddUUID;

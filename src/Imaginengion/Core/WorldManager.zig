@@ -12,6 +12,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
 const EManager = @import("../ECSManagers/EManager.zig");
 const GCManager = @import("../ECSManagers/GCManager.zig");
@@ -118,6 +119,26 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
     } else {
         std.log.err("WorldManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});
     }
+}
+
+/// A new copy of the template `tmpl` (a handle to a SceneAsset, PlayerAsset or GCAsset, going by obj_t). It has no
+/// UUID and takes the template's name. See Core.Fill. Entities are spawned by the scene they go in (Scene.Spawn)
+pub fn Spawn(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext, tmpl: AssetHandle) !obj_t {
+    const object: obj_t = if (obj_t == Scene)
+        //slotted into the stack once the template's SceneComponent is copied onto it
+        try self.mSManager.CreateBlankScene(engine_context)
+    else if (obj_t == Player)
+        try self.CreatePlayer(engine_context, Player.BlankConfig)
+    else if (obj_t == GameContext)
+        try self.CreateGameContext(engine_context, GameContext.BlankConfig)
+    else if (obj_t == Entity)
+        @compileError("an entity has to belong to a scene, spawn it with Scene.Spawn")
+    else
+        @compileError(std.fmt.comptimePrint("{s} can not be spawned", .{@typeName(obj_t)}));
+
+    errdefer object.Delete(engine_context) catch {};
+    try object.SetTmpl(engine_context, tmpl);
+    return object;
 }
 
 //===============================Scenes==============================================

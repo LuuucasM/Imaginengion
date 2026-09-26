@@ -5,11 +5,17 @@ const Tracy = @import("../Core/Tracy.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const GameContext = @import("../ECSObjects/GameContext.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const UUIDComponent = EntityComponents.UUIDComponent;
+const TransformComponent = EntityComponents.TransformComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const PlayerComponents = @import("../ECSComponents/PComponents.zig");
+const GameContextComponents = @import("../ECSComponents/GCComponents.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
@@ -21,19 +27,34 @@ const PARSE_OPTIONS: std.json.ParseOptions = .{
     .ignore_unknown_fields = true,
 };
 
-/// Children and scripts are created blank since all of their components come from the file
-const BLANK_ENTITY: Entity.CreateConfig = .{ .bAddUUID = false, .bAddName = false, .bAddTransform = false };
-
-// File layout (the same for scenes and entities, scenes additionally have "Entities"):
+// File layout, the same for every object type (entity, scene, player, game context):
 // {
 //   "<Component.Name>": { component json }, ...
 //   "Scripts": [ { ScriptComponent json }, ... ],
-//   "Children": [ { entity }, ... ],   (entities only)
+//   "Children": [ { object of the same type }, ... ],
 //   "Entities": [ { entity }, ... ]    (scenes only, the scene's top level entities)
 // }
+// Objects read from a file are created with their type's BlankConfig, since every component comes from the file
 
 //==================================SERIALIZING ==================================================
+/// What is written differently for the root of a template file (see SerializeTmpl)
+const TmplRoot = struct {
+    mUUID: u64,
+};
+
 pub fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
+    try WriteObjectFile(engine_context, object, abs_path, null);
+}
+
+/// Writes the object and everything under it as a template file. The root gets a new UUID, so the file never shares
+/// one with the object it was made from, and a reset transform, so the template sits at the origin (a copy is placed
+/// by its own transform). Everything under the root is written as it is.
+pub fn SerializeTmpl(engine_context: *EngineContext, object: anytype, abs_path: []const u8) !void {
+    const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+    try WriteObjectFile(engine_context, object, abs_path, .{ .mUUID = io_source.interface().int(u64) });
+}
+
+fn WriteObjectFile(engine_context: *EngineContext, object: anytype, abs_path: []const u8, tmpl_root: ?TmplRoot) !void {
     const zone = Tracy.ZoneInit("TextSerializer::SerializeECSObject(" ++ Tracy.ShortTypeName(@TypeOf(object)) ++ ")", @src());
     defer zone.Deinit();
     zone.Text(abs_path);
@@ -44,13 +65,14 @@ pub fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_p
     defer out.deinit();
 
     var write_stream: std.json.Stringify = .{ .writer = &out.writer, .options = STRINGIFY_OPTIONS };
-    try SerializeObject(&write_stream, frame_allocator, object);
+    try SerializeObject(&write_stream, frame_allocator, object, tmpl_root);
 
     //write the whole file at once so a failed serialize never leaves a half written file behind
     try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = out.written() });
 }
 
-fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype) anyerror!void {
+/// tmpl_root is only set for the root of a template file, never for what is under it
+fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype, tmpl_root: ?TmplRoot) anyerror!void {
     const obj_t = @TypeOf(object);
 
     try write_stream.beginObject();
@@ -58,7 +80,13 @@ fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.A
     inline for (comptime SerializeList(obj_t)) |component_type| {
         if (object.GetComponent(component_type)) |component| {
             try write_stream.objectField(component_type.Name);
-            try write_stream.write(component);
+            if (tmpl_root != null and component_type == UUIDComponent) {
+                try write_stream.write(UUIDComponent{ .ID = tmpl_root.?.mUUID });
+            } else if (tmpl_root != null and component_type == TransformComponent) {
+                try write_stream.write(TransformComponent.empty);
+            } else {
+                try write_stream.write(component);
+            }
         }
     }
 
@@ -74,17 +102,15 @@ fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.A
         try write_stream.endArray();
     }
 
-    if (obj_t == Entity) {
-        var child_iter = object.GetIterator(.Child);
-        if (child_iter.next()) |first_child| {
-            try write_stream.objectField("Children");
-            try write_stream.beginArray();
-            try SerializeObject(write_stream, frame_allocator, first_child);
-            while (child_iter.next()) |child| {
-                try SerializeObject(write_stream, frame_allocator, child);
-            }
-            try write_stream.endArray();
+    var child_iter = object.GetIterator(.Child);
+    if (child_iter.next()) |first_child| {
+        try write_stream.objectField("Children");
+        try write_stream.beginArray();
+        try SerializeObject(write_stream, frame_allocator, first_child, null);
+        while (child_iter.next()) |child| {
+            try SerializeObject(write_stream, frame_allocator, child, null);
         }
+        try write_stream.endArray();
     }
 
     if (obj_t == Scene) {
@@ -110,7 +136,7 @@ fn SerializeSceneEntities(write_stream: *std.json.Stringify, frame_allocator: st
     try write_stream.objectField("Entities");
     try write_stream.beginArray();
     for (entity_list.items) |entity_id| {
-        try SerializeObject(write_stream, frame_allocator, scene.GetEntity(entity_id));
+        try SerializeObject(write_stream, frame_allocator, scene.GetEntity(entity_id), null);
     }
     try write_stream.endArray();
 }
@@ -149,11 +175,17 @@ fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner,
         if (try DeserializeComponent(engine_context, scanner, object, key)) continue;
 
         if (std.mem.eql(u8, key, "Scripts")) {
-            try DeserializeScripts(engine_context, scanner, object);
-        } else if (obj_t == Entity and std.mem.eql(u8, key, "Children")) {
-            try DeserializeEntityList(engine_context, scanner, object);
+            //object types that scripts can't be added to yet have nothing that could have written these
+            if (comptime @hasDecl(obj_t, "AddScript")) {
+                try DeserializeScripts(engine_context, scanner, object);
+            } else {
+                std.log.warn("Skipping scripts while deserializing {s}, it can not have scripts yet", .{@typeName(obj_t)});
+                try scanner.skipValue();
+            }
+        } else if (std.mem.eql(u8, key, "Children")) {
+            try DeserializeChildren(engine_context, scanner, object);
         } else if (obj_t == Scene and std.mem.eql(u8, key, "Entities")) {
-            try DeserializeEntityList(engine_context, scanner, object);
+            try DeserializeSceneEntities(engine_context, scanner, object);
         } else {
             //a component that no longer exists or is no longer serialized, skip it so the rest of the file still loads
             std.log.warn("Skipping unknown key '{s}' while deserializing {s}", .{ key, @typeName(obj_t) });
@@ -192,18 +224,21 @@ fn DeserializeScripts(engine_context: *EngineContext, scanner: *std.json.Scanner
     _ = try scanner.next();
 }
 
-/// Reads an array of entities, creating each one as a child of parent (an Entity) or as a top level entity of parent (a Scene)
-fn DeserializeEntityList(engine_context: *EngineContext, scanner: *std.json.Scanner, parent: anytype) !void {
+/// Reads an array of objects, creating each one as a child of parent, of the same type as parent
+fn DeserializeChildren(engine_context: *EngineContext, scanner: *std.json.Scanner, parent: anytype) !void {
     if (.array_begin != try scanner.next()) return error.UnexpectedToken;
     while (try scanner.peekNextTokenType() != .array_end) {
-        const new_entity = if (@TypeOf(parent) == Scene)
-            try parent.CreateEntity(engine_context, BLANK_ENTITY)
-        else
-            try parent.CreateChild(engine_context, .Entity, .{
-                .bAddUUID = false,
-                .bAddName = false,
-                .bAddTransform = false,
-            });
+        const new_child = try parent.CreateChild(engine_context, .Entity, @TypeOf(parent).BlankConfig);
+        try DeserializeObject(engine_context, scanner, new_child);
+    }
+    _ = try scanner.next();
+}
+
+/// Reads an array of entities, creating each one as a top level entity of the scene
+fn DeserializeSceneEntities(engine_context: *EngineContext, scanner: *std.json.Scanner, scene: Scene) !void {
+    if (.array_begin != try scanner.next()) return error.UnexpectedToken;
+    while (try scanner.peekNextTokenType() != .array_end) {
+        const new_entity = try scene.CreateEntity(engine_context, Entity.BlankConfig);
         try DeserializeObject(engine_context, scanner, new_entity);
     }
     _ = try scanner.next();
@@ -215,6 +250,10 @@ fn SerializeList(comptime obj_t: type) []const type {
         return &EntityComponents.SerializeList;
     } else if (obj_t == Scene) {
         return &SceneComponents.SerializeList;
+    } else if (obj_t == Player) {
+        return &PlayerComponents.SerializeList;
+    } else if (obj_t == GameContext) {
+        return &GameContextComponents.SerializeList;
     } else {
         @compileError(std.fmt.comptimePrint("Serializing {s} is not supported yet", .{@typeName(obj_t)}));
     }

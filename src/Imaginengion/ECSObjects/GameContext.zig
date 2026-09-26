@@ -29,9 +29,21 @@ pub const DefaultConfig: CreateConfig = .{
     .bAddNameComponent = true,
 };
 
+/// Nothing added, for objects whose components all come from somewhere else (e.g. a file)
+pub const BlankConfig: CreateConfig = .{
+    .bAddUUIDComponent = false,
+    .bAddNameComponent = false,
+};
+
+/// A script child (see Core.AddScript): no UUID, nothing looks one up and it is saved as its ScriptComponent alone
+pub const ScriptConfig: CreateConfig = .{
+    .bAddUUIDComponent = false,
+    .bAddNameComponent = true,
+};
+
 pub const uninit: GameContext = .{
     .mID = NullObject,
-    .MManager = undefined,
+    .mManager = undefined,
 };
 
 mID: Type,
@@ -53,6 +65,14 @@ pub const Duplicate = Core.Duplicate;
 pub const GetUUID = Core.GetUUID;
 
 pub const Delete = Core.Delete;
+
+pub const SetTmpl = Core.SetTmpl;
+
+pub const Fill = Core.Fill;
+
+pub const Strip = Core.Strip;
+
+pub const MakeTmpl = Core.MakeTmpl;
 
 pub const GetIterator = Core.GetIterator;
 

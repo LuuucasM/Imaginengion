@@ -1,7 +1,6 @@
 const std = @import("std");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const AudioAsset = @import("../Asset/AudioAsset.zig").AudioAsset;
 const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
 const Entity = @import("../../ECSObjects/Entity.zig");
@@ -38,12 +37,6 @@ mCursor: u64 = 0,
 mVolume: f32 = 1.0,
 mPitch: f32 = 1.0,
 mLoop: bool = false,
-
-pub fn ReadFrames(self: *AudioComponent, engine_context: EngineContext, frames_out: []f32, frame_count: u64) !u64 {
-    const audio_asset = try self.mAudioAsset.GetAsset(engine_context, AudioAsset);
-
-    return audio_asset.ReadFrames(frames_out, frame_count, *self.mCursor, self.mLoop);
-}
 
 pub fn Deinit(self: *AudioComponent, _: *EngineContext) void {
     self.mAudioAsset.ReleaseAsset();

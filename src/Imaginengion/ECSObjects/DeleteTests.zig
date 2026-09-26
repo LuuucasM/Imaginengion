@@ -10,6 +10,9 @@ const Player = @import("Player.zig");
 const GameContext = @import("GameContext.zig");
 
 const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
+const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
+const NameComponent = @import("../ECSComponents/Shared/NameComponent.zig");
+const ECSObject = @import("ECSObject.zig");
 
 const EEventData = @import("../Events/EManagerData.zig");
 const GCEventData = @import("../Events/GCManagerData.zig");
@@ -216,4 +219,31 @@ test "players and game contexts delete the same way" {
     try std.testing.expect(!game_context.IsActive());
     try std.testing.expect(engine_context.mEditorWorld.GetObjectByUUID(Player, player_uuid) == null);
     try std.testing.expect(engine_context.mEditorWorld.GetObjectByUUID(GameContext, game_context_uuid) == null);
+}
+
+test "script children have a name but no UUID, and go along with their object, for every object type" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+
+    const scene = try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const objects = .{
+        try scene.CreateEntity(engine_context, Entity.DefaultConfig),
+        try editor_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig),
+        try editor_world.CreatePlayer(engine_context, Player.DefaultConfig),
+        try editor_world.CreateGameContext(engine_context, GameContext.DefaultConfig),
+    };
+
+    inline for (objects) |object| {
+        const obj_t = @TypeOf(object);
+        //Core's AddScript directly: the per type wrappers load the script to read its type, which needs a built script
+        const script = try ECSObject.Core(obj_t).AddScript(object, engine_context, .uninit);
+        try std.testing.expect(!script.HasComponent(UUIDComponent));
+        try std.testing.expect(script.HasComponent(NameComponent));
+
+        try object.Delete(engine_context);
+        try world.EndFrame();
+        try std.testing.expect(!script.IsActive());
+    }
 }

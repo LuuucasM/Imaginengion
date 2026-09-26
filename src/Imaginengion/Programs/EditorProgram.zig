@@ -339,6 +339,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const audio_zone = Tracy.ZoneInit("Audio Section", @src());
         defer audio_zone.Deinit();
+        try engine_context.mAudioManager.OnUpdate(engine_context);
     }
     //--------------Audio End--------------------
 
@@ -380,7 +381,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
         try engine_context.mAssetManager.ProcessDestroyedAssets(engine_context);
 
-        //after the assets: a destroyed EntityAsset deletes its tree in here
+        //after the assets: a destroyed object asset deletes its object in here
         try engine_context.mAssetWorld.ProcessEvents(SEventData, .EndOfFrame, engine_context, &callback_list);
         try engine_context.mAssetWorld.ProcessEvents(GCEventData, .EndOfFrame, engine_context, &callback_list);
         try engine_context.mAssetWorld.ProcessEvents(PEventData, .EndOfFrame, engine_context, &callback_list);

@@ -45,6 +45,20 @@ pub const DefaultConfig: CreateConfig = .{
     .bAddTransform = true,
 };
 
+/// Nothing added, for objects whose components all come from somewhere else (e.g. a file)
+pub const BlankConfig: CreateConfig = .{
+    .bAddUUID = false,
+    .bAddName = false,
+    .bAddTransform = false,
+};
+
+/// A script child (see Core.AddScript): no UUID, nothing looks one up and it is saved as its ScriptComponent alone
+pub const ScriptConfig: CreateConfig = .{
+    .bAddUUID = false,
+    .bAddName = true,
+    .bAddTransform = true,
+};
+
 pub const Type = u32;
 pub const NullObject: Type = std.math.maxInt(Type);
 const Entity = @This();
@@ -80,6 +94,14 @@ pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: Chi
 pub const Duplicate = Core.Duplicate;
 
 pub const Delete = Core.Delete;
+
+pub const SetTmpl = Core.SetTmpl;
+
+pub const Fill = Core.Fill;
+
+pub const Strip = Core.Strip;
+
+pub const MakeTmpl = Core.MakeTmpl;
 
 pub fn GetViewpointComponent(self: Entity) ?*ViewpointComponent {
     const viewpoint_entity = self.GetViewpointEntity() orelse return null;

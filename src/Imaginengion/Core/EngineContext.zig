@@ -78,7 +78,7 @@ mGameWorld: WorldManager = .{},
 mEditorWorld: WorldManager = .{},
 mSimulateWorld: WorldManager = .{},
 
-/// Where loaded ECS object assets live (EntityAsset, ...), so a file is parsed once and copied from after that.
+/// Where loaded ECS object assets live (EntityAsset, SceneAsset, PlayerAsset, GCAsset), so a file is parsed once and copied from after that.
 /// Nothing renders, simulates or scripts it, and it is deliberately left out of SetSyncCallbacks: nothing
 /// should react to what happens in here. Not a WorldType for the same reason.
 mAssetWorld: WorldManager = .{},
@@ -152,8 +152,10 @@ pub fn DeInit(self: *EngineContext) void {
     self.mSimulateWorld.Deinit(self);
 
     //the objects in here hold asset handles, so they are destroyed while the asset manager is still alive.
-    //the world itself is freed after the asset manager, whose EntityAssets look at it on their way out
+    //the world itself is freed after the asset manager, whose object assets look at it on their way out
     self.mAssetWorld.clearAndFree(self, .All);
+    //holds handles to the files objects were saved to / loaded from
+    self.mSerializer.Deinit(self.EngineAllocator());
 
     self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mImguiEventManager.Deinit(self.EngineAllocator());

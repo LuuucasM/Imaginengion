@@ -3,6 +3,7 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
+const RefMap = @import("../../ECSObjects/ECSObject.zig").RefMap;
 const SpawnPossComponent = @This();
 
 pub const Name: []const u8 = "SpawnPossComponent";
@@ -41,6 +42,11 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
     }
 
     return SpawnPossComponent{};
+}
+
+/// A copy of a scene points at the copy of the entity its template pointed at (see ECSObject.Core.Fill)
+pub fn RemapRefs(self: *SpawnPossComponent, ref_map: *const RefMap) void {
+    self.mEntityRef = ref_map.Get(self.mEntityRef) orelse .uninit;
 }
 
 fn ResolveEntityRef(requester: Serializer.Requester, entity_uuid: u64) bool {

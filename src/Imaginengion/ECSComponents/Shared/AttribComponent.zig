@@ -2,6 +2,7 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const AttribComponent = @This();
 
@@ -38,3 +39,8 @@ pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
 pub fn ImguiRender(self: *AttribComponent, _: *EngineContext) !void {
     try ImguiManager.RenderUnion(ValueTypes, &self.mData, "Type");
 }
+
+//the value is written as { "<type>": value }, which is how std.json handles a tagged union
+const Json = JsonUtils.JsonFields(AttribComponent, .{ .Data = "mData" });
+pub const jsonStringify = Json.jsonStringify;
+pub const jsonParse = Json.jsonParse;
