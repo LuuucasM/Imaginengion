@@ -100,6 +100,54 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
     try self.mGCManager.Copy(engine_context, &other_world.mGCManager);
     try self.mPManager.Copy(engine_context, &other_world.mPManager);
     try self.mSManager.Copy(engine_context, &other_world.mSManager);
+
+    //the ECS copies components by value, so every object handle in them still points at this world.
+    //ids carry over, so only the manager has to change, and only once all four managers are across
+    other_world.RetargetHandles();
+}
+
+/// Points every object handle (Entity, GameContext, Player, Scene) held in this world's components at
+/// this world. The same fields ECSObject's Core.AddComponent sets on a new component, for copies that
+/// never go through it.
+fn RetargetHandles(self: *WorldManager) void {
+    self.RetargetECSHandles(&self.mEManager.mECSManager);
+    self.RetargetECSHandles(&self.mGCManager.mECSManager);
+    self.RetargetECSHandles(&self.mPManager.mECSManager);
+    self.RetargetECSHandles(&self.mSManager.mECSManager);
+}
+
+fn RetargetECSHandles(self: *WorldManager, ecs_manager: anytype) void {
+    inline for (@TypeOf(ecs_manager.*).ComponentTypes) |component_type| {
+        //most components hold no handles, and those are skipped at compile time
+        if (comptime HoldsObjectHandle(component_type)) {
+            const type_info = @typeInfo(component_type);
+            for (ecs_manager.GetComponentSlice(component_type)) |*component| {
+                inline for (type_info.@"struct".field_types, type_info.@"struct".field_names) |field_type, field_name| {
+                    if (comptime IsObjectHandle(field_type)) {
+                        @field(component, field_name).mManager = self;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn HoldsObjectHandle(comptime component_type: type) bool {
+    const type_info = @typeInfo(component_type);
+    if (type_info != .@"struct") return false;
+    for (type_info.@"struct".field_types) |field_type| {
+        if (IsObjectHandle(field_type)) return true;
+    }
+    return false;
+}
+
+/// The objects whose mManager is a *WorldManager. An AssetHandle points at the engine's one asset
+/// manager, which every world shares, so it is right in a copy as it is.
+fn IsObjectHandle(comptime field_type: type) bool {
+    return field_type == Entity or
+        field_type == GameContext or
+        field_type == Player or
+        field_type == Scene;
 }
 
 pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {

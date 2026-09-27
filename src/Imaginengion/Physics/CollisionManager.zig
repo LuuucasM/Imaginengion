@@ -245,7 +245,7 @@ pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext) !v
     }
 }
 
-pub fn SolverPass(self: *CollisionManager, comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+pub fn SolverPass(self: *CollisionManager, world_manager: *WorldManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("CollisionManager::SolverPass", @src());
     defer zone.Deinit();
     zone.Value(self._BlockingContacts.items.len);
@@ -267,7 +267,7 @@ pub fn SolverPass(self: *CollisionManager, comptime world_type: EngineContext.Wo
                 }
             }
         }
-        try UpdateWorldTransforms(world_type, engine_context);
+        try UpdateWorldTransforms(world_manager, engine_context);
     }
 }
 

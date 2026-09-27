@@ -38,6 +38,8 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub const ComponentManagerT = ComponentManager(entity_t, components_types);
         /// A component's slot in THIS manager's arrays; see ComponentManager.ComponentInd.
         pub const ComponentInd = ComponentManagerT.ComponentInd;
+        /// The components this ECS was made with, builtins not included.
+        pub const ComponentTypes = components_types;
         pub const ECSCallbackList = ECSEventManager.CallbackList;
         pub const ECSEventCallback = ECSEventManager.EventCallback;
         const Self = @This();
@@ -202,6 +204,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         pub fn NumWithComponent(self: Self, comptime component_type: type) usize {
             _ValidateType(component_type);
             return self.mComponentManager.NumWithComponent(component_type);
+        }
+
+        /// Every `component_type` in this ECS, for a pass over all of them that has no use for the
+        /// ids. Only good until a component of that type is added or removed.
+        pub fn GetComponentSlice(self: Self, comptime component_type: type) []component_type {
+            _ValidateType(component_type);
+            return self.mComponentManager.GetComponentSlice(component_type);
         }
 
         pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {

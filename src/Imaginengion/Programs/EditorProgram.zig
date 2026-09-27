@@ -4,6 +4,7 @@ const Window = @import("../Windows/Window.zig");
 const ScriptsProcessor = @import("../Scripts/ScriptsProcessor.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
 const PushConstants = @import("../Renderer/RenderPipeline.zig").SDFPushConstants;
+const RenderStats = @import("../Core/EngineStats.zig").RenderStats;
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const VertexArray = @import("../VertexArrays/VertexArray.zig");
@@ -297,10 +298,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
         defer world_transform_zone.Deinit();
-        try PhysicsManager.UpdateWorldTransforms(.Game, engine_context);
-        try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+        try PhysicsManager.UpdateWorldTransforms(&engine_context.mGameWorld, engine_context);
+        try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+        //templates open for editing, so their previews show where things have been moved to
+        try PhysicsManager.UpdateWorldTransforms(&engine_context.mTmplEditWorld, engine_context);
         if (self.mEditorState == .Play) {
-            try PhysicsManager.UpdateWorldTransforms(.Simulate, engine_context);
+            try PhysicsManager.UpdateWorldTransforms(&engine_context.mSimulateWorld, engine_context);
         }
     }
     //---------------End World Transform Update ------------
@@ -506,19 +509,29 @@ fn OpenTmpl(self: *EditorProgram, engine_context: *EngineContext, tmpl: AssetHan
         }
     }
 
-    const panel = TmplEditPanel.Open(engine_context, handle) catch |err| {
+    const panel = TmplEditPanel.Open(engine_context, handle, self.mEditorViewportScene) catch |err| {
         handle.ReleaseAsset();
         return err;
     };
     try self.mTmplEditPanels.append(engine_context.EngineAllocator(), panel);
 }
 
-/// Draws every open template window, then closes the ones whose X was clicked this frame
+/// Closes the template windows whose X was clicked last frame, then draws the open ones and renders their previews
 fn RenderTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !void {
+    //before drawing rather than after: a window whose X was clicked still drew its preview that frame, and imgui only
+    //submits that frame's draw list later, so its texture has to live until then
+    try self.CloseTmplEditPanels(engine_context);
+
     for (self.mTmplEditPanels.items) |*panel| {
         try panel.OnImguiRender(engine_context);
     }
+    for (self.mTmplEditPanels.items) |*panel| {
+        try panel.RenderPreview(engine_context);
+    }
+}
 
+/// Saves and closes the template windows whose X was clicked
+fn CloseTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !void {
     var i: usize = 0;
     while (i < self.mTmplEditPanels.items.len) {
         const panel = &self.mTmplEditPanels.items[i];
@@ -724,10 +737,11 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
             try render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight);
         },
     }
-    try engine_context.mRenderer.OnUpdate(
-        self.mActiveWorldType,
+    try engine_context.mRenderer.RenderWorld(
+        self.mActiveWorld,
+        self.ActiveRenderStats(engine_context),
         engine_context,
-        BuildPushConstants(transform_component, viewpoint_component),
+        Renderer.BuildPushConstants(transform_component, viewpoint_component),
         Renderer.CameraView.FromViewpoint(transform_component, viewpoint_component, engine_context.mAppWindow.GetDisplayScale()),
         &render_component.mComputeTexture,
         .OverlayGame,
@@ -768,10 +782,11 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
         //skips a zero sized panel, so there may still be nothing to render into
         if (!render_component.mComputeTexture.IsCreated()) continue;
 
-        try engine_context.mRenderer.OnUpdate(
-            self.mActiveWorldType,
+        try engine_context.mRenderer.RenderWorld(
+            self.mActiveWorld,
+            self.ActiveRenderStats(engine_context),
             engine_context,
-            BuildPushConstants(transform_component, viewpoint_component),
+            Renderer.BuildPushConstants(transform_component, viewpoint_component),
             Renderer.CameraView.FromViewpoint(transform_component, viewpoint_component, engine_context.mAppWindow.GetDisplayScale()),
             &render_component.mComputeTexture,
             .OverlayGame,
@@ -779,21 +794,12 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
     }
 }
 
-/// The per view uniforms both render paths hand the renderer. The viewpoint's size has to be set
-/// for this frame before calling, since the ray params are derived from it. The quad and glyph
-/// counts are filled in by the renderer once it knows them.
-fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
-    const ray_params = viewpoint_component.GetRayParams();
-    return .{
-        .mPosition = transform_component.GetWorldPosition().ToArray(),
-        .mRotation = transform_component.GetWorldRotation().ToArray(),
-        .mRayScale = ray_params.Scale.ToArray(),
-        .mRayOffset = ray_params.Offset.ToArray(),
-        .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-        .mQuadsCount = 0,
-        .mGlyphsCount = 0,
-        .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
-        .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
+/// Where the renderer puts what it drew of the active world, for the stats panel
+fn ActiveRenderStats(self: *EditorProgram, engine_context: *EngineContext) *RenderStats {
+    return switch (self.mActiveWorldType) {
+        .Game => &engine_context.mEngineStats.GameWorldStats.mRenderStats,
+        .Editor => &engine_context.mEngineStats.EditorWorldStats.mRenderStats,
+        .Simulate => &engine_context.mEngineStats.SimulateWorldStats.mRenderStats,
     };
 }
 

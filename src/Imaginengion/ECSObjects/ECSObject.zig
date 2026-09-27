@@ -50,6 +50,10 @@ pub const RefMap = struct {
     }
 };
 
+/// The templates a Fill is inside of, outermost first: the chain of copies of other templates it followed to get
+/// where it is. Filling a template already on it would never end
+const TmplPath = std.ArrayList(AssetHandle.Type);
+
 pub fn Core(comptime Self: type) type {
     return struct {
         comptime {
@@ -355,18 +359,74 @@ pub fn Core(comptime Self: type) type {
         /// are copied onto it, except the ones it already has (a shell keeps its own UUID, Name, Transform, ...), and
         /// so are the template's scripts, children and, for a scene, its entities. Nothing copied gets a UUID. A copied
         /// component that points at another object inside the template is pointed at that object's copy (RemapRefs).
+        /// Copies of other templates inside it (their shells) are filled from their own templates in turn, and a
+        /// template that ends up inside itself that way is error.TmplLoop.
         pub fn Fill(self: Self, engine_context: *EngineContext) !void {
             if (Self == AssetHandle) @compileError("an asset handle can not be filled from a template");
+            var tmpl_path: TmplPath = .empty;
+            try _Fill(self, engine_context, &tmpl_path);
+        }
 
-            const tmpl_ref = GetComponent(self, TmplRefComponent) orelse return error.NoTmplRef;
-            //by value: loading more assets while copying (textures, scripts, ...) can move the storage this points into
-            const tmpl = (try tmpl_ref.mTmpl.GetAsset(engine_context, AComponents.ObjectAssetFor(Self))).mObject;
+        /// The SerializeList components an object has, one bit per entry
+        const ComponentSet = std.StaticBitSet(_SerializeList().len);
 
+        fn _Fill(self: Self, engine_context: *EngineContext, tmpl_path: *TmplPath) anyerror!void {
+            //by value: loading more assets while copying (textures, scripts, ...) can move the storage the component is in
+            const tmpl_handle = (GetComponent(self, TmplRefComponent) orelse return error.NoTmplRef).mTmpl;
+
+            //a template already being filled further up means it is inside itself, filling it again would never end
+            for (tmpl_path.items) |outer_tmpl_id| {
+                if (outer_tmpl_id == tmpl_handle.mID) {
+                    std.log.warn("the template {s} has a copy of itself inside it, so it can not be filled", .{tmpl_handle.GetFileMetaData().mRelPath.items});
+                    return error.TmplLoop;
+                }
+            }
+            try tmpl_path.append(engine_context.FrameAllocator(), tmpl_handle.mID);
+            defer _ = tmpl_path.pop();
+
+            const tmpl = (try tmpl_handle.GetAsset(engine_context, AComponents.ObjectAssetFor(Self))).mObject;
+
+            //what it has before copying is its own (a shell's UUID, Name, Transform, ...) rather than the template's,
+            //so any reference in it already points where it should and is not remapped
+            const own_components = _OwnComponents(self);
             var ref_map: RefMap = .{};
             try _CopyObject(tmpl, self, engine_context, &ref_map);
-            //after everything is copied, so every copy a reference could point at exists.
-            //the shell's own components hold no references, so it is fine that they go through this too
-            try _RemapRefs(self, engine_context, &ref_map);
+            //after everything is copied, so every copy a reference could point at exists
+            try _RemapRefs(self, engine_context, &ref_map, own_components);
+            //last, so this template's remap never sees what they bring in: they remap it with their own map
+            try _FillNested(self, engine_context, tmpl_path);
+        }
+
+        fn _OwnComponents(self: Self) ComponentSet {
+            var own_components: ComponentSet = .empty;
+            inline for (comptime _SerializeList(), 0..) |component_type, i| {
+                if (HasComponent(self, component_type)) own_components.set(i);
+            }
+            return own_components;
+        }
+
+        /// Fills every copy of another template that was just copied into `target`'s tree (a shell under it with a
+        /// TmplRefComponent). Their own Fill takes care of what is under them
+        fn _FillNested(target: Self, engine_context: *EngineContext, tmpl_path: *TmplPath) anyerror!void {
+            var child_iter = target.GetIterator(.Child);
+            while (child_iter.next()) |child| {
+                try _FillNestedAt(child, engine_context, tmpl_path);
+            }
+
+            if (Self == Scene) {
+                const root_entities = try _SceneRootEntities(target, engine_context);
+                for (root_entities.items) |entity_id| {
+                    try Core(Entity)._FillNestedAt(target.GetEntity(entity_id), engine_context, tmpl_path);
+                }
+            }
+        }
+
+        fn _FillNestedAt(object: Self, engine_context: *EngineContext, tmpl_path: *TmplPath) anyerror!void {
+            if (HasComponent(object, TmplRefComponent)) {
+                try _Fill(object, engine_context, tmpl_path);
+            } else {
+                try _FillNested(object, engine_context, tmpl_path);
+            }
         }
 
         /// Copies the template object `tmpl` onto `target`: its components, then its scripts, children and a scene's entities
@@ -413,23 +473,24 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        /// Lets each component of `target` and everything under it that references other objects point them at their copies
-        fn _RemapRefs(target: Self, engine_context: *EngineContext, ref_map: *const RefMap) anyerror!void {
-            inline for (comptime _SerializeList()) |component_type| {
-                if (@hasDecl(component_type, "RemapRefs")) {
+        /// Lets each component of `target` and everything under it that references other objects point them at their
+        /// copies, except `target`'s components in `skip`
+        fn _RemapRefs(target: Self, engine_context: *EngineContext, ref_map: *const RefMap, skip: ComponentSet) anyerror!void {
+            inline for (comptime _SerializeList(), 0..) |component_type, i| {
+                if (@hasDecl(component_type, "RemapRefs") and !skip.isSet(i)) {
                     if (GetComponent(target, component_type)) |component| component.RemapRefs(ref_map);
                 }
             }
 
             var child_iter = target.GetIterator(.Child);
             while (child_iter.next()) |child| {
-                try _RemapRefs(child, engine_context, ref_map);
+                try _RemapRefs(child, engine_context, ref_map, .empty);
             }
 
             if (Self == Scene) {
                 const root_entities = try _SceneRootEntities(target, engine_context);
                 for (root_entities.items) |entity_id| {
-                    try Core(Entity)._RemapRefs(target.GetEntity(entity_id), engine_context, ref_map);
+                    try Core(Entity)._RemapRefs(target.GetEntity(entity_id), engine_context, ref_map, .empty);
                 }
             }
         }

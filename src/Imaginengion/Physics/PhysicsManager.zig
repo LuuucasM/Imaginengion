@@ -106,27 +106,21 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime 
                 }
             }
 
-            try UpdateWorldTransforms(world_type, engine_context);
+            try UpdateWorldTransforms(world_manager, engine_context);
 
             try self._CollisionManager.BroadPass(engine_context, world_manager, dynamic_colliders.items, other_colliders.items);
             try self._CollisionManager.NarrowPass(engine_context);
             try self._CollisionManager.PreSolverPass(engine_context);
-            try self._CollisionManager.SolverPass(world_type, engine_context);
+            try self._CollisionManager.SolverPass(world_manager, engine_context);
             try self._CollisionManager.PostsolverPass(engine_context);
             self._CollisionManager.EndPass(engine_context);
         }
     }
 }
 
-pub fn UpdateWorldTransforms(comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+pub fn UpdateWorldTransforms(world_manager: *WorldManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::UpdateWorldTransforms", @src());
     defer zone.Deinit();
-
-    var world_manager = switch (world_type) {
-        .Game => &engine_context.mGameWorld,
-        .Editor => &engine_context.mEditorWorld,
-        .Simulate => &engine_context.mSimulateWorld,
-    };
 
     //only entities whose local transform changed since the last pass, which is a single component
     //query and so costs O(dirty) rather than the whole world. Every write goes through Entity's

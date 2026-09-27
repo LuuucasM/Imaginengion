@@ -9,6 +9,7 @@ test {
     _ = @import("Physics/BodyTagTests.zig");
     _ = @import("Physics/CollisionsTests.zig");
     _ = @import("Physics/RayCastTests.zig");
+    _ = @import("Core/WorldCopyTests.zig");
 }
 
 //Core Stuff -----------------------------------
@@ -20,12 +21,18 @@ pub const Tracy = @import("Core/Tracy.zig");
 pub const Entity = @import("ECSObjects/Entity.zig");
 pub const EntityComponents = @import("ECSComponents/EComponents.zig");
 
+//Audio Stuff -----------------------------------------
+pub const Voice = @import("ECSObjects/Voice.zig");
+
 //Scene Stuff -----------------------------------------
 pub const SceneLayer = @import("ECSObjects/Scene.zig");
 
 //Script Stuff ----------------------------------------------
 pub const ScriptType = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptType;
 pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
+
+//Event Stuff -----------------------------------------------
+pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;
 
 //Rendering Stuff -------------------------------------------
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").PushConstants;

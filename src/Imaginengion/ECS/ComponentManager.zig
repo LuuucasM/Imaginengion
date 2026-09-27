@@ -205,6 +205,13 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return internal_array.GetComponent(entityID);
         }
 
+        /// Every `component_type` in this manager, in dense order. Adding or removing one of that
+        /// type moves them, so the slice is only good until then.
+        pub fn GetComponentSlice(self: Self, comptime component_type: type) []component_type {
+            const internal_array: *InternalComponentArray(entity_t, component_type) = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
+            return internal_array.mComponents.mValues.items;
+        }
+
         pub fn ResetComponent(self: Self, engine_context: *EngineContext, entity_id: entity_t, component: anytype) void {
             const component_t = @TypeOf(component);
             std.debug.assert(self.HasComponent(component_t, entity_id));

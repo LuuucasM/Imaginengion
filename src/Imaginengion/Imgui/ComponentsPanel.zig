@@ -137,11 +137,11 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
         //playing needs the entity the component is on, which EditorRender does not get
         if (comptime component_type == AudioComponent and @TypeOf(object) == Entity) {
             if (imgui.igButton("Preview", .{ .x = 0.0, .y = 0.0 })) {
-                _ = try engine_context.mAudioManager.PlayVoice(engine_context, object);
+                _ = try object.PlayAudio(engine_context);
             }
             imgui.igSameLine(0.0, -1.0);
             if (imgui.igButton("Stop", .{ .x = 0.0, .y = 0.0 })) {
-                object.GetComponent(AudioComponent).?.StopVoices();
+                object.StopAudio();
             }
         }
     }

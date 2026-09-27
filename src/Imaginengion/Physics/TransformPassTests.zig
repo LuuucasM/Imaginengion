@@ -56,7 +56,7 @@ test "scene, entity, move transform: world transform stays sane" {
     //adding the transform should have tagged it, via Manager.AddComponent
     try std.testing.expect(entity.HasComponent(TransformDirtyTag));
 
-    try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
     try std.testing.expect(!entity.HasComponent(TransformDirtyTag));
 
     const t0 = entity.GetComponent(TransformComponent).?;
@@ -67,7 +67,7 @@ test "scene, entity, move transform: world transform stays sane" {
     try entity.SetTranslation(engine_context, .{ .x = 3.0, .y = 0.0, .z = 0.0 });
     try std.testing.expect(entity.HasComponent(TransformDirtyTag));
 
-    try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
     const t1 = entity.GetComponent(TransformComponent).?;
     try ExpectFinite(t1.GetWorldPosition(), "world position after move");
@@ -83,13 +83,13 @@ test "repeated moves do not drift the world scale" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
 
-    try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
     const first_scale = entity.GetComponent(TransformComponent).?.GetWorldScale();
 
     //the panel tags every frame it is open, so this is the steady state while dragging a value
     for (0..60) |i| {
         try entity.SetTranslation(engine_context, .{ .x = @floatFromInt(i), .y = 0, .z = 0 });
-        try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+        try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
     }
 
     const last = entity.GetComponent(TransformComponent).?;
@@ -121,7 +121,7 @@ test "a child swings around a turning parent" {
 
     //a quarter turn about z takes the child's arm from +x round to +y
     try parent.SetRotation(engine_context, ZRotation(90));
-    try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
     const child_transform = child.GetComponent(TransformComponent).?;
     try ExpectVec3Near(.{ .x = 0, .y = 2, .z = 0 }, child_transform.GetWorldPosition());
@@ -142,7 +142,7 @@ test "a child moves out with a growing parent" {
 
     //doubling the parent doubles the child's offset from it, as well as the child itself
     try parent.SetScale(engine_context, .{ .x = 2, .y = 2, .z = 2 });
-    try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
     const child_transform = child.GetComponent(TransformComponent).?;
     try ExpectVec3Near(.{ .x = 14, .y = 0, .z = 0 }, child_transform.GetWorldPosition());
@@ -165,7 +165,7 @@ test "the transform pass and walking up the hierarchy agree" {
     try child.SetTransform(engine_context, .{ .x = 0, .y = 0, .z = 4 }, ZRotation(-60), .{ .x = 3, .y = 3, .z = 3 });
 
     //the pass walks down from the root with accumulators
-    try PhysicsManager.UpdateWorldTransforms(.Editor, engine_context);
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
     const child_transform = child.GetComponent(TransformComponent).?;
     const pass_position = child_transform.GetWorldPosition();
     const pass_rotation = child_transform.GetWorldRotation();

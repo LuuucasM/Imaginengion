@@ -39,6 +39,9 @@ const ECSEventData = @import("../Events/ECSEventData.zig");
 
 const EntityAsset = @import("../ECSComponents/AComponents.zig").EntityAsset;
 const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
+const PhysicsManager = @import("../Physics/PhysicsManager.zig");
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
+const ViewpointComponent = EntityComponents.ViewpointComponent;
 
 const TEXTURE_PATH ="src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
 
@@ -67,7 +70,6 @@ const TestWorld = struct {
         engine_context.mAssetEntityScene = try engine_context.mAssetWorld.NewScene(engine_context, .GameLayer, Scene.BlankConfig);
         //and the template editing world's
         try engine_context.mTmplEditWorld.Init(engine_allocator);
-        engine_context.mTmplEditScene = try engine_context.mTmplEditWorld.NewScene(engine_context, .GameLayer, Scene.BlankConfig);
         //templates are made in here, copies are spawned into the editor world
         try engine_context.mSimulateWorld.Init(engine_allocator);
         try engine_context.mEditorWorld.Init(engine_allocator);
@@ -360,6 +362,256 @@ test "spawned game contexts copy the template's components and children" {
     try std.testing.expect(!FirstChild(a).HasComponent(UUIDComponent));
 }
 
+//===================================== Nested templates =====================================
+
+/// Makes `object` a shell of `tmpl` by hand, the way Make Template leaves one. The component takes its own reference
+fn LinkShell(engine_context: *EngineContext, object: anytype, tmpl: AssetHandle) !void {
+    tmpl.RetainAsset();
+    _ = try object.AddComponent(engine_context, TmplRefComponent{ .mTmpl = tmpl });
+}
+
+fn ChildNamed(object: anytype, name: []const u8) !@TypeOf(object) {
+    var child_iter = object.GetIterator(.Child);
+    while (child_iter.next()) |child| {
+        if (std.mem.eql(u8, child.GetName(), name)) return child;
+    }
+    return error.NoChildNamed;
+}
+
+fn EntityNamed(engine_context: *EngineContext, scene: Scene, name: []const u8) !Entity {
+    const entity_ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    for (entity_ids.items) |entity_id| {
+        const entity = scene.GetEntity(entity_id);
+        if (std.mem.eql(u8, entity.GetName(), name)) return entity;
+    }
+    return error.NoEntityNamed;
+}
+
+/// A sword with a gem, saved as sword.imen
+fn SaveSwordTmpl(world: *TestWorld) !AssetHandle {
+    const engine_context = world.mEngineContext;
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const sword = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, sword, "Sword");
+    _ = try sword.AddComponent(engine_context, QuadComponent{});
+    const gem = try sword.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try SetName(engine_context, gem, "Gem");
+    return try world.SaveTmpl(sword, "sword.imen");
+}
+
+/// A copy of sword.imen spawned as part of something else: its own name and place, the sword's quad and gem, no UUIDs
+fn ExpectSwordCopy(sword: Entity, name: []const u8, x: f32, sword_tmpl: AssetHandle) !void {
+    try ExpectName(sword, name);
+    try std.testing.expect(!sword.HasComponent(UUIDComponent));
+    try std.testing.expectEqual(x, sword.GetComponent(TransformComponent).?.GetTranslation().x);
+    try std.testing.expectEqual(sword_tmpl.mID, sword.GetComponent(TmplRefComponent).?.mTmpl.mID);
+    try std.testing.expect(sword.HasComponent(QuadComponent));
+    const gem = FirstChild(sword);
+    try ExpectName(gem, "Gem");
+    try std.testing.expect(!gem.HasComponent(UUIDComponent));
+}
+
+test "copies of another template inside an entity template are filled from it when spawned" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const sword_tmpl = try SaveSwordTmpl(world);
+
+    //a goblin holding two swords, each only a shell placed where it goes
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, goblin, "Goblin");
+    const left = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try SetName(engine_context, left, "Left Sword");
+    try left.SetTranslation(engine_context, .{ .x = -2.0, .y = 0.0, .z = 0.0 });
+    try LinkShell(engine_context, left, sword_tmpl);
+    const right = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try SetName(engine_context, right, "Right Sword");
+    try right.SetTranslation(engine_context, .{ .x = 2.0, .y = 0.0, .z = 0.0 });
+    try LinkShell(engine_context, right, sword_tmpl);
+    const goblin_tmpl = try world.SaveTmpl(goblin, "goblin.imen");
+
+    const scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    //loaded first: the loaded goblin's two shells hold references of their own
+    _ = try goblin_tmpl.GetAsset(engine_context, EntityAsset);
+    const sword_refs = world.Refs(sword_tmpl);
+    const copy = try scene.Spawn(engine_context, goblin_tmpl);
+    try std.testing.expectEqual(sword_refs + 2, world.Refs(sword_tmpl));
+
+    //using the same template twice is not a loop: both are filled, separately
+    const left_copy = try ChildNamed(copy, "Left Sword");
+    const right_copy = try ChildNamed(copy, "Right Sword");
+    try ExpectSwordCopy(left_copy, "Left Sword", -2.0, sword_tmpl);
+    try ExpectSwordCopy(right_copy, "Right Sword", 2.0, sword_tmpl);
+    try std.testing.expect(FirstChild(left_copy).mID != FirstChild(right_copy).mID);
+    try std.testing.expectEqual(scene.mID, FirstChild(left_copy).GetComponent(EntitySceneComponent).?.mScene.mID);
+
+    //the loaded goblin template still only has the shells: filling happens in the copy
+    const tmpl_left = try ChildNamed((try goblin_tmpl.GetAsset(engine_context, EntityAsset)).mObject, "Left Sword");
+    try std.testing.expect(!tmpl_left.HasComponent(QuadComponent));
+    var tmpl_left_children = tmpl_left.GetIterator(.Child);
+    try std.testing.expect(tmpl_left_children.next() == null);
+
+    //deleting the copy takes the filled swords along, and the references they held on the sword template
+    const right_gem = FirstChild(right_copy);
+    try copy.Delete(engine_context);
+    try world.EndFrame(world.GameWorld());
+    try std.testing.expect(!left_copy.IsActive());
+    try std.testing.expect(!right_gem.IsActive());
+    try std.testing.expectEqual(sword_refs, world.Refs(sword_tmpl));
+}
+
+test "a copy of an entity template at the top of a scene template is filled when the scene is spawned" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const sword_tmpl = try SaveSwordTmpl(world);
+
+    const armory = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const rack = try armory.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, rack, "Rack Sword");
+    try rack.SetTranslation(engine_context, .{ .x = 3.0, .y = 0.0, .z = 0.0 });
+    try LinkShell(engine_context, rack, sword_tmpl);
+    const armory_tmpl = try world.SaveTmpl(armory, "armory.imsc");
+
+    const copy = try world.GameWorld().Spawn(Scene, engine_context, armory_tmpl);
+    const rack_copy = try EntityNamed(engine_context, copy, "Rack Sword");
+    try ExpectSwordCopy(rack_copy, "Rack Sword", 3.0, sword_tmpl);
+    try std.testing.expectEqual(copy.mID, FirstChild(rack_copy).GetComponent(EntitySceneComponent).?.mScene.mID);
+}
+
+fn CreateTopLevel(world: *TestWorld, comptime obj_t: type) !obj_t {
+    const engine_context = world.mEngineContext;
+    if (obj_t == Scene) return try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    if (obj_t == Player) return try world.TmplWorld().CreatePlayer(engine_context, Player.DefaultConfig);
+    if (obj_t == GameContext) return try world.TmplWorld().CreateGameContext(engine_context, GameContext.DefaultConfig);
+    @compileError("scenes, players and game contexts only");
+}
+
+/// An `obj_t` template holding a shell of another `obj_t` template as its child: spawning it fills that child too
+fn ExpectNestedChildFilled(world: *TestWorld, comptime obj_t: type, inner_file: []const u8, outer_file: []const u8) !void {
+    const engine_context = world.mEngineContext;
+
+    const inner = try CreateTopLevel(world, obj_t);
+    try SetName(engine_context, inner, "Inner");
+    const inner_child = try inner.CreateChild(engine_context, .Entity, obj_t.DefaultConfig);
+    try SetName(engine_context, inner_child, "Inner Child");
+    const inner_tmpl = try world.SaveTmpl(inner, inner_file);
+
+    const outer = try CreateTopLevel(world, obj_t);
+    try SetName(engine_context, outer, "Outer");
+    const shell = try outer.CreateChild(engine_context, .Entity, obj_t.DefaultConfig);
+    try SetName(engine_context, shell, "Shell");
+    try LinkShell(engine_context, shell, inner_tmpl);
+    const outer_tmpl = try world.SaveTmpl(outer, outer_file);
+
+    const copy = try world.GameWorld().Spawn(obj_t, engine_context, outer_tmpl);
+    const shell_copy = try ChildNamed(copy, "Shell");
+    try std.testing.expect(!shell_copy.HasComponent(UUIDComponent));
+    const filled_child = try ChildNamed(shell_copy, "Inner Child");
+    try std.testing.expect(!filled_child.HasComponent(UUIDComponent));
+}
+
+test "copies of other templates inside scene, player and game context templates are filled when spawned" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    try ExpectNestedChildFilled(world, Scene, "menu.imsc", "hud.imsc");
+    try ExpectNestedChildFilled(world, Player, "controller.impl", "player_one.impl");
+    try ExpectNestedChildFilled(world, GameContext, "round.imgc", "deathmatch.imgc");
+}
+
+test "a scene template inside another points its spawn at its own copy, not the outer template's or the asset world's" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const menu = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const start = try menu.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, start, "Start");
+    _ = try menu.AddComponent(engine_context, SpawnPossComponent{ .mEntityRef = start });
+    const menu_tmpl = try world.SaveTmpl(menu, "menu.imsc");
+
+    const hud = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const hud_start = try hud.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, hud_start, "HUD Start");
+    _ = try hud.AddComponent(engine_context, SpawnPossComponent{ .mEntityRef = hud_start });
+    const menu_shell = try hud.CreateChild(engine_context, .Entity, Scene.DefaultConfig);
+    try SetName(engine_context, menu_shell, "Menu");
+    try LinkShell(engine_context, menu_shell, menu_tmpl);
+    //a shell with a spawn of its own, pointing into the hud: the menu's does not replace it
+    const pinned_shell = try hud.CreateChild(engine_context, .Entity, Scene.DefaultConfig);
+    try SetName(engine_context, pinned_shell, "Pinned Menu");
+    _ = try pinned_shell.AddComponent(engine_context, SpawnPossComponent{ .mEntityRef = hud_start });
+    try LinkShell(engine_context, pinned_shell, menu_tmpl);
+    const hud_tmpl = try world.SaveTmpl(hud, "hud.imsc");
+
+    const copy = try world.GameWorld().Spawn(Scene, engine_context, hud_tmpl);
+    const menu_copy = try ChildNamed(copy, "Menu");
+    const pinned_copy = try ChildNamed(copy, "Pinned Menu");
+
+    //each scene's spawn point is its own copy of its own entity: the outer remap left the inner one alone
+    const hud_start_copy = copy.GetComponent(SpawnPossComponent).?.mEntityRef;
+    try std.testing.expect(hud_start_copy.IsActive());
+    try ExpectName(hud_start_copy, "HUD Start");
+    try std.testing.expectEqual(copy.mID, hud_start_copy.GetComponent(EntitySceneComponent).?.mScene.mID);
+    const menu_start_copy = menu_copy.GetComponent(SpawnPossComponent).?.mEntityRef;
+    try std.testing.expect(menu_start_copy.IsActive());
+    try std.testing.expect(menu_start_copy.mManager == world.GameWorld());
+    try ExpectName(menu_start_copy, "Start");
+    try std.testing.expectEqual(menu_copy.mID, menu_start_copy.GetComponent(EntitySceneComponent).?.mScene.mID);
+
+    //the pinned one kept its own, still pointing at the hud's copy: the menu's remap left it alone
+    try std.testing.expectEqual(hud_start_copy.mID, pinned_copy.GetComponent(SpawnPossComponent).?.mEntityRef.mID);
+    //and it was still filled from the menu
+    _ = try EntityNamed(engine_context, pinned_copy, "Start");
+}
+
+/// Spawning `tmpl` fails as a loop, twice, and each failed copy is fully gone once the frame ends: its entities
+/// and the references it held
+fn ExpectLoopSpawn(world: *TestWorld, scene: Scene, tmpl: AssetHandle) !void {
+    const engine_context = world.mEngineContext;
+    try std.testing.expectError(error.TmplLoop, scene.Spawn(engine_context, tmpl));
+    try world.EndFrame(world.GameWorld());
+    //the first try loaded the templates, which hold references of their own
+    const refs = world.Refs(tmpl);
+    try std.testing.expectError(error.TmplLoop, scene.Spawn(engine_context, tmpl));
+    try world.EndFrame(world.GameWorld());
+    try std.testing.expectEqual(refs, world.Refs(tmpl));
+    const left_over = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
+    try std.testing.expectEqual(@as(usize, 0), left_over.items.len);
+}
+
+test "a template that ends up inside itself can not be spawned, and nothing is left of the try" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a handle needs its file to exist, so each template is saved once empty to get the handle its shell points at
+    const placeholder = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+
+    //directly: the goblin holds a shell of the goblin
+    const goblin_handle = try world.SaveTmpl(placeholder, "goblin.imen");
+    const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const inner_goblin = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try LinkShell(engine_context, inner_goblin, goblin_handle);
+    const goblin_tmpl = try world.SaveTmpl(goblin, "goblin.imen");
+    try std.testing.expectEqual(goblin_handle.mID, goblin_tmpl.mID);
+    try ExpectLoopSpawn(world, scene, goblin_tmpl);
+
+    //through another template: a holds a shell of b, and b a shell of a
+    const a_handle = try world.SaveTmpl(placeholder, "a.imen");
+    const b_handle = try world.SaveTmpl(placeholder, "b.imen");
+    const a = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try LinkShell(engine_context, try a.CreateChild(engine_context, .Entity, Entity.DefaultConfig), b_handle);
+    const b = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try LinkShell(engine_context, try b.CreateChild(engine_context, .Entity, Entity.DefaultConfig), a_handle);
+    _ = try world.SaveTmpl(a, "a.imen");
+    _ = try world.SaveTmpl(b, "b.imen");
+    try ExpectLoopSpawn(world, scene, a_handle);
+}
+
 //===================================== Make Template =====================================
 
 /// What every object is left as by MakeTmpl once the frame ends: its own UUID and name, linked to the template,
@@ -547,14 +799,15 @@ test "an object that is already a copy can not be made a template" {
 
 //===================================== Template windows =====================================
 
-/// Opens the template in a window, checks it landed in the template editing world with its root selected and its tree
-/// under it, then closes the window and checks the tree and the window's handle reference are gone
-fn OpenAndClose(world: *TestWorld, tmpl: AssetHandle, comptime obj_t: type) !void {
+/// Opens the template in a window and checks it landed in the template editing world with its root selected, its tree
+/// under it and, for entity and scene templates, a preview camera in the editor world. Then closes the window and checks
+/// the tree, any scene it had, the camera and the window's handle reference are all gone
+fn OpenAndClose(world: *TestWorld, tmpl: AssetHandle, comptime obj_t: type, camera_scene: Scene) !void {
     const engine_context = world.mEngineContext;
     const refs_before_open = world.Refs(tmpl);
     //the window takes over a reference of its own, like the one OpenTmplEvent carries
     tmpl.RetainAsset();
-    var panel = try TmplEditPanel.Open(engine_context, tmpl);
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene);
 
     const root: obj_t = switch (panel.mRoot) {
         inline else => |object| if (@TypeOf(object) == obj_t) object else return error.WrongRootType,
@@ -565,10 +818,33 @@ fn OpenAndClose(world: *TestWorld, tmpl: AssetHandle, comptime obj_t: type) !voi
     });
     const child = FirstChild(root);
 
+    //an entity template sits in a scene of its own, which is what its preview draws
+    if (obj_t == Entity) {
+        const entity_scene = panel.mEntityScene.?;
+        try std.testing.expect(entity_scene.mManager == &engine_context.mTmplEditWorld);
+        try std.testing.expectEqual(entity_scene.mID, root.GetComponent(EntitySceneComponent).?.mScene.mID);
+    } else {
+        try std.testing.expect(panel.mEntityScene == null);
+    }
+
+    //entity and scene templates get a fixed camera in the editor world, players and game contexts have nothing to show
+    const has_preview = obj_t == Entity or obj_t == Scene;
+    try std.testing.expectEqual(has_preview, panel.mCamera != null);
+    if (panel.mCamera) |camera| {
+        try std.testing.expect(camera.mManager == &engine_context.mEditorWorld);
+        try std.testing.expect(camera.HasComponent(ViewpointComponent));
+        try std.testing.expectEqual(@as(f32, 15.0), camera.GetComponent(TransformComponent).?.GetTranslation().z);
+    }
+
     try panel.Close(engine_context);
     try world.EndFrame(&engine_context.mTmplEditWorld);
+    try world.EndFrame(&engine_context.mEditorWorld);
     try std.testing.expect(!root.IsActive());
     try std.testing.expect(!child.IsActive());
+    if (panel.mEntityScene) |entity_scene| try std.testing.expect(!entity_scene.IsActive());
+    if (panel.mCamera) |camera| try std.testing.expect(!camera.IsActive());
+    //nothing left in the editing world's scene stack
+    try std.testing.expectEqual(@as(usize, 0), engine_context.mTmplEditWorld.mSManager.mNumofLayers);
     try std.testing.expectEqual(refs_before_open, world.Refs(tmpl));
 }
 
@@ -576,38 +852,85 @@ test "a template window opens each type in the template editing world and closes
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
+    const camera_scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     const scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const goblin = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    try OpenAndClose(world, try world.SaveTmpl(goblin, "goblin.imen"), Entity);
+    try OpenAndClose(world, try world.SaveTmpl(goblin, "goblin.imen"), Entity, camera_scene);
 
     const hud = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     _ = try hud.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try hud.CreateChild(engine_context, .Entity, Scene.DefaultConfig);
-    const hud_tmpl = try world.SaveTmpl(hud, "hud.imsc");
-    //a scene template takes a stack slot in the editing world while it is open, next to the entity templates' scene
-    hud_tmpl.RetainAsset();
-    var hud_panel = try TmplEditPanel.Open(engine_context, hud_tmpl);
-    try std.testing.expectEqual(@as(usize, 2), engine_context.mTmplEditWorld.mSManager.mNumofLayers);
-    try hud_panel.Close(engine_context);
-    try world.EndFrame(&engine_context.mTmplEditWorld);
-    try std.testing.expectEqual(@as(usize, 1), engine_context.mTmplEditWorld.mSManager.mNumofLayers);
-    try OpenAndClose(world, hud_tmpl, Scene);
+    try OpenAndClose(world, try world.SaveTmpl(hud, "hud.imsc"), Scene, camera_scene);
 
     const player = try world.TmplWorld().CreatePlayer(engine_context, Player.DefaultConfig);
     _ = try player.CreateChild(engine_context, .Entity, Player.DefaultConfig);
-    try OpenAndClose(world, try world.SaveTmpl(player, "player_one.impl"), Player);
+    try OpenAndClose(world, try world.SaveTmpl(player, "player_one.impl"), Player, camera_scene);
 
     const game_context = try world.TmplWorld().CreateGameContext(engine_context, GameContext.DefaultConfig);
     _ = try game_context.CreateChild(engine_context, .Entity, GameContext.DefaultConfig);
-    try OpenAndClose(world, try world.SaveTmpl(game_context, "deathmatch.imgc"), GameContext);
+    try OpenAndClose(world, try world.SaveTmpl(game_context, "deathmatch.imgc"), GameContext, camera_scene);
+}
+
+test "two open entity templates are in scenes of their own, so each preview only has its own shapes" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const camera_scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try goblin.AddComponent(engine_context, QuadComponent{});
+    const sword = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try sword.AddComponent(engine_context, QuadComponent{});
+    const tree = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try tree.AddComponent(engine_context, QuadComponent{});
+
+    const goblin_tmpl = try world.SaveTmpl(goblin, "goblin.imen");
+    const tree_tmpl = try world.SaveTmpl(tree, "tree.imen");
+    goblin_tmpl.RetainAsset();
+    tree_tmpl.RetainAsset();
+    var goblin_panel = try TmplEditPanel.Open(engine_context, goblin_tmpl, camera_scene);
+    var tree_panel = try TmplEditPanel.Open(engine_context, tree_tmpl, camera_scene);
+
+    //the same query RenderScene draws
+    const shapes_query = GroupQuery{ .Component = QuadComponent };
+    const goblin_shapes = try goblin_panel.mEntityScene.?.GetEntityGroup(engine_context.FrameAllocator(), shapes_query);
+    const tree_shapes = try tree_panel.mEntityScene.?.GetEntityGroup(engine_context.FrameAllocator(), shapes_query);
+    try std.testing.expectEqual(@as(usize, 2), goblin_shapes.items.len);
+    try std.testing.expectEqual(@as(usize, 1), tree_shapes.items.len);
+
+    try goblin_panel.Close(engine_context);
+    try tree_panel.Close(engine_context);
+}
+
+test "moving something in an open template updates where the transform pass puts it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const camera_scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    const tmpl = try world.SaveTmpl(goblin, "goblin.imen");
+    tmpl.RetainAsset();
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene);
+
+    const sword = FirstChild(panel.mRoot.entity);
+    try sword.SetTranslation(engine_context, .{ .x = 3.0, .y = 0.0, .z = 0.0 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mTmplEditWorld, engine_context);
+    try std.testing.expectEqual(@as(f32, 3.0), sword.GetComponent(TransformComponent).?.GetWorldPosition().x);
+
+    try panel.Close(engine_context);
 }
 
 test "saving a template window writes the edits to its file, and the next spawn uses them" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
+    const camera_scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -620,7 +943,7 @@ test "saving a template window writes the edits to its file, and the next spawn 
     try ExpectName(FirstChild(before), "Sword");
 
     tmpl.RetainAsset();
-    var panel = try TmplEditPanel.Open(engine_context, tmpl);
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene);
     try SetName(engine_context, FirstChild(panel.mRoot.entity), "Axe");
     try panel.Save(engine_context);
 
@@ -641,8 +964,9 @@ test "a file that is not a template can not be opened in a template window" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
+    const camera_scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
     var texture = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = TEXTURE_PATH, .path_type = .Eng } });
     defer texture.ReleaseAsset();
-    try std.testing.expectError(error.NotATmplFile, TmplEditPanel.Open(engine_context, texture));
+    try std.testing.expectError(error.NotATmplFile, TmplEditPanel.Open(engine_context, texture, camera_scene));
 }

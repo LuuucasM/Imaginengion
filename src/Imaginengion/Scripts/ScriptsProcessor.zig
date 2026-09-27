@@ -150,9 +150,9 @@ fn _ValidateScriptType(comptime ObjectType: type, comptime script_type: type) vo
     }
 }
 
-fn _GetFnInfo(comptime func_type_info: std.builtin.Type, comptime func_name: []const u8, comptime type_name: []const u8) std.builtin.Type.Fn {
+fn _GetFnInfo(comptime func_type_info: std.builtin.Type, comptime func_name: []const u8, comptime type_name: []const u8) @FieldType(std.builtin.Type, "fn") {
     return switch (func_type_info) {
-        .Fn => |info| info,
+        .@"fn" => |info| info,
         else => @compileError(func_name ++ " must be a function" ++ type_name),
     };
 }
@@ -180,7 +180,7 @@ pub fn _ValidateScript(comptime script_type: type) void {
     const get_script_type_func_info = @typeInfo(GetScriptTypeFn);
     const type_fn_info = _GetFnInfo(get_script_type_func_info, "GetScriptType", type_name);
 
-    if (type_fn_info.params.len != 0) {
+    if (type_fn_info.param_types.len != 0) {
         @compileError("GetScriptType function must take no parameters" ++ type_name);
     }
     if (type_fn_info.return_type) |return_type| {

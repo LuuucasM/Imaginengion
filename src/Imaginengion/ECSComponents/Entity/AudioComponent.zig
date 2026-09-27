@@ -63,7 +63,8 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     _ = try ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
 
     // Pitch drag
-    _ = try ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.0, 0.0); //0.0 for upper bounds means no upper bounds i believe
+    //a playback rate: 1 is normal, 2 is twice as fast and an octave up, 0.5 half as fast and an octave down
+    _ = try ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.1, 4.0);
 
     // Loop toggle
     try ImguiManager.RenderBool(&self.mLoop, "Looping?");

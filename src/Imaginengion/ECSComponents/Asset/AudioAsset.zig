@@ -23,8 +23,8 @@ pub fn GetFrameCount(self: AudioAsset) u64 {
     return self.mAudioBuffer.GetFrameCount();
 }
 
-/// See AudioBuffer.ReadFrames. The asset can be reloaded between frames, so callers hold a handle and fetch the
-/// asset each time instead of keeping this pointer
-pub fn ReadFrames(self: *AudioAsset, frames_out: []f32, cursor: *u64, loop: bool) u64 {
-    return self.mAudioBuffer.ReadFrames(frames_out, cursor, loop);
+/// Every decoded sample, interleaved AUDIO_CHANNELS per frame. The asset can be reloaded between frames, so callers
+/// hold a handle and fetch the asset (and these samples) each time instead of keeping them
+pub fn GetSamples(self: AudioAsset) []const f32 {
+    return self.mAudioBuffer.GetSamples();
 }

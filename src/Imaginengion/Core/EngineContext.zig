@@ -87,10 +87,8 @@ mAssetEntityScene: Scene = .uninit,
 
 /// Where templates are opened for editing (see TmplEditPanel). Like mAssetWorld nothing runs on it, so a template's
 /// scripts don't run while it is being edited, and it is its own world so an open template never shares a UUID map
-/// with the loaded copy of the same file in mAssetWorld.
+/// with the loaded copy of the same file in mAssetWorld. Each open template gets a scene of its own in here.
 mTmplEditWorld: WorldManager = .{},
-/// The scene every entity template being edited is opened in, since an entity has to belong to a scene
-mTmplEditScene: Scene = .uninit,
 
 mImguiManager: ImguiManager = .{},
 mImguiEventManager: ImguiEventManager = .empty,
@@ -134,7 +132,6 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     self.mAssetEntityScene = try self.mAssetWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
 
     try self.mTmplEditWorld.Init(self.EngineAllocator());
-    self.mTmplEditScene = try self.mTmplEditWorld.NewScene(self, .GameLayer, .{ .bAddSceneUUID = false, .bAddSceneName = false });
 }
 
 /// Points every event manager in the engine at Program.OnEvent, the single synchronous entry

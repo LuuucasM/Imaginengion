@@ -8,7 +8,6 @@ const SceneOnSceneStartScript = @This();
 /// if this function returns true it allows the event to be propegated to other layers/systems
 /// if it returns false it will stop at this layer
 pub export fn Run(engine_context: *EngineContext, self: *const SceneLayer) callconv(.c) bool {
-    _ValidateScript(SceneOnSceneStartScript);
     _ = engine_context;
     _ = self;
     //your code goes here
@@ -16,10 +15,5 @@ pub export fn Run(engine_context: *EngineContext, self: *const SceneLayer) callc
 }
 //Note the following functions are for editor purposes and to not be changed by user or bad things can happen :)
 pub export fn GetScriptType() callconv(.c) ScriptType {
-    return ScriptType.OnSceneStart;
+    return ScriptType.SceneSceneStart;
 }
-
-//This function helps validate that the script provided by the user
-//will not break anything when trying to use
-//It is intended to fail fast before it can even compile
-const _ValidateScript = @import("IM")._ValidateScript;

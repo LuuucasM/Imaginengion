@@ -8,6 +8,7 @@ const UniformBuffer = @import("../UniformBuffers/UniformBuffer.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
+const RenderStats = @import("../Core/EngineStats.zig").RenderStats;
 const PipelineType = @import("RenderPipeline.zig").PipelineType;
 const ShadingBuffers = @import("Renderer.zig").ShadingBuffers;
 const SurfShadingData = @import("Renderer.zig").SurfShadingData;
@@ -116,7 +117,7 @@ pub const RenderBuffers = struct {
             },
         }
     }
-    pub fn SetBuffers(self: *RenderBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+    pub fn SetBuffers(self: *RenderBuffers, stats: *RenderStats, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("Renderer2D::SetBuffers", @src());
         defer zone.Deinit();
 
@@ -129,20 +130,8 @@ pub const RenderBuffers = struct {
         //glyphs
         _ = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
         //fill out stats
-        switch (world_type) {
-            .Game => {
-                engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-                engine_context.mEngineStats.GameWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
-            },
-            .Editor => {
-                engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-                engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
-            },
-            .Simulate => {
-                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
-            },
-        }
+        stats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
+        stats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
     }
     pub fn BindBuffers(self: RenderBuffers, render_pass: *anyopaque) void {
         self.mQuadBuffer.Bind(render_pass);
@@ -168,10 +157,10 @@ pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mOverlayData.Reset(engine_allocator, .ClearRetainingCapacity);
 }
 
-pub fn SetBuffers(self: *Renderer2D, world_type: EngineContext.WorldType, engine_context: *EngineContext, pipeline_t: PipelineType) !void {
+pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, pipeline_t: PipelineType) !void {
     try switch (pipeline_t) {
-        .GamePipeline => self.mGameData.SetBuffers(world_type, engine_context),
-        .OverlayPipeline => self.mOverlayData.SetBuffers(world_type, engine_context),
+        .GamePipeline => self.mGameData.SetBuffers(stats, engine_context),
+        .OverlayPipeline => self.mOverlayData.SetBuffers(stats, engine_context),
     };
 }
 

@@ -30,6 +30,8 @@ const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EngineContext = @import("../Core/EngineContext.zig");
+const RenderStats = @import("../Core/EngineStats.zig").RenderStats;
+const Scene = @import("../ECSObjects/Scene.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
@@ -189,7 +191,7 @@ pub const ShadingBuffers = struct {
             },
         }
     }
-    pub fn SetBuffers(self: *ShadingBuffers, world_type: EngineContext.WorldType, engine_context: *EngineContext) !void {
+    pub fn SetBuffers(self: *ShadingBuffers, stats: *RenderStats, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("Renderer::ShadingBuffers::SetBuffers", @src());
         defer zone.Deinit();
 
@@ -201,23 +203,9 @@ pub const ShadingBuffers = struct {
         _ = self.mMedShadingBuff.SetData(engine_context, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
 
         //fill out stats
-        switch (world_type) {
-            .Game => {
-                engine_context.mEngineStats.GameWorldStats.mRenderStats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
-                engine_context.mEngineStats.GameWorldStats.mRenderStats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
-                engine_context.mEngineStats.GameWorldStats.mRenderStats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
-            },
-            .Editor => {
-                engine_context.mEngineStats.EditorWorldStats.mRenderStats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
-                engine_context.mEngineStats.EditorWorldStats.mRenderStats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
-                engine_context.mEngineStats.EditorWorldStats.mRenderStats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
-            },
-            .Simulate => {
-                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
-                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
-                engine_context.mEngineStats.SimulateWorldStats.mRenderStats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
-            },
-        }
+        stats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
+        stats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
+        stats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
     }
     pub fn BindBuffers(self: ShadingBuffers, render_pass: *anyopaque) void {
         self.mSurfShadingBuff.Bind(render_pass);
@@ -268,44 +256,63 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
     self.mPlatform.Deinit(&engine_context.mAppWindow);
 }
 
-//mode bit 0: set to 1 for aspect ratio correction, 0 for not
-pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
-    const zone = Tracy.ZoneInit("Renderer::OnUpdate", @src());
-    defer zone.Deinit();
-    const world_manager = switch (world_type) {
-        .Game => &engine_context.mGameWorld,
-        .Editor => &engine_context.mEditorWorld,
-        .Simulate => &engine_context.mSimulateWorld,
+/// The per view uniforms every render hands the renderer, from the camera's transform and viewpoint. The viewpoint's
+/// size has to be set for this frame before calling, since the ray params are derived from it. The quad and glyph
+/// counts are filled in by the renderer once it knows them.
+pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
+    const ray_params = viewpoint_component.GetRayParams();
+    return .{
+        .mPosition = transform_component.GetWorldPosition().ToArray(),
+        .mRotation = transform_component.GetWorldRotation().ToArray(),
+        .mRayScale = ray_params.Scale.ToArray(),
+        .mRayOffset = ray_params.Offset.ToArray(),
+        .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
+        .mQuadsCount = 0,
+        .mGlyphsCount = 0,
+        .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
+        .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
     };
+}
 
+const SHAPES_QUERY = GroupQuery{
+    .Or = &[_]GroupQuery{
+        GroupQuery{ .Component = QuadComponent },
+        GroupQuery{ .Component = TextComponent },
+    },
+};
+
+/// Draws every shape in the world through the camera into compute_texture, and fills in stats with what it drew
+pub fn RenderWorld(self: *Renderer, world_manager: *WorldManager, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+    const zone = Tracy.ZoneInit("Renderer::RenderWorld", @src());
+    defer zone.Deinit();
+
+    const shapes_ids = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), SHAPES_QUERY);
+    try self.RenderShapes(world_manager, shapes_ids.items, stats, engine_context, push_constants, camera_view, compute_texture, rendering_mode);
+}
+
+/// RenderWorld for only the shapes in one scene, e.g. one template out of the several open in the template editing world
+pub fn RenderScene(self: *Renderer, scene: Scene, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+    const zone = Tracy.ZoneInit("Renderer::RenderScene", @src());
+    defer zone.Deinit();
+
+    const shapes_ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), SHAPES_QUERY);
+    try self.RenderShapes(scene.mManager, shapes_ids.items, stats, engine_context, push_constants, camera_view, compute_texture, rendering_mode);
+}
+
+fn RenderShapes(self: *Renderer, world_manager: *WorldManager, shapes_ids: []const Entity.Type, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     self.mSDFPushConstants = push_constants;
 
     try self.BeginRendering(engine_context.EngineAllocator());
 
-    //get all the shapes
-    const shapes_ids = try world_manager.GetEntityGroup(
-        engine_context.FrameAllocator(),
-        GroupQuery{
-            .Or = &[_]GroupQuery{
-                GroupQuery{ .Component = QuadComponent },
-                GroupQuery{ .Component = TextComponent },
-            },
-        },
-    );
-
-    switch (world_type) {
-        .Game => engine_context.mEngineStats.GameWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
-        .Editor => engine_context.mEngineStats.EditorWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
-        .Simulate => engine_context.mEngineStats.SimulateWorldStats.mRenderStats.TotalObjects = shapes_ids.items.len,
-    }
+    stats.TotalObjects = shapes_ids.len;
 
     {
         //one zone for the whole loop rather than one per shape, which would swamp the timeline
         const draw_zone = Tracy.ZoneInit("Renderer::DrawShapes", @src());
         defer draw_zone.Deinit();
-        draw_zone.Value(shapes_ids.items.len);
+        draw_zone.Value(shapes_ids.len);
 
-        for (shapes_ids.items) |shape_id| {
+        for (shapes_ids) |shape_id| {
             //TODO: distance based culling
             //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
             const shape_entity = world_manager.GetEntity(shape_id);
@@ -316,7 +323,7 @@ pub fn OnUpdate(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     //TODO: sorting
     //TODO: other optimizsations?
 
-    try self.EndRendering(world_type, engine_context, compute_texture, rendering_mode);
+    try self.EndRendering(stats, engine_context, compute_texture, rendering_mode);
 }
 
 fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
@@ -363,7 +370,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, ca
     }
 }
 
-fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_context: *EngineContext, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineContext, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::EndRendering", @src());
     defer zone.Deinit();
 
@@ -377,8 +384,8 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
     mode_switch: switch (rendering_mode) {
         .Overlay, .OverlayGame => {
             self.mPlatform.PushDebugGroup("Upload Buffers - Overlay");
-            try self.mR2D.SetBuffers(world_type, engine_context, .OverlayPipeline);
-            try self.mSDFShading.SetBuffers(world_type, engine_context);
+            try self.mR2D.SetBuffers(stats, engine_context, .OverlayPipeline);
+            try self.mSDFShading.SetBuffers(stats, engine_context);
             self.mPlatform.PopDebugGroup();
 
             const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
@@ -409,8 +416,8 @@ fn EndRendering(self: *Renderer, world_type: EngineContext.WorldType, engine_con
         },
         .Game => {
             self.mPlatform.PushDebugGroup("Upload Buffers - Game");
-            try self.mR2D.SetBuffers(world_type, engine_context, .GamePipeline);
-            try self.mSDFShading.SetBuffers(world_type, engine_context);
+            try self.mR2D.SetBuffers(stats, engine_context, .GamePipeline);
+            try self.mSDFShading.SetBuffers(stats, engine_context);
             self.mPlatform.PopDebugGroup();
 
             const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);

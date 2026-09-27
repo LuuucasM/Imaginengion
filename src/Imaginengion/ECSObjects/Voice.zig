@@ -20,8 +20,11 @@ pub const uninit: Voice = .{
 mID: Type,
 mManager: *AudioManager,
 
-/// Stops the voice. It stays readable until the end of the frame, and is silent from the next update on
+/// Stops the voice. It stays readable until the end of the frame, and is silent from the next update on. Does nothing
+/// for a voice that has finished, was stopped already, or was never played (uninit)
 pub fn Stop(self: Voice, engine_context: *EngineContext) !void {
+    //an uninit voice has no manager to ask
+    if (!self.IsIDValid()) return;
     try self.mManager.StopVoice(engine_context, self);
 }
 

@@ -88,6 +88,7 @@ pub fn build(b: *std.Build) void {
         "src/Imaginengion/Core/SkipFieldTests.zig",
         "src/Imaginengion/Core/SparseSetTests.zig",
         "src/Imaginengion/Core/SPSCRingBufferTests.zig",
+        "src/Imaginengion/Math/AudioTests.zig",
         "src/Imaginengion/Math/MathTypesTests.zig",
         "src/Imaginengion/Math/CameraRayTests.zig",
         "src/Imaginengion/Math/RayIntersectTests.zig",

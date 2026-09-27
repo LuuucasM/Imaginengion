@@ -22,7 +22,7 @@ pub fn GetFrameCount(self: AudioBuffer) u64 {
     return self.mImpl.GetFrameCount();
 }
 
-/// Fills frames_out (interleaved, AUDIO_CHANNELS per frame) from cursor on and returns how many frames were written
-pub fn ReadFrames(self: *AudioBuffer, frames_out: []f32, cursor: *u64, loop: bool) u64 {
-    return self.mImpl.ReadFrames(frames_out, cursor, loop);
+/// Every decoded sample, interleaved AUDIO_CHANNELS per frame
+pub fn GetSamples(self: AudioBuffer) []const f32 {
+    return self.mImpl.GetSamples();
 }
