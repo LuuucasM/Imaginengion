@@ -28,6 +28,10 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
+const LayoutComponent = EntityComponents.LayoutComponent;
+const LayoutItemComponent = EntityComponents.LayoutItemComponent;
+const TextComponent = EntityComponents.TextComponent;
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 
 const Serializer = @import("../Serializer/Serializer.zig");
@@ -131,7 +135,13 @@ pub fn Core(comptime Self: type) type {
         }
 
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
-            return .{ .mID = try self.mECSManager.DuplicateEntity(engine_context, obj_id), .mManager = ObjManager(self) };
+            const copy: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.DuplicateEntity(engine_context, obj_id), .mManager = ObjManager(self) };
+            //the ECS copies the components straight across without AddComponent, so a copy in a layout tree has to
+            //ask for its tree to be laid out itself
+            if (comptime Self == EManager) {
+                if (LayoutSystem.IsInLayout(copy)) try copy.MarkLayoutDirty(engine_context);
+            }
+            return copy;
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
@@ -154,6 +164,18 @@ pub fn Core(comptime Self: type) type {
                 if (!self.mECSManager.HasComponent(TransformDirtyTag, obj_id)) {
                     _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), obj_id, TransformDirtyTag{});
                 }
+            }
+
+            //what a layout tree is laid out from: the settings, and the text a leaf fits to. The same one place every
+            //route goes through as the transform above, so a component added in the panel, from code, from a file
+            //or from a template all lay their tree out. On an entity that isn't in any layout the tag is just
+            //cleared by the next layout pass
+            if (comptime Self == EManager and (@TypeOf(new_component) == LayoutComponent or
+                @TypeOf(new_component) == LayoutItemComponent or
+                @TypeOf(new_component) == TextComponent))
+            {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try entity.MarkLayoutDirty(engine_context);
             }
 
             //a new rigid body starts with whatever _InvMass it was constructed with (zero for a

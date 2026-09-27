@@ -17,6 +17,7 @@ const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
+const OverlayLayerTag = @import("../../ECSComponents/SComponents.zig").OverlayLayerTag;
 
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
@@ -56,7 +57,7 @@ const ORIGIN_POSE = CameraRay.Pose{
 };
 
 fn View(pose: CameraRay.Pose) CameraView {
-    return .{ .Pose = pose, .TanHalfFov = @tan(FOV / 2), .TargetHeight = HEIGHT, .FarDistance = 1000, .DisplayScale = 1 };
+    return .{ .Pose = pose, .TanHalfFov = @tan(FOV / 2), .TargetWidth = WIDTH, .TargetHeight = HEIGHT, .FarDistance = 1000, .DisplayScale = 1 };
 }
 
 fn PixelRay(pose: CameraRay.Pose, pixel: Vec2(f32)) CameraRay.Ray {
@@ -67,8 +68,14 @@ fn CenterRay(pose: CameraRay.Pose) CameraRay.Ray {
     return PixelRay(pose, .{ .x = WIDTH / 2, .y = HEIGHT / 2 });
 }
 
+/// A cast through a view that shows the whole world, every overlay included
 fn Cast(engine_context: *EngineContext, pose: CameraRay.Pose, ray: CameraRay.Ray, options: RayCast.CastOptions) !?RayCast.RayHit {
-    return RayCast.CastRay(engine_context, &engine_context.mEditorWorld, ray, View(pose), options);
+    const overlays = try engine_context.mEditorWorld.GetSceneGroup(engine_context.FrameAllocator(), .{ .Component = OverlayLayerTag });
+    return CastIn(engine_context, .{ .Overlays = overlays.items }, pose, ray, options);
+}
+
+fn CastIn(engine_context: *EngineContext, view_scenes: RayCast.ViewScenes, pose: CameraRay.Pose, ray: CameraRay.Ray, options: RayCast.CastOptions) !?RayCast.RayHit {
+    return RayCast.CastRay(engine_context, &engine_context.mEditorWorld, ray, View(pose), view_scenes, options);
 }
 
 fn AddQuad(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), size: Vec2(f32)) !Entity {
@@ -123,6 +130,39 @@ test "an overlay quad wins over a nearer game quad" {
     const hit = try Cast(engine_context, ORIGIN_POSE, CenterRay(ORIGIN_POSE), .{});
     try ExpectEntity(overlay_quad, hit);
     try std.testing.expectEqual(.OverlayLayer, hit.?.Layer);
+}
+
+test "an overlay the view doesn't show can't be hit" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const game_scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const game_quad = try AddQuad(engine_context, game_scene, .{ .x = 0, .y = 0, .z = -5 }, .{ .x = 4, .y = 4 });
+    //e.g. another player's HUD, right over the middle of the screen
+    const overlay_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const overlay_quad = try AddQuad(engine_context, overlay_scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    const ray = CenterRay(ORIGIN_POSE);
+    try ExpectEntity(game_quad, try CastIn(engine_context, .{ .Overlays = &.{} }, ORIGIN_POSE, ray, .{}));
+    try ExpectEntity(overlay_quad, try CastIn(engine_context, .{ .Overlays = &.{overlay_scene.mID} }, ORIGIN_POSE, ray, .{}));
+}
+
+test "of two overlays over the same spot, only the one the view shows is hit" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const hud_a = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const quad_a = try AddQuad(engine_context, hud_a, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
+    const hud_b = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const quad_b = try AddQuad(engine_context, hud_b, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 100, .y = 100 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    const ray = CenterRay(ORIGIN_POSE);
+    try ExpectEntity(quad_a, try CastIn(engine_context, .{ .Overlays = &.{hud_a.mID} }, ORIGIN_POSE, ray, .{}));
+    try ExpectEntity(quad_b, try CastIn(engine_context, .{ .Overlays = &.{hud_b.mID} }, ORIGIN_POSE, ray, .{}));
 }
 
 test "a hidden quad can't be hit" {

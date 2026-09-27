@@ -35,6 +35,10 @@ const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
 const SLOP: f32 = 0.01;
 
+//closing speeds below this do not bounce. A body resting on the floor gets a small closing speed from
+//gravity every substep, and bouncing that away would keep it hopping instead of settling
+const RESTITUTION_THRESHOLD: f32 = 1.0;
+
 const CollisionManager = @This();
 
 const CurrCollisionSet = Set(u64);
@@ -157,20 +161,8 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
         const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
-        if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
-            if (Collisions.SphereSphere(contact, origin_transform, collider_origin, target_transform, collider_target)) {
-                i += 1;
-            } else {
-                self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
-                end -= 1;
-            }
-        } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
-            if (Collisions.BoxBox(contact, origin_transform, collider_origin, target_transform, collider_target)) {
-                i += 1;
-            } else {
-                self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
-                end -= 1;
-            }
+        if (Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target)) {
+            i += 1;
         } else {
             self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
             end -= 1;
@@ -188,30 +180,13 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
         const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
-        if (collider_origin.mShape == .Sphere and collider_target.mShape == .Sphere) {
-            if (Collisions.SphereSphere(contact, origin_transform, collider_origin, target_transform, collider_target)) {
-                const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
-                try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
-                if (!self._LastCache.contains(key)) {
-                    //create new begin collision event
-                }
-                i += 1;
-            } else {
-                self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
-                end -= 1;
+        if (Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target)) {
+            const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
+            try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
+            if (!self._LastCache.contains(key)) {
+                //create new begin collision event
             }
-        } else if (collider_origin.mShape == .Box and collider_target.mShape == .Box) {
-            if (Collisions.BoxBox(contact, origin_transform, collider_origin, target_transform, collider_target)) {
-                const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
-                try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
-                if (!self._LastCache.contains(key)) {
-                    //create new begin collision event
-                }
-                i += 1;
-            } else {
-                self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
-                end -= 1;
-            }
+            i += 1;
         } else {
             self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
             end -= 1;
@@ -250,25 +225,31 @@ pub fn SolverPass(self: *CollisionManager, world_manager: *WorldManager, engine_
     defer zone.Deinit();
     zone.Value(self._BlockingContacts.items.len);
 
+    //velocities are iterated so a body in several contacts at once settles against all of them: each
+    //pass reads the velocities the last one left, which is still current
     for (0..SOLVER_ITERS) |_| {
         for (self._BlockingContacts.items) |contact| {
-            const entity_origin = contact.mOrigin;
-            const entity_target = contact.mTarget;
+            //either side can be a bare collider with no rigid body, which the solver treats as static
+            const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
+            const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
 
-            const q_rb_origin = entity_origin.GetComponent(RigidBodyComponent);
-            const q_rb_target = entity_target.GetComponent(RigidBodyComponent);
+            if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
-            if (q_rb_origin) |rb_origin| {
-                if (q_rb_target) |rb_target| {
-                    if (rb_origin._InvMass == 0 and rb_target._InvMass == 0) continue;
-
-                    VelocityCorrection(contact, rb_origin, rb_target);
-                    try PositionCorrection(engine_context, contact, entity_origin, rb_origin, entity_target, rb_target);
-                }
-            }
+            VelocityCorrection(contact, q_rb_origin, q_rb_target);
         }
-        try UpdateWorldTransforms(world_manager, engine_context);
     }
+
+    //positions are corrected once. mPenetration was measured by the narrow pass and is never
+    //re-measured here, so a second pass would push by the full depth again for overlap already removed
+    for (self._BlockingContacts.items) |contact| {
+        const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
+        const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+
+        if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
+
+        try PositionCorrection(engine_context, contact, contact.mOrigin, q_rb_origin, contact.mTarget, q_rb_target);
+    }
+    try UpdateWorldTransforms(world_manager, engine_context);
 }
 
 pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {
@@ -309,34 +290,66 @@ fn GetCollisionType(collider_origin: *ColliderComponent, collider_target: *Colli
     return .Block;
 }
 
-fn VelocityCorrection(contact: Contact, rb_origin: *RigidBodyComponent, rb_target: *RigidBodyComponent) void {
-    const rv = rb_target._Velocity.SubVec(rb_origin._Velocity);
+/// A collider without a rigid body cannot be moved by the solver, which is exactly a static body
+fn InvMassOf(q_rb: ?*RigidBodyComponent) f32 {
+    return if (q_rb) |rb| rb._InvMass else 0.0;
+}
+
+fn VelocityOf(q_rb: ?*RigidBodyComponent) Vec3(f32) {
+    return if (q_rb) |rb| rb._Velocity else std.mem.zeroes(Vec3(f32));
+}
+
+/// A collider without a rigid body has no material, so it adds no bounce of its own
+fn RestitutionOf(q_rb: ?*RigidBodyComponent) f32 {
+    return if (q_rb) |rb| rb.mMaterialData.GetRestitution() else 0.0;
+}
+
+/// The bouncier of the two surfaces wins, so a bouncy ball bounces off anything without every wall
+/// needing a material too
+fn CombinedRestitution(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) f32 {
+    return @max(RestitutionOf(q_rb_origin), RestitutionOf(q_rb_target));
+}
+
+/// Callers make sure at least one side has a nonzero inverse mass
+fn VelocityCorrection(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) void {
+    const rv = VelocityOf(q_rb_target).SubVec(VelocityOf(q_rb_origin));
 
     const vel_along_norm = rv.Dot(contact.mNormal);
     if (vel_along_norm > 0) return; //they are already moving apart
 
-    const e: f32 = 0.0; //coefficient of restitution
+    //coefficient of restitution: 0 kills the closing speed, 1 hands all of it back the other way,
+    //which against an immovable side is a mirror reflection about the normal
+    const e: f32 = if (-vel_along_norm > RESTITUTION_THRESHOLD) CombinedRestitution(q_rb_origin, q_rb_target) else 0.0;
 
-    const j = (-(1.0 + e) * vel_along_norm) / (rb_origin._InvMass + rb_target._InvMass); //magnitude of the impulse
+    const j = (-(1.0 + e) * vel_along_norm) / (InvMassOf(q_rb_origin) + InvMassOf(q_rb_target)); //magnitude of the impulse
 
     const impulse = contact.mNormal.MulScalar(j);
 
-    rb_origin.ApplyImpulse(impulse.Neg());
-    rb_target.ApplyImpulse(impulse);
+    if (q_rb_origin) |rb_origin| rb_origin.ApplyImpulse(impulse.Neg());
+    if (q_rb_target) |rb_target| rb_target.ApplyImpulse(impulse);
 }
 
-fn PositionCorrection(engine_context: *EngineContext, contact: Contact, entity_origin: Entity, rb_origin: *RigidBodyComponent, entity_target: Entity, rb_target: *RigidBodyComponent) !void {
-    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (rb_origin._InvMass + rb_target._InvMass) * PERCENT;
+/// Callers make sure at least one side has a nonzero inverse mass
+fn PositionCorrection(engine_context: *EngineContext, contact: Contact, entity_origin: Entity, q_rb_origin: ?*RigidBodyComponent, entity_target: Entity, q_rb_target: ?*RigidBodyComponent) !void {
+    const inv_mass_origin = InvMassOf(q_rb_origin);
+    const inv_mass_target = InvMassOf(q_rb_target);
+
+    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (inv_mass_origin + inv_mass_target) * PERCENT;
     const correction = contact.mNormal.MulScalar(correction_mag);
 
-    const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
-    const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
+    //an immovable side would get a zero offset, so it is skipped rather than written back unchanged,
+    //which would still tag it dirty and send it through the next transform pass for nothing
+    if (inv_mass_origin != 0) {
+        const transform_origin = entity_origin.GetComponent(EntityTransformComponent).?;
+        var origin_translation = transform_origin.GetTranslation();
+        origin_translation.SubEqVec(correction.MulScalar(inv_mass_origin));
+        try entity_origin.SetTranslation(engine_context, origin_translation);
+    }
 
-    var origin_translation = transform_origin.GetTranslation();
-    origin_translation.SubEqVec(correction.MulScalar(rb_origin._InvMass));
-    try entity_origin.SetTranslation(engine_context, origin_translation);
-
-    var target_translation = transform_target.GetTranslation();
-    target_translation.AddEqVec(correction.MulScalar(rb_target._InvMass));
-    try entity_target.SetTranslation(engine_context, target_translation);
+    if (inv_mass_target != 0) {
+        const transform_target = entity_target.GetComponent(EntityTransformComponent).?;
+        var target_translation = transform_target.GetTranslation();
+        target_translation.AddEqVec(correction.MulScalar(inv_mass_target));
+        try entity_target.SetTranslation(engine_context, target_translation);
+    }
 }

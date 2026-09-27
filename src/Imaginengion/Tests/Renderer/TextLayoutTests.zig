@@ -248,3 +248,15 @@ test "Measure matches what the iterator lays out" {
         try std.testing.expect(glyph.Pen.y >= measured.Min.y and glyph.Pen.y <= measured.Max.y);
     }
 }
+
+test "the metrics give the text's room and its middle, for layout to fit and center it" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    //two lines at font size 2: the widest is "AA", 2 wide; ascender down to the second line's descender
+    const metrics = TextLayout.Measure(FakeFont, "AA\nA", &font, 2, 0);
+
+    const top = ASCENDER * 2;
+    const bottom = -LINE_HEIGHT * 2 + DESCENDER * 2;
+    try ExpectVec2(.{ .x = 2, .y = top - bottom }, metrics.Size());
+    try ExpectVec2(.{ .x = 1, .y = (top + bottom) / 2 }, metrics.Center());
+}

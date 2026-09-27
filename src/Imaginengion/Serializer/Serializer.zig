@@ -7,6 +7,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
+const Bus = @import("../ECSObjects/Bus.zig");
 
 const TextSerializer = @import("TextSerializer.zig");
 
@@ -25,6 +26,7 @@ pub const Requester = union(enum(u16)) {
     Scene: Scene,
     Player: Player,
     GameContext: GameContext,
+    Bus: Bus,
 
     pub const default: Requester = .{ .Entity = .uninit };
 
@@ -38,6 +40,8 @@ pub const Requester = union(enum(u16)) {
             return .{ .Player = object };
         } else if (obj_t == GameContext) {
             return .{ .GameContext = object };
+        } else if (obj_t == Bus) {
+            return .{ .Bus = object };
         } else {
             @compileError(std.fmt.comptimePrint("{s} is not a valid requester type", .{@typeName(obj_t)}));
         }

@@ -207,7 +207,7 @@ pub fn ToSelectedObject(object: anytype) SelectedObject {
 /// "Make Template" for any object type. Off without an open project, since the template goes in the content browser's
 /// folder, and on an object that is already a copy of a template
 fn MakeTmplMenuItem(engine_context: *EngineContext, object: anytype) !void {
-    const is_enabled = engine_context.mAssetManager.mProjectDirectory != null and !object.HasComponent(TmplRefComponent);
+    const is_enabled = engine_context.mProject.IsOpen() and !object.HasComponent(TmplRefComponent);
     if (imgui.igMenuItem_Bool("Make Template", "", false, is_enabled)) {
         try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .MakeTmplEvent = .{ .mObject = ToSelectedObject(object) } });
     }

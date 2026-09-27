@@ -27,6 +27,16 @@ pub const Metrics = struct {
     Min: Vec2(f32),
     Max: Vec2(f32),
     LineCount: u32,
+
+    /// How much room the text takes: the width of its widest line by the height of all its lines
+    pub fn Size(self: Metrics) Vec2(f32) {
+        return self.Max.SubVec(self.Min);
+    }
+
+    /// The middle of that room, relative to where the text is placed (its first line's baseline, where lines start)
+    pub fn Center(self: Metrics) Vec2(f32) {
+        return self.Min.AddVec(self.Max).MulScalar(0.5);
+    }
 };
 
 pub fn Iterator(comptime FontT: type) type {

@@ -9,8 +9,8 @@ const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
-const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
+pub const ViewScenes = ShapeGeometry.ViewScenes;
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 
@@ -71,12 +71,12 @@ const BestHit = struct {
     Kind: RayHitKind,
 };
 
-/// What `ray` hits in `world`, seen through `camera_view`: every shape is placed the way the renderer
-/// placed it for that camera (ShapeGeometry), so what gets hit is what was drawn. Overlay shapes are
-/// drawn on top of the game layer whatever their depth, so an overlay hit wins over any game hit, and
-/// within a layer the nearest hit wins. Hidden shapes and anything past the far distance its layer is
+/// What `ray` hits of what `view_scenes` shows of `world`, seen through `camera_view`: the same shapes the
+/// renderer draws for that view, placed the same way (ShapeGeometry), so what gets hit is what was drawn.
+/// Overlay shapes are drawn on top of the game layer whatever their depth, so an overlay hit wins over any game
+/// hit, and within a layer the nearest hit wins. Hidden shapes and anything past the far distance its layer is
 /// drawn to are skipped.
-pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, camera_view: CameraView, options: CastOptions) !?RayHit {
+pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, camera_view: CameraView, view_scenes: ViewScenes, options: CastOptions) !?RayHit {
     const frame_allocator = engine_context.FrameAllocator();
 
     var best_overlay: ?BestHit = null;
@@ -84,17 +84,15 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
 
     switch (options.Targets) {
         .Visuals => {
-            const shape_ids = try world.GetEntityGroup(frame_allocator, GroupQuery{
-                .Or = &[_]GroupQuery{
-                    GroupQuery{ .Component = QuadComponent },
-                    GroupQuery{ .Component = TextComponent },
-                },
-            });
+            const shapes = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
 
-            for (shape_ids.items) |shape_id| {
-                const entity = world.GetEntity(shape_id);
+            for (shapes.items) |shape| {
+                //overlays come first and any overlay hit wins, so once there is one the game layer can't change the answer
+                if (shape.Canvas == null and best_overlay != null) break;
+
+                const entity = shape.Entity;
+                const canvas = shape.Canvas;
                 const transform = entity.GetComponent(TransformComponent) orelse continue;
-                const canvas = ShapeGeometry.EntityCanvas(entity, camera_view);
                 const best = if (canvas != null) &best_overlay else &best_game;
                 const far = if (canvas != null) OverlayCanvas.FAR_DISTANCE else camera_view.FarDistance;
 
@@ -114,13 +112,16 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
             }
         },
         .Colliders => {
-            const collider_ids = try world.GetEntityGroup(frame_allocator, .{ .Component = ColliderComponent });
+            const colliders = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
 
-            for (collider_ids.items) |collider_id| {
-                const entity = world.GetEntity(collider_id);
+            for (colliders.items) |shape| {
+                //the same as for visuals: an overlay hit already decides it
+                if (shape.Canvas == null and best_overlay != null) break;
+
+                const entity = shape.Entity;
+                const canvas = shape.Canvas;
                 const transform = entity.GetComponent(TransformComponent) orelse continue;
                 const collider = entity.GetComponent(ColliderComponent).?;
-                const canvas = ShapeGeometry.EntityCanvas(entity, camera_view);
                 const best = if (canvas != null) &best_overlay else &best_game;
                 const far = if (canvas != null) OverlayCanvas.FAR_DISTANCE else camera_view.FarDistance;
 

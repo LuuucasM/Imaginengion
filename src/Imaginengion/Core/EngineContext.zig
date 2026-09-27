@@ -1,6 +1,7 @@
 const std = @import("std");
 const Window = @import("../Windows/Window.zig");
 const AssetManager = @import("../ECSManagers/AManager.zig");
+const Project = @import("Project.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
 const InputManager = @import("../Inputs/Input.zig");
 const Renderer = @import("../Renderer/Renderer.zig");
@@ -65,6 +66,8 @@ mDT: f32 = 1.0 / 60.0,
 
 mAppWindow: Window = .{},
 
+/// The open project, if any: its folder and the settings kept per project
+mProject: Project = .{},
 mAssetManager: AssetManager = .empty,
 mAudioManager: AudioManager = .{},
 mInputManager: InputManager = .empty,
@@ -119,7 +122,7 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mAssetManager.Init(self);
     try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
-    try self.mAudioManager.Init(self.EngineAllocator());
+    try self.mAudioManager.Init(self);
     try self.mInputManager.Init(self.EngineAllocator());
 
     try self.mPhysicsManager.Init(self.EngineAllocator());
@@ -174,6 +177,7 @@ pub fn DeInit(self: *EngineContext) void {
     self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit(self);
     self.mAssetManager.Deinit(self);
+    self.mProject.Deinit(self);
     self.mAssetWorld.Deinit(self);
 
     self.mRenderer.Deinit(self);

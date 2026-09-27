@@ -18,6 +18,10 @@ const PossessComponent = @import("../ECSComponents/Player/PossessComponent.zig")
 const OverlayComponent = @import("../ECSComponents/Player/OverlayComponent.zig");
 const AudioComponent = @import("../ECSComponents/Entity/AudioComponent.zig");
 const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
+const LayoutComponent = @import("../ECSComponents/Entity/LayoutComponent.zig");
+const LayoutItemComponent = @import("../ECSComponents/Entity/LayoutItemComponent.zig");
+const TextComponent = @import("../ECSComponents/Entity/TextComponent.zig");
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
@@ -114,6 +118,14 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
             //a stale world transform.
             if (comptime component_type == TransformComponent and @TypeOf(object) == Entity) {
                 try object.MarkTransformDirty(engine_context);
+                //x and y of something layout places snap back as they're dragged, z stays editable
+                if (LayoutSystem.IsPlacedByLayout(object)) try object.MarkLayoutDirty(engine_context);
+            }
+
+            //a layout setting, or the text a leaf fits to, changes how the whole tree it is in is laid out. Tagged while the panel is open
+            //for the same reason as the transform: one entity, and a missed edit would leave the layout stale
+            if (comptime (component_type == LayoutComponent or component_type == LayoutItemComponent or component_type == TextComponent) and @TypeOf(object) == Entity) {
+                try object.MarkLayoutDirty(engine_context);
             }
 
             //same story for the mass input: it recomputes _InvMass in place, so the tags that were

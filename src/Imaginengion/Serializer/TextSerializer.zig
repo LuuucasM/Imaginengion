@@ -7,6 +7,8 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
+const Bus = @import("../ECSObjects/Bus.zig");
+const VComponents = @import("../ECSComponents/VComponents.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -71,6 +73,12 @@ fn WriteObjectFile(engine_context: *EngineContext, object: anytype, abs_path: []
     try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = out.written() });
 }
 
+/// Writes object and everything under it as one value into a stream the caller owns, for objects that are saved as
+/// part of another file rather than in one of their own (e.g. the bus tree in the project's audio settings)
+pub fn WriteObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype) !void {
+    try SerializeObject(write_stream, frame_allocator, object, null);
+}
+
 /// tmpl_root is only set for the root of a template file, never for what is under it
 fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.Allocator, object: anytype, tmpl_root: ?TmplRoot) anyerror!void {
     const obj_t = @TypeOf(object);
@@ -90,16 +98,19 @@ fn SerializeObject(write_stream: *std.json.Stringify, frame_allocator: std.mem.A
         }
     }
 
-    //script children only hold their ScriptComponent + a script type tag that AddScript recreates from the asset
-    var script_iter = object.GetIterator(.Script);
-    if (script_iter.next()) |first_script| {
-        try write_stream.objectField("Scripts");
-        try write_stream.beginArray();
-        try write_stream.write(first_script.GetComponent(ScriptComponent).?);
-        while (script_iter.next()) |script| {
-            try write_stream.write(script.GetComponent(ScriptComponent).?);
+    //script children only hold their ScriptComponent + a script type tag that AddScript recreates from the asset.
+    //object types that scripts can't be added to (e.g. a bus) have none to write, the same check DeserializeObject makes
+    if (comptime @hasDecl(obj_t, "AddScript")) {
+        var script_iter = object.GetIterator(.Script);
+        if (script_iter.next()) |first_script| {
+            try write_stream.objectField("Scripts");
+            try write_stream.beginArray();
+            try write_stream.write(first_script.GetComponent(ScriptComponent).?);
+            while (script_iter.next()) |script| {
+                try write_stream.write(script.GetComponent(ScriptComponent).?);
+            }
+            try write_stream.endArray();
         }
-        try write_stream.endArray();
     }
 
     var child_iter = object.GetIterator(.Child);
@@ -158,6 +169,11 @@ pub fn DeserializeECSObj(engine_context: *EngineContext, object: anytype, abs_pa
     try DeserializeObject(engine_context, &scanner, object);
 
     if (.end_of_document != try scanner.next()) return error.UnexpectedToken;
+}
+
+/// Reads one object written by WriteObject from a stream the caller owns into object, which should be blank
+pub fn ReadObject(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype) !void {
+    try DeserializeObject(engine_context, scanner, object);
 }
 
 fn DeserializeObject(engine_context: *EngineContext, scanner: *std.json.Scanner, object: anytype) anyerror!void {
@@ -254,6 +270,8 @@ fn SerializeList(comptime obj_t: type) []const type {
         return &PlayerComponents.SerializeList;
     } else if (obj_t == GameContext) {
         return &GameContextComponents.SerializeList;
+    } else if (obj_t == Bus) {
+        return &VComponents.SerializeList;
     } else {
         @compileError(std.fmt.comptimePrint("Serializing {s} is not supported yet", .{@typeName(obj_t)}));
     }

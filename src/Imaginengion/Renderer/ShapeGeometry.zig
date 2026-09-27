@@ -1,6 +1,6 @@
-//! Where each shape actually is in the world, for a given camera. The one place that answers it, so
-//! the renderer drawing a shape and picking clicking on it can never disagree, the same reason rays
-//! (CameraRay) and text layout (TextLayout) each have a single home.
+//! What a view shows, and where each shape actually is in the world for its camera. The one place that
+//! answers both, so the renderer drawing a shape and picking clicking on it can never disagree, the same
+//! reason rays (CameraRay) and text layout (TextLayout) each have a single home.
 const std = @import("std");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -12,13 +12,18 @@ const THICKNESS_2D = @import("../Math/SDFFunctions.zig").THICKNESS_2D;
 const CameraView = @import("Renderer.zig").CameraView;
 const TextLayout = @import("TextLayout.zig");
 
+const WorldManager = @import("../Core/WorldManager.zig");
+const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Entity = @import("../ECSObjects/Entity.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const GameLayerTag = EntityComponents.GameLayerTag;
+const OverlayLayerTag = EntityComponents.OverlayLayerTag;
+const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const SceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
 
 /// An oriented box in world space, what the renderer uploads and what a ray is tested against.
@@ -28,19 +33,86 @@ pub const Box = struct {
     HalfExtents: Vec3(f32),
 };
 
-/// For an overlay entity, its scene's canvas in front of this camera: its transform is in canvas
-/// units and this is what places it in the world. Null for a game layer entity, whose transform is
-/// already world space.
-pub fn EntityCanvas(entity: Entity, camera_view: CameraView) ?CanvasTransform {
-    return switch (entity.GetLayer()) {
-        .GameLayer => null,
-        .OverlayLayer => OverlayCanvas.ComputeCanvasTransform(
-            camera_view.Pose,
-            camera_view.TanHalfFov,
-            camera_view.TargetHeight,
-            entity.GetComponent(EntitySceneComponent).?.mScene.GetComponent(SceneComponent).?.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale),
-        ),
+/// Everything that is drawn: quads and text. What the renderer draws and what picking clicks on
+pub const VISUALS_QUERY = GroupQuery{ .Or = &[_]GroupQuery{
+    .{ .Component = QuadComponent },
+    .{ .Component = TextComponent },
+} };
+
+/// Which scenes a view shows. The game layer is usually the whole world, which everyone sees; overlays are
+/// chosen per view, e.g. the ones a player has (Player.GetOverlayScenes) or every one for the editor camera
+pub const ViewScenes = struct {
+    Game: union(enum) {
+        All,
+        /// just this game layer scene, e.g. a template preview
+        One: Scene.Type,
+        None,
+    } = .All,
+    Overlays: []const Scene.Type,
+};
+
+/// One entity a view shows, with the canvas that places it for an overlay entity (null in the game layer,
+/// whose transforms are already world space)
+pub const ViewShape = struct {
+    Entity: Entity,
+    Canvas: ?CanvasTransform,
+};
+
+/// An overlay scene's canvas in front of this camera: its entities' transforms are in canvas units and this
+/// is what places them in the world
+pub fn SceneCanvas(scene: Scene, camera_view: CameraView) CanvasTransform {
+    const scene_component = scene.GetComponent(SceneComponent).?;
+    return OverlayCanvas.ComputeCanvasTransform(
+        camera_view.Pose,
+        camera_view.TanHalfFov,
+        camera_view.TargetHeight,
+        scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale),
+    );
+}
+
+/// Every entity matching `query` that this view shows, each with its canvas: the renderer draws this list and
+/// picking tests it, so the two always agree on what a view contains. Overlay scenes come first, each canvas
+/// worked out once for its whole scene, then the game layer. Overlay scenes that are gone, or aren't overlays,
+/// are left out. Only valid for the frame it was built in
+pub fn GatherViewShapes(
+    frame_allocator: std.mem.Allocator,
+    world: *WorldManager,
+    camera_view: CameraView,
+    view_scenes: ViewScenes,
+    comptime query: GroupQuery,
+) !std.ArrayList(ViewShape) {
+    //folded away by a collapsed layout item: neither drawn nor clickable
+    const hidden = GroupQuery{ .Component = LayoutHiddenTag };
+    const overlay_shapes = GroupQuery{ .And = &[_]GroupQuery{ query, .{ .Component = OverlayLayerTag } } };
+    const game_shapes = GroupQuery{ .And = &[_]GroupQuery{ query, .{ .Component = GameLayerTag } } };
+    const overlay_query = GroupQuery{ .Not = .{ .mFirst = &overlay_shapes, .mSecond = &hidden } };
+    const game_query = GroupQuery{ .Not = .{ .mFirst = &game_shapes, .mSecond = &hidden } };
+
+    var shapes: std.ArrayList(ViewShape) = .empty;
+
+    for (view_scenes.Overlays) |scene_id| {
+        const scene = world.GetScene(scene_id);
+        if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
+
+        const canvas = SceneCanvas(scene, camera_view);
+        const entity_ids = try scene.GetEntityGroup(frame_allocator, overlay_query);
+        try shapes.ensureUnusedCapacity(frame_allocator, entity_ids.items.len);
+        for (entity_ids.items) |entity_id| {
+            shapes.appendAssumeCapacity(.{ .Entity = world.GetEntity(entity_id), .Canvas = canvas });
+        }
+    }
+
+    const game_ids = switch (view_scenes.Game) {
+        .All => try world.GetEntityGroup(frame_allocator, game_query),
+        .One => |scene_id| try world.GetScene(scene_id).GetEntityGroup(frame_allocator, game_query),
+        .None => return shapes,
     };
+    try shapes.ensureUnusedCapacity(frame_allocator, game_ids.items.len);
+    for (game_ids.items) |entity_id| {
+        shapes.appendAssumeCapacity(.{ .Entity = world.GetEntity(entity_id), .Canvas = null });
+    }
+
+    return shapes;
 }
 
 /// The quad's own size grown by its scale (and everything above it in the hierarchy), placed by the

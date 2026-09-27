@@ -3,8 +3,9 @@ const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ViewportPanel = @import("ViewportPanel.zig");
+const EditorProgram = @import("../Programs/EditorProgram.zig");
 const CameraRay = @import("../Math/CameraRay.zig");
-const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
+const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const RayCast = @import("../Physics/RayCast.zig");
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -12,7 +13,6 @@ const EntityNameComponent = @import("../ECSComponents/EComponents.zig").NameComp
 const PlayerNameComponent = @import("../ECSComponents/PComponents.zig").NameComponent;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
-const OverlayLayerTag = SceneComponents.OverlayLayerTag;
 const SceneNameComponent = SceneComponents.NameComponent;
 const PickingDebugPanel = @This();
 
@@ -20,7 +20,7 @@ _P_Open: bool = false,
 
 /// What the mouse is over, as picking will see it: this reads the view rects the panels recorded
 /// last frame, which is what was on screen, the same as next frame's input will.
-pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, viewport_panel: *const ViewportPanel) !void {
+pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, viewport_panel: *const ViewportPanel, editor_program: *const EditorProgram) !void {
     const zone = Tracy.ZoneInit("PickingDebugPanel::OnImguiRender", @src());
     defer zone.Deinit();
 
@@ -76,11 +76,14 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
         .Simulate => &engine_context.mSimulateWorld,
     };
 
+    //the overlays this view shows, as the renderer drew it
+    const view_scenes = try editor_program.ViewScenesFor(frame_allocator, view.Camera, world);
+
     imgui.igSeparator();
 
     //exactly what a left click here would do
     try Text(frame_allocator, "A click here selects:", .{});
-    if (try RayCast.CastRay(engine_context, world, ray, camera_view, .{})) |hit| {
+    if (try RayCast.CastRay(engine_context, world, ray, camera_view, view_scenes, .{})) |hit| {
         try Text(frame_allocator, "\t{s}", .{EntityName(hit.Entity.GetMainObject())});
         try HitText(frame_allocator, hit);
     } else {
@@ -88,7 +91,7 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     }
 
     try Text(frame_allocator, "Collider under the mouse:", .{});
-    if (try RayCast.CastRay(engine_context, world, ray, camera_view, .{ .Targets = .Colliders })) |hit| {
+    if (try RayCast.CastRay(engine_context, world, ray, camera_view, view_scenes, .{ .Targets = .Colliders })) |hit| {
         try HitText(frame_allocator, hit);
     } else {
         try Text(frame_allocator, "\tnone", .{});
@@ -96,17 +99,16 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
 
     imgui.igSeparator();
 
-    //the canvas point under the mouse for each overlay scene, placed the same way the renderer
-    //placed it (see ShapeGeometry.EntityCanvas)
+    //the canvas point under the mouse for each overlay scene this view shows, placed the same way the
+    //renderer placed it (see ShapeGeometry.SceneCanvas)
     var overlay_count: usize = 0;
-    const scene_ids = try world.GetSceneGroup(frame_allocator, .{ .Component = OverlayLayerTag });
-    for (scene_ids.items) |scene_id| {
+    for (view_scenes.Overlays) |scene_id| {
         const scene = world.GetScene(scene_id);
         const scene_component = scene.GetComponent(SceneComponent).?;
         overlay_count += 1;
 
         const pixels_per_unit = scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
-        const canvas = OverlayCanvas.ComputeCanvasTransform(camera_view.Pose, camera_view.TanHalfFov, camera_view.TargetHeight, pixels_per_unit);
+        const canvas = ShapeGeometry.SceneCanvas(scene, camera_view);
         const scene_name = if (scene.GetComponent(SceneNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
 
         try Text(frame_allocator, "Overlay '{s}' ({s}, {d:.2} px per unit)", .{ scene_name, @tagName(scene_component.mOverlayScaleMode), pixels_per_unit });
@@ -116,7 +118,7 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
             try Text(frame_allocator, "\tCanvas point: none", .{});
         }
     }
-    if (overlay_count == 0) try Text(frame_allocator, "No overlay scenes in this world", .{});
+    if (overlay_count == 0) try Text(frame_allocator, "No overlay scenes in this view", .{});
 }
 
 /// The shape that was hit and where, under a heading line.

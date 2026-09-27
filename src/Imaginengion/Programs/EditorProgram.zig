@@ -70,12 +70,14 @@ const ECSEvent = EManager.ECSManagerT.ECSEventManager.EventType;
 
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
+const OverlayLayerTag = SceneComponents.OverlayLayerTag;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
 
 const PlayerComponents = @import("../ECSComponents/PComponents.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
 const PlayerRenderComponent = PlayerComponents.RenderTargetComponent;
 const PlayerNameComponent = PlayerComponents.NameComponent;
+const OverlayComponent = PlayerComponents.OverlayComponent;
 
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
@@ -92,6 +94,7 @@ const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
 const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
@@ -182,6 +185,8 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     _ = try self.mEditorUIEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorUIEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
+    //the editor's own UI is an overlay only the editor UI player sees
+    _ = try self.mEditorUIPlayer.AddComponent(engine_context, OverlayComponent{ .mScene = self.mEditorUIScene });
     //=================================================================
 
     //EDITOR VIEWPORT STUFF==================================================
@@ -296,6 +301,20 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
     //-------------End Assets Update ------------------
 
+    //--------------Layout Update --------------
+    //before the transforms, which pick up the translations layout sets
+    {
+        const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());
+        defer layout_zone.Deinit();
+        try LayoutSystem.UpdateLayouts(&engine_context.mGameWorld, engine_context);
+        try LayoutSystem.UpdateLayouts(&engine_context.mEditorWorld, engine_context);
+        try LayoutSystem.UpdateLayouts(&engine_context.mTmplEditWorld, engine_context);
+        if (self.mEditorState == .Play) {
+            try LayoutSystem.UpdateLayouts(&engine_context.mSimulateWorld, engine_context);
+        }
+    }
+    //---------------End Layout Update ------------
+
     //--------------World Transform Update --------------
     {
         const world_transform_zone = Tracy.ZoneInit("World Transform Update Section", @src());
@@ -335,7 +354,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             try self._StatsPanel.OnImguiRender(engine_context);
             //before RenderViewports, so it reads last frame's view rects the way input picking will
-            try self._PickingDebugPanel.OnImguiRender(engine_context, &self._ViewportPanel);
+            try self._PickingDebugPanel.OnImguiRender(engine_context, &self._ViewportPanel, self);
             try self.RenderTmplEditPanels(engine_context);
             try self.OnImguiRender(engine_context);
             try self.RenderViewports(engine_context);
@@ -491,7 +510,8 @@ fn OnViewportClick(self: *EditorProgram, engine_context: *EngineContext, click_p
     const ray = Renderer.CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view_at.Pixel);
     const camera_view = Renderer.CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale());
 
-    const hit = try RayCast.CastRay(engine_context, world, ray, camera_view, .{});
+    const view_scenes = try self.ViewScenesFor(engine_context.FrameAllocator(), view_at.View.Camera, world);
+    const hit = try RayCast.CastRay(engine_context, world, ray, camera_view, view_scenes, .{});
     const selected: ?Entity = if (hit) |h| h.Entity.GetMainObject() else null;
 
     //the same event the entity list selects with, so every way of selecting goes through one path
@@ -564,6 +584,10 @@ fn MakeTmpl(self: *EditorProgram, engine_context: *EngineContext, object: anytyp
 }
 
 fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
+    //a failed save is logged rather than keeping the editor open, which could leave no way to close it
+    engine_context.mProject.Save(engine_context) catch |err| {
+        std.log.err("Failed to save the project before closing: {}", .{err});
+    };
     engine_context.mIsRunning = false;
     return false;
 }
@@ -742,6 +766,7 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
     }
     try engine_context.mRenderer.RenderWorld(
         self.mActiveWorld,
+        try self.ViewScenesFor(engine_context.FrameAllocator(), self.mEditorViewportPlayer, self.mActiveWorld),
         self.ActiveRenderStats(engine_context),
         engine_context,
         Renderer.BuildPushConstants(transform_component, viewpoint_component),
@@ -787,6 +812,7 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
 
         try engine_context.mRenderer.RenderWorld(
             self.mActiveWorld,
+            try self.ViewScenesFor(frame_allocator, view.mPlayer, self.mActiveWorld),
             self.ActiveRenderStats(engine_context),
             engine_context,
             Renderer.BuildPushConstants(transform_component, viewpoint_component),
@@ -859,6 +885,19 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
             try self._ViewportPanel.OnImguiRenderPlay(engine_context, images.items, self.mActiveWorldType);
         },
     }
+}
+
+/// Which scenes a view shows: the whole game layer of `world`, and the overlays its camera sees. The editor camera
+/// sees every overlay in the world it looks at, so HUDs can be seen and edited; a player sees only its own
+/// (Player.GetOverlayScenes). Rendering, click picking and the Picking Debug panel all ask this, so what can be
+/// clicked in a view is always what was drawn in it. Only valid for this frame
+pub fn ViewScenesFor(self: *const EditorProgram, frame_allocator: std.mem.Allocator, camera: Player, world: *WorldManager) !Renderer.ViewScenes {
+    const is_editor_camera = camera.mID == self.mEditorViewportPlayer.mID and camera.mManager == self.mEditorViewportPlayer.mManager;
+    const overlay_scenes = if (is_editor_camera)
+        try world.GetSceneGroup(frame_allocator, .{ .Component = OverlayLayerTag })
+    else
+        try camera.GetOverlayScenes(frame_allocator);
+    return .{ .Overlays = overlay_scenes.items };
 }
 
 /// The player views a world viewport draws, each already checked by Player.GetRenderView so the
@@ -966,16 +1005,19 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             if (imgui.igMenuItem_Bool("New Project", "", false, true) == true) {
                 const abs_path = try PlatformUtils.OpenFolder(engine_context.FrameAllocator());
                 if (abs_path.len > 0) {
-                    try self._ContentBrowserPanel.OnNewProjectEvent(engine_context, abs_path);
-                    try engine_context.mAssetManager.OnNewProjectEvent(engine_context, abs_path);
+                    try engine_context.mProject.New(engine_context, abs_path);
+                    try self._ContentBrowserPanel.OnProjectOpened(engine_context);
                 }
             }
             if (imgui.igMenuItem_Bool("Open Project", "", false, true) == true) {
                 const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), ".imprj");
                 if (abs_path.len > 0) {
-                    try self._ContentBrowserPanel.OnOpenProjectEvent(engine_context, abs_path);
-                    try engine_context.mAssetManager.OnOpenProjectEvent(engine_context, abs_path);
+                    try engine_context.mProject.Open(engine_context, abs_path);
+                    try self._ContentBrowserPanel.OnProjectOpened(engine_context);
                 }
+            }
+            if (imgui.igMenuItem_Bool("Save Project", "", false, engine_context.mProject.IsOpen()) == true) {
+                try engine_context.mProject.Save(engine_context);
             }
             imgui.igSeparator();
             if (imgui.igMenuItem_Bool("Exit", @ptrCast(@alignCast(my_null_ptr)), false, true) == true) {

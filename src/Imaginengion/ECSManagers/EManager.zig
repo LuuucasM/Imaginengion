@@ -7,6 +7,7 @@ const EventData = @import("../Events/EManagerData.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityComponentsList = EntityComponents.ComponentsList;
 const NameComponent = EntityComponents.NameComponent;
@@ -94,6 +95,10 @@ pub fn ProcessEvents(self: *EManager, comptime event_data: type, comptime event_
         var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
         callback_list.append(&uuid_callback.mNode);
         defer callback_list.remove(&uuid_callback.mNode);
+        //the layout trees that lose an element when a removal or delete really happens
+        var layout_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = LayoutSystem.OnEntityECSEvent };
+        callback_list.append(&layout_callback.mNode);
+        defer callback_list.remove(&layout_callback.mNode);
         try self.mECSManager.ProcessEvents(engine_context, event_category, callback_list);
     } else {
         std.log.err("EManager.ProcessEvents does not currently handle processing events of type {s}", .{@typeName(event_data)});

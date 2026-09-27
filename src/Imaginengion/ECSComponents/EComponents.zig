@@ -12,6 +12,10 @@ pub const QuadComponent = @import("Entity/QuadComponent.zig");
 pub const RigidBodyComponent = @import("Entity/RigidBodyComponent.zig");
 pub const StaticBodyTag = @import("Entity/TagComponents.zig").StaticBodyTag;
 pub const DynamicBodyTag = @import("Entity/TagComponents.zig").DynamicBodyTag;
+pub const LayoutDirtyTag = @import("Entity/TagComponents.zig").LayoutDirtyTag;
+pub const LayoutHiddenTag = @import("Entity/TagComponents.zig").LayoutHiddenTag;
+pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
+pub const LayoutItemComponent = @import("Entity/LayoutItemComponent.zig");
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Shared/TransformComponent.zig");
 pub const TransformDirtyTag = @import("Shared/TagComponents.zig").TransformDirtyTag;
@@ -57,6 +61,10 @@ pub const ComponentsList = [_]type{
     //never saved: an entity takes its scene's layer (Scene.CreateEntity, Entity.CreateChild)
     GameLayerTag,
     OverlayLayerTag,
+    LayoutComponent,
+    LayoutItemComponent,
+    LayoutDirtyTag,
+    LayoutHiddenTag,
 
     //scripts
     ScriptComponent,
@@ -82,6 +90,8 @@ pub const SerializeList = [_]type{
     TransformComponent,
     ViewpointComponent,
     TmplRefComponent,
+    LayoutComponent,
+    LayoutItemComponent,
 };
 
 /// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
@@ -112,6 +122,8 @@ pub const ComponentPanelList = [_]type{
     TransformComponent,
     ViewpointComponent,
     TmplRefComponent,
+    LayoutComponent,
+    LayoutItemComponent,
 };
 
 ///A list of all the scripts
@@ -144,6 +156,10 @@ pub const EComponents = enum(u16) {
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
     GameLayerTag = ListInd(&ComponentsList, GameLayerTag),
     OverlayLayerTag = ListInd(&ComponentsList, OverlayLayerTag),
+    LayoutComponent = ListInd(&ComponentsList, LayoutComponent),
+    LayoutItemComponent = ListInd(&ComponentsList, LayoutItemComponent),
+    LayoutDirtyTag = ListInd(&ComponentsList, LayoutDirtyTag),
+    LayoutHiddenTag = ListInd(&ComponentsList, LayoutHiddenTag),
 };
 
 comptime {

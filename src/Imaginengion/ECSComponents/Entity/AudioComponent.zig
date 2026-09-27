@@ -5,6 +5,8 @@ const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Bus = @import("../../ECSObjects/Bus.zig");
+const UUIDComponent = @import("../Shared/UUIDComponent.zig");
+const Serializer = @import("../../Serializer/Serializer.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -83,13 +85,73 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     if (try ImguiManager.RenderBusRef(engine_context, &self.mBus, "Bus")) |new_bus| self.mBus = new_bus;
 }
 
-const Json = JsonUtils.JsonFields(AudioComponent, .{
-    .AudioType = "mAudioType",
-    .Audio = "mAudioAsset",
-    .Volume = "mVolume",
-    .Pitch = "mPitch",
-    .Loop = "mLoop",
-    .StopWithSource = "mStopWithSource",
-});
-pub const jsonStringify = Json.jsonStringify;
-pub const jsonParse = Json.jsonParse;
+pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
+    try jw.beginObject();
+
+    try jw.objectField("AudioType");
+    try jw.write(self.mAudioType);
+    try jw.objectField("Audio");
+    try jw.write(self.mAudioAsset);
+    try jw.objectField("Volume");
+    try jw.write(self.mVolume);
+    try jw.objectField("Pitch");
+    try jw.write(self.mPitch);
+    try jw.objectField("Loop");
+    try jw.write(self.mLoop);
+    try jw.objectField("StopWithSource");
+    try jw.write(self.mStopWithSource);
+
+    //a bus is saved as its UUID, and turned back into the bus once the project's buses are loaded. Master is left out,
+    //since a bus that is not set plays into Master anyway
+    if (self.mBus.IsActive() and self.mBus.mID != self.mBus.mManager.GetMasterBus().mID) {
+        if (self.mBus.GetComponent(UUIDComponent)) |uuid_component| {
+            try jw.objectField("Bus");
+            try jw.write(uuid_component.ID);
+        }
+    }
+
+    try jw.endObject();
+}
+
+pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!AudioComponent {
+    //a key a file does not have keeps the component's default
+    const FileData = struct {
+        AudioType: AudioType = .Audio2D,
+        Audio: AssetHandle = .uninit,
+        Volume: f32 = 1.0,
+        Pitch: f32 = 1.0,
+        Loop: bool = false,
+        StopWithSource: bool = true,
+        Bus: ?u64 = null,
+    };
+    const file_data = try std.json.innerParse(FileData, frame_allocator, reader, options);
+
+    if (file_data.Bus) |bus_uuid| {
+        const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
+        const serializer = &engine_context.mSerializer;
+        std.debug.assert(serializer.mCurrDeserialize.requester == .Entity);
+        try serializer.AddResolveReq(engine_context.EngineAllocator(), .{
+            .Requester = serializer.mCurrDeserialize.requester,
+            .UUID = bus_uuid,
+            .Resolve = ResolveBusRef,
+        });
+    }
+
+    return .{
+        .mAudioType = file_data.AudioType,
+        .mAudioAsset = file_data.Audio,
+        .mVolume = file_data.Volume,
+        .mPitch = file_data.Pitch,
+        .mLoop = file_data.Loop,
+        .mStopWithSource = file_data.StopWithSource,
+    };
+}
+
+fn ResolveBusRef(requester: Serializer.Requester, bus_uuid: u64) bool {
+    //the component may have been removed since the request was made, nothing left to resolve
+    const audio_component = requester.Entity.GetComponent(AudioComponent) orelse return true;
+    //AddComponent pointed mBus at the AudioManager when the parsed component was added
+    const bus = audio_component.mBus.mManager.GetBusByUUID(bus_uuid) orelse return false;
+    audio_component.mBus = bus;
+    return true;
+}

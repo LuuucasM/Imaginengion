@@ -10,9 +10,15 @@ pub const SurfacePhysicsMat = struct {
     Kind: SurfMat.SurfaceMaterials,
     Scale: SurfMat.SurfPhysicsData,
 
+    //Custom's base values are all 1, so its Scale is the material itself. The identity scale would
+    //make every new body perfectly bouncy; a new body does not bounce until it is given restitution
     pub const default: SurfacePhysicsMat = .{
         .Kind = .Custom,
-        .Scale = SurfMat.SurfaceScaleIdentity.PhysicsData,
+        .Scale = .{
+            .Restitution = 0.0,
+            .StaticFriction = SurfMat.SurfaceScaleIdentity.PhysicsData.StaticFriction,
+            .KineticFriction = SurfMat.SurfaceScaleIdentity.PhysicsData.KineticFriction,
+        },
     };
 
     pub fn ImguiRender(self: *SurfacePhysicsMat) !void {
@@ -74,10 +80,15 @@ pub const PhysicsMaterial = union(enum) {
     Surface: SurfacePhysicsMat,
     Medium: MediumPhysicsMat,
 
-    pub const default: PhysicsMaterial = .{ .Surface = .{
-        .Kind = .Custom,
-        .Scale = SurfMat.SurfaceScaleIdentity.PhysicsData,
-    } };
+    pub const default: PhysicsMaterial = .{ .Surface = .default };
+
+    /// How bouncy a surface is, 0 to 1. A medium (air, water) has no surface to bounce off, so it is 0
+    pub fn GetRestitution(self: PhysicsMaterial) f32 {
+        return switch (self) {
+            .Surface => |s| s.GetScaledMaterial().Restitution,
+            .Medium => 0.0,
+        };
+    }
 
     pub fn GetMaterialData(self: PhysicsMaterial) union(enum) {
         Surface: SurfMat.SurfPhysicsData,

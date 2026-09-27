@@ -13,6 +13,22 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
 
             return try inner_io.vtable.dirOpenDir(inner_io.userdata, dir, sub_path, options);
         }
+        fn DirCreateDirPath(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, permissions: std.Io.Dir.Permissions) std.Io.Dir.CreateDirPathError!std.Io.Dir.CreatePathStatus {
+            const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+            const inner_io = switch (io_type) {
+                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Evented => @compileError("evented not implemented for this Io yet\n"),
+            };
+            return try inner_io.vtable.dirCreateDirPath(inner_io.userdata, dir, sub_path, permissions);
+        }
+        fn DirAccess(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.AccessOptions) std.Io.Dir.AccessError!void {
+            const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
+            const inner_io = switch (io_type) {
+                .Threaded => engine_context._Internal.ThreadedIO.io(),
+                .Evented => @compileError("evented not implemented for this Io yet\n"),
+            };
+            return try inner_io.vtable.dirAccess(inner_io.userdata, dir, sub_path, options);
+        }
         fn DirStatFile(context: ?*anyopaque, dir: std.Io.Dir, sub_path: []const u8, options: std.Io.Dir.StatFileOptions) std.Io.Dir.StatFileError!std.Io.File.Stat {
             const engine_context: *EngineContext = @ptrCast(@alignCast(context.?));
             const inner_io = switch (io_type) {
@@ -164,12 +180,12 @@ pub inline fn MakeIoVTable(comptime io_type: IoType) type {
             .batchCancel = std.Io.unreachableBatchCancel,
 
             .dirCreateDir = std.Io.failingDirCreateDir,
-            .dirCreateDirPath = std.Io.failingDirCreateDirPath,
+            .dirCreateDirPath = fns.DirCreateDirPath,
             .dirCreateDirPathOpen = std.Io.failingDirCreateDirPathOpen,
             .dirOpenDir = fns.DirOpenDir,
             .dirStat = std.Io.failingDirStat,
             .dirStatFile = fns.DirStatFile,
-            .dirAccess = std.Io.failingDirAccess,
+            .dirAccess = fns.DirAccess,
             .dirCreateFile = fns.DirCreateFile,
             .dirCreateFileAtomic = std.Io.failingDirCreateFileAtomic,
             .dirOpenFile = fns.DirOpenFile,

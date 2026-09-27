@@ -125,6 +125,8 @@ pub fn Core(comptime Self: type) type {
                 return try self.mManager.mPManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == Scene) {
                 return try self.mManager.mSManager.AddComponent(engine_context, self.mID, component);
+            } else if (Self == Bus) {
+                return try self.mManager.AddComponent(engine_context, self.mID, component);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }

@@ -29,11 +29,9 @@ mSceneTextureHandle: AssetHandle = undefined,
 mScriptTextureHandle: AssetHandle = undefined,
 mAudioTextureHandle: AssetHandle = undefined,
 
-mProjectDirectory: ?std.Io.Dir = null,
-mProjectPath: std.ArrayList(u8) = .empty,
+//the folder being browsed, somewhere inside the open project's folder (engine_context.mProject)
 mCurrentDirectory: ?std.Io.Dir = null,
 mCurrentPath: std.ArrayList(u8) = .empty,
-mProjectFile: ?std.Io.File = null,
 
 pub fn Init(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
     self.mDirTextureHandle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .path_type = .Eng, .rel_path = "src/Imaginengion/EngineAssets/textures/foldericon.png" } });
@@ -51,20 +49,11 @@ pub fn Deinit(self: *ContentBrowserPanel, engine_context: *EngineContext) void {
     self.mSceneTextureHandle.ReleaseAsset();
     self.mScriptTextureHandle.ReleaseAsset();
     self.mAudioTextureHandle.ReleaseAsset();
-    if (self.mProjectDirectory) |*dir| {
-        dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
-    }
-    self.mProjectPath.deinit(engine_context.EngineAllocator());
     if (self.mCurrentDirectory) |*dir| {
         dir.close(engine_context.Io());
         self.mCurrentDirectory = null;
     }
     self.mCurrentPath.deinit(engine_context.EngineAllocator());
-    if (self.mProjectFile) |*file| {
-        file.close(engine_context.Io());
-        self.mProjectFile = null;
-    }
 }
 
 pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
@@ -79,7 +68,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext)
     try self.HandlePopupContext(engine_context);
 
     //if we dont have a project directory yet dont try to print stuff
-    if (self.mProjectDirectory == null) return;
+    if (!engine_context.mProject.IsOpen() or self.mCurrentDirectory == null) return;
 
     //calculate column stuff
     const padding: f32 = 8.0;
@@ -137,7 +126,7 @@ fn RenderBackButton(self: *ContentBrowserPanel, engine_context: *EngineContext, 
 
     const engine_allocator = engine_context.EngineAllocator();
 
-    if (std.mem.eql(u8, self.mProjectPath.items, self.mCurrentPath.items) == true) return;
+    if (std.mem.eql(u8, engine_context.mProject.GetPath(), self.mCurrentPath.items) == true) return;
 
     const back_texture = try self.mBackArrowTextureHandle.GetAsset(engine_context, Texture2D);
 
@@ -256,62 +245,17 @@ pub fn OnTogglePanelEvent(self: *ContentBrowserPanel) void {
     self.mIsVisible = !self.mIsVisible;
 }
 
-pub fn OnNewProjectEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, abs_path: []const u8) !void {
-    if (self.mProjectDirectory) |*dir| {
-        dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
-    }
-
+/// Points the browser at the root of the project that was just opened or made (engine_context.mProject)
+pub fn OnProjectOpened(self: *ContentBrowserPanel, engine_context: *EngineContext) !void {
     if (self.mCurrentDirectory) |*dir| {
         dir.close(engine_context.Io());
         self.mCurrentDirectory = null;
     }
+    self.mCurrentPath.clearRetainingCapacity();
 
-    if (self.mProjectFile) |*file| {
-        file.close(engine_context.Io());
-        self.mProjectFile = null;
-    }
-
-    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
-    self.mCurrentPath.clearAndFree(engine_context.EngineAllocator());
-
-    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{});
-    self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{ .iterate = true });
-
-    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
-    _ = try self.mCurrentPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
-
-    self.mProjectFile = try self.mProjectDirectory.?.createFile(engine_context.Io(), "NewGame.imprj", .{});
-}
-
-pub fn OnOpenProjectEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, abs_path: []const u8) !void {
-    const dir_name = std.fs.path.dirname(abs_path).?;
-
-    if (self.mProjectDirectory) |*dir| {
-        dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
-    }
-
-    if (self.mCurrentDirectory) |*dir| {
-        dir.close(engine_context.Io());
-        self.mCurrentDirectory = null;
-    }
-
-    if (self.mProjectFile) |*file| {
-        file.close(engine_context.Io());
-        self.mProjectFile = null;
-    }
-
-    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
-    self.mCurrentPath.clearAndFree(engine_context.EngineAllocator());
-
-    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{});
-    self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{ .iterate = true });
-
-    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
-    _ = try self.mCurrentPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
-
-    self.mProjectFile = try self.mProjectDirectory.?.openFile(engine_context.Io(), "NewGame.imprj", .{});
+    const project_path = engine_context.mProject.GetPath();
+    self.mCurrentDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), project_path, .{ .iterate = true });
+    try self.mCurrentPath.appendSlice(engine_context.EngineAllocator(), project_path);
 }
 
 pub fn OnNewScriptEvent(self: *ContentBrowserPanel, engine_context: *EngineContext, new_script_event: NewScriptEvent) !void {
@@ -374,7 +318,7 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
         var fba = std.heap.FixedBufferAllocator.init(&buffer);
         const allocator = fba.allocator();
 
-        const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[self.mProjectPath.items.len..], entry_name });
+        const rel_path = try std.fs.path.join(allocator, &[_][]const u8{ self.mCurrentPath.items[engine_context.mProject.GetPath().len..], entry_name });
 
         var script_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
         defer engine_context.mAssetManager.ReleaseAssetHandle(&script_handle);

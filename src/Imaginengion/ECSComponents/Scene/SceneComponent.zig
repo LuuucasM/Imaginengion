@@ -1,6 +1,7 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const OverlayCanvas = @import("../../Math/OverlayCanvas.zig");
+const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const SceneComponent = @This();
 
@@ -16,6 +17,10 @@ pub const Removable: bool = false;
 //how the scene's units turn into screen pixels. the overlay renderer reads it for its canvas; game
 //layer scenes are drawn through the camera, so for them it doesn't change anything yet
 mOverlayScaleMode: OverlayScaleMode = .ScaleWithScreen,
+/// For an overlay scene, the screen in canvas units (width / k by height / k) as of the last time a view drew it:
+/// what its layout roots size and anchor against. Null until it has been drawn. Recorded by the renderer, never
+/// saved: it belongs to whatever view the scene is in, not to the scene
+mLayoutArea: ?Vec2(f32) = null,
 
 pub fn Deinit(_: *SceneComponent, _: *EngineContext) void {}
 

@@ -22,6 +22,8 @@ const VoiceFadeComponent = VComponents.VoiceFadeComponent;
 const BusComponent = VComponents.BusComponent;
 const VolumeComponent = VComponents.VolumeComponent;
 const NameComponent = VComponents.NameComponent;
+const UUIDComponent = VComponents.UUIDComponent;
+const TextSerializer = @import("../Serializer/TextSerializer.zig");
 const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Bus.Type);
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Bus.Type);
 const AudioComponent = @import("../ECSComponents/EComponents.zig").AudioComponent;
@@ -84,6 +86,8 @@ mOutputBuffer: TAudioBuffer = .default,
 
 mECSManager: ECSManagerT = .empty,
 mEventManager: EventManagerT = .empty,
+/// Bus UUID -> the bus, for turning a saved bus reference back into a bus
+mUUIDToWorldID: std.AutoHashMapUnmanaged(u64, Bus.Type) = .empty,
 
 /// Hands out AudioComponent.mVoiceToken values, see NewVoiceToken
 mNextVoiceToken: u32 = 0,
@@ -91,9 +95,8 @@ mNextVoiceToken: u32 = 0,
 /// The root of the bus tree, made in Init. Everything is mixed through it, and it can not be deleted
 mMasterBus: Bus = .uninit,
 
-pub fn Init(self: *AudioManager, engine_allocator: std.mem.Allocator) !void {
-    try self.mECSManager.Init(engine_allocator);
-    self.mMasterBus = try self.NewBus(engine_allocator, null, "Master");
+pub fn Init(self: *AudioManager, engine_context: *EngineContext) !void {
+    try self.InitMixer(engine_context);
     try self.mAudioContext.Init();
     self.mAudioContext.SetAudioBuffer(&self.mOutputBuffer);
 }
@@ -101,8 +104,20 @@ pub fn Init(self: *AudioManager, engine_allocator: std.mem.Allocator) !void {
 pub fn Deinit(self: *AudioManager, engine_context: *EngineContext) void {
     self.mAudioContext.RemoveAudioBuffer();
     self.mAudioContext.Deinit();
+    self.DeinitMixer(engine_context);
+}
+
+/// Voices and buses without the output device. Init is this and then the device; tests use it on its own, to work
+/// with voices and buses without a sound card. Pair it with DeinitMixer
+pub fn InitMixer(self: *AudioManager, engine_context: *EngineContext) !void {
+    try self.mECSManager.Init(engine_context.EngineAllocator());
+    self.mMasterBus = try self.NewBus(engine_context, null, Bus.DefaultConfig, "Master");
+}
+
+pub fn DeinitMixer(self: *AudioManager, engine_context: *EngineContext) void {
     self.mECSManager.Deinit(engine_context);
     self.mEventManager.Deinit(engine_context.EngineAllocator());
+    self.mUUIDToWorldID.deinit(engine_context.EngineAllocator());
 }
 
 pub const SetSyncCallback = Core.SetSyncCallback;
@@ -110,6 +125,17 @@ pub const GetComponent = Core.GetComponent;
 pub const HasComponent = Core.HasComponent;
 pub const IsActiveObj = Core.IsActiveObj;
 pub const GetGroup = Core.GetGroup;
+pub const AddComponent = Core.AddComponent;
+pub const AddUUID = Core.AddUUID;
+pub const RemoveUUID = Core.RemoveUUID;
+pub const GetWorldID = Core.GetWorldID;
+
+/// The manager an object of type obj_t is kept in, as the world's GetManager does it. Voices and buses are both kept
+/// here. Lets code written for any object type (e.g. UUIDComponent.PostParse) reach this one the same way
+pub fn GetManager(self: *AudioManager, comptime obj_t: type) *AudioManager {
+    comptime std.debug.assert(obj_t == Voice or obj_t == Bus);
+    return self;
+}
 const DeleteVoice = Core.DeleteObj;
 
 /// Starts playing source's AudioComponent from the beginning, as an attached or detached voice depending on the
@@ -193,9 +219,16 @@ pub fn GetMasterBus(self: *AudioManager) Bus {
     return self.mMasterBus;
 }
 
-/// A new bus under parent (under Master if parent is not a bus), at full volume and unpaused
-pub fn CreateBus(self: *AudioManager, engine_context: *EngineContext, parent: Bus) !Bus {
-    return try self.NewBus(engine_context.EngineAllocator(), self.ResolveBus(parent.mID), "Bus");
+/// A new bus under parent (under Master if parent is not a bus), unpaused, with config's components
+pub fn CreateBus(self: *AudioManager, engine_context: *EngineContext, parent: Bus, config: Bus.CreateConfig) !Bus {
+    return try self.NewBus(engine_context, self.ResolveBus(parent.mID), config, "Bus");
+}
+
+/// The bus with this UUID, or null if no bus has it
+pub fn GetBusByUUID(self: *AudioManager, uuid: u64) ?Bus {
+    const bus_id = self.GetWorldID(uuid) orelse return null;
+    if (!self.IsBus(bus_id)) return null;
+    return .{ .mID = bus_id, .mManager = self };
 }
 
 /// Deletes the bus and every bus under it at the end of the frame, through the ECS, which destroys children with
@@ -206,6 +239,10 @@ pub fn DeleteBus(self: *AudioManager, engine_context: *EngineContext, bus: Bus) 
         std.log.warn("The Master bus can not be deleted", .{});
         return;
     }
+    try self.QueueBusDestroy(engine_context, bus);
+}
+
+fn QueueBusDestroy(self: *AudioManager, engine_context: *EngineContext, bus: Bus) !void {
     if (!self.IsBus(bus.mID)) return;
 
     const event: EventData.EventT = .{ .DestroyBus = .{ .Bus = .{ .mID = bus.mID, .mManager = self } } };
@@ -224,24 +261,90 @@ fn IsBus(self: *AudioManager, id: Bus.Type) bool {
     return self.mECSManager.IsActiveEntity(id) and self.HasComponent(BusComponent, id);
 }
 
-fn NewBus(self: *AudioManager, engine_allocator: std.mem.Allocator, parent_id: ?Bus.Type, name: []const u8) !Bus {
+fn NewBus(self: *AudioManager, engine_context: *EngineContext, parent_id: ?Bus.Type, config: Bus.CreateConfig, name: []const u8) !Bus {
+    const engine_allocator = engine_context.EngineAllocator();
+
     const bus_id = if (parent_id) |parent|
         try self.mECSManager.AddChild(engine_allocator, parent, .Entity)
     else
         try self.mECSManager.CreateEntity(engine_allocator);
 
+    //what makes it a bus, so not up to the config: a blank bus being read from a file still needs one
     _ = try self.mECSManager.AddComponent(engine_allocator, bus_id, BusComponent{});
-    _ = try self.mECSManager.AddComponent(engine_allocator, bus_id, VolumeComponent{});
 
-    var name_component: NameComponent = .empty;
-    try name_component.mName.appendSlice(engine_allocator, name);
-    _ = self.mECSManager.AddComponent(engine_allocator, bus_id, name_component) catch |err| {
-        name_component.mName.deinit(engine_allocator);
-        return err;
-    };
+    if (config.bAddVolume) {
+        _ = try self.mECSManager.AddComponent(engine_allocator, bus_id, VolumeComponent{});
+    }
+    if (config.bAddName) {
+        var name_component: NameComponent = .empty;
+        try name_component.mName.appendSlice(engine_allocator, name);
+        _ = self.mECSManager.AddComponent(engine_allocator, bus_id, name_component) catch |err| {
+            name_component.mName.deinit(engine_allocator);
+            return err;
+        };
+    }
+    if (config.bAddUUID) {
+        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+        const uuid = io_source.interface().int(u64);
+        _ = try self.mECSManager.AddComponent(engine_allocator, bus_id, UUIDComponent{ .ID = uuid });
+        try self.AddUUID(engine_allocator, uuid, bus_id);
+    }
 
     return .{ .mID = bus_id, .mManager = self };
 }
+
+//=========================================== PROJECT SETTINGS ===========================================
+//the bus tree is kept per project, in ProjectSettings/Audio.json (see Project.zig). Voices are not: what is playing
+//is not part of a project
+
+pub const ProjectSettingsName = "Audio";
+
+pub fn SaveProjectSettings(self: *AudioManager, engine_context: *EngineContext, write_stream: *std.json.Stringify) !void {
+    try write_stream.beginObject();
+    try write_stream.objectField("Buses");
+    try TextSerializer.WriteObject(write_stream, engine_context.FrameAllocator(), self.mMasterBus);
+    try write_stream.endObject();
+}
+
+/// Replaces the bus tree with the one in the settings. Settings without one leave a new project's tree
+pub fn LoadProjectSettings(self: *AudioManager, engine_context: *EngineContext, scanner: *std.json.Scanner) !void {
+    try self.ResetProjectSettings(engine_context);
+
+    if (.object_begin != try scanner.next()) return error.UnexpectedToken;
+    while (true) {
+        const key = switch (try scanner.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed)) {
+            .object_end => break,
+            inline .string, .allocated_string => |slice| slice,
+            else => return error.UnexpectedToken,
+        };
+
+        if (std.mem.eql(u8, key, "Buses")) {
+            //read into a blank bus rather than the Master that is there, which already has the components the file
+            //has, and the ECS adds a component to an object only once
+            const new_master = try self.NewBus(engine_context, null, Bus.BlankConfig, "Master");
+            try TextSerializer.ReadObject(engine_context, scanner, new_master);
+            try self.ReplaceMasterBus(engine_context, new_master);
+        } else {
+            std.log.warn("Skipping unknown key '{s}' in the audio settings", .{key});
+            try scanner.skipValue();
+        }
+    }
+}
+
+/// Back to a new project's bus tree: a Master at full volume with nothing under it
+pub fn ResetProjectSettings(self: *AudioManager, engine_context: *EngineContext) !void {
+    try self.ReplaceMasterBus(engine_context, try self.NewBus(engine_context, null, Bus.DefaultConfig, "Master"));
+}
+
+/// Makes new_master the root and queues the old tree's destroy for the end of the frame. Until then the old buses are
+/// still there but not mixed, so anything playing into them is silent for what is left of the frame; after that it
+/// falls back to the new Master, like any voice whose bus was deleted
+fn ReplaceMasterBus(self: *AudioManager, engine_context: *EngineContext, new_master: Bus) !void {
+    const old_master = self.mMasterBus;
+    self.mMasterBus = new_master;
+    try self.QueueBusDestroy(engine_context, old_master);
+}
+//========================================= END PROJECT SETTINGS =========================================
 
 /// Whether voices playing into this bus are held where they are: it, or a bus above it, is paused and has faded all
 /// the way out. Until the fade is done they keep playing, so the fade has something to fade
@@ -369,7 +472,8 @@ fn MixBus(self: *AudioManager, bus_id: Bus.Type, bus_buffers: []f32, samples_per
     }
 
     const bus_component = self.GetComponent(BusComponent, bus_id).?;
-    const target_gain = if (bus_component.mPaused) 0.0 else self.GetComponent(VolumeComponent, bus_id).?.mVolume;
+    const volume = if (self.GetComponent(VolumeComponent, bus_id)) |volume_component| volume_component.mVolume else 1.0;
+    const target_gain = if (bus_component.mPaused) 0.0 else volume;
     AudioMath.ApplyGainTowards(AUDIO_CHANNELS, bus_buffer, &bus_component.mGain, target_gain, 1.0 / @as(f32, FADE_FRAMES));
 
     return bus_buffer;
@@ -437,11 +541,16 @@ fn GetVoiceState(self: *AudioManager, voice_id: Voice.Type) VoiceState {
     return .{ .Attached = source_component };
 }
 
-/// Runs the voice destroys queued this frame: the manager events hand each one to the ECS as a destroy, then the
-/// ECS events actually free it
+/// Runs the voice and bus destroys queued this frame: the manager events hand each one to the ECS as a destroy, then
+/// the ECS events actually free it
 pub fn ProcessDestroyedVoices(self: *AudioManager, engine_context: *EngineContext) !void {
     var callback_list: std.DoublyLinkedList = .{};
     try self.ProcessEvents(EventData, .EndOfFrame, engine_context, &callback_list);
+
+    //takes a destroyed bus's UUID out of the map while it can still be read
+    var uuid_callback = ECSManagerT.ECSEventCallback{ .mCtx = self, .mCallbackFn = Core.RemoveDestroyedUUID };
+    callback_list.append(&uuid_callback.mNode);
+    defer callback_list.remove(&uuid_callback.mNode);
     try self.mECSManager.ProcessEvents(engine_context, .EndOfFrame, &callback_list);
 }
 

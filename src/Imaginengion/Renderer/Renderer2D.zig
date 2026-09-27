@@ -32,7 +32,6 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
@@ -204,8 +203,7 @@ pub fn DrawQuad(
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
     quad_component: *QuadComponent,
-    entity_scene_comp: *EntitySceneComponent,
-    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     shading_buff: *ShadingBuffers,
 ) !void {
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
@@ -223,10 +221,7 @@ pub fn DrawQuad(
     var shading_flag: u32 = 0;
     if (quad_component.mTexOptions.mIsTransparent) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
 
-    const quad_buff_base = switch (entity_scene_comp.mScene.GetLayer()) {
-        .GameLayer => &self.mGameData.mQuadBufferBase,
-        .OverlayLayer => &self.mOverlayData.mQuadBufferBase,
-    };
+    const quad_buff_base = if (canvas != null) &self.mOverlayData.mQuadBufferBase else &self.mGameData.mQuadBufferBase;
 
     try quad_buff_base.append(engine_context.EngineAllocator(), .{
         .Position = box.Center.ToArray(),
@@ -242,8 +237,7 @@ pub fn DrawText(
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
     text_component: *TextComponent,
-    entity_scene_comp: *EntitySceneComponent,
-    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     shading_buff: *ShadingBuffers,
 ) !void {
     const zone = Tracy.ZoneInit("Renderer2D::DrawText", @src());
@@ -271,10 +265,7 @@ pub fn DrawText(
     const glyph_rot = if (canvas) |c| c.ToWorldRotation(text_rot) else text_rot;
     const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
 
-    const glyph_buff_base = switch (entity_scene_comp.mScene.GetLayer()) {
-        .GameLayer => &self.mGameData.mGlyphBufferBase,
-        .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
-    };
+    const glyph_buff_base = if (canvas != null) &self.mOverlayData.mGlyphBufferBase else &self.mGameData.mGlyphBufferBase;
 
     //font size and bounds with the text's scale applied, the same ones picking measures the text with
     const params = ShapeGeometry.GetTextParams(transform_component, text_component);

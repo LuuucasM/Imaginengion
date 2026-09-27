@@ -26,7 +26,6 @@ const TransformComponent = EntityComponents.TransformComponent;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
-const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -45,6 +44,7 @@ const MediumMaterial = @import("../Physics/MediumMaterial.zig");
 const CameraRay = @import("../Math/CameraRay.zig");
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const ShapeGeometry = @import("ShapeGeometry.zig");
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 
 const SDFPipeline = @import("backends/SDFPipeline.zig").SDFPipeline;
 
@@ -102,6 +102,8 @@ comptime {
 pub const CameraView = struct {
     Pose: CameraRay.Pose,
     TanHalfFov: f32,
+    //the size in pixels of what it's drawn into
+    TargetWidth: f32,
     TargetHeight: f32,
     FarDistance: f32, //game layer shapes past this aren't drawn (overlay uses OverlayCanvas.FAR_DISTANCE)
     DisplayScale: f32, //the OS display scale, what ConstantPixelSize overlays size by
@@ -112,6 +114,7 @@ pub const CameraView = struct {
         return .{
             .Pose = .{ .Position = transform.GetWorldPosition(), .Rotation = transform.GetWorldRotation() },
             .TanHalfFov = @tan(viewpoint.mPerspectiveFOVRad * 0.5),
+            .TargetWidth = @floatFromInt(viewpoint.mViewportWidth),
             .TargetHeight = @floatFromInt(viewpoint.mViewportHeight),
             .FarDistance = viewpoint.mPerspectiveFar,
             .DisplayScale = display_scale,
@@ -274,20 +277,19 @@ pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_co
     };
 }
 
-const SHAPES_QUERY = GroupQuery{
-    .Or = &[_]GroupQuery{
-        GroupQuery{ .Component = QuadComponent },
-        GroupQuery{ .Component = TextComponent },
-    },
-};
+/// Which scenes a render draws, see ShapeGeometry.ViewScenes
+pub const ViewScenes = ShapeGeometry.ViewScenes;
 
-/// Draws every shape in the world through the camera into compute_texture, and fills in stats with what it drew
-pub fn RenderWorld(self: *Renderer, world_manager: *WorldManager, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+/// Draws what `view_scenes` shows of the world through the camera into compute_texture, and fills in stats with
+/// what it drew
+pub fn RenderWorld(self: *Renderer, world_manager: *WorldManager, view_scenes: ViewScenes, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::RenderWorld", @src());
     defer zone.Deinit();
 
-    const shapes_ids = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), SHAPES_QUERY);
-    try self.RenderShapes(world_manager, shapes_ids.items, stats, engine_context, push_constants, camera_view, compute_texture, rendering_mode);
+    //the screen each overlay is drawn on is what its layout fits into
+    try LayoutSystem.RecordViewArea(world_manager, view_scenes.Overlays, camera_view, engine_context);
+    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), world_manager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+    try self.RenderShapes(shapes.items, stats, engine_context, push_constants, compute_texture, rendering_mode);
 }
 
 /// RenderWorld for only the shapes in one scene, e.g. one template out of the several open in the template editing world
@@ -295,28 +297,34 @@ pub fn RenderScene(self: *Renderer, scene: Scene, stats: *RenderStats, engine_co
     const zone = Tracy.ZoneInit("Renderer::RenderScene", @src());
     defer zone.Deinit();
 
-    const shapes_ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), SHAPES_QUERY);
-    try self.RenderShapes(scene.mManager, shapes_ids.items, stats, engine_context, push_constants, camera_view, compute_texture, rendering_mode);
+    const scene_id = [_]Scene.Type{scene.mID};
+    const view_scenes: ViewScenes = switch (scene.GetLayer()) {
+        .GameLayer => .{ .Game = .{ .One = scene.mID }, .Overlays = &.{} },
+        .OverlayLayer => .{ .Game = .None, .Overlays = &scene_id },
+    };
+    try LayoutSystem.RecordViewArea(scene.mManager, view_scenes.Overlays, camera_view, engine_context);
+    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), scene.mManager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+    try self.RenderShapes(shapes.items, stats, engine_context, push_constants, compute_texture, rendering_mode);
 }
 
-fn RenderShapes(self: *Renderer, world_manager: *WorldManager, shapes_ids: []const Entity.Type, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, camera_view: CameraView, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+/// Draws shapes already gathered for a view (ShapeGeometry.GatherViewShapes), each carrying its canvas
+fn RenderShapes(self: *Renderer, shapes: []const ShapeGeometry.ViewShape, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     self.mSDFPushConstants = push_constants;
 
     try self.BeginRendering(engine_context.EngineAllocator());
 
-    stats.TotalObjects = shapes_ids.len;
+    stats.TotalObjects = shapes.len;
 
     {
         //one zone for the whole loop rather than one per shape, which would swamp the timeline
         const draw_zone = Tracy.ZoneInit("Renderer::DrawShapes", @src());
         defer draw_zone.Deinit();
-        draw_zone.Value(shapes_ids.len);
+        draw_zone.Value(shapes.len);
 
-        for (shapes_ids) |shape_id| {
+        for (shapes) |shape| {
             //TODO: distance based culling
             //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
-            const shape_entity = world_manager.GetEntity(shape_id);
-            try self.DrawShape(engine_context, shape_entity, camera_view);
+            try self.DrawShape(engine_context, shape);
         }
     }
 
@@ -338,23 +346,19 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
     _ = try self.mSDFShading.AddMedium(engine_allocator, Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 }, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
 }
 
-fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, camera_view: CameraView) anyerror!void {
+fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeometry.ViewShape) anyerror!void {
+    const entity = shape.Entity;
     const transform_component = entity.GetComponent(TransformComponent).?;
-    const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
-
-    //an overlay entity's transform is in canvas units, parented to the camera: its scene's canvas
-    //puts it in front of this view's camera. game layer transforms are already world space
-    const canvas = ShapeGeometry.EntityCanvas(entity, camera_view);
 
     //check for specific shapes and draw them if they exist. a hidden shape is skipped here and by
-    //picking alike, so nothing can be clicked that isn't drawn
+    //picking alike, so nothing can be clicked that isn't drawn. an overlay shape's canvas places it
+    //in front of this view's camera, and sends it to the overlay pass
     if (entity.GetComponent(QuadComponent)) |quad_component| {
         if (quad_component.mShouldRender) try self.mR2D.DrawQuad(
             engine_context,
             transform_component,
             quad_component,
-            entity_scene_comp,
-            canvas,
+            shape.Canvas,
             &self.mSDFShading,
         );
     }
@@ -363,8 +367,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, entity: Entity, ca
             engine_context,
             transform_component,
             text_component,
-            entity_scene_comp,
-            canvas,
+            shape.Canvas,
             &self.mSDFShading,
         );
     }

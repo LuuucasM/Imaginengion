@@ -22,6 +22,21 @@ pub const Contact = struct {
     mPenetration: f32,
 };
 
+/// Runs the narrow test that fits the two colliders' shapes. The switch is exhaustive on purpose, so
+/// a new shape will not compile until every pairing with it has a test.
+pub fn TestShapes(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
+    return switch (origin_collider.mShape) {
+        .Sphere => switch (target_collider.mShape) {
+            .Sphere => SphereSphere(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
+            .Box => SphereBox(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
+        },
+        .Box => switch (target_collider.mShape) {
+            .Sphere => BoxSphere(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
+            .Box => BoxBox(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
+        },
+    };
+}
+
 pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
     const origin_pos = origin_transform_comp.GetWorldPosition();
     const target_pos = target_transform_comp.GetWorldPosition();
@@ -83,5 +98,65 @@ pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, ori
     contact.mNormal = normal;
     contact.mPenetration = penetration;
 
+    return true;
+}
+
+/// Axis aligned: the box's rotation is ignored, the same as BoxBox.
+/// The normal points from the box to the sphere, like every other test's origin to target.
+pub fn BoxSphere(contact: *Contact, box_transform_comp: *TransformComponent, box_collider: *ColliderComponent, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent) bool {
+    const half = box_collider.GetWorldHalfExtents(box_transform_comp.GetWorldScale());
+    const radius = sphere_collider.GetWorldRadius(sphere_transform_comp.GetWorldScale());
+
+    //the sphere's center relative to the box's, so the box spans -half to +half on each axis
+    const delta = sphere_transform_comp.GetWorldPosition().SubVec(box_transform_comp.GetWorldPosition());
+
+    //the point on (or in) the box nearest the sphere's center
+    const closest = Vec3(f32){
+        .x = std.math.clamp(delta.x, -half.x, half.x),
+        .y = std.math.clamp(delta.y, -half.y, half.y),
+        .z = std.math.clamp(delta.z, -half.z, half.z),
+    };
+
+    const offset = delta.SubVec(closest);
+    const dist_sq = offset.Dot(offset);
+    if (dist_sq >= radius * radius) return false; //not a collision
+
+    if (dist_sq > 0.00001 * 0.00001) {
+        //center is outside the box: push out along the line from the nearest point to the center
+        const dist = @sqrt(dist_sq);
+        contact.mNormal = offset.DivScalar(dist);
+        contact.mPenetration = radius - dist;
+        return true;
+    }
+
+    //center is inside the box (or on its surface), so the nearest point is the center itself and gives
+    //no direction. Push out through the nearest face instead, like BoxBox picks its least overlap axis:
+    //the center has to travel to that face and then a full radius past it
+    const face_x = half.x - @abs(delta.x);
+    const face_y = half.y - @abs(delta.y);
+    const face_z = half.z - @abs(delta.z);
+
+    var face_dist = face_x;
+    var normal = Vec3(f32){ .x = MathUtils.Sign(delta.x), .y = 0.0, .z = 0.0 };
+
+    if (face_y < face_dist) {
+        face_dist = face_y;
+        normal = Vec3(f32){ .x = 0.0, .y = MathUtils.Sign(delta.y), .z = 0.0 };
+    }
+    if (face_z < face_dist) {
+        face_dist = face_z;
+        normal = Vec3(f32){ .x = 0.0, .y = 0.0, .z = MathUtils.Sign(delta.z) };
+    }
+
+    contact.mNormal = normal;
+    contact.mPenetration = face_dist + radius;
+
+    return true;
+}
+
+/// BoxSphere with the roles swapped: the normal points from the sphere to the box.
+pub fn SphereBox(contact: *Contact, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent, box_transform_comp: *TransformComponent, box_collider: *ColliderComponent) bool {
+    if (!BoxSphere(contact, box_transform_comp, box_collider, sphere_transform_comp, sphere_collider)) return false;
+    contact.mNormal = contact.mNormal.Neg();
     return true;
 }

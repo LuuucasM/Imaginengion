@@ -776,7 +776,7 @@ pub fn RenderBusRef(engine_context: *EngineContext, bus_ref: *const Bus, label: 
     var new_bus: ?Bus = null;
 
     const current_id = audio_manager.ResolveBus(bus_ref.mID);
-    const current_name = audio_manager.GetComponent(NameComponent, current_id).?.mName.items;
+    const current_name = if (audio_manager.GetComponent(NameComponent, current_id)) |name| name.mName.items else "Bus";
     const preview = try std.fmt.allocPrintSentinel(frame_allocator, "{s}", .{current_name}, 0);
 
     if (imgui.igBeginCombo(label.ptr, preview.ptr, 0)) {
@@ -784,7 +784,7 @@ pub fn RenderBusRef(engine_context: *EngineContext, bus_ref: *const Bus, label: 
 
         const buses = try audio_manager.GetGroup(frame_allocator, .{ .Component = BusComponent });
         for (buses.items) |bus_id| {
-            const bus_name = audio_manager.GetComponent(NameComponent, bus_id).?.mName.items;
+            const bus_name = if (audio_manager.GetComponent(NameComponent, bus_id)) |name| name.mName.items else "Bus";
             //the id after ## keeps two buses with the same name apart without showing it
             const item = try std.fmt.allocPrintSentinel(frame_allocator, "{s}##{d}", .{ bus_name, bus_id }, 0);
             const is_selected = bus_id == current_id;

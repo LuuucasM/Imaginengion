@@ -35,7 +35,7 @@ pub fn OnImguiRender(self: *AudioBusesPanel, engine_context: *EngineContext) !vo
 
     switch (action) {
         .None => {},
-        .AddChild => |parent| _ = try parent.CreateChild(engine_context),
+        .AddChild => |parent| _ = try parent.CreateChild(engine_context, .Entity, Bus.DefaultConfig),
         .Delete => |bus| try bus.Delete(engine_context),
     }
 }
@@ -46,16 +46,22 @@ fn RenderBus(engine_context: *EngineContext, bus: Bus, master_bus: Bus, action: 
     imgui.igPushID_Int(@intCast(bus.mID));
     defer imgui.igPopID();
 
-    const name_component = bus.GetComponent(NameComponent).?;
-    const tree_label = try std.fmt.allocPrintSentinel(frame_allocator, "{s}", .{name_component.mName.items}, 0);
+    //a bus read from a hand edited file may be missing any of these
+    const name_component = bus.GetComponent(NameComponent);
+    const name = if (name_component) |component| component.mName.items else "Bus";
+    const tree_label = try std.fmt.allocPrintSentinel(frame_allocator, "{s}", .{name}, 0);
     //a fixed id rather than the name, so renaming the bus does not close its node
     if (!imgui.igTreeNodeEx_StrStr("Bus", imgui.ImGuiTreeNodeFlags_DefaultOpen, "%s", tree_label.ptr)) return;
     defer imgui.igTreePop();
 
     const is_master = bus.mID == master_bus.mID;
 
-    if (!is_master) try ImguiManager.RenderTextInput(engine_context, &name_component.mName, "Name");
-    _ = try ImguiManager.RenderFloatDrag(&bus.GetComponent(VolumeComponent).?.mVolume, "Volume", 0.01, 0.0, 1.0);
+    if (!is_master) {
+        if (name_component) |component| try ImguiManager.RenderTextInput(engine_context, &component.mName, "Name");
+    }
+    if (bus.GetComponent(VolumeComponent)) |volume_component| {
+        _ = try ImguiManager.RenderFloatDrag(&volume_component.mVolume, "Volume", 0.01, 0.0, 1.0);
+    }
     try ImguiManager.RenderBool(&bus.GetComponent(BusComponent).?.mPaused, "Paused");
 
     if (imgui.igSmallButton("Add Child")) action.* = .{ .AddChild = bus };

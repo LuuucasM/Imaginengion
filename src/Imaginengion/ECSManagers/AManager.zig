@@ -17,6 +17,7 @@ const Texture2D = AssetComponents.Texture2D;
 const TextAsset = AssetComponents.TextAsset;
 const AudioAsset = AssetComponents.AudioAsset;
 const EngineContext = @import("../Core/EngineContext.zig");
+const Project = @import("../Core/Project.zig");
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
@@ -115,8 +116,6 @@ pub const empty: AManager = .{
     .mUUIDToWorldID = .empty,
     .mCWD = undefined,
     .mCWDPath = .empty,
-    .mProjectDirectory = null,
-    .mProjectPath = .empty,
     .mPendingDelete = .empty,
     ._internal = .uninit,
 };
@@ -131,8 +130,6 @@ mEventManager: EventManagerT,
 
 mCWD: std.Io.Dir,
 mCWDPath: std.ArrayList(u8),
-mProjectDirectory: ?std.Io.Dir,
-mProjectPath: std.ArrayList(u8),
 mPendingDelete: std.AutoArrayHashMapUnmanaged(AssetHandle.Type, PendingDelete),
 _internal: InternalData,
 
@@ -177,10 +174,8 @@ pub fn Setup(self: *AManager, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
     Core.Deinit(self, engine_context);
     self.mCWDPath.deinit(engine_context.EngineAllocator());
-    self.mProjectPath.deinit(engine_context.EngineAllocator());
 
     self.mCWD.close(engine_context.Io());
-    if (self.mProjectDirectory) |p_dir| p_dir.close(engine_context.Io());
     self.mPendingDelete.deinit(engine_context.EngineAllocator());
 
     self._internal.Deinit(engine_context);
@@ -338,32 +333,11 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     }
 }
 
-pub fn OnNewProjectEvent(self: *AManager, engine_context: *EngineContext, abs_path: []const u8) !void {
-    if (self.mProjectDirectory) |*dir| {
-        dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
-    }
-
-    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
-
-    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), abs_path, .{});
-
-    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{abs_path});
-}
-
-pub fn OnOpenProjectEvent(self: *AManager, engine_context: *EngineContext, abs_path: []const u8) !void {
-    if (self.mProjectDirectory) |*dir| {
-        dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
-    }
-
-    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
-
-    const dir_name = std.fs.path.dirname(abs_path).?;
-
-    self.mProjectDirectory = try std.Io.Dir.openDirAbsolute(engine_context.Io(), dir_name, .{});
-
-    _ = try self.mProjectPath.print(engine_context.EngineAllocator(), "{s}", .{dir_name});
+/// The project .Prj paths are relative to. Reached through the EngineContext this manager lives in, since the path
+/// helpers are called without one
+fn GetProject(self: *AManager) *const Project {
+    const engine_context: *EngineContext = @alignCast(@fieldParentPtr("mAssetManager", self));
+    return &engine_context.mProject;
 }
 
 pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !std.Io.File.Stat {
@@ -372,7 +346,7 @@ pub fn OpenFileStats(self: *AManager, engine_context: *EngineContext, rel_path: 
 
     switch (path_type) {
         .Eng => return try self.mCWD.statFile(engine_context.Io(), rel_path, .{}),
-        .Prj => return try self.mProjectDirectory.?.statFile(engine_context.Io(), rel_path, .{}),
+        .Prj => return try engine_context.mProject.GetDirectory().statFile(engine_context.Io(), rel_path, .{}),
         .Gen => return error.NoFileToOpen,
     }
 }
@@ -382,7 +356,7 @@ pub fn OpenFile(self: *AManager, engine_context: *EngineContext, rel_path: []con
     defer zone.Deinit();
     switch (path_type) {
         .Eng => return try self.mCWD.openFile(engine_context.Io(), rel_path, .{}),
-        .Prj => return try self.mProjectDirectory.?.openFile(engine_context.Io(), rel_path, .{}),
+        .Prj => return try engine_context.mProject.GetDirectory().openFile(engine_context.Io(), rel_path, .{}),
         .Gen => unreachable,
     }
 }
@@ -405,7 +379,7 @@ pub fn GetAbsPath(self: *AManager, allocator: std.mem.Allocator, rel_path: []con
             return try std.fs.path.join(allocator, &[_][]const u8{ self.mCWDPath.items, rel_path });
         },
         .Prj => {
-            return try std.fs.path.join(allocator, &[_][]const u8{ self.mProjectPath.items, rel_path });
+            return try self.GetProject().GetAbsPath(allocator, rel_path);
         },
         .Gen => unreachable,
     }
@@ -414,7 +388,7 @@ pub fn GetAbsPath(self: *AManager, allocator: std.mem.Allocator, rel_path: []con
 pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []const u8 {
     return switch (path_type) {
         .Eng => abs_path[self.mCWDPath.items.len + 1 ..],
-        .Prj => abs_path[self.mProjectPath.items.len + 1 ..],
+        .Prj => self.GetProject().GetRelPath(abs_path),
         .Gen => unreachable,
     };
 }
@@ -429,11 +403,6 @@ pub const IsActiveObj = Core.IsActiveObj;
 pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) void {
     Core.clearAndFree(self, engine_context);
     self.mPendingDelete.clearAndFree(engine_context.EngineAllocator());
-    if (self.mProjectDirectory) |dir| {
-        dir.close(engine_context.Io());
-        self.mProjectDirectory = null;
-    }
-    self.mProjectPath.clearAndFree(engine_context.EngineAllocator());
 }
 
 pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {

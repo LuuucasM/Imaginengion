@@ -10,6 +10,8 @@ const RigidBodyComponent = Components.RigidBodyComponent;
 const AudioComponent = Components.AudioComponent;
 const StaticBodyTag = Components.StaticBodyTag;
 const DynamicBodyTag = Components.DynamicBodyTag;
+const LayoutDirtyTag = Components.LayoutDirtyTag;
+const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const GameLayerTag = Components.GameLayerTag;
 const OverlayLayerTag = Components.OverlayLayerTag;
 const LayerType = @import("../ECSComponents/Shared/TagComponents.zig").LayerType;
@@ -191,6 +193,7 @@ pub fn SetTranslation(self: Entity, engine_context: *EngineContext, translation:
     const transform = self.GetComponent(TransformComponent) orelse return;
     transform._SetLocalUntagged(translation, transform.GetRotation(), transform.GetScale());
     try self.MarkTransformDirty(engine_context);
+    try self._SnapBackIfPlacedByLayout(engine_context);
 }
 
 pub fn SetRotation(self: Entity, engine_context: *EngineContext, rotation: Quat(f32)) !void {
@@ -211,6 +214,13 @@ pub fn SetTransform(self: Entity, engine_context: *EngineContext, translation: V
     const transform = self.GetComponent(TransformComponent) orelse return;
     transform._SetLocalUntagged(translation, rotation, scale);
     try self.MarkTransformDirty(engine_context);
+    try self._SnapBackIfPlacedByLayout(engine_context);
+}
+
+/// Layout owns the x and y of what it places, so a translation set by hand on one is put back by the next layout
+/// pass, every time, rather than sticking until something unrelated relays the tree out. Z is never layout's
+fn _SnapBackIfPlacedByLayout(self: Entity, engine_context: *EngineContext) !void {
+    if (LayoutSystem.IsPlacedByLayout(self)) try self.MarkLayoutDirty(engine_context);
 }
 
 /// Adding the tag twice would trip AddComponent's assert, so this is the only way it goes on.
@@ -227,6 +237,21 @@ pub fn MarkTransformDirty(self: Entity, engine_context: *EngineContext) !void {
 pub fn ClearTransformDirty(self: Entity, engine_context: *EngineContext) !void {
     if (!self.HasComponent(TransformDirtyTag)) return;
     try self.RemoveComponentSync(engine_context, TransformDirtyTag);
+}
+
+/// Asks for the layout tree this entity is in to be worked out again (UI/LayoutSystem.zig). Tagging any entity of a
+/// tree relays out the whole tree, once. Adding the tag twice would trip AddComponent's assert, so this is the only
+/// way it goes on
+pub fn MarkLayoutDirty(self: Entity, engine_context: *EngineContext) !void {
+    if (self.HasComponent(LayoutDirtyTag)) return;
+    _ = try self.AddComponent(engine_context, LayoutDirtyTag{});
+}
+
+/// Removed synchronously, like ClearTransformDirty: a change after the layout pass then tags again instead of being
+/// swallowed by a tag still waiting for the end of the frame
+pub fn ClearLayoutDirty(self: Entity, engine_context: *EngineContext) !void {
+    if (!self.HasComponent(LayoutDirtyTag)) return;
+    try self.RemoveComponentSync(engine_context, LayoutDirtyTag);
 }
 
 /// Brings StaticBodyTag/DynamicBodyTag back in step with the body's inverse mass. Exactly one of
