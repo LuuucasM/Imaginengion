@@ -10,6 +10,9 @@ const RigidBodyComponent = Components.RigidBodyComponent;
 const AudioComponent = Components.AudioComponent;
 const StaticBodyTag = Components.StaticBodyTag;
 const DynamicBodyTag = Components.DynamicBodyTag;
+const GameLayerTag = Components.GameLayerTag;
+const OverlayLayerTag = Components.OverlayLayerTag;
+const LayerType = @import("../ECSComponents/Shared/TagComponents.zig").LayerType;
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Type);
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Type);
 const RenderTargetComponent = Components.RenderTargetComponent;
@@ -88,9 +91,20 @@ pub const GetName = Core.GetName;
 
 pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: CreateConfig) !Entity {
     const child_entity = try Core.CreateChild(self, engine_context, child_type, config);
-    //a child entity belongs to the same scene as its parent
+    //a child entity belongs to the same scene as its parent, so it is in the same layer too
     _ = try child_entity.AddComponent(engine_context, self.GetComponent(EntitySceneComponent).?.*);
+    switch (self.GetLayer()) {
+        .GameLayer => _ = try child_entity.AddComponent(engine_context, GameLayerTag{}),
+        .OverlayLayer => _ = try child_entity.AddComponent(engine_context, OverlayLayerTag{}),
+    }
     return child_entity;
+}
+
+/// The layer this entity is drawn in, from the layer tag it took from its scene (see GameLayerTag)
+pub fn GetLayer(self: Entity) LayerType {
+    if (self.HasComponent(OverlayLayerTag)) return .OverlayLayer;
+    std.debug.assert(self.HasComponent(GameLayerTag));
+    return .GameLayer;
 }
 
 pub const Duplicate = Core.Duplicate;

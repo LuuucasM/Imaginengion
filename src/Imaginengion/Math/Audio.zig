@@ -103,3 +103,24 @@ pub fn ApplyFade(comptime channels: usize, samples: []f32, frames_left: *u32, fa
     @memset(samples[audible_frames * channels ..], 0.0);
     return audible_frames;
 }
+
+/// Scales samples by a gain that moves from current toward target by at most max_step per frame, and leaves current
+/// where it got to. Unlike ApplyRamp the speed is fixed rather than tied to the buffer's length, so a change always
+/// takes the same time however long each mix is: with max_step = 1 / fade_frames, full gain to silence takes exactly
+/// fade_frames. Used for a bus's gain, so that pausing (a target of 0) always fades over the same few ms
+pub fn ApplyGainTowards(comptime channels: usize, samples: []f32, current: *f32, target: f32, max_step: f32) void {
+    std.debug.assert(samples.len % channels == 0);
+    std.debug.assert(max_step > 0.0);
+
+    //snapping once within a step lands exactly on the target, where adding steps up could overshoot or miss it. The
+    //snap reaches a little past one step because adding a step many times drifts: 240 steps of 1/240 down from 1
+    //leave slightly more than one step, which would otherwise take one frame too many and end on a tiny non-zero gain
+    const snap_distance = max_step * 1.001;
+
+    const frame_count = samples.len / channels;
+    for (0..frame_count) |frame| {
+        const difference = target - current.*;
+        current.* = if (@abs(difference) <= snap_distance) target else current.* + std.math.sign(difference) * max_step;
+        for (samples[frame * channels ..][0..channels]) |*sample| sample.* *= current.*;
+    }
+}

@@ -1,9 +1,9 @@
 const std = @import("std");
-const Collisions = @import("Collisions.zig");
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const Collisions = @import("../../Physics/Collisions.zig");
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const Vec3 = @import("../Math/MathTypes.zig").Vec3;
+const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 
 const eps: f32 = 0.0001;
 

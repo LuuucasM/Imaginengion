@@ -10,6 +10,10 @@ const SceneUUIDComponent = SceneComponents.UUIDComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
 const SceneComponent = SceneComponents.SceneComponent;
 const SceneNameComponent = SceneComponents.NameComponent;
+const TagComponents = @import("../ECSComponents/Shared/TagComponents.zig");
+pub const LayerType = TagComponents.LayerType;
+const GameLayerTag = TagComponents.GameLayerTag;
+const OverlayLayerTag = TagComponents.OverlayLayerTag;
 const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const EntityNameComponent = EntityComponents.NameComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -136,6 +140,14 @@ pub const AddComponentScript = Core.AddComponentScript;
 
 pub const IsActive = Core.IsActive;
 pub const Invalidate = Core.Invalidate;
+
+/// The layer this scene is drawn in, from its layer tag. Every scene in the stack has one: it is added
+/// with the SceneComponent (SManager.CreateScene) or read from the scene's file or template
+pub fn GetLayer(self: Scene) LayerType {
+    if (self.HasComponent(OverlayLayerTag)) return .OverlayLayer;
+    std.debug.assert(self.HasComponent(GameLayerTag));
+    return .GameLayer;
+}
 pub const IsIDValid = Core.IsIDValid;
 //===================END for the scenes==============================================
 
@@ -144,6 +156,11 @@ pub const IsIDValid = Core.IsIDValid;
 pub fn CreateEntity(self: Scene, engine_context: *EngineContext, new_entity_config: NewEntityConfig) !Entity {
     var new_entity = try self.mManager.mEManager.CreateEntity(engine_context, new_entity_config);
     _ = try new_entity.AddComponent(engine_context, EntitySceneComponent{ .mScene = self });
+    //an entity is in its scene's layer, see GameLayerTag
+    switch (self.GetLayer()) {
+        .GameLayer => _ = try new_entity.AddComponent(engine_context, GameLayerTag{}),
+        .OverlayLayer => _ = try new_entity.AddComponent(engine_context, OverlayLayerTag{}),
+    }
     return new_entity;
 }
 

@@ -2,8 +2,8 @@
 //! These drive a real ECSManager built from the test components below, so they do not depend on the
 //! engine's component lists. Run with `zig build test`.
 const std = @import("std");
-const EngineContext = @import("../Core/EngineContext.zig");
-const ECS = @import("ECSManager.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const ECS = @import("../../ECS/ECSManager.zig");
 
 const Position = struct {
     pub const Name: []const u8 = "Position";

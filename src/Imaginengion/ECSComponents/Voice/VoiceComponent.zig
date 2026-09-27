@@ -1,12 +1,13 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
+const Bus = @import("../../ECSObjects/Bus.zig");
 const VoiceComponent = @This();
 
 pub const Name: []const u8 = "VoiceComponent";
 
 //what every voice has. How it should sound is a modifier read from somewhere else: an attached voice reads its
-//source's AudioComponent live, a detached voice reads its own copies (VoiceAssetComponent, VoiceVolumeComponent, ...)
+//source's AudioComponent live, a detached voice reads its own copies (VoiceAssetComponent, VolumeComponent, ...)
 
 /// The entity whose AudioComponent this voice plays, if it is attached. Invalid for a detached voice, which does not
 /// care what happens to the entity that started it
@@ -27,5 +28,8 @@ mAssetID: AssetHandle.Type = AssetHandle.NullObject,
 mLastVolume: f32 = 1.0,
 /// The pitch it read at
 mLastPitch: f32 = 1.0,
+/// The bus it played into, or NullObject for Master. Set once for a detached voice, which keeps the bus its source
+/// had when it started
+mBusID: Bus.Type = Bus.NullObject,
 
 pub fn Deinit(_: *VoiceComponent, _: *EngineContext) void {}

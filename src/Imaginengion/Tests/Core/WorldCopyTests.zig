@@ -3,17 +3,17 @@
 //! No window or renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("EngineContext.zig");
-const WorldManager = @import("WorldManager.zig");
-const Entity = @import("../ECSObjects/Entity.zig");
-const Scene = @import("../ECSObjects/Scene.zig");
-const Player = @import("../ECSObjects/Player.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const WorldManager = @import("../../Core/WorldManager.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const Player = @import("../../ECSObjects/Player.zig");
 
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const PossessComponent = @import("../ECSComponents/PComponents.zig").PossessComponent;
-const SpawnPossComponent = @import("../ECSComponents/SComponents.zig").SpawnPossComponent;
+const PossessComponent = @import("../../ECSComponents/PComponents.zig").PossessComponent;
+const SpawnPossComponent = @import("../../ECSComponents/SComponents.zig").SpawnPossComponent;
 
 const TestWorlds = struct {
     mEngineContext: *EngineContext,

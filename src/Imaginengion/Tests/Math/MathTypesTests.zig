@@ -1,5 +1,5 @@
 const std = @import("std");
-const MathTypes = @import("MathTypes.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;

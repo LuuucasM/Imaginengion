@@ -4,6 +4,7 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
 const Entity = @import("../../ECSObjects/Entity.zig");
+const Bus = @import("../../ECSObjects/Bus.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -25,6 +26,8 @@ mAudioAsset: AssetHandle = .uninit,
 mVolume: f32 = 1.0,
 mPitch: f32 = 1.0,
 mLoop: bool = false,
+/// The bus its voices play into. Uninit means Master, and so does a bus that has since been deleted
+mBus: Bus = .uninit,
 
 /// true: the voices this plays are attached. They read the settings above live and stop with the component (its
 /// entity destroyed, it removed, or StopVoices). For sounds that belong to something: an engine hum, dialogue.
@@ -76,6 +79,8 @@ pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void
     try ImguiManager.ImguiSeparator();
 
     try ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
+
+    if (try ImguiManager.RenderBusRef(engine_context, &self.mBus, "Bus")) |new_bus| self.mBus = new_bus;
 }
 
 const Json = JsonUtils.JsonFields(AudioComponent, .{

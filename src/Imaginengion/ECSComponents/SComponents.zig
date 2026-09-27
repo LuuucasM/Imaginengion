@@ -8,6 +8,8 @@ pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const SpawnPossComponent = @import("Scene/SpawnPossComponent.zig");
 pub const StackPosComponent = @import("Scene/StackPosComponent.zig");
 pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
+pub const GameLayerTag = @import("Shared/TagComponents.zig").GameLayerTag;
+pub const OverlayLayerTag = @import("Shared/TagComponents.zig").OverlayLayerTag;
 //pub const TransformComponent = @import("Components/TransformComponent.zig");
 
 const ScriptTags = @import("Shared/ScriptTags.zig");
@@ -24,6 +26,8 @@ pub const ComponentsList = [_]type{
     SpawnPossComponent,
     StackPosComponent,
     TmplRefComponent,
+    GameLayerTag,
+    OverlayLayerTag,
 
     //Scripts
     ScriptComponent,
@@ -49,6 +53,9 @@ pub const SerializeList = [_]type{
     SceneComponent,
     SpawnPossComponent,
     TmplRefComponent,
+    //a scene's layer is saved as its tag, and reading it back is what slots the scene into the stack
+    GameLayerTag,
+    OverlayLayerTag,
 };
 
 /// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
@@ -56,9 +63,11 @@ pub const SerializeList = [_]type{
 pub const ShellList = [_]type{
     UUIDComponent,
     NameComponent,
-    //its layer is what gives it its slot in the scene stack
     SceneComponent,
     TmplRefComponent,
+    //its layer is what gives it its slot in the scene stack
+    GameLayerTag,
+    OverlayLayerTag,
 };
 
 pub const ScriptsList = [_]type{
@@ -76,6 +85,8 @@ pub const EComponents = enum(u16) {
     SpawnPossComponent = ListInd(&ComponentsList, SpawnPossComponent),
     StackPosComponent = ListInd(&ComponentsList, StackPosComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
+    GameLayerTag = ListInd(&ComponentsList, GameLayerTag),
+    OverlayLayerTag = ListInd(&ComponentsList, OverlayLayerTag),
 
     OnSceneStartScript = ListInd(&ComponentsList, OnSceneStartScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),

@@ -1,6 +1,6 @@
 const std = @import("std");
-const MathTypes = @import("../Math/MathTypes.zig");
-const TextLayout = @import("TextLayout.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
+const TextLayout = @import("../../Renderer/TextLayout.zig");
 const Vec2 = MathTypes.Vec2;
 
 const eps: f32 = 0.0001;

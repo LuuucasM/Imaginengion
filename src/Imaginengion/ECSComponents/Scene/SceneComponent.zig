@@ -2,21 +2,17 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const OverlayCanvas = @import("../../Math/OverlayCanvas.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const SceneComponent = @This();
 
-pub const LayerType = enum(u1) {
-    GameLayer = 0,
-    OverlayLayer = 1,
-};
+//a scene's layer is its GameLayerTag or OverlayLayerTag (see Scene.GetLayer)
+pub const LayerType = @import("../Shared/TagComponents.zig").LayerType;
 
 pub const OverlayScaleMode = OverlayCanvas.OverlayScaleMode;
 
 pub const Name: []const u8 = "SceneComponent";
-//every scene needs one: the renderer and the scene stack read its layer type
+//every scene needs one: the overlay renderer reads its scale mode
 pub const Removable: bool = false;
 
-mLayerType: LayerType = .GameLayer,
 //how the scene's units turn into screen pixels. the overlay renderer reads it for its canvas; game
 //layer scenes are drawn through the camera, so for them it doesn't change anything yet
 mOverlayScaleMode: OverlayScaleMode = .ScaleWithScreen,
@@ -29,21 +25,11 @@ pub fn GetPixelsPerUnit(self: SceneComponent, target_height: f32, display_scale:
 }
 
 pub fn EditorRender(self: *SceneComponent, _: *EngineContext) !void {
-    //shown, not edited: the scene stack slots a scene by its layer when it is created
-    imgui.igText("Layer: %s", @tagName(self.mLayerType).ptr);
-
     try ImguiManager.RenderEnum(OverlayScaleMode, &self.mOverlayScaleMode, "Scale Mode");
 }
 
 const Json = JsonUtils.JsonFields(SceneComponent, .{
-    .LayerType = "mLayerType",
     .OverlayScaleMode = "mOverlayScaleMode",
 });
 pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;
-
-/// A loaded scene gets its slot in the scene stack here, once its layer type is known,
-/// the same as CreateScene does for a new one
-pub fn PostParse(_: *SceneComponent, engine_context: *EngineContext, owner: anytype) !void {
-    try owner.mManager.mSManager.InsertScene(engine_context, owner);
-}

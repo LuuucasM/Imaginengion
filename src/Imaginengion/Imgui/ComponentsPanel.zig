@@ -15,7 +15,9 @@ const Assets = @import("../ECSComponents/AComponents.zig");
 const TransformComponent = @import("../ECSComponents/Shared/TransformComponent.zig");
 const RigidBodyComponent = @import("../ECSComponents/Entity/RigidBodyComponent.zig");
 const PossessComponent = @import("../ECSComponents/Player/PossessComponent.zig");
+const OverlayComponent = @import("../ECSComponents/Player/OverlayComponent.zig");
 const AudioComponent = @import("../ECSComponents/Entity/AudioComponent.zig");
+const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
 const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
@@ -121,6 +123,12 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
             }
         }
 
+        //the layer is the scene's layer tag, which the panel doesn't list: shown here, not edited,
+        //since the scene stack slots a scene by its layer when it is created
+        if (comptime component_type == SceneComponent and @TypeOf(object) == SceneLayer) {
+            imgui.igText("Layer: %s", @tagName(object.GetLayer()).ptr);
+        }
+
         //possessing links both the player and the entity's PlayerSlotComponent, so the component
         //cannot render itself: only here do we have the Player to call Possess on
         if (comptime component_type == PossessComponent and @TypeOf(object) == Player) {
@@ -130,6 +138,23 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
                     object.Possess(new_entity);
                 } else {
                     possess_component.mPossessedEntity = .uninit;
+                }
+            }
+        }
+
+        //like PossessComponent, rendered here rather than by the component: only here do we have the
+        //player, to check that a dropped scene is an overlay in its world
+        if (comptime component_type == OverlayComponent and @TypeOf(object) == Player) {
+            const overlay_component = object.GetComponent(OverlayComponent).?;
+            if (try ImguiManager.RenderSceneRef(engine_context, &overlay_component.mScene, "Overlay Scene")) |new_scene| {
+                if (!new_scene.IsActive()) {
+                    overlay_component.mScene = .uninit;
+                } else if (new_scene.mManager != object.mManager) {
+                    std.log.warn("An overlay has to be a scene in the same world as the player", .{});
+                } else if (new_scene.GetLayer() != .OverlayLayer) {
+                    std.log.warn("Only an overlay scene can be shown as an overlay, not a game layer scene", .{});
+                } else {
+                    overlay_component.mScene = new_scene;
                 }
             }
         }

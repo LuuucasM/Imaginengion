@@ -1,6 +1,6 @@
 const std = @import("std");
-const InputManager = @import("Input.zig");
-const Vec2 = @import("../Math/MathTypes.zig").Vec2;
+const InputManager = @import("../../Inputs/Input.zig");
+const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 
 fn NewInput() !InputManager {
     var input: InputManager = .empty;

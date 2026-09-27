@@ -32,16 +32,13 @@ pub const Box = struct {
 /// units and this is what places it in the world. Null for a game layer entity, whose transform is
 /// already world space.
 pub fn EntityCanvas(entity: Entity, camera_view: CameraView) ?CanvasTransform {
-    const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
-    const scene_component = entity_scene_comp.mScene.GetComponent(SceneComponent).?;
-
-    return switch (scene_component.mLayerType) {
+    return switch (entity.GetLayer()) {
         .GameLayer => null,
         .OverlayLayer => OverlayCanvas.ComputeCanvasTransform(
             camera_view.Pose,
             camera_view.TanHalfFov,
             camera_view.TargetHeight,
-            scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale),
+            entity.GetComponent(EntitySceneComponent).?.mScene.GetComponent(SceneComponent).?.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale),
         ),
     };
 }

@@ -25,6 +25,8 @@ const NameComponent = SceneComponents.NameComponent;
 const SceneStackPos = SceneComponents.StackPosComponent;
 //const SceneTransformComponent = SceneComponents.TransformComponent;
 const SceneScriptComponent = SceneComponents.ScriptComponent;
+const GameLayerTag = SceneComponents.GameLayerTag;
+const OverlayLayerTag = SceneComponents.OverlayLayerTag;
 
 const Entity = @import("../ECSObjects/Entity.zig");
 const EComponents = @import("../ECSComponents/EComponents.zig");
@@ -75,14 +77,18 @@ pub const Deinit = Core.Deinit;
 
 pub fn CreateScene(self: *SManager, engine_context: *EngineContext, layer_type: LayerType, config: Scene.CreateConfig) !Scene {
     const new_scene: Scene = try Core.CreateObj(self, engine_context, config);
-    //nothing else adds this, and the stack bookkeeping below reads it
-    _ = try new_scene.AddComponent(engine_context, SceneComponent{ .mLayerType = layer_type });
+    _ = try new_scene.AddComponent(engine_context, SceneComponent{});
+    //nothing else gives a new scene its layer, and the stack bookkeeping below reads it
+    switch (layer_type) {
+        .GameLayer => _ = try new_scene.AddComponent(engine_context, GameLayerTag{}),
+        .OverlayLayer => _ = try new_scene.AddComponent(engine_context, OverlayLayerTag{}),
+    }
     try self.InsertScene(engine_context, new_scene);
     return new_scene;
 }
 
 /// A scene with no components that is not in the scene stack yet, for scenes whose components all come from
-/// a file: the file's SceneComponent slots it into the stack (SceneComponent.PostParse)
+/// a file: the file's layer tag slots it into the stack (GameLayerTag.PostParse)
 pub fn CreateBlankScene(self: *SManager, engine_context: *EngineContext) !Scene {
     return try Core.CreateObj(self, engine_context, Scene.BlankConfig);
 }
@@ -188,14 +194,14 @@ pub fn OnManagerEvents(self: *SManager, engine_context: *EngineContext, event: E
 }
 
 pub fn MoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene, move_to_pos: usize) !void {
-    const scene_component = scene_layer.GetComponent(SceneComponent).?;
+    const layer = scene_layer.GetLayer();
     const stack_pos_component = scene_layer.GetComponent(SceneStackPos).?;
     const current_pos = stack_pos_component.mPosition;
 
     var new_pos: usize = 0;
-    if (scene_component.mLayerType == .OverlayLayer and move_to_pos < self.mGameLayerInsertIndex) {
+    if (layer == .OverlayLayer and move_to_pos < self.mGameLayerInsertIndex) {
         new_pos = self.mGameLayerInsertIndex;
-    } else if (scene_component.mLayerType == .GameLayer and move_to_pos >= self.mGameLayerInsertIndex) {
+    } else if (layer == .GameLayer and move_to_pos >= self.mGameLayerInsertIndex) {
         new_pos = self.mGameLayerInsertIndex - 1;
     } else {
         new_pos = move_to_pos;
@@ -243,10 +249,9 @@ pub fn SortScenesFunc(ecs_manager_sc: *ECSManagerT, a: Scene.Type, b: Scene.Type
     return (b_stack_pos_comp.mPosition < a_stack_pos_comp.mPosition);
 }
 
-/// Gives the scene its stack position from its SceneComponent's layer type
+/// Gives the scene its stack position from its layer
 pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer: Scene) !void {
-    const scene_component = scene_layer.GetComponent(SceneComponent).?;
-    if (scene_component.mLayerType == .GameLayer) {
+    if (scene_layer.GetLayer() == .GameLayer) {
         //shift the overlays up before adding, otherwise the new scene is in the group too
         //and shifts itself past the slot it was just given
         const stack_pos_group = try self.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = SceneStackPos });
@@ -267,7 +272,6 @@ pub fn InsertScene(self: *SManager, engine_context: *EngineContext, scene_layer:
 fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer: Scene) !void {
     //next realign the scene stack so that everything is in the right position after this one is destroyed
     const destroy_stack_pos = scene_layer.GetComponent(SceneStackPos).?;
-    const scene_component = scene_layer.GetComponent(SceneComponent).?;
 
     var stack_pos_group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = SceneStackPos });
     defer stack_pos_group.deinit(frame_allocator);
@@ -279,7 +283,7 @@ fn RemoveScene(self: *SManager, frame_allocator: std.mem.Allocator, scene_layer:
         }
     }
 
-    if (scene_component.mLayerType == .GameLayer) {
+    if (scene_layer.GetLayer() == .GameLayer) {
         self.mGameLayerInsertIndex -= 1;
     }
     self.mNumofLayers -= 1;

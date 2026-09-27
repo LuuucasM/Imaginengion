@@ -1,6 +1,6 @@
 const std = @import("std");
-const MathTypes = @import("MathTypes.zig");
-const ScreenRect = @import("ScreenRect.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
+const ScreenRect = @import("../../Math/ScreenRect.zig");
 const Vec2 = MathTypes.Vec2;
 
 const eps: f32 = 0.0001;

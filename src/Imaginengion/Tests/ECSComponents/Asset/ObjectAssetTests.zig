@@ -3,22 +3,22 @@
 //! directly since the asset manager needs a window. Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("../../Core/EngineContext.zig");
-const TextSerializer = @import("../../Serializer/TextSerializer.zig");
-const Assets = @import("../AComponents.zig");
-const Entity = @import("../../ECSObjects/Entity.zig");
-const Scene = @import("../../ECSObjects/Scene.zig");
-const Player = @import("../../ECSObjects/Player.zig");
-const GameContext = @import("../../ECSObjects/GameContext.zig");
+const EngineContext = @import("../../../Core/EngineContext.zig");
+const TextSerializer = @import("../../../Serializer/TextSerializer.zig");
+const Assets = @import("../../../ECSComponents/AComponents.zig");
+const Entity = @import("../../../ECSObjects/Entity.zig");
+const Scene = @import("../../../ECSObjects/Scene.zig");
+const Player = @import("../../../ECSObjects/Player.zig");
+const GameContext = @import("../../../ECSObjects/GameContext.zig");
 
-const EntitySceneComponent = @import("../EComponents.zig").EntitySceneComponent;
-const AttribComponent = @import("../GCComponents.zig").AttribComponent;
+const EntitySceneComponent = @import("../../../ECSComponents/EComponents.zig").EntitySceneComponent;
+const AttribComponent = @import("../../../ECSComponents/GCComponents.zig").AttribComponent;
 
-const EEventData = @import("../../Events/EManagerData.zig");
-const GCEventData = @import("../../Events/GCManagerData.zig");
-const PEventData = @import("../../Events/PManagerData.zig");
-const SEventData = @import("../../Events/SManagerData.zig");
-const ECSEventData = @import("../../Events/ECSEventData.zig");
+const EEventData = @import("../../../Events/EManagerData.zig");
+const GCEventData = @import("../../../Events/GCManagerData.zig");
+const PEventData = @import("../../../Events/PManagerData.zig");
+const SEventData = @import("../../../Events/SManagerData.zig");
+const ECSEventData = @import("../../../Events/ECSEventData.zig");
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,

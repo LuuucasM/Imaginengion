@@ -1,24 +1,24 @@
 //! CastRay against a real world (no window, no renderer). Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("../Core/EngineContext.zig");
-const Entity = @import("../ECSObjects/Entity.zig");
-const Scene = @import("../ECSObjects/Scene.zig");
-const PhysicsManager = @import("PhysicsManager.zig");
-const RayCast = @import("RayCast.zig");
-const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
-const CameraView = @import("../Renderer/Renderer.zig").CameraView;
-const CameraRay = @import("../Math/CameraRay.zig");
-const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
-const THICKNESS_2D = @import("../Math/SDFFunctions.zig").THICKNESS_2D;
+const EngineContext = @import("../../Core/EngineContext.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const RayCast = @import("../../Physics/RayCast.zig");
+const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
+const CameraView = @import("../../Renderer/Renderer.zig").CameraView;
+const CameraRay = @import("../../Math/CameraRay.zig");
+const OverlayCanvas = @import("../../Math/OverlayCanvas.zig");
+const THICKNESS_2D = @import("../../Math/SDFFunctions.zig").THICKNESS_2D;
 
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 
-const MathTypes = @import("../Math/MathTypes.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;

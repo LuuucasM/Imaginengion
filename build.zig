@@ -82,31 +82,17 @@ pub fn build(b: *std.Build) void {
     //=========================================TEST STEP=========================================
     const test_step = b.step("test", "Test Engine");
 
-    //Standalone test files, one per unit under test. Each `*Tests.zig` imports the module it
-    //covers, so the module itself carries no test code.
-    const unit_test_sources = [_][]const u8{
-        "src/Imaginengion/Core/SkipFieldTests.zig",
-        "src/Imaginengion/Core/SparseSetTests.zig",
-        "src/Imaginengion/Core/SPSCRingBufferTests.zig",
-        "src/Imaginengion/Math/AudioTests.zig",
-        "src/Imaginengion/Math/MathTypesTests.zig",
-        "src/Imaginengion/Math/CameraRayTests.zig",
-        "src/Imaginengion/Math/RayIntersectTests.zig",
-        "src/Imaginengion/Math/ScreenRectTests.zig",
-        "src/Imaginengion/Math/OverlayCanvasTests.zig",
-        "src/Imaginengion/UnitTests.zig",
-    };
+    //All test files live in src/Imaginengion/Tests/, mirroring the folder they cover. Standalone ones
+    //(no engine needed) are indexed by UnitTests.zig, which has to sit at the source root so the tests
+    //can @import("../...") into the engine sources. New standalone test files go in UnitTests.zig, not here.
+    const unit_tests = b.addTest(.{ .root_module = b.createModule(.{
+        .target = target,
+        .optimize = .Debug,
+        .root_source_file = b.path("src/Imaginengion/UnitTests.zig"),
+    }) });
+    const run_unit_tests = b.addRunArtifact(unit_tests);
 
-    for (unit_test_sources) |test_source| {
-        const unit_tests = b.addTest(.{ .root_module = b.createModule(.{
-            .target = target,
-            .optimize = .Debug,
-            .root_source_file = b.path(test_source),
-        }) });
-        const run_unit_tests = b.addRunArtifact(unit_tests);
-
-        test_step.dependOn(&run_unit_tests.step);
-    }
+    test_step.dependOn(&run_unit_tests.step);
 
     if (test_build) {
         run_step.dependOn(test_step);

@@ -12,6 +12,7 @@ const EntityNameComponent = @import("../ECSComponents/EComponents.zig").NameComp
 const PlayerNameComponent = @import("../ECSComponents/PComponents.zig").NameComponent;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
+const OverlayLayerTag = SceneComponents.OverlayLayerTag;
 const SceneNameComponent = SceneComponents.NameComponent;
 const PickingDebugPanel = @This();
 
@@ -98,11 +99,10 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     //the canvas point under the mouse for each overlay scene, placed the same way the renderer
     //placed it (see ShapeGeometry.EntityCanvas)
     var overlay_count: usize = 0;
-    const scene_ids = try world.GetSceneGroup(frame_allocator, .{ .Component = SceneComponent });
+    const scene_ids = try world.GetSceneGroup(frame_allocator, .{ .Component = OverlayLayerTag });
     for (scene_ids.items) |scene_id| {
         const scene = world.GetScene(scene_id);
         const scene_component = scene.GetComponent(SceneComponent).?;
-        if (scene_component.mLayerType != .OverlayLayer) continue;
         overlay_count += 1;
 
         const pixels_per_unit = scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);

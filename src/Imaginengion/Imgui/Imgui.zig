@@ -9,11 +9,16 @@ const Texture2D = @import("../ECSComponents/AComponents.zig").Texture2D;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
 const NameComponent = @import("../ECSComponents/EComponents.zig").NameComponent;
+const Bus = @import("../ECSObjects/Bus.zig");
+const BusComponent = @import("../ECSComponents/VComponents.zig").BusComponent;
 const ImguiManager = @This();
 
 /// Drag drop payload ID for an Entity value, set by the ECS display and accepted by RenderEntityRef
 pub const ENTITY_REF_PAYLOAD = "EntityRef";
+//a scene dragged out of the scene list
+pub const SCENE_REF_PAYLOAD = "SceneRef";
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -761,6 +766,77 @@ pub fn RenderEntityRef(engine_context: *EngineContext, entity_ref: *const Entity
     }
 
     return new_entity;
+}
+
+/// A bus reference field: a dropdown of every bus by name. An unset or since deleted bus shows as Master, since that
+/// is what it plays into. Returns the picked bus, or null if nothing changed this frame
+pub fn RenderBusRef(engine_context: *EngineContext, bus_ref: *const Bus, label: [:0]const u8) !?Bus {
+    const frame_allocator = engine_context.FrameAllocator();
+    const audio_manager = &engine_context.mAudioManager;
+    var new_bus: ?Bus = null;
+
+    const current_id = audio_manager.ResolveBus(bus_ref.mID);
+    const current_name = audio_manager.GetComponent(NameComponent, current_id).?.mName.items;
+    const preview = try std.fmt.allocPrintSentinel(frame_allocator, "{s}", .{current_name}, 0);
+
+    if (imgui.igBeginCombo(label.ptr, preview.ptr, 0)) {
+        defer imgui.igEndCombo();
+
+        const buses = try audio_manager.GetGroup(frame_allocator, .{ .Component = BusComponent });
+        for (buses.items) |bus_id| {
+            const bus_name = audio_manager.GetComponent(NameComponent, bus_id).?.mName.items;
+            //the id after ## keeps two buses with the same name apart without showing it
+            const item = try std.fmt.allocPrintSentinel(frame_allocator, "{s}##{d}", .{ bus_name, bus_id }, 0);
+            const is_selected = bus_id == current_id;
+            if (imgui.igSelectable_Bool(item.ptr, is_selected, 0, .{ .x = 0, .y = 0 })) {
+                new_bus = .{ .mID = bus_id, .mManager = audio_manager };
+            }
+            if (is_selected) imgui.igSetItemDefaultFocus();
+        }
+    }
+
+    return new_bus;
+}
+
+/// A scene reference field, the scene version of RenderEntityRef: set by dropping a scene from the scene
+/// list on it, cleared from its right click menu. Returns the new scene (uninit when cleared) or null if
+/// nothing changed this frame
+pub fn RenderSceneRef(engine_context: *EngineContext, scene_ref: *const Scene, label: [:0]const u8) !?Scene {
+    const frame_allocator = engine_context.FrameAllocator();
+    var new_scene: ?Scene = null;
+
+    imgui.igPushID_Str(label.ptr);
+    defer imgui.igPopID();
+
+    imgui.igTextUnformatted(label.ptr, null);
+    imgui.igSameLine(0.0, 8.0);
+
+    if (scene_ref.IsActive()) {
+        //GetName assumes a NameComponent, fall back to the ID for scenes without one
+        const name = if (scene_ref.HasComponent(NameComponent))
+            try std.fmt.allocPrintSentinel(frame_allocator, "{s}", .{scene_ref.GetName()}, 0)
+        else
+            try std.fmt.allocPrintSentinel(frame_allocator, "Scene {d}", .{scene_ref.mID}, 0);
+        imgui.igTextUnformatted(name.ptr, null);
+    } else {
+        imgui.igTextUnformatted("None", null);
+    }
+
+    if (imgui.igBeginPopupContextItem("SceneRefContext", imgui.ImGuiPopupFlags_MouseButtonRight)) {
+        defer imgui.igEndPopup();
+        if (imgui.igMenuItem_Bool("Clear", "", false, scene_ref.IsActive())) {
+            new_scene = .uninit;
+        }
+    }
+
+    if (imgui.igBeginDragDropTarget()) {
+        defer imgui.igEndDragDropTarget();
+        if (imgui.igAcceptDragDropPayload(SCENE_REF_PAYLOAD, imgui.ImGuiDragDropFlags_None)) |payload| {
+            new_scene = @as(*const Scene, @ptrCast(@alignCast(payload.*.Data))).*;
+        }
+    }
+
+    return new_scene;
 }
 
 const InputTextContext = struct {

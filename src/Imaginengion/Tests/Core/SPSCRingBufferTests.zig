@@ -1,5 +1,5 @@
 const std = @import("std");
-const SPSCRingBuffer = @import("SPSCRingBuffer.zig").SPSCRingBuffer;
+const SPSCRingBuffer = @import("../../Core/SPSCRingBuffer.zig").SPSCRingBuffer;
 
 const Ring = SPSCRingBuffer(u32, 8);
 

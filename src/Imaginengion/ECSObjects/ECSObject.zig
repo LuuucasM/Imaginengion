@@ -14,6 +14,7 @@ const GameContext = @import("GameContext.zig");
 const Player = @import("Player.zig");
 const Scene = @import("Scene.zig");
 const Voice = @import("Voice.zig");
+const Bus = @import("Bus.zig");
 
 const AComponents = @import("../ECSComponents/AComponents.zig");
 const EComponents = @import("../ECSComponents/EComponents.zig");
@@ -102,6 +103,8 @@ pub fn Core(comptime Self: type) type {
             inline for (type_info.@"struct".field_types, type_info.@"struct".field_names) |field_type, field_name| {
                 if (field_type == AssetHandle) {
                     @field(component, field_name).mManager = &engine_context.mAssetManager;
+                } else if (field_type == Bus) {
+                    @field(component, field_name).mManager = &engine_context.mAudioManager;
                 } else if (field_type == Entity or
                     field_type == GameContext or
                     field_type == Player or
@@ -173,7 +176,7 @@ pub fn Core(comptime Self: type) type {
                 return self.mManager.mPManager.GetComponent(component_type, self.mID);
             } else if (Self == Scene) {
                 return self.mManager.mSManager.GetComponent(component_type, self.mID);
-            } else if (Self == Voice) {
+            } else if (Self == Voice or Self == Bus) {
                 return self.mManager.GetComponent(component_type, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
@@ -190,7 +193,7 @@ pub fn Core(comptime Self: type) type {
                 return self.mManager.mPManager.HasComponent(component_type, self.mID);
             } else if (Self == Scene) {
                 return self.mManager.mSManager.HasComponent(component_type, self.mID);
-            } else if (Self == Voice) {
+            } else if (Self == Voice or Self == Bus) {
                 return self.mManager.HasComponent(component_type, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
@@ -544,7 +547,7 @@ pub fn Core(comptime Self: type) type {
         pub fn IsActive(self: Self) bool {
             if (!self.IsIDValid()) return false;
             return blk: {
-                if (Self == AssetHandle or Self == Voice) {
+                if (Self == AssetHandle or Self == Voice or Self == Bus) {
                     break :blk self.mManager.IsActiveObj(self.mID);
                 } else if (Self == Entity) {
                     break :blk self.mManager.mEManager.IsActiveObj(self.mID);
@@ -597,7 +600,7 @@ pub fn Core(comptime Self: type) type {
                     break :blk PComponents.ComponentsList;
                 } else if (obj_t == Scene) {
                     break :blk SComponents.ComponentsList;
-                } else if (obj_t == Voice) {
+                } else if (obj_t == Voice or obj_t == Bus) {
                     break :blk VComponents.ComponentsList;
                 } else {
                     @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
@@ -626,7 +629,7 @@ pub fn Core(comptime Self: type) type {
                 is_valid = true;
             } else if (obj_t == Scene) {
                 is_valid = true;
-            } else if (obj_t == Voice) {
+            } else if (obj_t == Voice or obj_t == Bus) {
                 is_valid = true;
             }
 

@@ -1,7 +1,7 @@
 const std = @import("std");
-const MathTypes = @import("MathTypes.zig");
-const RayIntersect = @import("RayIntersect.zig");
-const Ray = @import("CameraRay.zig").Ray;
+const MathTypes = @import("../../Math/MathTypes.zig");
+const RayIntersect = @import("../../Math/RayIntersect.zig");
+const Ray = @import("../../Math/CameraRay.zig").Ray;
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
 

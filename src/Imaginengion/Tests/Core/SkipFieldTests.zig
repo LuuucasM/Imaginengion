@@ -1,7 +1,7 @@
 //! Unit tests for `StaticSkipField`. These live outside SkipField.zig so the data structure
 //! itself stays free of test-only code. Run with `zig build test`.
 const std = @import("std");
-const StaticSkipField = @import("SkipField.zig").StaticSkipField;
+const StaticSkipField = @import("../../Core/SkipField.zig").StaticSkipField;
 
 test "Init Small Field" {
     const FieldSize = 1;

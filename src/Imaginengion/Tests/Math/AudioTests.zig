@@ -1,5 +1,5 @@
 const std = @import("std");
-const AudioMath = @import("Audio.zig");
+const AudioMath = @import("../../Math/Audio.zig");
 
 //mono, so each frame is one sample and expected values read straight off
 const source = [_]f32{ 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0 };
@@ -170,4 +170,46 @@ test "a finished fade silences the whole buffer" {
 
     try std.testing.expectEqual(0, AudioMath.ApplyFade(2, &samples, &frames_left, 240));
     try std.testing.expectEqualSlices(f32, &.{ 0.0, 0.0, 0.0, 0.0 }, &samples);
+}
+
+test "gain moves toward its target at a fixed speed and stops there" {
+    var samples: [6]f32 = @splat(1.0);
+    var gain: f32 = 1.0;
+
+    AudioMath.ApplyGainTowards(1, &samples, &gain, 0.0, 0.25);
+    try std.testing.expectEqualSlices(f32, &.{ 0.75, 0.5, 0.25, 0.0, 0.0, 0.0 }, &samples);
+    try std.testing.expectEqual(0.0, gain);
+}
+
+test "full gain to silence takes exactly fade_frames whatever the step adds up to" {
+    const fade_frames = 240;
+    var samples: [fade_frames * 2]f32 = @splat(1.0);
+    var gain: f32 = 1.0;
+
+    AudioMath.ApplyGainTowards(2, &samples, &gain, 0.0, 1.0 / @as(f32, fade_frames));
+    //the last frame of the fade is silent, the one before it is not
+    try std.testing.expectEqual(0.0, samples[(fade_frames - 1) * 2]);
+    try std.testing.expect(samples[(fade_frames - 2) * 2] > 0.0);
+    try std.testing.expectEqual(0.0, gain);
+}
+
+test "gain split across calls matches one call" {
+    var whole: [9]f32 = @splat(1.0);
+    var whole_gain: f32 = 0.0;
+    AudioMath.ApplyGainTowards(1, &whole, &whole_gain, 1.0, 0.125);
+
+    var split: [9]f32 = @splat(1.0);
+    var split_gain: f32 = 0.0;
+    AudioMath.ApplyGainTowards(1, split[0..4], &split_gain, 1.0, 0.125);
+    AudioMath.ApplyGainTowards(1, split[4..], &split_gain, 1.0, 0.125);
+
+    try std.testing.expectEqualSlices(f32, &whole, &split);
+    try std.testing.expectEqual(whole_gain, split_gain);
+}
+
+test "gain already at its target is a plain gain" {
+    var samples = [_]f32{ 2.0, -4.0 };
+    var gain: f32 = 0.5;
+    AudioMath.ApplyGainTowards(1, &samples, &gain, 0.5, 0.01);
+    try std.testing.expectEqualSlices(f32, &.{ 1.0, -2.0 }, &samples);
 }

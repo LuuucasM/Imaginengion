@@ -12,18 +12,24 @@ pub const EventData = @import("../Events/AudioManagerData.zig");
 const ECSCore = @import("../ECSManagers/Manager.zig").Core;
 
 const Voice = @import("../ECSObjects/Voice.zig");
+const Bus = @import("../ECSObjects/Bus.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const VComponents = @import("../ECSComponents/VComponents.zig");
 const VoiceComponent = VComponents.VoiceComponent;
 const VoiceAssetComponent = VComponents.VoiceAssetComponent;
-const VoiceVolumeComponent = VComponents.VoiceVolumeComponent;
 const VoicePitchComponent = VComponents.VoicePitchComponent;
 const VoiceFadeComponent = VComponents.VoiceFadeComponent;
+const BusComponent = VComponents.BusComponent;
+const VolumeComponent = VComponents.VolumeComponent;
+const NameComponent = VComponents.NameComponent;
+const ParentComponent = @import("../ECS/Components.zig").ParentComponent(Bus.Type);
+const ChildComponent = @import("../ECS/Components.zig").ChildComponent(Bus.Type);
 const AudioComponent = @import("../ECSComponents/EComponents.zig").AudioComponent;
 const AudioAsset = @import("../ECSComponents/AComponents.zig").AudioAsset;
 const AudioManager = @This();
 
-pub const ECSManagerT = ECSManager.ECSManager(Voice.Type, &VComponents.ComponentsList, "VoiceECS");
+//voices and buses share this one ECS, told apart by their components (VoiceComponent, BusComponent)
+pub const ECSManagerT = ECSManager.ECSManager(Voice.Type, &VComponents.ComponentsList, "AudioECS");
 pub const EventManagerT = EventManager.EventManager(EventData);
 
 const Core = ECSCore(AudioManager);
@@ -82,8 +88,12 @@ mEventManager: EventManagerT = .empty,
 /// Hands out AudioComponent.mVoiceToken values, see NewVoiceToken
 mNextVoiceToken: u32 = 0,
 
+/// The root of the bus tree, made in Init. Everything is mixed through it, and it can not be deleted
+mMasterBus: Bus = .uninit,
+
 pub fn Init(self: *AudioManager, engine_allocator: std.mem.Allocator) !void {
     try self.mECSManager.Init(engine_allocator);
+    self.mMasterBus = try self.NewBus(engine_allocator, null, "Master");
     try self.mAudioContext.Init();
     self.mAudioContext.SetAudioBuffer(&self.mOutputBuffer);
 }
@@ -141,6 +151,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: En
         .mAssetID = audio_component.mAudioAsset.mID,
         .mLastVolume = audio_component.mVolume,
         .mLastPitch = audio_component.mPitch,
+        .mBusID = audio_component.mBus.mID,
     });
 
     if (!is_attached) {
@@ -151,7 +162,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: En
             unused_handle.ReleaseAsset();
             return err;
         };
-        _ = try self.mECSManager.AddComponent(engine_allocator, voice.mID, VoiceVolumeComponent{ .mVolume = audio_component.mVolume });
+        _ = try self.mECSManager.AddComponent(engine_allocator, voice.mID, VolumeComponent{ .mVolume = audio_component.mVolume });
         _ = try self.mECSManager.AddComponent(engine_allocator, voice.mID, VoicePitchComponent{ .mPitch = audio_component.mPitch });
     }
 
@@ -177,10 +188,79 @@ fn NewVoiceToken(self: *AudioManager) u32 {
     return self.mNextVoiceToken;
 }
 
+/// The root bus. Everything is mixed through it, and it can not be deleted
+pub fn GetMasterBus(self: *AudioManager) Bus {
+    return self.mMasterBus;
+}
+
+/// A new bus under parent (under Master if parent is not a bus), at full volume and unpaused
+pub fn CreateBus(self: *AudioManager, engine_context: *EngineContext, parent: Bus) !Bus {
+    return try self.NewBus(engine_context.EngineAllocator(), self.ResolveBus(parent.mID), "Bus");
+}
+
+/// Deletes the bus and every bus under it at the end of the frame, through the ECS, which destroys children with
+/// their parent. Voices playing into them fall back to Master. Deleting Master, or a bus that is already gone or
+/// already queued, does nothing
+pub fn DeleteBus(self: *AudioManager, engine_context: *EngineContext, bus: Bus) !void {
+    if (bus.mID == self.mMasterBus.mID) {
+        std.log.warn("The Master bus can not be deleted", .{});
+        return;
+    }
+    if (!self.IsBus(bus.mID)) return;
+
+    const event: EventData.EventT = .{ .DestroyBus = .{ .Bus = .{ .mID = bus.mID, .mManager = self } } };
+    for (self.mEventManager.mEventsArray.getPtr(.EndOfFrame).items) |queued_event| {
+        if (std.meta.eql(queued_event, event)) return;
+    }
+    try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, event);
+}
+
+/// bus_id if it is a live bus, otherwise Master: what an unset (uninit) or since deleted bus plays into
+pub fn ResolveBus(self: *AudioManager, bus_id: Bus.Type) Bus.Type {
+    return if (self.IsBus(bus_id)) bus_id else self.mMasterBus.mID;
+}
+
+fn IsBus(self: *AudioManager, id: Bus.Type) bool {
+    return self.mECSManager.IsActiveEntity(id) and self.HasComponent(BusComponent, id);
+}
+
+fn NewBus(self: *AudioManager, engine_allocator: std.mem.Allocator, parent_id: ?Bus.Type, name: []const u8) !Bus {
+    const bus_id = if (parent_id) |parent|
+        try self.mECSManager.AddChild(engine_allocator, parent, .Entity)
+    else
+        try self.mECSManager.CreateEntity(engine_allocator);
+
+    _ = try self.mECSManager.AddComponent(engine_allocator, bus_id, BusComponent{});
+    _ = try self.mECSManager.AddComponent(engine_allocator, bus_id, VolumeComponent{});
+
+    var name_component: NameComponent = .empty;
+    try name_component.mName.appendSlice(engine_allocator, name);
+    _ = self.mECSManager.AddComponent(engine_allocator, bus_id, name_component) catch |err| {
+        name_component.mName.deinit(engine_allocator);
+        return err;
+    };
+
+    return .{ .mID = bus_id, .mManager = self };
+}
+
+/// Whether voices playing into this bus are held where they are: it, or a bus above it, is paused and has faded all
+/// the way out. Until the fade is done they keep playing, so the fade has something to fade
+fn IsBusHeld(self: *AudioManager, bus_id: Bus.Type) bool {
+    var current_id = bus_id;
+    while (true) {
+        const bus_component = self.GetComponent(BusComponent, current_id).?;
+        if (bus_component.mPaused and bus_component.mGain == 0.0) return true;
+        //Master is the only bus without a parent
+        const child_component = self.GetComponent(ChildComponent, current_id) orelse return false;
+        current_id = child_component.mParent;
+    }
+}
+
 /// Mixes every voice into the output buffer, topping it back up to TARGET_FRAMES.
 ///
 /// The mix runs in stages, each one a batch over every voice: read each voice's asset into its own buffer at its
-/// pitch, apply each voice's volume, fade out the ones that are stopping, then sum them all. Pitch is part of the read
+/// pitch, apply each voice's volume, fade out the ones that are stopping, then mix them through the bus tree. Pitch is
+/// part of the read
 /// rather than a stage after it, since it decides how much of the asset is read. New kinds of processing (reverb,
 /// spatial) slot in as stages of their own. Where a stage gets its modifier depends on the voice (see VoiceState):
 /// live from its source's AudioComponent, from its own copies, or from what it played last
@@ -215,7 +295,7 @@ pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
         const voice_component = self.GetComponent(VoiceComponent, voice_id).?;
         const volume = switch (self.GetVoiceState(voice_id)) {
             .Attached => |source_component| source_component.mVolume,
-            .Detached => self.GetComponent(VoiceVolumeComponent, voice_id).?.mVolume,
+            .Detached => self.GetComponent(VolumeComponent, voice_id).?.mVolume,
             .Orphaned => voice_component.mLastVolume,
         };
         const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
@@ -234,21 +314,65 @@ pub fn OnUpdate(self: *AudioManager, engine_context: *EngineContext) !void {
         }
     }
 
-    //mix stage
-    const mixed_buffer = try frame_allocator.alloc(f32, samples_to_produce);
-    @memset(mixed_buffer, 0);
-    for (0..voices.items.len) |i| {
+    //bus stage: each voice is added into its bus, then the tree is mixed children first, each bus applying its own
+    //gain before it is added into its parent. What comes out of Master is the mix
+    const buses = try self.GetGroup(frame_allocator, .{ .Component = BusComponent });
+    const bus_buffers = try frame_allocator.alloc(f32, buses.items.len * samples_to_produce);
+    @memset(bus_buffers, 0);
+
+    var bus_indices: BusIndices = .empty;
+    try bus_indices.ensureTotalCapacity(frame_allocator, @intCast(buses.items.len));
+    for (buses.items, 0..) |bus_id, i| {
+        bus_indices.putAssumeCapacity(bus_id, i);
+    }
+
+    for (voices.items, 0..) |voice_id, i| {
         const voice_samples = voice_buffers[i * samples_to_produce ..][0 .. voice_frames[i] * AUDIO_CHANNELS];
-        for (mixed_buffer[0..voice_samples.len], voice_samples) |*mixed, sample| {
+        if (voice_samples.len == 0) continue;
+        const bus_id = self.ResolveBus(self.GetComponent(VoiceComponent, voice_id).?.mBusID);
+        const bus_buffer = bus_buffers[bus_indices.get(bus_id).? * samples_to_produce ..][0..samples_to_produce];
+        for (bus_buffer[0..voice_samples.len], voice_samples) |*mixed, sample| {
             mixed.* += sample;
         }
     }
+
+    const mixed_buffer = self.MixBus(self.mMasterBus.mID, bus_buffers, samples_to_produce, &bus_indices);
 
     for (mixed_buffer) |*sample| {
         sample.* = std.math.clamp(sample.*, -1.0, 1.0);
     }
 
     _ = self.mOutputBuffer.PushSlice(mixed_buffer);
+}
+
+const BusIndices = std.AutoHashMapUnmanaged(Bus.Type, usize);
+
+/// Adds every bus under bus_id into its buffer, each one mixed the same way first, then applies this bus's gain.
+/// The gain moves toward the bus's volume, or 0 while it is paused, at a fixed speed: full to silent in FADE_FRAMES,
+/// so a pause always fades over the same few ms and a volume change glides. Returns the bus's buffer
+fn MixBus(self: *AudioManager, bus_id: Bus.Type, bus_buffers: []f32, samples_per_bus: usize, bus_indices: *const BusIndices) []f32 {
+    const bus_buffer = bus_buffers[bus_indices.get(bus_id).? * samples_per_bus ..][0..samples_per_bus];
+
+    //only buses are ever children in this ECS, voices never are
+    const first_child = if (self.GetComponent(ParentComponent, bus_id)) |parent_component| parent_component.mFirstEntity else Bus.NullObject;
+    if (first_child != Bus.NullObject) {
+        var child_id = first_child;
+        while (true) {
+            const next_id = self.GetComponent(ChildComponent, child_id).?.mNext;
+            const child_buffer = self.MixBus(child_id, bus_buffers, samples_per_bus, bus_indices);
+            for (bus_buffer, child_buffer) |*mixed, sample| {
+                mixed.* += sample;
+            }
+            if (next_id == first_child) break; //the list is circular
+            child_id = next_id;
+        }
+    }
+
+    const bus_component = self.GetComponent(BusComponent, bus_id).?;
+    const target_gain = if (bus_component.mPaused) 0.0 else self.GetComponent(VolumeComponent, bus_id).?.mVolume;
+    AudioMath.ApplyGainTowards(AUDIO_CHANNELS, bus_buffer, &bus_component.mGain, target_gain, 1.0 / @as(f32, FADE_FRAMES));
+
+    return bus_buffer;
 }
 
 /// Reads the next frames of one voice into voice_buffer and returns how many were read. Starts the fade of a voice that
@@ -275,6 +399,15 @@ fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
     };
     voice_component.mAssetID = asset_id;
     voice_component.mLastPitch = pitch;
+
+    const bus_id = switch (voice_state) {
+        .Attached => |source_component| source_component.mBus.mID,
+        .Detached, .Orphaned => voice_component.mBusID,
+    };
+    voice_component.mBusID = bus_id;
+
+    //its bus is paused and has faded out: read nothing, so the cursor stays put until the bus is unpaused
+    if (self.IsBusHeld(self.ResolveBus(bus_id))) return 0;
 
     //fetched every update rather than kept, since a hot reload can swap the asset out between updates.
     //loading an asset only touches the asset manager's storage, so the component pointers above stay valid.
@@ -338,6 +471,12 @@ pub fn OnManagerEvents(self: *AudioManager, engine_context: *EngineContext, even
         .DestroyVoice => |e| {
             if (self.mECSManager.IsActiveEntity(e.Voice.mID)) {
                 try self.mECSManager.DestroyEntity(engine_context, e.Voice.mID);
+            }
+        },
+        .DestroyBus => |e| {
+            //the ECS queues the destroy of every bus under it too
+            if (self.mECSManager.IsActiveEntity(e.Bus.mID)) {
+                try self.mECSManager.DestroyEntity(engine_context, e.Bus.mID);
             }
         },
         .Default => unreachable,

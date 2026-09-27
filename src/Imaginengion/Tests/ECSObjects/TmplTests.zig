@@ -4,43 +4,44 @@
 //! renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("../Core/EngineContext.zig");
-const WorldManager = @import("../Core/WorldManager.zig");
-const TextSerializer = @import("../Serializer/TextSerializer.zig");
-const AssetHandle = @import("AssetHandle.zig");
-const Entity = @import("Entity.zig");
-const Scene = @import("Scene.zig");
-const Player = @import("Player.zig");
-const GameContext = @import("GameContext.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const WorldManager = @import("../../Core/WorldManager.zig");
+const TextSerializer = @import("../../Serializer/TextSerializer.zig");
+const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const Player = @import("../../ECSObjects/Player.zig");
+const GameContext = @import("../../ECSObjects/GameContext.zig");
 
-const AssetMetaData = @import("../ECSComponents/AComponents.zig").AssetMetaData;
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const AssetMetaData = @import("../../ECSComponents/AComponents.zig").AssetMetaData;
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const UUIDComponent = EntityComponents.UUIDComponent;
 const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const TmplRefComponent = EntityComponents.TmplRefComponent;
-const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const SceneComponents = @import("../../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
 const StackPosComponent = SceneComponents.StackPosComponent;
 const SpawnPossComponent = SceneComponents.SpawnPossComponent;
-const PlayerComponents = @import("../ECSComponents/PComponents.zig");
+const PlayerComponents = @import("../../ECSComponents/PComponents.zig");
 const MicComponent = PlayerComponents.MicComponent;
 const PossessComponent = PlayerComponents.PossessComponent;
-const AttribComponent = @import("../ECSComponents/GCComponents.zig").AttribComponent;
-const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
+const OverlayComponent = PlayerComponents.OverlayComponent;
+const AttribComponent = @import("../../ECSComponents/GCComponents.zig").AttribComponent;
+const EntityTagComponent = @import("../../ECS/Components.zig").EntityTagComponent;
 
-const EEventData = @import("../Events/EManagerData.zig");
-const GCEventData = @import("../Events/GCManagerData.zig");
-const PEventData = @import("../Events/PManagerData.zig");
-const SEventData = @import("../Events/SManagerData.zig");
-const ECSEventData = @import("../Events/ECSEventData.zig");
+const EEventData = @import("../../Events/EManagerData.zig");
+const GCEventData = @import("../../Events/GCManagerData.zig");
+const PEventData = @import("../../Events/PManagerData.zig");
+const SEventData = @import("../../Events/SManagerData.zig");
+const ECSEventData = @import("../../Events/ECSEventData.zig");
 
-const EntityAsset = @import("../ECSComponents/AComponents.zig").EntityAsset;
-const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
-const PhysicsManager = @import("../Physics/PhysicsManager.zig");
-const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
+const EntityAsset = @import("../../ECSComponents/AComponents.zig").EntityAsset;
+const TmplEditPanel = @import("../../Imgui/TmplEditPanel.zig");
+const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const GroupQuery = @import("../../ECS/ECSManager.zig").GroupQuery;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
 
 const TEXTURE_PATH ="src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
@@ -279,7 +280,7 @@ test "spawned scenes copy their entities, take a stack slot and point their spaw
 
     try ExpectName(a, "HUD");
     try std.testing.expect(!a.HasComponent(UUIDComponent));
-    try std.testing.expectEqual(.OverlayLayer, a.GetComponent(SceneComponent).?.mLayerType);
+    try std.testing.expectEqual(.OverlayLayer, a.GetLayer());
 
     //slotted above the level, in the order they were spawned
     try std.testing.expectEqual(@as(usize, 3), game_scenes.mNumofLayers);
@@ -292,6 +293,8 @@ test "spawned scenes copy their entities, take a stack slot and point their spaw
     try std.testing.expectEqual(@as(usize, 3), a_entities.items.len);
     for (a_entities.items) |entity_id| {
         try std.testing.expect(!a.GetEntity(entity_id).HasComponent(UUIDComponent));
+        //and in the copy's layer, which they take from it rather than the template
+        try std.testing.expectEqual(.OverlayLayer, a.GetEntity(entity_id).GetLayer());
     }
 
     //each copy spawns into its own copy of the spawn point, not the template's in the asset world
@@ -339,6 +342,23 @@ test "spawned players copy the template's components and children" {
     try ExpectName(FirstChild(a), "Controller");
     try std.testing.expect(!FirstChild(a).HasComponent(UUIDComponent));
     try std.testing.expect(FirstChild(a).mID != FirstChild(b).mID);
+}
+
+test "a spawned player shows no overlay until it is given one" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    //the overlay scene is outside the template, so a copy has nothing of its own to point at
+    const hud = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const player = try world.TmplWorld().CreatePlayer(engine_context, Player.DefaultConfig);
+    _ = try player.AddComponent(engine_context, OverlayComponent{ .mScene = hud });
+    const tmpl = try world.SaveTmpl(player, "player_one.impl");
+
+    const copy = try world.GameWorld().Spawn(Player, engine_context, tmpl);
+
+    try std.testing.expect(copy.HasComponent(OverlayComponent));
+    try std.testing.expect(copy.GetComponent(OverlayComponent).?.GetScene() == null);
 }
 
 test "spawned game contexts copy the template's components and children" {
@@ -715,7 +735,7 @@ test "making a scene a template leaves a shell that keeps its stack slot" {
     try world.EndFrame(world.GameWorld());
 
     try ExpectShell(hud, hud_uuid, "HUD");
-    try std.testing.expectEqual(.OverlayLayer, hud.GetComponent(SceneComponent).?.mLayerType);
+    try std.testing.expectEqual(.OverlayLayer, hud.GetLayer());
     try std.testing.expect(!hud.HasComponent(SpawnPossComponent));
     try std.testing.expect(!button.IsActive());
     const hud_entities = try hud.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });

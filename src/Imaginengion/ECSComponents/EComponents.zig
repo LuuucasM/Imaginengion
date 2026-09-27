@@ -16,6 +16,8 @@ pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
 pub const TransformComponent = @import("Shared/TransformComponent.zig");
 pub const TransformDirtyTag = @import("Shared/TagComponents.zig").TransformDirtyTag;
 pub const ShouldRenderTag = @import("Shared/TagComponents.zig").ShouldRenderTag;
+pub const GameLayerTag = @import("Shared/TagComponents.zig").GameLayerTag;
+pub const OverlayLayerTag = @import("Shared/TagComponents.zig").OverlayLayerTag;
 pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TextComponent = @import("Entity/TextComponent.zig");
 pub const ViewpointComponent = @import("Entity/ViewpointComponent.zig");
@@ -52,6 +54,9 @@ pub const ComponentsList = [_]type{
     ViewpointComponent,
     RenderTargetComponent,
     TmplRefComponent,
+    //never saved: an entity takes its scene's layer (Scene.CreateEntity, Entity.CreateChild)
+    GameLayerTag,
+    OverlayLayerTag,
 
     //scripts
     ScriptComponent,
@@ -137,6 +142,8 @@ pub const EComponents = enum(u16) {
     ViewpointComponent = ListInd(&ComponentsList, ViewpointComponent),
     RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
+    GameLayerTag = ListInd(&ComponentsList, GameLayerTag),
+    OverlayLayerTag = ListInd(&ComponentsList, OverlayLayerTag),
 };
 
 comptime {

@@ -1,15 +1,17 @@
 //Tests that need the engine module, run by `zig build test-engine`
 test {
-    _ = @import("ECS/ECSTests.zig");
-    _ = @import("ECSObjects/DeleteTests.zig");
-    _ = @import("Serializer/SerializerTests.zig");
-    _ = @import("ECSComponents/Asset/ObjectAssetTests.zig");
-    _ = @import("ECSObjects/TmplTests.zig");
-    _ = @import("Physics/TransformPassTests.zig");
-    _ = @import("Physics/BodyTagTests.zig");
-    _ = @import("Physics/CollisionsTests.zig");
-    _ = @import("Physics/RayCastTests.zig");
-    _ = @import("Core/WorldCopyTests.zig");
+    _ = @import("Tests/ECS/ECSTests.zig");
+    _ = @import("Tests/ECSObjects/DeleteTests.zig");
+    _ = @import("Tests/Serializer/SerializerTests.zig");
+    _ = @import("Tests/ECSComponents/Asset/ObjectAssetTests.zig");
+    _ = @import("Tests/ECSObjects/TmplTests.zig");
+    _ = @import("Tests/ECSObjects/LayerTagTests.zig");
+    _ = @import("Tests/ECSObjects/OverlayTests.zig");
+    _ = @import("Tests/Physics/TransformPassTests.zig");
+    _ = @import("Tests/Physics/BodyTagTests.zig");
+    _ = @import("Tests/Physics/CollisionsTests.zig");
+    _ = @import("Tests/Physics/RayCastTests.zig");
+    _ = @import("Tests/Core/WorldCopyTests.zig");
 }
 
 //Core Stuff -----------------------------------
@@ -23,6 +25,7 @@ pub const EntityComponents = @import("ECSComponents/EComponents.zig");
 
 //Audio Stuff -----------------------------------------
 pub const Voice = @import("ECSObjects/Voice.zig");
+pub const Bus = @import("ECSObjects/Bus.zig");
 
 //Scene Stuff -----------------------------------------
 pub const SceneLayer = @import("ECSObjects/Scene.zig");

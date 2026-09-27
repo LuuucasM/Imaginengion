@@ -2,18 +2,18 @@
 //! transform pass, with no window and no renderer. Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("../Core/EngineContext.zig");
-const WorldManager = @import("../Core/WorldManager.zig");
-const Entity = @import("../ECSObjects/Entity.zig");
-const Scene = @import("../ECSObjects/Scene.zig");
-const PhysicsManager = @import("PhysicsManager.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const WorldManager = @import("../../Core/WorldManager.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
-const MainObjectComponent = @import("../ECS/Components.zig").MainObjectComponent;
+const MainObjectComponent = @import("../../ECS/Components.zig").MainObjectComponent;
 
-const MathTypes = @import("../Math/MathTypes.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
 

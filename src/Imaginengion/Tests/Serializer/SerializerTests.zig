@@ -3,23 +3,23 @@
 //! don't touch those are used. Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("../Core/EngineContext.zig");
-const TextSerializer = @import("TextSerializer.zig");
-const Entity = @import("../ECSObjects/Entity.zig");
-const Scene = @import("../ECSObjects/Scene.zig");
-const Player = @import("../ECSObjects/Player.zig");
-const GameContext = @import("../ECSObjects/GameContext.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const TextSerializer = @import("../../Serializer/TextSerializer.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const Player = @import("../../ECSObjects/Player.zig");
+const GameContext = @import("../../ECSObjects/GameContext.zig");
 
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
-const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const SceneComponents = @import("../../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
 const StackPosComponent = SceneComponents.StackPosComponent;
-const PlayerComponents = @import("../ECSComponents/PComponents.zig");
+const PlayerComponents = @import("../../ECSComponents/PComponents.zig");
 const MicComponent = PlayerComponents.MicComponent;
 const PossessComponent = PlayerComponents.PossessComponent;
-const AttribComponent = @import("../ECSComponents/GCComponents.zig").AttribComponent;
+const AttribComponent = @import("../../ECSComponents/GCComponents.zig").AttribComponent;
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -116,7 +116,7 @@ test "a scene round trips with its entities and takes its slot in the scene stac
     try TextSerializer.DeserializeECSObj(engine_context, loaded, path);
 
     const scene_component = loaded.GetComponent(SceneComponent).?;
-    try std.testing.expectEqual(.OverlayLayer, scene_component.mLayerType);
+    try std.testing.expectEqual(.OverlayLayer, loaded.GetLayer());
     try std.testing.expectEqual(.ConstantPixelSize, scene_component.mOverlayScaleMode);
     try std.testing.expectEqual(overlay.GetUUID(), loaded.GetUUID());
 
@@ -125,9 +125,13 @@ test "a scene round trips with its entities and takes its slot in the scene stac
     try std.testing.expectEqual(@as(usize, 0), game_layer.GetComponent(StackPosComponent).?.mPosition);
     try std.testing.expectEqual(@as(usize, 2), loaded.GetComponent(StackPosComponent).?.mPosition);
 
-    //both top level entities, and the child under the first, belong to the loaded scene
+    //both top level entities, and the child under the first, belong to the loaded scene, and are in
+    //its layer: the tag isn't saved on them, they take it from the scene
     const loaded_entities = try loaded.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntitySceneComponent });
     try std.testing.expectEqual(@as(usize, 3), loaded_entities.items.len);
+    for (loaded_entities.items) |entity_id| {
+        try std.testing.expectEqual(.OverlayLayer, loaded.GetEntity(entity_id).GetLayer());
+    }
 }
 
 test "a player round trips, children included" {

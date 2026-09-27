@@ -34,8 +34,6 @@ const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 
-const SceneComponents = @import("../ECSComponents/SComponents.zig");
-const SceneSceneComponent = SceneComponents.SceneComponent;
 
 const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
@@ -211,7 +209,6 @@ pub fn DrawQuad(
     shading_buff: *ShadingBuffers,
 ) !void {
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
-    const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
     //the same box picking tests against
     const box = ShapeGeometry.QuadBox(transform_component, quad_component, canvas);
@@ -226,7 +223,7 @@ pub fn DrawQuad(
     var shading_flag: u32 = 0;
     if (quad_component.mTexOptions.mIsTransparent) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
 
-    const quad_buff_base = switch (scene_scene_comp.mLayerType) {
+    const quad_buff_base = switch (entity_scene_comp.mScene.GetLayer()) {
         .GameLayer => &self.mGameData.mQuadBufferBase,
         .OverlayLayer => &self.mOverlayData.mQuadBufferBase,
     };
@@ -255,7 +252,6 @@ pub fn DrawText(
     const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
     const atlas_asset = &text_asset.mAtlas;
     const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
-    const scene_scene_comp = entity_scene_comp.mScene.GetComponent(SceneSceneComponent).?;
 
     const texture_shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
@@ -275,7 +271,7 @@ pub fn DrawText(
     const glyph_rot = if (canvas) |c| c.ToWorldRotation(text_rot) else text_rot;
     const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
 
-    const glyph_buff_base = switch (scene_scene_comp.mLayerType) {
+    const glyph_buff_base = switch (entity_scene_comp.mScene.GetLayer()) {
         .GameLayer => &self.mGameData.mGlyphBufferBase,
         .OverlayLayer => &self.mOverlayData.mGlyphBufferBase,
     };

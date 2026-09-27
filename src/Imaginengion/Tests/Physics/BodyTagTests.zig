@@ -2,12 +2,12 @@
 //! No window and no GPU: BroadPass only pairs entities up, the geometry tests come later.
 const std = @import("std");
 
-const EngineContext = @import("../Core/EngineContext.zig");
-const Entity = @import("../ECSObjects/Entity.zig");
-const Scene = @import("../ECSObjects/Scene.zig");
-const CollisionManager = @import("CollisionManager.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const CollisionManager = @import("../../Physics/CollisionManager.zig");
 
-const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const StaticBodyTag = EntityComponents.StaticBodyTag;

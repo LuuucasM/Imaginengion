@@ -314,7 +314,7 @@ fn ObjectTraits(comptime T: type) type {
             pub fn HandleDragDropSource(scene_layer: Scene) void {
                 if (imgui.igBeginDragDropSource(imgui.ImGuiDragDropFlags_None) == true) {
                     defer imgui.igEndDragDropSource();
-                    _ = imgui.igSetDragDropPayload("SceneRef", &scene_layer, @sizeOf(Scene), 0);
+                    _ = imgui.igSetDragDropPayload(ImguiManager.SCENE_REF_PAYLOAD, &scene_layer, @sizeOf(Scene), 0);
                 }
             }
             pub fn HandleObjectContextMenu(engine_context: *EngineContext, object: Scene, can_delete: bool) !void {

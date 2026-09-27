@@ -80,6 +80,7 @@ const PlayerNameComponent = PlayerComponents.NameComponent;
 const ImGui = @import("../Imgui/Imgui.zig");
 const Dockspace = @import("../Imgui/Dockspace.zig");
 const AssetHandlePanel = @import("../Imgui/AssethandlePanel.zig");
+const AudioBusesPanel = @import("../Imgui/AudioBusesPanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
@@ -120,6 +121,7 @@ pub const EditorState = enum(u2) {
 
 //editor imgui stuff
 _AssetHandlePanel: AssetHandlePanel = .{},
+_AudioBusesPanel: AudioBusesPanel = .{},
 _ComponentsPanel: ComponentsPanel = .{},
 _ContentBrowserPanel: ContentBrowserPanel = .{},
 /// One per template open for editing, see OpenTmpl
@@ -324,6 +326,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 
             try self._ContentBrowserPanel.OnImguiRender(engine_context);
             try self._AssetHandlePanel.OnImguiRender(engine_context);
+            try self._AudioBusesPanel.OnImguiRender(engine_context);
             try self.mEntityPanel.OnImguiRender(engine_context, current_world, .GameObj, &self.mSelectedObj);
             try self.mScenePanel.OnImguiRender(engine_context, current_world, .Scenes, &self.mSelectedObj);
             try self.mPlayerPanel.OnImguiRender(engine_context, current_world, .Players, &self.mSelectedObj);
@@ -987,6 +990,9 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             defer imgui.igEndMenu();
             if (imgui.igMenuItem_Bool("Asset Handles", @ptrCast(@alignCast(my_null_ptr)), self._AssetHandlePanel._P_Open, true) == true) {
                 self._AssetHandlePanel._P_Open = !self._AssetHandlePanel._P_Open;
+            }
+            if (imgui.igMenuItem_Bool("Audio Buses", @ptrCast(@alignCast(my_null_ptr)), self._AudioBusesPanel._P_Open, true) == true) {
+                self._AudioBusesPanel._P_Open = !self._AudioBusesPanel._P_Open;
             }
             if (imgui.igMenuItem_Bool("Components", @ptrCast(@alignCast(my_null_ptr)), self._ComponentsPanel._P_Open, true) == true) {
                 self._ComponentsPanel._P_Open = !self._ComponentsPanel._P_Open;

@@ -3,22 +3,22 @@
 //! Run with `zig build test-engine`.
 const std = @import("std");
 
-const EngineContext = @import("../Core/EngineContext.zig");
-const Entity = @import("Entity.zig");
-const Scene = @import("Scene.zig");
-const Player = @import("Player.zig");
-const GameContext = @import("GameContext.zig");
+const EngineContext = @import("../../Core/EngineContext.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const Player = @import("../../ECSObjects/Player.zig");
+const GameContext = @import("../../ECSObjects/GameContext.zig");
 
-const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
-const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
-const NameComponent = @import("../ECSComponents/Shared/NameComponent.zig");
-const ECSObject = @import("ECSObject.zig");
+const StackPosComponent = @import("../../ECSComponents/SComponents.zig").StackPosComponent;
+const UUIDComponent = @import("../../ECSComponents/Shared/UUIDComponent.zig");
+const NameComponent = @import("../../ECSComponents/Shared/NameComponent.zig");
+const ECSObject = @import("../../ECSObjects/ECSObject.zig");
 
-const EEventData = @import("../Events/EManagerData.zig");
-const GCEventData = @import("../Events/GCManagerData.zig");
-const PEventData = @import("../Events/PManagerData.zig");
-const SEventData = @import("../Events/SManagerData.zig");
-const ECSEventData = @import("../Events/ECSEventData.zig");
+const EEventData = @import("../../Events/EManagerData.zig");
+const GCEventData = @import("../../Events/GCManagerData.zig");
+const PEventData = @import("../../Events/PManagerData.zig");
+const SEventData = @import("../../Events/SManagerData.zig");
+const ECSEventData = @import("../../Events/ECSEventData.zig");
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,

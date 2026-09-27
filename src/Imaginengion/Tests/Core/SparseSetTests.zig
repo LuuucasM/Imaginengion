@@ -1,7 +1,7 @@
 //! Unit tests for `SparseSet`. These live outside SparseSet.zig so the data structure
 //! itself stays free of test-only code. Run with `zig build test`.
 const std = @import("std");
-const SparseSet = @import("SparseSet.zig").SparseSet;
+const SparseSet = @import("../../Core/SparseSet.zig").SparseSet;
 
 const TrackedSet = SparseSet(u32, u20, u64, true);
 const UntrackedSet = SparseSet(u32, u20, u64, false);
