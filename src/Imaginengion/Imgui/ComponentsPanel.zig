@@ -21,6 +21,7 @@ const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
 const LayoutComponent = @import("../ECSComponents/Entity/LayoutComponent.zig");
 const LayoutItemComponent = @import("../ECSComponents/Entity/LayoutItemComponent.zig");
 const TextComponent = @import("../ECSComponents/Entity/TextComponent.zig");
+const QuadComponent = @import("../ECSComponents/Entity/QuadComponent.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
@@ -192,10 +193,31 @@ fn NewObjectComponentPopup(comptime ObjectType: type, engine_context: *EngineCon
         if (is_addable and !object.HasComponent(component_type)) {
             if (imgui.igMenuItem_Bool(component_type.Name.ptr, "", false, true)) {
                 defer imgui.igCloseCurrentPopup();
-                _ = try object.AddComponent(engine_context, component_type{});
+                try AddFromPanel(component_type, engine_context, object);
             }
         }
     }
+}
+
+/// Adds a component the way picking it from the panel's menu does: at its defaults, except that adding layout to
+/// something with a quad keeps the quad the size it is. A layout item starts at the quad's size, fixed, and a
+/// container with no item gets one like that. Fitting would shrink the quad to nothing, since layout only ever sizes
+/// a quad (it's the element's background), and never fits to one. Code, files and templates add exactly what they're
+/// given instead: a saved Fit is a real choice, and can't be told apart from a default one
+pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContext, object: anytype) !void {
+    if (comptime @TypeOf(object) == Entity and (component_type == LayoutItemComponent or component_type == LayoutComponent)) {
+        if (object.GetComponent(QuadComponent)) |quad| {
+            const keeps_size = LayoutItemComponent{ .mWidth = .{ .Fixed = quad.mSize.x }, .mHeight = .{ .Fixed = quad.mSize.y } };
+            if (component_type == LayoutItemComponent) {
+                _ = try object.AddComponent(engine_context, keeps_size);
+                return;
+            }
+            _ = try object.AddComponent(engine_context, LayoutComponent{});
+            if (!object.HasComponent(LayoutItemComponent)) _ = try object.AddComponent(engine_context, keeps_size);
+            return;
+        }
+    }
+    _ = try object.AddComponent(engine_context, component_type{});
 }
 
 fn ObjectTraits(comptime T: type) type {

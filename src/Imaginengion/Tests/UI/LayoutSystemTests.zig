@@ -534,3 +534,36 @@ test "a collapsed element and everything under it are hidden, and shown again wh
     try std.testing.expect(inner.HasComponent(LayoutHiddenTag));
     try std.testing.expect(inner_child.HasComponent(LayoutHiddenTag));
 }
+
+//------------------------------adding layout in the editor------------------------------
+
+const ComponentsPanel = @import("../../Imgui/ComponentsPanel.zig");
+
+test "adding layout from the panel keeps a quad the size it is" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try world.DrawnOverlay();
+
+    //an item on a quad starts fixed at the quad's size, where fitting would shrink it to nothing
+    const panel = try New(engine_context, scene, null);
+    _ = try panel.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 30, .y = 20 } });
+    try ComponentsPanel.AddFromPanel(LayoutItemComponent, engine_context, panel);
+    try world.Update();
+    try ExpectQuad(30, 20, panel);
+
+    //a container on a quad comes with an item like that
+    const box = try New(engine_context, scene, null);
+    _ = try box.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 8, .y = 6 } });
+    try ComponentsPanel.AddFromPanel(LayoutComponent, engine_context, box);
+    try std.testing.expect(box.HasComponent(LayoutItemComponent));
+    try world.Update();
+    try ExpectQuad(8, 6, box);
+
+    //with no quad there's nothing to keep, so the defaults it has always had
+    const bare = try New(engine_context, scene, null);
+    try ComponentsPanel.AddFromPanel(LayoutComponent, engine_context, bare);
+    try std.testing.expect(!bare.HasComponent(LayoutItemComponent));
+    try ComponentsPanel.AddFromPanel(LayoutItemComponent, engine_context, bare);
+    try std.testing.expectEqual(Layout.Sizing.Fit, bare.GetComponent(LayoutItemComponent).?.mWidth);
+}
