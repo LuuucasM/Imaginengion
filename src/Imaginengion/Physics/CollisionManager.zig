@@ -16,7 +16,6 @@ const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransform
 const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
-const Set = @import("../Vendor/ziglang-set/src/array_hash_set/unmanaged.zig").ArraySetUnmanaged;
 const ImguiManager = @import("../Imgui/Imgui.zig");
 
 const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
@@ -41,7 +40,24 @@ const RESTITUTION_THRESHOLD: f32 = 1.0;
 
 const CollisionManager = @This();
 
-const CurrCollisionSet = Set(u64);
+/// One pair of colliders whose shapes overlap on a substep
+const Touch = struct {
+    mKey: u64,
+    //where the pair's Contact is: in _OverlapContacts if mIsTrigger, in _BlockingContacts if not.
+    //only good for the substep that made it, the contact lists are rebuilt on the next one
+    mContactInd: u32,
+    mIsTrigger: bool,
+
+    fn LessThan(_: void, a: Touch, b: Touch) bool {
+        return a.mKey < b.mKey;
+    }
+};
+
+/// Both ids in one number, smaller one in the high half. The order the two are given in does not
+/// matter, so a pair keeps its key when the broad pass swaps which side it calls the origin
+pub fn PairKey(a: Entity.Type, b: Entity.Type) u64 {
+    return @as(u64, @min(a, b)) << 32 | @as(u64, @max(a, b));
+}
 
 pub const CollisionFilter = struct {
     pub const default: CollisionFilter = .{
@@ -60,32 +76,32 @@ pub const CollisionFilter = struct {
 };
 
 pub const empty: CollisionManager = .{
-    ._LastCache = undefined,
-    ._CurrentCache = undefined,
+    ._TouchingLast = .empty,
+    ._TouchingNow = .empty,
     ._BlockingContacts = .empty,
     ._OverlapContacts = .empty,
 };
 
-pub const ContactCache = struct {
-    pub const empty: ContactCache = .{
-        .AccumImpulse = 0.0,
-    };
-    AccumImpulse: f32,
-};
-
-_LastCache: std.AutoArrayHashMapUnmanaged(u64, ContactCache),
-_CurrentCache: std.AutoArrayHashMapUnmanaged(u64, ContactCache),
+//the pairs touching on the last substep and on this one, both sorted by key. They outlive the frame,
+//which is why they are on the engine allocator and not the frame one
+_TouchingLast: std.ArrayList(Touch),
+_TouchingNow: std.ArrayList(Touch),
 _BlockingContacts: std.ArrayList(Contact),
 _OverlapContacts: std.ArrayList(Contact),
 
 pub fn Init(_: *CollisionManager, _: std.mem.Allocator) !void {}
 
 pub fn Deinit(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
+    self._TouchingLast.deinit(engine_allocator);
+    self._TouchingNow.deinit(engine_allocator);
     self._BlockingContacts.deinit(engine_allocator);
     self._OverlapContacts.deinit(engine_allocator);
 }
 
+/// Forgets which pairs were touching too, so whatever is touching on the next substep counts as new
 pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void {
+    self._TouchingLast.clearRetainingCapacity();
+    self._TouchingNow.clearRetainingCapacity();
     self._BlockingContacts.clearRetainingCapacity();
     self._OverlapContacts.clearRetainingCapacity();
     _ = engine_allocator;
@@ -181,11 +197,6 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
         if (Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target)) {
-            const key: u64 = @as(u64, @intCast(contact.mOrigin.mID)) << 32 | @as(u64, @intCast(contact.mTarget.mID));
-            try self._CurrentCache.put(engine_context.FrameAllocator(), key, .empty);
-            if (!self._LastCache.contains(key)) {
-                //create new begin collision event
-            }
             i += 1;
         } else {
             self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
@@ -199,13 +210,52 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
     Tracy.Plot("Physics/Blocking Contacts", .{ .color = 0xFF5722 }, self._BlockingContacts.items.len);
     Tracy.Plot("Physics/Overlap Contacts", .{ .color = 0xFFC107 }, self._OverlapContacts.items.len);
 
-    //check for end collision events
-    var prev_iter = self._LastCache.iterator();
-    while (prev_iter.next()) |entry| {
-        if (!self._CurrentCache.contains(entry.key_ptr.*)) {
-            //create a new EndCOllisionEvent
-        }
+    try self.UpdateTouching(engine_context);
+}
+
+/// Works out which of this substep's contacts are new and queues a CollisionBeginEvent for each.
+/// Runs on what the narrow pass left, so every contact in both lists is a pair that really overlaps.
+fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext) !void {
+    const engine_allocator = engine_context.EngineAllocator();
+
+    self._TouchingNow.clearRetainingCapacity();
+    try self._TouchingNow.ensureTotalCapacity(engine_allocator, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
+    for (self._BlockingContacts.items, 0..) |contact, contact_ind| {
+        self._TouchingNow.appendAssumeCapacity(.{ .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID), .mContactInd = @intCast(contact_ind), .mIsTrigger = false });
     }
+    for (self._OverlapContacts.items, 0..) |contact, contact_ind| {
+        self._TouchingNow.appendAssumeCapacity(.{ .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID), .mContactInd = @intCast(contact_ind), .mIsTrigger = true });
+    }
+
+    //_TouchingLast was sorted the same way a substep ago, so with this one sorted the two can be walked
+    //side by side: a key can only be missing from the other list if that list has already moved past it
+    std.sort.pdq(Touch, self._TouchingNow.items, {}, Touch.LessThan);
+
+    const last = self._TouchingLast.items;
+    var last_ind: usize = 0;
+    for (self._TouchingNow.items) |touch| {
+        //keys in last below this one were touching and no longer are. an end collision event would go
+        //here, and for whatever is left of last once this loop is done
+        while (last_ind < last.len and last[last_ind].mKey < touch.mKey) : (last_ind += 1) {}
+
+        if (last_ind < last.len and last[last_ind].mKey == touch.mKey) {
+            //still touching, which is what keeps a pair from being reported every substep it is in contact
+            last_ind += 1;
+            continue;
+        }
+
+        const contact = if (touch.mIsTrigger) self._OverlapContacts.items[touch.mContactInd] else self._BlockingContacts.items[touch.mContactInd];
+        try engine_context.mGameEventManager.Insert(engine_allocator, .PostPhysics, .{ .CollisionBeginEvent = .{
+            .mOrigin = contact.mOrigin,
+            .mTarget = contact.mTarget,
+            .mNormal = contact.mNormal,
+            .mIsTrigger = touch.mIsTrigger,
+        } });
+    }
+
+    //swapped rather than copied: this substep's list is the next one's last, and the old last's
+    //storage is what the next substep fills
+    std.mem.swap(std.ArrayList(Touch), &self._TouchingLast, &self._TouchingNow);
 }
 
 pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {
@@ -266,10 +316,6 @@ pub fn PostsolverPass(self: *CollisionManager, engine_context: *EngineContext) !
 
 pub fn EndPass(self: *CollisionManager, engine_context: *EngineContext) void {
     _ = engine_context;
-    // Swap instead of deinit+reset so the stale cache's backing storage is
-    // reused as next pass's _CurrentCache instead of being freed and regrown.
-    std.mem.swap(std.AutoArrayHashMapUnmanaged(u64, ContactCache), &self._LastCache, &self._CurrentCache);
-    self._CurrentCache.clearRetainingCapacity();
     self._BlockingContacts.clearRetainingCapacity();
     self._OverlapContacts.clearRetainingCapacity();
 }

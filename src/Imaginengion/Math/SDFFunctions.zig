@@ -135,12 +135,35 @@ pub fn GetLocalPoint(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32))
     return point.SubVec(position).InvQuatRotate(rotation);
 }
 
+/// A quad is a thin plate: its 2D rounded box extruded to its thickness. Square corners (radii of 0) make it
+/// exactly the plain box
 pub fn sdIMQuad(point: Vec3(f32), quad: QuadData) f32 {
-    return sdBox(
-        GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation)),
-        .FromVector(quad.HalfExtents),
+    const local_point = GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation));
+    const half_extents: Vec3(f32) = .FromVector(quad.HalfExtents);
+    const distance_2d = sdRoundedBox2D(
+        .{ .x = local_point.x, .y = local_point.y },
+        .{ .x = half_extents.x, .y = half_extents.y },
+        .FromVector(quad.CornerRadii),
     );
+    return opExtrusion(local_point, distance_2d, half_extents.z);
 }
+
+/// Whether a point on the quad is in its border band: within BorderWidth of its (rounded) edge
+pub fn InIMQuadBorder(point: Vec3(f32), quad: QuadData) bool {
+    if (quad.BorderWidth <= 0) return false;
+    const local_point = GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation));
+    const half_extents: Vec3(f32) = .FromVector(quad.HalfExtents);
+    const distance_2d = sdRoundedBox2D(
+        .{ .x = local_point.x, .y = local_point.y },
+        .{ .x = half_extents.x, .y = half_extents.y },
+        .FromVector(quad.CornerRadii),
+    );
+    return distance_2d > -quad.BorderWidth;
+}
+
+/// A texture UV that means "no texture, just the surface's color", for surfaces like a border that are a
+/// solid color. A real UV's layer is never negative
+pub const UNTEXTURED_UV: Vec3(f32) = .{ .x = 0, .y = 0, .z = -2 };
 
 pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
     return sdBox(GlyphLocalPoint(point, glyph), .FromVector(glyph.HalfExtents));
@@ -148,7 +171,7 @@ pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
 
 /// The ray against the quad's box: where it hits, which face, and where on it.
 pub fn rayIMQuad(ray: Ray, quad: QuadData) HitInfo {
-    return RayIntersect.RayBox(ray, .FromVector(quad.Position), .FromVector(quad.Rotation), .FromVector(quad.HalfExtents));
+    return RayIntersect.RayRoundedBox2D(ray, .FromVector(quad.Position), .FromVector(quad.Rotation), .FromVector(quad.HalfExtents), .FromVector(quad.CornerRadii));
 }
 
 /// The ray against the glyph's box, which sits PlaneCenter off the glyph's position in its own plane.

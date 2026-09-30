@@ -59,6 +59,13 @@ pub const QuadData = extern struct {
     //the shader's vec3 takes 16 bytes, so on the GPU this starts at 48, not right after the 12 bytes of [3]f32
     ShadingHandle: u32 align(16),
     ShadingFlags: u32,
+    //the surface drawn in the border band instead of ShadingHandle's, when BorderWidth isn't 0
+    BorderShadingHandle: u32,
+    //world units, already scaled and kept to at most half the smaller side
+    BorderWidth: f32,
+    //world units, already scaled and clamped like BorderWidth, in SDFFunctions' order (x top right, y bottom
+    //right, z top left, w bottom left)
+    CornerRadii: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
 };
 
 pub const GlyphData = extern struct {
@@ -221,6 +228,15 @@ pub fn DrawQuad(
     var shading_flag: u32 = 0;
     if (quad_component.mTexOptions.mIsTransparent) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
 
+    //the border is a solid color: its own surface, which the marcher draws untextured
+    var border_shading_handle = shading_handle;
+    if (box.BorderWidth > 0) {
+        var border_options: Texture2D.TexOptions = .default;
+        border_options.mColor = quad_component.mBorderColor;
+        border_shading_handle = try shading_buff.AddSurface(engine_context.EngineAllocator(), &border_options, texture_asset, std.math.maxInt(u32));
+        if (quad_component.mBorderColor.w < 1.0) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
+    }
+
     const quad_buff_base = if (canvas != null) &self.mOverlayData.mQuadBufferBase else &self.mGameData.mQuadBufferBase;
 
     try quad_buff_base.append(engine_context.EngineAllocator(), .{
@@ -229,6 +245,9 @@ pub fn DrawQuad(
         .HalfExtents = box.HalfExtents.ToArray(),
         .ShadingHandle = @intCast(shading_handle),
         .ShadingFlags = shading_flag,
+        .BorderShadingHandle = @intCast(border_shading_handle),
+        .BorderWidth = box.BorderWidth,
+        .CornerRadii = box.CornerRadii.ToArray(),
     });
 }
 

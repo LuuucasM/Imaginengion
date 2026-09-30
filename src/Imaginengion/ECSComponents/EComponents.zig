@@ -14,6 +14,8 @@ pub const StaticBodyTag = @import("Entity/TagComponents.zig").StaticBodyTag;
 pub const DynamicBodyTag = @import("Entity/TagComponents.zig").DynamicBodyTag;
 pub const LayoutDirtyTag = @import("Entity/TagComponents.zig").LayoutDirtyTag;
 pub const LayoutHiddenTag = @import("Entity/TagComponents.zig").LayoutHiddenTag;
+pub const HoveredTag = @import("Entity/TagComponents.zig").HoveredTag;
+pub const PressedTag = @import("Entity/TagComponents.zig").PressedTag;
 pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
 pub const LayoutItemComponent = @import("Entity/LayoutItemComponent.zig");
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
@@ -65,6 +67,8 @@ pub const ComponentsList = [_]type{
     LayoutItemComponent,
     LayoutDirtyTag,
     LayoutHiddenTag,
+    HoveredTag,
+    PressedTag,
 
     //scripts
     ScriptComponent,
@@ -160,6 +164,8 @@ pub const EComponents = enum(u16) {
     LayoutItemComponent = ListInd(&ComponentsList, LayoutItemComponent),
     LayoutDirtyTag = ListInd(&ComponentsList, LayoutDirtyTag),
     LayoutHiddenTag = ListInd(&ComponentsList, LayoutHiddenTag),
+    HoveredTag = ListInd(&ComponentsList, HoveredTag),
+    PressedTag = ListInd(&ComponentsList, PressedTag),
 };
 
 comptime {

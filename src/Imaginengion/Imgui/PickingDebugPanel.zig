@@ -9,6 +9,7 @@ const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const RayCast = @import("../Physics/RayCast.zig");
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
 const Entity = @import("../ECSObjects/Entity.zig");
+const UIEvent = @import("../Events/UIEventData.zig").EventT;
 const EntityNameComponent = @import("../ECSComponents/EComponents.zig").NameComponent;
 const PlayerNameComponent = @import("../ECSComponents/PComponents.zig").NameComponent;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
@@ -17,6 +18,9 @@ const SceneNameComponent = SceneComponents.NameComponent;
 const PickingDebugPanel = @This();
 
 _P_Open: bool = false,
+//the last thing a mouse button did to an entity, to see pointer events arrive
+mLastPointerEvent: [128]u8 = undefined,
+mLastPointerEventLen: usize = 0,
 
 /// What the mouse is over, as picking will see it: this reads the view rects the panels recorded
 /// last frame, which is what was on screen, the same as next frame's input will.
@@ -37,6 +41,13 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
         viewport_panel.mViewportRects.items.len, viewport_panel.mIsHoveredViewport,
         viewport_panel.mPlayRects.items.len,     viewport_panel.mIsHoveredPlay,
     });
+
+    imgui.igSeparator();
+
+    //the pointer system's state: only a running game's views have one, the editor camera's view is for selecting
+    try PointerText(frame_allocator, "Pointer over", engine_context.mPointerSystem.mHovered.items);
+    try PointerText(frame_allocator, "Left button holding", engine_context.mPointerSystem.mPressed.get(.BUTTON_LEFT).items);
+    try Text(frame_allocator, "Last pointer event: {s}", .{if (self.mLastPointerEventLen > 0) self.mLastPointerEvent[0..self.mLastPointerEventLen] else "none yet"});
 
     imgui.igSeparator();
 
@@ -132,6 +143,28 @@ fn HitText(frame_allocator: std.mem.Allocator, hit: RayCast.RayHit) !void {
 fn EntityName(entity: Entity) []const u8 {
     const name_component = entity.GetComponent(EntityNameComponent) orelse return "<unnamed>";
     return if (name_component.mName.items.len > 0) name_component.mName.items else "<unnamed>";
+}
+
+/// Remembers the last press, release or click to show. Enter and exit aren't kept: they'd bury the clicks, and
+/// what is hovered is shown as it is
+pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
+    const text = switch (event) {
+        .PointerPressed => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} pressed on '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
+        .PointerReleased => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} released from '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
+        .PointerClicked => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} clicked '{s}' x{d}", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mClicks }),
+        .PointerEnter, .PointerExit, .Default => return,
+    } catch return;
+    self.mLastPointerEventLen = text.len;
+}
+
+/// The entities of a pointer chain, the one under the pointer first and then what it is inside
+fn PointerText(frame_allocator: std.mem.Allocator, label: []const u8, chain: []const Entity) !void {
+    var names: std.ArrayList(u8) = .empty;
+    for (chain, 0..) |entity, i| {
+        if (i > 0) try names.appendSlice(frame_allocator, " < ");
+        try names.appendSlice(frame_allocator, if (entity.IsActive()) EntityName(entity) else "<gone>");
+    }
+    try Text(frame_allocator, "{s}: {s}", .{ label, if (names.items.len > 0) names.items else "nothing" });
 }
 
 pub fn OnTogglePanelEvent(self: *PickingDebugPanel) void {

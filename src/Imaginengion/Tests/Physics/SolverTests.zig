@@ -1,4 +1,5 @@
-//! Covers the solver pass: what it does to the bodies in a contact once the narrow pass has found it.
+//! Covers the solver pass: what it does to the bodies in a contact once the narrow pass has found it,
+//! and the CollisionBeginEvent the narrow pass queues the first substep a pair touches.
 //! No window and no GPU, the passes are run by hand in the order PhysicsManager.OnUpdate runs them.
 const std = @import("std");
 
@@ -14,6 +15,7 @@ const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
+const GameEvent = @import("../../Events/GameEventData.zig").EventT;
 
 const eps: f32 = 0.0001;
 
@@ -31,6 +33,8 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
+        //the narrow pass queues its collision events here
+        engine_context.mGameEventManager.Deinit(engine_context.EngineAllocator());
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -228,4 +232,101 @@ test "a slow hit does not bounce" {
 
     try RunCollisionPasses(&collision_manager, engine_context);
     try std.testing.expectApproxEqAbs(@as(f32, 0), pair.ball.GetComponent(RigidBodyComponent).?.GetVelocity().x, eps);
+}
+
+/// One whole substep of collision: RunCollisionPasses, then the end pass that empties the contact lists
+fn RunSubstep(collision_manager: *CollisionManager, engine_context: *EngineContext) !void {
+    try RunCollisionPasses(collision_manager, engine_context);
+    collision_manager.EndPass(engine_context);
+}
+
+/// The collision events queued so far and not yet cleared
+fn QueuedCollisions(engine_context: *EngineContext) []const GameEvent {
+    return engine_context.mGameEventManager.mEventsArray.getPtr(.PostPhysics).items;
+}
+
+test "a pair's key is the same whichever side comes first" {
+    try std.testing.expectEqual(CollisionManager.PairKey(3, 7), CollisionManager.PairKey(7, 3));
+    try std.testing.expect(CollisionManager.PairKey(3, 7) != CollisionManager.PairKey(3, 8));
+}
+
+test "a collision begins once, and again only after the pair has come apart" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    var collision_manager: CollisionManager = .empty;
+    try collision_manager.Init(engine_context.EngineAllocator());
+    defer collision_manager.Deinit(engine_context.EngineAllocator());
+
+    const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
+
+    try RunSubstep(&collision_manager, engine_context);
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+
+    //the ball is the dynamic one, so it is the origin, and the wall is to its right
+    const event = QueuedCollisions(engine_context)[0].CollisionBeginEvent;
+    try std.testing.expectEqual(pair.ball.mID, event.mOrigin.mID);
+    try std.testing.expectEqual(pair.wall.mID, event.mTarget.mID);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), event.mNormal.x, eps);
+    try std.testing.expect(!event.mIsTrigger);
+
+    //the solver leaves the ball a little inside the wall (the slop), so it is still touching on the
+    //next substeps, and staying in contact is not a new collision
+    try RunSubstep(&collision_manager, engine_context);
+    try RunSubstep(&collision_manager, engine_context);
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+
+    //lifted clear of the wall for a substep, then put back into it
+    try pair.ball.SetTranslation(engine_context, .{ .x = -3, .y = 0, .z = 0 });
+    try RunSubstep(&collision_manager, engine_context);
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+
+    try pair.ball.SetTranslation(engine_context, .{ .x = -0.9, .y = 0, .z = 0 });
+    try RunSubstep(&collision_manager, engine_context);
+    try std.testing.expectEqual(@as(usize, 2), QueuedCollisions(engine_context).len);
+}
+
+test "a trigger pair begins once too, and is not pushed apart" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    var collision_manager: CollisionManager = .empty;
+    try collision_manager.Init(engine_context.EngineAllocator());
+    defer collision_manager.Deinit(engine_context.EngineAllocator());
+
+    const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
+    pair.wall.GetComponent(ColliderComponent).?.mCollisionFilter.IsTrigger = true;
+
+    try RunSubstep(&collision_manager, engine_context);
+    try RunSubstep(&collision_manager, engine_context);
+
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+    try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBeginEvent.mIsTrigger);
+    try std.testing.expectEqual(@as(f32, -0.9), pair.ball.GetComponent(TransformComponent).?.GetTranslation().x);
+}
+
+test "a world steps its own physics, and clearing the world forgets who was touching" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const world_manager = &engine_context.mEditorWorld;
+    const scene = try world_manager.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    _ = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
+
+    //the default frame time is exactly one fixed step, which is two substeps: the pair begins on the
+    //first and is only still touching on the second
+    try world_manager.OnPhysicsUpdate(engine_context);
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+    try std.testing.expectEqual(@as(usize, 1), world_manager.mPhysicsManager._CollisionManager._TouchingLast.items.len);
+
+    //another world's physics has seen none of it
+    try std.testing.expectEqual(@as(usize, 0), engine_context.mGameWorld.mPhysicsManager._CollisionManager._TouchingLast.items.len);
+
+    world_manager.clearAndFree(engine_context, .All);
+    try std.testing.expectEqual(@as(usize, 0), world_manager.mPhysicsManager._CollisionManager._TouchingLast.items.len);
 }

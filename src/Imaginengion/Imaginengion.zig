@@ -16,6 +16,7 @@ test {
     _ = @import("Tests/Renderer/ViewShapesTests.zig");
     _ = @import("Tests/UI/LayoutComponentTests.zig");
     _ = @import("Tests/UI/LayoutSystemTests.zig");
+    _ = @import("Tests/UI/PointerSystemTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }

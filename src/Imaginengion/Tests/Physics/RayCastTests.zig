@@ -325,3 +325,41 @@ test "text is hit over its whole bounds area, not just its letters" {
     const scaled = ShapeGeometry.TextBox(FakeFont, &transform, &text, &font, null);
     try std.testing.expectApproxEqAbs(@as(f32, 10), scaled.HalfExtents.x, eps);
 }
+
+test "a click in a rounded quad's cut off corner goes through it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    //4 x 4 with corners rounded by 1, right in front of the camera, and a plain quad behind it
+    const rounded = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
+    rounded.GetComponent(QuadComponent).?.mCornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
+    const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    //straight down at points in front of the camera, so each ray only moves in z
+    const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
+    const corner = CameraRay.Ray{ .Origin = .{ .x = 1.9, .y = 1.9, .z = 0 }, .Dir = down };
+    const inside_curve = CameraRay.Ray{ .Origin = .{ .x = 1.5, .y = 1.5, .z = 0 }, .Dir = down };
+    try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, corner, .{}));
+    try ExpectEntity(rounded, try Cast(engine_context, ORIGIN_POSE, inside_curve, .{}));
+}
+
+test "corner radii and borders grow with the quad's smaller axis and stay within half its smaller side" {
+    var transform: TransformComponent = .{};
+    transform.SetWorldScale(.{ .x = 3, .y = 2, .z = 1 });
+    const quad = QuadComponent{
+        .mSize = .{ .x = 4, .y = 4 },
+        .mCornerRadii = .{ .x = 1, .y = 0, .z = 100, .w = 0.5 },
+        .mBorderWidth = 0.25,
+    };
+
+    const box = ShapeGeometry.QuadBox(&transform, &quad, null);
+    //scaled by 2, the smaller axis; the quad is 12 x 8, so nothing can be more than 4
+    try std.testing.expectApproxEqAbs(@as(f32, 2), box.CornerRadii.x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), box.CornerRadii.y, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 4), box.CornerRadii.z, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), box.CornerRadii.w, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), box.BorderWidth, eps);
+}

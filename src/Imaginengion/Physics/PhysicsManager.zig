@@ -59,15 +59,18 @@ pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
     self._CollisionManager.Deinit(engine_allocator);
 }
 
-pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, comptime world_type: EngineContext.WorldType) !void {
+/// Drops everything carried from one step to the next: the leftover time and which pairs were touching.
+/// For when the owning world's entities are cleared out or replaced, since their ids then mean different objects
+pub fn Reset(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
+    self._InternalData = .empty;
+    self._CollisionManager.Reset(engine_allocator);
+}
+
+/// world_manager is the world that owns this PhysicsManager, see WorldManager.OnPhysicsUpdate
+pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
 
-    var world_manager = switch (world_type) {
-        .Game => &engine_context.mGameWorld,
-        .Editor => &engine_context.mEditorWorld,
-        .Simulate => &engine_context.mSimulateWorld,
-    };
     self._InternalData.Accumulator += engine_context.mDT;
 
     //fixed steps run this frame: normally 0 or 1, and climbing means physics is falling behind real time

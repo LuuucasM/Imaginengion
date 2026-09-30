@@ -114,6 +114,8 @@ const SurfaceHit = struct {
     T: f32,
     Normal: Vec3(f32),
     TextureUV: Vec3(f32),
+    //which surface the hit is shaded with: usually the shape's own, but a quad's border band has its own
+    ShadingHandle: u32,
 
     const none: SurfaceHit = .{
         .Found = false,
@@ -121,6 +123,7 @@ const SurfaceHit = struct {
         .T = 0,
         .Normal = .{ .x = 0, .y = 0, .z = 0 },
         .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
+        .ShadingHandle = 0,
     };
 };
 
@@ -242,7 +245,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                 //the exact point on the surface, rather than wherever within epsilon the march stopped
                 self.mEdges[curr_edge_ind].Length = surface.T;
                 const end_point = from_point.AddVec(curr_edge.Direction.MulScalar(surface.T));
-                const shading_handle = self.GetShadingHandle(surface.Object);
+                const shading_handle = surface.ShadingHandle;
 
                 const new_node_ind = self.GetNodeIndex();
                 self.mNodes[new_node_ind] = Node{
@@ -355,6 +358,19 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                     const hit = SDFFunc.rayIMQuad(ray, quad);
                     if (!IsFrontHit(hit)) return .none;
 
+                    //the band around the edge is the border's solid color, the rest is the quad's own surface
+                    const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
+                    if (SDFFunc.InIMQuadBorder(hit_point, quad)) {
+                        return .{
+                            .Found = true,
+                            .Object = object,
+                            .T = hit.T,
+                            .Normal = hit.Normal,
+                            .TextureUV = SDFFunc.UNTEXTURED_UV,
+                            .ShadingHandle = quad.BorderShadingHandle,
+                        };
+                    }
+
                     const texture_shading_data = self.mSurfShading[quad.ShadingHandle];
                     return .{
                         .Found = true,
@@ -367,6 +383,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                             texture_shading_data.TextureWidth,
                             texture_shading_data.TextureHeight,
                         ),
+                        .ShadingHandle = quad.ShadingHandle,
                     };
                 },
                 .Glyph => {
@@ -391,6 +408,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                             texture_shading_data.TextureWidth,
                             texture_shading_data.TextureHeight,
                         ),
+                        .ShadingHandle = glyph.AtlasShadingHandle,
                     };
                 },
                 else => return .none,
@@ -437,6 +455,8 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         }
 
         fn SampleTexture(texture_uv: Vec3(f32), sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
+            //a solid color surface: the surface's color comes through as it is
+            if (texture_uv.z == SDFFunc.UNTEXTURED_UV.z) return Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 };
             if (texture_uv.x < 0 or texture_uv.y < 0 or texture_uv.z < 0) return Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
 
             return .FromVector(sample_sampler(textures_array, texture_uv.ToVector(), 0.0));

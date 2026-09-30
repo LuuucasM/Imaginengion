@@ -8,7 +8,6 @@ const Renderer = @import("../Renderer/Renderer.zig");
 const Program = @import("../Programs/Program.zig");
 const Application = @import("../Core/Application.zig");
 const Tracy = @import("Tracy.zig");
-const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const EngineContext = @This();
@@ -23,6 +22,11 @@ pub const WindowEventCallback = WindowEventManager.EventCallback;
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData);
 pub const ImguiEventCallback = ImguiEventManager.EventCallback;
+
+const UIEventData = @import("../Events/UIEventData.zig");
+const UIEventManager = @import("../Events/EventManager.zig").EventManager(UIEventData);
+pub const UIEventCallback = UIEventManager.EventCallback;
+const PointerSystem = @import("../UI/PointerSystem.zig");
 
 const GameEventData = @import("../Events/GameEventData.zig");
 const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData);
@@ -72,10 +76,13 @@ mAssetManager: AssetManager = .empty,
 mAudioManager: AudioManager = .{},
 mInputManager: InputManager = .empty,
 mRenderer: Renderer = .{},
-mPhysicsManager: PhysicsManager = .{},
 
 mGameEventManager: GameEventManager = .empty,
 mSystemEventManager: WindowEventManager = .empty,
+/// What the pointer does to entities (see Events/UIEventData.zig), sent by mPointerSystem
+mUIEventManager: UIEventManager = .empty,
+/// What the mouse is over and holding down, as tags and events on entities
+mPointerSystem: PointerSystem = .empty,
 
 mGameWorld: WorldManager = .{},
 mEditorWorld: WorldManager = .{},
@@ -125,8 +132,6 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
     try self.mAudioManager.Init(self);
     try self.mInputManager.Init(self.EngineAllocator());
 
-    try self.mPhysicsManager.Init(self.EngineAllocator());
-
     try self.mGameWorld.Init(self.EngineAllocator());
     try self.mEditorWorld.Init(self.EngineAllocator());
     try self.mSimulateWorld.Init(self.EngineAllocator());
@@ -145,6 +150,7 @@ pub fn SetSyncCallbacks(self: *EngineContext, program: *Program) void {
     self.mSystemEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mGameEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mImguiEventManager.SetSyncCallback(program, Program.OnEvent);
+    self.mUIEventManager.SetSyncCallback(program, Program.OnEvent);
 
     self.mAssetManager.SetSyncCallback(program, Program.OnEvent);
     self.mAudioManager.SetSyncCallback(program, Program.OnEvent);
@@ -172,8 +178,9 @@ pub fn DeInit(self: *EngineContext) void {
     self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mImguiEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
+    self.mUIEventManager.Deinit(self.EngineAllocator());
+    self.mPointerSystem.Deinit(self.EngineAllocator());
 
-    self.mPhysicsManager.Deinit(self.EngineAllocator());
     self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit(self);
     self.mAssetManager.Deinit(self);

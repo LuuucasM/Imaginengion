@@ -15,12 +15,19 @@ const eps: f32 = 0.0001;
 const IDENTITY = Quat(f32){ .w = 1, .x = 0, .y = 0, .z = 0 };
 
 fn MakeQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32)) QuadData {
+    return MakeRoundedQuad(center, rotation, half, .{ .x = 0, .y = 0, .z = 0, .w = 0 }, 0);
+}
+
+fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32), radii: Vec4(f32), border_width: f32) QuadData {
     return .{
         .Rotation = rotation.ToArray(),
         .Position = center.ToArray(),
         .HalfExtents = half.ToArray(),
         .ShadingHandle = 0,
         .ShadingFlags = 0,
+        .BorderShadingHandle = 0,
+        .BorderWidth = border_width,
+        .CornerRadii = radii.ToArray(),
     };
 }
 
@@ -187,4 +194,39 @@ test "opExtrusion of sdRoundedBox2D and normalExtrusion agree with RayRoundedBox
         try std.testing.expectApproxEqAbs(@as(f32, 1), normal.Dot(hit.Normal), 0.001);
     }
     try std.testing.expect(hits > 200);
+}
+
+//a quad as the marcher sees it: a rounded plate, and its border band
+
+test "a quad with square corners is exactly the plain box, and rounding only cuts the corners" {
+    const half = Vec3(f32){ .x = 2, .y = 1, .z = SDFFunc.THICKNESS_2D };
+    const square = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, half);
+    const rounded = MakeRoundedQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, half, .{ .x = 0.5, .y = 0.5, .z = 0.5, .w = 0.5 }, 0);
+
+    //in front of the middle, and off the right edge: rounding changes neither
+    for ([_]Vec3(f32){ .{ .x = 0, .y = 0, .z = 3 }, .{ .x = 3, .y = 0, .z = 0 } }) |point| {
+        try std.testing.expectApproxEqAbs(@as(f32, point.x + point.z - (if (point.x > 0) half.x else half.z)), SDFFunc.sdIMQuad(point, square), eps);
+        try std.testing.expectApproxEqAbs(SDFFunc.sdIMQuad(point, square), SDFFunc.sdIMQuad(point, rounded), eps);
+    }
+
+    //just inside the square corner is on the square quad, but outside the rounded one
+    const corner = Vec3(f32){ .x = 1.95, .y = 0.95, .z = 0 };
+    try std.testing.expect(SDFFunc.sdIMQuad(corner, square) <= 0);
+    try std.testing.expect(SDFFunc.sdIMQuad(corner, rounded) > 0);
+}
+
+test "the border band runs along the edge, round the rounded corners, and only as wide as the border" {
+    const half = Vec3(f32){ .x = 2, .y = 1, .z = SDFFunc.THICKNESS_2D };
+    const quad = MakeRoundedQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, half, .{ .x = 0.5, .y = 0.5, .z = 0.5, .w = 0.5 }, 0.1);
+
+    try std.testing.expect(SDFFunc.InIMQuadBorder(.{ .x = 1.95, .y = 0, .z = 0 }, quad));
+    try std.testing.expect(!SDFFunc.InIMQuadBorder(.{ .x = 1.85, .y = 0, .z = 0 }, quad));
+    try std.testing.expect(!SDFFunc.InIMQuadBorder(.{ .x = 0, .y = 0, .z = 0 }, quad));
+    //on the curve of the top right corner, whose center is (1.5, 0.5), 0.05 in from it
+    const along_curve = Vec3(f32){ .x = 1.5 + 0.45 * 0.7071, .y = 0.5 + 0.45 * 0.7071, .z = 0 };
+    try std.testing.expect(SDFFunc.InIMQuadBorder(along_curve, quad));
+
+    //no border: nothing is in it
+    const plain = MakeRoundedQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, half, .{ .x = 0.5, .y = 0.5, .z = 0.5, .w = 0.5 }, 0);
+    try std.testing.expect(!SDFFunc.InIMQuadBorder(.{ .x = 1.99, .y = 0, .z = 0 }, plain));
 }

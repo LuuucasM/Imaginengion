@@ -18,6 +18,7 @@ const EManager = @import("../ECSManagers/EManager.zig");
 const GCManager = @import("../ECSManagers/GCManager.zig");
 const PManager = @import("../ECSManagers/PManager.zig");
 const SManager = @import("../ECSManagers/SManager.zig");
+const PhysicsManager = @import("../Physics/PhysicsManager.zig");
 
 const EEventData = @import("../Events/EManagerData.zig");
 const GCEventData = @import("../Events/GCManagerData.zig");
@@ -37,6 +38,10 @@ mEManager: EManager = .empty,
 mGCManager: GCManager = .empty,
 mPManager: PManager = .empty,
 mSManager: SManager = .empty,
+
+/// What physics carries from one step of this world to the next: leftover step time and which pairs
+/// were touching. It is about this world's entities, so it lives and is cleared with them
+mPhysicsManager: PhysicsManager = .{},
 
 pub fn GetEntity(self: *WorldManager, entity_id: Entity.Type) Entity {
     return Entity{ .mID = entity_id, .mManager = self };
@@ -59,6 +64,12 @@ pub fn Init(self: *WorldManager, engine_allocator: std.mem.Allocator) !void {
     try self.mGCManager.Init(engine_allocator);
     try self.mPManager.Init(engine_allocator);
     try self.mSManager.Init(engine_allocator);
+    try self.mPhysicsManager.Init(engine_allocator);
+}
+
+/// Steps this world's physics by the frame's time
+pub fn OnPhysicsUpdate(self: *WorldManager, engine_context: *EngineContext) !void {
+    try self.mPhysicsManager.OnUpdate(engine_context, self);
 }
 
 /// Points every event manager under this world at the engine-wide synchronous listener.
@@ -74,11 +85,16 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mGCManager.Deinit(engine_context);
     self.mPManager.Deinit(engine_context);
     self.mSManager.Deinit(engine_context);
+    self.mPhysicsManager.Deinit(engine_context.EngineAllocator());
 }
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
     const zone = Tracy.ZoneInit("WorldManager::clearAndFree", @src());
     defer zone.Deinit();
+
+    //the physics state names entities by id, so it goes whenever they do
+    if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.EngineAllocator());
+
     switch (options) {
         .All => {
             self.mEManager.clearAndFree(engine_context);
@@ -104,6 +120,9 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
     //the ECS copies components by value, so every object handle in them still points at this world.
     //ids carry over, so only the manager has to change, and only once all four managers are across
     other_world.RetargetHandles();
+
+    //physics state is not copied: the copy starts its own stepping, so nothing in it has touched yet
+    other_world.mPhysicsManager.Reset(engine_context.EngineAllocator());
 }
 
 /// Points every object handle (Entity, GameContext, Player, Scene) held in this world's components at

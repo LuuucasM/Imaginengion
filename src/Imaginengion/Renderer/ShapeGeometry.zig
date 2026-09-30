@@ -5,6 +5,7 @@ const std = @import("std");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
+const Vec4 = MathTypes.Vec4;
 
 const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const CanvasTransform = OverlayCanvas.CanvasTransform;
@@ -31,6 +32,10 @@ pub const Box = struct {
     Center: Vec3(f32),
     Rotation: Quat(f32),
     HalfExtents: Vec3(f32),
+    //a rounded quad's corners, in world units (x top right, y bottom right, z top left, w bottom left). 0 for a box
+    CornerRadii: Vec4(f32) = .{ .x = 0, .y = 0, .z = 0, .w = 0 },
+    //a quad's border band, in world units. Only drawn, never part of the shape
+    BorderWidth: f32 = 0,
 };
 
 /// Everything that is drawn: quads and text. What the renderer draws and what picking clicks on
@@ -131,10 +136,23 @@ pub fn QuadBox(transform: *const TransformComponent, quad: *const QuadComponent,
         half_y *= c.Scale;
     }
 
+    //corners and border grow with the quad, by its smaller axis so a rounded corner stays round. Neither can be
+    //more than half the smaller side: past that the corners would overlap, and the border would cover it all
+    const size_scale = @min(world_scale.x, world_scale.y) * if (canvas) |c| c.Scale else 1.0;
+    const most = @min(half_x, half_y);
+    const radii = quad.mCornerRadii.MulScalar(size_scale);
+
     return .{
         .Center = center,
         .Rotation = rotation,
         .HalfExtents = .{ .x = half_x, .y = half_y, .z = THICKNESS_2D },
+        .CornerRadii = .{
+            .x = std.math.clamp(radii.x, 0, most),
+            .y = std.math.clamp(radii.y, 0, most),
+            .z = std.math.clamp(radii.z, 0, most),
+            .w = std.math.clamp(radii.w, 0, most),
+        },
+        .BorderWidth = std.math.clamp(quad.mBorderWidth * size_scale, 0, most),
     };
 }
 

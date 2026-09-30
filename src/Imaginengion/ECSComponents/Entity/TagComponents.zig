@@ -35,3 +35,22 @@ pub const LayoutHiddenTag = struct {
 
     pub fn Deinit(_: *LayoutHiddenTag, _: *EngineContext) void {}
 };
+
+/// On an entity while the pointer is over it or over something inside it (see UI/PointerSystem.zig). A state to
+/// check or query, e.g. for a hover color; the moment it starts and ends are PointerEnter and PointerExit events.
+/// Never saved
+pub const HoveredTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "HoveredTag";
+
+    pub fn Deinit(_: *HoveredTag, _: *EngineContext) void {}
+};
+
+/// On an entity while a mouse button that went down on it (or on something inside it) is still held, even once the
+/// pointer has moved off it. For a pushed in look, and for knowing what is being held or dragged. Never saved
+pub const PressedTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "PressedTag";
+
+    pub fn Deinit(_: *PressedTag, _: *EngineContext) void {}
+};

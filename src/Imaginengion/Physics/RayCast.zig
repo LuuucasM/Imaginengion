@@ -99,7 +99,8 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                 if (entity.GetComponent(QuadComponent)) |quad| {
                     if (quad.mShouldRender) {
                         const box = ShapeGeometry.QuadBox(transform, quad, canvas);
-                        Consider(best, entity, .Quad, RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents), far, options);
+                        //rounded, so a click in a cut off corner goes through to whatever is behind
+                        Consider(best, entity, .Quad, RayIntersect.RayRoundedBox2D(ray, box.Center, box.Rotation, box.HalfExtents, box.CornerRadii), far, options);
                     }
                 }
                 if (entity.GetComponent(TextComponent)) |text| {

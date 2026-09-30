@@ -10,12 +10,17 @@ const EPlayerComponents = @import("../ECSComponents/PComponents.zig").EComponent
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const EGameContextComponents = @import("../ECSComponents/GCComponents.zig").EComponents;
 
+const Vec3 = @import("../Math/MathTypes.zig").Vec3;
+
 pub const EventCategories = enum {
     EndOfFrame,
+    //queued by the physics step, for whatever runs right after it
+    PostPhysics,
 };
 
 pub const EventT = union(enum) {
     Default: DefaultEvent,
+    CollisionBeginEvent: CollisionBeginEvent,
     DestroyEntityEvent: DestroyEntityEvent,
     DestroySceneEvent: DestroySceneEvent,
     DestroyPlayerEvent: DestroyPlayerEvent,
@@ -27,6 +32,17 @@ pub const EventT = union(enum) {
 };
 
 pub const DefaultEvent = struct {};
+
+/// Two colliders that were apart on the last physics substep are overlapping on this one.
+/// Sent once per pair: nothing more is sent while they stay in contact
+pub const CollisionBeginEvent = struct {
+    mOrigin: Entity,
+    mTarget: Entity,
+    //points from mOrigin to mTarget
+    mNormal: Vec3(f32),
+    //one of the two is a trigger, so they passed through each other instead of being pushed apart
+    mIsTrigger: bool,
+};
 
 pub const DestroyEntityEvent = struct {
     mEntity: Entity,

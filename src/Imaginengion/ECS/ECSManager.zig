@@ -532,7 +532,9 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
 
         fn _ValidateCompList(comptime component_list: []const type) void {
             inline for (component_list) |component_type| {
-                const type_name = std.fmt.comptimePrint(" {s}", .{@typeName(component_type)});
+                //concatenated rather than comptimePrint: formatting costs compile time steps per character, and with
+                //enough components the list ran past the default limit
+                const type_name = " " ++ @typeName(component_type);
                 const type_info = @typeInfo(component_type);
                 switch (type_info) {
                     .@"struct" => {},
