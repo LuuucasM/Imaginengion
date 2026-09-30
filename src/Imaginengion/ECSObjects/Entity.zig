@@ -21,6 +21,7 @@ const RenderTargetComponent = Components.RenderTargetComponent;
 const OnKeyPressedScript = Components.OnKeyPressedScript;
 const ViewpointComponent = Components.ViewpointComponent;
 const OnUpdateScript = Components.OnUpdateScript;
+const OnCollisionBeginScript = Components.OnCollisionBeginScript;
 const MainObjectComponent = @import("../ECS/Components.zig").MainObjectComponent;
 const PathType = @import("../ECSManagers/AManager.zig").PathType;
 const ScriptAsset = @import("../ECSComponents/AComponents.zig").ScriptAsset;
@@ -169,6 +170,9 @@ pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle
         },
         .EntityOnUpdate => {
             _ = try new_script_entity.AddComponent(engine_context, OnUpdateScript{});
+        },
+        .EntityOnCollisionBegin => {
+            _ = try new_script_entity.AddComponent(engine_context, OnCollisionBeginScript{});
         },
         else => @panic("this shouldnt happen!\n"),
     }
@@ -346,5 +350,5 @@ pub const Invalidate = Core.Invalidate;
 pub const IsIDValid = Core.IsIDValid;
 
 fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
-    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate);
+    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate or script_type == .EntityOnCollisionBegin);
 }

@@ -96,6 +96,16 @@ pub fn FindViewAt(self: *const ViewportPanel, screen_pos: Vec2(f32)) ?ViewAt {
     return null;
 }
 
+/// The view `camera` was last drawn in, wherever the mouse is. Null if it isn't on screen
+pub fn FindViewOf(self: *const ViewportPanel, camera: Player) ?ViewRect {
+    for ([_][]const ViewRect{ self.mPlayRects.items, self.mViewportRects.items }) |rects| {
+        for (rects) |rect| {
+            if (rect.Camera.mID == camera.mID and rect.Camera.mManager == camera.mManager) return rect;
+        }
+    }
+    return null;
+}
+
 fn FindInRects(rects: []const ViewRect, screen_pos: Vec2(f32)) ?struct { View: ViewRect, Pixel: Vec2(f32) } {
     var i = rects.len;
     while (i > 0) {

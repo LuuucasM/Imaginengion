@@ -1,5 +1,6 @@
 //! Covers the solver pass: what it does to the bodies in a contact once the narrow pass has found it,
-//! and the CollisionBeginEvent the narrow pass queues the first substep a pair touches.
+//! the CollisionBeginEvent the narrow pass queues the first substep a pair touches, and handing that
+//! event to the entities' collision scripts.
 //! No window and no GPU, the passes are run by hand in the order PhysicsManager.OnUpdate runs them.
 const std = @import("std");
 
@@ -13,9 +14,14 @@ const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const TransformComponent = EntityComponents.TransformComponent;
+const OnCollisionBeginScript = EntityComponents.OnCollisionBeginScript;
+const OnUpdateScript = EntityComponents.OnUpdateScript;
+
+const ECSObject = @import("../../ECSObjects/ECSObject.zig");
+const ScriptsProcessor = @import("../../Scripts/ScriptsProcessor.zig");
 
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
-const GameEvent = @import("../../Events/GameEventData.zig").EventT;
+const PhysicsEvent = @import("../../Events/PhysicsEventData.zig").EventT;
 
 const eps: f32 = 0.0001;
 
@@ -33,8 +39,6 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mEditorWorld.Deinit(engine_context);
-        //the narrow pass queues its collision events here
-        engine_context.mGameEventManager.Deinit(engine_context.EngineAllocator());
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -68,7 +72,8 @@ fn RunCollisionPasses(collision_manager: *CollisionManager, engine_context: *Eng
     const dynamic_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.DynamicCollidersQuery);
     const other_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.OtherCollidersQuery);
     try collision_manager.BroadPass(engine_context, world_manager, dynamic_colliders.items, other_colliders.items);
-    try collision_manager.NarrowPass(engine_context);
+    //queued where the world's own physics step would queue them, and freed with the world
+    try collision_manager.NarrowPass(engine_context, &world_manager.mPhysicsManager.mEventManager);
     try collision_manager.SolverPass(world_manager, engine_context);
 }
 
@@ -241,8 +246,8 @@ fn RunSubstep(collision_manager: *CollisionManager, engine_context: *EngineConte
 }
 
 /// The collision events queued so far and not yet cleared
-fn QueuedCollisions(engine_context: *EngineContext) []const GameEvent {
-    return engine_context.mGameEventManager.mEventsArray.getPtr(.PostPhysics).items;
+fn QueuedCollisions(engine_context: *EngineContext) []const PhysicsEvent {
+    return engine_context.mEditorWorld.mPhysicsManager.mEventManager.mEventsArray.getPtr(.PostPhysics).items;
 }
 
 test "a pair's key is the same whichever side comes first" {
@@ -266,7 +271,7 @@ test "a collision begins once, and again only after the pair has come apart" {
     try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
 
     //the ball is the dynamic one, so it is the origin, and the wall is to its right
-    const event = QueuedCollisions(engine_context)[0].CollisionBeginEvent;
+    const event = QueuedCollisions(engine_context)[0].CollisionBegin;
     try std.testing.expectEqual(pair.ball.mID, event.mOrigin.mID);
     try std.testing.expectEqual(pair.wall.mID, event.mTarget.mID);
     try std.testing.expectApproxEqAbs(@as(f32, 1), event.mNormal.x, eps);
@@ -305,7 +310,7 @@ test "a trigger pair begins once too, and is not pushed apart" {
     try RunSubstep(&collision_manager, engine_context);
 
     try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
-    try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBeginEvent.mIsTrigger);
+    try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
     try std.testing.expectEqual(@as(f32, -0.9), pair.ball.GetComponent(TransformComponent).?.GetTranslation().x);
 }
 
@@ -329,4 +334,29 @@ test "a world steps its own physics, and clearing the world forgets who was touc
 
     world_manager.clearAndFree(engine_context, .All);
     try std.testing.expectEqual(@as(usize, 0), world_manager.mPhysicsManager._CollisionManager._TouchingLast.items.len);
+}
+
+test "handing a collision to scripts that have nothing to run is skipped" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const pair = try WallAndBall(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
+
+    //a collision script and one of another type on the ball. Core's AddScript with no asset: the per
+    //type wrapper loads the script to read its type, which needs a built script
+    const collision_script = try ECSObject.Core(Entity).AddScript(pair.ball, engine_context, .uninit);
+    _ = try collision_script.AddComponent(engine_context, OnCollisionBeginScript{});
+    const update_script = try ECSObject.Core(Entity).AddScript(pair.ball, engine_context, .uninit);
+    _ = try update_script.AddComponent(engine_context, OnUpdateScript{});
+
+    //the update script is passed over for not being a collision script, the collision script for
+    //having no asset, and the wall for having no scripts at all
+    try ScriptsProcessor.RunCollisionBeginScripts(engine_context, .{
+        .mOrigin = pair.ball,
+        .mTarget = pair.wall,
+        .mNormal = .{ .x = 1, .y = 0, .z = 0 },
+        .mIsTrigger = false,
+    });
 }

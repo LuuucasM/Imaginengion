@@ -23,6 +23,10 @@ const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const ChildComponent = @import("../ECS/Components.zig").ChildComponent;
 const EntitySceneComponent = EComponents.EntitySceneComponent;
 const StackPosComponent = SComponents.StackPosComponent;
+const OnCollisionBeginScript = EComponents.OnCollisionBeginScript;
+
+const CollisionInfo = @import("../Physics/Collisions.zig").CollisionInfo;
+const CollisionBeginEvent = @import("../Events/PhysicsEventData.zig").CollisionBeginEvent;
 
 const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
@@ -79,6 +83,39 @@ pub fn RunScript(
     }
 
     return cont_bool;
+}
+
+/// Runs the OnCollisionBegin scripts of both entities in a collision that has just begun. Meant for
+/// after the physics step and never during it: a script is free to move or delete things, which the
+/// step's contact lists could not survive.
+pub fn RunCollisionBeginScripts(engine_context: *EngineContext, event: CollisionBeginEvent) !void {
+    //each side is told about the contact as it sees it, so the normal always points at the other one
+    try RunCollisionScripts(OnCollisionBeginScript, engine_context, event.mOrigin, event.mTarget, .{ .mNormal = event.mNormal, .mIsTrigger = event.mIsTrigger });
+    try RunCollisionScripts(OnCollisionBeginScript, engine_context, event.mTarget, event.mOrigin, .{ .mNormal = event.mNormal.Neg(), .mIsTrigger = event.mIsTrigger });
+}
+
+/// Runs owner's own collision scripts of one type. Nothing is checked for them first: every one is
+/// handed the collision, and it is the script that looks at what it hit. Unlike RunScript this starts
+/// from the one object and walks its script children, since a collision is about two entities and
+/// not every entity in the world. A script that returns false stops the ones after it.
+fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContext, owner: Entity, other: Entity, info: CollisionInfo) !void {
+    _ValidateScriptType(Entity, script_type);
+
+    var script_iter = owner.GetIterator(.Script);
+    while (script_iter.next()) |script| {
+        if (!script.HasComponent(script_type)) continue;
+
+        const script_component = script.GetComponent(ScriptComponent) orelse continue;
+        if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
+
+        const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
+
+        const script_zone = Tracy.ZoneInit("ScriptsProcessor::CollisionScript", @src());
+        defer script_zone.Deinit();
+        if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
+
+        if (!script_asset.Run(script_type, .{ engine_context, &owner, &other, &info })) return;
+    }
 }
 
 /// Scripts run top layer first, matching the order scenes are drawn in. The sort is

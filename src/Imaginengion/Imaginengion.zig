@@ -44,6 +44,9 @@ pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScr
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;
 
+//Physics Stuff ---------------------------------------------
+pub const CollisionInfo = @import("Physics/Collisions.zig").CollisionInfo;
+
 //Rendering Stuff -------------------------------------------
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").PushConstants;
 pub const QuatData = @import("Renderer/Renderer2D.zig").QuadData;

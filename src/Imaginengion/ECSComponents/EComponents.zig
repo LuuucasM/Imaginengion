@@ -37,6 +37,7 @@ pub const MainObjectComponent = @import("../ECS/Components.zig").MainObjectCompo
 const ScriptTags = @import("Shared/ScriptTags.zig");
 pub const OnKeyPressedScript = ScriptTags.OnKeyPressedScript;
 pub const OnUpdateScript = ScriptTags.EntityOnUpdateScript;
+pub const OnCollisionBeginScript = ScriptTags.OnCollisionBeginScript;
 
 ///This is an array of all the components that Entity can have
 /// It is used to be passed to the ECS
@@ -74,6 +75,7 @@ pub const ComponentsList = [_]type{
     ScriptComponent,
     OnKeyPressedScript,
     OnUpdateScript,
+    OnCollisionBeginScript,
 };
 
 ///This is an array of components that should be serialized
@@ -134,6 +136,7 @@ pub const ComponentPanelList = [_]type{
 pub const ScriptsList = [_]type{
     OnKeyPressedScript,
     OnUpdateScript,
+    OnCollisionBeginScript,
 };
 
 pub const EComponents = enum(u16) {
@@ -155,6 +158,7 @@ pub const EComponents = enum(u16) {
     ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
     OnInputPressedScript = ListInd(&ComponentsList, OnKeyPressedScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
+    OnCollisionBeginScript = ListInd(&ComponentsList, OnCollisionBeginScript),
     ViewpointComponent = ListInd(&ComponentsList, ViewpointComponent),
     RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),

@@ -16,6 +16,9 @@ const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const ScenePhysicsComponent = SceneComponents.PhysicsComponent;
 const CollisionManager = @import("CollisionManager.zig");
 
+const EventData = @import("../Events/PhysicsEventData.zig");
+pub const EventManagerT = @import("../Events/EventManager.zig").EventManager(EventData);
+
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
@@ -46,6 +49,10 @@ const IDENTITY_ROTATION: Quat(f32) = .{ .w = 1.0, .x = 0.0, .y = 0.0, .z = 0.0 }
 const IDENTITY_SCALE: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 };
 const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
 
+/// What the steps have to report, e.g. the collisions that began. Nothing in here listens to it:
+/// whoever steps the world processes it afterwards, see ProcessEvents
+mEventManager: EventManagerT = .empty,
+
 _CollisionManager: CollisionManager = .empty,
 _InternalData: InternalData = .empty,
 
@@ -57,13 +64,27 @@ pub fn Deinit(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
     const zone = Tracy.ZoneInit("PhysicsManager::Deinit", @src());
     defer zone.Deinit();
     self._CollisionManager.Deinit(engine_allocator);
+    self.mEventManager.Deinit(engine_allocator);
 }
 
-/// Drops everything carried from one step to the next: the leftover time and which pairs were touching.
-/// For when the owning world's entities are cleared out or replaced, since their ids then mean different objects
+/// Points this manager's events at the engine-wide synchronous listener
+pub fn SetSyncCallback(self: *PhysicsManager, ctx: anytype, comptime handler: anytype) void {
+    self.mEventManager.SetSyncCallback(ctx, handler);
+}
+
+/// Hands the events queued in a category to the caller's listeners, then empties it
+pub fn ProcessEvents(self: *PhysicsManager, comptime event_category: EventData.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
+    try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
+    self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
+}
+
+/// Drops everything carried from one step to the next: the leftover time, which pairs were touching,
+/// and any events not processed yet. For when the owning world's entities are cleared out or replaced,
+/// since their ids then mean different objects
 pub fn Reset(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
     self._InternalData = .empty;
     self._CollisionManager.Reset(engine_allocator);
+    self.mEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
 }
 
 /// world_manager is the world that owns this PhysicsManager, see WorldManager.OnPhysicsUpdate
@@ -112,7 +133,7 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, world_man
             try UpdateWorldTransforms(world_manager, engine_context);
 
             try self._CollisionManager.BroadPass(engine_context, world_manager, dynamic_colliders.items, other_colliders.items);
-            try self._CollisionManager.NarrowPass(engine_context);
+            try self._CollisionManager.NarrowPass(engine_context, &self.mEventManager);
             try self._CollisionManager.PreSolverPass(engine_context);
             try self._CollisionManager.SolverPass(world_manager, engine_context);
             try self._CollisionManager.PostsolverPass(engine_context);

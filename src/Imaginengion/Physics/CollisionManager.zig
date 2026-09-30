@@ -13,6 +13,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const SkipField = @import("../Core/SkipField.zig").StaticSkipField;
 const UpdateWorldTransforms = @import("PhysicsManager.zig").UpdateWorldTransforms;
+const PhysicsEventManager = @import("PhysicsManager.zig").EventManagerT;
 const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -161,8 +162,9 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
 }
 
 ///Checks generated contacts list from broad pass to see if thing actually collided
-/// For the contact sets the penetration, normal, and contact state
-pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void {
+/// For the contact sets the penetration, normal, and contact state.
+/// event_manager is where the collisions that begin on this substep are queued
+pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
     const zone = Tracy.ZoneInit("CollisionManager::NarrowPass", @src());
     defer zone.Deinit();
     zone.Value(self._OverlapContacts.items.len + self._BlockingContacts.items.len);
@@ -210,12 +212,12 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext) !void
     Tracy.Plot("Physics/Blocking Contacts", .{ .color = 0xFF5722 }, self._BlockingContacts.items.len);
     Tracy.Plot("Physics/Overlap Contacts", .{ .color = 0xFFC107 }, self._OverlapContacts.items.len);
 
-    try self.UpdateTouching(engine_context);
+    try self.UpdateTouching(engine_context, event_manager);
 }
 
 /// Works out which of this substep's contacts are new and queues a CollisionBeginEvent for each.
 /// Runs on what the narrow pass left, so every contact in both lists is a pair that really overlaps.
-fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext) !void {
+fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
     self._TouchingNow.clearRetainingCapacity();
@@ -245,7 +247,7 @@ fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext) !void
         }
 
         const contact = if (touch.mIsTrigger) self._OverlapContacts.items[touch.mContactInd] else self._BlockingContacts.items[touch.mContactInd];
-        try engine_context.mGameEventManager.Insert(engine_allocator, .PostPhysics, .{ .CollisionBeginEvent = .{
+        try event_manager.Insert(engine_allocator, .PostPhysics, .{ .CollisionBegin = .{
             .mOrigin = contact.mOrigin,
             .mTarget = contact.mTarget,
             .mNormal = contact.mNormal,

@@ -42,6 +42,8 @@ const WindowEvent = WindowEventData.EventT;
 const GameEventData = @import("../Events/GameEventData.zig");
 const GameEvent = GameEventData.EventT;
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PhysicsEventData = @import("../Events/PhysicsEventData.zig");
+const PhysicsEvent = PhysicsEventData.EventT;
 
 const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEvent = ImguiEventData.EventT;
@@ -96,6 +98,8 @@ const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
+const PointerSystem = @import("../UI/PointerSystem.zig");
+const ScreenRect = @import("../Math/ScreenRect.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
 const IndexBuffer = @import("../IndexBuffers/IndexBuffer.zig");
@@ -143,6 +147,8 @@ mGameModePanel: ECSDisplayPanel = .{},
 mSelectedObj: ?SelectedObject = null,
 
 mEditorState: EditorState = .Stop,
+//the player whose view the pointer was last over, which a drag keeps following the mouse through once it leaves
+mPointerCamera: ?Player = null,
 mRunPlayer: ?Player = null,
 
 //editor UI stuff
@@ -255,8 +261,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         //Human Inputs
         try engine_context.mAppWindow.PollInputEvents(engine_context);
 
-        //what the mouse is over, before the presses and clicks below that land on it
-        try self.UpdatePointerHover(engine_context);
+        //where the mouse is and what it is over, before the presses and clicks below that land on it
+        try self.UpdatePointer(engine_context);
 
         var window_event_callback = EngineContext.WindowEventCallback{ .mCtx = self, .mCallbackFn = OnSystemEvent };
         callback_list.append(&window_event_callback.mNode);
@@ -292,6 +298,14 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer game_logic_zone.Deinit();
 
         if (self.mEditorState == .Play) {
+            //what the physics step queued. processed here and not inside the step, so whatever reacts is free
+            //to move or delete what it hit, and before the update scripts so they see the result
+            var physics_event_callback = PhysicsManager.EventManagerT.EventCallback{ .mCtx = self, .mCallbackFn = OnPhysicsEvent };
+            callback_list.append(&physics_event_callback.mNode);
+            try engine_context.mSimulateWorld.ProcessEvents(PhysicsEventData, .PostPhysics, engine_context, &callback_list);
+            callback_list.first = null;
+            callback_list.last = null;
+
             _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Simulate, engine_context, .{});
         }
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Editor, engine_context, .{});
@@ -477,6 +491,8 @@ pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anyt
         return .Continue;
     } else if (T == UIEvent) {
         return .Continue;
+    } else if (T == PhysicsEvent) {
+        return .Continue;
     } else if (T == AManagerEvent) {
         return .Continue;
     } else if (T == AudioManagerEvent) {
@@ -521,39 +537,69 @@ pub fn OnUIEvent(editor_program: *anyopaque, _: *EngineContext, event: *const UI
     return .Continue;
 }
 
-/// Tells the pointer system what the mouse is over, once a frame. Only in a view of the running game: the editor
-/// camera's view is for selecting and moving things, not for using them, so there the pointer is over nothing
-fn UpdatePointerHover(self: *EditorProgram, engine_context: *EngineContext) !void {
-    const no_position = Vec3(f32){ .x = 0, .y = 0, .z = 0 };
-    if (self.mEditorState != .Play) return engine_context.mPointerSystem.UpdateHover(engine_context, null, no_position);
+/// Tells the pointer system where the mouse is and what it is over, once a frame. Only in a view of the running
+/// game: the editor camera's view is for selecting and moving things, not for using them, so there the pointer is
+/// over nothing
+fn UpdatePointer(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const pointer = &engine_context.mPointerSystem;
+    const mouse = engine_context.mInputManager.GetMousePosition();
+    var input = PointerSystem.Input{ .Pixel = mouse };
 
-    const view_at = self._ViewportPanel.FindViewAt(engine_context.mInputManager.GetMousePosition()) orelse
-        return engine_context.mPointerSystem.UpdateHover(engine_context, null, no_position);
-    const is_editor_camera = view_at.View.Camera.mID == self.mEditorViewportPlayer.mID and view_at.View.Camera.mManager == self.mEditorViewportPlayer.mManager;
-    if (is_editor_camera) return engine_context.mPointerSystem.UpdateHover(engine_context, null, no_position);
+    if (self.mEditorState == .Play) {
+        const game_view = if (self._ViewportPanel.FindViewAt(mouse)) |view_at| (if (self.IsEditorCamera(view_at.View.Camera)) null else view_at) else null;
+        if (game_view) |view_at| {
+            self.mPointerCamera = view_at.View.Camera;
+            if (self.PointerViewOf(engine_context, view_at.View, view_at.Pixel)) |view| {
+                input.View = view;
+                if (try self.CastInView(engine_context, view_at.View, view)) |hit| {
+                    input.Target = hit.Entity;
+                    input.Position = hit.Position;
+                }
+            }
+        } else if (pointer.IsHolding()) {
+            //the mouse has left the view a button went down in: it is over nothing, but what is held keeps
+            //following it through that view, so a slider dragged past the edge of the panel doesn't stall
+            if (self.mPointerCamera) |camera| {
+                if (self._ViewportPanel.FindViewOf(camera)) |view_rect| {
+                    if (ScreenRect.ToTargetPixelUnbounded(view_rect.Rect, mouse)) |pixel| {
+                        input.View = self.PointerViewOf(engine_context, view_rect, pixel);
+                    }
+                }
+            }
+        }
+    }
 
-    const hit = try self.CastAtView(engine_context, view_at);
-    try engine_context.mPointerSystem.UpdateHover(
-        engine_context,
-        if (hit) |h| h.Entity else null,
-        if (hit) |h| h.Position else no_position,
-    );
+    try pointer.Update(engine_context, input);
 }
 
-/// What is under a pixel of a view, through the same ray, camera and scenes the renderer drew that view with, so
-/// it lands on what was drawn
-fn CastAtView(self: *EditorProgram, engine_context: *EngineContext, view_at: ViewportPanel.ViewAt) !?RayCast.RayHit {
-    const render_view = view_at.View.Camera.GetRenderView() orelse return null;
-    const world = switch (view_at.View.World) {
+fn IsEditorCamera(self: *const EditorProgram, camera: Player) bool {
+    return camera.mID == self.mEditorViewportPlayer.mID and camera.mManager == self.mEditorViewportPlayer.mManager;
+}
+
+/// The ray through a pixel of a view and the camera it was drawn with, the same ones the renderer used
+fn PointerViewOf(_: *EditorProgram, engine_context: *EngineContext, view: ViewportPanel.ViewRect, pixel: Vec2(f32)) ?PointerSystem.View {
+    const render_view = view.Camera.GetRenderView() orelse return null;
+    return .{
+        .Ray = Renderer.CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, pixel),
+        .CameraView = Renderer.CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale()),
+    };
+}
+
+/// What a view's ray hits, among the scenes that view shows, so it lands on what was drawn
+fn CastInView(self: *EditorProgram, engine_context: *EngineContext, view: ViewportPanel.ViewRect, pointer_view: PointerSystem.View) !?RayCast.RayHit {
+    const world = switch (view.World) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
     };
+    const view_scenes = try self.ViewScenesFor(engine_context.FrameAllocator(), view.Camera, world);
+    return try RayCast.CastRay(engine_context, world, pointer_view.Ray, pointer_view.CameraView, view_scenes, .{});
+}
 
-    const ray = Renderer.CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view_at.Pixel);
-    const camera_view = Renderer.CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale());
-    const view_scenes = try self.ViewScenesFor(engine_context.FrameAllocator(), view_at.View.Camera, world);
-    return try RayCast.CastRay(engine_context, world, ray, camera_view, view_scenes, .{});
+/// What is under a pixel of a view
+fn CastAtView(self: *EditorProgram, engine_context: *EngineContext, view_at: ViewportPanel.ViewAt) !?RayCast.RayHit {
+    const pointer_view = self.PointerViewOf(engine_context, view_at.View, view_at.Pixel) orelse return null;
+    return try self.CastInView(engine_context, view_at.View, pointer_view);
 }
 
 /// Selects what was clicked in a viewport or play panel: the game object owning the shape under the
@@ -665,6 +711,15 @@ pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, e
     return .Continue;
 }
 
+/// What a physics step had to report, see PhysicsEventData. No else, so a new physics event has to be given an arm here
+pub fn OnPhysicsEvent(_: *anyopaque, engine_context: *EngineContext, event: *const PhysicsEvent) anyerror!EventResult {
+    switch (event.*) {
+        .Default => {},
+        .CollisionBegin => |e| try ScriptsProcessor.RunCollisionBeginScripts(engine_context, e),
+    }
+    return .Continue;
+}
+
 pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const ImguiEvent) anyerror!EventResult {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     switch (event.*) {
@@ -752,6 +807,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         self.mActiveWorldType = .Game;
         //what the pointer was over and holding is in the world that's about to go
         engine_context.mPointerSystem.Reset();
+        self.mPointerCamera = null;
         engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {
         //only start when the run player can actually be drawn, otherwise play shows nothing

@@ -56,3 +56,11 @@ test "a zero size rect never contains the mouse" {
     empty.Size = .{ .x = 400, .y = 0 };
     try std.testing.expect(ScreenRect.ToTargetPixel(empty, .{ .x = 100, .y = 80 }) == null);
 }
+
+test "the unbounded pixel agrees inside the rect and carries on past its edges" {
+    try ExpectPixel(.{ .x = 100, .y = 50 }, ScreenRect.ToTargetPixelUnbounded(RECT, .{ .x = 150, .y = 130 }));
+    //left of and above the rect, and past its far corner, where the bounded one gives nothing
+    try ExpectPixel(.{ .x = -50, .y = -80 }, ScreenRect.ToTargetPixelUnbounded(RECT, .{ .x = 0, .y = 0 }));
+    try ExpectPixel(.{ .x = 450, .y = 320 }, ScreenRect.ToTargetPixelUnbounded(RECT, .{ .x = 500, .y = 400 }));
+    try std.testing.expect(ScreenRect.ToTargetPixel(RECT, .{ .x = 500, .y = 400 }) == null);
+}

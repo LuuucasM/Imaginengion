@@ -7,6 +7,8 @@ const SceneLayer = @import("../../ECSObjects/Scene.zig");
 const WindowEventData = @import("../../Events/WindowEventData.zig");
 const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
 
+const CollisionInfo = @import("../../Physics/Collisions.zig").CollisionInfo;
+
 //ENTITY SCRIPTS
 pub const OnKeyPressedScript = struct {
     pub const RunFuncSig = *const fn (*const EngineContext, *const Entity, *const KeyboardPressedEvent) callconv(.c) bool;
@@ -22,6 +24,17 @@ pub const EntityOnUpdateScript = struct {
     pub const Name: []const u8 = "EntityOnUpdateScript";
     pub const Scripttype: ScriptType = .EntityOnUpdate;
     pub fn Deinit(_: *EntityOnUpdateScript, _: *EngineContext) void {}
+};
+
+/// Runs once when the owner's collider starts touching another one (see CollisionBeginEvent), whatever
+/// it touched: like a key pressed script being handed every key, the script itself checks what it hit
+pub const OnCollisionBeginScript = struct {
+    //engine context, the script's owner, the entity it hit, and the contact as the owner sees it
+    pub const RunFuncSig = *const fn (*EngineContext, *const Entity, *const Entity, *const CollisionInfo) callconv(.c) bool;
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "OnCollisionBeginScript";
+    pub const Scripttype: ScriptType = .EntityOnCollisionBegin;
+    pub fn Deinit(_: *OnCollisionBeginScript, _: *EngineContext) void {}
 };
 
 //SCENE SCRIPTS

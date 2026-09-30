@@ -18,6 +18,7 @@ pub const ScriptType = enum(u8) {
     //Game object scripts
     EntityInputPressed,
     EntityOnUpdate,
+    EntityOnCollisionBegin,
 
     //Scene Scripts
     SceneSceneStart,

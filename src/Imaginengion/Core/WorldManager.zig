@@ -25,6 +25,7 @@ const GCEventData = @import("../Events/GCManagerData.zig");
 const PEventData = @import("../Events/PManagerData.zig");
 const SEventData = @import("../Events/SManagerData.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
+const PhysicsEventData = @import("../Events/PhysicsEventData.zig");
 
 const ClearAndFreeOptions = enum {
     All,
@@ -78,6 +79,7 @@ pub fn SetSyncCallback(self: *WorldManager, ctx: anytype, comptime handler: anyt
     self.mGCManager.SetSyncCallback(ctx, handler);
     self.mPManager.SetSyncCallback(ctx, handler);
     self.mSManager.SetSyncCallback(ctx, handler);
+    self.mPhysicsManager.SetSyncCallback(ctx, handler);
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
@@ -178,6 +180,8 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
         try self.mPManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else if (event_data == SEventData) {
         try self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
+    } else if (event_data == PhysicsEventData) {
+        try self.mPhysicsManager.ProcessEvents(event_category, engine_context, callback_list);
     } else if (event_data == ECSEventData) {
         try self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
         try self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);

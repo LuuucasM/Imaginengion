@@ -324,10 +324,10 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
         defer engine_context.mAssetManager.ReleaseAssetHandle(&script_handle);
 
         const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);
-        if (script_asset.GetScriptType() == .EntityInputPressed or script_asset.GetScriptType() == .EntityOnUpdate) {
-            _ = imgui.igSetDragDropPayload("GameObjectScriptLoad", rel_path.ptr, rel_path.len, 0);
-        } else if (script_asset.GetScriptType() == .SceneSceneStart) {
-            _ = imgui.igSetDragDropPayload("SceneScriptLoad", rel_path.ptr, rel_path.len, 0);
+        //the payload names are the ones ScriptsPanel's drop targets accept
+        switch (script_asset.GetScriptType()) {
+            .EntityInputPressed, .EntityOnUpdate, .EntityOnCollisionBegin => _ = imgui.igSetDragDropPayload("EntityScript", rel_path.ptr, rel_path.len, 0),
+            .SceneSceneStart, .SceneInputPressed, .SceneOnUpdate => _ = imgui.igSetDragDropPayload("SceneScript", rel_path.ptr, rel_path.len, 0),
         }
     }
 }

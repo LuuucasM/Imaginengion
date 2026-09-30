@@ -22,6 +22,15 @@ pub const Contact = struct {
     mPenetration: f32,
 };
 
+/// What a collision script is told about a contact, from the side of the entity the script belongs to.
+/// The same for every collision script type, so begin, stay and end scripts all share one Run signature
+pub const CollisionInfo = struct {
+    //points from the script's own entity toward the other one. zero once the two no longer overlap
+    mNormal: Vec3(f32),
+    //one of the two colliders is a trigger, so they pass through each other instead of being pushed apart
+    mIsTrigger: bool,
+};
+
 /// Runs the narrow test that fits the two colliders' shapes. The switch is exhaustive on purpose, so
 /// a new shape will not compile until every pairing with it has a test.
 pub fn TestShapes(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {

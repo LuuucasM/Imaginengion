@@ -1,11 +1,11 @@
-//! What the pointer (the mouse) is over and holding down, turned into things entities can react to:
+//! What the pointer (the mouse) is over, holding down and dragging, turned into things entities can react to:
 //!   - states, as tags: HoveredTag while the pointer is over an entity, PressedTag while a button that went down
 //!     on it is still held. Anything can check them, or query everything that has one
 //!   - moments, as events through the engine's UI event manager (Events/UIEventData.zig): enter, exit, pressed,
-//!     released, clicked
+//!     released, clicked, and a drag's start, moves and end
 //!
-//! Both go to the entity under the pointer and to everything it is inside: its parent, and so on up (its chain).
-//! The pointer over a button's label is over the button, and inside the panel the button is in.
+//! All of it goes to the entity under the pointer and to everything it is inside: its parent, and so on up (its
+//! chain). The pointer over a button's label is over the button, and inside the panel the button is in.
 //!
 //! It doesn't find what is under the pointer itself: whoever owns the views (the editor, a game's window) casts
 //! the ray and hands over the entity it hit, so this works the same for an overlay and for the world.
@@ -13,31 +13,76 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
-const Vec3 = @import("../Math/MathTypes.zig").Vec3;
+const CLICK_DRAG_THRESHOLD = @import("../Inputs/Input.zig").CLICK_DRAG_THRESHOLD;
+const MathTypes = @import("../Math/MathTypes.zig");
+const Vec2 = MathTypes.Vec2;
+const Vec3 = MathTypes.Vec3;
+const Ray = @import("../Math/CameraRay.zig").Ray;
+const CameraView = @import("../Renderer/Renderer.zig").CameraView;
+const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
+const UIEvent = @import("../Events/UIEventData.zig").EventT;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
 const PointerSystem = @This();
 
 const Chain = std.ArrayList(Entity);
+const ZERO = Vec3(f32){ .x = 0, .y = 0, .z = 0 };
+
+/// What the pointer system is told once a frame
+pub const Input = struct {
+    /// the entity under the pointer, null if it is over nothing
+    Target: ?Entity = null,
+    /// where the pointer's ray met the target, in the world
+    Position: Vec3(f32) = ZERO,
+    /// the mouse in window pixels, which is what tells a drag from a click
+    Pixel: Vec2(f32) = .{ .x = 0, .y = 0 },
+    /// the view the pointer is cast through, which a drag follows the pointer across. Null when there is none:
+    /// a drag then waits where it is until there is one again
+    View: ?View = null,
+};
+
+/// The pointer's ray, and the camera of the view it is cast through
+pub const View = struct {
+    Ray: Ray,
+    CameraView: CameraView,
+};
+
+/// A mouse button that is down, and what it went down on
+const Held = struct {
+    /// what it went down on: the entity under the pointer first, then each thing it is inside
+    mChain: Chain = .empty,
+    mPressPixel: Vec2(f32) = .{ .x = 0, .y = 0 },
+    /// where the pointer's ray met that entity, in the world
+    mGrabPosition: Vec3(f32) = ZERO,
+    /// the pointer has moved far enough from where the button went down that this is a drag, not a click
+    mIsDragging: bool = false,
+    /// where the pointer was on the drag plane when the button went down, and as of the last drag event, in the
+    /// grabbed entity's own units (see DragPoint). Null until there has been a view to work it out through
+    mStartPoint: ?Vec3(f32) = null,
+    mLastPoint: ?Vec3(f32) = null,
+};
 
 pub const empty: PointerSystem = .{};
 
 /// What the pointer is over, the entity itself first and then each thing it is inside. Kept as a list rather than
 /// worked out from the first entity again, so the rest still hear the pointer leave if that entity is deleted
 mHovered: Chain = .empty,
-mHoverPosition: Vec3(f32) = .{ .x = 0, .y = 0, .z = 0 },
-/// What each held button went down on, the same way
-mPressed: std.EnumArray(MouseCodes, Chain) = .initFill(.empty),
+/// What the last Update was told, which is what a press lands on
+mInput: Input = .{},
+mHeld: std.EnumArray(MouseCodes, Held) = .initFill(.{}),
 /// What each button was on when it last came up, for the click that may follow the release
 mReleased: std.EnumArray(MouseCodes, Chain) = .initFill(.empty),
+/// Whether each button's last release ended a drag, which is never a click as well
+mWasDragged: std.EnumArray(MouseCodes, bool) = .initFill(false),
 
 pub fn Deinit(self: *PointerSystem, engine_allocator: std.mem.Allocator) void {
     self.mHovered.deinit(engine_allocator);
-    for (&self.mPressed.values) |*chain| chain.deinit(engine_allocator);
+    for (&self.mHeld.values) |*held| held.mChain.deinit(engine_allocator);
     for (&self.mReleased.values) |*chain| chain.deinit(engine_allocator);
     self.* = .empty;
 }
@@ -45,17 +90,31 @@ pub fn Deinit(self: *PointerSystem, engine_allocator: std.mem.Allocator) void {
 /// Forgets everything without touching an entity, for when the world they are in is about to be thrown away
 pub fn Reset(self: *PointerSystem) void {
     self.mHovered.clearRetainingCapacity();
-    for (&self.mPressed.values) |*chain| chain.clearRetainingCapacity();
+    for (&self.mHeld.values) |*held| {
+        held.mChain.clearRetainingCapacity();
+        held.mIsDragging = false;
+    }
     for (&self.mReleased.values) |*chain| chain.clearRetainingCapacity();
 }
 
-/// Once a frame: `target` is the entity under the pointer, null if it is over nothing, and `position` where its
-/// ray met it. Checked every frame rather than only when the mouse moves, since what is under a still mouse can
-/// move, appear or go away
-pub fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext, target: ?Entity, position: Vec3(f32)) !void {
-    const frame_allocator = engine_context.FrameAllocator();
-    const new_chain = try ChainOf(frame_allocator, target);
-    self.mHoverPosition = position;
+/// Whether any mouse button is down on something
+pub fn IsHolding(self: *const PointerSystem) bool {
+    for (self.mHeld.values) |held| {
+        if (held.mChain.items.len > 0) return true;
+    }
+    return false;
+}
+
+/// Once a frame: where the pointer is and what is under it. Checked every frame rather than only when the mouse
+/// moves, since what is under a still mouse can move, appear or go away
+pub fn Update(self: *PointerSystem, engine_context: *EngineContext, input: Input) !void {
+    self.mInput = input;
+    try self.UpdateHover(engine_context);
+    for (std.enums.values(MouseCodes)) |button| try self.UpdateDrag(engine_context, button);
+}
+
+fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
+    const new_chain = try ChainOf(engine_context.FrameAllocator(), self.mInput.Target);
 
     //left: in the old chain and not the new one. The ones that are gone altogether have nothing left to tell
     for (self.mHovered.items) |entity| {
@@ -73,42 +132,119 @@ pub fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext, target:
     try Assign(&self.mHovered, engine_context.EngineAllocator(), new_chain.items);
 }
 
-/// A mouse button went down: on whatever the pointer is over as of the last UpdateHover
-pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes) !void {
-    const pressed = self.mPressed.getPtr(button);
-    try Assign(pressed, engine_context.EngineAllocator(), self.mHovered.items);
+/// A held button becomes a drag once the mouse is CLICK_DRAG_THRESHOLD from where it went down, the same distance
+/// the input manager stops calling a release a click at. From then on what it holds hears how the pointer moves
+fn UpdateDrag(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes) !void {
+    const held = self.mHeld.getPtr(button);
+    const target = if (held.mChain.items.len > 0) held.mChain.items[0] else return;
 
-    const target = if (pressed.items.len > 0) pressed.items[0] else return;
-    for (pressed.items) |entity| {
+    if (!held.mIsDragging) {
+        if (self.mInput.Pixel.Distance(held.mPressPixel) < CLICK_DRAG_THRESHOLD) return;
+        held.mIsDragging = true;
+        for (held.mChain.items) |entity| {
+            if (!entity.IsActive()) continue;
+            try Send(engine_context, .{ .PointerDragStart = .{ .mEntity = entity, .mButton = button, .mTarget = target } });
+        }
+    }
+
+    const point = DragPoint(held.*, self.mInput) orelse return;
+    //no view yet when the button went down: the drag is measured from the first point there is
+    const start = held.mStartPoint orelse point;
+    const last = held.mLastPoint orelse point;
+    held.mStartPoint = start;
+    held.mLastPoint = point;
+
+    const delta = point.SubVec(last);
+    if (delta.x == 0 and delta.y == 0 and delta.z == 0) return;
+    for (held.mChain.items) |entity| {
         if (!entity.IsActive()) continue;
-        if (!entity.HasComponent(PressedTag)) _ = try entity.AddComponent(engine_context, PressedTag{});
-        try Send(engine_context, .{ .PointerPressed = .{ .mEntity = entity, .mButton = button, .mPosition = self.mHoverPosition, .mTarget = target } });
+        try Send(engine_context, .{ .PointerDrag = .{
+            .mEntity = entity,
+            .mButton = button,
+            .mDelta = delta,
+            .mTotal = point.SubVec(start),
+            .mTarget = target,
+        } });
     }
 }
 
-/// A mouse button came up: whatever it went down on is let go, wherever the pointer is now
+/// Where the pointer is on the plane a drag is measured across, in the units the grabbed entity is placed in, so
+/// something dragged can add a drag's delta to its own translation and stay under the pointer:
+///   - an overlay entity: the point on its scene's canvas, in canvas units
+///   - a world entity: the point on the plane facing the camera through where it was grabbed, in world units
+fn DragPoint(held: Held, input: Input) ?Vec3(f32) {
+    const view = input.View orelse return null;
+    const target = held.mChain.items[0];
+    if (!target.IsActive()) return null;
+
+    switch (target.GetLayer()) {
+        .OverlayLayer => {
+            const scene = target.GetComponent(EntitySceneComponent).?.mScene;
+            return ShapeGeometry.SceneCanvas(scene, view.CameraView).RayToCanvasPoint(view.Ray);
+        },
+        .GameLayer => {
+            const normal = (Vec3(f32){ .x = 0, .y = 0, .z = 1 }).QuatRotate(view.CameraView.Pose.Rotation);
+            const facing = view.Ray.Dir.Dot(normal);
+            if (facing == 0) return null;
+            const t = held.mGrabPosition.SubVec(view.Ray.Origin).Dot(normal) / facing;
+            if (t < 0) return null;
+            return view.Ray.Origin.AddVec(view.Ray.Dir.MulScalar(t));
+        },
+    }
+}
+
+/// A mouse button went down: on whatever the pointer is over as of the last Update
+pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes) !void {
+    const held = self.mHeld.getPtr(button);
+    try Assign(&held.mChain, engine_context.EngineAllocator(), self.mHovered.items);
+    held.mPressPixel = self.mInput.Pixel;
+    held.mGrabPosition = self.mInput.Position;
+    held.mIsDragging = false;
+    held.mStartPoint = null;
+    held.mLastPoint = null;
+
+    const target = if (held.mChain.items.len > 0) held.mChain.items[0] else return;
+    //where a drag would be measured from
+    held.mStartPoint = DragPoint(held.*, self.mInput);
+    held.mLastPoint = held.mStartPoint;
+
+    for (held.mChain.items) |entity| {
+        if (!entity.IsActive()) continue;
+        if (!entity.HasComponent(PressedTag)) _ = try entity.AddComponent(engine_context, PressedTag{});
+        try Send(engine_context, .{ .PointerPressed = .{ .mEntity = entity, .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
+    }
+}
+
+/// A mouse button came up: whatever it went down on is let go, wherever the pointer is now, and its drag ends
 pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes) !void {
-    const pressed = self.mPressed.getPtr(button);
+    const held = self.mHeld.getPtr(button);
     //kept for the click that follows a release in place
-    try Assign(self.mReleased.getPtr(button), engine_context.EngineAllocator(), pressed.items);
+    try Assign(self.mReleased.getPtr(button), engine_context.EngineAllocator(), held.mChain.items);
     const released = self.mReleased.get(button).items;
-    pressed.clearRetainingCapacity();
+    const was_dragging = held.mIsDragging;
+    const total = if (held.mStartPoint != null and held.mLastPoint != null) held.mLastPoint.?.SubVec(held.mStartPoint.?) else ZERO;
+    self.mWasDragged.set(button, was_dragging);
+    held.mChain.clearRetainingCapacity();
+    held.mIsDragging = false;
 
     const target = if (released.len > 0) released[0] else return;
     for (released) |entity| {
         if (!entity.IsActive()) continue;
         //another button may still be holding it
         if (!self.IsHeld(entity) and entity.HasComponent(PressedTag)) try entity.RemoveComponentSync(engine_context, PressedTag);
-        try Send(engine_context, .{ .PointerReleased = .{ .mEntity = entity, .mButton = button, .mPosition = self.mHoverPosition, .mTarget = target } });
+        if (was_dragging) try Send(engine_context, .{ .PointerDragEnd = .{ .mEntity = entity, .mButton = button, .mTotal = total, .mTarget = target } });
+        try Send(engine_context, .{ .PointerReleased = .{ .mEntity = entity, .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
     }
 }
 
 /// The release just before this was a click (the input manager's: the button came up where it went down). It
 /// clicks what was under the pointer both when the button went down and now: pressing on a button's label and
-/// letting go on its background clicks the button, which was under both, but not the label
+/// letting go on its background clicks the button, which was under both, but not the label. A release that ended
+/// a drag clicks nothing, even if the pointer came back to where it started
 pub fn OnClicked(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes, clicks: u8) !void {
     const released = self.mReleased.getPtr(button);
     defer released.clearRetainingCapacity();
+    if (self.mWasDragged.get(button)) return;
 
     const target = if (self.mHovered.items.len > 0) self.mHovered.items[0] else return;
     for (released.items) |entity| {
@@ -117,7 +253,7 @@ pub fn OnClicked(self: *PointerSystem, engine_context: *EngineContext, button: M
             .mEntity = entity,
             .mButton = button,
             .mClicks = clicks,
-            .mPosition = self.mHoverPosition,
+            .mPosition = self.mInput.Position,
             .mTarget = target,
         } });
     }
@@ -125,8 +261,8 @@ pub fn OnClicked(self: *PointerSystem, engine_context: *EngineContext, button: M
 
 /// Whether any button that is down went down on `entity`
 fn IsHeld(self: *const PointerSystem, entity: Entity) bool {
-    for (self.mPressed.values) |chain| {
-        if (Contains(chain.items, entity)) return true;
+    for (self.mHeld.values) |held| {
+        if (Contains(held.mChain.items, entity)) return true;
     }
     return false;
 }
@@ -156,6 +292,6 @@ fn Assign(chain: *Chain, engine_allocator: std.mem.Allocator, entities: []const 
     try chain.appendSlice(engine_allocator, entities);
 }
 
-fn Send(engine_context: *EngineContext, event: @import("../Events/UIEventData.zig").EventT) !void {
+fn Send(engine_context: *EngineContext, event: UIEvent) !void {
     try engine_context.mUIEventManager.Insert(engine_context.EngineAllocator(), .Pointer, event);
 }

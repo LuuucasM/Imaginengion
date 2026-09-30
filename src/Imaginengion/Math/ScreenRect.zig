@@ -20,3 +20,11 @@ pub fn ToTargetPixel(rect: ScreenRect, screen_pos: Vec2(f32)) ?Vec2(f32) {
 
     return local.DivVec(rect.Size).MulVec(rect.TargetSize);
 }
+
+/// ToTargetPixel without the bounds check: a position outside the rect gives a pixel off the edge of the render
+/// target, for something that has to keep following the mouse past the view it started in, like a drag. Null only
+/// for a rect with no size
+pub fn ToTargetPixelUnbounded(rect: ScreenRect, screen_pos: Vec2(f32)) ?Vec2(f32) {
+    if (rect.Size.x <= 0 or rect.Size.y <= 0) return null;
+    return screen_pos.SubVec(rect.Min).DivVec(rect.Size).MulVec(rect.TargetSize);
+}

@@ -18,6 +18,9 @@ pub const EventT = union(enum) {
     PointerPressed: PointerButtonEvent,
     PointerReleased: PointerButtonEvent,
     PointerClicked: PointerClickedEvent,
+    PointerDragStart: PointerDragStartEvent,
+    PointerDrag: PointerDragEvent,
+    PointerDragEnd: PointerDragEndEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -50,5 +53,34 @@ pub const PointerClickedEvent = struct {
     /// 1 for a single click, 2 for a double click, and so on
     mClicks: u8,
     mPosition: Vec3(f32),
+    mTarget: Entity,
+};
+
+/// A held button has moved far enough from where it went down that it is a drag rather than a click. Everything
+/// about a drag goes to what the button went down on, wherever the pointer has got to since
+pub const PointerDragStartEvent = struct {
+    mEntity: Entity,
+    mButton: MouseCodes,
+    mTarget: Entity,
+};
+
+/// The pointer moved during a drag. The movement is in the units the grabbed entity (mTarget) is placed in, so
+/// something dragged can add mDelta to its translation and stay under the pointer: canvas units for an overlay
+/// entity, and for a world entity world units across the plane facing the camera through where it was grabbed
+pub const PointerDragEvent = struct {
+    mEntity: Entity,
+    mButton: MouseCodes,
+    /// since the last drag event
+    mDelta: Vec3(f32),
+    /// since the button went down
+    mTotal: Vec3(f32),
+    mTarget: Entity,
+};
+
+/// The button came up. Sent just before its PointerReleased
+pub const PointerDragEndEvent = struct {
+    mEntity: Entity,
+    mButton: MouseCodes,
+    mTotal: Vec3(f32),
     mTarget: Entity,
 };
