@@ -195,7 +195,7 @@ fn _GetFnInfo(comptime func_type_info: std.builtin.Type, comptime func_name: []c
 }
 
 pub fn _ValidateScript(comptime script_type: type) void {
-    const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
+    const type_name = " " ++ @typeName(script_type) ++ "\n";
     std.debug.assert(@hasDecl(script_type, "Run"));
     std.debug.assert(@hasDecl(script_type, "GetScriptType"));
 

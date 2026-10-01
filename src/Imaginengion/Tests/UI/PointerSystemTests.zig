@@ -15,6 +15,11 @@ const PointerSystem = @import("../../UI/PointerSystem.zig");
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
+const DropHoverTag = EntityComponents.DropHoverTag;
+const DragSourceComponent = EntityComponents.DragSourceComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
+const QuadComponent = EntityComponents.QuadComponent;
+const TextComponent = EntityComponents.TextComponent;
 
 const SEventData = @import("../../Events/SManagerData.zig");
 const EEventData = @import("../../Events/EManagerData.zig");
@@ -369,4 +374,108 @@ test "a drag on something in the world is in world units, across a plane facing 
     const per_pixel = 2.0 * 10.0 * @tan(FOV / 2) / 1080.0;
     const drag = (try EventFor(try world.TakeEvents(), .PointerDrag, crate)).PointerDrag;
     try ExpectVec3(100 * per_pixel, 0, 0, drag.mDelta);
+}
+
+//-----------------------------drag and drop-----------------------------
+
+/// The Play button can be picked up, and what it carries is its quad: it stands in for whatever a real source would
+/// carry. Pressed on its label, then dragged 40 pixels to the right over `over`
+fn PickUpPlay(world: *TestWorld, over: ?Entity) !void {
+    const engine_context = world.mEngineContext;
+    _ = try world.mPlay.AddComponent(engine_context, DragSourceComponent{});
+    _ = try world.mPlay.AddComponent(engine_context, QuadComponent{});
+    try world.MoveTo(world.mLabel, .{ .x = 960, .y = 540 }, 1920, 1080);
+    try engine_context.mPointerSystem.OnPressed(engine_context, .BUTTON_LEFT);
+    try world.MoveTo(over, .{ .x = 1000, .y = 540 }, 1920, 1080);
+    _ = try world.TakeEvents();
+}
+
+test "a drag source held over a target that takes it lights it up, and letting go drops it there" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const pointer = &engine_context.mPointerSystem;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+
+    try PickUpPlay(world, world.mQuit);
+    try std.testing.expectEqual(world.mPlay.mID, pointer.Carrying().?.mID);
+    try std.testing.expect(world.mQuit.HasComponent(DropHoverTag));
+
+    try pointer.OnReleased(engine_context, .BUTTON_LEFT);
+    const events = try world.TakeEvents();
+    try ExpectSent(events, .PointerDropped, &.{world.mQuit});
+    try std.testing.expectEqual(world.mPlay.mID, (try EventFor(events, .PointerDropped, world.mQuit)).PointerDropped.mSource.mID);
+    try std.testing.expect(!world.mQuit.HasComponent(DropHoverTag));
+    try std.testing.expect(pointer.Carrying() == null);
+}
+
+test "a target that takes something else stays dark and gets no drop" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{TextComponent}));
+
+    try PickUpPlay(world, world.mQuit);
+    try std.testing.expect(!world.mQuit.HasComponent(DropHoverTag));
+    try engine_context.mPointerSystem.OnReleased(engine_context, .BUTTON_LEFT);
+    try ExpectSent(try world.TakeEvents(), .PointerDropped, &.{});
+}
+
+test "the nearest target that takes it wins, going up from what is under the pointer" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    //the Quit button takes it, and so does the menu it is in
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+
+    try PickUpPlay(world, world.mQuit);
+    try std.testing.expect(world.mQuit.HasComponent(DropHoverTag));
+    try std.testing.expect(!world.mMenu.HasComponent(DropHoverTag));
+
+    //over the menu itself: the light moves to it
+    try world.MoveTo(world.mMenu, .{ .x = 1010, .y = 540 }, 1920, 1080);
+    try std.testing.expect(!world.mQuit.HasComponent(DropHoverTag));
+    try std.testing.expect(world.mMenu.HasComponent(DropHoverTag));
+}
+
+test "only a drag that starts on a source carries anything, and only with the left button" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const pointer = &engine_context.mPointerSystem;
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+    _ = try world.mQuit.AddComponent(engine_context, QuadComponent{});
+
+    //the Quit button has what the menu takes, but it isn't a drag source
+    try world.MoveTo(world.mQuit, .{ .x = 960, .y = 540 }, 1920, 1080);
+    try pointer.OnPressed(engine_context, .BUTTON_LEFT);
+    try world.MoveTo(world.mMenu, .{ .x = 1000, .y = 540 }, 1920, 1080);
+    try std.testing.expect(pointer.Carrying() == null);
+    try pointer.OnReleased(engine_context, .BUTTON_LEFT);
+    try ExpectSent(try world.TakeEvents(), .PointerDropped, &.{});
+
+    //a source dragged with the right button is a plain drag
+    _ = try world.mQuit.AddComponent(engine_context, DragSourceComponent{});
+    try world.MoveTo(world.mQuit, .{ .x = 960, .y = 540 }, 1920, 1080);
+    try pointer.OnPressed(engine_context, .BUTTON_RIGHT);
+    try world.MoveTo(world.mMenu, .{ .x = 1000, .y = 540 }, 1920, 1080);
+    try std.testing.expect(pointer.Carrying() == null);
+    try std.testing.expect(!world.mMenu.HasComponent(DropHoverTag));
+}
+
+test "a source deleted mid drag drops nothing" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+
+    try PickUpPlay(world, world.mQuit);
+    try world.mPlay.Delete(engine_context);
+    try world.EndFrame();
+    try world.MoveTo(world.mQuit, .{ .x = 1010, .y = 540 }, 1920, 1080);
+    try std.testing.expect(!world.mQuit.HasComponent(DropHoverTag));
+
+    try engine_context.mPointerSystem.OnReleased(engine_context, .BUTTON_LEFT);
+    try ExpectSent(try world.TakeEvents(), .PointerDropped, &.{});
 }

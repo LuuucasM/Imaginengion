@@ -10,6 +10,7 @@ const RigidBodyComponent = Components.RigidBodyComponent;
 const AudioComponent = Components.AudioComponent;
 const StaticBodyTag = Components.StaticBodyTag;
 const DynamicBodyTag = Components.DynamicBodyTag;
+const KinematicBodyTag = Components.KinematicBodyTag;
 const LayoutDirtyTag = Components.LayoutDirtyTag;
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const GameLayerTag = Components.GameLayerTag;
@@ -258,35 +259,82 @@ pub fn ClearLayoutDirty(self: Entity, engine_context: *EngineContext) !void {
     try self.RemoveComponentSync(engine_context, LayoutDirtyTag);
 }
 
-/// Brings StaticBodyTag/DynamicBodyTag back in step with the body's inverse mass. Exactly one of
-/// them is present while the entity has a RigidBodyComponent, and neither once it does not, so
-/// CollisionManager.BroadPass can treat "carries DynamicBodyTag" as the whole answer to whether an
-/// entity can be moved by the solver.
-///
-/// Call this after anything that changes _InvMass. The removals are synchronous on purpose: a
-/// deferred one would leave both tags on the entity until end of frame, and a broad pass running
-/// before then would find it in the dynamic set and the static set at once.
-pub fn SyncBodyTags(self: Entity, engine_context: *EngineContext) !void {
-    const rigid_body = self.GetComponent(RigidBodyComponent) orelse {
-        try self.ClearBodyTags(engine_context);
-        return;
-    };
+/// The tags a rigid body carries exactly one of. The tag is the record of the body's type: changing the
+/// type is adding the new tag, which takes the others off (see OnBodyTypeTagAdded)
+pub const BodyTypeTags = [_]type{ StaticBodyTag, KinematicBodyTag, DynamicBodyTag };
 
-    if (rigid_body._InvMass != 0.0) {
-        if (self.HasComponent(StaticBodyTag)) try self.RemoveComponentSync(engine_context, StaticBodyTag);
-        if (!self.HasComponent(DynamicBodyTag)) _ = try self.AddComponent(engine_context, DynamicBodyTag{});
-    } else {
-        if (self.HasComponent(DynamicBodyTag)) try self.RemoveComponentSync(engine_context, DynamicBodyTag);
-        if (!self.HasComponent(StaticBodyTag)) _ = try self.AddComponent(engine_context, StaticBodyTag{});
+/// Brings a rigid body in step with its type tag. One with no tag yet gets one: static if it was given no
+/// mass, which is how a body was made static before there were body types, and dynamic otherwise. Then its
+/// mass is kept at RigidBodyComponent.MIN_MASS or above, and the inverse mass the solver divides by is
+/// worked out, 0 unless it is dynamic. A static body also loses any velocity it was given, it never moves.
+///
+/// Runs whenever a rigid body or a type tag is added (Manager.AddComponent) and after the mass is edited in
+/// the components panel, so every way a body comes into being goes through it: code, a file, a template.
+/// An entity with a type tag and no rigid body is left alone, it is a tag loaded ahead of its rigid body.
+//anyerror: it adds a type tag, whose add hook calls back in here, so the error set can not be inferred
+pub fn SyncRigidBody(self: Entity, engine_context: *EngineContext) anyerror!void {
+    const rigid_body = self.GetComponent(RigidBodyComponent) orelse return;
+
+    if (!self.HasBodyTypeTag()) {
+        //adding the tag comes back through here (OnBodyTypeTagAdded), which does the rest
+        if (rigid_body._Mass > 0.0) {
+            _ = try self.AddComponent(engine_context, DynamicBodyTag{});
+        } else {
+            _ = try self.AddComponent(engine_context, StaticBodyTag{});
+        }
+        return;
+    }
+
+    rigid_body._Mass = @max(rigid_body._Mass, RigidBodyComponent.MIN_MASS);
+    rigid_body._InvMass = if (self.HasComponent(DynamicBodyTag)) 1.0 / rigid_body._Mass else 0.0;
+
+    if (self.HasComponent(StaticBodyTag)) {
+        rigid_body._Velocity = std.mem.zeroes(Vec3(f32));
+        rigid_body._Force = std.mem.zeroes(Vec3(f32));
     }
 }
 
-/// Takes both body tags off, for when the RigidBodyComponent is going away. SyncBodyTags cannot do
-/// this itself on the removal path, because RemoveComponent only queues and the component is still
-/// readable when it returns.
+/// Called by Manager.AddComponent for any of BodyTypeTags. The new tag replaces whichever type the body
+/// had. The removals are synchronous on purpose: a deferred one would leave two type tags on the entity until
+/// end of frame, and a physics step before then would find the body in two type queries at once.
+pub fn OnBodyTypeTagAdded(self: Entity, engine_context: *EngineContext, comptime added_tag: type) !void {
+    inline for (BodyTypeTags) |tag_type| {
+        if (tag_type != added_tag and self.HasComponent(tag_type)) try self.RemoveComponentSync(engine_context, tag_type);
+    }
+    try self.SyncRigidBody(engine_context);
+}
+
+/// Makes a rigid body the type of the given tag (one of BodyTypeTags). The way to change a type from code:
+/// adding the tag directly works as well, but not when the body already has it, the same as adding any
+/// component an entity already carries
+pub fn SetBodyType(self: Entity, engine_context: *EngineContext, comptime body_type_tag: type) !void {
+    if (self.HasComponent(body_type_tag)) return;
+    _ = try self.AddComponent(engine_context, body_type_tag{});
+}
+
+/// Sets a rigid body's mass, kept at RigidBodyComponent.MIN_MASS or above, and the inverse mass with it.
+/// The way to change a mass from code. Does nothing on an entity with no rigid body
+pub fn SetMass(self: Entity, engine_context: *EngineContext, mass: f32) !void {
+    const rigid_body = self.GetComponent(RigidBodyComponent) orelse return;
+    //clamped here as well: a mass of 0 or less reads as static to a body that has no type tag yet
+    rigid_body._Mass = @max(mass, RigidBodyComponent.MIN_MASS);
+    try self.SyncRigidBody(engine_context);
+}
+
+pub fn HasBodyTypeTag(self: Entity) bool {
+    inline for (BodyTypeTags) |tag_type| {
+        if (self.HasComponent(tag_type)) return true;
+    }
+    return false;
+}
+
+/// Takes the body type tag off, for when the RigidBodyComponent is going away. SyncRigidBody can not do it
+/// on the removal path, because RemoveComponent only queues and the component is still readable when it
+/// returns.
 pub fn ClearBodyTags(self: Entity, engine_context: *EngineContext) !void {
-    if (self.HasComponent(StaticBodyTag)) try self.RemoveComponentSync(engine_context, StaticBodyTag);
-    if (self.HasComponent(DynamicBodyTag)) try self.RemoveComponentSync(engine_context, DynamicBodyTag);
+    inline for (BodyTypeTags) |tag_type| {
+        if (self.HasComponent(tag_type)) try self.RemoveComponentSync(engine_context, tag_type);
+    }
 }
 
 pub fn _CalculateWorldTransform(self: Entity) void {

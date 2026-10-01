@@ -24,7 +24,6 @@ mTexOptions: Texture2D.TexOptions = .default,
 mMaterial: Material.SurfaceRenderMat = .default,
 mFontSize: f32 = 9,
 mBounds: Vec2(f32) = .{ .x = 8, .y = 8 },
-mEngineAllocator: std.mem.Allocator = undefined,
 mShouldEditTexture: bool = false,
 
 pub fn Deinit(self: *TextComponent, engine_context: *EngineContext) void {
@@ -43,6 +42,18 @@ pub fn Clone(self: *const TextComponent, engine_context: *EngineContext) !TextCo
     new_component.mTexHandle.RetainAsset();
 
     return new_component;
+}
+
+/// Replaces the text. Layout doesn't see the change on its own, so if the entity is in a layout the caller
+/// marks it with entity.MarkLayoutDirty
+pub fn SetText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
+    self.mText.clearRetainingCapacity();
+    try self.mText.appendSlice(engine_context.EngineAllocator(), text);
+}
+
+/// Adds to the end of the text. Same as SetText, the caller marks the layout dirty if the entity is in one
+pub fn AppendText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
+    try self.mText.appendSlice(engine_context.EngineAllocator(), text);
 }
 
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {

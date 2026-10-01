@@ -198,6 +198,12 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return internal_array.HasComponent(entityID);
         }
 
+        /// HasComponent for a component known only by its slot (ComponentInd) at runtime, e.g. one picked from a
+        /// list stored in another component
+        pub fn HasComponentInd(self: Self, component_ind: usize, entityID: entity_t) bool {
+            return self.mComponentsArrays.items[component_ind].HasComponent(entityID);
+        }
+
         pub fn GetComponent(self: Self, comptime component_type: type, entityID: entity_t) ?*component_type {
             const internal_array_t = InternalComponentArray(entity_t, component_type);
             const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));

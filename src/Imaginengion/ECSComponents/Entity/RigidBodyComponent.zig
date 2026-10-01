@@ -10,24 +10,37 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 pub const Editable: bool = true;
 pub const Name: []const u8 = "RigidBodyComponent";
 
-mMass: f32 = 0.0,
-mMaterialData: Material.PhysicsMaterial = .default,
+/// The least a body's mass can be. A mass of 0 would be an immovable body that still falls, and making
+/// something immovable is what the static and kinematic body types are for
+pub const MIN_MASS: f32 = 0.001;
 
-_InvMass: f32 = 0.0,
+//never below MIN_MASS. Set it with Entity.SetMass rather than writing it, so _InvMass follows: any other
+//write is brought back to MIN_MASS or above the next time the body is synced (Entity.SyncRigidBody).
+//Only a dynamic body uses it, its type is the body type tag it carries
+_Mass: f32 = 1.0,
+mMaterialData: Material.PhysicsMaterial = .default,
+//multiplies the scene's gravity axis by axis before it is applied: 1 is the scene's gravity as it is, 0 ignores
+//it, a negative falls the other way. It scales the scene's gravity, it can not point it along another axis
+mGravityScale: Vec3(f32) = .{ .x = 1.0, .y = 1.0, .z = 1.0 },
+
+//what impulses and forces are divided by: 1 / _Mass on a dynamic body, and 0 on a static or kinematic
+//one, which is what makes them unpushable. Worked out by Entity.SyncRigidBody
+_InvMass: f32 = 1.0,
 _Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) void {}
 
 pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
-    if (try ImguiManager.RenderFloatInput(&self.mMass, "Mass", 0.1, 1.0)) {
-        if (self.mMass != 0.0) {
-            self._InvMass = 1.0 / self.mMass;
-        } else {
-            self._InvMass = 0.0;
-        }
-    }
+    //written straight into the field: the components panel syncs the body after this, which keeps it at
+    //MIN_MASS or above and works out _InvMass again
+    _ = try ImguiManager.RenderFloatInput(&self._Mass, "Mass", 0.1, 1.0);
+    try ImguiManager.RenderVec3(&self.mGravityScale, "Gravity Scale", 1.0, 0.05, 100.0);
     try ImguiManager.RenderUnion(Material.PhysicsMaterial, &self.mMaterialData, "Material");
+}
+
+pub fn GetMass(self: *const RigidBodyComponent) f32 {
+    return self._Mass;
 }
 
 /// Applies continuous force to the rigid body physically accurate
@@ -78,15 +91,12 @@ pub fn GetVelocity(self: *const RigidBodyComponent) Vec3(f32) {
     return self._Velocity;
 }
 
-//only the authored values are saved, the underscore runtime state is rebuilt from them
+//only the authored values are saved, the runtime state is rebuilt from them. _Mass is authored, it only has
+//the underscore so it is written through Entity.SetMass
 const Json = JsonUtils.JsonFields(RigidBodyComponent, .{
-    .Mass = "mMass",
+    .Mass = "_Mass",
     .Material = "mMaterialData",
+    .GravityScale = "mGravityScale",
 });
 pub const jsonStringify = Json.jsonStringify;
 pub const jsonParse = Json.jsonParse;
-
-pub fn PostParse(self: *RigidBodyComponent, engine_context: *EngineContext, owning_entity: anytype) !void {
-    self._InvMass = if (self.mMass != 0.0) 1.0 / self.mMass else 0.0;
-    try owning_entity.SyncBodyTags(engine_context);
-}

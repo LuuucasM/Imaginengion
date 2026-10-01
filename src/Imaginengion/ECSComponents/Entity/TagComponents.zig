@@ -1,5 +1,11 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
 
+//The three body types. A rigid body carries exactly one, and the tag is the record of its type: it is saved,
+//and changing the type is swapping the tag (adding one takes the others off, see Entity.OnBodyTypeTagAdded).
+//The tags are also the queries: integration visits only dynamic and kinematic bodies, and the broad pass
+//pairs by type.
+
+/// Never moves: floors, walls. Can't be pushed and is never integrated, whatever velocity it is given
 pub const StaticBodyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "StaticBodyTag";
@@ -7,6 +13,16 @@ pub const StaticBodyTag = struct {
     pub fn Deinit(_: *StaticBodyTag, _: *EngineContext) void {}
 };
 
+/// Moved by code, through its velocity alone: paddles, moving platforms, doors. No gravity or forces, and
+/// can't be pushed, but pushes dynamic bodies out of its way
+pub const KinematicBodyTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "KinematicBodyTag";
+
+    pub fn Deinit(_: *KinematicBodyTag, _: *EngineContext) void {}
+};
+
+/// Moved by physics: gravity, forces and collisions
 pub const DynamicBodyTag = struct {
     pub const Editable: bool = false;
     pub const Name: []const u8 = "DynamicBodyTag";
@@ -53,4 +69,13 @@ pub const PressedTag = struct {
     pub const Name: []const u8 = "PressedTag";
 
     pub fn Deinit(_: *PressedTag, _: *EngineContext) void {}
+};
+
+/// On a drop target (DropTargetComponent) while a drag source it takes is held over it: for a "drop here" look. The
+/// moment the source is let go there is the PointerDropped event. Never saved
+pub const DropHoverTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "DropHoverTag";
+
+    pub fn Deinit(_: *DropHoverTag, _: *EngineContext) void {}
 };

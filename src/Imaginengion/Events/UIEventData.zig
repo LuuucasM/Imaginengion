@@ -21,6 +21,7 @@ pub const EventT = union(enum) {
     PointerDragStart: PointerDragStartEvent,
     PointerDrag: PointerDragEvent,
     PointerDragEnd: PointerDragEndEvent,
+    PointerDropped: PointerDroppedEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -83,4 +84,14 @@ pub const PointerDragEndEvent = struct {
     mButton: MouseCodes,
     mTotal: Vec3(f32),
     mTarget: Entity,
+};
+
+/// A drag source (DragSourceComponent) was let go over a drop target (DropTargetComponent) that takes it. Sent to
+/// the target only: the nearest one taking the source, going up from what was under the pointer. The target reads
+/// what it needs from the source's components
+pub const PointerDroppedEvent = struct {
+    mEntity: Entity,
+    mSource: Entity,
+    /// where the pointer's ray met what it was over, in the world
+    mPosition: Vec3(f32),
 };

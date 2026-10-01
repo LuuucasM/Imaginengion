@@ -572,6 +572,37 @@ pub fn RenderFloat3Input(val: *Vec3(f32), label: [:0]const u8) !void {
     _ = imgui.igInputFloat3(label, @ptrCast(val), "%.3f", 0);
 }
 
+/// A combo box over a set of tag components an object carries exactly one of, e.g. a rigid body's type
+/// (Entity.BodyTypeTags). The tags are the record: the choice shown is whichever of them the object has (the
+/// first if it has none), and picking another takes that tag off and puts the picked one on.
+pub fn RenderComponentEnum(comptime tag_types: []const type, object: anytype, engine_context: *EngineContext, label: [:0]const u8) !void {
+    const IntTag = std.math.IntFittingRange(0, tag_types.len - 1);
+    //an enum named after the tags, so the regular enum combo box can show them
+    const TagEnum = comptime enum_blk: {
+        var names: [tag_types.len][:0]const u8 = undefined;
+        for (tag_types, 0..) |tag_type, i| names[i] = std.fmt.comptimePrint("{s}", .{tag_type.Name});
+        break :enum_blk @Enum(IntTag, .exhaustive, &names, &std.simd.iota(IntTag, tag_types.len));
+    };
+
+    var current_ind: IntTag = 0;
+    inline for (tag_types, 0..) |tag_type, i| {
+        if (object.HasComponent(tag_type)) current_ind = i;
+    }
+
+    var choice: TagEnum = @fromBackingInt(current_ind);
+    try RenderEnum(TagEnum, &choice, label);
+    const choice_ind = @backingInt(choice);
+    if (choice_ind == current_ind) return;
+
+    //off first and synchronously, so the object never carries two of them at once
+    inline for (tag_types, 0..) |tag_type, i| {
+        if (i != choice_ind and object.HasComponent(tag_type)) try object.RemoveComponentSync(engine_context, tag_type);
+    }
+    inline for (tag_types, 0..) |tag_type, i| {
+        if (i == choice_ind) _ = try object.AddComponent(engine_context, tag_type{});
+    }
+}
+
 pub fn RenderEnum(comptime T: type, value: *T, label: [:0]const u8) !void {
     const field_names = std.meta.fieldNames(T);
     const current_index = @backingInt(value.*);

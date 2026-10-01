@@ -3,6 +3,10 @@
 //!     on it is still held. Anything can check them, or query everything that has one
 //!   - moments, as events through the engine's UI event manager (Events/UIEventData.zig): enter, exit, pressed,
 //!     released, clicked, and a drag's start, moves and end
+//!   - drag and drop: a drag that starts on a drag source (DragSourceComponent) can be let go over a drop target
+//!     (DropTargetComponent) that takes it. What a source carries is its own components, and a target takes it if
+//!     it has one the target lists. The target gets DropHoverTag while it's held over it, and PointerDropped on
+//!     the drop
 //!
 //! All of it goes to the entity under the pointer and to everything it is inside: its parent, and so on up (its
 //! chain). The pointer over a button's label is over the button, and inside the panel the button is in.
@@ -25,6 +29,9 @@ const UIEvent = @import("../Events/UIEventData.zig").EventT;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
+const DropHoverTag = EntityComponents.DropHoverTag;
+const DragSourceComponent = EntityComponents.DragSourceComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 
@@ -65,7 +72,12 @@ const Held = struct {
     /// grabbed entity's own units (see DragPoint). Null until there has been a view to work it out through
     mStartPoint: ?Vec3(f32) = null,
     mLastPoint: ?Vec3(f32) = null,
+    /// for a drag of the left button that started on a drag source: the nearest one it went down on
+    mSource: ?Entity = null,
 };
+
+/// The button drag and drop uses: other buttons still drag, they just carry nothing
+const DROP_BUTTON: MouseCodes = .BUTTON_LEFT;
 
 pub const empty: PointerSystem = .{};
 
@@ -79,6 +91,8 @@ mHeld: std.EnumArray(MouseCodes, Held) = .initFill(.{}),
 mReleased: std.EnumArray(MouseCodes, Chain) = .initFill(.empty),
 /// Whether each button's last release ended a drag, which is never a click as well
 mWasDragged: std.EnumArray(MouseCodes, bool) = .initFill(false),
+/// The drop target with DropHoverTag: what the held drag source would be dropped on if let go now
+mDropTarget: ?Entity = null,
 
 pub fn Deinit(self: *PointerSystem, engine_allocator: std.mem.Allocator) void {
     self.mHovered.deinit(engine_allocator);
@@ -95,6 +109,15 @@ pub fn Reset(self: *PointerSystem) void {
         held.mIsDragging = false;
     }
     for (&self.mReleased.values) |*chain| chain.clearRetainingCapacity();
+    self.mDropTarget = null;
+}
+
+/// What the left button is carrying: the drag source of the drag in progress, null if there is none
+pub fn Carrying(self: *const PointerSystem) ?Entity {
+    const held = self.mHeld.get(DROP_BUTTON);
+    if (!held.mIsDragging) return null;
+    const source = held.mSource orelse return null;
+    return if (source.IsActive()) source else null;
 }
 
 /// Whether any mouse button is down on something
@@ -111,6 +134,44 @@ pub fn Update(self: *PointerSystem, engine_context: *EngineContext, input: Input
     self.mInput = input;
     try self.UpdateHover(engine_context);
     for (std.enums.values(MouseCodes)) |button| try self.UpdateDrag(engine_context, button);
+    try self.UpdateDropTarget(engine_context);
+}
+
+/// Moves DropHoverTag to whatever the drag source would be dropped on now
+fn UpdateDropTarget(self: *PointerSystem, engine_context: *EngineContext) !void {
+    const new_target: ?Entity = if (self.Carrying()) |source| FindDropTarget(self.mHovered.items, source) else null;
+    try self.SetDropTarget(engine_context, new_target);
+}
+
+fn SetDropTarget(self: *PointerSystem, engine_context: *EngineContext, new_target: ?Entity) !void {
+    if (self.mDropTarget) |old| {
+        if (new_target != null and Same(old, new_target.?)) return;
+        if (old.IsActive() and old.HasComponent(DropHoverTag)) try old.RemoveComponentSync(engine_context, DropHoverTag);
+    }
+    self.mDropTarget = new_target;
+    if (new_target) |target| {
+        if (!target.HasComponent(DropHoverTag)) _ = try target.AddComponent(engine_context, DropHoverTag{});
+    }
+}
+
+/// The nearest drop target in `chain` (what the pointer is over, then each thing it is inside) that takes `source`.
+/// A source isn't dropped on itself
+fn FindDropTarget(chain: []const Entity, source: Entity) ?Entity {
+    for (chain) |entity| {
+        if (!entity.IsActive() or Same(entity, source)) continue;
+        const drop_target = entity.GetComponent(DropTargetComponent) orelse continue;
+        if (Takes(drop_target.*, source)) return entity;
+    }
+    return null;
+}
+
+/// Whether the source has any of the components the target takes
+fn Takes(drop_target: DropTargetComponent, source: Entity) bool {
+    const ecs = &source.mManager.mEManager.mECSManager;
+    for (drop_target.mAccepts) |component_ind| {
+        if (ecs.HasComponentInd(component_ind, source.mID)) return true;
+    }
+    return false;
 }
 
 fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
@@ -141,6 +202,15 @@ fn UpdateDrag(self: *PointerSystem, engine_context: *EngineContext, button: Mous
     if (!held.mIsDragging) {
         if (self.mInput.Pixel.Distance(held.mPressPixel) < CLICK_DRAG_THRESHOLD) return;
         held.mIsDragging = true;
+        //picked up: the nearest drag source it went down on
+        if (button == DROP_BUTTON) {
+            for (held.mChain.items) |entity| {
+                if (entity.IsActive() and entity.HasComponent(DragSourceComponent)) {
+                    held.mSource = entity;
+                    break;
+                }
+            }
+        }
         for (held.mChain.items) |entity| {
             if (!entity.IsActive()) continue;
             try Send(engine_context, .{ .PointerDragStart = .{ .mEntity = entity, .mButton = button, .mTarget = target } });
@@ -202,6 +272,7 @@ pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: M
     held.mIsDragging = false;
     held.mStartPoint = null;
     held.mLastPoint = null;
+    held.mSource = null;
 
     const target = if (held.mChain.items.len > 0) held.mChain.items[0] else return;
     //where a drag would be measured from
@@ -224,6 +295,18 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
     const was_dragging = held.mIsDragging;
     const total = if (held.mStartPoint != null and held.mLastPoint != null) held.mLastPoint.?.SubVec(held.mStartPoint.?) else ZERO;
     self.mWasDragged.set(button, was_dragging);
+
+    //let go over something that takes what it carries: dropped there
+    if (button == DROP_BUTTON) {
+        if (self.Carrying()) |source| {
+            if (self.mDropTarget) |drop_target| {
+                if (drop_target.IsActive()) try Send(engine_context, .{ .PointerDropped = .{ .mEntity = drop_target, .mSource = source, .mPosition = self.mInput.Position } });
+            }
+        }
+        try self.SetDropTarget(engine_context, null);
+        held.mSource = null;
+    }
+
     held.mChain.clearRetainingCapacity();
     held.mIsDragging = false;
 
@@ -282,9 +365,13 @@ fn ChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
 
 fn Contains(chain: []const Entity, entity: Entity) bool {
     for (chain) |other| {
-        if (other.mID == entity.mID and other.mManager == entity.mManager) return true;
+        if (Same(other, entity)) return true;
     }
     return false;
+}
+
+fn Same(a: Entity, b: Entity) bool {
+    return a.mID == b.mID and a.mManager == b.mManager;
 }
 
 fn Assign(chain: *Chain, engine_allocator: std.mem.Allocator, entities: []const Entity) !void {

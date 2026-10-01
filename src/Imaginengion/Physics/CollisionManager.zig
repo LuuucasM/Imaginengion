@@ -8,6 +8,8 @@ const ColliderComponent = EntityComponents.ColliderComponent;
 const EntityTransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const DynamicBodyTag = EntityComponents.DynamicBodyTag;
+const KinematicBodyTag = EntityComponents.KinematicBodyTag;
+const StaticBodyTag = EntityComponents.StaticBodyTag;
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
@@ -21,15 +23,41 @@ const ImguiManager = @import("../Imgui/Imgui.zig");
 
 const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
 const DynamicQuery = GroupQuery{ .Component = DynamicBodyTag };
+const KinematicQuery = GroupQuery{ .Component = KinematicBodyTag };
+const MovingQuery = GroupQuery{ .Or = &.{ DynamicQuery, KinematicQuery } };
 
 //colliders the solver can actually move
-pub const DynamicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, DynamicQuery } };
+const DynamicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, DynamicQuery } };
 
-//everything else that collides: static bodies, and colliders carrying no RigidBodyComponent at
-//all. Asking for "collider and not dynamic" rather than "collider and static" is deliberate, so
-//that a collider with no rigid body (which has neither body tag) still takes part in collision
-//the way it does today, instead of silently dropping out of the broad pass.
-pub const OtherCollidersQuery = GroupQuery{ .Not = .{ .mFirst = &ColliderQuery, .mSecond = &DynamicQuery } };
+//colliders moved by code, which the solver can't move
+const KinematicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, KinematicQuery } };
+
+//everything that collides and never moves: static bodies, and colliders carrying no RigidBodyComponent at
+//all. Asking for "collider and neither dynamic nor kinematic" rather than "collider and static" is deliberate,
+//so that a collider with no rigid body (which has no body type tag) still takes part in collision as a static
+//body would, instead of silently dropping out of the broad pass.
+const StaticCollidersQuery = GroupQuery{ .Not = .{ .mFirst = &ColliderQuery, .mSecond = &MovingQuery } };
+
+/// A world's colliders split by how they move, which decides what the broad pass pairs them with
+pub const ColliderGroups = struct {
+    mDynamic: []const Entity.Type,
+    mKinematic: []const Entity.Type,
+    mStatic: []const Entity.Type,
+};
+
+pub fn QueryColliderGroups(world_manager: *WorldManager, frame_allocator: std.mem.Allocator) !ColliderGroups {
+    return .{
+        .mDynamic = (try world_manager.GetEntityGroup(frame_allocator, DynamicCollidersQuery)).items,
+        .mKinematic = (try world_manager.GetEntityGroup(frame_allocator, KinematicCollidersQuery)).items,
+        .mStatic = (try world_manager.GetEntityGroup(frame_allocator, StaticCollidersQuery)).items,
+    };
+}
+
+/// Which pairs AddBroadPair keeps: any that can interact, or only those where one side is a trigger
+const Pairing = enum {
+    Any,
+    TriggerOnly,
+};
 
 const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
@@ -110,25 +138,39 @@ pub fn Reset(self: *CollisionManager, engine_allocator: std.mem.Allocator) void 
 
 ///Checks the whole scene for objects that can possibly collide.
 /// For the contact sets the entity origin, target, and collision type.
-/// dynamic_arr and other_arr are the DynamicCollidersQuery and OtherCollidersQuery groups, fetched
-/// once by the caller for every substep rather than re-queried here each time.
-pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, dynamic_arr: []const Entity.Type, other_arr: []const Entity.Type) !void {
+/// groups is QueryColliderGroups, fetched once by the caller for every substep rather than re-queried
+/// here each time.
+pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, groups: ColliderGroups) !void {
     const zone = Tracy.ZoneInit("CollisionManager::BroadPass", @src());
     defer zone.Deinit();
 
-    //a pair that neither side can move has nothing for the solver to do with it, so those pairs are
-    //never built rather than being built, classified, narrow-phase tested and then dropped at the
-    //_InvMass check in SolverPass. Every remaining pair has at least one dynamic body in it, which
-    //is why both loops below are anchored on the dynamic list.
-    for (0..dynamic_arr.len) |i| {
-        for (i + 1..dynamic_arr.len) |j| {
-            try self.AddBroadPair(engine_context, world_manager, dynamic_arr[i], dynamic_arr[j]);
+    //a dynamic body can be pushed, so every pair with one in it can need solving: dynamic against everything
+    for (0..groups.mDynamic.len) |i| {
+        for (i + 1..groups.mDynamic.len) |j| {
+            try self.AddBroadPair(engine_context, world_manager, groups.mDynamic[i], groups.mDynamic[j], .Any);
+        }
+    }
+    for (groups.mDynamic) |origin_id| {
+        for (groups.mKinematic) |target_id| {
+            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id, .Any);
+        }
+        for (groups.mStatic) |target_id| {
+            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id, .Any);
         }
     }
 
-    for (dynamic_arr) |origin_id| {
-        for (other_arr) |target_id| {
-            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id);
+    //a kinematic body against a static or another kinematic one: neither can be pushed, so all such a pair
+    //can give is the event of them touching. Built only when one side is a trigger, where the event is the
+    //point (a platform entering a zone). Two solid ones would be work every substep for an event that is
+    //rarely wanted, an elevator against its shaft. Static against static is never built: neither ever moves.
+    for (groups.mKinematic) |origin_id| {
+        for (groups.mStatic) |target_id| {
+            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id, .TriggerOnly);
+        }
+    }
+    for (0..groups.mKinematic.len) |i| {
+        for (i + 1..groups.mKinematic.len) |j| {
+            try self.AddBroadPair(engine_context, world_manager, groups.mKinematic[i], groups.mKinematic[j], .TriggerOnly);
         }
     }
 
@@ -136,7 +178,7 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
 }
 
 /// Classifies one pair and records it if the two can interact at all.
-fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin_id: Entity.Type, target_id: Entity.Type) !void {
+fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin_id: Entity.Type, target_id: Entity.Type, comptime pairing: Pairing) !void {
     const entity_origin = world_manager.GetEntity(origin_id);
     const entity_target = world_manager.GetEntity(target_id);
 
@@ -146,6 +188,7 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
     const collision_type = GetCollisionType(collider_origin, collider_target);
 
     if (collision_type == .Ignore) return;
+    if (pairing == .TriggerOnly and collision_type == .Block) return;
 
     const contact: Contact = .{
         .mOrigin = entity_origin,
@@ -343,8 +386,11 @@ fn InvMassOf(q_rb: ?*RigidBodyComponent) f32 {
     return if (q_rb) |rb| rb._InvMass else 0.0;
 }
 
-fn VelocityOf(q_rb: ?*RigidBodyComponent) Vec3(f32) {
-    return if (q_rb) |rb| rb._Velocity else std.mem.zeroes(Vec3(f32));
+/// A static body never moves, so whatever velocity it was given is not what it hits with
+fn VelocityOf(entity: Entity, q_rb: ?*RigidBodyComponent) Vec3(f32) {
+    const rb = q_rb orelse return std.mem.zeroes(Vec3(f32));
+    if (entity.HasComponent(StaticBodyTag)) return std.mem.zeroes(Vec3(f32));
+    return rb._Velocity;
 }
 
 /// A collider without a rigid body has no material, so it adds no bounce of its own
@@ -360,7 +406,7 @@ fn CombinedRestitution(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBo
 
 /// Callers make sure at least one side has a nonzero inverse mass
 fn VelocityCorrection(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) void {
-    const rv = VelocityOf(q_rb_target).SubVec(VelocityOf(q_rb_origin));
+    const rv = VelocityOf(contact.mTarget, q_rb_target).SubVec(VelocityOf(contact.mOrigin, q_rb_origin));
 
     const vel_along_norm = rv.Dot(contact.mNormal);
     if (vel_along_norm > 0) return; //they are already moving apart

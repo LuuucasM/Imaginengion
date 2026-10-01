@@ -110,6 +110,12 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
     if (is_tree_open) {
         defer imgui.igTreePop();
         if (@hasDecl(component_type, "EditorRender")) {
+            //the body type is which of the type tags the entity has, picked like an enum. Drawn ahead of the rigid
+            //body's own settings and before its pointer is fetched below, since swapping the tag syncs the body
+            if (comptime component_type == RigidBodyComponent and @TypeOf(object) == Entity) {
+                try ImguiManager.RenderComponentEnum(&Entity.BodyTypeTags, object, engine_context, "Body Type");
+            }
+
             const component_ptr = object.GetComponent(component_type).?;
             try component_ptr.EditorRender(engine_context);
 
@@ -129,10 +135,10 @@ fn PrintObjectComponent(comptime component_type: type, engine_context: *EngineCo
                 try object.MarkLayoutDirty(engine_context);
             }
 
-            //same story for the mass input: it recomputes _InvMass in place, so the tags that were
-            //derived from it have to be brought back in step
+            //same story for the mass input: it writes the mass straight into the component, so the body is synced
+            //to keep the mass at its minimum or above and the inverse mass in step with it
             if (comptime component_type == RigidBodyComponent and @TypeOf(object) == Entity) {
-                try object.SyncBodyTags(engine_context);
+                try object.SyncRigidBody(engine_context);
             }
         }
 

@@ -1,6 +1,7 @@
 //! Covers the solver pass: what it does to the bodies in a contact once the narrow pass has found it,
 //! the CollisionBeginEvent the narrow pass queues the first substep a pair touches, and handing that
-//! event to the entities' collision scripts.
+//! event to the entities' collision scripts. Also the gravity each body feels during the step, and how
+//! kinematic and static bodies move or don't.
 //! No window and no GPU, the passes are run by hand in the order PhysicsManager.OnUpdate runs them.
 const std = @import("std");
 
@@ -16,6 +17,9 @@ const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const OnCollisionBeginScript = EntityComponents.OnCollisionBeginScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
+const StaticBodyTag = EntityComponents.StaticBodyTag;
+const KinematicBodyTag = EntityComponents.KinematicBodyTag;
+const ScenePhysicsComponent = @import("../../ECSComponents/SComponents.zig").PhysicsComponent;
 
 const ECSObject = @import("../../ECSObjects/ECSObject.zig");
 const ScriptsProcessor = @import("../../Scripts/ScriptsProcessor.zig");
@@ -58,7 +62,8 @@ fn CollidingShape(shape: ColliderComponent.Shapes) ColliderComponent {
 fn MakeBall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), velocity: Vec3(f32)) !Entity {
     const ball = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try ball.AddComponent(engine_context, CollidingShape(.Sphere));
-    _ = try ball.AddComponent(engine_context, RigidBodyComponent{ .mMass = 1.0, ._InvMass = 1.0 });
+    //a new rigid body is dynamic with a mass of 1
+    _ = try ball.AddComponent(engine_context, RigidBodyComponent{});
     try ball.SetTranslation(engine_context, position);
     ball.GetComponent(RigidBodyComponent).?.SetVelocity(velocity);
     return ball;
@@ -69,9 +74,8 @@ fn RunCollisionPasses(collision_manager: *CollisionManager, engine_context: *Eng
     const world_manager = &engine_context.mEditorWorld;
     try PhysicsManager.UpdateWorldTransforms(world_manager, engine_context);
 
-    const dynamic_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.DynamicCollidersQuery);
-    const other_colliders = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), CollisionManager.OtherCollidersQuery);
-    try collision_manager.BroadPass(engine_context, world_manager, dynamic_colliders.items, other_colliders.items);
+    const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
+    try collision_manager.BroadPass(engine_context, world_manager, groups);
     //queued where the world's own physics step would queue them, and freed with the world
     try collision_manager.NarrowPass(engine_context, &world_manager.mPhysicsManager.mEventManager);
     try collision_manager.SolverPass(world_manager, engine_context);
@@ -109,7 +113,7 @@ test "a collider with no rigid body blocks like a static body" {
     try ExpectBallStoppedByWall(engine_context, &collision_manager, ball, wall);
 }
 
-test "a mass 0 rigid body blocks the same way" {
+test "a static rigid body blocks the same way" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -122,6 +126,7 @@ test "a mass 0 rigid body blocks the same way" {
     const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try wall.AddComponent(engine_context, CollidingShape(.Box));
     _ = try wall.AddComponent(engine_context, RigidBodyComponent{});
+    _ = try wall.AddComponent(engine_context, StaticBodyTag{});
 
     const ball = try MakeBall(engine_context, scene, .{ .x = -0.9, .y = 0, .z = 0 }, .{ .x = 5, .y = 0, .z = 0 });
 
@@ -215,6 +220,7 @@ test "the bouncier surface wins" {
     //a default, dead ball against a static wall with restitution 1 still bounces fully
     const pair = try WallAndBall(engine_context, scene, .{ .x = 5, .y = 0, .z = 0 });
     _ = try pair.wall.AddComponent(engine_context, RigidBodyComponent{});
+    _ = try pair.wall.AddComponent(engine_context, StaticBodyTag{});
     SetRestitution(pair.wall, 1.0);
 
     try RunCollisionPasses(&collision_manager, engine_context);
@@ -359,4 +365,109 @@ test "handing a collision to scripts that have nothing to run is skipped" {
         .mNormal = .{ .x = 1, .y = 0, .z = 0 },
         .mIsTrigger = false,
     });
+}
+
+/// A mass 2 body with no collider, at rest, feeling the given share of its scene's gravity. The entity and not
+/// its component is handed back: adding the next body can move the component storage under a held pointer
+fn MakeFallingBody(engine_context: *EngineContext, scene: Scene, gravity_scale: Vec3(f32)) !Entity {
+    const body = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try body.AddComponent(engine_context, RigidBodyComponent{ ._Mass = 2.0, .mGravityScale = gravity_scale });
+    return body;
+}
+
+fn VelocityOf(body: Entity) Vec3(f32) {
+    return body.GetComponent(RigidBodyComponent).?.GetVelocity();
+}
+
+test "a body feels its scene's gravity scaled axis by axis" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    _ = try scene.AddComponent(engine_context, ScenePhysicsComponent{ .mGravity = .{ .x = 6, .y = -12, .z = 0 } });
+
+    const as_is = try MakeFallingBody(engine_context, scene, .{ .x = 1, .y = 1, .z = 1 });
+    const ignores = try MakeFallingBody(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 });
+    const half_down_only = try MakeFallingBody(engine_context, scene, .{ .x = 0, .y = 0.5, .z = 1 });
+    const upside_down = try MakeFallingBody(engine_context, scene, .{ .x = 1, .y = -1, .z = 1 });
+
+    //one fixed step is 1/60 s, so each body ends it moving at its scaled gravity / 60, whatever its mass
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(as_is).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, -0.2), VelocityOf(as_is).y, eps);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ignores).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ignores).y, eps);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(half_down_only).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, -0.1), VelocityOf(half_down_only).y, eps);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1), VelocityOf(upside_down).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.2), VelocityOf(upside_down).y, eps);
+}
+
+/// A collider-less body of the given type at the origin, already moving
+fn MakeMovingBody(engine_context: *EngineContext, scene: Scene, comptime body_type_tag: type, velocity: Vec3(f32)) !Entity {
+    const body = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try body.AddComponent(engine_context, RigidBodyComponent{});
+    _ = try body.AddComponent(engine_context, body_type_tag{});
+    body.GetComponent(RigidBodyComponent).?.SetVelocity(velocity);
+    return body;
+}
+
+test "a kinematic body moves by its velocity alone, and a static body not at all" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    //gravity on, which neither of them feels
+    _ = try scene.AddComponent(engine_context, ScenePhysicsComponent{});
+
+    const kinematic = try MakeMovingBody(engine_context, scene, KinematicBodyTag, .{ .x = 3, .y = 0, .z = 0 });
+    //given a velocity after it is static, the way a script might: it still never moves
+    const static = try MakeMovingBody(engine_context, scene, StaticBodyTag, .{ .x = 3, .y = 0, .z = 0 });
+
+    //and nothing pushes the kinematic one: an impulse or a force is lost on it
+    kinematic.GetComponent(RigidBodyComponent).?.ApplyImpulse(.{ .x = 100, .y = 0, .z = 0 });
+    kinematic.GetComponent(RigidBodyComponent).?.ApplyForce(.{ .x = 100, .y = 0, .z = 0 });
+
+    //one fixed step is 1/60 s
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 0.05), kinematic.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 3), VelocityOf(kinematic).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(kinematic).y, eps);
+
+    try std.testing.expectEqual(@as(f32, 0), static.GetComponent(TransformComponent).?.GetTranslation().x);
+}
+
+test "a kinematic body pushes a dynamic one and is not pushed back" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    var collision_manager: CollisionManager = .empty;
+    try collision_manager.Init(engine_context.EngineAllocator());
+    defer collision_manager.Deinit(engine_context.EngineAllocator());
+
+    //a paddle-like box at the origin moving right into a ball at rest that is 0.1 into its right face
+    const paddle = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try paddle.AddComponent(engine_context, CollidingShape(.Box));
+    _ = try paddle.AddComponent(engine_context, RigidBodyComponent{});
+    _ = try paddle.AddComponent(engine_context, KinematicBodyTag{});
+    paddle.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 2, .y = 0, .z = 0 });
+
+    const ball = try MakeBall(engine_context, scene, .{ .x = 0.9, .y = 0, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
+
+    try RunCollisionPasses(&collision_manager, engine_context);
+
+    //no bounce on either, so the ball is carried off at the paddle's speed, and pushed clear by the overlap
+    try std.testing.expectApproxEqAbs(@as(f32, 2), VelocityOf(ball).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.972), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+
+    //the paddle goes on as it was, where it was
+    try std.testing.expectApproxEqAbs(@as(f32, 2), VelocityOf(paddle).x, eps);
+    try std.testing.expectEqual(@as(f32, 0), paddle.GetComponent(TransformComponent).?.GetTranslation().x);
 }

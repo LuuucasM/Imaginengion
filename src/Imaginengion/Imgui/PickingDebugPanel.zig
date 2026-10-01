@@ -47,6 +47,7 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     //the pointer system's state: only a running game's views have one, the editor camera's view is for selecting
     try PointerText(frame_allocator, "Pointer over", engine_context.mPointerSystem.mHovered.items);
     try PointerText(frame_allocator, "Left button holding", engine_context.mPointerSystem.mHeld.get(.BUTTON_LEFT).mChain.items);
+    try Text(frame_allocator, "Carrying: {s}", .{if (engine_context.mPointerSystem.Carrying()) |source| EntityName(source) else "nothing"});
     try Text(frame_allocator, "Last pointer event: {s}", .{if (self.mLastPointerEventLen > 0) self.mLastPointerEvent[0..self.mLastPointerEventLen] else "none yet"});
 
     imgui.igSeparator();
@@ -155,6 +156,7 @@ pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
         .PointerDragStart => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} started dragging '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
         .PointerDrag => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} dragging '{s}', {d:.1}, {d:.1}, {d:.1} so far", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
         .PointerDragEnd => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} dragged '{s}' {d:.1}, {d:.1}, {d:.1}", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
+        .PointerDropped => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "dropped '{s}' on '{s}'", .{ EntityName(e.mSource), EntityName(e.mEntity) }),
         .PointerEnter, .PointerExit, .Default => return,
     } catch return;
     self.mLastPointerEventLen = text.len;

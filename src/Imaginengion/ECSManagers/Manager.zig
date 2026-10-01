@@ -178,19 +178,29 @@ pub fn Core(comptime Self: type) type {
                 try entity.MarkLayoutDirty(engine_context);
             }
 
-            //a new rigid body starts with whatever _InvMass it was constructed with (zero for a
-            //default one, so static), and BroadPass reads the tag rather than the mass
+            //a new rigid body gets a type tag if it has none, and its mass and inverse mass put in step with it.
+            //every way a body comes in goes through here: code, the panel, a file, a template
             if (comptime Self == EManager and @TypeOf(new_component) == RigidBodyComponent) {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
-                try entity.SyncBodyTags(engine_context);
+                try entity.SyncRigidBody(engine_context);
+            }
+
+            //a body type tag replaces the type the body had, see Entity.OnBodyTypeTagAdded
+            if (comptime Self == EManager) {
+                inline for (Entity.BodyTypeTags) |tag_type| {
+                    if (@TypeOf(new_component) == tag_type) {
+                        const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                        try entity.OnBodyTypeTagAdded(engine_context, tag_type);
+                    }
+                }
             }
 
             return component_ptr;
         }
 
         pub fn RemoveComponent(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
-            //the body tags describe a rigid body that is on its way out, so they come off now.
-            //SyncBodyTags would re-add one instead: this removal is only queued, so the component
+            //the body type tag describes a rigid body that is on its way out, so it comes off now.
+            //SyncRigidBody would re-add one instead: this removal is only queued, so the component
             //is still readable until the end of the frame.
             if (comptime Self == EManager and component_type == RigidBodyComponent) {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };

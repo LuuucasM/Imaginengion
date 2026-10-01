@@ -367,6 +367,12 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.HasComponent(ComponentType, entity_id);
         }
 
+        /// HasComponent for a component known only by its slot (ComponentInd) at runtime
+        pub fn HasComponentInd(self: Self, component_ind: usize, entity_id: entity_t) bool {
+            std.debug.assert(self.IsActiveEntity(entity_id));
+            return self.mComponentManager.HasComponentInd(component_ind, entity_id);
+        }
+
         pub fn GetComponent(self: Self, comptime component_type: type, entity_id: entity_t) ?*component_type {
             _ValidateType(component_type);
             std.debug.assert(self.IsActiveEntity(entity_id));
@@ -612,7 +618,7 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
         }
 
         fn _ValidateType(comptime component_type: type) void {
-            const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+            const type_name = " " ++ @typeName(component_type) ++ "\n";
 
             const type_info = @typeInfo(component_type);
             if (type_info != .@"struct") {

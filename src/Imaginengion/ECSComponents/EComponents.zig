@@ -12,10 +12,14 @@ pub const QuadComponent = @import("Entity/QuadComponent.zig");
 pub const RigidBodyComponent = @import("Entity/RigidBodyComponent.zig");
 pub const StaticBodyTag = @import("Entity/TagComponents.zig").StaticBodyTag;
 pub const DynamicBodyTag = @import("Entity/TagComponents.zig").DynamicBodyTag;
+pub const KinematicBodyTag = @import("Entity/TagComponents.zig").KinematicBodyTag;
 pub const LayoutDirtyTag = @import("Entity/TagComponents.zig").LayoutDirtyTag;
 pub const LayoutHiddenTag = @import("Entity/TagComponents.zig").LayoutHiddenTag;
 pub const HoveredTag = @import("Entity/TagComponents.zig").HoveredTag;
 pub const PressedTag = @import("Entity/TagComponents.zig").PressedTag;
+pub const DropHoverTag = @import("Entity/TagComponents.zig").DropHoverTag;
+pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
+pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
 pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
 pub const LayoutItemComponent = @import("Entity/LayoutItemComponent.zig");
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
@@ -52,6 +56,7 @@ pub const ComponentsList = [_]type{
     QuadComponent,
     RigidBodyComponent,
     StaticBodyTag,
+    KinematicBodyTag,
     DynamicBodyTag,
     EntitySceneComponent,
     TextComponent,
@@ -70,6 +75,9 @@ pub const ComponentsList = [_]type{
     LayoutHiddenTag,
     HoveredTag,
     PressedTag,
+    DropHoverTag,
+    DragSourceComponent,
+    DropTargetComponent,
 
     //scripts
     ScriptComponent,
@@ -90,6 +98,12 @@ pub const SerializeList = [_]type{
     NameComponent,
     PlayerSlotComponent,
     QuadComponent,
+    //the body type is the tag, so the tag is what is saved. Ahead of RigidBodyComponent on purpose: a rigid
+    //body added with no type tag is given one, so the saved tag has to be on the entity first or it would be
+    //added a second time on load (the same goes for a template being copied, which goes through this list too)
+    StaticBodyTag,
+    KinematicBodyTag,
+    DynamicBodyTag,
     RigidBodyComponent,
     ShouldRenderTag,
     TextComponent,
@@ -150,6 +164,7 @@ pub const EComponents = enum(u16) {
     RigidBodyComponent = ListInd(&ComponentsList, RigidBodyComponent),
     StaticBodyTag = ListInd(&ComponentsList, StaticBodyTag),
     DynamicBodyTag = ListInd(&ComponentsList, DynamicBodyTag),
+    KinematicBodyTag = ListInd(&ComponentsList, KinematicBodyTag),
     EntitySceneComponent = ListInd(&ComponentsList, EntitySceneComponent),
     TextComponent = ListInd(&ComponentsList, TextComponent),
     TransformComponent = ListInd(&ComponentsList, TransformComponent),
@@ -170,11 +185,14 @@ pub const EComponents = enum(u16) {
     LayoutHiddenTag = ListInd(&ComponentsList, LayoutHiddenTag),
     HoveredTag = ListInd(&ComponentsList, HoveredTag),
     PressedTag = ListInd(&ComponentsList, PressedTag),
+    DropHoverTag = ListInd(&ComponentsList, DropHoverTag),
+    DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
+    DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
 };
 
 comptime {
     for (ComponentsList) |component_type| {
-        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(component_type)});
+        const type_name = " " ++ @typeName(component_type) ++ "\n";
         if (!@hasDecl(component_type, "Editable")) {
             @compileError("Type must have 'Editable' pub const declaration " ++ type_name);
         }
@@ -219,7 +237,7 @@ comptime {
     }
 
     for (ScriptsList) |script_type| {
-        const type_name = std.fmt.comptimePrint(" {s}\n", .{@typeName(script_type)});
+        const type_name = " " ++ @typeName(script_type) ++ "\n";
         if (!@hasDecl(script_type, "Scripttype")) {
             @compileError("Type must have 'Scripttype' pub const declaration " ++ type_name);
         }
