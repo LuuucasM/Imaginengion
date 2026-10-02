@@ -17,6 +17,8 @@ test {
     _ = @import("Tests/UI/LayoutComponentTests.zig");
     _ = @import("Tests/UI/LayoutSystemTests.zig");
     _ = @import("Tests/UI/PointerSystemTests.zig");
+    _ = @import("Tests/UI/FocusSystemTests.zig");
+    _ = @import("Tests/UI/PopupSystemTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }

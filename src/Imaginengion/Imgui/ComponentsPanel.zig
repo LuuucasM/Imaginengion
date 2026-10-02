@@ -20,6 +20,7 @@ const AudioComponent = @import("../ECSComponents/Entity/AudioComponent.zig");
 const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
 const LayoutComponent = @import("../ECSComponents/Entity/LayoutComponent.zig");
 const LayoutItemComponent = @import("../ECSComponents/Entity/LayoutItemComponent.zig");
+const PopupComponent = @import("../ECSComponents/Entity/PopupComponent.zig");
 const TextComponent = @import("../ECSComponents/Entity/TextComponent.zig");
 const QuadComponent = @import("../ECSComponents/Entity/QuadComponent.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
@@ -224,6 +225,10 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
         }
     }
     _ = try object.AddComponent(engine_context, component_type{});
+    //a popup opens and closes through its layout item, so it gets one the way picking one from the menu gives it
+    if (comptime @TypeOf(object) == Entity and component_type == PopupComponent) {
+        if (!object.HasComponent(LayoutItemComponent)) try AddFromPanel(LayoutItemComponent, engine_context, object);
+    }
 }
 
 fn ObjectTraits(comptime T: type) type {

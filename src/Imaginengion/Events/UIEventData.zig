@@ -1,14 +1,15 @@
-//! What the pointer (the mouse) does to entities: moments, where HoveredTag and PressedTag are the states that
-//! last. Each event is for one entity, `mEntity`. The entity under the pointer and everything it is inside (its
-//! parent, and so on up) each get their own, so a button hears about a click that landed on its label: `mTarget`
-//! is the entity that was actually under the pointer. See UI/PointerSystem.zig, which sends them.
+//! What the pointer (the mouse) and the keyboard do to entities, and popups opening and closing: moments, where
+//! HoveredTag, PressedTag and FocusedTag are the states that last. Each event is for one entity, `mEntity`. The entity it happened to and
+//! everything it is inside (its parent, and so on up) each get their own, so a button hears about a click that
+//! landed on its label: `mTarget` is the entity it actually happened to. See UI/PointerSystem.zig,
+//! UI/FocusSystem.zig and UI/PopupSystem.zig, which send them.
 const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
 const Vec3 = @import("../Math/MathTypes.zig").Vec3;
 
 pub const EventCategories = enum {
     /// processed once a frame, after the input events that cause them and before game logic
-    Pointer,
+    Interaction,
 };
 
 pub const EventT = union(enum) {
@@ -22,6 +23,12 @@ pub const EventT = union(enum) {
     PointerDrag: PointerDragEvent,
     PointerDragEnd: PointerDragEndEvent,
     PointerDropped: PointerDroppedEvent,
+    FocusGained: FocusEvent,
+    FocusLost: FocusEvent,
+    TextChanged: TextEvent,
+    TextSubmitted: TextEvent,
+    PopupOpened: PopupEvent,
+    PopupClosed: PopupEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -94,4 +101,30 @@ pub const PointerDroppedEvent = struct {
     mSource: Entity,
     /// where the pointer's ray met what it was over, in the world
     mPosition: Vec3(f32),
+};
+
+/// A text input (TextInputComponent) got the keyboard, or lost it. Losing it comes after the TextSubmitted or the
+/// revert's TextChanged that ended the edit
+pub const FocusEvent = struct {
+    mEntity: Entity,
+    /// the text input itself
+    mTarget: Entity,
+};
+
+/// For a text input (mTarget), read its TextComponent for the text:
+///   - TextChanged: its text was edited: typed into, deleted from, pasted into, or put back by Escape
+///   - TextSubmitted: the edit was kept, by Enter or by pressing somewhere else. Sent even if the text is the same
+///     as before the edit, so compare against what you had if that matters
+pub const TextEvent = struct {
+    mEntity: Entity,
+    mTarget: Entity,
+};
+
+/// A popup (mTarget, the root with the PopupComponent) was opened or closed. Closing one closes the popups opened on
+/// top of it as well, each with its own PopupClosed, the top one first
+pub const PopupEvent = struct {
+    mEntity: Entity,
+    mTarget: Entity,
+    /// what it was opened against, null for a point (a right-click menu)
+    mOpener: ?Entity,
 };

@@ -74,7 +74,7 @@ const TestWorld = struct {
     /// The events sent since the last call, the way the frame's processing empties them
     fn TakeEvents(self: *TestWorld) ![]UIEvent {
         const engine_context = self.mEngineContext;
-        const queued = engine_context.mUIEventManager.mEventsArray.getPtr(.Pointer);
+        const queued = engine_context.mUIEventManager.mEventsArray.getPtr(.Interaction);
         const taken = try engine_context.FrameAllocator().dupe(UIEvent, queued.items);
         queued.clearRetainingCapacity();
         return taken;

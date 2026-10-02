@@ -20,6 +20,7 @@ pub const EventT = union(enum) {
     MouseClicked: MouseClickedEvent,
     MouseMoved: MouseMovedEvent,
     MouseScrolled: MouseScrolledEvent,
+    TextTyped: TextTypedEvent,
 };
 
 pub const DefaultEvent = struct {};
@@ -45,6 +46,19 @@ pub const MouseClickedEvent = struct {
     _MouseY: f32,
     _Clicks: u8, //from SDL: 1 for a single click, 2 for a double click, and so on
 };
+/// Text the keyboard typed: what the keys make with shift, the keyboard's layout and accents worked out, so not one
+/// event per key. Only sent while something is taking text (see FocusSystem). Longer text (pasted from an input
+/// method) comes as several events in a row, split between codepoints
+pub const TextTypedEvent = struct {
+    pub const MAX_LEN = 16;
+    _Bytes: [MAX_LEN]u8,
+    _Len: u8,
+
+    pub fn Text(self: *const TextTypedEvent) []const u8 {
+        return self._Bytes[0..self._Len];
+    }
+};
+
 pub const MouseMovedEvent = struct {
     _MouseX: f32,
     _MouseY: f32,

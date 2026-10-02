@@ -14,4 +14,5 @@ test {
     _ = @import("Tests/Renderer/TextLayoutTests.zig");
     _ = @import("Tests/Inputs/InputTests.zig");
     _ = @import("Tests/UI/LayoutTests.zig");
+    _ = @import("Tests/UI/TextEditTests.zig");
 }

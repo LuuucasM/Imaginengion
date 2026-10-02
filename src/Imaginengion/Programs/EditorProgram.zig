@@ -273,8 +273,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         //what that did to entities: enter, exit, pressed, released, clicked. Before game logic, which reacts to it
         var ui_event_callback = EngineContext.UIEventCallback{ .mCtx = self, .mCallbackFn = OnUIEvent };
         callback_list.append(&ui_event_callback.mNode);
-        try engine_context.mUIEventManager.ProcessCategory(.Pointer, engine_context, callback_list);
-        engine_context.mUIEventManager.ClearCategory(engine_allocator, .Pointer, .ClearRetainingCapacity);
+        try engine_context.mUIEventManager.ProcessCategory(.Interaction, engine_context, callback_list);
+        engine_context.mUIEventManager.ClearCategory(engine_allocator, .Interaction, .ClearRetainingCapacity);
         callback_list.first = null;
         callback_list.last = null;
 
@@ -338,6 +338,11 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         if (self.mEditorState == .Play) {
             try LayoutSystem.UpdateLayouts(&engine_context.mSimulateWorld, engine_context);
         }
+        //popups go against what opened them and the caret where the laid out text puts it
+        if (self.mEditorState == .Play) {
+            try engine_context.mPopupSystem.Update(engine_context, &engine_context.mSimulateWorld);
+        }
+        try engine_context.mFocusSystem.Update(engine_context);
     }
     //---------------End Layout Update ------------
 
@@ -517,7 +522,13 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
     switch (event.*) {
         .WindowClose => _ = self.OnWindowClose(engine_context),
         .KeyboardPressed => |e| _ = try self.OnKeyboardPressedEvent(engine_context, e),
-        .MousePressed => |e| try engine_context.mPointerSystem.OnPressed(engine_context, e._ButtonCode),
+        .MousePressed => |e| {
+            try engine_context.mPointerSystem.OnPressed(engine_context, e._ButtonCode);
+            //popups the press is outside close, then the keyboard follows what the press landed on
+            try engine_context.mPopupSystem.OnPressed(engine_context, &engine_context.mPointerSystem);
+            try engine_context.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, e._ButtonCode);
+        },
+        .TextTyped => |e| try engine_context.mFocusSystem.OnTextTyped(engine_context, e.Text()),
         .MouseReleased => |e| try engine_context.mPointerSystem.OnReleased(engine_context, e._ButtonCode),
         .MouseClicked => |e| {
             try engine_context.mPointerSystem.OnClicked(engine_context, e._ButtonCode, e._Clicks);
@@ -529,7 +540,7 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
     return .Continue;
 }
 
-/// The pointer events of the frame. Nothing reacts to them yet: widgets add their listeners to the callback list
+/// The pointer and keyboard events of the frame. Nothing reacts to them yet: widgets add their listeners to the callback list
 /// in OnUpdate. The Picking Debug panel shows the last one, to see them arrive
 pub fn OnUIEvent(editor_program: *anyopaque, _: *EngineContext, event: *const UIEvent) anyerror!EventResult {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
@@ -784,7 +795,24 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
 pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !bool {
     _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Editor, engine_context, .{&e});
     if (self.mEditorState == .Play) {
-        _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Simulate, engine_context, .{&e});
+        //scene by scene from the top of the stack. A text input with the keyboard takes every key at its own scene's
+        //turn, and the top popup takes Escape at its own: the scenes above hear it first and can keep it, the scenes
+        //below never do. In the same scene the text input goes first, since it has the keyboard
+        const focus = &engine_context.mFocusSystem;
+        const popups = &engine_context.mPopupSystem;
+        const focus_pos = focus.FocusedStackPos();
+        const popup_pos = if (e._InputCode == .ESCAPE) popups.TopStackPos() else null;
+        if (popup_pos != null and (focus_pos == null or popup_pos.? > focus_pos.?)) {
+            if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, popup_pos.?, .{&e})) {
+                try popups.CloseTop(engine_context);
+            }
+        } else if (focus_pos) |stack_pos| {
+            if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, stack_pos, .{&e})) {
+                try focus.OnKeyPressed(engine_context, e);
+            }
+        } else {
+            _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Simulate, engine_context, .{&e});
+        }
     }
 
     if (e._InputCode == .F5) {
@@ -805,8 +833,11 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         self.mEditorState = .Stop;
         self.mActiveWorld = &engine_context.mGameWorld;
         self.mActiveWorldType = .Game;
-        //what the pointer was over and holding is in the world that's about to go
+        //what the pointer was over and holding, what had the keyboard and the open popups are in the world that's
+        //about to go
         engine_context.mPointerSystem.Reset();
+        engine_context.mFocusSystem.Reset(engine_context);
+        engine_context.mPopupSystem.Reset();
         self.mPointerCamera = null;
         engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {

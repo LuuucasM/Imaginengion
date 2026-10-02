@@ -20,6 +20,9 @@ pub const PressedTag = @import("Entity/TagComponents.zig").PressedTag;
 pub const DropHoverTag = @import("Entity/TagComponents.zig").DropHoverTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
+pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
+pub const TextInputComponent = @import("Entity/TextInputComponent.zig");
+pub const PopupComponent = @import("Entity/PopupComponent.zig");
 pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
 pub const LayoutItemComponent = @import("Entity/LayoutItemComponent.zig");
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
@@ -78,6 +81,9 @@ pub const ComponentsList = [_]type{
     DropHoverTag,
     DragSourceComponent,
     DropTargetComponent,
+    FocusedTag,
+    TextInputComponent,
+    PopupComponent,
 
     //scripts
     ScriptComponent,
@@ -112,6 +118,8 @@ pub const SerializeList = [_]type{
     TmplRefComponent,
     LayoutComponent,
     LayoutItemComponent,
+    TextInputComponent,
+    PopupComponent,
 };
 
 /// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
@@ -144,6 +152,8 @@ pub const ComponentPanelList = [_]type{
     TmplRefComponent,
     LayoutComponent,
     LayoutItemComponent,
+    TextInputComponent,
+    PopupComponent,
 };
 
 ///A list of all the scripts
@@ -188,6 +198,9 @@ pub const EComponents = enum(u16) {
     DropHoverTag = ListInd(&ComponentsList, DropHoverTag),
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
+    FocusedTag = ListInd(&ComponentsList, FocusedTag),
+    TextInputComponent = ListInd(&ComponentsList, TextInputComponent),
+    PopupComponent = ListInd(&ComponentsList, PopupComponent),
 };
 
 comptime {

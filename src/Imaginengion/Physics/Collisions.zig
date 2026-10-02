@@ -5,7 +5,7 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 
-const MathUtils = @import("../Math/MathUtils.zig");
+const SDF = @import("../Math/SDFFunctions.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 
@@ -18,9 +18,28 @@ pub const CollisionType = enum {
 pub const Contact = struct {
     mOrigin: Entity = .uninit,
     mTarget: Entity = .uninit,
+    //points from mOrigin to mTarget
     mNormal: Vec3(f32),
-    mPenetration: f32,
+    //the gap between the two along mNormal: negative while they overlap, by how deep
+    mSeparation: f32,
+
+    //what the solver found and did on this substep, see CollisionManager.SolveVelocities
+    //how fast the two were closing along mNormal before the solver did anything, which the bounce is worked out from
+    mApproachSpeed: f32 = 0,
+    //how hard the solver pushed them apart, in total. Above 0 means they really met, gap or not
+    mImpulse: f32 = 0,
+    //the restitution they bounced with, 0 if they did not bounce
+    mBounce: f32 = 0,
+    //a trigger pair that was apart and whose path this substep went into each other, see SweepShapes. It
+    //touches although no snapshot ever found it overlapping
+    mCrossed: bool = false,
 };
+
+//the most steps SweepShapes takes along a path before giving up on it
+const SWEEP_MAX_STEPS: u32 = 32;
+//how close a sweep has to get to count as a hit. Sphere tracing nears a surface in ever smaller steps
+//and never quite lands on it
+const SWEEP_HIT_DISTANCE: f32 = 0.001;
 
 /// What a collision script is told about a contact, from the side of the entity the script belongs to.
 /// The same for every collision script type, so begin, stay and end scripts all share one Run signature
@@ -31,141 +50,86 @@ pub const CollisionInfo = struct {
     mIsTrigger: bool,
 };
 
-/// Runs the narrow test that fits the two colliders' shapes. The switch is exhaustive on purpose, so
-/// a new shape will not compile until every pairing with it has a test.
+/// Works out the gap and the direction between two colliders, whether or not they touch, and returns whether
+/// they overlap. Every test is an SDF evaluation:
+///   - a sphere against anything: the other collider's SDF at the sphere's centre, less the radius (ShapeSphere)
+///   - box against box: the SDF of the two boxes added together (BoxBox)
+/// The switch is exhaustive on purpose, so a new shape will not compile until every pairing with it has a test.
 pub fn TestShapes(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
-    return switch (origin_collider.mShape) {
-        .Sphere => switch (target_collider.mShape) {
-            .Sphere => SphereSphere(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
-            .Box => SphereBox(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
-        },
+    switch (origin_collider.mShape) {
+        .Sphere => SphereShape(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
         .Box => switch (target_collider.mShape) {
-            .Sphere => BoxSphere(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
+            .Sphere => ShapeSphere(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
             .Box => BoxBox(contact, origin_transform_comp, origin_collider, target_transform_comp, target_collider),
         },
-    };
+    }
+    //touching exactly is not an overlap
+    return contact.mSeparation < 0.0;
 }
 
-pub fn SphereSphere(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
-    const origin_pos = origin_transform_comp.GetWorldPosition();
-    const target_pos = target_transform_comp.GetWorldPosition();
+/// Whether the pair meets as the target moves by `motion` relative to the origin. Sphere tracing, the same as the
+/// renderer's ray marching, through the gap TestShapes measures: each step moves the target on by the gap, which
+/// nothing is closer than, so it can never step past a surface, and it stops at a hit (within SWEEP_HIT_DISTANCE)
+/// or once the whole motion is covered. Rotation is honoured wherever TestShapes honours it.
+/// On a hit the contact's normal is the one at the hit point. A path that grazes a surface nears it in ever
+/// smaller steps, so running out of SWEEP_MAX_STEPS without a hit counts as a miss.
+pub fn SweepShapes(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent, motion: Vec3(f32)) bool {
+    const length = motion.Len();
+    if (length <= 0.0) return false;
+    const direction = motion.DivScalar(length);
 
-    const delta = target_pos.SubVec(origin_pos);
+    //a copy that is moved along the path, the real transform stays where it is
+    var moved_target = target_transform_comp.*;
+    const start = target_transform_comp.GetWorldPosition();
 
-    const radius_sum = origin_collider.GetWorldRadius(origin_transform_comp.GetWorldScale()) + target_collider.GetWorldRadius(target_transform_comp.GetWorldScale());
+    var probe = contact.*;
+    var travelled: f32 = 0.0;
+    for (0..SWEEP_MAX_STEPS) |_| {
+        moved_target.SetWorldPosition(start.AddVec(direction.MulScalar(travelled)));
+        _ = TestShapes(&probe, origin_transform_comp, origin_collider, &moved_target, target_collider);
 
-    // Compare squared distances first to avoid paying for a sqrt on pairs
-    // that don't even overlap (the common case in a broad-phase pass).
-    const dist_sq = delta.Dot(delta);
-    if (dist_sq >= radius_sum * radius_sum) return false; //not a collision
+        if (probe.mSeparation <= SWEEP_HIT_DISTANCE) {
+            contact.mNormal = probe.mNormal;
+            return true;
+        }
 
-    const dist = @sqrt(dist_sq);
-    const penetration = radius_sum - dist;
-
-    var normal = std.mem.zeroes(Vec3(f32));
-
-    if (dist > 0.00001) {
-        normal = delta.DivScalar(dist);
-    } else {
-        normal.x = 1;
+        travelled += probe.mSeparation;
+        if (travelled >= length) return false;
     }
-
-    contact.mNormal = normal;
-    contact.mPenetration = penetration;
-
-    return true;
+    return false;
 }
 
-/// Axis aligned: the boxes' rotations are ignored.
-pub fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) bool {
-    const origin_pos = origin_transform_comp.GetWorldPosition();
-    const target_pos = target_transform_comp.GetWorldPosition();
-    const origin_half = origin_collider.GetWorldHalfExtents(origin_transform_comp.GetWorldScale());
-    const target_half = target_collider.GetWorldHalfExtents(target_transform_comp.GetWorldScale());
+/// Any collider against a sphere. The sphere's centre is taken into the other collider's own space, where that
+/// collider's SDF gives the distance to its surface and the SDF's gradient the direction out of it. The sphere's
+/// radius off the distance is the gap. The collider's rotation is honoured here, since it is undone on the point.
+/// The normal points from the collider to the sphere, like every other test's origin to target.
+fn ShapeSphere(contact: *Contact, shape_transform_comp: *TransformComponent, shape_collider: *ColliderComponent, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent) void {
+    const shape_rotation = shape_transform_comp.GetWorldRotation();
+    const shape_scale = shape_transform_comp.GetWorldScale();
+    const local_center = SDF.GetLocalPoint(sphere_transform_comp.GetWorldPosition(), shape_transform_comp.GetWorldPosition(), shape_rotation);
 
-    const delta = target_pos.SubVec(origin_pos);
-
-    //boxes overlap on an axis while their centers are closer than their half extents added up
-    const overlap_x = (origin_half.x + target_half.x) - @abs(delta.x);
-    const overlap_y = (origin_half.y + target_half.y) - @abs(delta.y);
-    const overlap_z = (origin_half.z + target_half.z) - @abs(delta.z);
-
-    if (overlap_x <= 0 or overlap_y <= 0 or overlap_z <= 0) return false; //not a collision
-
-    var penetration = overlap_x;
-    var normal = Vec3(f32){ .x = MathUtils.Sign(delta.x), .y = 0.0, .z = 0.0 };
-
-    if (overlap_y < penetration) {
-        penetration = overlap_y;
-        normal = Vec3(f32){ .x = 0.0, .y = MathUtils.Sign(delta.y), .z = 0.0 };
-    }
-    if (overlap_z < penetration) {
-        penetration = overlap_z;
-        normal = Vec3(f32){ .x = 0.0, .y = 0.0, .z = MathUtils.Sign(delta.z) };
-    }
-
-    contact.mNormal = normal;
-    contact.mPenetration = penetration;
-
-    return true;
-}
-
-/// Axis aligned: the box's rotation is ignored, the same as BoxBox.
-/// The normal points from the box to the sphere, like every other test's origin to target.
-pub fn BoxSphere(contact: *Contact, box_transform_comp: *TransformComponent, box_collider: *ColliderComponent, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent) bool {
-    const half = box_collider.GetWorldHalfExtents(box_transform_comp.GetWorldScale());
     const radius = sphere_collider.GetWorldRadius(sphere_transform_comp.GetWorldScale());
 
-    //the sphere's center relative to the box's, so the box spans -half to +half on each axis
-    const delta = sphere_transform_comp.GetWorldPosition().SubVec(box_transform_comp.GetWorldPosition());
-
-    //the point on (or in) the box nearest the sphere's center
-    const closest = Vec3(f32){
-        .x = std.math.clamp(delta.x, -half.x, half.x),
-        .y = std.math.clamp(delta.y, -half.y, half.y),
-        .z = std.math.clamp(delta.z, -half.z, half.z),
-    };
-
-    const offset = delta.SubVec(closest);
-    const dist_sq = offset.Dot(offset);
-    if (dist_sq >= radius * radius) return false; //not a collision
-
-    if (dist_sq > 0.00001 * 0.00001) {
-        //center is outside the box: push out along the line from the nearest point to the center
-        const dist = @sqrt(dist_sq);
-        contact.mNormal = offset.DivScalar(dist);
-        contact.mPenetration = radius - dist;
-        return true;
-    }
-
-    //center is inside the box (or on its surface), so the nearest point is the center itself and gives
-    //no direction. Push out through the nearest face instead, like BoxBox picks its least overlap axis:
-    //the center has to travel to that face and then a full radius past it
-    const face_x = half.x - @abs(delta.x);
-    const face_y = half.y - @abs(delta.y);
-    const face_z = half.z - @abs(delta.z);
-
-    var face_dist = face_x;
-    var normal = Vec3(f32){ .x = MathUtils.Sign(delta.x), .y = 0.0, .z = 0.0 };
-
-    if (face_y < face_dist) {
-        face_dist = face_y;
-        normal = Vec3(f32){ .x = 0.0, .y = MathUtils.Sign(delta.y), .z = 0.0 };
-    }
-    if (face_z < face_dist) {
-        face_dist = face_z;
-        normal = Vec3(f32){ .x = 0.0, .y = 0.0, .z = MathUtils.Sign(delta.z) };
-    }
-
-    contact.mNormal = normal;
-    contact.mPenetration = face_dist + radius;
-
-    return true;
+    contact.mSeparation = shape_collider.LocalDistance(local_center, shape_scale) - radius;
+    //back out of the collider's own space
+    contact.mNormal = shape_collider.LocalNormal(local_center, shape_scale).QuatRotate(shape_rotation);
 }
 
-/// BoxSphere with the roles swapped: the normal points from the sphere to the box.
-pub fn SphereBox(contact: *Contact, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent, box_transform_comp: *TransformComponent, box_collider: *ColliderComponent) bool {
-    if (!BoxSphere(contact, box_transform_comp, box_collider, sphere_transform_comp, sphere_collider)) return false;
+/// ShapeSphere with the roles swapped: the normal points from the sphere to the other collider.
+fn SphereShape(contact: *Contact, sphere_transform_comp: *TransformComponent, sphere_collider: *ColliderComponent, shape_transform_comp: *TransformComponent, shape_collider: *ColliderComponent) void {
+    ShapeSphere(contact, shape_transform_comp, shape_collider, sphere_transform_comp, sphere_collider);
     contact.mNormal = contact.mNormal.Neg();
-    return true;
+}
+
+/// Two boxes are apart by exactly the distance from one's centre to a box the size of both put together,
+/// placed on the other's centre: sdBox of the offset between them against their half extents added up. Outside
+/// that is the true gap, inside it is minus the overlap on the least overlapping axis, and gradBox gives the
+/// direction either way. Axis aligned: the boxes' rotations are ignored. Two rotated boxes have no such shape,
+/// they need a separating axis test instead.
+fn BoxBox(contact: *Contact, origin_transform_comp: *TransformComponent, origin_collider: *ColliderComponent, target_transform_comp: *TransformComponent, target_collider: *ColliderComponent) void {
+    const delta = target_transform_comp.GetWorldPosition().SubVec(origin_transform_comp.GetWorldPosition());
+    const half_sum = origin_collider.GetWorldHalfExtents(origin_transform_comp.GetWorldScale()).AddVec(target_collider.GetWorldHalfExtents(target_transform_comp.GetWorldScale()));
+
+    contact.mSeparation = SDF.sdBox(delta, half_sum);
+    contact.mNormal = SDF.gradBox(delta, half_sum);
 }

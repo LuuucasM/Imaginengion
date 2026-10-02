@@ -59,6 +59,22 @@ pub fn GetDisplayScale(self: UnsupportedWindow) f32 {
     return Unsupported();
 }
 
+pub fn StartTextInput(self: UnsupportedWindow) void {
+    _ = self;
+    Unsupported();
+}
+
+pub fn StopTextInput(self: UnsupportedWindow) void {
+    _ = self;
+    Unsupported();
+}
+
+pub fn GetClipboardText(self: UnsupportedWindow, allocator: @import("std").mem.Allocator) ![]u8 {
+    _ = self;
+    _ = allocator;
+    return Unsupported();
+}
+
 fn Unsupported() noreturn {
     @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag) ++ " in Window\n");
 }

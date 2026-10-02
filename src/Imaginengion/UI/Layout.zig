@@ -423,7 +423,7 @@ const Solver = struct {
 
 /// The center of an element of `size` pinned by `anchoring` to a rectangle of `parent_size`, both around the
 /// rectangle's center
-fn AnchoredCenter(anchoring: Anchoring, parent_size: Vec2(f32), size: Vec2(f32)) Vec2(f32) {
+pub fn AnchoredCenter(anchoring: Anchoring, parent_size: Vec2(f32), size: Vec2(f32)) Vec2(f32) {
     return .{
         .x = anchoring.Anchor.x * parent_size.x / 2 - anchoring.Pivot.x * size.x / 2 + anchoring.Offset.x,
         .y = anchoring.Anchor.y * parent_size.y / 2 - anchoring.Pivot.y * size.y / 2 + anchoring.Offset.y,

@@ -34,6 +34,20 @@ pub fn PollInputEvents(self: *Window, engine_context: *EngineContext) !void {
     try self._Impl.PollInputEvents(engine_context);
 }
 
+/// Turns typed text (TextTyped events) on and off: on while something is being typed into
+pub fn StartTextInput(self: Window) void {
+    self._Impl.StartTextInput();
+}
+
+pub fn StopTextInput(self: Window) void {
+    self._Impl.StopTextInput();
+}
+
+/// A copy of the clipboard's text, empty if there is none. The caller frees it
+pub fn GetClipboardText(self: Window, allocator: std.mem.Allocator) ![]u8 {
+    return self._Impl.GetClipboardText(allocator);
+}
+
 pub fn IsMinimized(self: Window) bool {
     return self._Impl.IsMinimized();
 }

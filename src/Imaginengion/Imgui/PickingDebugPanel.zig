@@ -48,7 +48,18 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     try PointerText(frame_allocator, "Pointer over", engine_context.mPointerSystem.mHovered.items);
     try PointerText(frame_allocator, "Left button holding", engine_context.mPointerSystem.mHeld.get(.BUTTON_LEFT).mChain.items);
     try Text(frame_allocator, "Carrying: {s}", .{if (engine_context.mPointerSystem.Carrying()) |source| EntityName(source) else "nothing"});
-    try Text(frame_allocator, "Last pointer event: {s}", .{if (self.mLastPointerEventLen > 0) self.mLastPointerEvent[0..self.mLastPointerEventLen] else "none yet"});
+    var popup_names: std.ArrayList(u8) = .empty;
+    for (engine_context.mPopupSystem.OpenPopups(), 0..) |open, i| {
+        if (i > 0) try popup_names.appendSlice(frame_allocator, " > ");
+        try popup_names.appendSlice(frame_allocator, if (open.mPopup.IsActive()) EntityName(open.mPopup) else "<gone>");
+    }
+    try Text(frame_allocator, "Popups open: {s}", .{if (popup_names.items.len > 0) popup_names.items else "none"});
+    if (engine_context.mFocusSystem.Focused()) |focused| {
+        try Text(frame_allocator, "Keyboard: typing into '{s}', caret at byte {d}", .{ EntityName(focused), engine_context.mFocusSystem.Caret() });
+    } else {
+        try Text(frame_allocator, "Keyboard: nothing has it", .{});
+    }
+    try Text(frame_allocator, "Last UI event: {s}", .{if (self.mLastPointerEventLen > 0) self.mLastPointerEvent[0..self.mLastPointerEventLen] else "none yet"});
 
     imgui.igSeparator();
 
@@ -157,6 +168,13 @@ pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
         .PointerDrag => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} dragging '{s}', {d:.1}, {d:.1}, {d:.1} so far", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
         .PointerDragEnd => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} dragged '{s}' {d:.1}, {d:.1}, {d:.1}", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
         .PointerDropped => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "dropped '{s}' on '{s}'", .{ EntityName(e.mSource), EntityName(e.mEntity) }),
+        //one per entity in the chain: only the text input's own, so it isn't always its top parent's
+        .FocusGained => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' got the keyboard", .{EntityName(e.mTarget)}) else return,
+        .FocusLost => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' lost the keyboard", .{EntityName(e.mTarget)}) else return,
+        .TextChanged => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' text changed", .{EntityName(e.mTarget)}) else return,
+        .TextSubmitted => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' text submitted", .{EntityName(e.mTarget)}) else return,
+        .PopupOpened => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "popup '{s}' opened", .{EntityName(e.mTarget)}) else return,
+        .PopupClosed => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "popup '{s}' closed", .{EntityName(e.mTarget)}) else return,
         .PointerEnter, .PointerExit, .Default => return,
     } catch return;
     self.mLastPointerEventLen = text.len;
@@ -179,4 +197,8 @@ pub fn OnTogglePanelEvent(self: *PickingDebugPanel) void {
 fn Text(frame_allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) !void {
     const text = try std.fmt.allocPrint(frame_allocator, fmt, args);
     imgui.igTextUnformatted(text.ptr, text.ptr + text.len);
+}
+
+fn Same(a: Entity, b: Entity) bool {
+    return a.mID == b.mID and a.mManager == b.mManager;
 }

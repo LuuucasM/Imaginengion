@@ -63,6 +63,10 @@ const SOLVER_ITERS: u32 = 4;
 const PERCENT: f32 = 0.8;
 const SLOP: f32 = 0.01;
 
+//how much further than they could close in a substep two colliders are still treated as a contact. Covers
+//what the substep's own motion misses, e.g. a resting body that gravity has not started moving yet
+const SPECULATIVE_MARGIN: f32 = 2.0 * SLOP;
+
 //closing speeds below this do not bounce. A body resting on the floor gets a small closing speed from
 //gravity every substep, and bouncing that away would keep it hopping instead of settling
 const RESTITUTION_THRESHOLD: f32 = 1.0;
@@ -194,7 +198,7 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
         .mOrigin = entity_origin,
         .mTarget = entity_target,
         .mNormal = Vec3(f32){ .x = 0, .y = 0, .z = 0 },
-        .mPenetration = 0,
+        .mSeparation = 0,
     };
 
     switch (collision_type) {
@@ -204,10 +208,12 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
     }
 }
 
-///Checks generated contacts list from broad pass to see if thing actually collided
-/// For the contact sets the penetration, normal, and contact state.
-/// event_manager is where the collisions that begin on this substep are queued
-pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
+///Measures every pair the broad pass found: the gap between them and the direction, for the contact.
+/// Runs before anything has moved this substep. A pair is kept while the two overlap or are close enough to
+/// meet within dt. For a solid pair that is a speculative contact, so the solver can stop them at the surface
+/// before they move rather than find them already through each other. For a trigger pair it is a pair that
+/// SweepTriggers checks the path of, since nothing stops a body going through a trigger.
+pub fn NarrowPass(self: *CollisionManager, dt: f32) void {
     const zone = Tracy.ZoneInit("CollisionManager::NarrowPass", @src());
     defer zone.Deinit();
     zone.Value(self._OverlapContacts.items.len + self._BlockingContacts.items.len);
@@ -222,7 +228,8 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext, event
         const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
-        if (Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target)) {
+        _ = Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target);
+        if (contact.mSeparation < SpeculativeReach(contact.*, dt)) {
             i += 1;
         } else {
             self._OverlapContacts.items[i] = self._OverlapContacts.items[end - 1];
@@ -241,7 +248,8 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext, event
         const origin_transform = contact.mOrigin.GetComponent(EntityTransformComponent).?;
         const target_transform = contact.mTarget.GetComponent(EntityTransformComponent).?;
 
-        if (Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target)) {
+        _ = Collisions.TestShapes(contact, origin_transform, collider_origin, target_transform, collider_target);
+        if (contact.mSeparation < SpeculativeReach(contact.*, dt)) {
             i += 1;
         } else {
             self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
@@ -254,21 +262,32 @@ pub fn NarrowPass(self: *CollisionManager, engine_context: *EngineContext, event
     //the broad phase is handing over many pairs that never touch
     Tracy.Plot("Physics/Blocking Contacts", .{ .color = 0xFF5722 }, self._BlockingContacts.items.len);
     Tracy.Plot("Physics/Overlap Contacts", .{ .color = 0xFFC107 }, self._OverlapContacts.items.len);
-
-    try self.UpdateTouching(engine_context, event_manager);
 }
 
-/// Works out which of this substep's contacts are new and queues a CollisionBeginEvent for each.
-/// Runs on what the narrow pass left, so every contact in both lists is a pair that really overlaps.
-fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
+/// How far apart two colliders can be and still meet within dt: as far as they could close at the speed
+/// they are moving relative to each other, plus SPECULATIVE_MARGIN. Their whole relative speed rather than
+/// just its part along the normal, so a pair sliding past each other is not missed
+fn SpeculativeReach(contact: Contact, dt: f32) f32 {
+    const relative_velocity = VelocityOf(contact.mTarget, contact.mTarget.GetComponent(RigidBodyComponent)).SubVec(VelocityOf(contact.mOrigin, contact.mOrigin.GetComponent(RigidBodyComponent)));
+    return relative_velocity.Len() * dt + SPECULATIVE_MARGIN;
+}
+
+/// Works out which of this substep's contacts are new and queues a CollisionBeginEvent for each. Runs once the
+/// solver is done, since a solid pair touches when the solver pushed them apart, whether or not they ever
+/// overlapped (a fast ball stopped at a brick's surface), or when they are within SLOP of each other (a body
+/// resting on another). A speculative contact the solver never needed is a near miss and does not touch.
+/// A trigger pair touches while it overlaps, or when its path went into the trigger this substep (SweepTriggers).
+pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
     self._TouchingNow.clearRetainingCapacity();
     try self._TouchingNow.ensureTotalCapacity(engine_allocator, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
     for (self._BlockingContacts.items, 0..) |contact, contact_ind| {
+        if (contact.mImpulse <= 0.0 and contact.mSeparation > SLOP) continue;
         self._TouchingNow.appendAssumeCapacity(.{ .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID), .mContactInd = @intCast(contact_ind), .mIsTrigger = false });
     }
     for (self._OverlapContacts.items, 0..) |contact, contact_ind| {
+        if (contact.mSeparation >= 0.0 and !contact.mCrossed) continue;
         self._TouchingNow.appendAssumeCapacity(.{ .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID), .mContactInd = @intCast(contact_ind), .mIsTrigger = true });
     }
 
@@ -315,34 +334,99 @@ pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext) !v
     }
 }
 
-pub fn SolverPass(self: *CollisionManager, world_manager: *WorldManager, engine_context: *EngineContext) !void {
-    const zone = Tracy.ZoneInit("CollisionManager::SolverPass", @src());
+/// Sets the velocities the bodies move with this substep, before they move. Three passes over the solid contacts:
+///   1. how fast each pair is closing, recorded before anything changes it, for the bounce
+///   2. stop at the surface: a pair may close no faster than takes it to the surface by the end of dt, so a fast
+///      body arrives at what it would have passed through. Iterated, so a body in several contacts at once
+///      settles against all of them: each pass reads the velocities the last one left
+///   3. bounce: a pair the solver pushed apart leaves at its restitution times the speed it came in at. Done apart
+///      from 2, which on its own leaves a body arriving at the surface with next to no speed left to bounce
+pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
+    const zone = Tracy.ZoneInit("CollisionManager::SolveVelocities", @src());
     defer zone.Deinit();
     zone.Value(self._BlockingContacts.items.len);
 
-    //velocities are iterated so a body in several contacts at once settles against all of them: each
-    //pass reads the velocities the last one left, which is still current
+    for (self._BlockingContacts.items) |*contact| {
+        const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
+        const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+        contact.mApproachSpeed = -RelativeNormalVelocity(contact.*, q_rb_origin, q_rb_target);
+        contact.mImpulse = 0;
+        contact.mBounce = 0;
+    }
+
     for (0..SOLVER_ITERS) |_| {
-        for (self._BlockingContacts.items) |contact| {
+        for (self._BlockingContacts.items) |*contact| {
             //either side can be a bare collider with no rigid body, which the solver treats as static
             const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
             const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
 
             if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
-            VelocityCorrection(contact, q_rb_origin, q_rb_target);
+            StopAtSurface(contact, q_rb_origin, q_rb_target, dt);
         }
     }
 
-    //positions are corrected once. mPenetration was measured by the narrow pass and is never
-    //re-measured here, so a second pass would push by the full depth again for overlap already removed
+    for (self._BlockingContacts.items) |*contact| {
+        const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
+        const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+
+        if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
+
+        Bounce(contact, q_rb_origin, q_rb_target);
+    }
+}
+
+/// For trigger pairs that are apart: whether the path the two take this substep goes into each other, which sets
+/// mCrossed. A fast body can be short of a thin trigger on one substep and past it on the next without ever
+/// being seen overlapping it, and nothing slows it down at a trigger the way the solver does at a solid surface.
+/// Runs after SolveVelocities, so it sweeps along the velocities the bodies will really move with: a ball that
+/// bounces off a wall does not count as going into the trigger behind it.
+pub fn SweepTriggers(self: *CollisionManager, dt: f32) void {
+    const zone = Tracy.ZoneInit("CollisionManager::SweepTriggers", @src());
+    defer zone.Deinit();
+
+    for (self._OverlapContacts.items) |*contact| {
+        if (contact.mSeparation < 0.0) continue; //already overlapping, touching without a sweep
+
+        //how far the target moves relative to the origin this substep
+        const relative_velocity = VelocityOf(contact.mTarget, contact.mTarget.GetComponent(RigidBodyComponent)).SubVec(VelocityOf(contact.mOrigin, contact.mOrigin.GetComponent(RigidBodyComponent)));
+        const motion = relative_velocity.MulScalar(dt);
+
+        contact.mCrossed = Collisions.SweepShapes(
+            contact,
+            contact.mOrigin.GetComponent(EntityTransformComponent).?,
+            contact.mOrigin.GetComponent(ColliderComponent).?,
+            contact.mTarget.GetComponent(EntityTransformComponent).?,
+            contact.mTarget.GetComponent(ColliderComponent).?,
+            motion,
+        );
+    }
+}
+
+/// Moves bodies after they have moved by their velocities, then brings the transforms up to date. Two things,
+/// both along the contact's normal:
+///   - a pair that really overlaps is pushed apart, by the depth the narrow pass measured. Once: the depth is
+///     never measured again here, so a second push would go the full depth again for overlap already removed
+///   - a pair that bounced while still apart is moved back toward each other by (1 + restitution) x the gap.
+///     The bounce set the leaving velocity for the whole substep, so the body would turn around that gap short
+///     of the surface. Moving it back is the same as reaching the surface and bouncing for the time left over
+pub fn CorrectPositions(self: *CollisionManager, world_manager: *WorldManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("CollisionManager::CorrectPositions", @src());
+    defer zone.Deinit();
+
     for (self._BlockingContacts.items) |contact| {
         const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
         const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
 
         if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
-        try PositionCorrection(engine_context, contact, contact.mOrigin, q_rb_origin, contact.mTarget, q_rb_target);
+        //only one of these is ever above 0: the first needs an overlap, the second a gap
+        const push_apart = @max(-contact.mSeparation - SLOP, 0.0) * PERCENT;
+        const pull_together = if (contact.mBounce > 0.0) (1.0 + contact.mBounce) * @max(contact.mSeparation, 0.0) else 0.0;
+        const distance = push_apart - pull_together;
+        if (distance == 0.0) continue;
+
+        try MoveAlongNormal(engine_context, contact, q_rb_origin, q_rb_target, distance);
     }
     try UpdateWorldTransforms(world_manager, engine_context);
 }
@@ -404,32 +488,63 @@ fn CombinedRestitution(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBo
     return @max(RestitutionOf(q_rb_origin), RestitutionOf(q_rb_target));
 }
 
-/// Callers make sure at least one side has a nonzero inverse mass
-fn VelocityCorrection(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) void {
-    const rv = VelocityOf(contact.mTarget, q_rb_target).SubVec(VelocityOf(contact.mOrigin, q_rb_origin));
-
-    const vel_along_norm = rv.Dot(contact.mNormal);
-    if (vel_along_norm > 0) return; //they are already moving apart
-
-    //coefficient of restitution: 0 kills the closing speed, 1 hands all of it back the other way,
-    //which against an immovable side is a mirror reflection about the normal
-    const e: f32 = if (-vel_along_norm > RESTITUTION_THRESHOLD) CombinedRestitution(q_rb_origin, q_rb_target) else 0.0;
-
-    const j = (-(1.0 + e) * vel_along_norm) / (InvMassOf(q_rb_origin) + InvMassOf(q_rb_target)); //magnitude of the impulse
-
-    const impulse = contact.mNormal.MulScalar(j);
-
-    if (q_rb_origin) |rb_origin| rb_origin.ApplyImpulse(impulse.Neg());
-    if (q_rb_target) |rb_target| rb_target.ApplyImpulse(impulse);
+/// The target's velocity relative to the origin's along the normal: negative while they close
+fn RelativeNormalVelocity(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) f32 {
+    const relative_velocity = VelocityOf(contact.mTarget, q_rb_target).SubVec(VelocityOf(contact.mOrigin, q_rb_origin));
+    return relative_velocity.Dot(contact.mNormal);
 }
 
+/// Pushes the pair apart along the normal with an impulse of `magnitude`, split by how pushable each side is.
 /// Callers make sure at least one side has a nonzero inverse mass
-fn PositionCorrection(engine_context: *EngineContext, contact: Contact, entity_origin: Entity, q_rb_origin: ?*RigidBodyComponent, entity_target: Entity, q_rb_target: ?*RigidBodyComponent) !void {
+fn ApplyNormalImpulse(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent, magnitude: f32) void {
+    const impulse = contact.mNormal.MulScalar(magnitude);
+    if (q_rb_origin) |rb_origin| rb_origin.ApplyImpulse(impulse.Neg());
+    if (q_rb_target) |rb_target| rb_target.ApplyImpulse(impulse);
+    contact.mImpulse += magnitude;
+}
+
+/// Takes away as much of the closing speed as would carry the pair past each other within dt. A pair still
+/// apart may close its gap this substep and no more, so a fast body ends the substep at the surface rather
+/// than through it. A pair already overlapping may not close at all.
+/// Callers make sure at least one side has a nonzero inverse mass
+fn StopAtSurface(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent, dt: f32) void {
+    const normal_velocity = RelativeNormalVelocity(contact.*, q_rb_origin, q_rb_target);
+    const allowed_closing = @max(contact.mSeparation, 0.0) / dt;
+    if (normal_velocity >= -allowed_closing) return; //they won't get past the surface at this speed
+
+    const magnitude = -(normal_velocity + allowed_closing) / (InvMassOf(q_rb_origin) + InvMassOf(q_rb_target));
+    ApplyNormalImpulse(contact, q_rb_origin, q_rb_target, magnitude);
+}
+
+/// Sends a pair the solver stopped back apart at its restitution times the speed it was closing at before the
+/// solver did anything: 0 leaves them stopped, 1 hands all of it back, which against an immovable side is a
+/// mirror reflection about the normal. Only for pairs the solver actually pushed, so a near miss never bounces,
+/// and only above RESTITUTION_THRESHOLD, so a resting body is not kept hopping.
+/// Callers make sure at least one side has a nonzero inverse mass
+fn Bounce(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) void {
+    if (contact.mImpulse <= 0.0 or contact.mApproachSpeed <= RESTITUTION_THRESHOLD) return;
+
+    const restitution = CombinedRestitution(q_rb_origin, q_rb_target);
+    if (restitution <= 0.0) return;
+
+    const leaving_speed = restitution * contact.mApproachSpeed;
+    const normal_velocity = RelativeNormalVelocity(contact.*, q_rb_origin, q_rb_target);
+    if (normal_velocity >= leaving_speed) return;
+
+    const magnitude = (leaving_speed - normal_velocity) / (InvMassOf(q_rb_origin) + InvMassOf(q_rb_target));
+    ApplyNormalImpulse(contact, q_rb_origin, q_rb_target, magnitude);
+    contact.mBounce = restitution;
+}
+
+/// Moves the pair `distance` further apart along the normal (toward each other when negative), split by how
+/// pushable each side is. Callers make sure at least one side has a nonzero inverse mass
+fn MoveAlongNormal(engine_context: *EngineContext, contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent, distance: f32) !void {
+    const entity_origin = contact.mOrigin;
+    const entity_target = contact.mTarget;
     const inv_mass_origin = InvMassOf(q_rb_origin);
     const inv_mass_target = InvMassOf(q_rb_target);
 
-    const correction_mag = (@max(contact.mPenetration - SLOP, 0.0)) / (inv_mass_origin + inv_mass_target) * PERCENT;
-    const correction = contact.mNormal.MulScalar(correction_mag);
+    const correction = contact.mNormal.MulScalar(distance / (inv_mass_origin + inv_mass_target));
 
     //an immovable side would get a zero offset, so it is skipped rather than written back unchanged,
     //which would still tag it dirty and send it through the next transform pass for nothing

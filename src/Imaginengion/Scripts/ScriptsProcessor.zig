@@ -44,6 +44,33 @@ pub fn RunScript(
     engine_context: *EngineContext,
     args: anytype,
 ) !bool {
+    return RunScriptsFrom(ObjectType, script_type, world_type, engine_context, null, args);
+}
+
+/// RunScript for only the scenes above `stack_pos` in the scene stack: their turns come before that scene's. For an
+/// event something in that scene takes at its own turn (a key a focused text field is typed with), so the scenes
+/// under it never hear it. Returns false if a script asked to consume the event, so it never reaches that scene
+pub fn RunScriptAbove(
+    comptime ObjectType: type,
+    comptime script_type: type,
+    comptime world_type: EngineContext.WorldType,
+    engine_context: *EngineContext,
+    stack_pos: usize,
+    args: anytype,
+) !bool {
+    comptime std.debug.assert(ObjectType == Entity or ObjectType == Scene);
+    return RunScriptsFrom(ObjectType, script_type, world_type, engine_context, stack_pos, args);
+}
+
+/// `above`: only scripts whose owner sits higher in the scene stack than this, null for all of them
+fn RunScriptsFrom(
+    comptime ObjectType: type,
+    comptime script_type: type,
+    comptime world_type: EngineContext.WorldType,
+    engine_context: *EngineContext,
+    above: ?usize,
+    args: anytype,
+) !bool {
     _ValidateScriptType(ObjectType, script_type);
 
     const zone = Tracy.ZoneInit("ScriptsProcessor::RunScript(" ++ Tracy.ShortTypeName(ObjectType) ++ ", " ++ Tracy.ShortTypeName(script_type) ++ ", " ++ @tagName(world_type) ++ ")", @src());
@@ -64,6 +91,10 @@ pub fn RunScript(
     var cont_bool = true;
     for (script_ids.items) |script_id| {
         if (cont_bool == false) break;
+        //sorted from the top of the stack down, so the rest are no higher
+        if (above) |stack_pos| {
+            if (OwnerStackPos(ObjectType, world_manager, OwnerOf(ObjectType, world_manager, script_id)) <= stack_pos) break;
+        }
 
         const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
         if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;

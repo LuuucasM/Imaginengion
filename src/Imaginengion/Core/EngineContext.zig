@@ -27,6 +27,8 @@ const UIEventData = @import("../Events/UIEventData.zig");
 const UIEventManager = @import("../Events/EventManager.zig").EventManager(UIEventData);
 pub const UIEventCallback = UIEventManager.EventCallback;
 const PointerSystem = @import("../UI/PointerSystem.zig");
+const FocusSystem = @import("../UI/FocusSystem.zig");
+const PopupSystem = @import("../UI/PopupSystem.zig");
 
 const GameEventData = @import("../Events/GameEventData.zig");
 const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData);
@@ -79,10 +81,14 @@ mRenderer: Renderer = .{},
 
 mGameEventManager: GameEventManager = .empty,
 mSystemEventManager: WindowEventManager = .empty,
-/// What the pointer does to entities (see Events/UIEventData.zig), sent by mPointerSystem
+/// What the pointer and keyboard do to entities, and popups opening and closing (see Events/UIEventData.zig)
 mUIEventManager: UIEventManager = .empty,
 /// What the mouse is over and holding down, as tags and events on entities
 mPointerSystem: PointerSystem = .empty,
+/// Which text input the keyboard is typing into, and the typing
+mFocusSystem: FocusSystem = .empty,
+/// Which popups are open, stacked
+mPopupSystem: PopupSystem = .empty,
 
 mGameWorld: WorldManager = .{},
 mEditorWorld: WorldManager = .{},
@@ -180,6 +186,8 @@ pub fn DeInit(self: *EngineContext) void {
     self.mSystemEventManager.Deinit(self.EngineAllocator());
     self.mUIEventManager.Deinit(self.EngineAllocator());
     self.mPointerSystem.Deinit(self.EngineAllocator());
+    self.mFocusSystem.Deinit(self.EngineAllocator());
+    self.mPopupSystem.Deinit(self.EngineAllocator());
 
     self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit(self);

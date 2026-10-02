@@ -71,6 +71,15 @@ pub const PressedTag = struct {
     pub fn Deinit(_: *PressedTag, _: *EngineContext) void {}
 };
 
+/// On the one entity that has the keyboard: a text input (TextInputComponent) being typed into. For a "being edited"
+/// look. Never saved
+pub const FocusedTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "FocusedTag";
+
+    pub fn Deinit(_: *FocusedTag, _: *EngineContext) void {}
+};
+
 /// On a drop target (DropTargetComponent) while a drag source it takes is held over it: for a "drop here" look. The
 /// moment the source is let go there is the PointerDropped event. Never saved
 pub const DropHoverTag = struct {

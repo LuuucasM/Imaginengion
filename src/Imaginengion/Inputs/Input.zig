@@ -20,6 +20,10 @@ _MousePositionDelta: Vec2(f32),
 _MouseScrolledDelta: Vec2(f32),
 //where each button went down, while it is held. Null when it isn't, or once its release was handled
 _MouseDownPositions: std.EnumArray(InputEnums.MouseCodes, ?Vec2(f32)),
+/// Set while a text input has the keyboard (see FocusSystem): the keys are being typed into it, so IsKeyPressed and
+/// IsKeyRepeated read false for everything else, the way a script in a scene under the text field never hears its
+/// key events
+mKeyboardTaken: bool,
 
 pub const empty: InputManager = .{
     ._KeyPressedSet = .empty,
@@ -29,6 +33,7 @@ pub const empty: InputManager = .{
     ._MousePositionDelta = .{ .x = 0.0, .y = 0.0 },
     ._MouseScrolledDelta = .{ .x = 0.0, .y = 0.0 },
     ._MouseDownPositions = .initFill(null),
+    .mKeyboardTaken = false,
 };
 
 pub fn Init(self: *InputManager, engine_allocator: std.mem.Allocator) !void {
@@ -42,9 +47,16 @@ pub fn Deinit(self: *InputManager, engine_allocator: std.mem.Allocator) void {
 }
 
 pub fn IsKeyPressed(self: InputManager, key: InputEnums.ScanCodes) bool {
+    if (self.mKeyboardTaken) return false;
+    return self._KeyPressedSet.contains(key);
+}
+/// Whether the key is down even while a text input has the keyboard, for what is doing the typing (e.g. Ctrl for
+/// Ctrl+V)
+pub fn IsKeyPressedUnfiltered(self: InputManager, key: InputEnums.ScanCodes) bool {
     return self._KeyPressedSet.contains(key);
 }
 pub fn IsKeyRepeated(self: InputManager, key: InputEnums.ScanCodes) bool {
+    if (self.mKeyboardTaken) return false;
     if (self._KeyPressedSet.get(key)) |value| {
         return value == 1;
     }

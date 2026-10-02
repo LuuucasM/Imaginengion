@@ -25,6 +25,7 @@ const ECSObject = @import("../../ECSObjects/ECSObject.zig");
 const ScriptsProcessor = @import("../../Scripts/ScriptsProcessor.zig");
 
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
+const Quat = @import("../../Math/MathTypes.zig").Quat;
 const PhysicsEvent = @import("../../Events/PhysicsEventData.zig").EventT;
 
 const eps: f32 = 0.0001;
@@ -69,16 +70,24 @@ fn MakeBall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), v
     return ball;
 }
 
-/// The collision half of one physics substep: transforms, broad, narrow, then solve
+/// One physics substep's worth of time, the dt the passes below are run with
+const SUBSTEP_DT: f32 = 1.0 / 120.0;
+
+/// The collision half of one physics substep, in the order PhysicsManager.OnUpdate runs it, with the bodies left
+/// where they are rather than moved by their velocities: transforms, broad, narrow, solve, correct positions, then
+/// which pairs touch
 fn RunCollisionPasses(collision_manager: *CollisionManager, engine_context: *EngineContext) !void {
     const world_manager = &engine_context.mEditorWorld;
     try PhysicsManager.UpdateWorldTransforms(world_manager, engine_context);
 
     const groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
     try collision_manager.BroadPass(engine_context, world_manager, groups);
+    collision_manager.NarrowPass(SUBSTEP_DT);
+    collision_manager.SolveVelocities(SUBSTEP_DT);
+    collision_manager.SweepTriggers(SUBSTEP_DT);
+    try collision_manager.CorrectPositions(world_manager, engine_context);
     //queued where the world's own physics step would queue them, and freed with the world
-    try collision_manager.NarrowPass(engine_context, &world_manager.mPhysicsManager.mEventManager);
-    try collision_manager.SolverPass(world_manager, engine_context);
+    try collision_manager.UpdateTouching(engine_context, &world_manager.mPhysicsManager.mEventManager);
 }
 
 fn ExpectBallStoppedByWall(engine_context: *EngineContext, collision_manager: *CollisionManager, ball: Entity, wall: Entity) !void {
@@ -470,4 +479,246 @@ test "a kinematic body pushes a dynamic one and is not pushed back" {
     //the paddle goes on as it was, where it was
     try std.testing.expectApproxEqAbs(@as(f32, 2), VelocityOf(paddle).x, eps);
     try std.testing.expectEqual(@as(f32, 0), paddle.GetComponent(TransformComponent).?.GetTranslation().x);
+}
+
+/// A wall 0.1 thick across x at the origin, and a small ball (radius 0.1) at x = -1 heading straight at it.
+/// At 120 substeps a second a speed of 120 is a whole unit a substep, which used to carry a ball like this
+/// clean through the wall without it ever being seen overlapping
+fn ThinWallAndFastBall(engine_context: *EngineContext, scene: Scene, speed: f32, restitution: f32) !Entity {
+    const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    var wall_collider = CollidingShape(.Box);
+    wall_collider.mBoxSize = .{ .x = 0.1, .y = 4, .z = 4 };
+    _ = try wall.AddComponent(engine_context, wall_collider);
+
+    const ball = try MakeBall(engine_context, scene, .{ .x = -1, .y = 0, .z = 0 }, .{ .x = speed, .y = 0, .z = 0 });
+    ball.GetComponent(ColliderComponent).?.mRadius = 0.1;
+    SetRestitution(ball, restitution);
+    return ball;
+}
+
+test "a fast ball stops at a thin wall instead of passing through it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const ball = try ThinWallAndFastBall(engine_context, scene, 120, 0);
+
+    //one fixed step is two substeps. On the first the ball is 0.85 from the wall: it may close that and no more,
+    //so it ends with its surface on the wall's (centre at -0.15). On the second it may not close at all
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, -0.15), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).x, eps);
+
+    //it was stopped at the surface without ever overlapping, and that is still a collision
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+}
+
+test "a fast ball bounces off a thin wall's surface, not short of it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const ball = try ThinWallAndFastBall(engine_context, scene, 120, 1);
+
+    //first substep: 0.85 to the surface takes 0.85 of the substep, then back out at 120 for the 0.15 left over,
+    //which puts it at -0.15 - 0.15 = -0.3. Second substep: a whole unit further back, to -1.3
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, -1.3), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, -120), VelocityOf(ball).x, eps);
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+}
+
+test "a ball sliding past a wall within reach loses no speed and touches nothing" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a tall wall with its face at x = 0.5, and a ball 0.015 off it moving straight up alongside: close enough to
+    //be a speculative contact, but never closing on the wall
+    const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    var wall_collider = CollidingShape(.Box);
+    wall_collider.mBoxSize = .{ .x = 1, .y = 10, .z = 10 };
+    _ = try wall.AddComponent(engine_context, wall_collider);
+
+    const ball = try MakeBall(engine_context, scene, .{ .x = 1.015, .y = 0, .z = 0 }, .{ .x = 0, .y = 60, .z = 0 });
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 60), VelocityOf(ball).y, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.015), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectEqual(@as(usize, 0), QueuedCollisions(engine_context).len);
+}
+
+test "a ball resting on a floor stays there and begins touching it once" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    _ = try scene.AddComponent(engine_context, ScenePhysicsComponent{});
+
+    //a floor with its top at y = 0.5, and a radius 0.5 ball sitting exactly on it
+    const floor = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    var floor_collider = CollidingShape(.Box);
+    floor_collider.mBoxSize = .{ .x = 10, .y = 1, .z = 10 };
+    _ = try floor.AddComponent(engine_context, floor_collider);
+
+    const ball = try MakeBall(engine_context, scene, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 0, .y = 0, .z = 0 });
+
+    //half a second: gravity pulls it into the floor every substep, and the floor stops it every substep
+    for (0..30) |_| try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectApproxEqAbs(@as(f32, 1), ball.GetComponent(TransformComponent).?.GetTranslation().y, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), VelocityOf(ball).y, eps);
+    //the floor pushes on it every substep, so it never stops touching and never begins again
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+}
+
+/// A trigger box at `position`, `size` across, so nothing is stopped by it
+fn MakeTrigger(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), size: Vec3(f32)) !Entity {
+    const trigger = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    var trigger_collider = CollidingShape(.Box);
+    trigger_collider.mBoxSize = size;
+    trigger_collider.mCollisionFilter.IsTrigger = true;
+    _ = try trigger.AddComponent(engine_context, trigger_collider);
+    try trigger.SetTranslation(engine_context, position);
+    return trigger;
+}
+
+/// A ball of radius 0.1 at `position` moving at `velocity`
+fn MakeSmallBall(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), velocity: Vec3(f32)) !Entity {
+    const ball = try MakeBall(engine_context, scene, position, velocity);
+    ball.GetComponent(ColliderComponent).?.mRadius = 0.1;
+    return ball;
+}
+
+const THIN_TRIGGER = Vec3(f32){ .x = 0.1, .y = 4, .z = 4 };
+
+test "a fast ball that skips a thin trigger is seen crossing it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a unit a substep from -1.5: at -0.5 after the first, at 0.5 after the second. The trigger and the ball
+    //only reach 0.15 either side of it, so no snapshot ever has them overlapping
+    _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, THIN_TRIGGER);
+    const ball = try MakeSmallBall(engine_context, scene, .{ .x = -1.5, .y = 0, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+    try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
+
+    //and a trigger stops nothing
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), ball.GetComponent(TransformComponent).?.GetTranslation().x, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 120), VelocityOf(ball).x, eps);
+}
+
+test "a fast ball passing beside a trigger is not seen crossing it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //the trigger reaches 0.5 up, the ball's path is 0.7 up with a radius of 0.1: 0.1 clear the whole way
+    _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.1, .y = 1, .z = 1 });
+    _ = try MakeSmallBall(engine_context, scene, .{ .x = -1.5, .y = 0.7, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectEqual(@as(usize, 0), QueuedCollisions(engine_context).len);
+}
+
+test "a ball that ends a substep inside a trigger begins touching it once" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //from -1 the first substep's path goes in and stops with the ball's centre on the trigger's. The second
+    //substep starts overlapping, which is still the same touch, and leaves; the third is clear of it
+    _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, THIN_TRIGGER);
+    _ = try MakeSmallBall(engine_context, scene, .{ .x = -1, .y = 0, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+}
+
+/// How many collisions a fast ball sets off going past a trigger box turned `angle` about z. The ball's path is
+/// 0.65 up: clear of the unturned box (0.5 up, plus the radius of 0.1), but into a corner turned 45 degrees,
+/// which reaches 0.707 up
+fn CrossingsPastTurnedTrigger(angle: f32) !usize {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    const trigger = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, ONE_BY_ONE);
+    try trigger.SetRotation(engine_context, Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, angle));
+    _ = try MakeSmallBall(engine_context, scene, .{ .x = -1.5, .y = 0.65, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+    return QueuedCollisions(engine_context).len;
+}
+
+const ONE_BY_ONE = Vec3(f32){ .x = 1, .y = 1, .z = 1 };
+
+test "a sweep sees a trigger's rotation" {
+    try std.testing.expectEqual(@as(usize, 0), try CrossingsPastTurnedTrigger(0));
+    try std.testing.expectEqual(@as(usize, 1), try CrossingsPastTurnedTrigger(std.math.pi / 4.0));
+}
+
+test "a fast box that skips a thin trigger is seen crossing it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //box against box goes through the two boxes added together, here 0.15 either side on x like the ball above
+    _ = try MakeTrigger(engine_context, scene, .{ .x = 0, .y = 0, .z = 0 }, THIN_TRIGGER);
+
+    const box = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    var box_collider = CollidingShape(.Box);
+    box_collider.mBoxSize = .{ .x = 0.2, .y = 0.2, .z = 0.2 };
+    _ = try box.AddComponent(engine_context, box_collider);
+    _ = try box.AddComponent(engine_context, RigidBodyComponent{});
+    try box.SetTranslation(engine_context, .{ .x = -1.5, .y = 0, .z = 0 });
+    box.GetComponent(RigidBodyComponent).?.SetVelocity(.{ .x = 120, .y = 0, .z = 0 });
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+    try std.testing.expect(QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
+}
+
+test "a ball that bounces off a wall does not go into the trigger behind it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a thin wall at the origin with a thin trigger right behind it. The ball would reach the trigger at the
+    //speed it comes in at, but it bounces off the wall on the same substep, and the sweep follows the bounce
+    const wall = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    var wall_collider = CollidingShape(.Box);
+    wall_collider.mBoxSize = THIN_TRIGGER;
+    _ = try wall.AddComponent(engine_context, wall_collider);
+    _ = try MakeTrigger(engine_context, scene, .{ .x = 0.1, .y = 0, .z = 0 }, THIN_TRIGGER);
+
+    const ball = try MakeSmallBall(engine_context, scene, .{ .x = -1, .y = 0, .z = 0 }, .{ .x = 120, .y = 0, .z = 0 });
+    SetRestitution(ball, 1);
+
+    try engine_context.mEditorWorld.OnPhysicsUpdate(engine_context);
+
+    //the wall, and only the wall
+    try std.testing.expectEqual(@as(usize, 1), QueuedCollisions(engine_context).len);
+    try std.testing.expect(!QueuedCollisions(engine_context)[0].CollisionBegin.mIsTrigger);
 }

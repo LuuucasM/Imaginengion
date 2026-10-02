@@ -1,6 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const WindowEvent = @import("../Events/WindowEventData.zig").Event;
+const TextTypedEvent = @import("../Events/WindowEventData.zig").TextTypedEvent;
 
 const sdl = @import("../Core/CImports.zig").sdl;
 
@@ -53,6 +54,26 @@ pub fn GetPixelDensity(self: SDLWindow) f32 {
 /// The OS content scale for the display the window is on, e.g. 1.5 at 150% Windows scaling.
 pub fn GetDisplayScale(self: SDLWindow) f32 {
     return sdl.SDL_GetWindowDisplayScale(self._Window);
+}
+
+/// Asks SDL for typed text (SDL_EVENT_TEXT_INPUT), which it only sends while this is on. On a phone it would also
+/// bring up the on-screen keyboard. Does nothing if it is already on, or if there is no window (tests)
+pub fn StartTextInput(self: SDLWindow) void {
+    const window = self._Window orelse return;
+    if (!sdl.SDL_TextInputActive(window)) _ = sdl.SDL_StartTextInput(window);
+}
+
+pub fn StopTextInput(self: SDLWindow) void {
+    const window = self._Window orelse return;
+    if (sdl.SDL_TextInputActive(window)) _ = sdl.SDL_StopTextInput(window);
+}
+
+/// A copy of the text on the clipboard, empty if there is none. The caller frees it
+pub fn GetClipboardText(_: SDLWindow, allocator: std.mem.Allocator) ![]u8 {
+    const clipboard = sdl.SDL_GetClipboardText();
+    if (clipboard == null) return allocator.alloc(u8, 0);
+    defer sdl.SDL_free(clipboard);
+    return allocator.dupe(u8, std.mem.span(clipboard));
 }
 
 pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
@@ -152,6 +173,20 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
                     .InputEvent,
                     .{ .MouseMoved = .{ ._MouseX = event.motion.x, ._MouseY = event.motion.y } },
                 );
+            },
+            sdl.SDL_EVENT_TEXT_INPUT => {
+                //SDL's text is only good until the next poll, so it is copied into events, in pieces that end
+                //between codepoints
+                const text: []const u8 = std.mem.span(event.text.text);
+                var start: usize = 0;
+                while (start < text.len) {
+                    var end = @min(start + TextTypedEvent.MAX_LEN, text.len);
+                    while (end < text.len and end > start and text[end] & 0b1100_0000 == 0b1000_0000) end -= 1;
+                    var typed = TextTypedEvent{ ._Bytes = undefined, ._Len = @intCast(end - start) };
+                    @memcpy(typed._Bytes[0..typed._Len], text[start..end]);
+                    try engine_context.mSystemEventManager.Insert(engine_context.EngineAllocator(), .InputEvent, .{ .TextTyped = typed });
+                    start = end;
+                }
             },
             sdl.SDL_EVENT_MOUSE_WHEEL => {
                 final_mouse_scroll = .{ .x = event.wheel.x, .y = event.wheel.y };

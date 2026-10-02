@@ -16,14 +16,28 @@ const Ray = @import("CameraRay.zig").Ray;
 
 pub const THICKNESS_2D: f32 = 0.001;
 
-fn sdBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
+/// A sphere of `radius` around the origin
+pub fn sdSphere(point: Vec3(f32), radius: f32) f32 {
+    return point.Len() - radius;
+}
+
+/// The gradient of sdSphere: straight out from the center. At the center itself every direction is as
+/// good as any other, so it picks +x
+pub fn gradSphere(point: Vec3(f32)) Vec3(f32) {
+    const length = point.Len();
+    if (length <= 0.00001) return .{ .x = 1.0, .y = 0.0, .z = 0.0 };
+    return point.DivScalar(length);
+}
+
+/// A box of `half_extents` around the origin
+pub fn sdBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
     const q = point.Abs().SubVec(half_extents);
     return q.ClampScalar(0).Len() + @min(@max(q.x, @max(q.y, q.z)), 0.0);
 }
 
 /// The gradient of sdBox, which is the surface normal at a hit, worked out directly rather than by
 /// sampling the distance around the point (iq's sdgBox with no rounding).
-fn gradBox(point: Vec3(f32), half_extents: Vec3(f32)) Vec3(f32) {
+pub fn gradBox(point: Vec3(f32), half_extents: Vec3(f32)) Vec3(f32) {
     const w = point.Abs().SubVec(half_extents);
     const g = @max(w.x, @max(w.y, w.z));
 

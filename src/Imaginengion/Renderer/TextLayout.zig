@@ -60,49 +60,55 @@ pub fn Iterator(comptime FontT: type) type {
         /// pen, so they never come out of here.
         pub fn Next(self: *Self) ?GlyphPlacement {
             while (self.mIndex < self.mText.len) {
-                const decoded = DecodeAt(self.mText, self.mIndex);
-                self.mIndex += decoded.Len;
-
-                if (decoded.Codepoint == '\n') {
-                    self.NewLine();
-                    continue;
-                }
-
-                const glyph = &self.mFont.mGlyphs[FontT.ToArrayIndex(decoded.Codepoint)];
-                const advance = glyph.mAdvance * self.mFontSize;
-
-                //a glyph without plane bounds has no ink (a space). it only advances, and never wraps
-                //the line, so trailing spaces can't push a word onto a line of its own
-                if (glyph.mPlaneMax.x <= glyph.mPlaneMin.x) {
-                    self.Advance(advance);
-                    continue;
-                }
-
-                //the pen > 0 check stops a glyph wider than the whole wrap width from leaving an empty line
-                if (self.mWrapWidth > 0 and self.mPen.x > 0 and self.mPen.x + advance > self.mWrapWidth) {
-                    self.NewLine();
-                }
-
-                //plane bounds are (left, top) and (right, bottom) at font size 1, y up
-                const left = glyph.mPlaneMin.x;
-                const top = glyph.mPlaneMin.y;
-                const right = glyph.mPlaneMax.x;
-                const bottom = glyph.mPlaneMax.y;
-
-                const placement = GlyphPlacement{
-                    .Pen = self.mPen,
-                    .PlaneCenter = .{ .x = (left + right) * 0.5 * self.mFontSize, .y = (top + bottom) * 0.5 * self.mFontSize },
-                    .HalfExtents = .{ .x = (right - left) * 0.5 * self.mFontSize, .y = (top - bottom) * 0.5 * self.mFontSize },
-                    //atlas texels are (left, top) and (right, bottom), so the corners' y swap
-                    .UV0 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel0.x, .y = glyph.mAtlasTexel1.y }, self.mFont.mAtlasSize),
-                    .UV1 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel1.x, .y = glyph.mAtlasTexel0.y }, self.mFont.mAtlasSize),
-                };
-
-                self.Advance(advance + self.Kerning(glyph) * self.mFontSize);
-
-                return placement;
+                if (self.Step()) |placement| return placement;
             }
             return null;
+        }
+
+        /// Moves the pen past the one codepoint at mIndex, and returns where it is drawn if it has anything to draw.
+        /// Only call it while mIndex is inside the text
+        pub fn Step(self: *Self) ?GlyphPlacement {
+            const decoded = DecodeAt(self.mText, self.mIndex);
+            self.mIndex += decoded.Len;
+
+            if (decoded.Codepoint == '\n') {
+                self.NewLine();
+                return null;
+            }
+
+            const glyph = &self.mFont.mGlyphs[FontT.ToArrayIndex(decoded.Codepoint)];
+            const advance = glyph.mAdvance * self.mFontSize;
+
+            //a glyph without plane bounds has no ink (a space). it only advances, and never wraps
+            //the line, so trailing spaces can't push a word onto a line of its own
+            if (glyph.mPlaneMax.x <= glyph.mPlaneMin.x) {
+                self.Advance(advance);
+                return null;
+            }
+
+            //the pen > 0 check stops a glyph wider than the whole wrap width from leaving an empty line
+            if (self.mWrapWidth > 0 and self.mPen.x > 0 and self.mPen.x + advance > self.mWrapWidth) {
+                self.NewLine();
+            }
+
+            //plane bounds are (left, top) and (right, bottom) at font size 1, y up
+            const left = glyph.mPlaneMin.x;
+            const top = glyph.mPlaneMin.y;
+            const right = glyph.mPlaneMax.x;
+            const bottom = glyph.mPlaneMax.y;
+
+            const placement = GlyphPlacement{
+                .Pen = self.mPen,
+                .PlaneCenter = .{ .x = (left + right) * 0.5 * self.mFontSize, .y = (top + bottom) * 0.5 * self.mFontSize },
+                .HalfExtents = .{ .x = (right - left) * 0.5 * self.mFontSize, .y = (top - bottom) * 0.5 * self.mFontSize },
+                //atlas texels are (left, top) and (right, bottom), so the corners' y swap
+                .UV0 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel0.x, .y = glyph.mAtlasTexel1.y }, self.mFont.mAtlasSize),
+                .UV1 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel1.x, .y = glyph.mAtlasTexel0.y }, self.mFont.mAtlasSize),
+            };
+
+            self.Advance(advance + self.Kerning(glyph) * self.mFontSize);
+
+            return placement;
         }
 
         /// Only complete once Next has returned null.
@@ -142,6 +148,44 @@ pub fn Measure(comptime FontT: type, text: []const u8, font: *const FontT, font_
     var iter = Iterator(FontT).Init(text, font, font_size, wrap_width);
     while (iter.Next()) |_| {}
     return iter.GetMetrics();
+}
+
+/// Where a caret just before the byte at `index` sits: the pen once everything before it is laid out, local to the
+/// text origin like GlyphPlacement.Pen, so on that line's baseline. `index` is the text's length for the end of it.
+/// A caret before a word that wraps stays at the end of the line above, where the word was typed
+pub fn CaretPen(comptime FontT: type, text: []const u8, font: *const FontT, font_size: f32, wrap_width: f32, index: usize) Vec2(f32) {
+    var iter = Iterator(FontT).Init(text, font, font_size, wrap_width);
+    while (iter.mIndex < @min(index, text.len)) _ = iter.Step();
+    return iter.mPen;
+}
+
+/// The caret position nearest `point` (local to the text origin, like GlyphPlacement.Pen): the byte index of a
+/// codepoint's start, or the text's length. The line the point is on comes first, then the nearest spot along it. A
+/// point above the first line or below the last goes to that line
+pub fn CaretIndexAt(comptime FontT: type, text: []const u8, font: *const FontT, font_size: f32, wrap_width: f32, point: Vec2(f32)) usize {
+    const line_height = font.mLineHeight * font_size;
+    const line_count = Measure(FontT, text, font, font_size, wrap_width).LineCount;
+    //each line takes the room from its ascender down to the next line's
+    const lines_down = if (line_height > 0) @floor((font.mAscender * font_size - point.y) / line_height) else 0;
+    const line = std.math.clamp(lines_down, 0, @as(f32, @floatFromInt(line_count - 1)));
+    const baseline = -line * line_height;
+
+    var iter = Iterator(FontT).Init(text, font, font_size, wrap_width);
+    var best_index: usize = 0;
+    var best_distance = std.math.inf(f32);
+    while (true) {
+        //a caret before mIndex sits at the pen
+        if (@abs(iter.mPen.y - baseline) <= line_height * 0.5) {
+            const distance = @abs(iter.mPen.x - point.x);
+            if (distance < best_distance) {
+                best_distance = distance;
+                best_index = iter.mIndex;
+            }
+        }
+        if (iter.mIndex >= text.len) break;
+        _ = iter.Step();
+    }
+    return best_index;
 }
 
 /// One UTF-8 codepoint at `index`. Invalid or cut-off bytes decode to the replacement character one

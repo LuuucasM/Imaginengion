@@ -351,7 +351,7 @@ fn IsHeld(self: *const PointerSystem, entity: Entity) bool {
 }
 
 /// `entity` and then each thing it is inside, up to the top of its hierarchy. Empty for null
-fn ChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
+pub fn ChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
     var chain: Chain = .empty;
     var current = entity orelse return chain;
     if (!current.IsActive()) return chain;
@@ -380,5 +380,5 @@ fn Assign(chain: *Chain, engine_allocator: std.mem.Allocator, entities: []const 
 }
 
 fn Send(engine_context: *EngineContext, event: UIEvent) !void {
-    try engine_context.mUIEventManager.Insert(engine_context.EngineAllocator(), .Pointer, event);
+    try engine_context.mUIEventManager.Insert(engine_context.EngineAllocator(), .Interaction, event);
 }

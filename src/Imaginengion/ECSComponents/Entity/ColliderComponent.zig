@@ -6,6 +6,7 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const CollisionFilter = @import("../../Physics/CollisionManager.zig").CollisionFilter;
 const CollisionManager = @import("../../Physics/CollisionManager.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
+const SDF = @import("../../Math/SDFFunctions.zig");
 
 const ColliderComponent = @This();
 
@@ -33,6 +34,24 @@ pub fn GetWorldHalfExtents(self: ColliderComponent, world_scale: Vec3(f32)) Vec3
 /// The sphere's radius in world units. A sphere can only grow evenly, so it takes the largest scale axis.
 pub fn GetWorldRadius(self: ColliderComponent, world_scale: Vec3(f32)) f32 {
     return self.mRadius * @max(world_scale.x, @max(world_scale.y, world_scale.z));
+}
+
+/// The collider's signed distance at a point in its own space: relative to its world position and unrotated
+/// (SDF.GetLocalPoint), negative inside. The same SDF primitives the renderer draws shapes with. The shape's
+/// size is grown by world_scale rather than the point being shrunk, so the distance stays a true distance
+pub fn LocalDistance(self: ColliderComponent, local_point: Vec3(f32), world_scale: Vec3(f32)) f32 {
+    return switch (self.mShape) {
+        .Box => SDF.sdBox(local_point, self.GetWorldHalfExtents(world_scale)),
+        .Sphere => SDF.sdSphere(local_point, self.GetWorldRadius(world_scale)),
+    };
+}
+
+/// The direction out of the collider's surface at a point in its own space, the gradient of LocalDistance
+pub fn LocalNormal(self: ColliderComponent, local_point: Vec3(f32), world_scale: Vec3(f32)) Vec3(f32) {
+    return switch (self.mShape) {
+        .Box => SDF.gradBox(local_point, self.GetWorldHalfExtents(world_scale)),
+        .Sphere => SDF.gradSphere(local_point),
+    };
 }
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {

@@ -260,3 +260,33 @@ test "the metrics give the text's room and its middle, for layout to fit and cen
     try ExpectVec2(.{ .x = 2, .y = top - bottom }, metrics.Size());
     try ExpectVec2(.{ .x = 1, .y = (top + bottom) / 2 }, metrics.Center());
 }
+
+test "a caret sits at the pen once everything before it is laid out, kerning and all" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    //at size 2: A is 1 wide but kerns 0.2 into V, V is 1 wide and has no kerning with A
+    try ExpectVec2(.{ .x = 0, .y = 0 }, TextLayout.CaretPen(FakeFont, "AVA", &font, 2, 0, 0));
+    try ExpectVec2(.{ .x = 0.8, .y = 0 }, TextLayout.CaretPen(FakeFont, "AVA", &font, 2, 0, 1));
+    try ExpectVec2(.{ .x = 1.8, .y = 0 }, TextLayout.CaretPen(FakeFont, "AVA", &font, 2, 0, 2));
+    try ExpectVec2(.{ .x = 2.8, .y = 0 }, TextLayout.CaretPen(FakeFont, "AVA", &font, 2, 0, 3));
+
+    //after a line break: the start of the next line
+    try ExpectVec2(.{ .x = 0, .y = -LINE_HEIGHT * 2 }, TextLayout.CaretPen(FakeFont, "A\nA", &font, 2, 0, 2));
+    try ExpectVec2(.{ .x = 1, .y = -LINE_HEIGHT * 2 }, TextLayout.CaretPen(FakeFont, "A\nA", &font, 2, 0, 3));
+}
+
+test "a point lands the caret on the nearest spot of the line it is on" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    //caret spots at x 0, 0.8, 1.8 and 2.8
+    try std.testing.expectEqual(@as(usize, 1), TextLayout.CaretIndexAt(FakeFont, "AVA", &font, 2, 0, .{ .x = 1.0, .y = 0.5 }));
+    try std.testing.expectEqual(@as(usize, 2), TextLayout.CaretIndexAt(FakeFont, "AVA", &font, 2, 0, .{ .x = 1.4, .y = 0.5 }));
+    try std.testing.expectEqual(@as(usize, 0), TextLayout.CaretIndexAt(FakeFont, "AVA", &font, 2, 0, .{ .x = -5, .y = 0.5 }));
+    try std.testing.expectEqual(@as(usize, 3), TextLayout.CaretIndexAt(FakeFont, "AVA", &font, 2, 0, .{ .x = 100, .y = 0.5 }));
+    try std.testing.expectEqual(@as(usize, 0), TextLayout.CaretIndexAt(FakeFont, "", &font, 2, 0, .{ .x = 3, .y = 0 }));
+
+    //the second line, then above the first and below the last
+    try std.testing.expectEqual(@as(usize, 3), TextLayout.CaretIndexAt(FakeFont, "A\nA", &font, 2, 0, .{ .x = 0.9, .y = -2 }));
+    try std.testing.expectEqual(@as(usize, 1), TextLayout.CaretIndexAt(FakeFont, "A\nA", &font, 2, 0, .{ .x = 0.9, .y = 10 }));
+    try std.testing.expectEqual(@as(usize, 2), TextLayout.CaretIndexAt(FakeFont, "A\nA", &font, 2, 0, .{ .x = -1, .y = -100 }));
+}
