@@ -25,6 +25,7 @@ const FORMAT_VERSION: u32 = 1;
 /// never rewrites another's and version control shows a change against the system it belongs to
 const SETTINGS_OWNERS = [_][]const u8{
     "mAudioManager",
+    "mUIManager",
 };
 
 const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2 };

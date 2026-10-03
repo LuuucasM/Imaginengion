@@ -1,4 +1,5 @@
-//! Who has the keyboard: the one text input (TextInputComponent) being typed into, and the typing itself.
+//! Who has the keyboard: the one text input (an entity whose UI element has a TextInputComponent) being typed into, and
+//! the typing itself. Part of the UIManager.
 //!   - focus: the left button going down on a text input, or on anything inside one, gives it the keyboard. It gets
 //!     FocusedTag and a blinking caret (a thin quad on a child entity, made and deleted here). Any button going down
 //!     anywhere else takes the keyboard away again
@@ -17,7 +18,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
 const KeyboardPressedEvent = @import("../Events/WindowEventData.zig").KeyboardPressedEvent;
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
-const PointerSystem = @import("PointerSystem.zig");
+const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const TextEdit = @import("TextEdit.zig");
 const TextLayout = @import("../Renderer/TextLayout.zig");
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
@@ -27,7 +28,8 @@ const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const TextInputComponent = EntityComponents.TextInputComponent;
+const UIManager = @import("UIManager.zig");
+const TextInputComponent = @import("../ECSComponents/UIComponents.zig").TextInputComponent;
 const FocusedTag = EntityComponents.FocusedTag;
 const TextComponent = EntityComponents.TextComponent;
 const QuadComponent = EntityComponents.QuadComponent;
@@ -65,6 +67,9 @@ mOriginal: std.ArrayList(u8) = .empty,
 mCaretEntity: ?Entity = null,
 /// Since the caret last moved or the text last changed: it shows straight away after either, then blinks
 mBlinkTime: f32 = 0,
+/// Whether this turned the window's typed text on, so it knows to turn it off again. Only Update touches the window:
+/// a script calls into its own copy of the engine, which can't reach the window's library
+mTextInputOn: bool = false,
 
 pub fn Deinit(self: *FocusSystem, engine_allocator: std.mem.Allocator) void {
     self.mOriginal.deinit(engine_allocator);
@@ -106,7 +111,7 @@ pub fn Caret(self: *const FocusSystem) usize {
 pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *const PointerSystem, button: MouseCodes) !void {
     var pressed: ?Entity = null;
     for (pointer.mHovered.items) |entity| {
-        if (entity.IsActive() and entity.HasComponent(TextInputComponent)) {
+        if (entity.IsActive() and UIManager.HasUIComponent(entity, TextInputComponent)) {
             pressed = entity;
             break;
         }
@@ -140,8 +145,8 @@ pub fn Focus(self: *FocusSystem, engine_context: *EngineContext, entity: Entity)
     try self.mOriginal.appendSlice(engine_context.EngineAllocator(), text.mText.items);
 
     if (!entity.HasComponent(FocusedTag)) _ = try entity.AddComponent(engine_context, FocusedTag{});
+    //typed text is turned on by the next Update
     engine_context.mInputManager.mKeyboardTaken = true;
-    engine_context.mAppWindow.StartTextInput();
     try Send(engine_context, entity, .FocusGained);
     return true;
 }
@@ -224,19 +229,18 @@ fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
 /// Once a frame, after layout and before world transforms: keeps the caret on the text and blinking, and lets go if
 /// the focused text input has gone
 pub fn Update(self: *FocusSystem, engine_context: *EngineContext) !void {
+    defer self.SyncTextInput(engine_context);
     const focused = self.mFocused orelse return;
     if (!focused.IsActive()) {
         //deleted while being typed into, and its caret with it: there is no one left to tell
         self.Reset(engine_context);
         return;
     }
-    if (!focused.HasComponent(TextInputComponent) or !focused.HasComponent(TextComponent)) {
+    if (!UIManager.HasUIComponent(focused, TextInputComponent) or !focused.HasComponent(TextComponent)) {
         try self.EndEdit(engine_context, .Submit);
         return;
     }
 
-    //typed text is one switch for the whole window, and an ImGui text field letting go of the keyboard turns it off
-    engine_context.mAppWindow.StartTextInput();
     self.mBlinkTime += engine_context.mDT;
     try self.UpdateCaret(engine_context, focused);
 }
@@ -271,6 +275,8 @@ fn CaretEntity(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
         try name.mName.appendSlice(engine_context.EngineAllocator(), "Caret");
     }
     _ = try caret.AddComponent(engine_context, QuadComponent{});
+    //its color is the theme's
+    try UIManager.Style(engine_context, caret, "Caret");
     self.mCaretEntity = caret;
     return caret;
 }
@@ -334,9 +340,22 @@ fn Changed(self: *FocusSystem, engine_context: *EngineContext, focused: Entity) 
     try Send(engine_context, focused, .TextChanged);
 }
 
+/// Typed text is turned off by the next Update
 fn ReleaseKeyboard(engine_context: *EngineContext) void {
     engine_context.mInputManager.mKeyboardTaken = false;
-    engine_context.mAppWindow.StopTextInput();
+}
+
+/// The window's typed text on while a text input has the keyboard, and off again once it doesn't. It is one switch for
+/// the whole window, and an ImGui text field letting go of the keyboard turns it off, so it is turned on every frame
+/// one is being typed into, and only turned off if this turned it on
+fn SyncTextInput(self: *FocusSystem, engine_context: *EngineContext) void {
+    if (self.Focused() != null) {
+        engine_context.mAppWindow.StartTextInput();
+        self.mTextInputOn = true;
+    } else if (self.mTextInputOn) {
+        engine_context.mAppWindow.StopTextInput();
+        self.mTextInputOn = false;
+    }
 }
 
 /// One event of `kind` to the text input and to everything it is inside
@@ -344,7 +363,7 @@ fn Send(engine_context: *EngineContext, text_input: Entity, comptime kind: std.m
     const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), text_input);
     for (chain.items) |entity| {
         const event = @unionInit(UIEvent, @tagName(kind), .{ .mEntity = entity, .mTarget = text_input });
-        try engine_context.mUIEventManager.Insert(engine_context.EngineAllocator(), .Interaction, event);
+        try engine_context.mUIManager.mEventManager.Insert(engine_context.EngineAllocator(), .UI, event);
     }
 }
 

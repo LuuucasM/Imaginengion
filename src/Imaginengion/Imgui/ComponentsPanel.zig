@@ -20,7 +20,11 @@ const AudioComponent = @import("../ECSComponents/Entity/AudioComponent.zig");
 const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
 const LayoutComponent = @import("../ECSComponents/Entity/LayoutComponent.zig");
 const LayoutItemComponent = @import("../ECSComponents/Entity/LayoutItemComponent.zig");
-const PopupComponent = @import("../ECSComponents/Entity/PopupComponent.zig");
+const ClipComponent = @import("../ECSComponents/Entity/ClipComponent.zig");
+const UIElement = @import("../ECSObjects/UIElement.zig");
+const UIComponents = @import("../ECSComponents/UIComponents.zig");
+const PopupComponent = UIComponents.PopupComponent;
+const ScrollComponent = UIComponents.ScrollComponent;
 const TextComponent = @import("../ECSComponents/Entity/TextComponent.zig");
 const QuadComponent = @import("../ECSComponents/Entity/QuadComponent.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
@@ -225,9 +229,18 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
         }
     }
     _ = try object.AddComponent(engine_context, component_type{});
-    //a popup opens and closes through its layout item, so it gets one the way picking one from the menu gives it
-    if (comptime @TypeOf(object) == Entity and component_type == PopupComponent) {
-        if (!object.HasComponent(LayoutItemComponent)) try AddFromPanel(LayoutItemComponent, engine_context, object);
+    //what a UI component needs of its entity, given the way picking it from the entity's menu would give it: a popup
+    //opens and closes through the entity's layout item, and a scroll cuts off what runs past with the entity's clip
+    if (comptime @TypeOf(object) == UIElement) {
+        const owner = object.GetOwner();
+        if (owner.IsActive()) {
+            if (comptime component_type == PopupComponent) {
+                if (!owner.HasComponent(LayoutItemComponent)) try AddFromPanel(LayoutItemComponent, engine_context, owner);
+            }
+            if (comptime component_type == ScrollComponent) {
+                if (!owner.HasComponent(ClipComponent)) _ = try owner.AddComponent(engine_context, ClipComponent{});
+            }
+        }
     }
 }
 
@@ -251,6 +264,10 @@ fn ObjectTraits(comptime T: type) type {
         const GameModeComponents = @import("../ECSComponents/GCComponents.zig");
         return struct {
             const ComponentsPanelList = GameModeComponents.ComponentsPanelList;
+        };
+    } else if (T == UIElement) {
+        return struct {
+            const ComponentsPanelList = UIComponents.ComponentsPanelList;
         };
     } else {
         @compileError(@typeName(T) ++ "This type is not supported currently");

@@ -238,3 +238,26 @@ test "a rigid body saved before body types loads as the type its mass meant" {
     try std.testing.expect(!loaded.HasComponent(EntityComponents.DynamicBodyTag));
     try std.testing.expectEqual(RigidBodyComponent.MIN_MASS, loaded.GetComponent(RigidBodyComponent).?.GetMass());
 }
+
+test "a constant force round trips" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const ConstantForceComponent = EntityComponents.ConstantForceComponent;
+
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const thruster = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try thruster.AddComponent(engine_context, ConstantForceComponent{ .mForce = .{ .x = 1, .y = 20, .z = -3 }, .mLocalForce = .{ .x = 0, .y = 0, .z = 7 } });
+
+    const path = try world.FilePath("thruster.imen");
+    try TextSerializer.SerializeECSObject(engine_context, thruster, path);
+
+    const loaded = try scene.CreateEntity(engine_context, Entity.BlankConfig);
+    try TextSerializer.DeserializeECSObj(engine_context, loaded, path);
+
+    const force = loaded.GetComponent(ConstantForceComponent).?.mForce;
+    try std.testing.expectEqual(@as(f32, 1), force.x);
+    try std.testing.expectEqual(@as(f32, 20), force.y);
+    try std.testing.expectEqual(@as(f32, -3), force.z);
+    try std.testing.expectEqual(@as(f32, 7), loaded.GetComponent(ConstantForceComponent).?.mLocalForce.z);
+}

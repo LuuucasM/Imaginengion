@@ -1,0 +1,226 @@
+//! Themes and styles: reading a theme, which state's colors an entity takes from its tags, and what a style writes into
+//! an entity's quad and text. Themes are read from text here rather than loaded as assets, except the engine's default,
+//! which is read from its file so a broken one is caught. Run with `zig build test-engine`.
+const std = @import("std");
+
+const EngineContext = @import("../../Core/EngineContext.zig");
+const Entity = @import("../../ECSObjects/Entity.zig");
+const Scene = @import("../../ECSObjects/Scene.zig");
+const ThemeAsset = @import("../../ECSComponents/Asset/ThemeAsset.zig");
+const StyleSystem = @import("../../UI/StyleSystem.zig");
+const UIManager = @import("../../UI/UIManager.zig");
+const Vec4 = @import("../../Math/MathTypes.zig").Vec4;
+
+const EntityComponents = @import("../../ECSComponents/EComponents.zig");
+const QuadComponent = EntityComponents.QuadComponent;
+const TextComponent = EntityComponents.TextComponent;
+const HoveredTag = EntityComponents.HoveredTag;
+const PressedTag = EntityComponents.PressedTag;
+const FocusedTag = EntityComponents.FocusedTag;
+const SelectedTag = EntityComponents.SelectedTag;
+const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
+const StyleComponent = @import("../../ECSComponents/UIComponents.zig").StyleComponent;
+
+const THEME =
+    \\{ "Styles": {
+    \\    "Button": {
+    \\      "Background": { "Normal": [0.1, 0.2, 0.3, 1], "Hovered": [0.4, 0.5, 0.6, 1], "Pressed": [0.7, 0.8, 0.9, 1], "Selected": [0, 1, 0, 1] },
+    \\      "Border": { "Normal": [1, 1, 1, 0.5] },
+    \\      "Text": { "Normal": [1, 1, 1, 1] },
+    \\      "BorderWidth": 2,
+    \\      "CornerRadius": 4,
+    \\      "FontSize": 18
+    \\    },
+    \\    "Plain": { "Background": { "Normal": [0.5, 0.5, 0.5, 1] } }
+    \\} }
+;
+
+const TestWorld = struct {
+    mEngineContext: *EngineContext,
+    mTheme: ThemeAsset = .{},
+    mScene: Scene = undefined,
+
+    fn Init() !*TestWorld {
+        const self = try std.heap.page_allocator.create(TestWorld);
+        self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
+        const engine_context = self.mEngineContext;
+        engine_context.* = .{};
+        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
+        try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        self.mScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+        try self.mTheme.FromJson(engine_context, THEME);
+        return self;
+    }
+
+    fn Deinit(self: *TestWorld) void {
+        const engine_context = self.mEngineContext;
+        self.mTheme.Deinit(engine_context);
+        engine_context.mEditorWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
+        _ = engine_context._Internal.EngineGPA.deinit();
+        std.heap.page_allocator.destroy(engine_context);
+        std.heap.page_allocator.destroy(self);
+    }
+
+    /// An entity with a quad and text, styled `style`
+    fn Styled(self: *TestWorld, style: []const u8) !Entity {
+        const engine_context = self.mEngineContext;
+        const entity = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+        _ = try entity.AddComponent(engine_context, QuadComponent{});
+        _ = try entity.AddComponent(engine_context, TextComponent{});
+        try UIManager.Style(engine_context, entity, style);
+        return entity;
+    }
+
+    fn Update(self: *TestWorld) !void {
+        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme);
+    }
+};
+
+fn ExpectColor(expected: [4]f32, actual: Vec4(f32)) !void {
+    try std.testing.expectApproxEqAbs(expected[0], actual.x, 0.0001);
+    try std.testing.expectApproxEqAbs(expected[1], actual.y, 0.0001);
+    try std.testing.expectApproxEqAbs(expected[2], actual.z, 0.0001);
+    try std.testing.expectApproxEqAbs(expected[3], actual.w, 0.0001);
+}
+
+test "a theme reads its styles, leaving out what each one leaves out" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    const button = world.mTheme.GetStyle("Button").?;
+    try ExpectColor(.{ 0.4, 0.5, 0.6, 1 }, button.Background.Hovered.?);
+    try std.testing.expect(button.Background.Focused == null);
+    try std.testing.expectEqual(@as(f32, 4), button.CornerRadius.?);
+    try std.testing.expect(!button.Font.IsIDValid());
+
+    const plain = world.mTheme.GetStyle("Plain").?;
+    try std.testing.expect(plain.Text.Normal == null);
+    try std.testing.expect(plain.BorderWidth == null);
+    try std.testing.expect(world.mTheme.GetStyle("Missing") == null);
+}
+
+test "an entity's colors follow its state, highest first, and a state with no color takes the normal one" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.Styled("Button");
+    const quad = entity.GetComponent(QuadComponent).?;
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, quad.mTexOptions.mColor);
+
+    _ = try entity.AddComponent(engine_context, SelectedTag{});
+    try world.Update();
+    try ExpectColor(.{ 0, 1, 0, 1 }, quad.mTexOptions.mColor);
+
+    //focused outranks selected, and the style has no focused color: the normal one
+    _ = try entity.AddComponent(engine_context, FocusedTag{});
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, quad.mTexOptions.mColor);
+
+    _ = try entity.AddComponent(engine_context, HoveredTag{});
+    try world.Update();
+    try ExpectColor(.{ 0.4, 0.5, 0.6, 1 }, quad.mTexOptions.mColor);
+
+    _ = try entity.AddComponent(engine_context, PressedTag{});
+    try world.Update();
+    try ExpectColor(.{ 0.7, 0.8, 0.9, 1 }, quad.mTexOptions.mColor);
+}
+
+test "a style writes the border, corners and text it has, and leaves the rest as the entity has it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    const button = try world.Styled("Button");
+    const plain = try world.Styled("Plain");
+    plain.GetComponent(QuadComponent).?.mBorderWidth = 7;
+    plain.GetComponent(TextComponent).?.mTexOptions.mColor = .{ .x = 0.25, .y = 0.25, .z = 0.25, .w = 1 };
+    try world.Update();
+
+    const quad = button.GetComponent(QuadComponent).?;
+    try ExpectColor(.{ 1, 1, 1, 0.5 }, quad.mBorderColor);
+    try std.testing.expectEqual(@as(f32, 2), quad.mBorderWidth);
+    try std.testing.expectEqual(@as(f32, 4), quad.mCornerRadii.w);
+    try ExpectColor(.{ 1, 1, 1, 1 }, button.GetComponent(TextComponent).?.mTexOptions.mColor);
+
+    //plain only has a background
+    try ExpectColor(.{ 0.5, 0.5, 0.5, 1 }, plain.GetComponent(QuadComponent).?.mTexOptions.mColor);
+    try std.testing.expectEqual(@as(f32, 7), plain.GetComponent(QuadComponent).?.mBorderWidth);
+    try ExpectColor(.{ 0.25, 0.25, 0.25, 1 }, plain.GetComponent(TextComponent).?.mTexOptions.mColor);
+}
+
+test "a new font size has layout fit the text again, a new color doesn't" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const button = try world.Styled("Button");
+    try button.ClearLayoutDirty(engine_context);
+    try world.Update();
+    try std.testing.expectEqual(@as(f32, 18), button.GetComponent(TextComponent).?.mFontSize);
+    try std.testing.expect(button.HasComponent(LayoutDirtyTag));
+
+    //the same size again: nothing to lay out, even though the colors are written again
+    try button.ClearLayoutDirty(engine_context);
+    _ = try button.AddComponent(engine_context, HoveredTag{});
+    try world.Update();
+    try std.testing.expect(!button.HasComponent(LayoutDirtyTag));
+}
+
+test "an element whose style the theme hasn't is left alone" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    const entity = try world.Styled("Missing");
+    entity.GetComponent(QuadComponent).?.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
+    try world.Update();
+    try world.Update();
+    try ExpectColor(.{ 0.3, 0.3, 0.3, 1 }, entity.GetComponent(QuadComponent).?.mTexOptions.mColor);
+}
+
+test "styling an entity gives it a UI element, and styling it again changes its style" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.Styled("Plain");
+    try std.testing.expectEqualStrings("Plain", UIManager.GetUIComponent(entity, StyleComponent).?.mStyle.items);
+    try UIManager.Style(engine_context, entity, "Button");
+    try std.testing.expectEqualStrings("Button", UIManager.GetUIComponent(entity, StyleComponent).?.mStyle.items);
+}
+
+test "the engine's default theme reads, with every style the editor's look needs" {
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    const engine_allocator = engine_context.EngineAllocator();
+    //file reads go through the context's Io, which forwards to this
+    engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        .concurrent_limit = .nothing,
+        .async_limit = .nothing,
+    });
+    //no Setup: its default assets need the GPU. The theme's fonts are only looked up, not loaded
+    try engine_context.mAssetManager.Init(engine_context);
+
+    const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), UIManager.DEFAULT_THEME_PATH, engine_context.FrameAllocator(), .unlimited);
+    var theme: ThemeAsset = .{};
+    try theme.FromJson(engine_context, contents);
+    for ([_][]const u8{ "Window", "Header", "Button", "Field", "Tab", "Title", "Popup", "Text", "Caret", "Scrollbar", "AxisX", "AxisY", "AxisZ" }) |name| {
+        if (theme.GetStyle(name) == null) {
+            std.debug.print("the default theme has no style '{s}'\n", .{name});
+            return error.TestMissingStyle;
+        }
+    }
+    try std.testing.expect(theme.GetStyle("AxisX").?.Font.IsIDValid());
+    theme.Deinit(engine_context);
+
+    //the asset manager, minus the default assets Init never set up and the working directory handle it does not own
+    const asset_manager = &engine_context.mAssetManager;
+    asset_manager.mECSManager.Deinit(engine_context);
+    asset_manager.mUUIDToWorldID.deinit(engine_allocator);
+    asset_manager.mEventManager.Deinit(engine_allocator);
+    asset_manager.mPendingDelete.deinit(engine_allocator);
+    asset_manager.mCWDPath.deinit(engine_allocator);
+    _ = engine_context._Internal.EngineGPA.deinit();
+}

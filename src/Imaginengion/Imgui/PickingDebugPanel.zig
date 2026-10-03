@@ -10,6 +10,7 @@ const RayCast = @import("../Physics/RayCast.zig");
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
 const EntityNameComponent = @import("../ECSComponents/EComponents.zig").NameComponent;
 const PlayerNameComponent = @import("../ECSComponents/PComponents.zig").NameComponent;
 const SceneComponents = @import("../ECSComponents/SComponents.zig");
@@ -49,13 +50,13 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     try PointerText(frame_allocator, "Left button holding", engine_context.mPointerSystem.mHeld.get(.BUTTON_LEFT).mChain.items);
     try Text(frame_allocator, "Carrying: {s}", .{if (engine_context.mPointerSystem.Carrying()) |source| EntityName(source) else "nothing"});
     var popup_names: std.ArrayList(u8) = .empty;
-    for (engine_context.mPopupSystem.OpenPopups(), 0..) |open, i| {
+    for (engine_context.mUIManager.mPopupSystem.OpenPopups(), 0..) |open, i| {
         if (i > 0) try popup_names.appendSlice(frame_allocator, " > ");
         try popup_names.appendSlice(frame_allocator, if (open.mPopup.IsActive()) EntityName(open.mPopup) else "<gone>");
     }
     try Text(frame_allocator, "Popups open: {s}", .{if (popup_names.items.len > 0) popup_names.items else "none"});
-    if (engine_context.mFocusSystem.Focused()) |focused| {
-        try Text(frame_allocator, "Keyboard: typing into '{s}', caret at byte {d}", .{ EntityName(focused), engine_context.mFocusSystem.Caret() });
+    if (engine_context.mUIManager.mFocusSystem.Focused()) |focused| {
+        try Text(frame_allocator, "Keyboard: typing into '{s}', caret at byte {d}", .{ EntityName(focused), engine_context.mUIManager.mFocusSystem.Caret() });
     } else {
         try Text(frame_allocator, "Keyboard: nothing has it", .{});
     }
@@ -159,7 +160,7 @@ fn EntityName(entity: Entity) []const u8 {
 
 /// Remembers the last press, release or click to show. Enter and exit aren't kept: they'd bury the clicks, and
 /// what is hovered is shown as it is
-pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
+pub fn OnPointerEvent(self: *PickingDebugPanel, event: PointerEvent) void {
     const text = switch (event) {
         .PointerPressed => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} pressed on '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
         .PointerReleased => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} released from '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
@@ -168,6 +169,14 @@ pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
         .PointerDrag => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} dragging '{s}', {d:.1}, {d:.1}, {d:.1} so far", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
         .PointerDragEnd => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "{s} dragged '{s}' {d:.1}, {d:.1}, {d:.1}", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
         .PointerDropped => |e| std.fmt.bufPrint(&self.mLastPointerEvent, "dropped '{s}' on '{s}'", .{ EntityName(e.mSource), EntityName(e.mEntity) }),
+        .PointerEnter, .PointerExit, .Default => return,
+    } catch return;
+    self.mLastPointerEventLen = text.len;
+}
+
+/// The same for the UI's events: typing and popups
+pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
+    const text = switch (event) {
         //one per entity in the chain: only the text input's own, so it isn't always its top parent's
         .FocusGained => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' got the keyboard", .{EntityName(e.mTarget)}) else return,
         .FocusLost => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' lost the keyboard", .{EntityName(e.mTarget)}) else return,
@@ -175,7 +184,8 @@ pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
         .TextSubmitted => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' text submitted", .{EntityName(e.mTarget)}) else return,
         .PopupOpened => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "popup '{s}' opened", .{EntityName(e.mTarget)}) else return,
         .PopupClosed => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "popup '{s}' closed", .{EntityName(e.mTarget)}) else return,
-        .PointerEnter, .PointerExit, .Default => return,
+        .ValueChanged => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastPointerEvent, "'{s}' value changed", .{EntityName(e.mTarget)}) else return,
+        .DestroyUIElement, .Default => return,
     } catch return;
     self.mLastPointerEventLen = text.len;
 }

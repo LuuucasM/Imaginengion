@@ -1,5 +1,5 @@
-//! Popups: right-click menus, dropdown lists and the menus of a menu bar. A popup is a layout tree whose root has a
-//! PopupComponent, built like any other UI. It is hidden while it is closed by its root's LayoutItemComponent being
+//! Popups: right-click menus, dropdown lists and the menus of a menu bar. Part of the UIManager. A popup is a layout
+//! tree whose root's UI element has a PopupComponent, built like any other UI. It is hidden while it is closed by its root's LayoutItemComponent being
 //! collapsed, which hides the whole tree and keeps the pointer off it. Opening one expands it and places it against
 //! what opened it (an entity, or a point such as where the pointer was), the way its PopupComponent says.
 //!
@@ -20,7 +20,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
-const PointerSystem = @import("PointerSystem.zig");
+const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const Layout = @import("Layout.zig");
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
@@ -28,7 +28,9 @@ const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const PopupComponent = EntityComponents.PopupComponent;
+const UIManager = @import("UIManager.zig");
+const UIElement = @import("../ECSObjects/UIElement.zig");
+const PopupComponent = @import("../ECSComponents/UIComponents.zig").PopupComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const TransformComponent = EntityComponents.TransformComponent;
@@ -80,7 +82,7 @@ pub fn IsOpen(self: *const PopupSystem, popup: Entity) bool {
 /// was above it; otherwise every other popup closes first. Opening one that is already open moves it to `at` and
 /// closes what is above it
 pub fn Open(self: *PopupSystem, engine_context: *EngineContext, popup: Entity, at: At) !void {
-    std.debug.assert(popup.HasComponent(PopupComponent));
+    std.debug.assert(UIManager.HasUIComponent(popup, PopupComponent));
 
     if (self.IndexOf(popup)) |index| {
         try self.CloseAbove(engine_context, index + 1);
@@ -163,9 +165,12 @@ pub fn Update(self: *PopupSystem, engine_context: *EngineContext, world: *WorldM
         }
     }
 
-    const popups = try world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = PopupComponent });
-    for (popups.items) |popup_id| {
-        const popup = world.GetEntity(popup_id);
+    const ui_manager = &engine_context.mUIManager;
+    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = PopupComponent });
+    for (element_ids.items) |element_id| {
+        const popup = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
+        //an element no entity has taken yet has nothing to compare
+        if (!popup.IsIDValid() or popup.mManager != world or !popup.IsActive()) continue;
         if (!self.IsOpen(popup)) try SetCollapsed(engine_context, popup, true);
     }
 
@@ -176,7 +181,7 @@ pub fn Update(self: *PopupSystem, engine_context: *EngineContext, world: *WorldM
 /// this frame, and where its opener was as of the last world transform pass
 fn Place(engine_context: *EngineContext, open: OpenPopup) !void {
     const popup = open.mPopup;
-    const anchoring = popup.GetComponent(PopupComponent).?.mPlacement;
+    const anchoring = (UIManager.GetUIComponent(popup, PopupComponent) orelse return).mPlacement;
     const size = if (popup.GetComponent(LayoutItemComponent)) |item| item.mComputedSize else Vec2(f32){ .x = 0, .y = 0 };
 
     const center: Vec2(f32) = switch (open.mAt) {
@@ -228,9 +233,10 @@ fn CloseAbove(self: *PopupSystem, engine_context: *EngineContext, index: usize) 
         if (!popup.IsActive()) continue;
 
         //a text input in it can't be typed into once it is hidden: its edit ends, kept
-        if (engine_context.mFocusSystem.Focused()) |focused| {
+        const focus = &engine_context.mUIManager.mFocusSystem;
+        if (focus.Focused()) |focused| {
             const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), focused);
-            if (Contains(chain.items, popup)) try engine_context.mFocusSystem.EndEdit(engine_context, .Submit);
+            if (Contains(chain.items, popup)) try focus.EndEdit(engine_context, .Submit);
         }
 
         try SetCollapsed(engine_context, popup, true);
@@ -273,7 +279,7 @@ fn Send(engine_context: *EngineContext, popup: Entity, at: At, comptime kind: st
     const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), popup);
     for (chain.items) |entity| {
         const event = @unionInit(UIEvent, @tagName(kind), .{ .mEntity = entity, .mTarget = popup, .mOpener = opener });
-        try engine_context.mUIEventManager.Insert(engine_context.EngineAllocator(), .Interaction, event);
+        try engine_context.mUIManager.mEventManager.Insert(engine_context.EngineAllocator(), .UI, event);
     }
 }
 

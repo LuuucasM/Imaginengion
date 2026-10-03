@@ -7,6 +7,7 @@ pub const ShaderAsset = @import("Asset/ShaderAsset.zig");
 pub const Texture2D = @import("Asset/Texture2D.zig");
 pub const TextAsset = @import("Asset/TextAsset.zig");
 pub const AudioAsset = @import("Asset/AudioAsset.zig");
+pub const ThemeAsset = @import("Asset/ThemeAsset.zig");
 
 //the ECS objects loaded from their files, see ObjectAsset.zig
 const ObjectAsset = @import("Asset/ObjectAsset.zig").ObjectAsset;
@@ -33,6 +34,7 @@ pub const ComponentsList = [_]type{
     FileMetaData,
     GenMetaData,
     AudioAsset,
+    ThemeAsset,
     EntityAsset,
     SceneAsset,
     PlayerAsset,
@@ -48,6 +50,7 @@ pub const EComponents = enum(16) {
     FileMetaData = ListInd(&ComponentsList, FileMetaData),
     GenMetaData = ListInd(&ComponentsList, GenMetaData),
     AudioAsset = ListInd(&ComponentsList, AudioAsset),
+    ThemeAsset = ListInd(&ComponentsList, ThemeAsset),
     EntityAsset = ListInd(&ComponentsList, EntityAsset),
     SceneAsset = ListInd(&ComponentsList, SceneAsset),
     PlayerAsset = ListInd(&ComponentsList, PlayerAsset),
@@ -60,6 +63,7 @@ pub const FileUpdateList = [_]type{
     ShaderAsset,
     TextAsset,
     AudioAsset,
+    ThemeAsset,
     EntityAsset,
     SceneAsset,
     PlayerAsset,

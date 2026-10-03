@@ -90,6 +90,139 @@ test "boxes that are apart report the true gap between them" {
     try std.testing.expectApproxEqAbs(@as(f32, 0.8), contact.mNormal.y, eps);
 }
 
+fn RoundedBox(size: Vec3(f32), corner_radius: f32) ColliderComponent {
+    return .{ .mShape = .Box, .mBoxSize = size, .mCornerRadius = corner_radius };
+}
+
+test "rounding a box leaves its faces where they were" {
+    var a_transform = PlacedAt(.{ .x = 0, .y = 0, .z = 0 }, ONE);
+    var a_collider = RoundedBox(ONE, 0.2);
+    var b_collider = RoundedBox(ONE, 0.1);
+
+    var contact = EmptyContact();
+    var beside = PlacedAt(.{ .x = 1.5, .y = 0, .z = 0 }, ONE);
+    _ = Collisions.TestShapes(&contact, &a_transform, &a_collider, &beside, &b_collider);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), contact.mSeparation, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), contact.mNormal.x, eps);
+}
+
+test "two rounded boxes are as far apart at a corner as their roundings add up to" {
+    //unit boxes rounded by 0.2 and 0.1: together a box of half extents 1 rounded by 0.3, whose corner is swept around
+    //a point 0.7 out on each axis. 1.1 diagonally is 0.4 past that point on x and y, 0.4 * sqrt(2) away, less 0.3
+    var a_transform = PlacedAt(.{ .x = 0, .y = 0, .z = 0 }, ONE);
+    var a_collider = RoundedBox(ONE, 0.2);
+    var b_collider = RoundedBox(ONE, 0.1);
+
+    var contact = EmptyContact();
+    var diagonal = PlacedAt(.{ .x = 1.1, .y = 1.1, .z = 0 }, ONE);
+    _ = Collisions.TestShapes(&contact, &a_transform, &a_collider, &diagonal, &b_collider);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.4 * std.math.sqrt2 - 0.3), contact.mSeparation, eps);
+    try std.testing.expectApproxEqAbs(std.math.sqrt1_2, contact.mNormal.x, eps);
+    try std.testing.expectApproxEqAbs(std.math.sqrt1_2, contact.mNormal.y, eps);
+
+    //sharp, the same two are only 0.1 * sqrt(2) apart there
+    var sharp_a = Box(ONE);
+    var sharp_b = Box(ONE);
+    _ = Collisions.TestShapes(&contact, &a_transform, &sharp_a, &diagonal, &sharp_b);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1 * std.math.sqrt2), contact.mSeparation, eps);
+}
+
+test "a box's rounding grows with its smallest scale axis and can't pass its smallest half extent" {
+    const collider = RoundedBox(ONE, 0.2);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.4), collider.GetWorldCornerRadius(.{ .x = 2, .y = 3, .z = 2 }), eps);
+
+    //a box half a unit thick can be rounded by a quarter at most, which makes that side a half circle
+    const thin = RoundedBox(.{ .x = 2, .y = 0.5, .z = 2 }, 1.0);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.25), thin.GetWorldCornerRadius(ONE), eps);
+}
+
+test "a sphere sees a box's rounded corner" {
+    //a unit box rounded by 0.2 has its corner swept around a point 0.3 out on each axis
+    var box_transform = PlacedAt(.{ .x = 0, .y = 0, .z = 0 }, ONE);
+    var box_collider = RoundedBox(ONE, 0.2);
+    var sphere_collider = Sphere(0.1);
+
+    var contact = EmptyContact();
+    var diagonal = PlacedAt(.{ .x = 0.6, .y = 0.6, .z = 0 }, ONE);
+    _ = Collisions.TestShapes(&contact, &box_transform, &box_collider, &diagonal, &sphere_collider);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.3 * std.math.sqrt2 - 0.2 - 0.1), contact.mSeparation, eps);
+}
+
+/// PlacedAt, turned about z, the way a top down car or a 2D game's boxes turn
+fn PlacedTurned(position: Vec3(f32), size_scale: Vec3(f32), degrees_about_z: f32) TransformComponent {
+    var transform = PlacedAt(position, size_scale);
+    transform.SetWorldRotation(Quat(f32).FromAxisAngle(.{ .x = 0, .y = 0, .z = 1 }, std.math.degreesToRadians(degrees_about_z)));
+    return transform;
+}
+
+test "a box turned on its corner beside an unturned one is apart by the gap to that corner" {
+    //turned 45 degrees a unit box reaches sqrt(2) / 2 along x, so from 1.5 away the corner is 1.5 - 0.5 - 0.7071 off
+    //the unturned box's face
+    var flat_transform = PlacedAt(.{ .x = 0, .y = 0, .z = 0 }, ONE);
+    var flat_collider = Box(ONE);
+    var turned_collider = Box(ONE);
+
+    var contact = EmptyContact();
+    var turned = PlacedTurned(.{ .x = 1.5, .y = 0, .z = 0 }, ONE, 45);
+    try std.testing.expect(!Collisions.TestShapes(&contact, &flat_transform, &flat_collider, &turned, &turned_collider));
+    try std.testing.expectApproxEqAbs(@as(f32, 1.0 - std.math.sqrt1_2), contact.mSeparation, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), contact.mNormal.x, eps);
+
+    //half a unit closer the corner is in by the same less a half
+    var closer = PlacedTurned(.{ .x = 1.0, .y = 0, .z = 0 }, ONE, 45);
+    try std.testing.expect(Collisions.TestShapes(&contact, &flat_transform, &flat_collider, &closer, &turned_collider));
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5 - std.math.sqrt1_2), contact.mSeparation, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), contact.mNormal.x, eps);
+
+    //the normal points from the origin to the target whichever way round they are
+    try std.testing.expect(Collisions.TestShapes(&contact, &closer, &turned_collider, &flat_transform, &flat_collider));
+    try std.testing.expectApproxEqAbs(@as(f32, -1), contact.mNormal.x, eps);
+}
+
+test "a long box turned a quarter turn collides as its turned self" {
+    //2 long and 0.5 wide: turned upright it is only 0.25 wide on x, so a unit box 0.9 away is clear of it by 0.15.
+    //Unturned it would reach 1 along x and overlap
+    var car_collider = Box(.{ .x = 2, .y = 0.5, .z = 1 });
+    var wall_collider = Box(ONE);
+    var upright_car = PlacedTurned(.{ .x = 0, .y = 0, .z = 0 }, ONE, 90);
+    var wall = PlacedAt(.{ .x = 0.9, .y = 0, .z = 0 }, ONE);
+
+    var contact = EmptyContact();
+    try std.testing.expect(!Collisions.TestShapes(&contact, &upright_car, &car_collider, &wall, &wall_collider));
+    try std.testing.expectApproxEqAbs(@as(f32, 0.15), contact.mSeparation, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), contact.mNormal.x, eps);
+}
+
+test "two boxes turned the same way are measured exactly in their shared turn" {
+    //both 2 long and turned upright, one stacked 2.1 above the other: 0.1 apart along y, and the normal is back in
+    //world space
+    var collider = Box(.{ .x = 2, .y = 0.5, .z = 1 });
+    var lower = PlacedTurned(.{ .x = 0, .y = 0, .z = 0 }, ONE, 90);
+    var upper = PlacedTurned(.{ .x = 0, .y = 2.1, .z = 0 }, ONE, 90);
+
+    var contact = EmptyContact();
+    try std.testing.expect(!Collisions.TestShapes(&contact, &lower, &collider, &upper, &collider));
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1), contact.mSeparation, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), contact.mNormal.y, eps);
+
+    //a diagonal gap is the true distance to the corner, not the SAT's lower bound along one axis
+    var diagonal = PlacedTurned(.{ .x = 0.6, .y = 2.1, .z = 0 }, ONE, 90);
+    _ = Collisions.TestShapes(&contact, &lower, &collider, &diagonal, &collider);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1 * std.math.sqrt2), contact.mSeparation, eps);
+}
+
+test "rounded turned boxes are their core boxes less both corner radii" {
+    var flat_transform = PlacedAt(.{ .x = 0, .y = 0, .z = 0 }, ONE);
+    var flat_collider = RoundedBox(ONE, 0.1);
+    var turned_collider = RoundedBox(ONE, 0.2);
+
+    //the cores are 0.4 and 0.3 half wide, the turned one's reaching 0.3 * sqrt(2) along x, then both radii come off
+    var contact = EmptyContact();
+    var turned = PlacedTurned(.{ .x = 1.5, .y = 0, .z = 0 }, ONE, 45);
+    _ = Collisions.TestShapes(&contact, &flat_transform, &flat_collider, &turned, &turned_collider);
+    try std.testing.expectApproxEqAbs(@as(f32, 1.5 - 0.4 - 0.3 * std.math.sqrt2 - 0.3), contact.mSeparation, eps);
+}
+
 test "default spheres fit a default quad" {
     //radius 0.5 at scale 1 is 1 across, like the quad
     var a_transform = PlacedAt(.{ .x = 0, .y = 0, .z = 0 }, ONE);

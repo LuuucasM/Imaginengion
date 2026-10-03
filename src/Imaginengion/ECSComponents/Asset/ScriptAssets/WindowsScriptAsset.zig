@@ -14,6 +14,7 @@ const SceneInputPressedScript = SceneComponents.InputPressedScript;
 
 const EngineContext = @import("../../../Core/EngineContext.zig");
 const Tracy = @import("../../../Core/Tracy.zig");
+const ScriptResult = @import("../ScriptAsset.zig").ScriptResult;
 const ScriptType = @import("../ScriptAsset.zig").ScriptType;
 
 mLib: std.os.windows.HMODULE = undefined,
@@ -82,7 +83,7 @@ pub fn Deinit(self: *WindowsScriptAsset, _: *EngineContext) void {
     _ = FreeLibrary(self.mLib);
 }
 
-pub fn Run(self: *WindowsScriptAsset, comptime script_type: type, args: anytype) bool {
+pub fn Run(self: *WindowsScriptAsset, comptime script_type: type, args: anytype) ScriptResult {
     const run_func: script_type.RunFuncSig = @ptrCast(self.mRunFunc);
     return @call(.auto, run_func, args);
 }

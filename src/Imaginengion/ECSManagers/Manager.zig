@@ -4,6 +4,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 const AManager = @import("AManager.zig");
 const AudioManager = @import("../AudioManager/AudioManager.zig");
+const UIManager = @import("../UI/UIManager.zig");
 const EManager = @import("EManager.zig");
 const GCManager = @import("GCManager.zig");
 const PManager = @import("PManager.zig");
@@ -23,6 +24,7 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Voice = @import("../ECSObjects/Voice.zig");
+const UIElement = @import("../ECSObjects/UIElement.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
@@ -31,6 +33,7 @@ const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TextComponent = EntityComponents.TextComponent;
+const UIElementComponent = EntityComponents.UIElementComponent;
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 
@@ -68,7 +71,7 @@ pub fn Core(comptime Self: type) type {
         /// Voice) point at their manager directly; every other object points at the WorldManager, which is
         /// recoverable because the ECS managers live as fields of it.
         fn ObjManager(self: *Self) @FieldType(UnderlyingObj(Self), "mManager") {
-            if (Self == AManager or Self == AudioManager) {
+            if (Self == AManager or Self == AudioManager or Self == UIManager) {
                 return self;
             } else if (Self == EManager) {
                 return @fieldParentPtr("mEManager", self);
@@ -106,6 +109,8 @@ pub fn Core(comptime Self: type) type {
                 .{ .ToDestroyScene = .{ .Scene = obj } }
             else if (Self == AudioManager)
                 .{ .DestroyVoice = .{ .Voice = obj } }
+            else if (Self == UIManager)
+                .{ .DestroyUIElement = .{ .Element = obj } }
             else
                 @compileError(std.fmt.comptimePrint("DeleteObj is not implemented for {s} yet", .{@typeName(Self)}));
 
@@ -137,9 +142,10 @@ pub fn Core(comptime Self: type) type {
         pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
             const copy: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.DuplicateEntity(engine_context, obj_id), .mManager = ObjManager(self) };
             //the ECS copies the components straight across without AddComponent, so a copy in a layout tree has to
-            //ask for its tree to be laid out itself
+            //ask for its tree to be laid out itself, and a copied UI element has to be told whose it is now
             if (comptime Self == EManager) {
                 if (LayoutSystem.IsInLayout(copy)) try copy.MarkLayoutDirty(engine_context);
+                try engine_context.mUIManager.Adopt(engine_context, copy);
             }
             return copy;
         }
@@ -176,6 +182,16 @@ pub fn Core(comptime Self: type) type {
             {
                 const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
                 try entity.MarkLayoutDirty(engine_context);
+            }
+
+            //a UI element's component may need another to go with it, e.g. a scroll needs a scroll state
+            if (comptime Self == UIManager) try self.OnElementComponentAdded(engine_context, obj_id, @TypeOf(new_component));
+
+            //an entity taking a UI element: a new one if the component came without, and either way pointed back at the
+            //entity. Every route a component comes in by ends here: code, the panel, a file, a template
+            if (comptime Self == EManager and @TypeOf(new_component) == UIElementComponent) {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try engine_context.mUIManager.Adopt(engine_context, entity);
             }
 
             //a new rigid body gets a type tag if it has none, and its mass and inverse mass put in step with it.
@@ -299,6 +315,8 @@ pub fn Core(comptime Self: type) type {
                 is_valid = true;
             } else if (manager_t == AudioManager) {
                 is_valid = true;
+            } else if (manager_t == UIManager) {
+                is_valid = true;
             }
 
             if (!is_valid) {
@@ -319,6 +337,8 @@ pub fn Core(comptime Self: type) type {
                 return Scene;
             } else if (manager_t == AudioManager) {
                 return Voice;
+            } else if (manager_t == UIManager) {
+                return UIElement;
             } else {
                 @compileError("Not a valid manager type!");
             }
@@ -337,6 +357,8 @@ pub fn Core(comptime Self: type) type {
                 return Scene.Type;
             } else if (manager_t == AudioManager) {
                 return Voice.Type;
+            } else if (manager_t == UIManager) {
+                return UIElement.Type;
             } else {
                 @compileError("Not a valid manager type!");
             }

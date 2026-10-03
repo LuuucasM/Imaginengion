@@ -1,7 +1,7 @@
 //! What the pointer (the mouse) is over, holding down and dragging, turned into things entities can react to:
 //!   - states, as tags: HoveredTag while the pointer is over an entity, PressedTag while a button that went down
 //!     on it is still held. Anything can check them, or query everything that has one
-//!   - moments, as events through the engine's UI event manager (Events/UIEventData.zig): enter, exit, pressed,
+//!   - moments, as events through the engine's pointer event manager (Events/PointerEventData.zig): enter, exit, pressed,
 //!     released, clicked, and a drag's start, moves and end
 //!   - drag and drop: a drag that starts on a drag source (DragSourceComponent) can be let go over a drop target
 //!     (DropTargetComponent) that takes it. What a source carries is its own components, and a target takes it if
@@ -24,7 +24,7 @@ const Vec3 = MathTypes.Vec3;
 const Ray = @import("../Math/CameraRay.zig").Ray;
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
@@ -379,6 +379,6 @@ fn Assign(chain: *Chain, engine_allocator: std.mem.Allocator, entities: []const 
     try chain.appendSlice(engine_allocator, entities);
 }
 
-fn Send(engine_context: *EngineContext, event: UIEvent) !void {
-    try engine_context.mUIEventManager.Insert(engine_context.EngineAllocator(), .Interaction, event);
+fn Send(engine_context: *EngineContext, event: PointerEvent) !void {
+    try engine_context.mPointerEventManager.Insert(engine_context.EngineAllocator(), .Pointer, event);
 }

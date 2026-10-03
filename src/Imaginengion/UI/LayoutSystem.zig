@@ -27,6 +27,10 @@ const Vec2 = MathTypes.Vec2;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
+const UIManager = @import("UIManager.zig");
+const UIComponents = @import("../ECSComponents/UIComponents.zig");
+const ScrollComponent = UIComponents.ScrollComponent;
+const ScrollStateComponent = UIComponents.ScrollStateComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
@@ -244,6 +248,11 @@ const Tree = struct {
         var text_center: ?Vec2(f32) = null;
         if (entity.GetComponent(LayoutComponent)) |layout| {
             node.Container = layout.ToContainer();
+            //a container whose UI element scrolls
+            if (UIManager.GetUIComponent(entity, ScrollComponent)) |scroll| {
+                node.Container.?.Scroll = scroll.mScroll;
+                if (UIManager.GetUIComponent(entity, ScrollStateComponent)) |state| node.Container.?.ScrollOffset = state.mOffset;
+            }
         } else if (try MeasureText(entity, engine_context)) |metrics| {
             //a leaf fits its text. A container fits its children, and its own text is left as it is
             node.Content = .{ .Size = metrics.Size() };
@@ -283,6 +292,11 @@ fn MeasureText(entity: Entity, engine_context: *EngineContext) !?TextLayout.Metr
 
 fn WriteBack(entity: Entity, text_center: ?Vec2(f32), result: Layout.Result, engine_context: *EngineContext) !void {
     if (entity.GetComponent(LayoutItemComponent)) |item| item.mComputedSize = result.Size;
+    //how far it scrolled, kept in range, and how far it can
+    if (UIManager.GetUIComponent(entity, ScrollStateComponent)) |state| {
+        state.mOffset = result.ScrollOffset;
+        state.mContentSize = result.ContentSize;
+    }
 
     //the element's background
     if (entity.GetComponent(QuadComponent)) |quad| quad.mSize = result.Size;

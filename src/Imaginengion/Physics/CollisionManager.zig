@@ -20,37 +20,51 @@ const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
 const ImguiManager = @import("../Imgui/Imgui.zig");
+const Material = @import("Material.zig");
 
 const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
-const DynamicQuery = GroupQuery{ .Component = DynamicBodyTag };
-const KinematicQuery = GroupQuery{ .Component = KinematicBodyTag };
-const MovingQuery = GroupQuery{ .Or = &.{ DynamicQuery, KinematicQuery } };
 
-//colliders the solver can actually move
-const DynamicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, DynamicQuery } };
-
-//colliders moved by code, which the solver can't move
-const KinematicCollidersQuery = GroupQuery{ .And = &.{ ColliderQuery, KinematicQuery } };
-
-//everything that collides and never moves: static bodies, and colliders carrying no RigidBodyComponent at
-//all. Asking for "collider and neither dynamic nor kinematic" rather than "collider and static" is deliberate,
-//so that a collider with no rigid body (which has no body type tag) still takes part in collision as a static
-//body would, instead of silently dropping out of the broad pass.
-const StaticCollidersQuery = GroupQuery{ .Not = .{ .mFirst = &ColliderQuery, .mSecond = &MovingQuery } };
-
-/// A world's colliders split by how they move, which decides what the broad pass pairs them with
-pub const ColliderGroups = struct {
-    mDynamic: []const Entity.Type,
-    mKinematic: []const Entity.Type,
-    mStatic: []const Entity.Type,
+/// One collider and the body it is part of: the game object it belongs to (Entity.GetMainObject), whose rigid body
+/// and body type tag decide how the collider moves. That is the collider's own entity when it is a MainObject,
+/// otherwise the nearest ancestor that is, otherwise the root of its hierarchy. So a game object can have colliders
+/// on convenience children, and they all move with it as one body
+pub const BodyCollider = struct {
+    mCollider: Entity.Type,
+    mBody: Entity.Type,
 };
 
+/// A world's colliders split by how their bodies move, which decides what the broad pass pairs them with
+pub const ColliderGroups = struct {
+    mDynamic: []const BodyCollider,
+    mKinematic: []const BodyCollider,
+    mStatic: []const BodyCollider,
+};
+
+/// Sorts every collider by its body's type. The type is on the game object the collider is part of, not on the
+/// collider's own entity when that is a convenience child, which one group query can not ask about: so each
+/// collider is walked up to its game object instead. A body with no rigid body, or a static one, is static: a
+/// collider with no rigid body anywhere above it still collides, as a static body would
 pub fn QueryColliderGroups(world_manager: *WorldManager, frame_allocator: std.mem.Allocator) !ColliderGroups {
-    return .{
-        .mDynamic = (try world_manager.GetEntityGroup(frame_allocator, DynamicCollidersQuery)).items,
-        .mKinematic = (try world_manager.GetEntityGroup(frame_allocator, KinematicCollidersQuery)).items,
-        .mStatic = (try world_manager.GetEntityGroup(frame_allocator, StaticCollidersQuery)).items,
-    };
+    const colliders = try world_manager.GetEntityGroup(frame_allocator, ColliderQuery);
+
+    var dynamic: std.ArrayList(BodyCollider) = .empty;
+    var kinematic: std.ArrayList(BodyCollider) = .empty;
+    var static: std.ArrayList(BodyCollider) = .empty;
+
+    for (colliders.items) |collider_id| {
+        const body = world_manager.GetEntity(collider_id).GetMainObject();
+        const body_collider: BodyCollider = .{ .mCollider = collider_id, .mBody = body.mID };
+
+        if (body.HasComponent(DynamicBodyTag)) {
+            try dynamic.append(frame_allocator, body_collider);
+        } else if (body.HasComponent(KinematicBodyTag)) {
+            try kinematic.append(frame_allocator, body_collider);
+        } else {
+            try static.append(frame_allocator, body_collider);
+        }
+    }
+
+    return .{ .mDynamic = dynamic.items, .mKinematic = kinematic.items, .mStatic = static.items };
 }
 
 /// Which pairs AddBroadPair keeps: any that can interact, or only those where one side is a trigger
@@ -71,6 +85,11 @@ const SPECULATIVE_MARGIN: f32 = 2.0 * SLOP;
 //gravity every substep, and bouncing that away would keep it hopping instead of settling
 const RESTITUTION_THRESHOLD: f32 = 1.0;
 
+//sliding slower than this at the start of a substep counts as still, held by static friction rather than kinetic.
+//A body resting on a slope picks up a substep of gravity along it before the solver runs, at most 9.81 / 120 ~ 0.08,
+//so this has to be above that or a resting body would never be held by its static friction
+const STATIC_SLIP_SPEED: f32 = 0.1;
+
 const CollisionManager = @This();
 
 /// One pair of colliders whose shapes overlap on a substep
@@ -80,6 +99,24 @@ const Touch = struct {
     //only good for the substep that made it, the contact lists are rebuilt on the next one
     mContactInd: u32,
     mIsTrigger: bool,
+    //the contact's colliders and game objects, kept here rather than read through mContactInd: the pair's end
+    //is found a substep later, once its contact is gone
+    mOrigin: Entity,
+    mTarget: Entity,
+    mOriginBody: Entity,
+    mTargetBody: Entity,
+
+    fn Init(contact: Contact, contact_ind: usize, is_trigger: bool) Touch {
+        return .{
+            .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID),
+            .mContactInd = @intCast(contact_ind),
+            .mIsTrigger = is_trigger,
+            .mOrigin = contact.mOrigin,
+            .mTarget = contact.mTarget,
+            .mOriginBody = contact.mOriginBody,
+            .mTargetBody = contact.mTargetBody,
+        };
+    }
 
     fn LessThan(_: void, a: Touch, b: Touch) bool {
         return a.mKey < b.mKey;
@@ -154,12 +191,12 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
             try self.AddBroadPair(engine_context, world_manager, groups.mDynamic[i], groups.mDynamic[j], .Any);
         }
     }
-    for (groups.mDynamic) |origin_id| {
-        for (groups.mKinematic) |target_id| {
-            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id, .Any);
+    for (groups.mDynamic) |origin| {
+        for (groups.mKinematic) |target| {
+            try self.AddBroadPair(engine_context, world_manager, origin, target, .Any);
         }
-        for (groups.mStatic) |target_id| {
-            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id, .Any);
+        for (groups.mStatic) |target| {
+            try self.AddBroadPair(engine_context, world_manager, origin, target, .Any);
         }
     }
 
@@ -167,9 +204,9 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
     //can give is the event of them touching. Built only when one side is a trigger, where the event is the
     //point (a platform entering a zone). Two solid ones would be work every substep for an event that is
     //rarely wanted, an elevator against its shaft. Static against static is never built: neither ever moves.
-    for (groups.mKinematic) |origin_id| {
-        for (groups.mStatic) |target_id| {
-            try self.AddBroadPair(engine_context, world_manager, origin_id, target_id, .TriggerOnly);
+    for (groups.mKinematic) |origin| {
+        for (groups.mStatic) |target| {
+            try self.AddBroadPair(engine_context, world_manager, origin, target, .TriggerOnly);
         }
     }
     for (0..groups.mKinematic.len) |i| {
@@ -182,9 +219,12 @@ pub fn BroadPass(self: *CollisionManager, engine_context: *EngineContext, world_
 }
 
 /// Classifies one pair and records it if the two can interact at all.
-fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin_id: Entity.Type, target_id: Entity.Type, comptime pairing: Pairing) !void {
-    const entity_origin = world_manager.GetEntity(origin_id);
-    const entity_target = world_manager.GetEntity(target_id);
+fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_manager: *WorldManager, origin: BodyCollider, target: BodyCollider, comptime pairing: Pairing) !void {
+    //two colliders of the same game object are one body, which never collides with itself
+    if (origin.mBody == target.mBody) return;
+
+    const entity_origin = world_manager.GetEntity(origin.mCollider);
+    const entity_target = world_manager.GetEntity(target.mCollider);
 
     const collider_origin = entity_origin.GetComponent(ColliderComponent).?;
     const collider_target = entity_target.GetComponent(ColliderComponent).?;
@@ -197,6 +237,8 @@ fn AddBroadPair(self: *CollisionManager, engine_context: *EngineContext, world_m
     const contact: Contact = .{
         .mOrigin = entity_origin,
         .mTarget = entity_target,
+        .mOriginBody = world_manager.GetEntity(origin.mBody),
+        .mTargetBody = world_manager.GetEntity(target.mBody),
         .mNormal = Vec3(f32){ .x = 0, .y = 0, .z = 0 },
         .mSeparation = 0,
     };
@@ -268,15 +310,18 @@ pub fn NarrowPass(self: *CollisionManager, dt: f32) void {
 /// they are moving relative to each other, plus SPECULATIVE_MARGIN. Their whole relative speed rather than
 /// just its part along the normal, so a pair sliding past each other is not missed
 fn SpeculativeReach(contact: Contact, dt: f32) f32 {
-    const relative_velocity = VelocityOf(contact.mTarget, contact.mTarget.GetComponent(RigidBodyComponent)).SubVec(VelocityOf(contact.mOrigin, contact.mOrigin.GetComponent(RigidBodyComponent)));
+    const relative_velocity = VelocityOf(contact.mTargetBody, contact.mTargetBody.GetComponent(RigidBodyComponent)).SubVec(VelocityOf(contact.mOriginBody, contact.mOriginBody.GetComponent(RigidBodyComponent)));
     return relative_velocity.Len() * dt + SPECULATIVE_MARGIN;
 }
 
-/// Works out which of this substep's contacts are new and queues a CollisionBeginEvent for each. Runs once the
+/// Works out which of this substep's contacts are new and queues a CollisionBeginEvent for each, and which pairs
+/// touching on the last substep no longer are and queues a CollisionEndEvent for each. Runs once the
 /// solver is done, since a solid pair touches when the solver pushed them apart, whether or not they ever
 /// overlapped (a fast ball stopped at a brick's surface), or when they are within SLOP of each other (a body
 /// resting on another). A speculative contact the solver never needed is a near miss and does not touch.
 /// A trigger pair touches while it overlaps, or when its path went into the trigger this substep (SweepTriggers).
+/// A pair the broad pass no longer builds (filtered out, collider removed, entity deleted) is not touching either,
+/// so it ends too. Nothing of a pair that ends is read from the ECS here, its entities may be gone
 pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
     const engine_allocator = engine_context.EngineAllocator();
 
@@ -284,11 +329,11 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
     try self._TouchingNow.ensureTotalCapacity(engine_allocator, self._BlockingContacts.items.len + self._OverlapContacts.items.len);
     for (self._BlockingContacts.items, 0..) |contact, contact_ind| {
         if (contact.mImpulse <= 0.0 and contact.mSeparation > SLOP) continue;
-        self._TouchingNow.appendAssumeCapacity(.{ .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID), .mContactInd = @intCast(contact_ind), .mIsTrigger = false });
+        self._TouchingNow.appendAssumeCapacity(Touch.Init(contact, contact_ind, false));
     }
     for (self._OverlapContacts.items, 0..) |contact, contact_ind| {
         if (contact.mSeparation >= 0.0 and !contact.mCrossed) continue;
-        self._TouchingNow.appendAssumeCapacity(.{ .mKey = PairKey(contact.mOrigin.mID, contact.mTarget.mID), .mContactInd = @intCast(contact_ind), .mIsTrigger = true });
+        self._TouchingNow.appendAssumeCapacity(Touch.Init(contact, contact_ind, true));
     }
 
     //_TouchingLast was sorted the same way a substep ago, so with this one sorted the two can be walked
@@ -298,9 +343,10 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
     const last = self._TouchingLast.items;
     var last_ind: usize = 0;
     for (self._TouchingNow.items) |touch| {
-        //keys in last below this one were touching and no longer are. an end collision event would go
-        //here, and for whatever is left of last once this loop is done
-        while (last_ind < last.len and last[last_ind].mKey < touch.mKey) : (last_ind += 1) {}
+        //keys in last below this one were touching and no longer are
+        while (last_ind < last.len and last[last_ind].mKey < touch.mKey) : (last_ind += 1) {
+            try QueueCollisionEnd(engine_allocator, event_manager, last[last_ind]);
+        }
 
         if (last_ind < last.len and last[last_ind].mKey == touch.mKey) {
             //still touching, which is what keeps a pair from being reported every substep it is in contact
@@ -310,11 +356,17 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
 
         const contact = if (touch.mIsTrigger) self._OverlapContacts.items[touch.mContactInd] else self._BlockingContacts.items[touch.mContactInd];
         try event_manager.Insert(engine_allocator, .PostPhysics, .{ .CollisionBegin = .{
-            .mOrigin = contact.mOrigin,
-            .mTarget = contact.mTarget,
+            .mOrigin = contact.mOriginBody,
+            .mTarget = contact.mTargetBody,
+            .mOriginCollider = contact.mOrigin,
+            .mTargetCollider = contact.mTarget,
             .mNormal = contact.mNormal,
             .mIsTrigger = touch.mIsTrigger,
         } });
+    }
+    //whatever is left of last is past every key touching now
+    for (last[last_ind..]) |touch| {
+        try QueueCollisionEnd(engine_allocator, event_manager, touch);
     }
 
     //swapped rather than copied: this substep's list is the next one's last, and the old last's
@@ -322,23 +374,62 @@ pub fn UpdateTouching(self: *CollisionManager, engine_context: *EngineContext, e
     std.mem.swap(std.ArrayList(Touch), &self._TouchingLast, &self._TouchingNow);
 }
 
-pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext) !void {
-    _ = engine_context;
-    for (self._OverlapContacts.items) |contact| {
-        _ = contact;
-        //trigger a PreSolverEvent
+/// A pair from the last substep that is not touching on this one
+fn QueueCollisionEnd(engine_allocator: std.mem.Allocator, event_manager: *PhysicsEventManager, touch: Touch) !void {
+    try event_manager.Insert(engine_allocator, .PostPhysics, .{ .CollisionEnd = .{
+        .mOrigin = touch.mOriginBody,
+        .mTarget = touch.mTargetBody,
+        .mOriginCollider = touch.mOrigin,
+        .mTargetCollider = touch.mTarget,
+        .mIsTrigger = touch.mIsTrigger,
+    } });
+}
+
+/// Hands every solid contact one of whose colliders asked for it (ColliderComponent.mPreSolveEvents) to whatever
+/// listens for PreSolveEvent, before the solver sees it, and drops the contacts it switches off. A dropped contact
+/// is gone for the rest of the substep: not solved, not corrected, and not touching. Asked again on the next substep,
+/// since the contacts are found again from scratch. Trigger contacts are not handed over, nothing solves them
+pub fn PreSolverPass(self: *CollisionManager, engine_context: *EngineContext, event_manager: *PhysicsEventManager) !void {
+    const zone = Tracy.ZoneInit("CollisionManager::PreSolverPass", @src());
+    defer zone.Deinit();
+
+    var i: usize = 0;
+    var end: usize = self._BlockingContacts.items.len;
+    while (i < end) {
+        const contact = self._BlockingContacts.items[i];
+        const origin_asks = contact.mOrigin.GetComponent(ColliderComponent).?.mPreSolveEvents;
+        const target_asks = contact.mTarget.GetComponent(ColliderComponent).?.mPreSolveEvents;
+
+        var enabled = true;
+        if (origin_asks or target_asks) {
+            _ = try event_manager.Dispatch(engine_context, .{ .PreSolve = .{
+                .mOrigin = contact.mOriginBody,
+                .mTarget = contact.mTargetBody,
+                .mOriginCollider = contact.mOrigin,
+                .mTargetCollider = contact.mTarget,
+                .mNormal = contact.mNormal,
+                .mSeparation = contact.mSeparation,
+                .mEnabled = &enabled,
+            } });
+        }
+
+        if (enabled) {
+            i += 1;
+        } else {
+            //the same swap removal as NarrowPass: the order of the contacts means nothing
+            self._BlockingContacts.items[i] = self._BlockingContacts.items[end - 1];
+            end -= 1;
+        }
     }
-    for (self._BlockingContacts.items) |contact| {
-        _ = contact;
-        //trigger a PreSolverEvent
-    }
+    self._BlockingContacts.items.len = end;
 }
 
 /// Sets the velocities the bodies move with this substep, before they move. Three passes over the solid contacts:
-///   1. how fast each pair is closing, recorded before anything changes it, for the bounce
+///   1. how fast each pair is closing and sliding, recorded before anything changes it, for the bounce and friction
 ///   2. stop at the surface: a pair may close no faster than takes it to the surface by the end of dt, so a fast
-///      body arrives at what it would have passed through. Iterated, so a body in several contacts at once
-///      settles against all of them: each pass reads the velocities the last one left
+///      body arrives at what it would have passed through. Then friction, which drags against the pair sliding along
+///      each other, as hard as how hard the stop pushed them together allows. Iterated, so a body in several contacts
+///      at once settles against all of them: each pass reads the velocities the last one left
 ///   3. bounce: a pair the solver pushed apart leaves at its restitution times the speed it came in at. Done apart
 ///      from 2, which on its own leaves a body arriving at the surface with next to no speed left to bounce
 pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
@@ -347,28 +438,31 @@ pub fn SolveVelocities(self: *CollisionManager, dt: f32) void {
     zone.Value(self._BlockingContacts.items.len);
 
     for (self._BlockingContacts.items) |*contact| {
-        const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
-        const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+        const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
+        const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
         contact.mApproachSpeed = -RelativeNormalVelocity(contact.*, q_rb_origin, q_rb_target);
+        contact.mSlipSpeed = RelativeTangentVelocity(contact.*, q_rb_origin, q_rb_target).Len();
         contact.mImpulse = 0;
         contact.mBounce = 0;
+        contact.mFrictionImpulse = std.mem.zeroes(Vec3(f32));
     }
 
     for (0..SOLVER_ITERS) |_| {
         for (self._BlockingContacts.items) |*contact| {
             //either side can be a bare collider with no rigid body, which the solver treats as static
-            const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
-            const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+            const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
+            const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
 
             if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
             StopAtSurface(contact, q_rb_origin, q_rb_target, dt);
+            ApplyFriction(contact, q_rb_origin, q_rb_target);
         }
     }
 
     for (self._BlockingContacts.items) |*contact| {
-        const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
-        const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+        const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
+        const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
 
         if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
@@ -389,7 +483,7 @@ pub fn SweepTriggers(self: *CollisionManager, dt: f32) void {
         if (contact.mSeparation < 0.0) continue; //already overlapping, touching without a sweep
 
         //how far the target moves relative to the origin this substep
-        const relative_velocity = VelocityOf(contact.mTarget, contact.mTarget.GetComponent(RigidBodyComponent)).SubVec(VelocityOf(contact.mOrigin, contact.mOrigin.GetComponent(RigidBodyComponent)));
+        const relative_velocity = VelocityOf(contact.mTargetBody, contact.mTargetBody.GetComponent(RigidBodyComponent)).SubVec(VelocityOf(contact.mOriginBody, contact.mOriginBody.GetComponent(RigidBodyComponent)));
         const motion = relative_velocity.MulScalar(dt);
 
         contact.mCrossed = Collisions.SweepShapes(
@@ -415,8 +509,8 @@ pub fn CorrectPositions(self: *CollisionManager, world_manager: *WorldManager, e
     defer zone.Deinit();
 
     for (self._BlockingContacts.items) |contact| {
-        const q_rb_origin = contact.mOrigin.GetComponent(RigidBodyComponent);
-        const q_rb_target = contact.mTarget.GetComponent(RigidBodyComponent);
+        const q_rb_origin = contact.mOriginBody.GetComponent(RigidBodyComponent);
+        const q_rb_target = contact.mTargetBody.GetComponent(RigidBodyComponent);
 
         if (InvMassOf(q_rb_origin) == 0 and InvMassOf(q_rb_target) == 0) continue;
 
@@ -482,6 +576,23 @@ fn RestitutionOf(q_rb: ?*RigidBodyComponent) f32 {
     return if (q_rb) |rb| rb.mMaterialData.GetRestitution() else 0.0;
 }
 
+/// A collider without a rigid body has no material. It is not frictionless, it has no say: the other side's
+/// friction is used alone, so a wall or a floor tile grips with whatever touches it without needing a material
+fn FrictionOf(q_rb: ?*RigidBodyComponent) ?Material.Friction {
+    return if (q_rb) |rb| rb.mMaterialData.GetFriction() else null;
+}
+
+/// The geometric mean of the two sides' friction (Box2D's rule), so a frictionless surface, ice, makes the contact
+/// frictionless whatever touches it. Called only for pairs the solver acts on, which have at least one rigid body
+fn CombinedFriction(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) Material.Friction {
+    const origin = FrictionOf(q_rb_origin) orelse return FrictionOf(q_rb_target).?;
+    const target = FrictionOf(q_rb_target) orelse return origin;
+    return .{
+        .Static = @sqrt(origin.Static * target.Static),
+        .Kinetic = @sqrt(origin.Kinetic * target.Kinetic),
+    };
+}
+
 /// The bouncier of the two surfaces wins, so a bouncy ball bounces off anything without every wall
 /// needing a material too
 fn CombinedRestitution(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) f32 {
@@ -490,8 +601,41 @@ fn CombinedRestitution(q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBo
 
 /// The target's velocity relative to the origin's along the normal: negative while they close
 fn RelativeNormalVelocity(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) f32 {
-    const relative_velocity = VelocityOf(contact.mTarget, q_rb_target).SubVec(VelocityOf(contact.mOrigin, q_rb_origin));
+    const relative_velocity = VelocityOf(contact.mTargetBody, q_rb_target).SubVec(VelocityOf(contact.mOriginBody, q_rb_origin));
     return relative_velocity.Dot(contact.mNormal);
+}
+
+/// The target's velocity relative to the origin's along the surface between them: how fast they slide along each other
+fn RelativeTangentVelocity(contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) Vec3(f32) {
+    const relative_velocity = VelocityOf(contact.mTargetBody, q_rb_target).SubVec(VelocityOf(contact.mOriginBody, q_rb_origin));
+    return relative_velocity.SubVec(contact.mNormal.MulScalar(relative_velocity.Dot(contact.mNormal)));
+}
+
+/// Coulomb friction: drags against the pair sliding along each other, at most the friction coefficient times how hard
+/// they are pressed together, which is the impulse the solver pushed them apart with so far (mImpulse). A pair the
+/// solver never pushed, a near miss, has no friction. Static friction while they were (near enough) still at the start
+/// of the substep, kinetic once they were sliding. The drag is kept in total over the iterations, the same way the
+/// push is, and it is the total that is held under the limit, so it can not pile up past it one iteration at a time.
+/// Without spin, friction drags on the bodies' centres: a ball slides rather than rolls.
+/// Callers make sure at least one side has a nonzero inverse mass
+fn ApplyFriction(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent) void {
+    if (contact.mImpulse <= 0.0) return;
+
+    const friction = CombinedFriction(q_rb_origin, q_rb_target);
+    const coefficient = if (contact.mSlipSpeed < STATIC_SLIP_SPEED) friction.Static else friction.Kinetic;
+    const max_impulse = coefficient * contact.mImpulse;
+
+    //the impulse on the target that would stop the sliding outright, added to what was already dragged
+    const inv_mass_sum = InvMassOf(q_rb_origin) + InvMassOf(q_rb_target);
+    const stopping = RelativeTangentVelocity(contact.*, q_rb_origin, q_rb_target).MulScalar(-1.0 / inv_mass_sum);
+    var total = contact.mFrictionImpulse.AddVec(stopping);
+    const total_len = total.Len();
+    if (total_len > max_impulse) total = total.MulScalar(max_impulse / total_len);
+
+    const impulse = total.SubVec(contact.mFrictionImpulse);
+    contact.mFrictionImpulse = total;
+    if (q_rb_origin) |rb_origin| rb_origin.ApplyImpulse(impulse.Neg());
+    if (q_rb_target) |rb_target| rb_target.ApplyImpulse(impulse);
 }
 
 /// Pushes the pair apart along the normal with an impulse of `magnitude`, split by how pushable each side is.
@@ -539,8 +683,9 @@ fn Bounce(contact: *Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*R
 /// Moves the pair `distance` further apart along the normal (toward each other when negative), split by how
 /// pushable each side is. Callers make sure at least one side has a nonzero inverse mass
 fn MoveAlongNormal(engine_context: *EngineContext, contact: Contact, q_rb_origin: ?*RigidBodyComponent, q_rb_target: ?*RigidBodyComponent, distance: f32) !void {
-    const entity_origin = contact.mOrigin;
-    const entity_target = contact.mTarget;
+    //the game objects, which their colliders on convenience children follow through the transform hierarchy
+    const entity_origin = contact.mOriginBody;
+    const entity_target = contact.mTargetBody;
     const inv_mass_origin = InvMassOf(q_rb_origin);
     const inv_mass_target = InvMassOf(q_rb_target);
 

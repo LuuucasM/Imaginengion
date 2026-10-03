@@ -5,6 +5,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 pub const AISlotComponent = @import("Entity/AISlotComponent.zig");
 pub const AudioComponent = @import("Entity/AudioComponent.zig");
 pub const ColliderComponent = @import("Entity/ColliderComponent.zig");
+pub const ConstantForceComponent = @import("Entity/ConstantForceComponent.zig");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
 pub const NameComponent = @import("Shared/NameComponent.zig");
 pub const PlayerSlotComponent = @import("Entity/PlayerSlotComponent.zig");
@@ -18,11 +19,12 @@ pub const LayoutHiddenTag = @import("Entity/TagComponents.zig").LayoutHiddenTag;
 pub const HoveredTag = @import("Entity/TagComponents.zig").HoveredTag;
 pub const PressedTag = @import("Entity/TagComponents.zig").PressedTag;
 pub const DropHoverTag = @import("Entity/TagComponents.zig").DropHoverTag;
+pub const SelectedTag = @import("Entity/TagComponents.zig").SelectedTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
 pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
-pub const TextInputComponent = @import("Entity/TextInputComponent.zig");
-pub const PopupComponent = @import("Entity/PopupComponent.zig");
+pub const ClipComponent = @import("Entity/ClipComponent.zig");
+pub const UIElementComponent = @import("Entity/UIElementComponent.zig");
 pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
 pub const LayoutItemComponent = @import("Entity/LayoutItemComponent.zig");
 pub const EntitySceneComponent = @import("Entity/EntitySceneComponent.zig");
@@ -45,6 +47,11 @@ const ScriptTags = @import("Shared/ScriptTags.zig");
 pub const OnKeyPressedScript = ScriptTags.OnKeyPressedScript;
 pub const OnUpdateScript = ScriptTags.EntityOnUpdateScript;
 pub const OnCollisionBeginScript = ScriptTags.OnCollisionBeginScript;
+pub const OnPointerEventScript = ScriptTags.OnPointerEventScript;
+pub const OnUIEventScript = ScriptTags.OnUIEventScript;
+pub const OnCollisionEndScript = ScriptTags.OnCollisionEndScript;
+pub const OnPreSolveScript = ScriptTags.OnPreSolveScript;
+pub const OnPhysicsUpdateScript = ScriptTags.EntityOnPhysicsUpdateScript;
 
 ///This is an array of all the components that Entity can have
 /// It is used to be passed to the ECS
@@ -53,6 +60,7 @@ pub const ComponentsList = [_]type{
     AISlotComponent,
     AudioComponent,
     ColliderComponent,
+    ConstantForceComponent,
     UUIDComponent,
     NameComponent,
     PlayerSlotComponent,
@@ -79,17 +87,23 @@ pub const ComponentsList = [_]type{
     HoveredTag,
     PressedTag,
     DropHoverTag,
+    SelectedTag,
     DragSourceComponent,
     DropTargetComponent,
     FocusedTag,
-    TextInputComponent,
-    PopupComponent,
+    ClipComponent,
+    UIElementComponent,
 
     //scripts
     ScriptComponent,
     OnKeyPressedScript,
     OnUpdateScript,
     OnCollisionBeginScript,
+    OnPointerEventScript,
+    OnUIEventScript,
+    OnCollisionEndScript,
+    OnPreSolveScript,
+    OnPhysicsUpdateScript,
 };
 
 ///This is an array of components that should be serialized
@@ -98,6 +112,7 @@ pub const SerializeList = [_]type{
     AISlotComponent,
     AudioComponent,
     ColliderComponent,
+    ConstantForceComponent,
     UUIDComponent,
     RenderTargetComponent,
     MainObjectComponent,
@@ -118,8 +133,8 @@ pub const SerializeList = [_]type{
     TmplRefComponent,
     LayoutComponent,
     LayoutItemComponent,
-    TextInputComponent,
-    PopupComponent,
+    ClipComponent,
+    UIElementComponent,
 };
 
 /// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
@@ -138,6 +153,7 @@ pub const ComponentPanelList = [_]type{
     AISlotComponent,
     AudioComponent,
     ColliderComponent,
+    ConstantForceComponent,
     UUIDComponent,
     MainObjectComponent,
     RenderTargetComponent,
@@ -152,8 +168,8 @@ pub const ComponentPanelList = [_]type{
     TmplRefComponent,
     LayoutComponent,
     LayoutItemComponent,
-    TextInputComponent,
-    PopupComponent,
+    ClipComponent,
+    UIElementComponent,
 };
 
 ///A list of all the scripts
@@ -161,12 +177,18 @@ pub const ScriptsList = [_]type{
     OnKeyPressedScript,
     OnUpdateScript,
     OnCollisionBeginScript,
+    OnPointerEventScript,
+    OnUIEventScript,
+    OnCollisionEndScript,
+    OnPreSolveScript,
+    OnPhysicsUpdateScript,
 };
 
 pub const EComponents = enum(u16) {
     AISlotComponent = ListInd(&ComponentsList, AISlotComponent),
     AudioComponent = ListInd(&ComponentsList, AudioComponent),
     ColliderComponent = ListInd(&ComponentsList, ColliderComponent),
+    ConstantForceComponent = ListInd(&ComponentsList, ConstantForceComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     NameComponent = ListInd(&ComponentsList, NameComponent),
     PlayerSlotComponent = ListInd(&ComponentsList, PlayerSlotComponent),
@@ -184,6 +206,11 @@ pub const EComponents = enum(u16) {
     OnInputPressedScript = ListInd(&ComponentsList, OnKeyPressedScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
     OnCollisionBeginScript = ListInd(&ComponentsList, OnCollisionBeginScript),
+    OnPointerEventScript = ListInd(&ComponentsList, OnPointerEventScript),
+    OnUIEventScript = ListInd(&ComponentsList, OnUIEventScript),
+    OnCollisionEndScript = ListInd(&ComponentsList, OnCollisionEndScript),
+    OnPreSolveScript = ListInd(&ComponentsList, OnPreSolveScript),
+    OnPhysicsUpdateScript = ListInd(&ComponentsList, OnPhysicsUpdateScript),
     ViewpointComponent = ListInd(&ComponentsList, ViewpointComponent),
     RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
@@ -196,11 +223,12 @@ pub const EComponents = enum(u16) {
     HoveredTag = ListInd(&ComponentsList, HoveredTag),
     PressedTag = ListInd(&ComponentsList, PressedTag),
     DropHoverTag = ListInd(&ComponentsList, DropHoverTag),
+    SelectedTag = ListInd(&ComponentsList, SelectedTag),
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
     FocusedTag = ListInd(&ComponentsList, FocusedTag),
-    TextInputComponent = ListInd(&ComponentsList, TextInputComponent),
-    PopupComponent = ListInd(&ComponentsList, PopupComponent),
+    ClipComponent = ListInd(&ComponentsList, ClipComponent),
+    UIElementComponent = ListInd(&ComponentsList, UIElementComponent),
 };
 
 comptime {

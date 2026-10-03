@@ -8,6 +8,7 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const DynamicBodyTag = EntityComponents.DynamicBodyTag;
 const KinematicBodyTag = EntityComponents.KinematicBodyTag;
+const ConstantForceComponent = EntityComponents.ConstantForceComponent;
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -48,6 +49,8 @@ const RigidBodyQuery = GroupQuery{ .Component = RigidBodyComponent };
 const DynamicBodiesQuery = GroupQuery{ .And = &.{ RigidBodyQuery, GroupQuery{ .Component = DynamicBodyTag } } };
 //moved by their velocity alone. static bodies have no query: they are never integrated
 const KinematicBodiesQuery = GroupQuery{ .And = &.{ RigidBodyQuery, GroupQuery{ .Component = KinematicBodyTag } } };
+//the dynamic bodies with a push that stays on them, the only ones a constant force can move
+const ConstantForceBodiesQuery = GroupQuery{ .And = &.{ DynamicBodiesQuery, GroupQuery{ .Component = ConstantForceComponent } } };
 
 const SUB_STEPS: u32 = 2;
 
@@ -111,71 +114,97 @@ pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, world_man
     //queries too instead of building lists nothing reads
     if (self._InternalData.Accumulator < PHYSICS_DT) return;
 
-    const dynamic_bodies = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), DynamicBodiesQuery);
-    const kinematic_bodies = try world_manager.GetEntityGroup(engine_context.FrameAllocator(), KinematicBodiesQuery);
+    while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
+        steps += 1;
+        try self.Step(engine_context, world_manager);
+    }
+}
+
+/// One fixed step of PHYSICS_DT. Whatever acts at the physics' own rate does so first (StepBeginEvent, which
+/// runs OnPhysicsUpdate scripts), then the substeps, then the forces applied for the step are let go of.
+fn Step(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
+    //synchronous, so everything listening is done before the step goes on
+    _ = try self.mEventManager.Dispatch(engine_context, .{ .StepBegin = .{ .mWorld = world_manager, .mDT = PHYSICS_DT } });
+    //what the listeners moved or turned, so the step starts from it. A local constant force reads the rotation
+    try UpdateWorldTransforms(world_manager, engine_context);
+
+    //fetched after the listeners, which may have added bodies or changed their types, and once for every substep
+    //below: nothing inside the substeps adds or removes a collider or a body tag, so the lists can't go stale
+    const frame_allocator = engine_context.FrameAllocator();
+    const dynamic_bodies = try world_manager.GetEntityGroup(frame_allocator, DynamicBodiesQuery);
+    const kinematic_bodies = try world_manager.GetEntityGroup(frame_allocator, KinematicBodiesQuery);
     const moving_body_count = dynamic_bodies.items.len + kinematic_bodies.items.len;
     Tracy.Plot("Physics/Moving Bodies", .{ .color = 0xE91E63 }, moving_body_count);
 
-    //fetched once for every substep of every step below, the same as the bodies. Nothing in here
-    //adds or removes a collider or a body tag, so the lists cannot go stale between substeps
-    const collider_groups = try CollisionManager.QueryColliderGroups(world_manager, engine_context.FrameAllocator());
+    const collider_groups = try CollisionManager.QueryColliderGroups(world_manager, frame_allocator);
 
-    while (self._InternalData.Accumulator >= PHYSICS_DT) : (self._InternalData.Accumulator -= PHYSICS_DT) {
-        steps += 1;
-        //contacts are found before anything moves, from where the bodies are and how fast they are going, so
-        //the solver can stop a body at a surface before the move that would have carried it through
-        for (0..SUB_STEPS) |_| {
-            {
-                //one zone for the whole pass: per-body zones would cost more than the few multiply-adds they time
-                const integrate_zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
-                defer integrate_zone.Deinit();
-                integrate_zone.Value(dynamic_bodies.items.len);
+    //added in with whatever the listeners applied, after them so a script that changes a constant force has it
+    //count from this step. Part of the step's forces from here on, felt on every substep and let go of at the end
+    const constant_force_bodies = try world_manager.GetEntityGroup(frame_allocator, ConstantForceBodiesQuery);
+    for (constant_force_bodies.items) |entity_id| {
+        const entity = world_manager.GetEntity(entity_id);
+        const constant_force = entity.GetComponent(ConstantForceComponent).?;
+        //the local one turned the way the body faces, into world space with the other
+        const rotation = entity.GetComponent(EntityTransformComponent).?.GetWorldRotation();
+        const force = constant_force.mForce.AddVec(constant_force.mLocalForce.QuatRotate(rotation));
+        entity.GetComponent(RigidBodyComponent).?.ApplyForce(force);
+    }
 
-                for (dynamic_bodies.items) |entity_id| {
-                    const entity = world_manager.GetEntity(entity_id);
-                    const entity_rb = entity.GetComponent(RigidBodyComponent).?;
+    //contacts are found before anything moves, from where the bodies are and how fast they are going, so
+    //the solver can stop a body at a surface before the move that would have carried it through
+    for (0..SUB_STEPS) |_| {
+        {
+            //one zone for the whole pass: per-body zones would cost more than the few multiply-adds they time
+            const integrate_zone = Tracy.ZoneInit("PhysicsManager::IntegrateVelocities", @src());
+            defer integrate_zone.Deinit();
+            integrate_zone.Value(dynamic_bodies.items.len);
 
-                    ApplyForces(entity, entity_rb);
-                    IntegrateVelocities(entity_rb, SUB_STEP_DT);
-                }
-
-                //code sets a kinematic body's velocity and nothing else changes it: no gravity, and a force
-                //anything applies is dropped rather than left to build up
-                for (kinematic_bodies.items) |entity_id| {
-                    const entity_rb = world_manager.GetEntity(entity_id).GetComponent(RigidBodyComponent).?;
-                    entity_rb._Force = std.mem.zeroes(Vec3(f32));
-                }
+            //only dynamic bodies: code sets a kinematic body's velocity and nothing else changes it, no
+            //gravity and no force
+            for (dynamic_bodies.items) |entity_id| {
+                const entity = world_manager.GetEntity(entity_id);
+                const entity_rb = entity.GetComponent(RigidBodyComponent).?;
+                IntegrateVelocities(entity_rb, GravityOf(entity, entity_rb), SUB_STEP_DT);
             }
-
-            //where the bodies start the substep, which is what the contacts are measured from
-            try UpdateWorldTransforms(world_manager, engine_context);
-
-            try self._CollisionManager.BroadPass(engine_context, world_manager, collider_groups);
-            self._CollisionManager.NarrowPass(SUB_STEP_DT);
-            try self._CollisionManager.PreSolverPass(engine_context);
-            self._CollisionManager.SolveVelocities(SUB_STEP_DT);
-            self._CollisionManager.SweepTriggers(SUB_STEP_DT);
-
-            {
-                const integrate_zone = Tracy.ZoneInit("PhysicsManager::IntegratePositions", @src());
-                defer integrate_zone.Deinit();
-                integrate_zone.Value(moving_body_count);
-
-                for (dynamic_bodies.items) |entity_id| {
-                    const entity = world_manager.GetEntity(entity_id);
-                    try IntegratePositions(engine_context, entity, entity.GetComponent(RigidBodyComponent).?, SUB_STEP_DT);
-                }
-                for (kinematic_bodies.items) |entity_id| {
-                    const entity = world_manager.GetEntity(entity_id);
-                    try IntegratePositions(engine_context, entity, entity.GetComponent(RigidBodyComponent).?, SUB_STEP_DT);
-                }
-            }
-
-            try self._CollisionManager.CorrectPositions(world_manager, engine_context);
-            try self._CollisionManager.UpdateTouching(engine_context, &self.mEventManager);
-            try self._CollisionManager.PostsolverPass(engine_context);
-            self._CollisionManager.EndPass(engine_context);
         }
+
+        //where the bodies start the substep, which is what the contacts are measured from
+        try UpdateWorldTransforms(world_manager, engine_context);
+
+        try self._CollisionManager.BroadPass(engine_context, world_manager, collider_groups);
+        self._CollisionManager.NarrowPass(SUB_STEP_DT);
+        try self._CollisionManager.PreSolverPass(engine_context, &self.mEventManager);
+        self._CollisionManager.SolveVelocities(SUB_STEP_DT);
+        self._CollisionManager.SweepTriggers(SUB_STEP_DT);
+
+        {
+            const integrate_zone = Tracy.ZoneInit("PhysicsManager::IntegratePositions", @src());
+            defer integrate_zone.Deinit();
+            integrate_zone.Value(moving_body_count);
+
+            for (dynamic_bodies.items) |entity_id| {
+                const entity = world_manager.GetEntity(entity_id);
+                try IntegratePositions(engine_context, entity, entity.GetComponent(RigidBodyComponent).?, SUB_STEP_DT);
+            }
+            for (kinematic_bodies.items) |entity_id| {
+                const entity = world_manager.GetEntity(entity_id);
+                try IntegratePositions(engine_context, entity, entity.GetComponent(RigidBodyComponent).?, SUB_STEP_DT);
+            }
+        }
+
+        try self._CollisionManager.CorrectPositions(world_manager, engine_context);
+        try self._CollisionManager.UpdateTouching(engine_context, &self.mEventManager);
+        try self._CollisionManager.PostsolverPass(engine_context);
+        self._CollisionManager.EndPass(engine_context);
+    }
+
+    //a force pushes for one step. Whatever applied it applies it again next step for as long as it should keep
+    //pushing. A kinematic body's are let go of too: it is never pushed by them, but they shouldn't pile up
+    for (dynamic_bodies.items) |entity_id| {
+        world_manager.GetEntity(entity_id).GetComponent(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
+    }
+    for (kinematic_bodies.items) |entity_id| {
+        world_manager.GetEntity(entity_id).GetComponent(RigidBodyComponent).?._Force = std.mem.zeroes(Vec3(f32));
     }
 }
 
@@ -289,20 +318,20 @@ fn CalculateEntityTransform(entity: Entity, position_acc: Vec3(f32), rotation_ac
     }
 }
 
-/// Only for dynamic bodies, the only ones forces move
-fn ApplyForces(entity: Entity, entity_rb: *RigidBodyComponent) void {
-    const entity_scene_comp = entity.GetComponent(EntitySceneComponent).?;
-    const scene_layer = entity_scene_comp.mScene;
-
-    if (scene_layer.GetComponent(ScenePhysicsComponent)) |physics_component| {
-        //the scene sets which way gravity pulls and how hard, the body how much of each axis it feels
-        entity_rb.ApplyForce(physics_component.mGravity.MulVec(entity_rb.mGravityScale).MulScalar(entity_rb.GetMass()));
-    }
+/// How fast gravity speeds a dynamic body up: its scene's gravity, scaled axis by axis by the body's gravity scale.
+/// Nothing in a scene with no physics settings
+fn GravityOf(entity: Entity, entity_rb: *const RigidBodyComponent) Vec3(f32) {
+    const scene_layer = entity.GetComponent(EntitySceneComponent).?.mScene;
+    const physics_component = scene_layer.GetComponent(ScenePhysicsComponent) orelse return std.mem.zeroes(Vec3(f32));
+    //the scene sets which way gravity pulls and how hard, the body how much of each axis it feels
+    return physics_component.mGravity.MulVec(entity_rb.mGravityScale);
 }
 
-fn IntegrateVelocities(entity_rb: *RigidBodyComponent, dt: f32) void {
-    entity_rb.AddVelocity(entity_rb._Force.MulScalar(entity_rb._InvMass * dt));
-    entity_rb._Force = std.mem.zeroes(Vec3(f32));
+/// Speeds a dynamic body up by gravity and by the forces applied to it this step. The forces stay in _Force until
+/// the step is over, so every substep of the step feels them
+fn IntegrateVelocities(entity_rb: *RigidBodyComponent, gravity: Vec3(f32), dt: f32) void {
+    const acceleration = gravity.AddVec(entity_rb._Force.MulScalar(entity_rb._InvMass));
+    entity_rb.AddVelocity(acceleration.MulScalar(dt));
 }
 
 fn IntegratePositions(engine_context: *EngineContext, entity: Entity, entity_rb: *RigidBodyComponent, dt: f32) !void {

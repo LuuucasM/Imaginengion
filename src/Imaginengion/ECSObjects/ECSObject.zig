@@ -15,6 +15,8 @@ const Player = @import("Player.zig");
 const Scene = @import("Scene.zig");
 const Voice = @import("Voice.zig");
 const Bus = @import("Bus.zig");
+const UIElement = @import("UIElement.zig");
+const WorldManager = @import("../Core/WorldManager.zig");
 
 const AComponents = @import("../ECSComponents/AComponents.zig");
 const EComponents = @import("../ECSComponents/EComponents.zig");
@@ -22,6 +24,7 @@ const GCComponents = @import("../ECSComponents/GCComponents.zig");
 const PComponents = @import("../ECSComponents/PComponents.zig");
 const SComponents = @import("../ECSComponents/SComponents.zig");
 const VComponents = @import("../ECSComponents/VComponents.zig");
+const UIComponents = @import("../ECSComponents/UIComponents.zig");
 
 const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 const NameComponent = @import("../ECSComponents/Shared/NameComponent.zig");
@@ -105,11 +108,15 @@ pub fn Core(comptime Self: type) type {
                     @field(component, field_name).mManager = &engine_context.mAssetManager;
                 } else if (field_type == Bus) {
                     @field(component, field_name).mManager = &engine_context.mAudioManager;
-                } else if (field_type == Entity or
+                } else if (field_type == UIElement) {
+                    @field(component, field_name).mManager = &engine_context.mUIManager;
+                } else if (comptime @FieldType(Self, "mManager") == *WorldManager and (field_type == Entity or
                     field_type == GameContext or
                     field_type == Player or
-                    field_type == Scene)
+                    field_type == Scene))
                 {
+                    //only an object in a world can point its handles at its own world. An element's owner is set
+                    //by the UIManager instead
                     @field(component, field_name).mManager = self.mManager;
                 }
             }
@@ -125,7 +132,7 @@ pub fn Core(comptime Self: type) type {
                 return try self.mManager.mPManager.AddComponent(engine_context, self.mID, component);
             } else if (Self == Scene) {
                 return try self.mManager.mSManager.AddComponent(engine_context, self.mID, component);
-            } else if (Self == Bus) {
+            } else if (Self == Bus or Self == UIElement) {
                 return try self.mManager.AddComponent(engine_context, self.mID, component);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
@@ -141,6 +148,8 @@ pub fn Core(comptime Self: type) type {
                 try self.mManager.mPManager.RemoveComponent(engine_context, self.mID, component_type);
             } else if (Self == Scene) {
                 try self.mManager.mSManager.RemoveComponent(engine_context, self.mID, component_type);
+            } else if (Self == UIElement) {
+                try self.mManager.RemoveComponent(engine_context, self.mID, component_type);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -158,6 +167,8 @@ pub fn Core(comptime Self: type) type {
                 try self.mManager.mPManager.RemoveComponentSync(engine_context, self.mID, component_type);
             } else if (Self == Scene) {
                 try self.mManager.mSManager.RemoveComponentSync(engine_context, self.mID, component_type);
+            } else if (Self == UIElement) {
+                try self.mManager.RemoveComponentSync(engine_context, self.mID, component_type);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -178,7 +189,7 @@ pub fn Core(comptime Self: type) type {
                 return self.mManager.mPManager.GetComponent(component_type, self.mID);
             } else if (Self == Scene) {
                 return self.mManager.mSManager.GetComponent(component_type, self.mID);
-            } else if (Self == Voice or Self == Bus) {
+            } else if (Self == Voice or Self == Bus or Self == UIElement) {
                 return self.mManager.GetComponent(component_type, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
@@ -195,7 +206,7 @@ pub fn Core(comptime Self: type) type {
                 return self.mManager.mPManager.HasComponent(component_type, self.mID);
             } else if (Self == Scene) {
                 return self.mManager.mSManager.HasComponent(component_type, self.mID);
-            } else if (Self == Voice or Self == Bus) {
+            } else if (Self == Voice or Self == Bus or Self == UIElement) {
                 return self.mManager.HasComponent(component_type, self.mID);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
@@ -549,7 +560,7 @@ pub fn Core(comptime Self: type) type {
         pub fn IsActive(self: Self) bool {
             if (!self.IsIDValid()) return false;
             return blk: {
-                if (Self == AssetHandle or Self == Voice or Self == Bus) {
+                if (Self == AssetHandle or Self == Voice or Self == Bus or Self == UIElement) {
                     break :blk self.mManager.IsActiveObj(self.mID);
                 } else if (Self == Entity) {
                     break :blk self.mManager.mEManager.IsActiveObj(self.mID);
@@ -604,6 +615,8 @@ pub fn Core(comptime Self: type) type {
                     break :blk SComponents.ComponentsList;
                 } else if (obj_t == Voice or obj_t == Bus) {
                     break :blk VComponents.ComponentsList;
+                } else if (obj_t == UIElement) {
+                    break :blk UIComponents.ComponentsList;
                 } else {
                     @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
                 }
@@ -632,6 +645,8 @@ pub fn Core(comptime Self: type) type {
             } else if (obj_t == Scene) {
                 is_valid = true;
             } else if (obj_t == Voice or obj_t == Bus) {
+                is_valid = true;
+            } else if (obj_t == UIElement) {
                 is_valid = true;
             }
 

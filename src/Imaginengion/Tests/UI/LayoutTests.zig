@@ -462,3 +462,196 @@ test "an inspector row: a fixed label, then three equal fields filling the rest"
     try std.testing.expectApproxEqAbs(@as(f32, 200), results[fields[2]].Center.x + 48, eps);
     try std.testing.expectApproxEqAbs(@as(f32, -150), results[label].Center.x, eps);
 }
+
+//-------------------------------grids-------------------------------
+
+test "a grid fits as many cells across as its width has room for, then wraps" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    //30 wide cells 10 apart: 100 has room for two (30 + 10 + 30), not three (110)
+    const grid = try tree.Add(null, .{ .Width = .{ .Fixed = 100 }, .Container = .{ .Direction = .Grid, .Gap = 10 } });
+    var cells: [5]Index = undefined;
+    for (&cells) |*cell| cell.* = try tree.Add(grid, .{ .Content = Box(30, 20) });
+
+    var results = try tree.Solve(null);
+    //three rows of 20, 10 apart
+    try ExpectVec(V(100, 80), results[grid].Size);
+    //from the top left, left to right and then down
+    try ExpectVec(V(-35, 30), results[cells[0]].Center);
+    try ExpectVec(V(5, 30), results[cells[1]].Center);
+    try ExpectVec(V(-35, 0), results[cells[2]].Center);
+    try ExpectVec(V(5, 0), results[cells[3]].Center);
+    try ExpectVec(V(-35, -30), results[cells[4]].Center);
+    std.testing.allocator.free(results);
+
+    //wider: three across, two rows
+    tree.mNodes.items[grid].Width = .{ .Fixed = 130 };
+    results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(130, 50), results[grid].Size);
+    try ExpectVec(V(-50, 15), results[cells[0]].Center);
+    try ExpectVec(V(30, 15), results[cells[2]].Center);
+    try ExpectVec(V(-50, -15), results[cells[3]].Center);
+}
+
+test "a grid with a set number of columns fits them, or fewer if it has fewer children" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const grid = try tree.Add(null, .{ .Container = .{ .Direction = .Grid, .Columns = .{ .Count = 3 }, .Gap = 5, .Padding = .All(10) } });
+    var cells: [4]Index = undefined;
+    for (&cells) |*cell| cell.* = try tree.Add(grid, .{ .Width = .{ .Fixed = 20 }, .Height = .{ .Fixed = 10 } });
+
+    var results = try tree.Solve(null);
+    //three cells and two gaps across, two rows down, and the padding around
+    try ExpectVec(V(90, 45), results[grid].Size);
+    //the fourth starts the second row
+    try ExpectVec(V(-25, 7.5), results[cells[0]].Center);
+    try ExpectVec(V(25, 7.5), results[cells[2]].Center);
+    try ExpectVec(V(-25, -7.5), results[cells[3]].Center);
+    std.testing.allocator.free(results);
+
+    tree.mNodes.items[cells[1]].NextSibling = null;
+    results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(65, 30), results[grid].Size);
+}
+
+test "every cell is the size of the biggest child, and a child that fills takes a whole cell" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const grid = try tree.Add(null, .{ .Container = .{ .Direction = .Grid, .Columns = .{ .Count = 2 } } });
+    const wide = try tree.Add(grid, .{ .Content = Box(30, 10) });
+    const tall = try tree.Add(grid, .{ .Content = Box(10, 40) });
+    const filler = try tree.Add(grid, .{ .Width = .{ .Fill = 1 }, .Height = .{ .Fill = 1 } });
+    const half = try tree.Add(grid, .{ .Width = .{ .Percent = 0.5 }, .Content = Box(0, 4) });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+
+    //30 x 40 cells, two by two
+    try ExpectVec(V(60, 80), results[grid].Size);
+    try ExpectVec(V(30, 10), results[wide].Size);
+    try ExpectVec(V(30, 40), results[filler].Size);
+    try ExpectVec(V(15, 4), results[half].Size);
+    //each at its cell's top left
+    try ExpectVec(V(-15, 35), results[wide].Center);
+    try ExpectVec(V(5, 20), results[tall].Center);
+    try ExpectVec(V(-15, -20), results[filler].Center);
+    try ExpectVec(V(7.5, -2), results[half].Center);
+}
+
+test "a grid that fits its children with no set columns is one row" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const grid = try tree.Add(null, .{ .Container = .{ .Direction = .Grid, .Gap = 2 } });
+    for (0..3) |_| _ = try tree.Add(grid, .{ .Content = Box(10, 10) });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(34, 10), results[grid].Size);
+}
+
+test "a grid filling its parent works out its columns from the width it is given" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const column = try tree.Add(null, .{ .Width = .{ .Fixed = 100 }, .Container = .{ .Direction = .Column } });
+    const grid = try tree.Add(column, .{ .Width = .{ .Fill = 1 }, .Container = .{ .Direction = .Grid } });
+    for (0..4) |_| _ = try tree.Add(grid, .{ .Content = Box(30, 10) });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    //three 30 wide cells fit in 100, so the fourth wraps
+    try ExpectVec(V(100, 20), results[grid].Size);
+    try ExpectVec(V(100, 20), results[column].Size);
+}
+
+test "a collapsed child takes no cell" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const grid = try tree.Add(null, .{ .Container = .{ .Direction = .Grid, .Columns = .{ .Count = 2 } } });
+    const first = try tree.Add(grid, .{ .Content = Box(10, 10) });
+    _ = try tree.Add(grid, .{ .Collapsed = true, .Content = Box(10, 10) });
+    const third = try tree.Add(grid, .{ .Content = Box(10, 10) });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(20, 10), results[grid].Size);
+    try ExpectVec(V(-5, 0), results[first].Center);
+    try ExpectVec(V(5, 0), results[third].Center);
+}
+
+//-----------------------------scrolling-----------------------------
+
+test "a scrolling container moves its children by its offset, kept between 0 and how far they run past it" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    //100 x 50, three 30 tall rows: 90 of content, so it scrolls up to 40
+    const list = try tree.Add(null, .{
+        .Width = .{ .Fixed = 100 },
+        .Height = .{ .Fixed = 50 },
+        .Container = .{ .Direction = .Column, .Scroll = .Vertical, .ScrollOffset = V(10, 20) },
+    });
+    var rows: [3]Index = undefined;
+    for (&rows) |*row| row.* = try tree.Add(list, .{ .Width = .{ .Fixed = 100 }, .Height = .{ .Fixed = 30 } });
+
+    var results = try tree.Solve(null);
+    try ExpectVec(V(100, 90), results[list].ContentSize);
+    //it doesn't scroll sideways, so that part of the offset is dropped
+    try ExpectVec(V(0, 20), results[list].ScrollOffset);
+    //scrolled down 20: everything 20 higher than it would be
+    try ExpectVec(V(0, 30), results[rows[0]].Center);
+    try ExpectVec(V(0, -30), results[rows[2]].Center);
+    std.testing.allocator.free(results);
+
+    tree.mNodes.items[list].Container.?.ScrollOffset = V(0, 100);
+    results = try tree.Solve(null);
+    try ExpectVec(V(0, 40), results[list].ScrollOffset);
+    //the last row's bottom on the list's bottom
+    try ExpectVec(V(0, -10), results[rows[2]].Center);
+    std.testing.allocator.free(results);
+
+    tree.mNodes.items[list].Container.?.ScrollOffset = V(0, -5);
+    results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(0, 0), results[list].ScrollOffset);
+    try ExpectVec(V(0, 10), results[rows[0]].Center);
+}
+
+test "what overflows a scrolling container starts at its start edge, even when centered" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const list = try tree.Add(null, .{
+        .Width = .{ .Fixed = 100 },
+        .Height = .{ .Fixed = 50 },
+        .Container = .{ .Direction = .Column, .MainAlign = .Center, .CrossAlign = .Center, .Scroll = .Both },
+    });
+    const wide = try tree.Add(list, .{ .Width = .{ .Fixed = 150 }, .Height = .{ .Fixed = 30 } });
+    const narrow = try tree.Add(list, .{ .Width = .{ .Fixed = 10 }, .Height = .{ .Fixed = 30 } });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(150, 60), results[list].ContentSize);
+    //60 of rows in 50 start at the top, and the 150 wide row at the left edge; the narrow one still centers
+    try ExpectVec(V(25, 10), results[wide].Center);
+    try ExpectVec(V(0, -20), results[narrow].Center);
+}
+
+test "a scrolling container's anchored children stay pinned where they are" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    const list = try tree.Add(null, .{
+        .Width = .{ .Fixed = 100 },
+        .Height = .{ .Fixed = 50 },
+        .Container = .{ .Direction = .Column, .Scroll = .Vertical, .ScrollOffset = V(0, 20) },
+    });
+    for (0..3) |_| _ = try tree.Add(list, .{ .Width = .{ .Fixed = 100 }, .Height = .{ .Fixed = 30 } });
+    const corner = try tree.Add(list, .{
+        .Width = .{ .Fixed = 10 },
+        .Height = .{ .Fixed = 10 },
+        .Placement = .{ .Anchored = .{ .Anchor = V(1, 1), .Pivot = V(1, 1) } },
+    });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    try ExpectVec(V(45, 20), results[corner].Center);
+}

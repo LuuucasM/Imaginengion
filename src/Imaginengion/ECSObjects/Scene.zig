@@ -132,6 +132,7 @@ pub fn AddScript(self: Scene, engine_context: *EngineContext, new_script_handle:
         .SceneSceneStart => try new_script_entity.AddComponent(engine_context, OnSceneStartScript{}),
         .SceneInputPressed => try new_script_entity.AddComponent(engine_context, SceneInputPressed{}),
         .SceneOnUpdate => try new_script_entity.AddComponent(engine_context, SceneOnUpdate{}),
+        .SceneOnPhysicsUpdate => try new_script_entity.AddComponent(engine_context, SceneComponents.OnPhysicsUpdateScript{}),
         else => unreachable,
     };
 }
@@ -215,5 +216,6 @@ fn FilterEntityByScene(self: Scene, list_allocator: std.mem.Allocator, entity_re
 fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
     std.debug.assert(script_type == .SceneInputPressed or
         script_type == .SceneOnUpdate or
+        script_type == .SceneOnPhysicsUpdate or
         script_type == .SceneSceneStart);
 }

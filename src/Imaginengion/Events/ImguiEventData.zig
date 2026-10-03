@@ -24,7 +24,11 @@ pub const EventT = union(enum) {
     SelectObjectEvent: SelectObjectEvent,
     MakeTmplEvent: MakeTmplEvent,
     OpenTmplEvent: OpenTmplEvent,
+    OpenUIElementPanelEvent: OpenUIElementPanelEvent,
 };
+
+/// The UI Element panel is to be shown, e.g. from an entity's UIElementComponent
+pub const OpenUIElementPanelEvent = struct {};
 
 pub const DefaultEvent = struct {};
 

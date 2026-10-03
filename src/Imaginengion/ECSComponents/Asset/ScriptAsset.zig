@@ -14,16 +14,32 @@ const SceneInputPressedScript = SceneComponents.InputPressedScript;
 
 const EngineContext = @import("../../Core/EngineContext.zig");
 
+/// What a script's Run hands back: whether what it ran for goes on to the next one in line, or stops with it.
+/// The values are what scripts' bool used to mean (true carried on, false stopped), so a script built before this
+/// reads the same
+pub const ScriptResult = enum(u8) {
+    /// this script dealt with it: nothing after it in line gets it
+    Handled = 0,
+    /// on to the next: the object's other scripts of this type, the scenes below for a key, the parents for a click
+    Continue = 1,
+};
+
 pub const ScriptType = enum(u8) {
     //Game object scripts
     EntityInputPressed,
     EntityOnUpdate,
     EntityOnCollisionBegin,
+    EntityOnCollisionEnd,
+    EntityOnPreSolve,
+    EntityOnPhysicsUpdate,
+    EntityOnPointerEvent,
+    EntityOnUIEvent,
 
     //Scene Scripts
     SceneSceneStart,
     SceneInputPressed,
     SceneOnUpdate,
+    SceneOnPhysicsUpdate,
 };
 
 const Impl = switch (builtin.os.tag) {
@@ -43,7 +59,7 @@ pub fn Deinit(self: *ScriptAsset, engine_context: *EngineContext) void {
     self._Impl.Deinit(engine_context);
 }
 
-pub fn Run(self: *ScriptAsset, comptime script_type: type, args: anytype) bool {
+pub fn Run(self: *ScriptAsset, comptime script_type: type, args: anytype) ScriptResult {
     return self._Impl.Run(script_type, args);
 }
 

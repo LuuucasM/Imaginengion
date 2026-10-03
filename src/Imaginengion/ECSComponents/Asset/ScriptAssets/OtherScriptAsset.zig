@@ -13,6 +13,7 @@ const SceneOnUpdateScript = SceneComponents.OnUpdateScript;
 const SceneInputPressedScript = SceneComponents.InputPressedScript;
 
 const EngineContext = @import("../../../Core/EngineContext.zig");
+const ScriptResult = @import("../ScriptAsset.zig").ScriptResult;
 const ScriptType = @import("../ScriptAsset.zig").ScriptType;
 
 mLib: std.DynLib = undefined,
@@ -65,9 +66,13 @@ pub fn Init(self: *OtherScriptAsset, engine_context: *EngineContext, abs_path: [
         .EntityInputPressed => @constCast(self.mLib.lookup(EntityInputPressedScript.RunFuncSig, "Run").?),
         .EntityOnUpdate => @constCast(self.mLib.lookup(EntityOnUpdateScript.RunFuncSig, "Run").?),
         .EntityOnCollisionBegin => @constCast(self.mLib.lookup(EntityComponents.OnCollisionBeginScript.RunFuncSig, "Run").?),
+        .EntityOnCollisionEnd => @constCast(self.mLib.lookup(EntityComponents.OnCollisionEndScript.RunFuncSig, "Run").?),
+        .EntityOnPreSolve => @constCast(self.mLib.lookup(EntityComponents.OnPreSolveScript.RunFuncSig, "Run").?),
+        .EntityOnPhysicsUpdate => @constCast(self.mLib.lookup(EntityComponents.OnPhysicsUpdateScript.RunFuncSig, "Run").?),
         .SceneSceneStart => @constCast(self.mLib.lookup(SceneSceneStartScript.RunFuncSig, "Run").?),
         .SceneInputPressed => @constCast(self.mLib.lookup(SceneInputPressedScript.RunFuncSig, "Run").?),
         .SceneOnUpdate => @constCast(self.mLib.lookup(SceneOnUpdateScript.RunFuncSig, "Run").?),
+        .SceneOnPhysicsUpdate => @constCast(self.mLib.lookup(SceneComponents.OnPhysicsUpdateScript.RunFuncSig, "Run").?),
     };
 }
 
@@ -75,7 +80,7 @@ pub fn Deinit(self: *OtherScriptAsset, _: *EngineContext) void {
     self.mLib.close();
 }
 
-pub fn Run(self: *OtherScriptAsset, comptime script_type: type, args: anytype) bool {
+pub fn Run(self: *OtherScriptAsset, comptime script_type: type, args: anytype) ScriptResult {
     return @call(.auto, @as(script_type.RunFuncSig, @ptrCast(self.mRunFunc)), args);
 }
 

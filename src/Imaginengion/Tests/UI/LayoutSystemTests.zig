@@ -594,3 +594,27 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
     try std.testing.expectApproxEqAbs(@as(f32, 100), box.HalfExtents.x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 100), box.HalfExtents.y, eps);
 }
+
+test "a grid of entities: the content browser's icons wrapping in a panel" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try world.DrawnOverlay();
+
+    //a 200 wide panel, with 60 x 70 icons 10 apart: three fit across
+    const panel = try Element(engine_context, scene, null, .{ .mWidth = .{ .Fixed = 200 } }, .{ .mDirection = .Grid, .mGap = 10 });
+    var icons: [4]Entity = undefined;
+    for (&icons) |*icon| icon.* = try Element(engine_context, scene, panel, Fixed(60, 70), null);
+
+    try world.Update();
+    try ExpectQuad(200, 150, panel);
+    try ExpectXY(-70, 40, icons[0]);
+    try ExpectXY(70, 40, icons[2]);
+    try ExpectXY(-70, -40, icons[3]);
+
+    //a set count of two
+    panel.GetComponent(LayoutComponent).?.mColumns = .{ .Count = 2 };
+    try panel.MarkLayoutDirty(engine_context);
+    try world.Update();
+    try ExpectXY(-70, -40, icons[2]);
+}

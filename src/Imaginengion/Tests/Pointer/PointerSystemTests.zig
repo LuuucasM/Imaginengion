@@ -6,11 +6,11 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
-const UIEvent = @import("../../Events/UIEventData.zig").EventT;
+const PointerEvent = @import("../../Events/PointerEventData.zig").EventT;
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const CameraRay = @import("../../Math/CameraRay.zig");
-const PointerSystem = @import("../../UI/PointerSystem.zig");
+const PointerSystem = @import("../../Pointer/PointerSystem.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
@@ -55,7 +55,7 @@ const TestWorld = struct {
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
         engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
-        engine_context.mUIEventManager.Deinit(engine_context.EngineAllocator());
+        engine_context.mPointerEventManager.Deinit(engine_context.EngineAllocator());
         engine_context.mEditorWorld.Deinit(engine_context);
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
@@ -72,10 +72,10 @@ const TestWorld = struct {
     }
 
     /// The events sent since the last call, the way the frame's processing empties them
-    fn TakeEvents(self: *TestWorld) ![]UIEvent {
+    fn TakeEvents(self: *TestWorld) ![]PointerEvent {
         const engine_context = self.mEngineContext;
-        const queued = engine_context.mUIEventManager.mEventsArray.getPtr(.Interaction);
-        const taken = try engine_context.FrameAllocator().dupe(UIEvent, queued.items);
+        const queued = engine_context.mPointerEventManager.mEventsArray.getPtr(.Pointer);
+        const taken = try engine_context.FrameAllocator().dupe(PointerEvent, queued.items);
         queued.clearRetainingCapacity();
         return taken;
     }
@@ -100,10 +100,10 @@ fn ViewThrough(pixel: Vec2(f32), width: f32, height: f32) PointerSystem.View {
     };
 }
 
-const Kind = std.meta.Tag(UIEvent);
+const Kind = std.meta.Tag(PointerEvent);
 
 /// Who an event is for
-fn EntityOf(event: UIEvent) Entity {
+fn EntityOf(event: PointerEvent) Entity {
     return switch (event) {
         .Default => unreachable,
         inline else => |e| e.mEntity,
@@ -111,7 +111,7 @@ fn EntityOf(event: UIEvent) Entity {
 }
 
 /// Exactly these entities got an event of this kind, in any order
-fn ExpectSent(events: []const UIEvent, kind: Kind, expected: []const Entity) !void {
+fn ExpectSent(events: []const PointerEvent, kind: Kind, expected: []const Entity) !void {
     var count: usize = 0;
     for (events) |event| {
         if (std.meta.activeTag(event) != kind) continue;
@@ -242,7 +242,7 @@ test "when the hovered entity is deleted, what it was inside still hears the poi
 //-------------------------------dragging-------------------------------
 
 /// The one event of this kind that is for `entity`
-fn EventFor(events: []const UIEvent, kind: Kind, entity: Entity) !UIEvent {
+fn EventFor(events: []const PointerEvent, kind: Kind, entity: Entity) !PointerEvent {
     for (events) |event| {
         if (std.meta.activeTag(event) == kind and EntityOf(event).mID == entity.mID) return event;
     }

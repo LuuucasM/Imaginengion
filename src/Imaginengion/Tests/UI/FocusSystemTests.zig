@@ -13,7 +13,9 @@ const ScanCodes = @import("../../Inputs/InputEnums.zig").ScanCodes;
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const FocusedTag = EntityComponents.FocusedTag;
-const TextInputComponent = EntityComponents.TextInputComponent;
+const TextInputComponent = @import("../../ECSComponents/UIComponents.zig").TextInputComponent;
+const UIElementComponent = EntityComponents.UIElementComponent;
+const UIManager = @import("../../UI/UIManager.zig");
 const TextComponent = EntityComponents.TextComponent;
 const QuadComponent = EntityComponents.QuadComponent;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
@@ -37,6 +39,7 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
+        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
@@ -53,16 +56,16 @@ const TestWorld = struct {
         const entity = try self.mForm.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         const text_component = try entity.AddComponent(engine_context, TextComponent{});
         try text_component.SetText(engine_context, text);
-        _ = try entity.AddComponent(engine_context, TextInputComponent{});
+        try AddUI(engine_context, entity, TextInputComponent{});
         return entity;
     }
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        engine_context.mFocusSystem.Deinit(engine_context.EngineAllocator());
         engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
-        engine_context.mUIEventManager.Deinit(engine_context.EngineAllocator());
+        engine_context.mPointerEventManager.Deinit(engine_context.EngineAllocator());
         engine_context.mEditorWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -73,16 +76,16 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         try engine_context.mPointerSystem.Update(engine_context, .{ .Target = target });
         try engine_context.mPointerSystem.OnPressed(engine_context, button);
-        try engine_context.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, button);
+        try engine_context.mUIManager.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, button);
         try engine_context.mPointerSystem.OnReleased(engine_context, button);
     }
 
     fn Key(self: *TestWorld, key: ScanCodes) !void {
-        try self.mEngineContext.mFocusSystem.OnKeyPressed(self.mEngineContext, .{ ._InputCode = key, ._Repeat = 0 });
+        try self.mEngineContext.mUIManager.mFocusSystem.OnKeyPressed(self.mEngineContext, .{ ._InputCode = key, ._Repeat = 0 });
     }
 
     fn Type(self: *TestWorld, text: []const u8) !void {
-        try self.mEngineContext.mFocusSystem.OnTextTyped(self.mEngineContext, text);
+        try self.mEngineContext.mUIManager.mFocusSystem.OnTextTyped(self.mEngineContext, text);
     }
 
     fn TextOf(entity: Entity) []const u8 {
@@ -93,7 +96,7 @@ const TestWorld = struct {
     /// events are left out: they are the pointer system's tests'
     fn TakeEvents(self: *TestWorld) ![]UIEvent {
         const engine_context = self.mEngineContext;
-        const queued = engine_context.mUIEventManager.mEventsArray.getPtr(.Interaction);
+        const queued = engine_context.mUIManager.mEventManager.mEventsArray.getPtr(.UI);
         var taken: std.ArrayList(UIEvent) = .empty;
         for (queued.items) |event| {
             switch (event) {
@@ -116,6 +119,12 @@ const TestWorld = struct {
     }
 };
 
+/// Gives `entity` a UI element (if it has none yet) and `component` on it
+fn AddUI(engine_context: *EngineContext, entity: Entity, component: anytype) !void {
+    if (!entity.HasComponent(UIElementComponent)) _ = try entity.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(entity).?.AddComponent(engine_context, component);
+}
+
 const Kind = std.meta.Tag(UIEvent);
 
 /// The kinds of events in order, one for each entity in the text input's chain (it, then the form)
@@ -128,7 +137,7 @@ fn ExpectKinds(events: []const UIEvent, kinds: []const Kind) !void {
 }
 
 fn ExpectFocused(world: *TestWorld, expected: ?Entity) !void {
-    const focused = world.mEngineContext.mFocusSystem.Focused();
+    const focused = world.mEngineContext.mUIManager.mFocusSystem.Focused();
     try std.testing.expectEqual(expected == null, focused == null);
     if (expected) |entity| try std.testing.expectEqual(entity.mID, focused.?.mID);
     for ([_]Entity{ world.mName, world.mTeam }) |text_input| {
@@ -144,7 +153,7 @@ test "pressing a text input gives it the keyboard, with the caret at the end, an
 
     try world.Press(world.mName, .BUTTON_LEFT);
     try ExpectFocused(world, world.mName);
-    try std.testing.expectEqual(@as(usize, 3), world.mEngineContext.mFocusSystem.Caret());
+    try std.testing.expectEqual(@as(usize, 3), world.mEngineContext.mUIManager.mFocusSystem.Caret());
 
     const events = try world.TakeEvents();
     try ExpectKinds(events, &.{.FocusGained});
@@ -165,7 +174,7 @@ test "pressing a text input gives it the keyboard, with the caret at the end, an
 test "typing goes in at the caret, and the keys move it and delete around it" {
     const world = try TestWorld.Init();
     defer world.Deinit();
-    const focus = &world.mEngineContext.mFocusSystem;
+    const focus = &world.mEngineContext.mUIManager.mFocusSystem;
 
     try world.Press(world.mName, .BUTTON_LEFT);
     _ = try world.TakeEvents();
@@ -272,12 +281,14 @@ test "the caret is a quad on a child of the text input, there only while it has 
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const focus = &engine_context.mFocusSystem;
+    const focus = &engine_context.mUIManager.mFocusSystem;
 
     try world.Press(world.mName, .BUTTON_LEFT);
     try focus.Update(engine_context);
     const caret = focus.mCaretEntity.?;
     try std.testing.expect(caret.HasComponent(QuadComponent));
+    //colored by the theme
+    try std.testing.expectEqualStrings("Caret", UIManager.GetUIComponent(caret, @import("../../ECSComponents/UIComponents.zig").StyleComponent).?.mStyle.items);
     try std.testing.expectEqual(world.mName.mID, caret.GetComponent(EntityChildComponent).?.mParent);
     //showing straight away, then blinking off
     try std.testing.expect(caret.GetComponent(QuadComponent).?.mShouldRender);
@@ -307,13 +318,13 @@ test "a text input deleted while it has the keyboard lets go of it" {
     const engine_context = world.mEngineContext;
 
     try world.Press(world.mName, .BUTTON_LEFT);
-    try engine_context.mFocusSystem.Update(engine_context);
+    try engine_context.mUIManager.mFocusSystem.Update(engine_context);
     try world.mName.Delete(engine_context);
     try world.EndFrame();
     _ = try world.TakeEvents();
 
-    try engine_context.mFocusSystem.Update(engine_context);
-    try std.testing.expect(engine_context.mFocusSystem.Focused() == null);
+    try engine_context.mUIManager.mFocusSystem.Update(engine_context);
+    try std.testing.expect(engine_context.mUIManager.mFocusSystem.Focused() == null);
     try std.testing.expect(!engine_context.mInputManager.mKeyboardTaken);
     try std.testing.expectEqual(@as(usize, 0), (try world.TakeEvents()).len);
 }
@@ -322,7 +333,7 @@ test "a text input's turn at the keyboard is its scene's place in the stack" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const focus = &engine_context.mFocusSystem;
+    const focus = &engine_context.mUIManager.mFocusSystem;
 
     try std.testing.expect(focus.FocusedStackPos() == null);
     try world.Press(world.mName, .BUTTON_LEFT);

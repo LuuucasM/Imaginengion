@@ -45,6 +45,33 @@ pub const HitInfo = struct {
     }
 };
 
+/// The nearest of the hits along one ray, each with whatever it was a hit on (Payload): what every caster keeps while
+/// it tests shape after shape, whichever shapes it is testing
+pub fn NearestHit(comptime Payload: type) type {
+    return struct {
+        const Self = @This();
+
+        pub const Entry = struct {
+            Payload: Payload,
+            Hit: HitInfo,
+        };
+
+        mBest: ?Entry = null,
+
+        /// Keeps `hit` if it is a hit that counts and nearer than the best so far. A hit past max_t does not count,
+        /// and neither does one the ray started inside of when skip_started_inside is set
+        pub fn Consider(self: *Self, payload: Payload, hit: HitInfo, max_t: f32, skip_started_inside: bool) void {
+            if (!hit.IsHit()) return;
+            if (hit.StartedInside and skip_started_inside) return;
+            if (hit.T > max_t) return;
+            if (self.mBest) |current| {
+                if (current.Hit.T <= hit.T) return;
+            }
+            self.mBest = .{ .Payload = payload, .Hit = hit };
+        }
+    };
+}
+
 const Slabs = struct {
     Enter: f32,
     Exit: f32,

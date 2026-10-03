@@ -16,6 +16,7 @@ const ScriptTags = @import("Shared/ScriptTags.zig");
 pub const OnSceneStartScript = ScriptTags.OnSceneStartScript;
 pub const OnUpdateScript = ScriptTags.SceneOnUpdateScript;
 pub const InputPressedScript = ScriptTags.InputPressedScript;
+pub const OnPhysicsUpdateScript = ScriptTags.SceneOnPhysicsUpdateScript;
 
 pub const ComponentsList = [_]type{
     //SceneLayer
@@ -34,6 +35,7 @@ pub const ComponentsList = [_]type{
     OnSceneStartScript,
     OnUpdateScript,
     InputPressedScript,
+    OnPhysicsUpdateScript,
 };
 
 pub const ComponentsPanelList = [_]type{
@@ -74,6 +76,7 @@ pub const ScriptsList = [_]type{
     OnSceneStartScript,
     OnUpdateScript,
     InputPressedScript,
+    OnPhysicsUpdateScript,
 };
 
 pub const EComponents = enum(u16) {
@@ -91,4 +94,5 @@ pub const EComponents = enum(u16) {
     OnSceneStartScript = ListInd(&ComponentsList, OnSceneStartScript),
     OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
     InputPressedScript = ListInd(&ComponentsList, InputPressedScript),
+    OnPhysicsUpdateScript = ListInd(&ComponentsList, OnPhysicsUpdateScript),
 };

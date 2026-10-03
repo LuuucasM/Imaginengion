@@ -52,7 +52,7 @@ pub const LayoutHiddenTag = struct {
     pub fn Deinit(_: *LayoutHiddenTag, _: *EngineContext) void {}
 };
 
-/// On an entity while the pointer is over it or over something inside it (see UI/PointerSystem.zig). A state to
+/// On an entity while the pointer is over it or over something inside it (see Pointer/PointerSystem.zig). A state to
 /// check or query, e.g. for a hover color; the moment it starts and ends are PointerEnter and PointerExit events.
 /// Never saved
 pub const HoveredTag = struct {
@@ -78,6 +78,16 @@ pub const FocusedTag = struct {
     pub const Name: []const u8 = "FocusedTag";
 
     pub fn Deinit(_: *FocusedTag, _: *EngineContext) void {}
+};
+
+/// On an entity that is selected: the selected row of a list, a selected unit, the open tab. What selects it is up to
+/// whoever uses it, nothing sets it on its own. A state to check or query, e.g. for a selected color (the theme's
+/// Selected). Never saved
+pub const SelectedTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "SelectedTag";
+
+    pub fn Deinit(_: *SelectedTag, _: *EngineContext) void {}
 };
 
 /// On a drop target (DropTargetComponent) while a drag source it takes is held over it: for a "drop here" look. The

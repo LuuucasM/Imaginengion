@@ -23,12 +23,13 @@ const ImguiEventData = @import("../Events/ImguiEventData.zig");
 const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData);
 pub const ImguiEventCallback = ImguiEventManager.EventCallback;
 
-const UIEventData = @import("../Events/UIEventData.zig");
-const UIEventManager = @import("../Events/EventManager.zig").EventManager(UIEventData);
-pub const UIEventCallback = UIEventManager.EventCallback;
-const PointerSystem = @import("../UI/PointerSystem.zig");
-const FocusSystem = @import("../UI/FocusSystem.zig");
-const PopupSystem = @import("../UI/PopupSystem.zig");
+const UIManager = @import("../UI/UIManager.zig");
+pub const UIEventCallback = UIManager.EventManagerT.EventCallback;
+const PointerEventData = @import("../Events/PointerEventData.zig");
+const PointerEventManager = @import("../Events/EventManager.zig").EventManager(PointerEventData);
+pub const PointerEventCallback = PointerEventManager.EventCallback;
+const PointerSystem = @import("../Pointer/PointerSystem.zig");
+
 
 const GameEventData = @import("../Events/GameEventData.zig");
 const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData);
@@ -81,14 +82,12 @@ mRenderer: Renderer = .{},
 
 mGameEventManager: GameEventManager = .empty,
 mSystemEventManager: WindowEventManager = .empty,
-/// What the pointer and keyboard do to entities, and popups opening and closing (see Events/UIEventData.zig)
-mUIEventManager: UIEventManager = .empty,
-/// What the mouse is over and holding down, as tags and events on entities
+/// What the pointer does to entities, sent by mPointerSystem (see Events/PointerEventData.zig)
+mPointerEventManager: PointerEventManager = .empty,
+/// What the mouse is over and holding down, as tags and events on entities. Any entity, not just UI
 mPointerSystem: PointerSystem = .empty,
-/// Which text input the keyboard is typing into, and the typing
-mFocusSystem: FocusSystem = .empty,
-/// Which popups are open, stacked
-mPopupSystem: PopupSystem = .empty,
+/// UI land: the UI-only side of entities that have UI, and what the UI does (see UI/UIManager.zig)
+mUIManager: UIManager = .empty,
 
 mGameWorld: WorldManager = .{},
 mEditorWorld: WorldManager = .{},
@@ -132,6 +131,8 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
 
     self.mAppWindow.Init(self);
 
+    //before anything is loaded: an entity with UI gets its element as it is read
+    try self.mUIManager.Init(self.EngineAllocator());
     try self.mAssetManager.Init(self);
     try self.mRenderer.Init(self);
     try self.mAssetManager.Setup(self);
@@ -156,7 +157,8 @@ pub fn SetSyncCallbacks(self: *EngineContext, program: *Program) void {
     self.mSystemEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mGameEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mImguiEventManager.SetSyncCallback(program, Program.OnEvent);
-    self.mUIEventManager.SetSyncCallback(program, Program.OnEvent);
+    self.mPointerEventManager.SetSyncCallback(program, Program.OnEvent);
+    self.mUIManager.SetSyncCallback(program, Program.OnEvent);
 
     self.mAssetManager.SetSyncCallback(program, Program.OnEvent);
     self.mAudioManager.SetSyncCallback(program, Program.OnEvent);
@@ -184,10 +186,9 @@ pub fn DeInit(self: *EngineContext) void {
     self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mImguiEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
-    self.mUIEventManager.Deinit(self.EngineAllocator());
+    self.mPointerEventManager.Deinit(self.EngineAllocator());
+    self.mUIManager.Deinit(self);
     self.mPointerSystem.Deinit(self.EngineAllocator());
-    self.mFocusSystem.Deinit(self.EngineAllocator());
-    self.mPopupSystem.Deinit(self.EngineAllocator());
 
     self.mInputManager.Deinit(self.EngineAllocator());
     self.mAudioManager.Deinit(self);

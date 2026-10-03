@@ -326,8 +326,8 @@ fn DragDropSourceScript(self: ContentBrowserPanel, engine_context: *EngineContex
         const script_asset = try script_handle.GetAsset(engine_context, ScriptAsset);
         //the payload names are the ones ScriptsPanel's drop targets accept
         switch (script_asset.GetScriptType()) {
-            .EntityInputPressed, .EntityOnUpdate, .EntityOnCollisionBegin => _ = imgui.igSetDragDropPayload("EntityScript", rel_path.ptr, rel_path.len, 0),
-            .SceneSceneStart, .SceneInputPressed, .SceneOnUpdate => _ = imgui.igSetDragDropPayload("SceneScript", rel_path.ptr, rel_path.len, 0),
+            .EntityInputPressed, .EntityOnUpdate, .EntityOnCollisionBegin, .EntityOnCollisionEnd, .EntityOnPreSolve, .EntityOnPhysicsUpdate, .EntityOnPointerEvent, .EntityOnUIEvent => _ = imgui.igSetDragDropPayload("EntityScript", rel_path.ptr, rel_path.len, 0),
+            .SceneSceneStart, .SceneInputPressed, .SceneOnUpdate, .SceneOnPhysicsUpdate => _ = imgui.igSetDragDropPayload("SceneScript", rel_path.ptr, rel_path.len, 0),
         }
     }
 }

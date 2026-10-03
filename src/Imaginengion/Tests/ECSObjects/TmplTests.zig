@@ -43,6 +43,8 @@ const TmplEditPanel = @import("../../Imgui/TmplEditPanel.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const GroupQuery = @import("../../ECS/ECSManager.zig").GroupQuery;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
+const UIElementComponent = EntityComponents.UIElementComponent;
+const UIManager = @import("../../UI/UIManager.zig");
 
 const TEXTURE_PATH ="src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
 
@@ -71,6 +73,8 @@ const TestWorld = struct {
         engine_context.mAssetEntityScene = try engine_context.mAssetWorld.NewScene(engine_context, .GameLayer, Scene.BlankConfig);
         //and the template editing world's
         try engine_context.mTmplEditWorld.Init(engine_allocator);
+        //elements for entities with UI, in every world
+        try engine_context.mUIManager.Init(engine_allocator);
         //templates are made in here, copies are spawned into the editor world
         try engine_context.mSimulateWorld.Init(engine_allocator);
         try engine_context.mEditorWorld.Init(engine_allocator);
@@ -95,6 +99,7 @@ const TestWorld = struct {
         asset_manager.mPendingDelete.deinit(engine_allocator);
         asset_manager.mCWDPath.deinit(engine_allocator);
         engine_context.mAssetWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
 
         _ = engine_context._Internal.EngineGPA.deinit();
         self.mTmpDir.cleanup();
@@ -159,6 +164,30 @@ fn FirstChild(object: anytype) @TypeOf(object) {
 
 fn ExpectName(object: anytype, expected: []const u8) !void {
     try std.testing.expectEqualStrings(expected, object.GetName());
+}
+
+test "each spawned entity gets a UI element of its own, the template's left as it is" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const button = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try button.AddComponent(engine_context, UIElementComponent{});
+    const tmpl_element = UIManager.ElementOf(button).?;
+
+    const tmpl = try world.SaveTmpl(button, "button.imen");
+    const scene = try world.GameWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const a = try scene.Spawn(engine_context, tmpl);
+    const b = try scene.Spawn(engine_context, tmpl);
+
+    const a_element = UIManager.ElementOf(a).?;
+    const b_element = UIManager.ElementOf(b).?;
+    try std.testing.expect(a_element.mID != b_element.mID);
+    try std.testing.expect(a_element.mID != tmpl_element.mID);
+    try std.testing.expectEqual(a.mID, a_element.GetOwner().mID);
+    try std.testing.expectEqual(b.mID, b_element.GetOwner().mID);
+    try std.testing.expectEqual(button.mID, tmpl_element.GetOwner().mID);
 }
 
 test "spawned entities copy the template's tree, keep their own transform and are separate from each other" {
@@ -255,6 +284,45 @@ test "filling an object with no template is an error" {
     const scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     try std.testing.expectError(error.NoTmplRef, entity.Fill(engine_context));
+}
+
+test "a spawned menu's opener opens its own copy of the popup" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const UIComponents = @import("../../ECSComponents/UIComponents.zig");
+
+    //an opener and the popup it names, two trees of one scene
+    const menu = try world.TmplWorld().NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const popup = try menu.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, popup, "Popup");
+    _ = try popup.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(popup).?.AddComponent(engine_context, UIComponents.PopupComponent{});
+    const opener = try menu.CreateEntity(engine_context, Entity.DefaultConfig);
+    try SetName(engine_context, opener, "Opener");
+    _ = try opener.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(opener).?.AddComponent(engine_context, UIComponents.PopupRefComponent{ .mPopup = popup });
+    const tmpl = try world.SaveTmpl(menu, "menu.imsc");
+
+    const a = try world.GameWorld().Spawn(Scene, engine_context, tmpl);
+    const b = try world.GameWorld().Spawn(Scene, engine_context, tmpl);
+    for ([_]Scene{ a, b }) |copy| {
+        const copy_opener = try Named(engine_context, copy, "Opener");
+        const copy_popup = try Named(engine_context, copy, "Popup");
+        const opens = UIManager.GetUIComponent(copy_opener, UIComponents.PopupRefComponent).?.mPopup;
+        try std.testing.expectEqual(copy_popup.mID, opens.mID);
+        try std.testing.expectEqual(world.GameWorld(), opens.mManager);
+    }
+}
+
+/// The entity called `name` in `scene`
+fn Named(engine_context: *EngineContext, scene: Scene, name: []const u8) !Entity {
+    const ids = try scene.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = NameComponent });
+    for (ids.items) |id| {
+        const entity = scene.mManager.GetEntity(id);
+        if (std.mem.eql(u8, entity.GetName(), name)) return entity;
+    }
+    return error.TestNoSuchEntity;
 }
 
 test "spawned scenes copy their entities, take a stack slot and point their spawn at their own copy" {

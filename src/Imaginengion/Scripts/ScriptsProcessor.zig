@@ -24,32 +24,62 @@ const ChildComponent = @import("../ECS/Components.zig").ChildComponent;
 const EntitySceneComponent = EComponents.EntitySceneComponent;
 const StackPosComponent = SComponents.StackPosComponent;
 const OnCollisionBeginScript = EComponents.OnCollisionBeginScript;
+const OnCollisionEndScript = EComponents.OnCollisionEndScript;
+const OnPreSolveScript = EComponents.OnPreSolveScript;
+const OnPointerEventScript = EComponents.OnPointerEventScript;
+const OnUIEventScript = EComponents.OnUIEventScript;
+const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const UIEvent = @import("../Events/UIEventData.zig").EventT;
 
 const CollisionInfo = @import("../Physics/Collisions.zig").CollisionInfo;
 const CollisionBeginEvent = @import("../Events/PhysicsEventData.zig").CollisionBeginEvent;
+const CollisionEndEvent = @import("../Events/PhysicsEventData.zig").CollisionEndEvent;
+const PreSolveEvent = @import("../Events/PhysicsEventData.zig").PreSolveEvent;
+const PreSolveInfo = @import("../Physics/Collisions.zig").PreSolveInfo;
 
 const Assets = @import("../ECSComponents/AComponents.zig");
 const ScriptAsset = Assets.ScriptAsset;
 const ScriptType = ScriptAsset.ScriptType;
+pub const ScriptResult = ScriptAsset.ScriptResult;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
-/// Runs every script of the given tag type belonging to objects of ObjectType, in scene
-/// stack order, and stops early if a script asks to consume the event.
+/// Runs every script of the given tag type belonging to objects of ObjectType, in scene stack order, and stops early
+/// if a script says it handled what it ran for. Handled if one did
 pub fn RunScript(
     comptime ObjectType: type,
     comptime script_type: type,
     comptime world_type: EngineContext.WorldType,
     engine_context: *EngineContext,
     args: anytype,
-) !bool {
-    return RunScriptsFrom(ObjectType, script_type, world_type, engine_context, null, args);
+) !ScriptResult {
+    return RunScriptsFrom(ObjectType, script_type, WorldOf(world_type, engine_context), @tagName(world_type), engine_context, null, args);
+}
+
+/// RunScript for a world given directly rather than by its type, for something that is handed the world it is
+/// about (a physics step on that world)
+pub fn RunScriptInWorld(
+    comptime ObjectType: type,
+    comptime script_type: type,
+    world_manager: *WorldManager,
+    engine_context: *EngineContext,
+    args: anytype,
+) !ScriptResult {
+    return RunScriptsFrom(ObjectType, script_type, world_manager, "World", engine_context, null, args);
+}
+
+fn WorldOf(comptime world_type: EngineContext.WorldType, engine_context: *EngineContext) *WorldManager {
+    return switch (world_type) {
+        .Game => &engine_context.mGameWorld,
+        .Editor => &engine_context.mEditorWorld,
+        .Simulate => &engine_context.mSimulateWorld,
+    };
 }
 
 /// RunScript for only the scenes above `stack_pos` in the scene stack: their turns come before that scene's. For an
 /// event something in that scene takes at its own turn (a key a focused text field is typed with), so the scenes
-/// under it never hear it. Returns false if a script asked to consume the event, so it never reaches that scene
+/// under it never hear it. Handled if a script above dealt with the event, so it never reaches that scene
 pub fn RunScriptAbove(
     comptime ObjectType: type,
     comptime script_type: type,
@@ -57,30 +87,26 @@ pub fn RunScriptAbove(
     engine_context: *EngineContext,
     stack_pos: usize,
     args: anytype,
-) !bool {
+) !ScriptResult {
     comptime std.debug.assert(ObjectType == Entity or ObjectType == Scene);
-    return RunScriptsFrom(ObjectType, script_type, world_type, engine_context, stack_pos, args);
+    return RunScriptsFrom(ObjectType, script_type, WorldOf(world_type, engine_context), @tagName(world_type), engine_context, stack_pos, args);
 }
 
-/// `above`: only scripts whose owner sits higher in the scene stack than this, null for all of them
+/// `above`: only scripts whose owner sits higher in the scene stack than this, null for all of them.
+/// `world_name` is only for the profiler zone's name
 fn RunScriptsFrom(
     comptime ObjectType: type,
     comptime script_type: type,
-    comptime world_type: EngineContext.WorldType,
+    world_manager: *WorldManager,
+    comptime world_name: []const u8,
     engine_context: *EngineContext,
     above: ?usize,
     args: anytype,
-) !bool {
+) !ScriptResult {
     _ValidateScriptType(ObjectType, script_type);
 
-    const zone = Tracy.ZoneInit("ScriptsProcessor::RunScript(" ++ Tracy.ShortTypeName(ObjectType) ++ ", " ++ Tracy.ShortTypeName(script_type) ++ ", " ++ @tagName(world_type) ++ ")", @src());
+    const zone = Tracy.ZoneInit("ScriptsProcessor::RunScript(" ++ Tracy.ShortTypeName(ObjectType) ++ ", " ++ Tracy.ShortTypeName(script_type) ++ ", " ++ world_name ++ ")", @src());
     defer zone.Deinit();
-
-    const world_manager = switch (world_type) {
-        .Game => &engine_context.mGameWorld,
-        .Editor => &engine_context.mEditorWorld,
-        .Simulate => &engine_context.mSimulateWorld,
-    };
 
     const frame_allocator = engine_context.FrameAllocator();
     const manager = world_manager.GetManager(ObjectType);
@@ -88,9 +114,7 @@ fn RunScriptsFrom(
     const script_ids = try manager.GetGroup(frame_allocator, GroupQuery{ .Component = script_type });
     SortByOwnerStackPos(ObjectType, world_manager, script_ids.items);
 
-    var cont_bool = true;
     for (script_ids.items) |script_id| {
-        if (cont_bool == false) break;
         //sorted from the top of the stack down, so the rest are no higher
         if (above) |stack_pos| {
             if (OwnerStackPos(ObjectType, world_manager, OwnerOf(ObjectType, world_manager, script_id)) <= stack_pos) break;
@@ -110,10 +134,10 @@ fn RunScriptsFrom(
         defer script_zone.Deinit();
         if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 
-        cont_bool = cont_bool and script_asset.Run(script_type, combined_args);
+        if (script_asset.Run(script_type, combined_args) == .Handled) return .Handled;
     }
 
-    return cont_bool;
+    return .Continue;
 }
 
 /// Runs the OnCollisionBegin scripts of both entities in a collision that has just begun. Meant for
@@ -121,15 +145,76 @@ fn RunScriptsFrom(
 /// step's contact lists could not survive.
 pub fn RunCollisionBeginScripts(engine_context: *EngineContext, event: CollisionBeginEvent) !void {
     //each side is told about the contact as it sees it, so the normal always points at the other one
-    try RunCollisionScripts(OnCollisionBeginScript, engine_context, event.mOrigin, event.mTarget, .{ .mNormal = event.mNormal, .mIsTrigger = event.mIsTrigger });
-    try RunCollisionScripts(OnCollisionBeginScript, engine_context, event.mTarget, event.mOrigin, .{ .mNormal = event.mNormal.Neg(), .mIsTrigger = event.mIsTrigger });
+    try RunCollisionScripts(OnCollisionBeginScript, engine_context, event.mOrigin, event.mTarget, &CollisionInfo{
+        .mNormal = event.mNormal,
+        .mIsTrigger = event.mIsTrigger,
+        .mSelfCollider = event.mOriginCollider,
+        .mOtherCollider = event.mTargetCollider,
+    });
+    try RunCollisionScripts(OnCollisionBeginScript, engine_context, event.mTarget, event.mOrigin, &CollisionInfo{
+        .mNormal = event.mNormal.Neg(),
+        .mIsTrigger = event.mIsTrigger,
+        .mSelfCollider = event.mTargetCollider,
+        .mOtherCollider = event.mOriginCollider,
+    });
+}
+
+/// Runs the OnCollisionEnd scripts of both entities in a collision that has just ended, after the physics step the
+/// same as RunCollisionBeginScripts. A collision also ends when one side is deleted, so a side that is gone is
+/// skipped and the other is still told: its script checks other.IsActive() before reading anything off it
+pub fn RunCollisionEndScripts(engine_context: *EngineContext, event: CollisionEndEvent) !void {
+    //apart, or one side gone, so there is no direction between them
+    const no_normal = std.mem.zeroes(@FieldType(CollisionInfo, "mNormal"));
+    if (event.mOrigin.IsActive()) {
+        try RunCollisionScripts(OnCollisionEndScript, engine_context, event.mOrigin, event.mTarget, &CollisionInfo{
+            .mNormal = no_normal,
+            .mIsTrigger = event.mIsTrigger,
+            .mSelfCollider = event.mOriginCollider,
+            .mOtherCollider = event.mTargetCollider,
+        });
+    }
+    if (event.mTarget.IsActive()) {
+        try RunCollisionScripts(OnCollisionEndScript, engine_context, event.mTarget, event.mOrigin, &CollisionInfo{
+            .mNormal = no_normal,
+            .mIsTrigger = event.mIsTrigger,
+            .mSelfCollider = event.mTargetCollider,
+            .mOtherCollider = event.mOriginCollider,
+        });
+    }
+}
+
+/// Runs the OnPreSolve scripts of both game objects in a solid contact the solver is about to act on, and writes
+/// whether it should back into the event. From the middle of the physics step, see PreSolveEvent. The contact stays
+/// enabled only if both sides leave it so, and once one side has switched it off the other's scripts are not asked
+pub fn RunPreSolveScripts(engine_context: *EngineContext, event: PreSolveEvent) !void {
+    var origin_info: PreSolveInfo = .{
+        .mNormal = event.mNormal,
+        .mSeparation = event.mSeparation,
+        .mSelfCollider = event.mOriginCollider,
+        .mOtherCollider = event.mTargetCollider,
+    };
+    try RunCollisionScripts(OnPreSolveScript, engine_context, event.mOrigin, event.mTarget, &origin_info);
+    if (!origin_info.mEnabled) {
+        event.mEnabled.* = false;
+        return;
+    }
+
+    var target_info: PreSolveInfo = .{
+        .mNormal = event.mNormal.Neg(),
+        .mSeparation = event.mSeparation,
+        .mSelfCollider = event.mTargetCollider,
+        .mOtherCollider = event.mOriginCollider,
+    };
+    try RunCollisionScripts(OnPreSolveScript, engine_context, event.mTarget, event.mOrigin, &target_info);
+    event.mEnabled.* = target_info.mEnabled;
 }
 
 /// Runs owner's own collision scripts of one type. Nothing is checked for them first: every one is
 /// handed the collision, and it is the script that looks at what it hit. Unlike RunScript this starts
 /// from the one object and walks its script children, since a collision is about two entities and
 /// not every entity in the world. A script that returns false stops the ones after it.
-fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContext, owner: Entity, other: Entity, info: CollisionInfo) !void {
+/// info is a pointer to the script type's info (CollisionInfo, PreSolveInfo), so a script can write back into it
+fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContext, owner: Entity, other: Entity, info: anytype) !void {
     _ValidateScriptType(Entity, script_type);
 
     var script_iter = owner.GetIterator(.Script);
@@ -145,8 +230,113 @@ fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContex
         defer script_zone.Deinit();
         if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 
-        if (!script_asset.Run(script_type, .{ engine_context, &owner, &other, &info })) return;
+        if (script_asset.Run(script_type, .{ engine_context, &owner, &other, info }) == .Handled) return;
     }
+}
+
+/// Hands the pointer's and the UI's events to the event scripts of the entities they are sent to (OnPointerEventScript,
+/// OnUIEventScript), one batch at a time, the way the batch is processed. One thing that happened (a click, a drop, a
+/// text input getting the keyboard) is sent as one event to each entity in a chain, the one it happened to first and
+/// then each one it is inside, next to each other in the batch. A script that hands back .Handled for one of them
+/// keeps it from the rest of that chain. Enter and exit are each entity's own, so nothing stops them
+pub const EventScripts = struct {
+    /// The last thing a script handled in this batch: the chain's later events for it are skipped
+    mHandled: ?Moment = null,
+
+    /// One thing that happened, as the events of its chain all describe it
+    pub const Moment = struct {
+        Kind: u16,
+        Target: Entity,
+        /// tells two clicks of different buttons on the same thing apart
+        Button: u8 = 0,
+
+        fn Same(a: Moment, b: Moment) bool {
+            return a.Kind == b.Kind and a.Button == b.Button and a.Target.mID == b.Target.mID and a.Target.mManager == b.Target.mManager;
+        }
+    };
+
+    /// Starts a new batch: nothing handled in it yet
+    pub fn Reset(self: *EventScripts) void {
+        self.mHandled = null;
+    }
+
+    pub fn OnPointerEvent(self: *EventScripts, engine_context: *EngineContext, event: PointerEvent) !void {
+        try self.Run(OnPointerEventScript, engine_context, event);
+    }
+
+    pub fn OnUIEvent(self: *EventScripts, engine_context: *EngineContext, event: UIEvent) !void {
+        try self.Run(OnUIEventScript, engine_context, event);
+    }
+
+    fn Run(self: *EventScripts, comptime script_type: type, engine_context: *EngineContext, event: anytype) !void {
+        if (!self.ShouldRun(event)) return;
+        const result = try RunEntityScripts(script_type, engine_context, EntityOf(event).?, .{&event});
+        self.After(event, result);
+    }
+
+    /// Whether `event` still goes to its entity's scripts: it is sent to one that is still there, and no script before
+    /// it in its chain has handled what it is about
+    pub fn ShouldRun(self: *const EventScripts, event: anytype) bool {
+        const owner = EntityOf(event) orelse return false;
+        if (!owner.IsActive()) return false;
+        const moment = MomentOf(event) orelse return true;
+        const handled = self.mHandled orelse return true;
+        return !moment.Same(handled);
+    }
+
+    /// What `event`'s scripts handed back: once one handled it, the rest of its chain is skipped
+    pub fn After(self: *EventScripts, event: anytype, result: ScriptResult) void {
+        if (result != .Handled) return;
+        if (MomentOf(event)) |moment| self.mHandled = moment;
+    }
+
+    /// Who an event is sent to, null for one that isn't sent to an entity
+    pub fn EntityOf(event: anytype) ?Entity {
+        return switch (event) {
+            inline else => |e| if (@hasField(@TypeOf(e), "mEntity")) e.mEntity else null,
+        };
+    }
+
+    /// The thing that happened that an event is one of a chain's events for, null for an event that is only its
+    /// entity's own (an enter, an exit)
+    pub fn MomentOf(event: anytype) ?Moment {
+        return switch (event) {
+            inline else => |e| blk: {
+                const E = @TypeOf(e);
+                if (!@hasField(E, "mTarget")) {
+                    //a drop goes to the one target alone, it has no chain to stop
+                    break :blk null;
+                }
+                break :blk Moment{
+                    .Kind = @intFromEnum(std.meta.activeTag(event)),
+                    .Target = e.mTarget,
+                    .Button = if (@hasField(E, "mButton")) @intFromEnum(e.mButton) else 0,
+                };
+            },
+        };
+    }
+};
+
+/// Runs `owner`'s own scripts of one type, in order, until one hands back .Handled
+pub fn RunEntityScripts(comptime script_type: type, engine_context: *EngineContext, owner: Entity, args: anytype) !ScriptResult {
+    _ValidateScriptType(Entity, script_type);
+
+    var script_iter = owner.GetIterator(.Script);
+    while (script_iter.next()) |script| {
+        if (!script.HasComponent(script_type)) continue;
+
+        const script_component = script.GetComponent(ScriptComponent) orelse continue;
+        if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
+
+        const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
+
+        const script_zone = Tracy.ZoneInit("ScriptsProcessor::EntityScript", @src());
+        defer script_zone.Deinit();
+        if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
+
+        if (script_asset.Run(script_type, .{ engine_context, &owner } ++ args) == .Handled) return .Handled;
+    }
+    return .Continue;
 }
 
 /// Scripts run top layer first, matching the order scenes are drawn in. The sort is
@@ -236,11 +426,11 @@ pub fn _ValidateScript(comptime script_type: type) void {
     const run_fn_info = _GetFnInfo(run_func_info, "Run", type_name);
 
     if (run_fn_info.return_type) |return_type| {
-        if (return_type != bool) {
-            @compileError("Run function must return bool" ++ type_name);
+        if (return_type != ScriptResult) {
+            @compileError("Run function must return ScriptResult (.Continue or .Handled)" ++ type_name);
         }
     } else {
-        @compileError("Run function must return bool" ++ type_name);
+        @compileError("Run function must return ScriptResult (.Continue or .Handled)" ++ type_name);
     }
 
     //validate GetScriptType

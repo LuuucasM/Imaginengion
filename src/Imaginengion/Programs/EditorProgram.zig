@@ -42,6 +42,7 @@ const WindowEvent = WindowEventData.EventT;
 const GameEventData = @import("../Events/GameEventData.zig");
 const GameEvent = GameEventData.EventT;
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
 const PhysicsEventData = @import("../Events/PhysicsEventData.zig");
 const PhysicsEvent = PhysicsEventData.EventT;
 
@@ -92,13 +93,16 @@ const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../Imgui/StatsPanel.zig");
 const PickingDebugPanel = @import("../Imgui/PickingDebugPanel.zig");
+const UIElementPanel = @import("../Imgui/UIElementPanel.zig");
+const UIManager = @import("../UI/UIManager.zig");
+const UIECSEvent = UIManager.ECSManagerT.ECSEventManager.EventType;
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
 const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
-const PointerSystem = @import("../UI/PointerSystem.zig");
+const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const ScreenRect = @import("../Math/ScreenRect.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
@@ -137,6 +141,9 @@ mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
 _ScriptsPanel: ScriptsPanel = .{},
 _StatsPanel: StatsPanel = .{},
 _PickingDebugPanel: PickingDebugPanel = .{},
+_UIElementPanel: UIElementPanel = .{},
+/// Hands the pointer's and the UI's events to entities' event scripts
+mEventScripts: ScriptsProcessor.EventScripts = .{},
 _ViewportPanel: ViewportPanel = .{},
 
 mScenePanel: ECSDisplayPanel = .{},
@@ -270,11 +277,21 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         callback_list.first = null;
         callback_list.last = null;
 
-        //what that did to entities: enter, exit, pressed, released, clicked. Before game logic, which reacts to it
+        //what that did to entities: enter, exit, pressed, released, clicked, dragged, dropped. Before game logic, which
+        //reacts to it
+        var pointer_event_callback = EngineContext.PointerEventCallback{ .mCtx = self, .mCallbackFn = OnPointerEvent };
+        callback_list.append(&pointer_event_callback.mNode);
+        self.mEventScripts.Reset();
+        try engine_context.mPointerEventManager.ProcessCategory(.Pointer, engine_context, callback_list);
+        engine_context.mPointerEventManager.ClearCategory(engine_allocator, .Pointer, .ClearRetainingCapacity);
+        callback_list.first = null;
+        callback_list.last = null;
+
+        //and what the UI did with it: typing, popups
         var ui_event_callback = EngineContext.UIEventCallback{ .mCtx = self, .mCallbackFn = OnUIEvent };
         callback_list.append(&ui_event_callback.mNode);
-        try engine_context.mUIEventManager.ProcessCategory(.Interaction, engine_context, callback_list);
-        engine_context.mUIEventManager.ClearCategory(engine_allocator, .Interaction, .ClearRetainingCapacity);
+        self.mEventScripts.Reset();
+        try engine_context.mUIManager.ProcessUIEvents(engine_context, callback_list);
         callback_list.first = null;
         callback_list.last = null;
 
@@ -332,17 +349,17 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());
         defer layout_zone.Deinit();
+        //how styled UI looks, which can change the size of its text
+        try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mGameWorld, engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mEditorWorld, engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mTmplEditWorld, engine_context);
         if (self.mEditorState == .Play) {
             try LayoutSystem.UpdateLayouts(&engine_context.mSimulateWorld, engine_context);
         }
-        //popups go against what opened them and the caret where the laid out text puts it
-        if (self.mEditorState == .Play) {
-            try engine_context.mPopupSystem.Update(engine_context, &engine_context.mSimulateWorld);
-        }
-        try engine_context.mFocusSystem.Update(engine_context);
+        //popups go against what opened them, scrollbars where their regions are scrolled and the caret where the laid
+        //out text puts it
+        try engine_context.mUIManager.UpdateAfterLayout(engine_context, if (self.mEditorState == .Play) &engine_context.mSimulateWorld else null);
     }
     //---------------End Layout Update ------------
 
@@ -382,6 +399,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             try self.mPlayerPanel.OnImguiRender(engine_context, current_world, .Players, &self.mSelectedObj);
             try self.mGameModePanel.OnImguiRender(engine_context, current_world, .GameModes, &self.mSelectedObj);
             try self._ComponentsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
+            try self._UIElementPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             try self._StatsPanel.OnImguiRender(engine_context);
             //before RenderViewports, so it reads last frame's view rects the way input picking will
@@ -458,6 +476,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         try engine_context.mAssetWorld.ProcessEvents(EEventData, .EndOfFrame, engine_context, &callback_list);
         try engine_context.mAssetWorld.ProcessEvents(ECSEventData, .EndOfFrame, engine_context, &callback_list);
 
+        //after every world's deletes, so an element whose entity went this frame goes with it
+        try engine_context.mUIManager.EndFrame(engine_context);
+
         //end of frame resets
         engine_context.mSystemEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
         engine_context.mGameEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
@@ -484,7 +505,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anytype) anyerror!EventResult {
     // discards so the shell compiles before the arms are filled in; drop them as you go
     _ = self;
-    _ = engine_context;
 
     const T = @TypeOf(event.*);
 
@@ -496,7 +516,16 @@ pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anyt
         return .Continue;
     } else if (T == UIEvent) {
         return .Continue;
+    } else if (T == PointerEvent) {
+        return .Continue;
+    } else if (T == UIECSEvent) {
+        return .Continue;
     } else if (T == PhysicsEvent) {
+        switch (event.*) {
+            .StepBegin => |e| try OnPhysicsStepBegin(engine_context, e),
+            .PreSolve => |e| try ScriptsProcessor.RunPreSolveScripts(engine_context, e),
+            else => {},
+        }
         return .Continue;
     } else if (T == AManagerEvent) {
         return .Continue;
@@ -522,13 +551,7 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
     switch (event.*) {
         .WindowClose => _ = self.OnWindowClose(engine_context),
         .KeyboardPressed => |e| _ = try self.OnKeyboardPressedEvent(engine_context, e),
-        .MousePressed => |e| {
-            try engine_context.mPointerSystem.OnPressed(engine_context, e._ButtonCode);
-            //popups the press is outside close, then the keyboard follows what the press landed on
-            try engine_context.mPopupSystem.OnPressed(engine_context, &engine_context.mPointerSystem);
-            try engine_context.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, e._ButtonCode);
-        },
-        .TextTyped => |e| try engine_context.mFocusSystem.OnTextTyped(engine_context, e.Text()),
+        .MousePressed => |e| try engine_context.mPointerSystem.OnPressed(engine_context, e._ButtonCode),
         .MouseReleased => |e| try engine_context.mPointerSystem.OnReleased(engine_context, e._ButtonCode),
         .MouseClicked => |e| {
             try engine_context.mPointerSystem.OnClicked(engine_context, e._ButtonCode, e._Clicks);
@@ -537,14 +560,28 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
         },
         else => {},
     }
+    //and then the UI, which works from what the pointer system made of it: presses, typing, the wheel
+    try engine_context.mUIManager.OnInputEvent(engine_context, &engine_context.mPointerSystem, event.*);
     return .Continue;
 }
 
-/// The pointer and keyboard events of the frame. Nothing reacts to them yet: widgets add their listeners to the callback list
-/// in OnUpdate. The Picking Debug panel shows the last one, to see them arrive
-pub fn OnUIEvent(editor_program: *anyopaque, _: *EngineContext, event: *const UIEvent) anyerror!EventResult {
+/// The pointer events of the frame. Scrollbars react to being dragged; game code and widgets will add their listeners
+/// to the callback list in OnUpdate. The Picking Debug panel shows the last one, to see them arrive
+pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const PointerEvent) anyerror!EventResult {
+    const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
+    self._PickingDebugPanel.OnPointerEvent(event.*);
+    //e.g. a dragged scrollbar scrolls its region
+    try engine_context.mUIManager.OnPointerEvent(engine_context, event.*);
+    //and what an entity does when it is clicked, dragged, dropped on: its scripts
+    try self.mEventScripts.OnPointerEvent(engine_context, event.*);
+    return .Continue;
+}
+
+/// The UI events of the frame: typing and popups. The Picking Debug panel shows the last one
+pub fn OnUIEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const UIEvent) anyerror!EventResult {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
     self._PickingDebugPanel.OnUIEvent(event.*);
+    try self.mEventScripts.OnUIEvent(engine_context, event.*);
     return .Continue;
 }
 
@@ -722,11 +759,21 @@ pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, e
     return .Continue;
 }
 
+/// A physics step is about to start on e.mWorld: the world's OnPhysicsUpdate scripts run now, at the step's own rate.
+/// A scene's first, the rules, then its entities'
+fn OnPhysicsStepBegin(engine_context: *EngineContext, e: PhysicsEventData.StepBeginEvent) !void {
+    _ = try ScriptsProcessor.RunScriptInWorld(Scene, SceneComponents.OnPhysicsUpdateScript, e.mWorld, engine_context, .{e.mDT});
+    _ = try ScriptsProcessor.RunScriptInWorld(Entity, EntityComponents.OnPhysicsUpdateScript, e.mWorld, engine_context, .{e.mDT});
+}
+
 /// What a physics step had to report, see PhysicsEventData. No else, so a new physics event has to be given an arm here
 pub fn OnPhysicsEvent(_: *anyopaque, engine_context: *EngineContext, event: *const PhysicsEvent) anyerror!EventResult {
     switch (event.*) {
         .Default => {},
+        //dispatched synchronously, never queued, see OnEvent
+        .StepBegin, .PreSolve => {},
         .CollisionBegin => |e| try ScriptsProcessor.RunCollisionBeginScripts(engine_context, e),
+        .CollisionEnd => |e| try ScriptsProcessor.RunCollisionEndScripts(engine_context, e),
     }
     return .Continue;
 }
@@ -780,6 +827,7 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         .SelectObjectEvent => |e| {
             self.mSelectedObj = e.mObject;
         },
+        .OpenUIElementPanelEvent => self._UIElementPanel._P_Open = true,
         .MakeTmplEvent => |e| switch (e.mObject) {
             inline else => |object| try self.MakeTmpl(engine_context, object),
         },
@@ -795,20 +843,13 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
 pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !bool {
     _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Editor, engine_context, .{&e});
     if (self.mEditorState == .Play) {
-        //scene by scene from the top of the stack. A text input with the keyboard takes every key at its own scene's
-        //turn, and the top popup takes Escape at its own: the scenes above hear it first and can keep it, the scenes
-        //below never do. In the same scene the text input goes first, since it has the keyboard
-        const focus = &engine_context.mFocusSystem;
-        const popups = &engine_context.mPopupSystem;
-        const focus_pos = focus.FocusedStackPos();
-        const popup_pos = if (e._InputCode == .ESCAPE) popups.TopStackPos() else null;
-        if (popup_pos != null and (focus_pos == null or popup_pos.? > focus_pos.?)) {
-            if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, popup_pos.?, .{&e})) {
-                try popups.CloseTop(engine_context);
-            }
-        } else if (focus_pos) |stack_pos| {
-            if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, stack_pos, .{&e})) {
-                try focus.OnKeyPressed(engine_context, e);
+        //scene by scene from the top of the stack. When the UI takes the key (a text input with the keyboard, the top
+        //popup's Escape) it does at its own scene's turn: the scenes above hear it first and can keep it, the scenes
+        //below never do
+        const ui_manager = &engine_context.mUIManager;
+        if (ui_manager.KeyTakerFor(e._InputCode)) |taker| {
+            if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, taker.StackPos, .{&e}) == .Continue) {
+                try ui_manager.OnKeyTaken(engine_context, taker, e);
             }
         } else {
             _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Simulate, engine_context, .{&e});
@@ -824,6 +865,20 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     return true;
 }
 
+/// Asks for a theme file and makes it the current theme. A file in the open project is kept by the project's path,
+/// anything else by the engine's
+fn PickTheme(_: *EditorProgram, engine_context: *EngineContext) !void {
+    const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), ".imtheme");
+    if (abs_path.len == 0) return;
+
+    const asset_manager = &engine_context.mAssetManager;
+    const project = &engine_context.mProject;
+    const path_type: @import("../ECSManagers/AManager.zig").PathType = if (project.IsOpen() and std.mem.startsWith(u8, abs_path, project.mPath.items)) .Prj else .Eng;
+    const rel_path = asset_manager.GetRelPath(abs_path, path_type);
+    const theme = try asset_manager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
+    engine_context.mUIManager.SetTheme(engine_context, theme);
+}
+
 pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineContext) !void {
     //play copies the whole game world and stop frees the simulate one, so this is the play button hitch
     const zone = Tracy.ZoneInit("EditorProgram::OnChangeEditorStateEvent", @src());
@@ -836,8 +891,7 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
         //what the pointer was over and holding, what had the keyboard and the open popups are in the world that's
         //about to go
         engine_context.mPointerSystem.Reset();
-        engine_context.mFocusSystem.Reset(engine_context);
-        engine_context.mPopupSystem.Reset();
+        engine_context.mUIManager.Reset(engine_context);
         self.mPointerCamera = null;
         engine_context.mSimulateWorld.clearAndFree(engine_context, .All);
     } else {
@@ -1190,12 +1244,18 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             if (imgui.igMenuItem_Bool("Picking Debug", @ptrCast(@alignCast(my_null_ptr)), self._PickingDebugPanel._P_Open, true) == true) {
                 self._PickingDebugPanel._P_Open = !self._PickingDebugPanel._P_Open;
             }
+            if (imgui.igMenuItem_Bool("UI Element", @ptrCast(@alignCast(my_null_ptr)), self._UIElementPanel._P_Open, true) == true) {
+                self._UIElementPanel._P_Open = !self._UIElementPanel._P_Open;
+            }
             if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenViewport, true) == true) {
                 self._ViewportPanel.mP_OpenViewport = !self._ViewportPanel.mP_OpenViewport;
             }
         }
         if (imgui.igBeginMenu("Editor", true) == true) {
             defer imgui.igEndMenu();
+            if (imgui.igMenuItem_Bool("UI Theme...", "", false, true) == true) {
+                try self.PickTheme(engine_context);
+            }
             if (imgui.igBeginMenu("Play Menu", true) == true) {
                 defer imgui.igEndMenu();
                 //stopping is always allowed, starting needs a run player that can be drawn

@@ -359,6 +359,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
             transform_component,
             quad_component,
             shape.Canvas,
+            shape.Clip,
             &self.mSDFShading,
         );
     }
@@ -368,6 +369,7 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
             transform_component,
             text_component,
             shape.Canvas,
+            shape.Clip,
             &self.mSDFShading,
         );
     }

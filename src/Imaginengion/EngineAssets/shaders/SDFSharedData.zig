@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const PushConstants = @import("IM").PushConstants;
 const QuadData = @import("IM").QuadData;
 const GlyphData = @import("IM").GlyphData;
+const ClipData = @import("IM").ClipData;
 const SurfShadingData = @import("IM").SurfShadingData;
 const MedShadingData = @import("IM").MedShadingData;
 const RayMarcher = @import("IM").RayMarcher;
@@ -46,6 +47,9 @@ pub const QuadsBuf = extern struct { ptr: QuadsArray };
 const GlyphsArray = @SpirvType(.{ .runtime_array = GlyphData });
 pub const GlyphsBuf = extern struct { ptr: GlyphsArray };
 
+const ClipsArray = @SpirvType(.{ .runtime_array = ClipData });
+pub const ClipsBuf = extern struct { ptr: ClipsArray };
+
 const SurfShadingArray = @SpirvType(.{ .runtime_array = SurfShadingData });
 pub const SurfShadingBuf = extern struct { ptr: SurfShadingArray };
 
@@ -58,6 +62,7 @@ pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, 
 pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "MedShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 2 } } });
 pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
 pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
+pub const ClipsSSBO = @extern(*addrspace(.storage_buffer) ClipsBuf, .{ .name = "ClipsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 5 } } });
 
 pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 1, .binding = 0 } } });
 

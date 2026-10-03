@@ -175,7 +175,7 @@ const MarchData = extern struct {
     object: ObjectData,
 };
 
-pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
+pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
     return extern struct {
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
@@ -189,6 +189,8 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         mGlyphs: glyphs_type,
         mQuadsCount: usize,
         mGlyphsCount: usize,
+        /// the clip regions shapes are cut to, by their ClipIndex
+        mClips: clips_type,
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
@@ -330,7 +332,8 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
 
             for (0..self.mQuadsCount) |i| {
                 if (skips.Contains(.Quad, i)) continue;
-                const dist = SDFFunc.sdIMQuad(point, self.mQuads[i]);
+                const quad: QuadData = self.mQuads[i];
+                const dist = self.Clipped(SDFFunc.sdIMQuad(point, quad), point, quad.ClipIndex);
                 if (dist < data.min_dist) {
                     data.min_dist = dist;
                     data.object.shape_type = .Quad;
@@ -339,7 +342,8 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             }
             for (0..self.mGlyphsCount) |i| {
                 if (skips.Contains(.Glyph, i)) continue;
-                const dist = SDFFunc.sdIMGlyph(point, self.mGlyphs[i]);
+                const glyph: GlyphData = self.mGlyphs[i];
+                const dist = self.Clipped(SDFFunc.sdIMGlyph(point, glyph), point, glyph.ClipIndex);
                 if (dist < data.min_dist) {
                     data.min_dist = dist;
                     data.object.shape_type = .Glyph;
@@ -349,17 +353,32 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             return data;
         }
 
+        /// A shape's distance cut to its clip region: the intersection of the two, so the march doesn't step
+        /// toward a part of it that is never drawn
+        fn Clipped(self: Self, distance: f32, point: Vec3(f32), clip_index: u32) f32 {
+            if (clip_index == SDFFunc.NO_CLIP) return distance;
+            return SDFFunc.opIntersection(distance, SDFFunc.sdIMClip(point, self.mClips[clip_index]));
+        }
+
+        /// Whether a hit on a shape is inside its clip region. One outside isn't drawn, and the ray goes on
+        /// to whatever is behind, the same as through a gap in a letter
+        fn InClip(self: Self, point: Vec3(f32), clip_index: u32) bool {
+            if (clip_index == SDFFunc.NO_CLIP) return true;
+            return SDFFunc.InIMClip(point, self.mClips[clip_index]);
+        }
+
         /// Where the ray meets `object`, if it does in a way that's drawn: the front of a plate, and for
-        /// a glyph, only where the letter covers it.
+        /// a glyph, only where the letter covers it. Neither outside its clip region
         fn SurfaceAt(self: Self, ray: Ray, object: ObjectData, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             switch (object.shape_type) {
                 .Quad => {
                     const quad: QuadData = self.mQuads[object.shape_ind];
                     const hit = SDFFunc.rayIMQuad(ray, quad);
                     if (!IsFrontHit(hit)) return .none;
+                    const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
+                    if (!self.InClip(hit_point, quad.ClipIndex)) return .none;
 
                     //the band around the edge is the border's solid color, the rest is the quad's own surface
-                    const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
                     if (SDFFunc.InIMQuadBorder(hit_point, quad)) {
                         return .{
                             .Found = true,
@@ -390,6 +409,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                     const glyph: GlyphData = self.mGlyphs[object.shape_ind];
                     const hit = SDFFunc.rayIMGlyph(ray, glyph);
                     if (!IsFrontHit(hit)) return .none;
+                    if (!self.InClip(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), glyph.ClipIndex)) return .none;
 
                     //the coverage test needs where in the glyph's box the hit is. the fill texture's UV
                     //is a different thing, a spot in its texture manager slot, and only for color

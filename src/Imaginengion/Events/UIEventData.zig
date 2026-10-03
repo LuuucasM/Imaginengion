@@ -1,106 +1,35 @@
-//! What the pointer (the mouse) and the keyboard do to entities, and popups opening and closing: moments, where
-//! HoveredTag, PressedTag and FocusedTag are the states that last. Each event is for one entity, `mEntity`. The entity it happened to and
-//! everything it is inside (its parent, and so on up) each get their own, so a button hears about a click that
-//! landed on its label: `mTarget` is the entity it actually happened to. See UI/PointerSystem.zig,
-//! UI/FocusSystem.zig and UI/PopupSystem.zig, which send them.
+//! What the UI does: a text input getting the keyboard and being typed into, popups opening and closing. Moments, where
+//! FocusedTag is the state that lasts. Each event is for one entity, `mEntity`: the entity it happened to and
+//! everything it is inside (its parent, and so on up) each get their own, and `mTarget` is the entity it actually
+//! happened to. See UI/FocusSystem.zig and UI/PopupSystem.zig, which send them. What the pointer does is its own,
+//! Events/PointerEventData.zig, since anything can be pointed at, not just UI.
 const Entity = @import("../ECSObjects/Entity.zig");
-const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
-const Vec3 = @import("../Math/MathTypes.zig").Vec3;
+const UIElement = @import("../ECSObjects/UIElement.zig");
 
+/// The UIManager's event manager's events
 pub const EventCategories = enum {
-    /// processed once a frame, after the input events that cause them and before game logic
-    Interaction,
+    /// processed once a frame, after the pointer's events and before game logic
+    UI,
+    /// the UIManager's own: elements deleted at the end of the frame
+    EndOfFrame,
 };
 
 pub const EventT = union(enum) {
     Default: DefaultEvent,
-    PointerEnter: PointerEnterEvent,
-    PointerExit: PointerExitEvent,
-    PointerPressed: PointerButtonEvent,
-    PointerReleased: PointerButtonEvent,
-    PointerClicked: PointerClickedEvent,
-    PointerDragStart: PointerDragStartEvent,
-    PointerDrag: PointerDragEvent,
-    PointerDragEnd: PointerDragEndEvent,
-    PointerDropped: PointerDroppedEvent,
+    DestroyUIElement: DestroyUIElementEvent,
     FocusGained: FocusEvent,
     FocusLost: FocusEvent,
     TextChanged: TextEvent,
     TextSubmitted: TextEvent,
     PopupOpened: PopupEvent,
     PopupClosed: PopupEvent,
+    ValueChanged: ValueEvent,
 };
 
 pub const DefaultEvent = struct {};
 
-/// The pointer is now over the entity or something inside it, and wasn't before
-pub const PointerEnterEvent = struct {
-    mEntity: Entity,
-};
-
-/// The pointer is no longer over the entity or anything inside it
-pub const PointerExitEvent = struct {
-    mEntity: Entity,
-};
-
-/// A mouse button went down over the entity, or came back up. The release goes to whatever was pressed, even if
-/// the pointer has left it since
-pub const PointerButtonEvent = struct {
-    mEntity: Entity,
-    mButton: MouseCodes,
-    /// where the pointer's ray met the target, in the world
-    mPosition: Vec3(f32),
-    mTarget: Entity,
-};
-
-/// A button was pressed and released in place (the input manager's click) over the entity: it was under the pointer
-/// both when the button went down and when it came up
-pub const PointerClickedEvent = struct {
-    mEntity: Entity,
-    mButton: MouseCodes,
-    /// 1 for a single click, 2 for a double click, and so on
-    mClicks: u8,
-    mPosition: Vec3(f32),
-    mTarget: Entity,
-};
-
-/// A held button has moved far enough from where it went down that it is a drag rather than a click. Everything
-/// about a drag goes to what the button went down on, wherever the pointer has got to since
-pub const PointerDragStartEvent = struct {
-    mEntity: Entity,
-    mButton: MouseCodes,
-    mTarget: Entity,
-};
-
-/// The pointer moved during a drag. The movement is in the units the grabbed entity (mTarget) is placed in, so
-/// something dragged can add mDelta to its translation and stay under the pointer: canvas units for an overlay
-/// entity, and for a world entity world units across the plane facing the camera through where it was grabbed
-pub const PointerDragEvent = struct {
-    mEntity: Entity,
-    mButton: MouseCodes,
-    /// since the last drag event
-    mDelta: Vec3(f32),
-    /// since the button went down
-    mTotal: Vec3(f32),
-    mTarget: Entity,
-};
-
-/// The button came up. Sent just before its PointerReleased
-pub const PointerDragEndEvent = struct {
-    mEntity: Entity,
-    mButton: MouseCodes,
-    mTotal: Vec3(f32),
-    mTarget: Entity,
-};
-
-/// A drag source (DragSourceComponent) was let go over a drop target (DropTargetComponent) that takes it. Sent to
-/// the target only: the nearest one taking the source, going up from what was under the pointer. The target reads
-/// what it needs from the source's components
-pub const PointerDroppedEvent = struct {
-    mEntity: Entity,
-    mSource: Entity,
-    /// where the pointer's ray met what it was over, in the world
-    mPosition: Vec3(f32),
+pub const DestroyUIElementEvent = struct {
+    Element: UIElement,
 };
 
 /// A text input (TextInputComponent) got the keyboard, or lost it. Losing it comes after the TextSubmitted or the
@@ -127,4 +56,11 @@ pub const PopupEvent = struct {
     mTarget: Entity,
     /// what it was opened against, null for a point (a right-click menu)
     mOpener: ?Entity,
+};
+
+/// A widget's value changed (mTarget): a checkbox checked or unchecked, a row of a list selected. Sent by whatever
+/// changed it, e.g. the stock widget scripts (UI/WidgetActions.zig). Read the value off mTarget, e.g. its SelectedTag
+pub const ValueEvent = struct {
+    mEntity: Entity,
+    mTarget: Entity,
 };

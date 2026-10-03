@@ -11,15 +11,17 @@ pub const SurfacePhysicsMat = struct {
     Scale: SurfMat.SurfPhysicsData,
 
     //Custom's base values are all 1, so its Scale is the material itself. The identity scale would
-    //make every new body perfectly bouncy; a new body does not bounce until it is given restitution
+    //make every new body perfectly bouncy and very grippy; a new body does not bounce until it is given
+    //restitution, and grips with 0.6, the usual default friction (Box2D's, Unity's)
     pub const default: SurfacePhysicsMat = .{
         .Kind = .Custom,
         .Scale = .{
             .Restitution = 0.0,
-            .StaticFriction = SurfMat.SurfaceScaleIdentity.PhysicsData.StaticFriction,
-            .KineticFriction = SurfMat.SurfaceScaleIdentity.PhysicsData.KineticFriction,
+            .StaticFriction = DEFAULT_FRICTION,
+            .KineticFriction = DEFAULT_FRICTION,
         },
     };
+    const DEFAULT_FRICTION: f32 = 0.6;
 
     pub fn ImguiRender(self: *SurfacePhysicsMat) !void {
         try ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
@@ -76,6 +78,12 @@ pub const MediumPhysicsMat = struct {
     }
 };
 
+/// A surface's two friction coefficients, see PhysicsMaterial.GetFriction
+pub const Friction = struct {
+    Static: f32,
+    Kinetic: f32,
+};
+
 pub const PhysicsMaterial = union(enum) {
     Surface: SurfacePhysicsMat,
     Medium: MediumPhysicsMat,
@@ -87,6 +95,18 @@ pub const PhysicsMaterial = union(enum) {
         return switch (self) {
             .Surface => |s| s.GetScaledMaterial().Restitution,
             .Medium => 0.0,
+        };
+    }
+
+    /// How much a surface grips what slides on it: the static friction holds what is (near enough) still, the kinetic
+    /// friction drags on what is already sliding. A medium has no surface to grip with, so it is 0
+    pub fn GetFriction(self: PhysicsMaterial) Friction {
+        return switch (self) {
+            .Surface => |s| blk: {
+                const scaled = s.GetScaledMaterial();
+                break :blk .{ .Static = scaled.StaticFriction, .Kinetic = scaled.KineticFriction };
+            },
+            .Medium => .{ .Static = 0.0, .Kinetic = 0.0 },
         };
     }
 

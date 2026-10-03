@@ -346,6 +346,27 @@ test "a click in a rounded quad's cut off corner goes through it" {
     try ExpectEntity(rounded, try Cast(engine_context, ORIGIN_POSE, inside_curve, .{}));
 }
 
+test "a click on the part of a shape its clip region cuts off goes through to what is behind" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    //a 4 x 4 clip region, a 10 x 10 quad inside it a little in front, and a big quad behind both
+    const region = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
+    _ = try region.AddComponent(engine_context, EntityComponents.ClipComponent{});
+    const content = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try content.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
+    _ = try content.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 10, .y = 10 } });
+    const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
+    try ExpectEntity(content, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1, .y = 1, .z = 0 }, .Dir = down }, .{}));
+    //on the content, but outside the region: cut off
+    try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 3, .y = 1, .z = 0 }, .Dir = down }, .{}));
+}
+
 test "corner radii and borders grow with the quad's smaller axis and stay within half its smaller side" {
     var transform: TransformComponent = .{};
     transform.SetWorldScale(.{ .x = 3, .y = 2, .z = 1 });

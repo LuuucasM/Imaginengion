@@ -123,6 +123,9 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
     //ids carry over, so only the manager has to change, and only once all four managers are across
     other_world.RetargetHandles();
 
+    //every copied UIElementComponent was copied with an element of its own, which has to be told whose it is
+    try engine_context.mUIManager.AdoptWorld(engine_context, other_world);
+
     //physics state is not copied: the copy starts its own stepping, so nothing in it has touched yet
     other_world.mPhysicsManager.Reset(engine_context.EngineAllocator());
 }

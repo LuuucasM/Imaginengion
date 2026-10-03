@@ -44,7 +44,9 @@ pub fn GetMass(self: *const RigidBodyComponent) f32 {
 }
 
 /// Applies continuous force to the rigid body physically accurate
-/// Force must be in newtons form
+/// Force must be in newtons form. It pushes until the end of the current physics step and is let go of after
+/// it, so a force that should go on pushing is applied again every step: from an OnPhysicsUpdate script, which
+/// runs at the start of each one. Applied from a once a frame script it only reaches the next step
 ///
 /// INPUT:
 ///     self: The rigid body self

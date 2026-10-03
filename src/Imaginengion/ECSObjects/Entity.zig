@@ -175,6 +175,21 @@ pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle
         .EntityOnCollisionBegin => {
             _ = try new_script_entity.AddComponent(engine_context, OnCollisionBeginScript{});
         },
+        .EntityOnCollisionEnd => {
+            _ = try new_script_entity.AddComponent(engine_context, Components.OnCollisionEndScript{});
+        },
+        .EntityOnPreSolve => {
+            _ = try new_script_entity.AddComponent(engine_context, Components.OnPreSolveScript{});
+        },
+        .EntityOnPhysicsUpdate => {
+            _ = try new_script_entity.AddComponent(engine_context, Components.OnPhysicsUpdateScript{});
+        },
+        .EntityOnPointerEvent => {
+            _ = try new_script_entity.AddComponent(engine_context, Components.OnPointerEventScript{});
+        },
+        .EntityOnUIEvent => {
+            _ = try new_script_entity.AddComponent(engine_context, Components.OnUIEventScript{});
+        },
         else => @panic("this shouldnt happen!\n"),
     }
 }
@@ -398,5 +413,5 @@ pub const Invalidate = Core.Invalidate;
 pub const IsIDValid = Core.IsIDValid;
 
 fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
-    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate or script_type == .EntityOnCollisionBegin);
+    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate or script_type == .EntityOnCollisionBegin or script_type == .EntityOnCollisionEnd or script_type == .EntityOnPreSolve or script_type == .EntityOnPhysicsUpdate);
 }

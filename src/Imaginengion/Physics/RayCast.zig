@@ -56,20 +56,21 @@ pub const RayHit = struct {
 };
 
 pub const CastOptions = struct {
-    /// What's drawn (quads and text) for clicking on things, or the physics shapes (colliders) for
-    /// questions like what a bullet hits. Colliders can be invisible, or not match what's drawn.
+    /// What's drawn (quads and text) for clicking on things, or the colliders as this view shows them, e.g.
+    /// clicking on an invisible collider in the editor. Colliders can be invisible, or not match what's drawn.
+    /// Game logic asking what a bullet hits wants PhysicsQueries instead, which needs no camera
     Targets: enum { Visuals, Colliders } = .Visuals,
     /// A ray that starts inside a shape "hits" it at distance 0. Usually unwanted: a camera inside a
     /// big box would hit that box every time.
     SkipStartedInside: bool = true,
 };
 
-/// The nearest hit so far within one layer.
-const BestHit = struct {
+/// What a hit was on: the nearest of these within one layer wins
+const Picked = struct {
     Entity: Entity,
-    Hit: HitInfo,
     Kind: RayHitKind,
 };
+const NearestPick = RayIntersect.NearestHit(Picked);
 
 /// What `ray` hits of what `view_scenes` shows of `world`, seen through `camera_view`: the same shapes the
 /// renderer draws for that view, placed the same way (ShapeGeometry), so what gets hit is what was drawn.
@@ -79,8 +80,8 @@ const BestHit = struct {
 pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, camera_view: CameraView, view_scenes: ViewScenes, options: CastOptions) !?RayHit {
     const frame_allocator = engine_context.FrameAllocator();
 
-    var best_overlay: ?BestHit = null;
-    var best_game: ?BestHit = null;
+    var best_overlay: NearestPick = .{};
+    var best_game: NearestPick = .{};
 
     switch (options.Targets) {
         .Visuals => {
@@ -88,7 +89,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
 
             for (shapes.items) |shape| {
                 //overlays come first and any overlay hit wins, so once there is one the game layer can't change the answer
-                if (shape.Canvas == null and best_overlay != null) break;
+                if (shape.Canvas == null and best_overlay.mBest != null) break;
 
                 const entity = shape.Entity;
                 const canvas = shape.Canvas;
@@ -100,14 +101,16 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                     if (quad.mShouldRender) {
                         const box = ShapeGeometry.QuadBox(transform, quad, canvas);
                         //rounded, so a click in a cut off corner goes through to whatever is behind
-                        Consider(best, entity, .Quad, RayIntersect.RayRoundedBox2D(ray, box.Center, box.Rotation, box.HalfExtents, box.CornerRadii), far, options);
+                        const hit = RayIntersect.RayRoundedBox2D(ray, box.Center, box.Rotation, box.HalfExtents, box.CornerRadii);
+                        if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Quad }, hit, far, options.SkipStartedInside);
                     }
                 }
                 if (entity.GetComponent(TextComponent)) |text| {
                     if (text.mShouldRender) {
                         const font = try text.mTextAssetHandle.GetAsset(engine_context, TextAsset);
                         const box = ShapeGeometry.TextBox(TextAsset, transform, text, font, canvas);
-                        Consider(best, entity, .Text, RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents), far, options);
+                        const hit = RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents);
+                        if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Text }, hit, far, options.SkipStartedInside);
                     }
                 }
             }
@@ -117,7 +120,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
 
             for (colliders.items) |shape| {
                 //the same as for visuals: an overlay hit already decides it
-                if (shape.Canvas == null and best_overlay != null) break;
+                if (shape.Canvas == null and best_overlay.mBest != null) break;
 
                 const entity = shape.Entity;
                 const canvas = shape.Canvas;
@@ -136,24 +139,20 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                         break :blk RayIntersect.RaySphere(ray, sphere.Center, sphere.Radius);
                     },
                 };
-                Consider(best, entity, .Collider, hit, far, options);
+                best.Consider(.{ .Entity = entity, .Kind = .Collider }, hit, far, options.SkipStartedInside);
             }
         },
     }
 
-    if (best_overlay) |winner| return RayHit.Init(ray, winner.Hit, winner.Entity, winner.Kind, .OverlayLayer);
-    if (best_game) |winner| return RayHit.Init(ray, winner.Hit, winner.Entity, winner.Kind, .GameLayer);
+    if (best_overlay.mBest) |winner| return RayHit.Init(ray, winner.Hit, winner.Payload.Entity, winner.Payload.Kind, .OverlayLayer);
+    if (best_game.mBest) |winner| return RayHit.Init(ray, winner.Hit, winner.Payload.Entity, winner.Payload.Kind, .GameLayer);
     return null;
 }
 
-/// Keeps `hit` if it counts and is nearer than the layer's best so far.
-fn Consider(best: *?BestHit, entity: Entity, kind: RayHitKind, hit: HitInfo, far: f32, options: CastOptions) void {
-    if (!hit.IsHit()) return;
-    if (hit.StartedInside and options.SkipStartedInside) return;
-    //not drawn past its layer's far distance, so not something that can be hit either
-    if (hit.T > far) return;
-    if (best.*) |current| {
-        if (current.Hit.T <= hit.T) return;
-    }
-    best.* = .{ .Entity = entity, .Hit = hit, .Kind = kind };
+/// Whether a hit lands inside the clip region its shape is cut to: a part cut off isn't drawn, so it can't be clicked,
+/// and whatever is behind it can be
+fn InClip(clip: ?ShapeGeometry.ViewClip, ray: Ray, hit: HitInfo) bool {
+    const view_clip = clip orelse return true;
+    if (!hit.IsHit()) return true;
+    return ShapeGeometry.ClipContains(view_clip.Rect, ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)));
 }

@@ -55,6 +55,7 @@ const CONTAINER = LayoutComponent{
     .mGap = 7.5,
     .mMainAlign = .Center,
     .mCrossAlign = .Center,
+    .mColumns = .{ .Count = 4 },
 };
 
 /// An item with nothing left at its default
@@ -76,6 +77,7 @@ fn ExpectContainer(expected: LayoutComponent, actual: LayoutComponent) !void {
     try std.testing.expectEqual(expected.mGap, actual.mGap);
     try std.testing.expectEqual(expected.mMainAlign, actual.mMainAlign);
     try std.testing.expectEqual(expected.mCrossAlign, actual.mCrossAlign);
+    try std.testing.expectEqual(expected.mColumns, actual.mColumns);
 }
 
 fn ExpectItemSettings(expected: LayoutItemComponent, actual: LayoutItemComponent) !void {

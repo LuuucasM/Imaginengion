@@ -13,13 +13,16 @@ const LayoutSystem = @import("../../UI/LayoutSystem.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
-const PopupComponent = EntityComponents.PopupComponent;
+const UIComponents = @import("../../ECSComponents/UIComponents.zig");
+const PopupComponent = UIComponents.PopupComponent;
+const UIElementComponent = EntityComponents.UIElementComponent;
+const UIManager = @import("../../UI/UIManager.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const QuadComponent = EntityComponents.QuadComponent;
 const TextComponent = EntityComponents.TextComponent;
-const TextInputComponent = EntityComponents.TextInputComponent;
+const TextInputComponent = UIComponents.TextInputComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const SComponents = @import("../../ECSComponents/SComponents.zig");
 const SceneComponent = SComponents.SceneComponent;
@@ -48,6 +51,7 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
+        try engine_context.mUIManager.Init(engine_context.EngineAllocator());
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
 
         const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
@@ -65,7 +69,7 @@ const TestWorld = struct {
         _ = try self.mNewRow.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = 80 }, .mHeight = .{ .Fixed = 20 } });
         self.mField = try self.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         _ = try self.mField.AddComponent(engine_context, TextComponent{});
-        _ = try self.mField.AddComponent(engine_context, TextInputComponent{});
+        try AddUI(engine_context, self.mField, TextInputComponent{});
 
         //50 x 40, beside what opens it, top edges lined up
         self.mSubmenu = try Popup(engine_context, scene, .{ .mPlacement = .{ .Anchor = .{ .x = 1, .y = 1 }, .Pivot = .{ .x = -1, .y = 1 } } }, 50, 40);
@@ -75,18 +79,17 @@ const TestWorld = struct {
 
     fn Popup(engine_context: *EngineContext, scene: Scene, popup: PopupComponent, width: f32, height: f32) !Entity {
         const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-        _ = try entity.AddComponent(engine_context, popup);
+        try AddUI(engine_context, entity, popup);
         _ = try entity.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = width }, .mHeight = .{ .Fixed = height } });
         return entity;
     }
 
     fn Deinit(self: *TestWorld) void {
         const engine_context = self.mEngineContext;
-        engine_context.mPopupSystem.Deinit(engine_context.EngineAllocator());
-        engine_context.mFocusSystem.Deinit(engine_context.EngineAllocator());
         engine_context.mPointerSystem.Deinit(engine_context.EngineAllocator());
-        engine_context.mUIEventManager.Deinit(engine_context.EngineAllocator());
+        engine_context.mPointerEventManager.Deinit(engine_context.EngineAllocator());
         engine_context.mEditorWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.EngineGPA.deinit();
         std.heap.page_allocator.destroy(engine_context);
         std.heap.page_allocator.destroy(self);
@@ -97,8 +100,8 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         const world = &engine_context.mEditorWorld;
         try LayoutSystem.UpdateLayouts(world, engine_context);
-        try engine_context.mPopupSystem.Update(engine_context, world);
-        try engine_context.mFocusSystem.Update(engine_context);
+        try engine_context.mUIManager.mPopupSystem.Update(engine_context, world);
+        try engine_context.mUIManager.mFocusSystem.Update(engine_context);
         try PhysicsManager.UpdateWorldTransforms(world, engine_context);
     }
 
@@ -107,20 +110,20 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         try engine_context.mPointerSystem.Update(engine_context, .{ .Target = target });
         try engine_context.mPointerSystem.OnPressed(engine_context, .BUTTON_LEFT);
-        try engine_context.mPopupSystem.OnPressed(engine_context, &engine_context.mPointerSystem);
-        try engine_context.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, .BUTTON_LEFT);
+        try engine_context.mUIManager.mPopupSystem.OnPressed(engine_context, &engine_context.mPointerSystem);
+        try engine_context.mUIManager.mFocusSystem.OnPressed(engine_context, &engine_context.mPointerSystem, .BUTTON_LEFT);
         try engine_context.mPointerSystem.OnReleased(engine_context, .BUTTON_LEFT);
     }
 
     fn Open(self: *TestWorld, popup: Entity, opener: Entity) !void {
-        try self.mEngineContext.mPopupSystem.Open(self.mEngineContext, popup, .{ .Opener = opener });
+        try self.mEngineContext.mUIManager.mPopupSystem.Open(self.mEngineContext, popup, .{ .Opener = opener });
     }
 
     /// The popup events since the last call, the popup each was for, in order. Only the popup's own event of the ones
     /// sent up its chain
     fn TakeEvents(self: *TestWorld) ![]UIEvent {
         const engine_context = self.mEngineContext;
-        const queued = engine_context.mUIEventManager.mEventsArray.getPtr(.Interaction);
+        const queued = engine_context.mUIManager.mEventManager.mEventsArray.getPtr(.UI);
         var taken: std.ArrayList(UIEvent) = .empty;
         for (queued.items) |event| {
             switch (event) {
@@ -143,9 +146,15 @@ const TestWorld = struct {
     }
 };
 
+/// Gives `entity` a UI element (if it has none yet) and `component` on it
+fn AddUI(engine_context: *EngineContext, entity: Entity, component: anytype) !void {
+    if (!entity.HasComponent(UIElementComponent)) _ = try entity.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(entity).?.AddComponent(engine_context, component);
+}
+
 /// Exactly these popups are open, bottom of the stack first, and they are the ones shown
 fn ExpectOpen(world: *TestWorld, expected: []const Entity) !void {
-    const open = world.mEngineContext.mPopupSystem.OpenPopups();
+    const open = world.mEngineContext.mUIManager.mPopupSystem.OpenPopups();
     try std.testing.expectEqual(expected.len, open.len);
     for (expected, open) |entity, popup| try std.testing.expectEqual(entity.mID, popup.mPopup.mID);
     for ([_]Entity{ world.mMenu, world.mSubmenu, world.mDropdown }) |popup| {
@@ -215,7 +224,7 @@ test "a popup opened at a point hangs from that point" {
     defer world.Deinit();
     try world.Frame();
 
-    try world.mEngineContext.mPopupSystem.Open(world.mEngineContext, world.mMenu, .{ .Point = .{ .x = 300, .y = 300 } });
+    try world.mEngineContext.mUIManager.mPopupSystem.Open(world.mEngineContext, world.mMenu, .{ .Point = .{ .x = 300, .y = 300 } });
     try world.Frame();
     try ExpectAt(world.mMenu, 340, 270);
 }
@@ -277,7 +286,7 @@ test "a press closes the popups above the one it lands in, and every popup when 
 test "Close takes the ones above with it, CloseTop only the top one" {
     const world = try TestWorld.Init();
     defer world.Deinit();
-    const popups = &world.mEngineContext.mPopupSystem;
+    const popups = &world.mEngineContext.mUIManager.mPopupSystem;
     try world.Frame();
 
     try world.Open(world.mMenu, world.mButton);
@@ -306,11 +315,11 @@ test "closing a popup ends the edit of a text field in it, keeping it" {
 
     try world.Open(world.mMenu, world.mButton);
     try world.Press(world.mField);
-    try std.testing.expect(engine_context.mFocusSystem.Focused() != null);
-    try engine_context.mFocusSystem.OnTextTyped(engine_context, "hi");
+    try std.testing.expect(engine_context.mUIManager.mFocusSystem.Focused() != null);
+    try engine_context.mUIManager.mFocusSystem.OnTextTyped(engine_context, "hi");
 
-    try engine_context.mPopupSystem.CloseAll(engine_context);
-    try std.testing.expect(engine_context.mFocusSystem.Focused() == null);
+    try engine_context.mUIManager.mPopupSystem.CloseAll(engine_context);
+    try std.testing.expect(engine_context.mUIManager.mFocusSystem.Focused() == null);
     try std.testing.expectEqualStrings("hi", world.mField.GetComponent(TextComponent).?.mText.items);
 }
 
@@ -326,7 +335,7 @@ test "a deleted popup is let go of, along with the ones opened from it" {
     try world.EndFrame();
 
     try world.Frame();
-    try std.testing.expectEqual(@as(usize, 0), world.mEngineContext.mPopupSystem.OpenPopups().len);
+    try std.testing.expectEqual(@as(usize, 0), world.mEngineContext.mUIManager.mPopupSystem.OpenPopups().len);
     try std.testing.expect(world.mSubmenu.GetComponent(LayoutItemComponent).?.mCollapsed);
     try ExpectEvents(try world.TakeEvents(), &.{.{ world.mSubmenu, false }});
 }
@@ -334,10 +343,40 @@ test "a deleted popup is let go of, along with the ones opened from it" {
 test "the top popup's turn at Escape is its scene's place in the stack" {
     const world = try TestWorld.Init();
     defer world.Deinit();
-    const popups = &world.mEngineContext.mPopupSystem;
+    const popups = &world.mEngineContext.mUIManager.mPopupSystem;
 
     try std.testing.expect(popups.TopStackPos() == null);
     try world.Open(world.mMenu, world.mButton);
     const scene = world.mMenu.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
     try std.testing.expectEqual(scene.GetComponent(StackPosComponent).?.mPosition, popups.TopStackPos().?);
+}
+
+test "Escape goes to the top popup, unless a text input in the same scene has the keyboard; other keys only to the text input" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const ui_manager = &engine_context.mUIManager;
+    const stack_pos = world.mMenu.GetComponent(EntityComponents.EntitySceneComponent).?.mScene.GetComponent(StackPosComponent).?.mPosition;
+    try world.Frame();
+
+    //nothing open, nothing typed into: the UI takes nothing
+    try std.testing.expect(ui_manager.KeyTakerFor(.ESCAPE) == null);
+
+    try world.Open(world.mMenu, world.mButton);
+    const escape = ui_manager.KeyTakerFor(.ESCAPE).?;
+    try std.testing.expectEqual(.Popup, escape.Kind);
+    try std.testing.expectEqual(stack_pos, escape.StackPos);
+    try std.testing.expect(ui_manager.KeyTakerFor(.A) == null);
+
+    //typing into the menu's field: it has the keyboard, and it is in the popup's scene, so it goes first
+    try world.Press(world.mField);
+    try std.testing.expectEqual(.Focus, ui_manager.KeyTakerFor(.ESCAPE).?.Kind);
+    try std.testing.expectEqual(.Focus, ui_manager.KeyTakerFor(.A).?.Kind);
+
+    //Escape ends the edit first, then the next one closes the menu
+    try ui_manager.OnKeyTaken(engine_context, ui_manager.KeyTakerFor(.ESCAPE).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });
+    try std.testing.expect(ui_manager.mFocusSystem.Focused() == null);
+    try std.testing.expect(ui_manager.mPopupSystem.IsOpen(world.mMenu));
+    try ui_manager.OnKeyTaken(engine_context, ui_manager.KeyTakerFor(.ESCAPE).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });
+    try std.testing.expect(!ui_manager.mPopupSystem.IsOpen(world.mMenu));
 }

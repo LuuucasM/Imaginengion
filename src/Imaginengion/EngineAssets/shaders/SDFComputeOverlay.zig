@@ -13,6 +13,7 @@ const Edge = @import("IM").Edge;
 const CameraUBO = SDFShared.CameraUBO;
 const QuadsSSBO = SDFShared.QuadsSSBO;
 const GlyphsSSBO = SDFShared.GlyphsSSBO;
+const ClipsSSBO = SDFShared.ClipsSSBO;
 const SurfShadingSSBO = SDFShared.SurfShadingSSBO;
 const MedShadingSSBO = SDFShared.MedShadingSSBO;
 const OutTexture = SDFShared.OutTexture;
@@ -23,6 +24,7 @@ const default_color = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 };
 const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&QuadsSSBO.ptr),
     @TypeOf(&GlyphsSSBO.ptr),
+    @TypeOf(&ClipsSSBO.ptr),
     @TypeOf(&SurfShadingSSBO.ptr),
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
@@ -47,6 +49,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mGlyphs = &GlyphsSSBO.ptr,
         .mQuadsCount = CameraUBO.mQuadsCount,
         .mGlyphsCount = CameraUBO.mGlyphsCount,
+        .mClips = &ClipsSSBO.ptr,
         .mSurfShading = &SurfShadingSSBO.ptr,
         .mMedShading = &MedShadingSSBO.ptr,
         .mPerspectiveFar = CameraUBO.mPerspectiveFar,

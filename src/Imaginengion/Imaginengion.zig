@@ -12,13 +12,19 @@ test {
     _ = @import("Tests/Physics/CollisionsTests.zig");
     _ = @import("Tests/Physics/SolverTests.zig");
     _ = @import("Tests/Physics/RayCastTests.zig");
+    _ = @import("Tests/Physics/PhysicsQueriesTests.zig");
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
     _ = @import("Tests/Renderer/ViewShapesTests.zig");
     _ = @import("Tests/UI/LayoutComponentTests.zig");
     _ = @import("Tests/UI/LayoutSystemTests.zig");
-    _ = @import("Tests/UI/PointerSystemTests.zig");
+    _ = @import("Tests/Pointer/PointerSystemTests.zig");
     _ = @import("Tests/UI/FocusSystemTests.zig");
     _ = @import("Tests/UI/PopupSystemTests.zig");
+    _ = @import("Tests/UI/ScrollSystemTests.zig");
+    _ = @import("Tests/UI/UIElementTests.zig");
+    _ = @import("Tests/UI/StyleSystemTests.zig");
+    _ = @import("Tests/Scripts/EventScriptsTests.zig");
+    _ = @import("Tests/UI/WidgetsTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }
@@ -41,13 +47,27 @@ pub const SceneLayer = @import("ECSObjects/Scene.zig");
 
 //Script Stuff ----------------------------------------------
 pub const ScriptType = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptType;
+pub const ScriptResult = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptResult;
 pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScript;
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;
+pub const PointerEvent = @import("Events/PointerEventData.zig").EventT;
+pub const PointerEventData = @import("Events/PointerEventData.zig");
+pub const UIEvent = @import("Events/UIEventData.zig").EventT;
+pub const UIEventData = @import("Events/UIEventData.zig");
+
+//UI Stuff --------------------------------------------------
+pub const UIManager = @import("UI/UIManager.zig");
+pub const UIElement = @import("ECSObjects/UIElement.zig");
+pub const UIComponents = @import("ECSComponents/UIComponents.zig");
+pub const WidgetActions = @import("UI/WidgetActions.zig");
+pub const Widgets = @import("UI/Widgets.zig");
 
 //Physics Stuff ---------------------------------------------
 pub const CollisionInfo = @import("Physics/Collisions.zig").CollisionInfo;
+pub const PreSolveInfo = @import("Physics/Collisions.zig").PreSolveInfo;
+pub const PhysicsQueries = @import("Physics/PhysicsQueries.zig");
 
 //Rendering Stuff -------------------------------------------
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").PushConstants;

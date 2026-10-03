@@ -9,9 +9,9 @@ const PopupComponent = @This();
 pub const Editable: bool = true;
 pub const Name: []const u8 = "PopupComponent";
 
-/// Makes the entity the root of a popup: a menu or list that is hidden until something opens it (see
-/// UI/PopupSystem.zig), then shown against what opened it. Opened and closed through its LayoutItemComponent's
-/// Collapsed, so it needs one; the popup system adds a plain one if it has none.
+/// On an entity's UI element (UIElementComponent): makes the entity the root of a popup, a menu or list that is hidden
+/// until something opens it (see UI/PopupSystem.zig), then shown against what opened it. Opened and closed through the
+/// entity's LayoutItemComponent's Collapsed, so it needs one; the popup system adds a plain one if it has none.
 /// How it sits against what opened it: Anchor is the point of the opener's rectangle (-1 to 1 across it, like
 /// layout's), Pivot the point of the popup put there. Opened at a point instead (a right-click menu), only Pivot and
 /// Offset count. The default hangs it below the opener, left edges lined up, which is a dropdown list

@@ -38,6 +38,7 @@ const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
 const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 const ShapeGeometry = @import("ShapeGeometry.zig");
+const Entity = @import("../ECSObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
 
@@ -66,6 +67,8 @@ pub const QuadData = extern struct {
     //world units, already scaled and clamped like BorderWidth, in SDFFunctions' order (x top right, y bottom
     //right, z top left, w bottom left)
     CornerRadii: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
+    //which ClipData it is cut to, NO_CLIP for none
+    ClipIndex: u32,
 };
 
 pub const GlyphData = extern struct {
@@ -75,11 +78,26 @@ pub const GlyphData = extern struct {
     PlaneCenter: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
     AtlasShadingHandle: u32,
     TextureShadingFlags: u32,
+    //which ClipData it is cut to, NO_CLIP for none
+    ClipIndex: u32,
 };
+
+/// A clip region's rectangle (ClipComponent), in world space: a shape with its index is only drawn where it is inside
+/// it, measured in the rectangle's own plane, so the cut goes straight through depth. Shared by every shape under the
+/// region, which is why it is a buffer of its own rather than a copy in each shape
+pub const ClipData = extern struct {
+    Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
+    HalfExtents: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
+};
+
+/// A shape's ClipIndex when it isn't inside any clip region
+pub const NO_CLIP: u32 = std.math.maxInt(u32);
 
 comptime {
     GPUAsserts.AssertGPULayout(QuadData);
     GPUAsserts.AssertGPULayout(GlyphData);
+    GPUAsserts.AssertGPULayout(ClipData);
 }
 
 pub const BufferKind = enum {
@@ -95,12 +113,20 @@ pub const RenderBuffers = struct {
     mGlyphBuffer: SSBO = .{},
     mGlyphBufferBase: std.ArrayList(GlyphData) = .empty,
 
+    mClipBuffer: SSBO = .{},
+    mClipBufferBase: std.ArrayList(ClipData) = .empty,
+    /// Each clip region's index in mClipBufferBase this batch, so its shapes share one entry
+    mClipIndices: std.AutoHashMapUnmanaged(Entity.Type, u32) = .empty,
+
     pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
         self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 2, .Compute);
         self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_context.EngineAllocator(), 100);
 
         self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 3, .Compute);
         self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
+
+        self.mClipBuffer.Init(engine_context, @sizeOf(ClipData) * 16, 4, .Compute);
+        self.mClipBufferBase = try std.ArrayList(ClipData).initCapacity(engine_context.EngineAllocator(), 16);
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {
         self.mQuadBuffer.Deinit(engine_context);
@@ -108,16 +134,24 @@ pub const RenderBuffers = struct {
 
         self.mGlyphBuffer.Deinit(engine_context);
         self.mGlyphBufferBase.deinit(engine_context.EngineAllocator());
+
+        self.mClipBuffer.Deinit(engine_context);
+        self.mClipBufferBase.deinit(engine_context.EngineAllocator());
+        self.mClipIndices.deinit(engine_context.EngineAllocator());
     }
     pub fn Reset(self: *RenderBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
         switch (reset_options) {
             .ClearAndFree => {
                 self.mQuadBufferBase.clearAndFree(engine_allocator);
                 self.mGlyphBufferBase.clearAndFree(engine_allocator);
+                self.mClipBufferBase.clearAndFree(engine_allocator);
+                self.mClipIndices.clearAndFree(engine_allocator);
             },
             .ClearRetainingCapacity => {
                 self.mQuadBufferBase.clearRetainingCapacity();
                 self.mGlyphBufferBase.clearRetainingCapacity();
+                self.mClipBufferBase.clearRetainingCapacity();
+                self.mClipIndices.clearRetainingCapacity();
             },
         }
     }
@@ -133,6 +167,10 @@ pub const RenderBuffers = struct {
 
         //glyphs
         _ = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
+
+        //clip regions
+        const clip_byte_size = self.mClipBufferBase.items.len * @sizeOf(ClipData);
+        _ = self.mClipBuffer.SetData(engine_context, self.mClipBufferBase.items.ptr, clip_byte_size, 0);
         //fill out stats
         stats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
         stats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
@@ -140,6 +178,23 @@ pub const RenderBuffers = struct {
     pub fn BindBuffers(self: RenderBuffers, render_pass: *anyopaque) void {
         self.mQuadBuffer.Bind(render_pass);
         self.mGlyphBuffer.Bind(render_pass);
+        self.mClipBuffer.Bind(render_pass);
+    }
+
+    /// The index of a shape's clip region in this batch's clips, adding it the first time one of its shapes asks.
+    /// NO_CLIP for a shape not in one
+    fn ClipIndex(self: *RenderBuffers, engine_allocator: std.mem.Allocator, clip: ?ShapeGeometry.ViewClip) !u32 {
+        const view_clip = clip orelse return NO_CLIP;
+        const entry = try self.mClipIndices.getOrPut(engine_allocator, view_clip.Owner);
+        if (!entry.found_existing) {
+            entry.value_ptr.* = @intCast(self.mClipBufferBase.items.len);
+            try self.mClipBufferBase.append(engine_allocator, .{
+                .Rotation = view_clip.Rect.Rotation.ToArray(),
+                .Position = view_clip.Rect.Center.ToArray(),
+                .HalfExtents = view_clip.Rect.HalfExtents.ToArray(),
+            });
+        }
+        return entry.value_ptr.*;
     }
 };
 
@@ -211,12 +266,17 @@ pub fn DrawQuad(
     transform_component: *EntityTransformComponent,
     quad_component: *QuadComponent,
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
+    clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
     shading_buff: *ShadingBuffers,
 ) !void {
-    const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
-
     //the same box picking tests against
     const box = ShapeGeometry.QuadBox(transform_component, quad_component, canvas);
+    //cut off altogether: nothing to draw, and nothing for every pixel to march past
+    if (clip) |view_clip| {
+        if (ShapeGeometry.OutsideClip(box, view_clip.Rect)) return;
+    }
+
+    const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
 
     const shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
@@ -237,7 +297,9 @@ pub fn DrawQuad(
         if (quad_component.mBorderColor.w < 1.0) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
     }
 
-    const quad_buff_base = if (canvas != null) &self.mOverlayData.mQuadBufferBase else &self.mGameData.mQuadBufferBase;
+    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
+    const quad_buff_base = &buffers.mQuadBufferBase;
+    const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
     try quad_buff_base.append(engine_context.EngineAllocator(), .{
         .Position = box.Center.ToArray(),
@@ -248,6 +310,7 @@ pub fn DrawQuad(
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = box.BorderWidth,
         .CornerRadii = box.CornerRadii.ToArray(),
+        .ClipIndex = clip_index,
     });
 }
 
@@ -257,6 +320,7 @@ pub fn DrawText(
     transform_component: *EntityTransformComponent,
     text_component: *TextComponent,
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
+    clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
     shading_buff: *ShadingBuffers,
 ) !void {
     const zone = Tracy.ZoneInit("Renderer2D::DrawText", @src());
@@ -284,13 +348,30 @@ pub fn DrawText(
     const glyph_rot = if (canvas) |c| c.ToWorldRotation(text_rot) else text_rot;
     const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
 
-    const glyph_buff_base = if (canvas != null) &self.mOverlayData.mGlyphBufferBase else &self.mGameData.mGlyphBufferBase;
+    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
+    const glyph_buff_base = &buffers.mGlyphBufferBase;
+    const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
     //font size and bounds with the text's scale applied, the same ones picking measures the text with
     const params = ShapeGeometry.GetTextParams(transform_component, text_component);
 
     var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, params.FontSize, params.WrapWidth);
     while (layout.Next()) |glyph| {
+        //the layout is in the text's own space, so the whole line turns with the transform instead
+        //of each glyph turning in place along world x
+        const local_pen = Vec3(f32){ .x = glyph.Pen.x - params.LeftBound, .y = glyph.Pen.y, .z = 0 };
+        var glyph_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
+        if (canvas) |c| glyph_pos = c.ToWorldPoint(glyph_pos);
+        const half_extents = Vec3(f32){ .x = glyph.HalfExtents.x * size_scale, .y = glyph.HalfExtents.y * size_scale, .z = THICKNESS_2D };
+        const plane_center = Vec2(f32){ .x = glyph.PlaneCenter.x * size_scale, .y = glyph.PlaneCenter.y * size_scale };
+
+        //a letter cut off altogether isn't sent
+        if (clip) |view_clip| {
+            const plane_offset = (Vec3(f32){ .x = plane_center.x, .y = plane_center.y, .z = 0 }).QuatRotate(glyph_rot);
+            const glyph_box = ShapeGeometry.Box{ .Center = glyph_pos.AddVec(plane_offset), .Rotation = glyph_rot, .HalfExtents = half_extents };
+            if (ShapeGeometry.OutsideClip(glyph_box, view_clip.Rect)) continue;
+        }
+
         var tex_options = Texture2D.TexOptions{
             .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
             .mIsTransparent = false,
@@ -306,19 +387,14 @@ pub fn DrawText(
             texture_shading_handle,
         );
 
-        //the layout is in the text's own space, so the whole line turns with the transform instead
-        //of each glyph turning in place along world x
-        const local_pen = Vec3(f32){ .x = glyph.Pen.x - params.LeftBound, .y = glyph.Pen.y, .z = 0 };
-        var glyph_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
-        if (canvas) |c| glyph_pos = c.ToWorldPoint(glyph_pos);
-
         try glyph_buff_base.append(engine_context.EngineAllocator(), .{
             .Position = glyph_pos.ToArray(),
             .Rotation = glyph_rot.ToVector(),
-            .HalfExtents = Vec3(f32).ArrayT{ glyph.HalfExtents.x * size_scale, glyph.HalfExtents.y * size_scale, THICKNESS_2D },
-            .PlaneCenter = Vec2(f32).ArrayT{ glyph.PlaneCenter.x * size_scale, glyph.PlaneCenter.y * size_scale },
+            .HalfExtents = half_extents.ToArray(),
+            .PlaneCenter = plane_center.ToArray(),
             .AtlasShadingHandle = @intCast(atlas_shading_handle),
             .TextureShadingFlags = @intCast(texture_shading_flags),
+            .ClipIndex = clip_index,
         });
     }
 }
