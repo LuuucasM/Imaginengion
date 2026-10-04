@@ -73,6 +73,7 @@ pub const GetComponent = Core.GetComponent;
 pub const HasComponent = Core.HasComponent;
 pub const GetUUID = Core.GetUUID;
 pub const GetName = Core.GetName;
+pub const SetName = Core.SetName;
 pub const GetIterator = Core.GetIterator;
 pub const IsActive = Core.IsActive;
 pub const IsIDValid = Core.IsIDValid;

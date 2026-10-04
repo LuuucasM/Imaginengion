@@ -34,6 +34,15 @@ const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnKeyPressedScript = EntityComponents.OnKeyPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const QuadComponent = EntityComponents.QuadComponent;
+const ViewportComponent = EntityComponents.ViewportComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const Viewports = @import("../Renderer/Viewports.zig");
+const Widgets = @import("../UI/Widgets.zig");
+const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
+const Layout = @import("../UI/Layout.zig");
+const LayoutComponent = EntityComponents.LayoutComponent;
+const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
@@ -158,10 +167,19 @@ mEditorState: EditorState = .Stop,
 mPointerCamera: ?Player = null,
 mRunPlayer: ?Player = null,
 
-//editor UI stuff
+//editor UI stuff: the editor's own UI, an overlay only the editor UI player sees, drawn to the whole window underneath
+//ImGui while the panels move over to it
 mEditorUIScene: Scene = .uninit,
 mEditorUIEntity: Entity = .uninit,
 mEditorUIPlayer: Player = .uninit,
+/// The editor UI's root: the whole window, which everything else in it goes inside
+mEditorUIRoot: Entity = .uninit,
+/// Where the main viewport's views go: the middle of the window the ImGui panels leave free (see UpdateViewportArea)
+mViewportArea: Entity = .uninit,
+/// One viewport quad per view the main viewport shows, in mViewportArea, in the order of the views
+mViewportQuads: std.ArrayList(Entity) = .empty,
+/// Whether the main viewport is shown (the Window menu's Viewport)
+mShowViewport: bool = true,
 
 //Editor viewport stuff
 mEditorViewportScene: Scene = .uninit,
@@ -201,6 +219,27 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mEditorUIPlayer.Possess(self.mEditorUIEntity);
     //the editor's own UI is an overlay only the editor UI player sees
     _ = try self.mEditorUIPlayer.AddComponent(engine_context, OverlayComponent{ .mScene = self.mEditorUIScene });
+    try self.mEditorUIScene.SetName(engine_context, "Editor UI");
+    try self.mEditorUIEntity.SetName(engine_context, "Editor UI Camera");
+    try self.mEditorUIPlayer.SetName(engine_context, "Editor UI Player");
+    //the whole window, in the window's background color
+    self.mEditorUIRoot = try self.mEditorUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try self.mEditorUIRoot.SetName(engine_context, "Editor UI Root");
+    _ = try self.mEditorUIRoot.AddComponent(engine_context, QuadComponent{});
+    _ = try self.mEditorUIRoot.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try self.mEditorUIRoot.AddComponent(engine_context, LayoutItemComponent{
+        .mWidth = .{ .Percent = 1 },
+        .mHeight = .{ .Percent = 1 },
+        .mPlacement = .{ .Anchored = .{} },
+    });
+    try UIManager.Style(engine_context, self.mEditorUIRoot, "Window");
+    //the main viewport's area, placed and sized every frame. A little in front of the root: two quads at the same depth
+    //are the same distance from the camera, and the marcher keeps the first it finds, which is the root's background
+    self.mViewportArea = try self.mEditorUIRoot.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try self.mViewportArea.SetName(engine_context, "Viewport Area");
+    try self.mViewportArea.SetTranslation(engine_context, Vec3(f32){ .x = 0, .y = 0, .z = EDITOR_UI_LAYER_DEPTH });
+    _ = try self.mViewportArea.AddComponent(engine_context, LayoutComponent{});
+    _ = try self.mViewportArea.AddComponent(engine_context, LayoutItemComponent{ .mPlacement = .{ .Anchored = .{} } });
     //=================================================================
 
     //EDITOR VIEWPORT STUFF==================================================
@@ -215,7 +254,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     });
     try self.mEditorViewportEntity.SetTranslation(engine_context, Vec3(f32){ .x = 0.0, .y = 0.0, .z = 15.0 });
     try self.mEditorViewportEntity.AddComponentScript(engine_context, "src/Imaginengion/EngineAssets/scripts/EditorCameraInput.zig", .Eng);
-    try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+    try self.mEditorViewportPlayer.GetComponent(PlayerRenderComponent).?.SetViewportSize(engine_context, engine_context.mAppWindow.GetWidth(), engine_context.mAppWindow.GetHeight());
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, PlayerSlotComponent{});
     _ = try self.mEditorViewportEntity.AddComponent(engine_context, ViewpointComponent{});
     self.mEditorViewportPlayer.Possess(self.mEditorViewportEntity);
@@ -238,6 +277,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     engine_context.mImguiManager.Deinit(engine_context);
     self._ContentBrowserPanel.Deinit(engine_context);
     self._ViewportPanel.Deinit(engine_context.EngineAllocator());
+    self.mViewportQuads.deinit(engine_context.EngineAllocator());
 }
 
 //Note other systems to consider in the on update loop
@@ -349,6 +389,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const layout_zone = Tracy.ZoneInit("Layout Update Section", @src());
         defer layout_zone.Deinit();
+        //where the main viewport's views go, which layout places
+        try self.UpdateViewportArea(engine_context);
         //how styled UI looks, which can change the size of its text
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mGameWorld, engine_context);
@@ -359,7 +401,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         }
         //popups go against what opened them, scrollbars where their regions are scrolled and the caret where the laid
         //out text puts it
-        try engine_context.mUIManager.UpdateAfterLayout(engine_context, if (self.mEditorState == .Play) &engine_context.mSimulateWorld else null);
+        //the editor's own UI always, and the game's while it is played
+        const ui_worlds = [_]*WorldManager{ &engine_context.mEditorWorld, &engine_context.mSimulateWorld };
+        try engine_context.mUIManager.UpdateAfterLayout(engine_context, if (self.mEditorState == .Play) &ui_worlds else ui_worlds[0..1]);
     }
     //---------------End Layout Update ------------
 
@@ -383,6 +427,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         defer render_zone.Deinit();
         if (engine_context.mRenderer.BeginFrame(engine_context)) {
             try self.RenderRenderTargets(engine_context);
+            //the editor's own UI fills the window, and ImGui draws over it
+            try self.RenderEditorUI(engine_context);
             const current_world = switch (self.mEditorState) {
                 .Play => EngineContext.WorldType.Simulate,
                 .Stop => EngineContext.WorldType.Game,
@@ -560,7 +606,9 @@ pub fn OnSystemEvent(editor_program: *anyopaque, engine_context: *EngineContext,
         },
         else => {},
     }
-    //and then the UI, which works from what the pointer system made of it: presses, typing, the wheel
+    //and then the UI, which works from what the pointer system made of it: presses, typing, the wheel. Typing into an
+    //ImGui field is ImGui's alone
+    if (event.* == .TextTyped and engine_context.mImguiManager.WantsKeyboard()) return .Continue;
     try engine_context.mUIManager.OnInputEvent(engine_context, &engine_context.mPointerSystem, event.*);
     return .Continue;
 }
@@ -585,21 +633,32 @@ pub fn OnUIEvent(editor_program: *anyopaque, engine_context: *EngineContext, eve
     return .Continue;
 }
 
-/// Tells the pointer system where the mouse is and what it is over, once a frame. Only in a view of the running
-/// game: the editor camera's view is for selecting and moving things, not for using them, so there the pointer is
-/// over nothing
+/// Tells the pointer system where the mouse is and what it is over, once a frame: the running game in one of its views,
+/// or else the editor's own UI wherever ImGui doesn't have the mouse. The editor camera's view is for selecting and
+/// moving things, not for using them, so there the pointer is over nothing
 fn UpdatePointer(self: *EditorProgram, engine_context: *EngineContext) !void {
+    try engine_context.mPointerSystem.Update(engine_context, try self.PointerInput(engine_context));
+}
+
+/// Where the mouse is and what it is over this frame, for UpdatePointer
+fn PointerInput(self: *EditorProgram, engine_context: *EngineContext) !PointerSystem.Input {
     const pointer = &engine_context.mPointerSystem;
     const mouse = engine_context.mInputManager.GetMousePosition();
     var input = PointerSystem.Input{ .Pixel = mouse };
 
+    //a drag that started in the editor UI keeps following the mouse there, even over an ImGui window
+    if (pointer.IsHolding() and self.mPointerCamera != null and self.IsEditorUICamera(self.mPointerCamera.?)) {
+        try self.PointAtEditorUI(engine_context, &input);
+        return input;
+    }
+
     if (self.mEditorState == .Play) {
-        const game_view = if (self._ViewportPanel.FindViewAt(mouse)) |view_at| (if (self.IsEditorCamera(view_at.View.Camera)) null else view_at) else null;
-        if (game_view) |view_at| {
-            self.mPointerCamera = view_at.View.Camera;
-            if (self.PointerViewOf(engine_context, view_at.View, view_at.Pixel)) |view| {
-                input.View = view;
-                if (try self.CastInView(engine_context, view_at.View, view)) |hit| {
+        const game_view = if (try self.ViewUnder(engine_context, mouse)) |view| (if (self.IsEditorCamera(view.Camera)) null else view) else null;
+        if (game_view) |view| {
+            self.mPointerCamera = view.Camera;
+            if (self.PointerViewOf(engine_context, view.Camera, view.Pixel)) |pointer_view| {
+                input.View = pointer_view;
+                if (try self.CastInView(engine_context, view.Camera, view.World, pointer_view)) |hit| {
                     input.Target = hit.Entity;
                     input.Position = hit.Position;
                 }
@@ -608,54 +667,127 @@ fn UpdatePointer(self: *EditorProgram, engine_context: *EngineContext) !void {
             //the mouse has left the view a button went down in: it is over nothing, but what is held keeps
             //following it through that view, so a slider dragged past the edge of the panel doesn't stall
             if (self.mPointerCamera) |camera| {
-                if (self._ViewportPanel.FindViewOf(camera)) |view_rect| {
-                    if (ScreenRect.ToTargetPixelUnbounded(view_rect.Rect, mouse)) |pixel| {
-                        input.View = self.PointerViewOf(engine_context, view_rect, pixel);
-                    }
-                }
+                if (self.PixelOffViewOf(engine_context, camera, mouse)) |pixel| input.View = self.PointerViewOf(engine_context, camera, pixel);
             }
         }
+        if (game_view != null or pointer.IsHolding()) return input;
     }
 
-    try pointer.Update(engine_context, input);
+    if (!engine_context.mImguiManager.WantsMouse()) try self.PointAtEditorUI(engine_context, &input);
+    return input;
+}
+
+/// Points `input` at what the mouse is over in the editor's own UI, which fills the window
+fn PointAtEditorUI(self: *EditorProgram, engine_context: *EngineContext, input: *PointerSystem.Input) !void {
+    const pointer_view = self.EditorUIView(engine_context, input.Pixel) orelse return;
+    input.View = pointer_view;
+    self.mPointerCamera = self.mEditorUIPlayer;
+    if (try self.CastEditorUI(engine_context, pointer_view)) |hit| {
+        input.Target = hit.Entity;
+        input.Position = hit.Position;
+    }
+}
+
+/// The ray through a window pixel into the editor's own UI, and the camera it is seen with. The editor UI is drawn at
+/// the window's size, so a window pixel is one of its pixels
+fn EditorUIView(self: *const EditorProgram, engine_context: *EngineContext, window_pixel: Vec2(f32)) ?PointerSystem.View {
+    const render_view = self.mEditorUIPlayer.GetRenderView() orelse return null;
+    return .{
+        .Ray = Renderer.CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, window_pixel),
+        .CameraView = Renderer.CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale()),
+    };
+}
+
+/// What a ray into the editor's own UI hits
+fn CastEditorUI(self: *const EditorProgram, engine_context: *EngineContext, pointer_view: PointerSystem.View) !?RayCast.RayHit {
+    const scene_id = [_]Scene.Type{self.mEditorUIScene.mID};
+    const view_scenes = Renderer.ViewScenes{ .Game = .None, .Overlays = &scene_id };
+    return try RayCast.CastRay(engine_context, &engine_context.mEditorWorld, pointer_view.Ray, pointer_view.CameraView, view_scenes, .{});
+}
+
+/// A view of a world on screen, and the pixel of it a window point is at
+pub const ViewUnderMouse = struct {
+    /// whose viewpoint drew it
+    Camera: Player,
+    /// whose entities are in it, not necessarily the camera's own world
+    World: EngineContext.WorldType,
+    /// continuous, in the camera viewpoint's pixels, ready for CameraView.PixelRay
+    Pixel: Vec2(f32),
+};
+
+/// The view under `window_pixel`: one in an ImGui viewport panel, or a viewport quad in the editor's own UI (with
+/// nothing of the editor UI over it) where ImGui doesn't have the mouse. Every view in the editor shows the active world
+pub fn ViewUnder(self: *const EditorProgram, engine_context: *EngineContext, window_pixel: Vec2(f32)) !?ViewUnderMouse {
+    if (self._ViewportPanel.FindViewAt(window_pixel)) |view_at| return .{ .Camera = view_at.View.Camera, .World = view_at.View.World, .Pixel = view_at.Pixel };
+    if (engine_context.mImguiManager.WantsMouse()) return null;
+    const ui_view = self.EditorUIView(engine_context, window_pixel) orelse return null;
+    const hit = try self.CastEditorUI(engine_context, ui_view) orelse return null;
+    const viewport = hit.Entity.GetComponent(ViewportComponent) orelse return null;
+    const pixel = Viewports.ViewPixelOnRay(hit.Entity, ui_view.Ray, ui_view.CameraView, .OnView) orelse return null;
+    return .{ .Camera = viewport.mPlayer, .World = self.mActiveWorldType, .Pixel = pixel };
+}
+
+/// The pixel of `camera`'s view a window point is at, even off the view's edges: an ImGui panel's, or else a viewport
+/// quad's showing it. Null if it isn't on screen
+fn PixelOffViewOf(self: *const EditorProgram, engine_context: *EngineContext, camera: Player, window_pixel: Vec2(f32)) ?Vec2(f32) {
+    if (self._ViewportPanel.FindViewOf(camera)) |view_rect| return ScreenRect.ToTargetPixelUnbounded(view_rect.Rect, window_pixel);
+    const quad = self.ViewportQuadOf(engine_context, camera) orelse return null;
+    const ui_view = self.EditorUIView(engine_context, window_pixel) orelse return null;
+    return Viewports.ViewPixelOnRay(quad, ui_view.Ray, ui_view.CameraView, .Unbounded);
+}
+
+/// The viewport quad in the editor's own UI that shows `camera`'s view, null if none does
+fn ViewportQuadOf(self: *const EditorProgram, engine_context: *EngineContext, camera: Player) ?Entity {
+    const world = &engine_context.mEditorWorld;
+    const entity_ids = world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = ViewportComponent }) catch return null;
+    for (entity_ids.items) |entity_id| {
+        const entity = world.GetEntity(entity_id);
+        const shows = entity.GetComponent(ViewportComponent).?.mPlayer;
+        if (shows.mID == camera.mID and shows.mManager == camera.mManager and entity.GetComponent(EntitySceneComponent).?.mScene.mID == self.mEditorUIScene.mID) return entity;
+    }
+    return null;
 }
 
 fn IsEditorCamera(self: *const EditorProgram, camera: Player) bool {
     return camera.mID == self.mEditorViewportPlayer.mID and camera.mManager == self.mEditorViewportPlayer.mManager;
 }
 
-/// The ray through a pixel of a view and the camera it was drawn with, the same ones the renderer used
-fn PointerViewOf(_: *EditorProgram, engine_context: *EngineContext, view: ViewportPanel.ViewRect, pixel: Vec2(f32)) ?PointerSystem.View {
-    const render_view = view.Camera.GetRenderView() orelse return null;
+fn IsEditorUICamera(self: *const EditorProgram, camera: Player) bool {
+    return camera.mID == self.mEditorUIPlayer.mID and camera.mManager == self.mEditorUIPlayer.mManager;
+}
+
+/// The ray through a pixel of a camera's view and the camera it was drawn with, the same ones the renderer used
+fn PointerViewOf(_: *EditorProgram, engine_context: *EngineContext, camera: Player, pixel: Vec2(f32)) ?PointerSystem.View {
+    const render_view = camera.GetRenderView() orelse return null;
     return .{
         .Ray = Renderer.CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, pixel),
         .CameraView = Renderer.CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale()),
     };
 }
 
-/// What a view's ray hits, among the scenes that view shows, so it lands on what was drawn
-fn CastInView(self: *EditorProgram, engine_context: *EngineContext, view: ViewportPanel.ViewRect, pointer_view: PointerSystem.View) !?RayCast.RayHit {
-    const world = switch (view.World) {
+/// What a camera's ray hits in `world_type`, among the scenes that camera's view shows, so it lands on what was drawn
+fn CastInView(self: *EditorProgram, engine_context: *EngineContext, camera: Player, world_type: EngineContext.WorldType, pointer_view: PointerSystem.View) !?RayCast.RayHit {
+    const world = switch (world_type) {
         .Game => &engine_context.mGameWorld,
         .Editor => &engine_context.mEditorWorld,
         .Simulate => &engine_context.mSimulateWorld,
     };
-    const view_scenes = try self.ViewScenesFor(engine_context.FrameAllocator(), view.Camera, world);
+    const view_scenes = try self.ViewScenesFor(engine_context.FrameAllocator(), camera, world);
     return try RayCast.CastRay(engine_context, world, pointer_view.Ray, pointer_view.CameraView, view_scenes, .{});
 }
 
 /// What is under a pixel of a view
-fn CastAtView(self: *EditorProgram, engine_context: *EngineContext, view_at: ViewportPanel.ViewAt) !?RayCast.RayHit {
-    const pointer_view = self.PointerViewOf(engine_context, view_at.View, view_at.Pixel) orelse return null;
-    return try self.CastInView(engine_context, view_at.View, pointer_view);
+fn CastAtView(self: *EditorProgram, engine_context: *EngineContext, view: ViewUnderMouse) !?RayCast.RayHit {
+    const pointer_view = self.PointerViewOf(engine_context, view.Camera, view.Pixel) orelse return null;
+    return try self.CastInView(engine_context, view.Camera, view.World, pointer_view);
 }
 
-/// Selects what was clicked in a viewport or play panel: the game object owning the shape under the
-/// mouse, or nothing if the click missed everything. A click outside any view is left alone.
+/// Selects what was clicked in a view, an ImGui viewport or play panel or a viewport quad: the game object owning the
+/// shape under the mouse, or nothing if the click missed everything. A click outside any view is left alone.
 fn OnViewportClick(self: *EditorProgram, engine_context: *EngineContext, click_position: Vec2(f32)) !void {
-    //the view rects are from the frame the click was made on, which is what was on screen
-    const view_at = self._ViewportPanel.FindViewAt(click_position) orelse return;
-    const hit = try self.CastAtView(engine_context, view_at);
+    //the ImGui view rects are from the frame the click was made on, which is what was on screen
+    const view = try self.ViewUnder(engine_context, click_position) orelse return;
+    const hit = try self.CastAtView(engine_context, view);
     const selected: ?Entity = if (hit) |h| h.Entity.GetMainObject() else null;
 
     //the same event the entity list selects with, so every way of selecting goes through one path
@@ -798,10 +930,6 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
                 self.mSelectedObj = null;
             }
         },
-        .ViewportResizeEvent => |e| {
-            self._ViewportPanel.mViewportWidth = e.mWidth;
-            self._ViewportPanel.mViewportHeight = e.mHeight;
-        },
         .PlayPanelResizeEvent => |e| {
             self._ViewportPanel.mPlayWidth = e.mWidth;
             self._ViewportPanel.mPlayHeight = e.mHeight;
@@ -841,12 +969,20 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
 }
 
 pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !bool {
+    const ui_manager = &engine_context.mUIManager;
+    //scene by scene from the top of the stack. When the UI takes the key (a text input with the keyboard, the top
+    //popup's Escape) it does at its own scene's turn: the scenes above hear it first and can keep it, the scenes below
+    //never do. The editor's own UI is over everything in the window, so when it takes a key the game never hears it
+    const editor_taker: ?UIManager.KeyTaker = if (ui_manager.KeyTakerFor(e._InputCode)) |taker| (if (taker.World == &engine_context.mEditorWorld) taker else null) else null;
+    if (editor_taker != null and !engine_context.mImguiManager.WantsKeyboard()) {
+        if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Editor, engine_context, editor_taker.?.StackPos, .{&e}) == .Continue) {
+            try ui_manager.OnKeyTaken(engine_context, editor_taker.?, e);
+        }
+        return true;
+    }
+
     _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Editor, engine_context, .{&e});
     if (self.mEditorState == .Play) {
-        //scene by scene from the top of the stack. When the UI takes the key (a text input with the keyboard, the top
-        //popup's Escape) it does at its own scene's turn: the scenes above hear it first and can keep it, the scenes
-        //below never do
-        const ui_manager = &engine_context.mUIManager;
         if (ui_manager.KeyTakerFor(e._InputCode)) |taker| {
             if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, taker.StackPos, .{&e}) == .Continue) {
                 try ui_manager.OnKeyTaken(engine_context, taker, e);
@@ -940,6 +1076,108 @@ fn RenderViewports(self: *EditorProgram, engine_context: *EngineContext) !void {
     }
 }
 
+/// Places the main viewport in the middle of the window the ImGui panels leave free (the whole window if there is no
+/// dockspace yet), and gives it a viewport quad for each view it shows, placed by the view's area rect: the editor
+/// camera, or while playing in it, every player's view. Before layout, which sizes the quads
+fn UpdateViewportArea(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const width: f32 = @floatFromInt(engine_context.mAppWindow.GetWidth());
+    const height: f32 = @floatFromInt(engine_context.mAppWindow.GetHeight());
+    const free = Dockspace.CentralRect() orelse Dockspace.Rect{ .Pos = .{ .x = 0, .y = 0 }, .Size = .{ .x = width, .y = height } };
+    //the editor UI keeps a constant pixel size: a canvas unit is a window point at the display's scale
+    const per_unit = OverlayCanvas.PixelsPerUnit(.ConstantPixelSize, height, engine_context.mAppWindow.GetDisplayScale());
+    const area_width = free.Size.x / per_unit;
+    const area_height = free.Size.y / per_unit;
+    try SetLayoutItem(engine_context, self.mViewportArea, .{
+        .mWidth = .{ .Fixed = area_width },
+        .mHeight = .{ .Fixed = area_height },
+        .mPlacement = .{ .Anchored = TopLeftAt(free.Pos.x / per_unit, free.Pos.y / per_unit) },
+        .mCollapsed = !self.mShowViewport,
+    });
+
+    //the views, each with the part of the area its viewpoint's area rect asks for
+    const frame_allocator = engine_context.FrameAllocator();
+    var views: std.ArrayList(struct { Player: Player, Area: Vec4(f32) }) = .empty;
+    if (self.mEditorState == .Play and !self._ViewportPanel.mP_OpenPlay) {
+        for ((try self.GetViewportViews(frame_allocator, .ViewportPanel)).items) |view| {
+            try views.append(frame_allocator, .{ .Player = view.mPlayer, .Area = view.mViewpoint.mAreaRect });
+        }
+    } else {
+        try views.append(frame_allocator, .{ .Player = self.mEditorViewportPlayer, .Area = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?.mAreaRect });
+    }
+
+    //as many quads as views: new ones made, the spare ones deleted
+    while (self.mViewportQuads.items.len < views.items.len) {
+        const quad = try self.mViewportArea.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+        try quad.SetName(engine_context, "Viewport");
+        _ = try quad.AddComponent(engine_context, QuadComponent{});
+        _ = try quad.AddComponent(engine_context, ViewportComponent{});
+        _ = try quad.AddComponent(engine_context, LayoutItemComponent{});
+        try self.mViewportQuads.append(engine_context.EngineAllocator(), quad);
+    }
+    while (self.mViewportQuads.items.len > views.items.len) {
+        try self.mViewportQuads.pop().?.Delete(engine_context);
+    }
+
+    for (views.items, self.mViewportQuads.items) |view, quad| {
+        quad.GetComponent(ViewportComponent).?.mPlayer = view.Player;
+        try SetLayoutItem(engine_context, quad, .{
+            .mWidth = .{ .Fixed = view.Area.z * area_width },
+            .mHeight = .{ .Fixed = view.Area.w * area_height },
+            .mPlacement = .{ .Anchored = TopLeftAt(view.Area.x * area_width, view.Area.y * area_height) },
+        });
+    }
+}
+
+/// How far in front of what it is drawn over a layer of the editor UI sits: the viewport in front of the window's
+/// background. Layout never sets depth, so it is set here, the same step the widget builders use
+const EDITOR_UI_LAYER_DEPTH: f32 = Widgets.DEPTH_STEP;
+
+/// Pinned by its top left corner to its parent's top left corner, `right` and `down` from it
+fn TopLeftAt(right: f32, down: f32) Layout.Anchoring {
+    return .{ .Anchor = .{ .x = -1, .y = 1 }, .Pivot = .{ .x = -1, .y = 1 }, .Offset = .{ .x = right, .y = -down } };
+}
+
+/// Sets an entity's size, placement and whether it is collapsed, and asks for layout only if that changed it
+fn SetLayoutItem(engine_context: *EngineContext, entity: Entity, wanted: struct { mWidth: Layout.Sizing, mHeight: Layout.Sizing, mPlacement: Layout.Placement, mCollapsed: bool = false }) !void {
+    const item = entity.GetComponent(LayoutItemComponent).?;
+    var updated = item.*;
+    updated.mWidth = wanted.mWidth;
+    updated.mHeight = wanted.mHeight;
+    updated.mPlacement = wanted.mPlacement;
+    updated.mCollapsed = wanted.mCollapsed;
+    if (std.meta.eql(updated, item.*)) return;
+    item.* = updated;
+    try entity.MarkLayoutDirty(engine_context);
+}
+
+/// Draws the editor UI scene at the window's size and puts it in the window, underneath what ImGui draws after it
+fn RenderEditorUI(self: *EditorProgram, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("EditorProgram::RenderEditorUI", @src());
+    defer zone.Deinit();
+    const render_component = self.mEditorUIPlayer.GetComponent(PlayerRenderComponent).?;
+    const transform_component = self.mEditorUIEntity.GetComponent(TransformComponent).?;
+    const viewpoint_component = self.mEditorUIEntity.GetComponent(ViewpointComponent).?;
+
+    const width = engine_context.mAppWindow.GetWidth();
+    const height = engine_context.mAppWindow.GetHeight();
+    //a minimized window has nothing to draw into
+    if (width < 1 or height < 1) return;
+    viewpoint_component.SetViewportSize(width, height);
+    try render_component.mComputeTexture.Resize(engine_context, width, height);
+    if (!render_component.mComputeTexture.IsCreated()) return;
+
+    try engine_context.mRenderer.RenderScene(
+        self.mEditorUIScene,
+        &engine_context.mEngineStats.EditorWorldStats.mRenderStats,
+        engine_context,
+        Renderer.BuildPushConstants(transform_component, viewpoint_component),
+        Renderer.CameraView.FromViewpoint(transform_component, viewpoint_component, engine_context.mAppWindow.GetDisplayScale()),
+        &render_component.mComputeTexture,
+        .Overlay,
+    );
+    engine_context.mRenderer.mPlatform.Present(&render_component.mComputeTexture);
+}
+
 fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, viewport_type: ViewportType) !void {
     const zone = Tracy.ZoneInit("EditorProgram::RenderEditorTarget", @src());
     defer zone.Deinit();
@@ -948,9 +1186,13 @@ fn RenderEditorTarget(self: *EditorProgram, engine_context: *EngineContext, view
     const viewpoint_component = self.mEditorViewportEntity.GetComponent(ViewpointComponent).?;
 
     switch (viewport_type) {
+        //the size its viewport quad covers
         .ViewportPanel => {
-            viewpoint_component.SetViewportSize(self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
-            try render_component.mComputeTexture.Resize(engine_context, self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight);
+            if (!self.mShowViewport) return;
+            const quad = self.ViewportQuadOf(engine_context, self.mEditorViewportPlayer) orelse return;
+            const ui_view = self.EditorUIView(engine_context, .{ .x = 0, .y = 0 }) orelse return;
+            try Viewports.FitPlayerToQuad(engine_context, quad, ui_view.CameraView);
+            if (!render_component.mComputeTexture.IsCreated()) return;
         },
         .PlayPanel => {
             viewpoint_component.SetViewportSize(self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight);
@@ -982,10 +1224,27 @@ fn RenderWorldTarget(self: *EditorProgram, engine_context: *EngineContext, viewp
         const transform_component = view.mTransform;
         const viewpoint_component = view.mViewpoint;
 
-        const panel_width, const panel_height = switch (viewport_type) {
-            .ViewportPanel => .{ self._ViewportPanel.mViewportWidth, self._ViewportPanel.mViewportHeight },
-            .PlayPanel => .{ self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight },
-        };
+        //the main viewport's views are each the size their viewport quad covers
+        if (viewport_type == .ViewportPanel) {
+            if (!self.mShowViewport) return;
+            const quad = self.ViewportQuadOf(engine_context, view.mPlayer) orelse continue;
+            const ui_view = self.EditorUIView(engine_context, .{ .x = 0, .y = 0 }) orelse continue;
+            try Viewports.FitPlayerToQuad(engine_context, quad, ui_view.CameraView);
+            if (!render_component.mComputeTexture.IsCreated()) continue;
+            try engine_context.mRenderer.RenderWorld(
+                self.mActiveWorld,
+                try self.ViewScenesFor(frame_allocator, view.mPlayer, self.mActiveWorld),
+                self.ActiveRenderStats(engine_context),
+                engine_context,
+                Renderer.BuildPushConstants(transform_component, viewpoint_component),
+                Renderer.CameraView.FromViewpoint(transform_component, viewpoint_component, engine_context.mAppWindow.GetDisplayScale()),
+                &render_component.mComputeTexture,
+                .OverlayGame,
+            );
+            continue;
+        }
+
+        const panel_width, const panel_height = .{ self._ViewportPanel.mPlayWidth, self._ViewportPanel.mPlayHeight };
         //the view is displayed in its area rect's share of the panel (see ViewportPanel.OnImguiRender),
         //so it renders at that size too. A full panel texture squeezed into half the panel would
         //come out squashed for split screen.
@@ -1039,9 +1298,8 @@ fn RenderViewportEditor(self: *EditorProgram, engine_context: *EngineContext, vi
     }};
 
     switch (viewport_type) {
-        .ViewportPanel => {
-            try self._ViewportPanel.OnImguiRenderViewport(engine_context, &images, self.mActiveWorldType);
-        },
+        //its viewport quad shows it
+        .ViewportPanel => {},
         .PlayPanel => {
             try self._ViewportPanel.OnImguiRenderPlay(engine_context, &images, self.mActiveWorldType);
         },
@@ -1071,9 +1329,8 @@ fn RenderViewportWorlds(self: *EditorProgram, engine_context: *EngineContext, vi
     }
 
     switch (viewport_type) {
-        .ViewportPanel => {
-            try self._ViewportPanel.OnImguiRenderViewport(engine_context, images.items, self.mActiveWorldType);
-        },
+        //their viewport quads show them
+        .ViewportPanel => {},
         .PlayPanel => {
             try self._ViewportPanel.OnImguiRenderPlay(engine_context, images.items, self.mActiveWorldType);
         },
@@ -1247,8 +1504,8 @@ pub fn OnImguiRender(self: *EditorProgram, engine_context: *EngineContext) !void
             if (imgui.igMenuItem_Bool("UI Element", @ptrCast(@alignCast(my_null_ptr)), self._UIElementPanel._P_Open, true) == true) {
                 self._UIElementPanel._P_Open = !self._UIElementPanel._P_Open;
             }
-            if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), self._ViewportPanel.mP_OpenViewport, true) == true) {
-                self._ViewportPanel.mP_OpenViewport = !self._ViewportPanel.mP_OpenViewport;
+            if (imgui.igMenuItem_Bool("Viewport", @ptrCast(@alignCast(my_null_ptr)), self.mShowViewport, true) == true) {
+                self.mShowViewport = !self.mShowViewport;
             }
         }
         if (imgui.igBeginMenu("Editor", true) == true) {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const RenderTargetComponent = @import("../ECSComponents/Shared/RenderTargetComponent.zig");
 const builtin = @import("builtin");
 const SSBO = @import("../SSBOs/SSBO.zig");
 const sdl = @import("../Core/CImports.zig").sdl;
@@ -265,6 +266,7 @@ pub fn DrawQuad(
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
     quad_component: *QuadComponent,
+    shown: ?RenderTargetComponent.Shown, //a render target it shows in place of its texture (ViewportComponent)
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
     shading_buff: *ShadingBuffers,
@@ -278,12 +280,15 @@ pub fn DrawQuad(
 
     const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
 
-    const shading_handle = try shading_buff.AddSurface(
-        engine_context.EngineAllocator(),
-        &quad_component.mTexOptions,
-        texture_asset,
-        std.math.maxInt(u32),
-    );
+    const shading_handle = if (shown) |target|
+        try shading_buff.AddSurfaceSlot(engine_context.EngineAllocator(), &quad_component.mTexOptions, target.Handle, target.Width, target.Height)
+    else
+        try shading_buff.AddSurface(
+            engine_context.EngineAllocator(),
+            &quad_component.mTexOptions,
+            texture_asset,
+            std.math.maxInt(u32),
+        );
 
     var shading_flag: u32 = 0;
     if (quad_component.mTexOptions.mIsTransparent) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;

@@ -370,12 +370,15 @@ test "Escape goes to the top popup, unless a text input in the same scene has th
     const escape = ui_manager.KeyTakerFor(.ESCAPE).?;
     try std.testing.expectEqual(.Popup, escape.Kind);
     try std.testing.expectEqual(stack_pos, escape.StackPos);
+    //the world whose scene stack that is a place in
+    try std.testing.expectEqual(&engine_context.mEditorWorld, escape.World);
     try std.testing.expect(ui_manager.KeyTakerFor(.A) == null);
 
     //typing into the menu's field: it has the keyboard, and it is in the popup's scene, so it goes first
     try world.Press(world.mField);
     try std.testing.expectEqual(.Focus, ui_manager.KeyTakerFor(.ESCAPE).?.Kind);
     try std.testing.expectEqual(.Focus, ui_manager.KeyTakerFor(.A).?.Kind);
+    try std.testing.expectEqual(&engine_context.mEditorWorld, ui_manager.KeyTakerFor(.A).?.World);
 
     //Escape ends the edit first, then the next one closes the menu
     try ui_manager.OnKeyTaken(engine_context, ui_manager.KeyTakerFor(.ESCAPE).?, .{ ._InputCode = .ESCAPE, ._Repeat = 0 });

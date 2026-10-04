@@ -26,6 +26,7 @@ pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
 pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
 pub const ClipComponent = @import("Entity/ClipComponent.zig");
+pub const ViewportComponent = @import("Entity/ViewportComponent.zig");
 pub const UIElementComponent = @import("Entity/UIElementComponent.zig");
 pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
 pub const LayoutItemComponent = @import("Entity/LayoutItemComponent.zig");
@@ -97,6 +98,8 @@ pub const ComponentsList = [_]type{
     FocusedTag,
     ClipComponent,
     UIElementComponent,
+    //never saved yet: the editor makes its viewports in code
+    ViewportComponent,
 
     //scripts
     ScriptComponent,
@@ -238,6 +241,7 @@ pub const EComponents = enum(u16) {
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
     FocusedTag = ListInd(&ComponentsList, FocusedTag),
     ClipComponent = ListInd(&ComponentsList, ClipComponent),
+    ViewportComponent = ListInd(&ComponentsList, ViewportComponent),
     UIElementComponent = ListInd(&ComponentsList, UIElementComponent),
 };
 

@@ -3,6 +3,9 @@
 //! made: a button is a styled quad with a label, and what it does is whatever script is put on it.
 //! Built in code for now, which is easy to test. Once these settle, saving one as a template file is a single call, and
 //! templates can take over.
+//! Every entity a builder makes inside another sits DEPTH_STEP in front of it. Layout never sets depth, and two shapes at
+//! the same depth are the same distance from the camera, where the renderer keeps whichever it finds first: a button's
+//! quad could hide behind the panel it is on, a label behind its button.
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -71,6 +74,9 @@ pub const StockScript = enum {
 pub const TEXT_SIZE: f32 = 16;
 /// The room between a button's or row's edge and what is in it
 pub const PADDING: f32 = 6;
+/// How far in front of its parent each entity a builder makes sits, in its parent's units (canvas units in an overlay).
+/// Any step separates them; this one is far too small to see
+pub const DEPTH_STEP: f32 = 0.01;
 /// A checkbox's box
 pub const CHECKBOX_SIZE: f32 = 16;
 /// How far in front of the rest of its scene a dropdown's list is, so it is drawn over what it hangs over
@@ -525,9 +531,14 @@ fn ButtonFrame(engine_context: *EngineContext, parent: Parent) !Entity {
     return button;
 }
 
+/// A new entity under `parent`: inside an entity, DEPTH_STEP in front of it
 fn NewEntity(engine_context: *EngineContext, parent: Parent) !Entity {
-    return switch (parent) {
-        .Entity => |entity| try entity.CreateChild(engine_context, .Entity, Entity.DefaultConfig),
-        .Scene => |scene| try scene.CreateEntity(engine_context, Entity.DefaultConfig),
-    };
+    switch (parent) {
+        .Entity => |entity| {
+            const child = try entity.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+            try child.SetTranslation(engine_context, Vec3(f32){ .x = 0, .y = 0, .z = DEPTH_STEP });
+            return child;
+        },
+        .Scene => |scene| return try scene.CreateEntity(engine_context, Entity.DefaultConfig),
+    }
 }

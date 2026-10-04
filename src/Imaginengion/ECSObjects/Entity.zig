@@ -92,6 +92,7 @@ pub const HasComponent = Core.HasComponent;
 pub const GetUUID = Core.GetUUID;
 
 pub const GetName = Core.GetName;
+pub const SetName = Core.SetName;
 
 pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: CreateConfig) !Entity {
     const child_entity = try Core.CreateChild(self, engine_context, child_type, config);

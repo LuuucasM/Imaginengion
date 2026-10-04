@@ -11,11 +11,16 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
 
         mComponents: SparseSetT = .empty,
 
-        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
+        /// Runs every component's Deinit without freeing the storage. A component's Deinit can reach into
+        /// other arrays of the same ECS (a ThemeAsset releasing its font handle), so the ComponentManager
+        /// calls this on every array before any of them are freed.
+        pub fn DeinitComponents(self: *Self, engine_context: *EngineContext) void {
             for (self.mComponents.mValues.items) |*component| {
                 component.Deinit(engine_context);
             }
-
+        }
+        /// Frees the storage only, DeinitComponents has to have run first
+        pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             self.mComponents.Deinit(engine_context.EngineAllocator());
         }
         pub fn DuplicateEntity(self: *Self, engine_context: *EngineContext, original_entity_id: entity_t, new_entity_id: entity_t) !void {
@@ -90,11 +95,8 @@ pub fn InternalComponentArray(comptime entity_t: type, comptime component_type: 
             try entity_set.appendSlice(allocator, self.mComponents.mDenseToSparse.items);
             return entity_set;
         }
+        /// Frees the storage only, DeinitComponents has to have run first
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
-            for (self.mComponents.mValues.items) |*component| {
-                component.Deinit(engine_context);
-            }
-
             self.mComponents.clearAndFree(engine_context.EngineAllocator());
         }
         pub fn DestroyEntity(self: *Self, engine_context: *EngineContext, entity_id: entity_t) void {

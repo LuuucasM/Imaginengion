@@ -33,6 +33,11 @@ pub fn Register(self: *TextureManager, engine_context: *EngineContext, pixels: ?
     return try self._Impl.Register(engine_context, pixels, width, height);
 }
 
+/// Copies a GPU texture's pixels into a registered slot, on the GPU (see the backend's CopyFromTexture)
+pub fn CopyFromTexture(self: *TextureManager, engine_context: *EngineContext, source: *anyopaque, texture_location: u32, width: usize, height: usize) void {
+    self._Impl.CopyFromTexture(engine_context, source, texture_location, width, height);
+}
+
 pub fn Unregister(self: *TextureManager, texture_location: u32) void {
     self._Impl.Unregister(texture_location);
 }

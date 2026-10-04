@@ -220,6 +220,13 @@ pub fn Core(comptime Self: type) type {
         pub fn GetName(self: Self) []const u8 {
             return GetComponent(self, NameComponent).?.*.mName.items;
         }
+
+        /// Renames the object. Nothing happens for one with no NameComponent
+        pub fn SetName(self: Self, engine_context: *EngineContext, name: []const u8) !void {
+            const name_component = GetComponent(self, NameComponent) orelse return;
+            name_component.mName.clearRetainingCapacity();
+            try name_component.mName.appendSlice(engine_context.EngineAllocator(), name);
+        }
         pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType, config: Self.CreateConfig) !Self {
             if (Self == Entity) {
                 return try self.mManager.mEManager.CreateChild(engine_context, self.mID, child_type, config);

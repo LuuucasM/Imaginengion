@@ -59,6 +59,7 @@ pub const GetComponent = Core.GetComponent;
 pub const HasComponent = Core.HasComponent;
 
 pub const GetName = Core.GetName;
+pub const SetName = Core.SetName;
 
 pub const Duplicate = Core.Duplicate;
 

@@ -194,6 +194,10 @@ test "the builders make each widget out of quads, text, layout and styles" {
     const label = FirstChild(button);
     try std.testing.expectEqualStrings("Play", label.GetComponent(TextComponent).?.mText.items);
     try std.testing.expectEqualStrings("Text", StyleOf(label));
+    //each a step in front of what it is in, so the renderer never has two at the same depth to choose between
+    const TransformComponent = EntityComponents.TransformComponent;
+    try std.testing.expectEqual(Widgets.DEPTH_STEP, label.GetComponent(TransformComponent).?.GetTranslation().z);
+    try std.testing.expectEqual(Widgets.DEPTH_STEP, button.GetComponent(TransformComponent).?.GetTranslation().z);
 
     const checkbox = try Widgets.Checkbox(engine_context, list, "Fullscreen", no_scripts);
     const box = FirstChild(checkbox);
@@ -208,9 +212,10 @@ test "the builders make each widget out of quads, text, layout and styles" {
     try std.testing.expectEqualStrings("Separator", StyleOf(separator));
     try std.testing.expectEqual(@as(f32, 1), separator.GetComponent(LayoutItemComponent).?.mHeight.Fixed);
 
-    //and at the top of a scene
+    //and at the top of a scene, where it is where the scene's own depth is
     const top = try Widgets.Label(engine_context, .{ .Scene = world.mScene }, "Title");
     try std.testing.expect(!top.HasComponent(@import("../../ECS/Components.zig").ChildComponent(Entity.Type)));
+    try std.testing.expectEqual(@as(f32, 0), top.GetComponent(TransformComponent).?.GetTranslation().z);
 }
 
 fn TextOf(entity: Entity) []const u8 {

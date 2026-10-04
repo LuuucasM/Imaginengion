@@ -3,6 +3,7 @@ const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const ViewportPanel = @import("ViewportPanel.zig");
+const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 const EditorProgram = @import("../Programs/EditorProgram.zig");
 const CameraRay = @import("../Math/CameraRay.zig");
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
@@ -38,9 +39,10 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     const mouse_pos = engine_context.mInputManager.GetMousePosition();
     try Text(frame_allocator, "Mouse (window): {d:.1}, {d:.1}", .{ mouse_pos.x, mouse_pos.y });
     try Text(frame_allocator, "Pixel density: {d:.2}   Display scale: {d:.2}", .{ engine_context.mAppWindow.GetPixelDensity(), engine_context.mAppWindow.GetDisplayScale() });
-    try Text(frame_allocator, "Views drawn: Viewport {d} (hovered: {}), Play {d} (hovered: {})", .{
-        viewport_panel.mViewportRects.items.len, viewport_panel.mIsHoveredViewport,
-        viewport_panel.mPlayRects.items.len,     viewport_panel.mIsHoveredPlay,
+    try Text(frame_allocator, "Views drawn: Viewport {d}, Play {d} (hovered: {})", .{
+        editor_program.mViewportQuads.items.len,
+        viewport_panel.mPlayRects.items.len,
+        viewport_panel.mIsHoveredPlay,
     });
 
     imgui.igSeparator();
@@ -64,34 +66,34 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
 
     imgui.igSeparator();
 
-    const view_at = viewport_panel.FindViewAt(mouse_pos) orelse {
+    //the same view a click looks for (EditorProgram.ViewUnder): the play panel's, or a viewport quad's
+    const view = try editor_program.ViewUnder(engine_context, mouse_pos) orelse {
         try Text(frame_allocator, "No view under the mouse", .{});
         return;
     };
-    const view = view_at.View;
 
-    const camera_name = if (view.Camera.GetComponent(PlayerNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
-    try Text(frame_allocator, "Panel: {s}", .{@tagName(view_at.Panel)});
-    try Text(frame_allocator, "Camera: {s}", .{camera_name});
-    try Text(frame_allocator, "World: {s}", .{@tagName(view.World)});
-    try Text(frame_allocator, "Target pixel: {d:.1}, {d:.1} of {d:.0} x {d:.0}", .{ view_at.Pixel.x, view_at.Pixel.y, view.Rect.TargetSize.x, view.Rect.TargetSize.y });
-
-    imgui.igSeparator();
-
-    //the camera may have stopped being drawable since the panels recorded it
+    //the camera may have stopped being drawable since the views were drawn
     const render_view = view.Camera.GetRenderView() orelse {
         try Text(frame_allocator, "Camera is no longer drawable", .{});
         return;
     };
+    const target_size = Vec2(f32){ .x = @floatFromInt(render_view.mViewpoint.mViewportWidth), .y = @floatFromInt(render_view.mViewpoint.mViewportHeight) };
+
+    const camera_name = if (view.Camera.GetComponent(PlayerNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
+    try Text(frame_allocator, "Camera: {s}", .{camera_name});
+    try Text(frame_allocator, "World: {s}", .{@tagName(view.World)});
+    try Text(frame_allocator, "Target pixel: {d:.1}, {d:.1} of {d:.0} x {d:.0}", .{ view.Pixel.x, view.Pixel.y, target_size.x, target_size.y });
+
+    imgui.igSeparator();
     //the same ray and camera view a click uses (EditorProgram.OnViewportClick), which are the ones the
     //renderer drew this view with
     const camera_view = CameraView.FromViewpoint(render_view.mTransform, render_view.mViewpoint, engine_context.mAppWindow.GetDisplayScale());
-    const ray = CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view_at.Pixel);
+    const ray = CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view.Pixel);
     try Text(frame_allocator, "Ray origin: {d:.3}, {d:.3}, {d:.3}", .{ ray.Origin.x, ray.Origin.y, ray.Origin.z });
     try Text(frame_allocator, "Ray dir: {d:.4}, {d:.4}, {d:.4}", .{ ray.Dir.x, ray.Dir.y, ray.Dir.z });
 
     //what the ray at the exact center reads, to compare against while hovering the middle
-    const center = CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, view.Rect.TargetSize.MulScalar(0.5));
+    const center = CameraView.PixelRay(render_view.mTransform, render_view.mViewpoint, target_size.MulScalar(0.5));
     try Text(frame_allocator, "Camera forward: {d:.4}, {d:.4}, {d:.4}", .{ center.Dir.x, center.Dir.y, center.Dir.z });
 
     const world = switch (view.World) {

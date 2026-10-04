@@ -26,8 +26,9 @@ const ComputeOutput = @import("../Renderer/Renderer.zig").ComputeOutput;
 
 const ViewportPanel = @This();
 
+/// The ImGui panels that show views. The main viewport is a viewport quad in the editor's own UI now, so only the play
+/// (preview) panel is left here
 pub const Panel = enum {
-    Viewport,
     Play,
 };
 
@@ -54,14 +55,6 @@ pub const ViewAt = struct {
     Pixel: Vec2(f32), //continuous render target pixel, ready for CameraRay.MakeRay
 };
 
-//for viewport window
-mP_OpenViewport: bool = true,
-mIsFocusedViewport: bool = false,
-mIsHoveredViewport: bool = false,
-mViewportWidth: usize = 0,
-mViewportHeight: usize = 0,
-mViewportRects: std.ArrayList(ViewRect) = .empty,
-
 //for play window
 mP_OpenPlay: bool = true,
 mIsFocusedPlay: bool = false,
@@ -71,15 +64,11 @@ mPlayHeight: usize = 0,
 mPlayRects: std.ArrayList(ViewRect) = .empty,
 
 pub fn Init(self: *ViewportPanel, viewport_width: usize, viewport_height: usize) void {
-    self.mViewportWidth = viewport_width;
-    self.mViewportHeight = viewport_height;
-
     self.mPlayWidth = viewport_width;
     self.mPlayHeight = viewport_height;
 }
 
 pub fn Deinit(self: *ViewportPanel, engine_allocator: std.mem.Allocator) void {
-    self.mViewportRects.deinit(engine_allocator);
     self.mPlayRects.deinit(engine_allocator);
 }
 
@@ -87,9 +76,6 @@ pub fn Deinit(self: *ViewportPanel, engine_allocator: std.mem.Allocator) void {
 /// last time the panels were drawn. Only a hovered panel counts, so a popup, menu or window over
 /// the viewport blocks it. Overlapping area rects resolve to the one drawn last, which is on top.
 pub fn FindViewAt(self: *const ViewportPanel, screen_pos: Vec2(f32)) ?ViewAt {
-    if (self.mIsHoveredViewport) {
-        if (FindInRects(self.mViewportRects.items, screen_pos)) |found| return .{ .Panel = .Viewport, .View = found.View, .Pixel = found.Pixel };
-    }
     if (self.mIsHoveredPlay) {
         if (FindInRects(self.mPlayRects.items, screen_pos)) |found| return .{ .Panel = .Play, .View = found.View, .Pixel = found.Pixel };
     }
@@ -98,10 +84,8 @@ pub fn FindViewAt(self: *const ViewportPanel, screen_pos: Vec2(f32)) ?ViewAt {
 
 /// The view `camera` was last drawn in, wherever the mouse is. Null if it isn't on screen
 pub fn FindViewOf(self: *const ViewportPanel, camera: Player) ?ViewRect {
-    for ([_][]const ViewRect{ self.mPlayRects.items, self.mViewportRects.items }) |rects| {
-        for (rects) |rect| {
-            if (rect.Camera.mID == camera.mID and rect.Camera.mManager == camera.mManager) return rect;
-        }
+    for (self.mPlayRects.items) |rect| {
+        if (rect.Camera.mID == camera.mID and rect.Camera.mManager == camera.mManager) return rect;
     }
     return null;
 }
@@ -113,36 +97,6 @@ fn FindInRects(rects: []const ViewRect, screen_pos: Vec2(f32)) ?struct { View: V
         if (ScreenRect.ToTargetPixel(rects[i].Rect, screen_pos)) |pixel| return .{ .View = rects[i], .Pixel = pixel };
     }
     return null;
-}
-
-pub fn OnImguiRenderViewport(self: *ViewportPanel, engine_context: *EngineContext, images: []const PanelImage, world: EngineContext.WorldType) !void {
-    const zone = Tracy.ZoneInit("ViewportPanel::OnImguiRenderViewport", @src());
-    defer zone.Deinit();
-
-    //a closed panel shows nothing, so it must not keep reporting what it showed before
-    self.mViewportRects.clearRetainingCapacity();
-    self.mIsHoveredViewport = false;
-
-    if (self.mP_OpenViewport == false) return;
-
-    _ = imgui.igBegin("Viewport", null, 0);
-    defer imgui.igEnd();
-
-    //update viewport size if needed
-    var viewport_size = imgui.igGetContentRegionAvail();
-
-    if (viewport_size.x != @as(f32, @floatFromInt(self.mViewportWidth)) or viewport_size.y != @as(f32, @floatFromInt(self.mViewportHeight))) {
-        if (viewport_size.x < 0) viewport_size.x = 0;
-        if (viewport_size.y < 0) viewport_size.y = 0;
-        self.mViewportWidth = @intFromFloat(viewport_size.x);
-        self.mViewportHeight = @intFromFloat(viewport_size.y);
-    }
-
-    //get if the window is focused or not
-    self.mIsFocusedViewport = imgui.igIsWindowFocused(imgui.ImGuiFocusedFlags_None);
-    //false while a popup, menu or another window is over it, which is what picking wants
-    self.mIsHoveredViewport = imgui.igIsWindowHovered(imgui.ImGuiHoveredFlags_None);
-    try OnImguiRender(engine_context, images, world, viewport_size, &self.mViewportRects);
 }
 
 pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, images: []const PanelImage, world: EngineContext.WorldType) !void {
@@ -217,10 +171,6 @@ fn OnImguiRender(engine_context: *EngineContext, images: []const PanelImage, wor
             .World = world,
         });
     }
-}
-
-pub fn OnTogglePanelEventViewport(self: *ViewportPanel) void {
-    self.mP_OpenViewport = !self.mP_OpenViewport;
 }
 
 pub fn OnTogglePanelEventPlay(self: *ViewportPanel) void {

@@ -89,6 +89,17 @@ pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
 pub fn ProcessEvent(_: *ImguiManager, event: *sdl.SDL_Event) void {
     _ = imgui.ImGui_ImplSDL3_ProcessEvent(@ptrCast(event));
 }
+/// Whether ImGui has the mouse: it is over one of its windows, or a button went down on one and is still held. As of
+/// the last frame ImGui ran, which is what was on screen
+pub fn WantsMouse(_: *const ImguiManager) bool {
+    return imgui.igGetIO_Nil().*.WantCaptureMouse;
+}
+
+/// Whether ImGui has the keyboard: one of its text fields is being typed into
+pub fn WantsKeyboard(_: *const ImguiManager) bool {
+    return imgui.igGetIO_Nil().*.WantCaptureKeyboard;
+}
+
 pub fn Begin(self: *ImguiManager) void {
     const zone = Tracy.ZoneInit("ImguiManager::Begin", @src());
     defer zone.Deinit();

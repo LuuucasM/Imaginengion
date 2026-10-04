@@ -83,6 +83,7 @@ pub const HasComponent = Core.HasComponent;
 pub const GetUUID = Core.GetUUID;
 
 pub const GetName = Core.GetName;
+pub const SetName = Core.SetName;
 
 pub const Delete = Core.Delete;
 

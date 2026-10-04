@@ -73,6 +73,11 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
+            // every component is deinitialized before any array is freed, since a component's Deinit
+            // can reach into other arrays (an asset releasing a handle to another asset)
+            for (self.mComponentsArrays.items) |component_array| {
+                component_array.DeinitComponents(engine_context);
+            }
             for (self.mComponentsArrays.items) |component_array| {
                 component_array.Deinit(engine_context);
             }
@@ -81,6 +86,10 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
         }
 
         pub fn clearAndFree(self: *Self, engine_context: *EngineContext) void {
+            // same two passes as Deinit
+            for (self.mComponentsArrays.items) |component_array| {
+                component_array.DeinitComponents(engine_context);
+            }
             for (self.mComponentsArrays.items) |component_array| {
                 component_array.clearAndFree(engine_context);
             }
@@ -134,6 +143,9 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             errdefer {
                 // the arrays already copied own their components, so they are emptied again
                 // rather than left as a half built ECS
+                for (other.mComponentsArrays.items[0..copied]) |component_array| {
+                    component_array.DeinitComponents(engine_context);
+                }
                 for (other.mComponentsArrays.items[0..copied]) |component_array| {
                     component_array.clearAndFree(engine_context);
                 }

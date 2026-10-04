@@ -13,9 +13,49 @@ pub const Editable = false;
 pub const Name: []const u8 = "RenderTargetComponent";
 
 mComputeTexture: ComputeOutput = .empty,
+/// Where a quad showing this target (ViewportComponent) samples it from: a slot in the texture manager, the target's
+/// size, which Shown copies the target into. Null until something shows it, and again after the target changes size
+mShownSlot: ?u32 = null,
+mShownWidth: usize = 0,
+mShownHeight: usize = 0,
 
 pub fn Deinit(self: *RenderTargetComponent, engine_context: *EngineContext) void {
+    self.ReleaseShownSlot(engine_context);
     self.mComputeTexture.Deinit(engine_context);
+}
+
+/// What a quad samples to show this target, and what has to be copied there before it does
+pub const Shown = struct {
+    Handle: u32,
+    Width: usize,
+    Height: usize,
+    /// the target's GPU texture, copied into the slot (TextureManager.CopyFromTexture) by the draw that shows it
+    Source: *anyopaque,
+};
+
+/// The texture manager slot a quad samples to show the target, the target's size: made the first time and again
+/// whenever the target's size changes. The draw that shows it copies the target in first (Renderer.EndRendering), so it
+/// shows what the target was last drawn with. Null while the target has no texture, or is too big for a slot
+pub fn ShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext) !?Shown {
+    if (!self.mComputeTexture.IsCreated()) return null;
+    const width = self.mComputeTexture.GetWidth();
+    const height = self.mComputeTexture.GetHeight();
+    const texture_manager = &engine_context.mRenderer.mTextureManager;
+    if (self.mShownSlot == null or self.mShownWidth != width or self.mShownHeight != height) {
+        self.ReleaseShownSlot(engine_context);
+        self.mShownSlot = texture_manager.Register(engine_context, null, width, height) catch |err| switch (err) {
+            error.TextureTooLarge => return null,
+            else => return err,
+        };
+        self.mShownWidth = width;
+        self.mShownHeight = height;
+    }
+    return .{ .Handle = self.mShownSlot.?, .Width = width, .Height = height, .Source = self.mComputeTexture.GetTexture() };
+}
+
+fn ReleaseShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext) void {
+    if (self.mShownSlot) |slot| engine_context.mRenderer.mTextureManager.Unregister(slot);
+    self.mShownSlot = null;
 }
 
 /// The GPU texture is owned, so a copy gets its own at the same size. A plain value copy would

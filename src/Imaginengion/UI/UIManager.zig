@@ -119,6 +119,8 @@ pub fn OnInputEvent(self: *UIManager, engine_context: *EngineContext, pointer: *
 
 /// Which part of the UI takes a key, and at which turn in the scene stack: its scene's place
 pub const KeyTaker = struct {
+    /// the world the taker is in, whose scene stack StackPos is a place in
+    World: *WorldManager,
     StackPos: usize,
     Kind: enum {
         /// the text input with the keyboard: every key
@@ -136,9 +138,12 @@ pub fn KeyTakerFor(self: *const UIManager, key: ScanCodes) ?KeyTaker {
     const focus_pos = self.mFocusSystem.FocusedStackPos();
     const popup_pos = if (key == .ESCAPE) self.mPopupSystem.TopStackPos() else null;
     if (popup_pos) |pos| {
-        if (focus_pos == null or pos > focus_pos.?) return .{ .StackPos = pos, .Kind = .Popup };
+        if (focus_pos == null or pos > focus_pos.?) {
+            const popups = self.mPopupSystem.OpenPopups();
+            return .{ .World = popups[popups.len - 1].mPopup.mManager, .StackPos = pos, .Kind = .Popup };
+        }
     }
-    if (focus_pos) |pos| return .{ .StackPos = pos, .Kind = .Focus };
+    if (focus_pos) |pos| return .{ .World = self.mFocusSystem.Focused().?.mManager, .StackPos = pos, .Kind = .Focus };
     return null;
 }
 
@@ -187,9 +192,9 @@ pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !voi
 
 /// Once a frame, after layout and before world transforms: open popups are placed against what opened them, scrollbars
 /// put where their regions are scrolled to, and the caret where the laid out text puts it. Popups and scrollbars are
-/// only for `play_world`, the world being played, null when nothing is
-pub fn UpdateAfterLayout(self: *UIManager, engine_context: *EngineContext, play_world: ?*WorldManager) !void {
-    if (play_world) |world| {
+/// only for `worlds`, the ones whose UI is in use: the world being played, the editor's own
+pub fn UpdateAfterLayout(self: *UIManager, engine_context: *EngineContext, worlds: []const *WorldManager) !void {
+    for (worlds) |world| {
         try self.mPopupSystem.Update(engine_context, world);
         try self.mScrollSystem.Update(engine_context, world);
     }

@@ -169,6 +169,27 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
     return (@as(u32, @intCast(slot_index)) << (LAYER_BYTES + BINS_BYTES)) | (@as(u32, @intCast(layer_index)) << BINS_BYTES) | @as(u32, @intCast(bin_index));
 }
 
+/// Copies `width` x `height` of `source` (a GPU texture of the same RGBA8 format, from its top left corner) into the slot
+/// `texture_location` was registered with, on the GPU, in the frame's work command buffer: after whatever drew into
+/// `source` earlier in it, and before anything that samples the slot later in it
+pub fn CopyFromTexture(self: *SGTextureManager, engine_context: *EngineContext, source: *anyopaque, texture_location: u32, width: usize, height: usize) void {
+    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetWorkCmdBuff()));
+    const offset_x, const offset_y = GetPixelOffsets(GetBinIndex(texture_location), GetSlotIndex(texture_location));
+    const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd) orelse return;
+    defer sdl.SDL_EndGPUCopyPass(copy_pass);
+
+    const src = sdl.SDL_GPUTextureLocation{ .texture = @ptrCast(@alignCast(source)), .mip_level = 0, .layer = 0, .x = 0, .y = 0, .z = 0 };
+    const dst = sdl.SDL_GPUTextureLocation{
+        .texture = self.mTexture,
+        .mip_level = 0,
+        .layer = @intCast(GetLayerIndex(texture_location)),
+        .x = @intCast(offset_x),
+        .y = @intCast(offset_y),
+        .z = 0,
+    };
+    sdl.SDL_CopyGPUTextureToTexture(copy_pass, &src, &dst, @intCast(width), @intCast(height), 1, false);
+}
+
 pub fn Bind(self: SGTextureManager, render_pass: *anyopaque) void {
     const sdl_render_pass: *sdl.SDL_GPURenderPass = @ptrCast(render_pass);
 

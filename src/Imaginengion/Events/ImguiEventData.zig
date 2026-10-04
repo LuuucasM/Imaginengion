@@ -14,7 +14,6 @@ pub const EventT = union(enum) {
     MoveSceneEvent: MoveSceneEvent,
     SelectSceneEvent: SelectSceneEvent,
     SelectEntityEvent: SelectEntityEvent,
-    ViewportResizeEvent: ViewportResizeEvent,
     PlayPanelResizeEvent: PlayPanelResizeEvent,
     OpenSceneSpecEvent: OpenSceneSpecEvent,
     DeleteEntityEvent: DeleteEntityEvent,
@@ -43,11 +42,6 @@ pub const SelectSceneEvent = struct {
 
 pub const SelectEntityEvent = struct {
     SelectedEntity: ?Entity,
-};
-
-pub const ViewportResizeEvent = struct {
-    mWidth: usize,
-    mHeight: usize,
 };
 
 pub const PlayPanelResizeEvent = struct {

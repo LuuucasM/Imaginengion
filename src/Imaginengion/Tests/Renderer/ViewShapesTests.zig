@@ -333,3 +333,68 @@ test "a box is only outside a clip when none of it reaches into it, through any 
     try std.testing.expect(ShapeGeometry.ClipContains(clip, .{ .x = 1.5, .y = -0.5, .z = -40 }));
     try std.testing.expect(!ShapeGeometry.ClipContains(clip, .{ .x = 2.5, .y = 0, .z = 0 }));
 }
+
+test "a viewport quad covers its size times the pixels a canvas unit covers, and only an overlay's has a size" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const Viewports = @import("../../Renderer/Viewports.zig");
+    //sizing a player needs a GPU texture, so it is only checked to build here
+    _ = &Viewports.FitPlayerToQuad;
+
+    const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const viewport = try AddQuad(engine_context, overlay);
+    viewport.GetComponent(QuadComponent).?.mSize = .{ .x = 400, .y = 225 };
+
+    //a constant pixel size overlay: a canvas unit is a pixel at the display's scale
+    overlay.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
+    const sharp = Viewports.PixelSizeOf(viewport, VIEW).?;
+    try std.testing.expectEqual(@as(usize, 800), sharp.Width);
+    try std.testing.expectEqual(@as(usize, 450), sharp.Height);
+
+    //one that scales with the screen: a 900 tall view is 900 / 1080 of a pixel a unit
+    overlay.GetComponent(SceneComponent).?.mOverlayScaleMode = .ScaleWithScreen;
+    const scaled = Viewports.PixelSizeOf(viewport, VIEW).?;
+    try std.testing.expectEqual(@as(usize, 333), scaled.Width);
+    try std.testing.expectEqual(@as(usize, 188), scaled.Height);
+
+    const game = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    try std.testing.expect(Viewports.PixelSizeOf(try AddQuad(engine_context, game), VIEW) == null);
+}
+
+/// The ray from VIEW's camera through a point of an overlay scene's canvas
+fn RayThroughCanvas(scene: Scene, canvas_point: Vec3(f32)) @import("../../Math/CameraRay.zig").Ray {
+    const world_point = ShapeGeometry.SceneCanvas(scene, VIEW).ToWorldPoint(canvas_point);
+    var dir = world_point.SubVec(VIEW.Pose.Position);
+    dir.Normalize();
+    return .{ .Origin = VIEW.Pose.Position, .Dir = dir };
+}
+
+test "a ray through a viewport quad lands on the pixel of the picture under it, top left first, and off it only when allowed" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const Viewports = @import("../../Renderer/Viewports.zig");
+
+    //400 x 200 canvas units, centered at (100, 50), showing an 800 x 400 picture
+    const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const quad = try AddQuad(engine_context, overlay);
+    quad.GetComponent(QuadComponent).?.mSize = .{ .x = 400, .y = 200 };
+    try quad.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+    const picture = Vec2(f32){ .x = 800, .y = 400 };
+
+    const center = Viewports.QuadPixelOnRay(quad, RayThroughCanvas(overlay, .{ .x = 100, .y = 50, .z = 0 }), VIEW, picture, .OnView).?;
+    try std.testing.expectApproxEqAbs(@as(f32, 400), center.x, 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 200), center.y, 0.5);
+
+    //canvas y is up, so the quad's top left is the picture's first pixel
+    const top_left = Viewports.QuadPixelOnRay(quad, RayThroughCanvas(overlay, .{ .x = -99, .y = 149, .z = 0 }), VIEW, picture, .OnView).?;
+    try std.testing.expectApproxEqAbs(@as(f32, 2), top_left.x, 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 2), top_left.y, 0.5);
+
+    //past the right edge: nothing under the pointer, but a drag can still follow it there
+    const past = RayThroughCanvas(overlay, .{ .x = 350, .y = 50, .z = 0 });
+    try std.testing.expect(Viewports.QuadPixelOnRay(quad, past, VIEW, picture, .OnView) == null);
+    try std.testing.expectApproxEqAbs(@as(f32, 900), Viewports.QuadPixelOnRay(quad, past, VIEW, picture, .Unbounded).?.x, 0.5);
+}

@@ -5,6 +5,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 pub fn ComponentArray(entity_t: type) type {
     const VTab = struct {
         CopyInto: *const fn (*anyopaque, *EngineContext, *anyopaque) anyerror!void,
+        DeinitComponents: *const fn (*anyopaque, *EngineContext) void,
         Deinit: *const fn (*anyopaque, *EngineContext) void,
         DuplicateEntity: *const fn (*anyopaque, *EngineContext, entity_t, entity_t) anyerror!void,
         HasComponent: *const fn (*anyopaque, entity_t) bool,
@@ -25,6 +26,10 @@ pub fn ComponentArray(entity_t: type) type {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
                     const other = @as(*internal_type, @ptrCast(@alignCast(other_ptr)));
                     try self.CopyInto(engine_context, other);
+                }
+                fn DeinitComponents(ptr: *anyopaque, engine_context: *EngineContext) void {
+                    const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
+                    self.DeinitComponents(engine_context);
                 }
                 fn Deinit(ptr: *anyopaque, engine_context: *EngineContext) void {
                     const self = @as(*internal_type, @ptrCast(@alignCast(ptr)));
@@ -60,6 +65,7 @@ pub fn ComponentArray(entity_t: type) type {
                 .mPtr = new_component_array,
                 .mVtable = &.{
                     .CopyInto = impl.CopyInto,
+                    .DeinitComponents = impl.DeinitComponents,
                     .Deinit = impl.Deinit,
                     .DuplicateEntity = impl.DuplicateEntity,
                     .HasComponent = impl.HasComponent,
@@ -75,6 +81,11 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn CopyInto(self: Self, engine_context: *EngineContext, other: Self) anyerror!void {
             try self.mVtable.CopyInto(self.mPtr, engine_context, other.mPtr);
         }
+        /// Runs every component's Deinit, leaving the storage in place
+        pub fn DeinitComponents(self: Self, engine_context: *EngineContext) void {
+            self.mVtable.DeinitComponents(self.mPtr, engine_context);
+        }
+        /// Frees the storage and the array itself, DeinitComponents has to have run first
         pub fn Deinit(self: Self, engine_context: *EngineContext) void {
             self.mVtable.Deinit(self.mPtr, engine_context);
         }
@@ -87,6 +98,7 @@ pub fn ComponentArray(entity_t: type) type {
         pub fn HasComponent(self: Self, entityID: entity_t) bool {
             return self.mVtable.HasComponent(self.mPtr, entityID);
         }
+        /// Frees the storage, DeinitComponents has to have run first
         pub fn clearAndFree(self: Self, engine_context: *EngineContext) void {
             self.mVtable.clearAndFree(self.mPtr, engine_context);
         }

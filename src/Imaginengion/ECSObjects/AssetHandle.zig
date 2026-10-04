@@ -43,6 +43,7 @@ pub fn ReleaseAsset(self: *AssetHandle) void {
 }
 
 pub const GetName = Core.GetName;
+pub const SetName = Core.SetName;
 pub const IsActive = Core.IsActive;
 pub const Invalidate = Core.Invalidate;
 pub const IsIDValid = Core.IsIDValid;

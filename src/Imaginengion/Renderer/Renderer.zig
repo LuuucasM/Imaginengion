@@ -35,6 +35,9 @@ const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
 const TextureManager = @import("../TextureManager/TextureManager.zig");
+const Viewports = @import("Viewports.zig");
+const RenderTargetComponent = @import("../ECSComponents/Shared/RenderTargetComponent.zig");
+const ViewportComponent = @import("../ECSComponents/Entity/ViewportComponent.zig");
 const RenderPipeline = @import("RenderPipeline.zig");
 const ComputeTexture = @import("../ComputeTexture/ComputeTexture.zig").ComputeStorageTexture;
 const PushConstants = RenderPipeline.SDFPushConstants;
@@ -173,6 +176,27 @@ pub const ShadingBuffers = struct {
 
         return self.mSurfShadingBuffBase.items.len - 1;
     }
+    /// AddSurface for a texture manager slot that isn't a Texture2D asset: a render target shown on a quad
+    pub fn AddSurfaceSlot(
+        self: *ShadingBuffers,
+        engine_allocator: std.mem.Allocator,
+        tex_options: *Texture2D.TexOptions,
+        texture_handle: u32,
+        width: usize,
+        height: usize,
+    ) !usize {
+        try self.mSurfShadingBuffBase.append(engine_allocator, .{
+            .Color = tex_options.mColor.ToArray(),
+            .TextureUV0 = tex_options.mTextureUV0.ToArray(),
+            .TextureUV1 = tex_options.mTextureUV1.ToArray(),
+            .TilingFactor = tex_options.mTilingFactor,
+            .Texturehandle = @intCast(texture_handle),
+            .SiblingShading = std.math.maxInt(u32),
+            .TextureWidth = @intCast(width),
+            .TextureHeight = @intCast(height),
+        });
+        return self.mSurfShadingBuffBase.items.len - 1;
+    }
     pub fn AddMedium(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), absorption: Vec3(f32), scattering: Vec3(f32)) !usize {
         try self.mMedShadingBuffBase.append(engine_allocator, .{
             .Color = color.ToArray(),
@@ -224,6 +248,9 @@ mSDFPushConstants: PushConstants = undefined,
 mR2D: Renderer2D = .{},
 mR3D: Renderer3D = .{},
 mSDFShading: ShadingBuffers = .{},
+/// The render targets the shapes being drawn show (ViewportComponent), copied into their slots at the start of the draw's
+/// command buffer, before anything samples them
+mShownCopies: std.ArrayList(RenderTargetComponent.Shown) = .empty,
 
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Renderer::Init", @src());
@@ -250,6 +277,7 @@ pub fn EndFrame(self: *Renderer) void {
 }
 
 pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
+    self.mShownCopies.deinit(engine_context.EngineAllocator());
     self.mSDFShading.Deinit(engine_context);
     self.mTextureManager.Deinit(engine_context);
     self.mGamePipeline.Deinit(engine_context);
@@ -340,6 +368,7 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
 
     self.mR2D.StartBatch(engine_allocator);
     self.mSDFShading.Reset(engine_allocator, .ClearRetainingCapacity);
+    self.mShownCopies.clearRetainingCapacity();
 
     //NOTE: temporary just add air as the medium
     const air_mat = MediumMaterial.MediumDatabase.get(.Air);
@@ -354,10 +383,14 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
     //picking alike, so nothing can be clicked that isn't drawn. an overlay shape's canvas places it
     //in front of this view's camera, and sends it to the overlay pass
     if (entity.GetComponent(QuadComponent)) |quad_component| {
+        //a quad showing a player's view samples its render target instead of its texture
+        const shown = if (entity.GetComponent(ViewportComponent)) |viewport| try Viewports.ShownTarget(engine_context, viewport.*) else null;
+        if (shown) |target| try self.mShownCopies.append(engine_context.EngineAllocator(), target);
         if (quad_component.mShouldRender) try self.mR2D.DrawQuad(
             engine_context,
             transform_component,
             quad_component,
+            shown,
             shape.Canvas,
             shape.Clip,
             &self.mSDFShading,
@@ -382,6 +415,9 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
     self.mPlatform.StartCmdBuff();
 
     self.mPlatform.PushDebugGroup("End Rendering");
+
+    //the render targets this draw shows, as they were last drawn, into the slots its quads sample
+    for (self.mShownCopies.items) |shown| self.mTextureManager.CopyFromTexture(engine_context, shown.Source, shown.Handle, shown.Width, shown.Height);
 
     const cmd = self.mPlatform.GetWorkCmdBuff();
 
