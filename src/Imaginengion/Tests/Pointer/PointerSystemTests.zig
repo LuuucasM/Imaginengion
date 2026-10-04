@@ -16,6 +16,7 @@ const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
 const DropHoverTag = EntityComponents.DropHoverTag;
+const DisabledTag = EntityComponents.DisabledTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
 const QuadComponent = EntityComponents.QuadComponent;
@@ -126,6 +127,36 @@ fn ExpectSent(events: []const PointerEvent, kind: Kind, expected: []const Entity
 fn ExpectTagged(comptime tag: type, tagged: []const Entity, untagged: []const Entity) !void {
     for (tagged) |entity| try std.testing.expect(entity.HasComponent(tag));
     for (untagged) |entity| try std.testing.expect(!entity.HasComponent(tag));
+}
+
+test "a disabled entity and what is inside it are passed by: the pointer is over what it is inside instead" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const pointer = &engine_context.mPointerSystem;
+    _ = try world.mPlay.AddComponent(engine_context, DisabledTag{});
+
+    try world.Hover(world.mLabel);
+    try ExpectTagged(HoveredTag, &.{world.mMenu}, &.{ world.mLabel, world.mPlay });
+    try ExpectSent(try world.TakeEvents(), .PointerEnter, &.{world.mMenu});
+    try std.testing.expect(PointerSystem.IsDisabled(world.mLabel));
+    try std.testing.expect(!PointerSystem.IsDisabled(world.mQuit));
+
+    //a click on it clicks only the menu, with the menu as what was clicked
+    try pointer.OnPressed(engine_context, .BUTTON_LEFT);
+    try pointer.OnReleased(engine_context, .BUTTON_LEFT);
+    try pointer.OnClicked(engine_context, .BUTTON_LEFT, 1);
+    const events = try world.TakeEvents();
+    try ExpectSent(events, .PointerClicked, &.{world.mMenu});
+    try ExpectTagged(PressedTag, &.{}, &.{ world.mLabel, world.mPlay, world.mMenu });
+    for (events) |event| {
+        if (event == .PointerClicked) try std.testing.expectEqual(world.mMenu.mID, event.PointerClicked.mTarget.mID);
+    }
+
+    //enabled again, the next frame it is hovered like anything else
+    try world.mPlay.RemoveComponentSync(engine_context, DisabledTag);
+    try world.Hover(world.mLabel);
+    try ExpectTagged(HoveredTag, &.{ world.mLabel, world.mPlay, world.mMenu }, &.{});
 }
 
 test "the entity under the pointer and everything it is inside are hovered, and hear it enter and leave" {

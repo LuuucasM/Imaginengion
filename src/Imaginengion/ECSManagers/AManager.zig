@@ -11,6 +11,7 @@ const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const AssetComponents = @import("../ECSComponents/AComponents.zig");
 const AssetComponentsList = AssetComponents.ComponentsList;
 const FileMetaData = AssetComponents.FileMetaData;
+const PendingDelete = AssetComponents.PendingDelete;
 const AssetMetaData = AssetComponents.AssetMetaData;
 const GenMetaData = AssetComponents.GenMetaData;
 const Texture2D = AssetComponents.Texture2D;
@@ -66,11 +67,6 @@ pub const ComputedSource = union(enum) {
     }
 };
 
-pub const PendingDelete = struct {
-    Reason: u32,
-    Time: std.Io.Timestamp,
-};
-
 pub const AssetErrorFlags = struct {
     pub const Reason = enum {
         FileNotFound,
@@ -116,7 +112,6 @@ pub const empty: AManager = .{
     .mUUIDToWorldID = .empty,
     .mCWD = undefined,
     .mCWDPath = .empty,
-    .mPendingDelete = .empty,
     ._internal = .uninit,
 };
 
@@ -130,7 +125,6 @@ mEventManager: EventManagerT,
 
 mCWD: std.Io.Dir,
 mCWDPath: std.ArrayList(u8),
-mPendingDelete: std.AutoArrayHashMapUnmanaged(AssetHandle.Type, PendingDelete),
 _internal: InternalData,
 
 pub fn Init(self: *AManager, engine_context: *EngineContext) !void {
@@ -176,7 +170,6 @@ pub fn Deinit(self: *AManager, engine_context: *EngineContext) void {
     self.mCWDPath.deinit(engine_context.EngineAllocator());
 
     self.mCWD.close(engine_context.Io());
-    self.mPendingDelete.deinit(engine_context.EngineAllocator());
 
     self._internal.Deinit(engine_context);
 }
@@ -285,7 +278,7 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     const group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
     zone.Value(group.items.len);
     Tracy.Plot("Assets/Tracked Files", .{ .color = 0x607D8B }, group.items.len);
-    Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mPendingDelete.count());
+    Tracy.Plot("Assets/Pending Delete", .{ .color = 0x9E9E9E }, self.mECSManager.NumWithComponent(PendingDelete));
     for (group.items) |asset_id| {
         const file_data = self.mECSManager.GetComponent(FileMetaData, asset_id).?;
 
@@ -297,6 +290,10 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
             }
             return err;
         };
+
+        //the stat worked, so the file is there: anything that marked it for deletion while it was
+        //missing no longer applies
+        try self.UnmarkForDelete(engine_context, asset_id);
 
         //an edit that leaves mtime and size untouched is not detected. Catching that would mean
         //hashing every asset's full contents every frame, which is not worth it here.
@@ -317,15 +314,18 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
         }
     }
 
-    var iter = self.mPendingDelete.iterator();
+    //asked of the ECS rather than kept in a side map, so the mark cannot outlive the asset: a
+    //destroyed asset takes its PendingDelete with it instead of leaving an entry that re-queues
+    //ToDestroyAsset every frame against a dead (or worse, recycled) id.
+    //Queried after the loop above so a mark made this frame is already in it, as it was before.
+    const pending = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = PendingDelete });
     const t1 = std.Io.Timestamp.now(engine_context.Io(), .awake);
-    while (iter.next()) |entry| {
-        const asset_id = entry.key_ptr.*;
-        const pending_delete = entry.value_ptr.*;
+    for (pending.items) |asset_id| {
+        const pending_delete = self.mECSManager.GetComponent(PendingDelete, asset_id).?;
 
         //TODO: here I can add different things to see if I can possibly recover the file based on its different reasons
 
-        const duration = pending_delete.Time.durationTo(t1);
+        const duration = pending_delete.mTime.durationTo(t1);
         const ns = duration.toNanoseconds();
         if (ns > ASSET_DELETE_TIMEOUT_NS) {
             try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .ToDestroyAsset = .{ .mAssetID = asset_id } });
@@ -402,7 +402,6 @@ pub const IsActiveObj = Core.IsActiveObj;
 
 pub fn clearAndFree(self: *AManager, engine_context: *EngineContext) void {
     Core.clearAndFree(self, engine_context);
-    self.mPendingDelete.clearAndFree(engine_context.EngineAllocator());
 }
 
 pub fn ProcessEvents(self: *AManager, comptime event_data: type, comptime event_category: event_data.EventCategories, engine_context: *EngineContext, callback_list: *std.DoublyLinkedList) !void {
@@ -521,20 +520,28 @@ fn GetDefaultAsset(self: *AManager, asset_type: type) !*asset_type {
 }
 
 fn MarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: AssetHandle.Type, reason: AssetErrorFlags.Reason) !void {
-    if (self.mPendingDelete.getPtr(asset_id)) |pending_data| {
-        switch (reason) {
-            .FileNotFound => pending_data.Reason |= AssetErrorFlags.FileNotFound,
-        }
-    } else {
-        const error_flags = switch (reason) {
-            .FileNotFound => AssetErrorFlags.FileNotFound,
-        };
-        try self.mPendingDelete.put(
-            engine_context.EngineAllocator(),
-            asset_id,
-            .{ .Reason = error_flags, .Time = std.Io.Timestamp.now(engine_context.Io(), .awake) },
-        );
+    const error_flags = switch (reason) {
+        .FileNotFound => AssetErrorFlags.FileNotFound,
+    };
+
+    //already marked: add the reason and leave mTime alone, so the grace period runs from the first
+    //thing that went wrong rather than restarting on every later one
+    if (self.mECSManager.GetComponent(PendingDelete, asset_id)) |pending_delete| {
+        pending_delete.mReason |= error_flags;
+        return;
     }
+
+    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, PendingDelete{
+        .mReason = error_flags,
+        .mTime = std.Io.Timestamp.now(engine_context.Io(), .awake),
+    });
+}
+
+/// Called when an asset's file turns out to be fine after all, so a file that only briefly went
+/// missing (an editor saving by rename, say) is not destroyed a second later.
+fn UnmarkForDelete(self: *AManager, engine_context: *EngineContext, asset_id: AssetHandle.Type) !void {
+    if (!self.mECSManager.HasComponent(PendingDelete, asset_id)) return;
+    try self.mECSManager.RemoveComponentSync(engine_context, asset_id, ECSManagerT.ComponentInd(PendingDelete));
 }
 
 fn _ValidateAssetType(asset_type: type) void {

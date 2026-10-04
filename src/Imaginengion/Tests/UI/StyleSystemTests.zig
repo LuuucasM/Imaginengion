@@ -24,7 +24,7 @@ const StyleComponent = @import("../../ECSComponents/UIComponents.zig").StyleComp
 const THEME =
     \\{ "Styles": {
     \\    "Button": {
-    \\      "Background": { "Normal": [0.1, 0.2, 0.3, 1], "Hovered": [0.4, 0.5, 0.6, 1], "Pressed": [0.7, 0.8, 0.9, 1], "Selected": [0, 1, 0, 1] },
+    \\      "Background": { "Normal": [0.1, 0.2, 0.3, 1], "Hovered": [0.4, 0.5, 0.6, 1], "Pressed": [0.7, 0.8, 0.9, 1], "Selected": [0, 1, 0, 1], "Disabled": [0.2, 0.2, 0.2, 1] },
     \\      "Border": { "Normal": [1, 1, 1, 0.5] },
     \\      "Text": { "Normal": [1, 1, 1, 1] },
     \\      "BorderWidth": 2,
@@ -126,6 +126,26 @@ test "an entity's colors follow its state, highest first, and a state with no co
     _ = try entity.AddComponent(engine_context, PressedTag{});
     try world.Update();
     try ExpectColor(.{ 0.7, 0.8, 0.9, 1 }, quad.mTexOptions.mColor);
+
+    //disabled outranks them all
+    _ = try entity.AddComponent(engine_context, EntityComponents.DisabledTag{});
+    try world.Update();
+    try ExpectColor(.{ 0.2, 0.2, 0.2, 1 }, quad.mTexOptions.mColor);
+}
+
+test "everything inside a disabled entity shows its disabled colors too" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const item = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const label = try item.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try label.AddComponent(engine_context, QuadComponent{});
+    try UIManager.Style(engine_context, label, "Button");
+    _ = try item.AddComponent(engine_context, EntityComponents.DisabledTag{});
+    try world.Update();
+    try std.testing.expectEqual(StyleSystem.State.Disabled, StyleSystem.StateOf(label));
+    try ExpectColor(.{ 0.2, 0.2, 0.2, 1 }, label.GetComponent(QuadComponent).?.mTexOptions.mColor);
 }
 
 test "a style writes the border, corners and text it has, and leaves the rest as the entity has it" {
@@ -206,7 +226,7 @@ test "the engine's default theme reads, with every style the editor's look needs
     const contents = try std.Io.Dir.cwd().readFileAlloc(engine_context.Io(), UIManager.DEFAULT_THEME_PATH, engine_context.FrameAllocator(), .unlimited);
     var theme: ThemeAsset = .{};
     try theme.FromJson(engine_context, contents);
-    for ([_][]const u8{ "Window", "Header", "Button", "Field", "Tab", "Title", "Popup", "Text", "Caret", "Scrollbar", "AxisX", "AxisY", "AxisZ" }) |name| {
+    for ([_][]const u8{ "Window", "Header", "Button", "Field", "Tab", "Title", "Popup", "Text", "Caret", "Scrollbar", "AxisX", "AxisY", "AxisZ", "AxisW", "Checkbox", "Separator", "Swatch", "TextDim", "MenuBar", "MenuCheck", "Arrow" }) |name| {
         if (theme.GetStyle(name) == null) {
             std.debug.print("the default theme has no style '{s}'\n", .{name});
             return error.TestMissingStyle;
@@ -220,7 +240,6 @@ test "the engine's default theme reads, with every style the editor's look needs
     asset_manager.mECSManager.Deinit(engine_context);
     asset_manager.mUUIDToWorldID.deinit(engine_allocator);
     asset_manager.mEventManager.Deinit(engine_allocator);
-    asset_manager.mPendingDelete.deinit(engine_allocator);
     asset_manager.mCWDPath.deinit(engine_allocator);
     _ = engine_context._Internal.EngineGPA.deinit();
 }

@@ -19,12 +19,34 @@ pub const ValueTypes = union(ValueEnum) {
     float32: f32,
     bool: bool,
     pub const default: ValueTypes = .{ .uint32 = 0 };
-    pub fn EditorRender(self: *ValueTypes) !void {
+    /// Drawn by RenderUnion under the type picker
+    pub fn ImguiRender(self: *ValueTypes) !void {
         switch (self.*) {
-            .uint32 => try ImguiManager.RenderScalerInput(&self.uint32, "Value", 1, 10),
-            .int32 => try ImguiManager.RenderIntInput(&self.int32, "Value", 1, 10),
-            .float32 => try ImguiManager.RenderFloatInput(&self.float32, "Value", 0.5, 5),
+            .uint32 => _ = try ImguiManager.RenderScalerInput(&self.uint32, "Value", 1, 10),
+            .int32 => _ = try ImguiManager.RenderIntInput(&self.int32, "Value", 1, 10),
+            .float32 => _ = try ImguiManager.RenderFloatInput(&self.float32, "Value", 0.5, 5),
             .bool => try ImguiManager.RenderBool(&self.bool, "Value"),
+        }
+    }
+
+    /// The value as a float, whatever its type: 1 or 0 for a bool
+    pub fn AsFloat(self: ValueTypes) f64 {
+        return switch (self) {
+            .uint32 => |v| @floatFromInt(v),
+            .int32 => |v| @floatFromInt(v),
+            .float32 => |v| v,
+            .bool => |v| if (v) 1 else 0,
+        };
+    }
+
+    /// Sets the value from a float, keeping its type: rounded to the nearest whole number for the integer types (u32
+    /// stopping at 0 and both at the ends of their range), and true for anything but 0 for a bool
+    pub fn SetFromFloat(self: *ValueTypes, value: f64) void {
+        switch (self.*) {
+            .uint32 => |*v| v.* = @intFromFloat(std.math.clamp(@round(value), 0, std.math.maxInt(u32))),
+            .int32 => |*v| v.* = @intFromFloat(std.math.clamp(@round(value), std.math.minInt(i32), std.math.maxInt(i32))),
+            .float32 => |*v| v.* = @floatCast(value),
+            .bool => |*v| v.* = value != 0,
         }
     }
 };
@@ -36,7 +58,7 @@ pub const Name: []const u8 = "AttribComponent";
 
 pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
 
-pub fn ImguiRender(self: *AttribComponent, _: *EngineContext) !void {
+pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
     try ImguiManager.RenderUnion(ValueTypes, &self.mData, "Type");
 }
 

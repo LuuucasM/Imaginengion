@@ -15,6 +15,7 @@ pub const StateColors = struct {
     Pressed: ?Vec4(f32) = null,
     Focused: ?Vec4(f32) = null,
     Selected: ?Vec4(f32) = null,
+    Disabled: ?Vec4(f32) = null,
 };
 
 /// How an element with this style (StyleComponent) looks. Everything is optional: whatever a style leaves out is left
@@ -49,6 +50,7 @@ const FileColors = struct {
     Pressed: ?[4]f32 = null,
     Focused: ?[4]f32 = null,
     Selected: ?[4]f32 = null,
+    Disabled: ?[4]f32 = null,
 };
 const FileFont = struct {
     Path: []const u8,
@@ -126,6 +128,7 @@ fn ToStateColors(colors: FileColors) StateColors {
         .Pressed = ToColor(colors.Pressed),
         .Focused = ToColor(colors.Focused),
         .Selected = ToColor(colors.Selected),
+        .Disabled = ToColor(colors.Disabled),
     };
 }
 

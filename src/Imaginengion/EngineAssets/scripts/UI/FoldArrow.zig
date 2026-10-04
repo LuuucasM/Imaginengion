@@ -6,19 +6,15 @@ const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
 
-/// Stock widget script: right clicking the entity opens the popup its UI element's PopupRefComponent names where the
-/// pointer is, a right-click menu (see WidgetActions.OpenContextMenu)
-/// Keeps a right click that opened its menu (.Handled), so the innermost menu wins: a row's own menu rather than the
-/// panel's it is in. Hands on every other click (.Continue)
+/// Stock widget script: clicking the entity, a tree node's arrow, folds the node's content away or out again and turns
+/// the arrow (see WidgetActions.FoldFromArrow)
+/// Keeps the click (.Handled), so the header it is in doesn't also take it as selecting the row
 pub export fn Run(engine_context: *EngineContext, self: *const Entity, event: *const PointerEvent) callconv(.c) ScriptResult {
     switch (event.*) {
         .PointerClicked => |click| {
-            if (click.mButton == .BUTTON_RIGHT) {
-                const opened = WidgetActions.OpenContextMenu(engine_context, self.*) catch |err| blk: {
-                    std.log.err("OpenContextMenu script: {s}", .{@errorName(err)});
-                    break :blk false;
-                };
-                if (opened) return .Handled;
+            if (click.mButton == .BUTTON_LEFT) {
+                WidgetActions.FoldFromArrow(engine_context, self.*) catch |err| std.log.err("FoldArrow script: {s}", .{@errorName(err)});
+                return .Handled;
             }
         },
         else => {},

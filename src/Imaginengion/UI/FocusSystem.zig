@@ -1,8 +1,8 @@
 //! Who has the keyboard: the one text input (an entity whose UI element has a TextInputComponent) being typed into, and
 //! the typing itself. Part of the UIManager.
-//!   - focus: the left button going down on a text input, or on anything inside one, gives it the keyboard. It gets
-//!     FocusedTag and a blinking caret (a thin quad on a child entity, made and deleted here). Any button going down
-//!     anywhere else takes the keyboard away again
+//!   - focus: the left button going down on a text input, or on anything inside one, gives it the keyboard; or a
+//!     double click, for one whose TextInputComponent says so. It gets FocusedTag and a blinking caret (a thin quad on
+//!     a child entity, made and deleted here). Any button going down anywhere else takes the keyboard away again
 //!   - typing: typed text (TextTyped events) goes in at the caret. Backspace, Delete, Left, Right, Home and End edit
 //!     and move it, Ctrl+V pastes. Enter keeps the edit, Escape puts back the text it had when it got the keyboard,
 //!     and either one ends it. A press somewhere else keeps the edit too
@@ -18,6 +18,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
 const KeyboardPressedEvent = @import("../Events/WindowEventData.zig").KeyboardPressedEvent;
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PointerClickedEvent = @import("../Events/PointerEventData.zig").PointerClickedEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const TextEdit = @import("TextEdit.zig");
 const TextLayout = @import("../Renderer/TextLayout.zig");
@@ -106,8 +107,9 @@ pub fn Caret(self: *const FocusSystem) usize {
 }
 
 /// A mouse button went down on what the pointer system has it over: call it after the pointer system's OnPressed.
-/// The left button on a text input (or anything inside one) gives it the keyboard, with the caret where it went down.
-/// Any button anywhere outside the focused text input ends its edit, keeping it
+/// The left button on a text input (or anything inside one) gives it the keyboard, with the caret where it went down,
+/// unless it waits for a double click (OnClicked). Any button anywhere outside the focused text input ends its edit,
+/// keeping it
 pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *const PointerSystem, button: MouseCodes) !void {
     var pressed: ?Entity = null;
     for (pointer.mHovered.items) |entity| {
@@ -127,7 +129,18 @@ pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *c
 
     if (button != .BUTTON_LEFT) return;
     const text_input = pressed orelse return;
+    if (UIManager.GetUIComponent(text_input, TextInputComponent).?.mFocusOn != .Press) return;
     if (try self.Focus(engine_context, text_input)) try self.PlaceCaretAt(engine_context, text_input, pointer.mInput);
+}
+
+/// One of the frame's pointer clicks: a double click (left button) on a text input that focuses on one gives it the
+/// keyboard, with the caret at the end of its text
+pub fn OnClicked(self: *FocusSystem, engine_context: *EngineContext, e: PointerClickedEvent) !void {
+    if (e.mButton != .BUTTON_LEFT or e.mClicks != 2) return;
+    //one event per entity in the chain: the text input's own
+    const text_input = UIManager.GetUIComponent(e.mEntity, TextInputComponent) orelse return;
+    if (text_input.mFocusOn != .DoubleClick or !e.mEntity.IsActive()) return;
+    _ = try self.Focus(engine_context, e.mEntity);
 }
 
 /// Gives `entity` the keyboard, with the caret at the end of its text. Returns false if it has no text to type into

@@ -96,7 +96,6 @@ const TestWorld = struct {
         asset_manager.mECSManager.Deinit(engine_context);
         asset_manager.mUUIDToWorldID.deinit(engine_allocator);
         asset_manager.mEventManager.Deinit(engine_allocator);
-        asset_manager.mPendingDelete.deinit(engine_allocator);
         asset_manager.mCWDPath.deinit(engine_allocator);
         engine_context.mAssetWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);

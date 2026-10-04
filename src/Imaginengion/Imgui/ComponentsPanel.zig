@@ -21,6 +21,7 @@ const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
 const LayoutComponent = @import("../ECSComponents/Entity/LayoutComponent.zig");
 const LayoutItemComponent = @import("../ECSComponents/Entity/LayoutItemComponent.zig");
 const ClipComponent = @import("../ECSComponents/Entity/ClipComponent.zig");
+const AttribComponent = @import("../ECSComponents/Shared/AttribComponent.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const PopupComponent = UIComponents.PopupComponent;
@@ -230,7 +231,8 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
     }
     _ = try object.AddComponent(engine_context, component_type{});
     //what a UI component needs of its entity, given the way picking it from the entity's menu would give it: a popup
-    //opens and closes through the entity's layout item, and a scroll cuts off what runs past with the entity's clip
+    //opens and closes through the entity's layout item, a scroll cuts off what runs past with the entity's clip, and a
+    //number field shows the entity's attribute, a float to start with
     if (comptime @TypeOf(object) == UIElement) {
         const owner = object.GetOwner();
         if (owner.IsActive()) {
@@ -239,6 +241,9 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
             }
             if (comptime component_type == ScrollComponent) {
                 if (!owner.HasComponent(ClipComponent)) _ = try owner.AddComponent(engine_context, ClipComponent{});
+            }
+            if (comptime component_type == UIComponents.NumberFieldComponent) {
+                if (!owner.HasComponent(AttribComponent)) _ = try owner.AddComponent(engine_context, AttribComponent{ .mData = .{ .float32 = 0 } });
             }
         }
     }

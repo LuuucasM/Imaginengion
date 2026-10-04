@@ -78,6 +78,15 @@ pub fn IsOpen(self: *const PopupSystem, popup: Entity) bool {
     return self.IndexOf(popup) != null;
 }
 
+/// What an open popup was opened against: a dropdown's button. Null if it isn't open, or was opened at a point
+pub fn OpenerOf(self: *const PopupSystem, popup: Entity) ?Entity {
+    const index = self.IndexOf(popup) orelse return null;
+    return switch (self.mOpen.items[index].mAt) {
+        .Opener => |opener| opener,
+        .Point => null,
+    };
+}
+
 /// Opens `popup` placed against `at`. From an entity inside an open popup it goes on top of that one, closing what
 /// was above it; otherwise every other popup closes first. Opening one that is already open moves it to `at` and
 /// closes what is above it
@@ -106,6 +115,12 @@ pub fn Open(self: *PopupSystem, engine_context: *EngineContext, popup: Entity, a
 pub fn Close(self: *PopupSystem, engine_context: *EngineContext, popup: Entity) !void {
     const index = self.IndexOf(popup) orelse return;
     try self.CloseAbove(engine_context, index);
+}
+
+/// Closes every popup above `popup`, leaving it open: a menu's submenus. Nothing happens if it isn't open
+pub fn CloseAbovePopup(self: *PopupSystem, engine_context: *EngineContext, popup: Entity) !void {
+    const index = self.IndexOf(popup) orelse return;
+    try self.CloseAbove(engine_context, index + 1);
 }
 
 pub fn CloseAll(self: *PopupSystem, engine_context: *EngineContext) !void {
@@ -147,10 +162,26 @@ pub fn PointerPoint(popup: Entity, pointer_input: PointerSystem.Input) ?Vec2(f32
 
 /// A mouse button went down on what the pointer system has it over: call it after the pointer system's OnPressed
 /// and before the focus system's, so a text input in a popup this closes ends its edit first. Closes every popup
-/// above the topmost one the press is inside
+/// above the topmost one the press is inside. A press on what opened a popup counts as inside it, so clicking a
+/// dropdown's or menu's button again is left to the button's own script to close it, rather than closing it here only
+/// for the click to open it again
 pub fn OnPressed(self: *PopupSystem, engine_context: *EngineContext, pointer: *const PointerSystem) !void {
-    const keep = self.TopmostContaining(pointer.mHovered.items);
-    try self.CloseAbove(engine_context, if (keep) |index| index + 1 else 0);
+    const chain = pointer.mHovered.items;
+    var keep = self.TopmostContaining(chain);
+    var index = self.mOpen.items.len;
+    while (index > 0) {
+        index -= 1;
+        if (keep != null and index <= keep.?) break;
+        const opener = switch (self.mOpen.items[index].mAt) {
+            .Opener => |opener| opener,
+            .Point => continue,
+        };
+        if (opener.IsActive() and Contains(chain, opener)) {
+            keep = index;
+            break;
+        }
+    }
+    try self.CloseAbove(engine_context, if (keep) |kept| kept + 1 else 0);
 }
 
 /// Once a frame, after layout and before world transforms: places each open popup against what opened it, and lets

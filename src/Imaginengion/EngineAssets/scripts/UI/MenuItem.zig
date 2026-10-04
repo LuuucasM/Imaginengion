@@ -6,20 +6,18 @@ const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
 
-/// Stock widget script: right clicking the entity opens the popup its UI element's PopupRefComponent names where the
-/// pointer is, a right-click menu (see WidgetActions.OpenContextMenu)
-/// Keeps a right click that opened its menu (.Handled), so the innermost menu wins: a row's own menu rather than the
-/// panel's it is in. Hands on every other click (.Continue)
+/// Stock widget script: a menu item. Clicking it closes every menu (see WidgetActions.PickMenuItem); what picking it
+/// does is the item's own script. Moving onto it closes the submenus open off its menu (WidgetActions.HoverMenuItem)
+/// Hands everything on (.Continue): the entity's own scripts and the ones it is inside still hear it
 pub export fn Run(engine_context: *EngineContext, self: *const Entity, event: *const PointerEvent) callconv(.c) ScriptResult {
     switch (event.*) {
         .PointerClicked => |click| {
-            if (click.mButton == .BUTTON_RIGHT) {
-                const opened = WidgetActions.OpenContextMenu(engine_context, self.*) catch |err| blk: {
-                    std.log.err("OpenContextMenu script: {s}", .{@errorName(err)});
-                    break :blk false;
-                };
-                if (opened) return .Handled;
+            if (click.mButton == .BUTTON_LEFT) {
+                WidgetActions.PickMenuItem(engine_context) catch |err| std.log.err("MenuItem script: {s}", .{@errorName(err)});
             }
+        },
+        .PointerEnter => {
+            WidgetActions.HoverMenuItem(engine_context, self.*) catch |err| std.log.err("MenuItem script: {s}", .{@errorName(err)});
         },
         else => {},
     }

@@ -5,7 +5,7 @@
 //!     (UIComponents.zig). An entity has one through its UIElementComponent, and its element points back at it
 //!   - an event manager for what the UI does (Events/UIEventData.zig)
 //!   - the parts that do the UI: typing into text inputs (FocusSystem), popups (PopupSystem), scrolling
-//!     (ScrollSystem) and how things look (StyleSystem, out of the current theme)
+//!     (ScrollSystem), number fields (NumberFieldSystem) and how things look (StyleSystem, out of the current theme)
 //!
 //! An element is never left without its entity, or shared by two. Every way an entity gets its component goes through
 //! Adopt, which hands it a fresh element if it has none and points the element back at it: added in the panel or from
@@ -27,6 +27,7 @@ const UIElement = @import("../ECSObjects/UIElement.zig");
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const ElementOwnerComponent = UIComponents.ElementOwnerComponent;
 const UIElementComponent = @import("../ECSComponents/EComponents.zig").UIElementComponent;
+const TextComponent = @import("../ECSComponents/EComponents.zig").TextComponent;
 const UIEventData = @import("../Events/UIEventData.zig");
 const ECSManager = @import("../ECS/ECSManager.zig").ECSManager;
 const EventManager = @import("../Events/EventManager.zig");
@@ -36,6 +37,7 @@ const FocusSystem = @import("FocusSystem.zig");
 const PopupSystem = @import("PopupSystem.zig");
 const ScrollSystem = @import("ScrollSystem.zig");
 const StyleSystem = @import("StyleSystem.zig");
+const NumberFieldSystem = @import("NumberFieldSystem.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ThemeAsset = @import("../ECSComponents/AComponents.zig").ThemeAsset;
 const ScrollComponent = UIComponents.ScrollComponent;
@@ -65,6 +67,8 @@ mPopupSystem: PopupSystem = .empty,
 mScrollSystem: ScrollSystem = .empty,
 /// How styled elements look
 mStyleSystem: StyleSystem = .empty,
+/// Dragging and typing number fields, and keeping their text showing their value
+mNumberFieldSystem: NumberFieldSystem = .empty,
 /// The current theme, which styles are looked up in. uninit until something asks for it, and then the engine's
 /// default if no other has been set
 mTheme: AssetHandle = .uninit,
@@ -146,20 +150,37 @@ pub fn OnKeyTaken(self: *UIManager, engine_context: *EngineContext, taker: KeyTa
     }
 }
 
-/// One of the frame's pointer events: a dragged scrollbar scrolls its region
+/// One of the frame's pointer events: a dragged scrollbar scrolls its region, a dragged number field changes its value,
+/// and a double click can start typing
 pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: PointerEvent) !void {
     try self.mScrollSystem.OnPointerEvent(engine_context, event);
+    try self.mNumberFieldSystem.OnPointerEvent(engine_context, event);
+    switch (event) {
+        .PointerClicked => |e| try self.mFocusSystem.OnClicked(engine_context, e),
+        else => {},
+    }
 }
 
-/// Hands out what the UI did this frame (typing, popups) to `callback_list`, then empties it
+/// Hands out what the UI did this frame (typing, popups, values) to `callback_list`, then empties it. The UI's own
+/// parts have each event first (a number field takes the number typed into it), and what they send in turn is handed
+/// out in the same pass
 pub fn ProcessUIEvents(self: *UIManager, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
-    try self.mEventManager.ProcessCategory(.UI, engine_context, callback_list);
+    var own_callback = EventManagerT.MakeCallback(UIManager, OnOwnUIEvent, self);
+    var callbacks = callback_list;
+    callbacks.prepend(&own_callback.mNode);
+    try self.mEventManager.ProcessCategory(.UI, engine_context, callbacks);
     self.mEventManager.ClearCategory(engine_context.EngineAllocator(), .UI, .ClearRetainingCapacity);
 }
 
-/// Once a frame, after game logic and before layout (a font can change sizes): every styled element's entity takes its
-/// style out of the current theme
+fn OnOwnUIEvent(self: *UIManager, engine_context: *EngineContext, event: *const UIEventData.EventT) !EventResult {
+    try self.mNumberFieldSystem.OnUIEvent(engine_context, event.*);
+    return .Continue;
+}
+
+/// Once a frame, after game logic and before layout (a font or a text can change sizes): every styled element's entity
+/// takes its style out of the current theme, and every number field shows its value
 pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !void {
+    try self.mNumberFieldSystem.Update(engine_context);
     const theme = self.CurrentTheme(engine_context) orelse return;
     try self.mStyleSystem.Update(engine_context, theme);
 }
@@ -180,6 +201,7 @@ pub fn UpdateAfterLayout(self: *UIManager, engine_context: *EngineContext, play_
 pub fn Reset(self: *UIManager, engine_context: *EngineContext) void {
     self.mFocusSystem.Reset(engine_context);
     self.mPopupSystem.Reset();
+    self.mNumberFieldSystem = .empty;
 }
 
 //------------------------------themes------------------------------
@@ -324,6 +346,17 @@ pub fn SendToChain(self: *UIManager, engine_context: *EngineContext, target: Ent
         const child_component = current.GetComponent(@import("../ECS/Components.zig").ChildComponent(Entity.Type)) orelse break;
         current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
     }
+}
+
+/// The entity showing an entity's text: the entity itself if it has a TextComponent, otherwise its first child that
+/// does. A number field's value, a button's or a row's label
+pub fn LabelOf(entity: Entity) ?Entity {
+    if (entity.HasComponent(TextComponent)) return entity;
+    var children = entity.GetIterator(.Child);
+    while (children.next()) |child| {
+        if (child.HasComponent(TextComponent)) return child;
+    }
+    return null;
 }
 
 /// Gives `entity` the style called `style_name`, and a UI element to hold it if it has none

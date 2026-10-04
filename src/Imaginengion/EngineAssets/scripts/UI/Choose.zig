@@ -6,19 +6,15 @@ const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const WidgetActions = @import("IM").WidgetActions;
 
-/// Stock widget script: right clicking the entity opens the popup its UI element's PopupRefComponent names where the
-/// pointer is, a right-click menu (see WidgetActions.OpenContextMenu)
-/// Keeps a right click that opened its menu (.Handled), so the innermost menu wins: a row's own menu rather than the
-/// panel's it is in. Hands on every other click (.Continue)
+/// Stock widget script: clicking the entity makes it a dropdown's choice, a row of the dropdown's popup list (see
+/// WidgetActions.Choose). It is selected among the other rows, its text shows on the dropdown's button, the popup
+/// closes, and the button and everything it is inside get a ValueChanged
+/// Hands the click on (.Continue): the entity's own scripts and the ones it is inside still hear it
 pub export fn Run(engine_context: *EngineContext, self: *const Entity, event: *const PointerEvent) callconv(.c) ScriptResult {
     switch (event.*) {
         .PointerClicked => |click| {
-            if (click.mButton == .BUTTON_RIGHT) {
-                const opened = WidgetActions.OpenContextMenu(engine_context, self.*) catch |err| blk: {
-                    std.log.err("OpenContextMenu script: {s}", .{@errorName(err)});
-                    break :blk false;
-                };
-                if (opened) return .Handled;
+            if (click.mButton == .BUTTON_LEFT) {
+                WidgetActions.Choose(engine_context, self.*) catch |err| std.log.err("Choose script: {s}", .{@errorName(err)});
             }
         },
         else => {},

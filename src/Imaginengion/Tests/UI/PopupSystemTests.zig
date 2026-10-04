@@ -258,7 +258,7 @@ test "a popup opened from inside another goes on top of it, one opened from outs
     try ExpectEvents(try world.TakeEvents(), &.{.{ world.mSubmenu, false }});
 }
 
-test "a press closes the popups above the one it lands in, and every popup when it lands outside them" {
+test "a press closes the popups above the one it lands in or whose opener it lands on, and every popup when it lands outside them" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     try world.Frame();
@@ -266,13 +266,17 @@ test "a press closes the popups above the one it lands in, and every popup when 
     try world.Open(world.mSubmenu, world.mNewRow);
     _ = try world.TakeEvents();
 
-    //on the menu's row: only the submenu goes
+    //on the row that opened the submenu: it counts as inside the submenu, so both stay
     try world.Press(world.mNewRow);
+    try ExpectOpen(world, &.{ world.mMenu, world.mSubmenu });
+
+    //on the menu itself: only the submenu goes
+    try world.Press(world.mMenu);
     try ExpectOpen(world, &.{world.mMenu});
     try ExpectEvents(try world.TakeEvents(), &.{.{ world.mSubmenu, false }});
 
-    //on the menu itself: it stays
-    try world.Press(world.mMenu);
+    //on the button that opened the menu: it stays, for the button's own script to close
+    try world.Press(world.mButton);
     try ExpectOpen(world, &.{world.mMenu});
 
     //anywhere else, over something or over nothing

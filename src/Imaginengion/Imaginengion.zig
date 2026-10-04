@@ -4,6 +4,7 @@ test {
     _ = @import("Tests/ECSObjects/DeleteTests.zig");
     _ = @import("Tests/Serializer/SerializerTests.zig");
     _ = @import("Tests/ECSComponents/Asset/ObjectAssetTests.zig");
+    _ = @import("Tests/ECSComponents/Asset/PendingDeleteTests.zig");
     _ = @import("Tests/ECSObjects/TmplTests.zig");
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
     _ = @import("Tests/ECSObjects/OverlayTests.zig");
@@ -25,6 +26,8 @@ test {
     _ = @import("Tests/UI/StyleSystemTests.zig");
     _ = @import("Tests/Scripts/EventScriptsTests.zig");
     _ = @import("Tests/UI/WidgetsTests.zig");
+    _ = @import("Tests/UI/NumberFieldSystemTests.zig");
+    _ = @import("Tests/UI/TreeMenuTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }

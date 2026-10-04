@@ -9,7 +9,9 @@
 //!     the drop
 //!
 //! All of it goes to the entity under the pointer and to everything it is inside: its parent, and so on up (its
-//! chain). The pointer over a button's label is over the button, and inside the panel the button is in.
+//! chain). The pointer over a button's label is over the button, and inside the panel the button is in. A disabled
+//! entity (DisabledTag) and everything inside it are left out of the chain: the pointer over a greyed out menu item
+//! is over the menu, and nothing else.
 //!
 //! It doesn't find what is under the pointer itself: whoever owns the views (the editor, a game's window) casts
 //! the ray and hands over the entity it hit, so this works the same for an overlay and for the world.
@@ -30,6 +32,7 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
 const DropHoverTag = EntityComponents.DropHoverTag;
+const DisabledTag = EntityComponents.DisabledTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -175,7 +178,7 @@ fn Takes(drop_target: DropTargetComponent, source: Entity) bool {
 }
 
 fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
-    const new_chain = try ChainOf(engine_context.FrameAllocator(), self.mInput.Target);
+    const new_chain = try EnabledChainOf(engine_context.FrameAllocator(), self.mInput.Target);
 
     //left: in the old chain and not the new one. The ones that are gone altogether have nothing left to tell
     for (self.mHovered.items) |entity| {
@@ -361,6 +364,29 @@ pub fn ChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
         current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
     }
     return chain;
+}
+
+/// ChainOf, starting from the first entity that isn't disabled or inside a disabled one: what the pointer is over when
+/// `entity` is under it
+fn EnabledChainOf(frame_allocator: std.mem.Allocator, entity: ?Entity) !Chain {
+    var chain = try ChainOf(frame_allocator, entity);
+    //everything up to the outermost disabled entity goes, that one included
+    var outermost: ?usize = null;
+    for (chain.items, 0..) |link, i| {
+        if (link.HasComponent(DisabledTag)) outermost = i;
+    }
+    if (outermost) |index| try chain.replaceRange(frame_allocator, 0, index + 1, &.{});
+    return chain;
+}
+
+/// Whether `entity` is disabled (DisabledTag), or inside an entity that is
+pub fn IsDisabled(entity: Entity) bool {
+    var current = entity;
+    while (true) {
+        if (current.HasComponent(DisabledTag)) return true;
+        const child_component = current.GetComponent(EntityChildComponent) orelse return false;
+        current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
+    }
 }
 
 fn Contains(chain: []const Entity, entity: Entity) bool {

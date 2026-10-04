@@ -23,6 +23,10 @@ const UIComponents = @import("../../ECSComponents/UIComponents.zig");
 const PopupComponent = UIComponents.PopupComponent;
 const PopupRefComponent = UIComponents.PopupRefComponent;
 const StyleComponent = UIComponents.StyleComponent;
+const NumberFieldComponent = UIComponents.NumberFieldComponent;
+const TextInputComponent = UIComponents.TextInputComponent;
+const AttribComponent = EntityComponents.AttribComponent;
+const Vec4 = @import("../../Math/MathTypes.zig").Vec4;
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -139,7 +143,7 @@ test "an opener opens the popup it names against itself and closes it again, and
     try std.testing.expect(!popups.IsOpen(pair.Popup));
 
     //with nowhere for the pointer to be, a right-click menu opens against what was right clicked
-    try WidgetActions.OpenContextMenu(engine_context, pair.Opener);
+    try std.testing.expect(try WidgetActions.OpenContextMenu(engine_context, pair.Opener));
     try std.testing.expect(popups.IsOpen(pair.Popup));
     try WidgetActions.ClosePopups(engine_context);
     try std.testing.expect(!popups.IsOpen(pair.Popup));
@@ -207,6 +211,131 @@ test "the builders make each widget out of quads, text, layout and styles" {
     //and at the top of a scene
     const top = try Widgets.Label(engine_context, .{ .Scene = world.mScene }, "Title");
     try std.testing.expect(!top.HasComponent(@import("../../ECS/Components.zig").ChildComponent(Entity.Type)));
+}
+
+fn TextOf(entity: Entity) []const u8 {
+    return UIManager.LabelOf(entity).?.GetComponent(TextComponent).?.mText.items;
+}
+
+/// The children of `entity` that have an AttribComponent: a row's or color field's number fields
+fn FieldsOf(entity: Entity) ![]Entity {
+    var fields: std.ArrayList(Entity) = .empty;
+    var children = entity.GetIterator(.Child);
+    while (children.next()) |child| {
+        if (child.HasComponent(AttribComponent)) try fields.append(std.testing.allocator, child);
+    }
+    return fields.toOwnedSlice(std.testing.allocator);
+}
+
+test "a number field is a styled quad holding its value, with text typed into on a double click" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const field = try Widgets.NumberField(engine_context, .{ .Entity = world.mList }, .{ .float32 = 1.5 }, .{ .mDecimals = 2 });
+    try std.testing.expectEqualStrings("Field", StyleOf(field));
+    try std.testing.expectEqual(@as(f32, 1.5), field.GetComponent(AttribComponent).?.mData.float32);
+    try std.testing.expectEqual(@as(u8, 2), UIManager.GetUIComponent(field, NumberFieldComponent).?.mDecimals);
+    const text = FirstChild(field);
+    try std.testing.expectEqualStrings("1.50", text.GetComponent(TextComponent).?.mText.items);
+    try std.testing.expectEqual(TextInputComponent.FocusOn.DoubleClick, UIManager.GetUIComponent(text, TextInputComponent).?.mFocusOn);
+
+    //a Vec3: an axis box before each of three float fields
+    const row = try Widgets.NumberRow(engine_context, .{ .Entity = world.mList }, &.{ 1, 2, 3 }, .{});
+    const fields = try FieldsOf(row);
+    defer std.testing.allocator.free(fields);
+    try std.testing.expectEqual(@as(usize, 3), fields.len);
+    try std.testing.expectEqual(@as(f32, 3), fields[2].GetComponent(AttribComponent).?.mData.float32);
+    try std.testing.expectEqualStrings("AxisX", StyleOf(FirstChild(row)));
+    try std.testing.expectEqualStrings("X", TextOf(FirstChild(row)));
+}
+
+/// A dropdown, open: its list and rows
+fn OpenDropdown(world: *TestWorld, choices: []const []const u8, chosen: ?usize) !struct { Button: Entity, List: Entity } {
+    const engine_context = world.mEngineContext;
+    const button = try Widgets.Dropdown(engine_context, .{ .Entity = world.mList }, choices, chosen, .{ .StockScripts = false });
+    const list = WidgetActions.PopupOf(button).?;
+    try WidgetActions.TogglePopup(engine_context, button);
+    try std.testing.expect(engine_context.mUIManager.mPopupSystem.IsOpen(list));
+    return .{ .Button = button, .List = list };
+}
+
+fn Row(list: Entity, index: usize) Entity {
+    var rows = list.GetIterator(.Child);
+    var row = rows.next().?;
+    for (0..index) |_| row = rows.next().?;
+    return row;
+}
+
+test "a dropdown shows its choice, and choosing a row shows it, closes the list and tells where the dropdown is" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const dropdown = try OpenDropdown(world, &.{ "Easy", "Normal", "Hard" }, 1);
+    try std.testing.expectEqualStrings("Normal", TextOf(dropdown.Button));
+    try std.testing.expectEqualStrings("Field", StyleOf(dropdown.Button));
+    try std.testing.expectEqual(@as(?usize, 1), WidgetActions.ChosenIndex(dropdown.Button));
+    //the list is the top of the scene, not inside the button
+    try std.testing.expect(!dropdown.List.HasComponent(@import("../../ECS/Components.zig").ChildComponent(Entity.Type)));
+    _ = try world.TakeValueChanged();
+
+    try WidgetActions.Choose(engine_context, Row(dropdown.List, 2));
+    try std.testing.expectEqualStrings("Hard", TextOf(dropdown.Button));
+    try std.testing.expectEqual(@as(?usize, 2), WidgetActions.ChosenIndex(dropdown.Button));
+    try std.testing.expect(!Row(dropdown.List, 1).HasComponent(SelectedTag));
+    try std.testing.expect(!engine_context.mUIManager.mPopupSystem.IsOpen(dropdown.List));
+    try ExpectTo(&.{ dropdown.Button, world.mList }, try world.TakeValueChanged());
+
+    //choosing the choice again closes the list without a change
+    try WidgetActions.TogglePopup(engine_context, dropdown.Button);
+    try WidgetActions.Choose(engine_context, Row(dropdown.List, 2));
+    try std.testing.expect(!engine_context.mUIManager.mPopupSystem.IsOpen(dropdown.List));
+    try std.testing.expectEqual(@as(usize, 0), (try world.TakeValueChanged()).len);
+}
+
+test "a dropdown with nothing chosen shows nothing and has no choice" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const dropdown = try OpenDropdown(world, &.{ "A", "B" }, null);
+    try std.testing.expectEqualStrings("", TextOf(dropdown.Button));
+    try std.testing.expectEqual(@as(?usize, null), WidgetActions.ChosenIndex(dropdown.Button));
+}
+
+test "a color field's four channels make its color, which its swatch shows" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const color_field = try Widgets.ColorField(engine_context, .{ .Entity = world.mList }, .{ .x = 1, .y = 0.5, .z = 0.25, .w = 2 }, .{ .StockScripts = false });
+
+    const fields = try FieldsOf(color_field);
+    defer std.testing.allocator.free(fields);
+    try std.testing.expectEqual(@as(usize, 4), fields.len);
+    //each channel is 0 to 1
+    const color = WidgetActions.ColorOf(color_field);
+    try std.testing.expectEqual(@as(f32, 0.5), color.y);
+    try std.testing.expectEqual(@as(f32, 1), color.w);
+    try std.testing.expectEqual(@as(?f32, 1), UIManager.GetUIComponent(fields[0], NumberFieldComponent).?.mMax);
+
+    var children = color_field.GetIterator(.Child);
+    var swatch = children.next().?;
+    while (swatch.HasComponent(AttribComponent)) swatch = children.next().?;
+    try std.testing.expectEqualStrings("Swatch", StyleOf(swatch));
+    try std.testing.expectEqual(@as(f32, 0.25), swatch.GetComponent(QuadComponent).?.mTexOptions.mColor.z);
+
+    //set from code: the channels within their limits, and the swatch with them
+    _ = try world.TakeValueChanged();
+    try WidgetActions.SetColor(engine_context, color_field, .{ .x = 0, .y = 0.5, .z = 1, .w = -1 });
+    const set = WidgetActions.ColorOf(color_field);
+    try std.testing.expectEqual(@as(f32, 0), set.x);
+    try std.testing.expectEqual(@as(f32, 0), set.w);
+    try std.testing.expectEqual(@as(f32, 1), swatch.GetComponent(QuadComponent).?.mTexOptions.mColor.z);
+    //red, blue and alpha changed, each telling its field, the color field and the list
+    try std.testing.expectEqual(@as(usize, 9), (try world.TakeValueChanged()).len);
+
+    //a channel set straight on its field: the swatch catches up when the stock script calls UpdateSwatch
+    fields[1].GetComponent(AttribComponent).?.mData = .{ .float32 = 0 };
+    WidgetActions.UpdateSwatch(color_field);
+    try std.testing.expectEqual(@as(f32, 0), swatch.GetComponent(QuadComponent).?.mTexOptions.mColor.y);
 }
 
 test "an opener in a copied world opens the copied world's popup" {

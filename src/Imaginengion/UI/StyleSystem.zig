@@ -1,7 +1,7 @@
 //! Styles: what a UI element's StyleComponent names, out of the current theme (ThemeAsset.zig), written into its
 //! entity's quad and text every frame. Part of the UIManager. The colors follow the state the entity is in, read from
-//! its tags, highest first: pressed, hovered, focused, selected, and otherwise normal. A state the style has no color
-//! for takes the normal one. Whatever a style leaves out is left as the entity has it.
+//! its tags, highest first: disabled (it or anything it is inside has DisabledTag), pressed, hovered, focused, selected,
+//! and otherwise normal. A state the style has no color for takes the normal one. Whatever a style leaves out is left as the entity has it.
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -17,11 +17,12 @@ const HoveredTag = EntityComponents.HoveredTag;
 const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
 const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
+const PointerSystem = @import("../Pointer/PointerSystem.zig");
 
 const StyleSystem = @This();
 
 /// The state an entity is in, as far as its colors go
-pub const State = enum { Normal, Hovered, Pressed, Focused, Selected };
+pub const State = enum { Normal, Hovered, Pressed, Focused, Selected, Disabled };
 
 pub const empty: StyleSystem = .{};
 
@@ -61,6 +62,7 @@ pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const 
 
 /// The state `entity` is in, from its tags
 pub fn StateOf(entity: Entity) State {
+    if (PointerSystem.IsDisabled(entity)) return .Disabled;
     if (entity.HasComponent(PressedTag)) return .Pressed;
     if (entity.HasComponent(HoveredTag)) return .Hovered;
     if (entity.HasComponent(FocusedTag)) return .Focused;
@@ -113,6 +115,7 @@ pub fn ColorFor(colors: ThemeAsset.StateColors, state: State) ?Vec4(f32) {
         .Pressed => colors.Pressed,
         .Focused => colors.Focused,
         .Selected => colors.Selected,
+        .Disabled => colors.Disabled,
     };
     return for_state orelse colors.Normal;
 }

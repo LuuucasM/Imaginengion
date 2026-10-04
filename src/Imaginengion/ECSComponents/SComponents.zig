@@ -1,5 +1,6 @@
 const ListInd = @import("../ECS/Components.zig").ListInd;
 const std = @import("std");
+pub const AttribComponent = @import("Shared/AttribComponent.zig");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
 pub const NameComponent = @import("Shared/NameComponent.zig");
 pub const PhysicsComponent = @import("Scene/PhysicsComponent.zig");
@@ -20,6 +21,7 @@ pub const OnPhysicsUpdateScript = ScriptTags.SceneOnPhysicsUpdateScript;
 
 pub const ComponentsList = [_]type{
     //SceneLayer
+    AttribComponent,
     UUIDComponent,
     NameComponent,
     PhysicsComponent,
@@ -41,6 +43,7 @@ pub const ComponentsList = [_]type{
 pub const ComponentsPanelList = [_]type{
     UUIDComponent,
     NameComponent,
+    AttribComponent,
     SceneComponent,
     PhysicsComponent,
     SpawnPossComponent,
@@ -51,6 +54,7 @@ pub const ComponentsPanelList = [_]type{
 pub const SerializeList = [_]type{
     UUIDComponent,
     NameComponent,
+    AttribComponent,
     PhysicsComponent,
     SceneComponent,
     SpawnPossComponent,
@@ -80,6 +84,7 @@ pub const ScriptsList = [_]type{
 };
 
 pub const EComponents = enum(u16) {
+    AttribComponent = ListInd(&ComponentsList, AttribComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     NameComponent = ListInd(&ComponentsList, NameComponent),
     PhysicsComponent = ListInd(&ComponentsList, PhysicsComponent),

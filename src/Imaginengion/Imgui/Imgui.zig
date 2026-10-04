@@ -560,12 +560,12 @@ pub fn RenderColor4Edit(val: *Vec4(f32), label: [:0]const u8) !void {
     _ = imgui.igColorEdit4(label.ptr, @ptrCast(val), imgui.ImGuiColorEditFlags_None);
 }
 
-pub fn RenderIntInput(val: *u32, label: [:0]const u8, speed: f32, speed_fast: f32) !bool {
+pub fn RenderIntInput(val: *i32, label: [:0]const u8, speed: i32, speed_fast: i32) !bool {
     return imgui.igInputInt(label, val, speed, speed_fast, 0);
 }
 
 pub fn RenderScalerInput(val: *u32, label: [:0]const u8, speed: u32, speed_fast: u32) !bool {
-    return imgui.igInputScalar(label, imgui.ImGuiDataType_U32, val, speed, speed_fast, "%u", 0);
+    return imgui.igInputScalar(label, imgui.ImGuiDataType_U32, val, &speed, &speed_fast, "%u", 0);
 }
 
 pub fn RenderFloat3Input(val: *Vec3(f32), label: [:0]const u8) !void {

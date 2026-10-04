@@ -1,6 +1,7 @@
 const ListInd = @import("../ECS/Components.zig").ListInd;
 pub const AssetMetaData = @import("Asset/AssetMetaData.zig");
 pub const FileMetaData = @import("Asset/FileMetaData.zig");
+pub const PendingDelete = @import("Asset/PendingDelete.zig");
 pub const GenMetaData = @import("Asset/GenMetaData.zig");
 pub const ScriptAsset = @import("Asset/ScriptAsset.zig");
 pub const ShaderAsset = @import("Asset/ShaderAsset.zig");
@@ -32,6 +33,7 @@ pub const ComponentsList = [_]type{
     TextAsset,
     AssetMetaData,
     FileMetaData,
+    PendingDelete,
     GenMetaData,
     AudioAsset,
     ThemeAsset,
@@ -48,6 +50,7 @@ pub const EComponents = enum(16) {
     TextAsset = ListInd(&ComponentsList, TextAsset),
     AssetMetaData = ListInd(&ComponentsList, AssetMetaData),
     FileMetaData = ListInd(&ComponentsList, FileMetaData),
+    PendingDelete = ListInd(&ComponentsList, PendingDelete),
     GenMetaData = ListInd(&ComponentsList, GenMetaData),
     AudioAsset = ListInd(&ComponentsList, AudioAsset),
     ThemeAsset = ListInd(&ComponentsList, ThemeAsset),

@@ -202,7 +202,10 @@ test "an element's UI components are saved and copied with its entity, how far i
 
     const original = try world.EntityWithElement();
     const element = UIManager.ElementOf(original).?;
-    _ = try element.AddComponent(engine_context, UIComponents.TextInputComponent{});
+    _ = try element.AddComponent(engine_context, UIComponents.TextInputComponent{ .mFocusOn = .DoubleClick });
+    _ = try element.AddComponent(engine_context, UIComponents.NumberFieldComponent{ .mSpeed = 2, .mMax = 5, .mDecimals = 1 });
+    //and the value a number field shows, which is the entity's own
+    _ = try original.AddComponent(engine_context, @import("../../ECSComponents/EComponents.zig").AttribComponent{ .mData = .{ .int32 = -7 } });
     _ = try element.AddComponent(engine_context, UIComponents.PopupComponent{ .mPlacement = .{ .Anchor = .{ .x = 1, .y = 1 }, .Pivot = .{ .x = -1, .y = 1 }, .Offset = .{ .x = 3, .y = -4 } } });
     _ = try element.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Both, .mWheelStep = 12 });
     //scrolling gets somewhere to keep how far it is scrolled
@@ -218,7 +221,13 @@ test "an element's UI components are saved and copied with its entity, how far i
 
     for ([_]Entity{ loaded, copy }) |entity| {
         const other = try ExpectOwnElement(entity);
-        try std.testing.expect(other.HasComponent(UIComponents.TextInputComponent));
+        try std.testing.expectEqual(UIComponents.TextInputComponent.FocusOn.DoubleClick, other.GetComponent(UIComponents.TextInputComponent).?.mFocusOn);
+        const number_field = other.GetComponent(UIComponents.NumberFieldComponent).?;
+        try std.testing.expectEqual(@as(f32, 2), number_field.mSpeed);
+        try std.testing.expectEqual(@as(?f32, null), number_field.mMin);
+        try std.testing.expectEqual(@as(?f32, 5), number_field.mMax);
+        try std.testing.expectEqual(@as(u8, 1), number_field.mDecimals);
+        try std.testing.expectEqual(@as(i32, -7), entity.GetComponent(@import("../../ECSComponents/EComponents.zig").AttribComponent).?.mData.int32);
         const popup = other.GetComponent(UIComponents.PopupComponent).?;
         try std.testing.expectEqual(@as(f32, 1), popup.mPlacement.Anchor.x);
         try std.testing.expectEqual(@as(f32, -4), popup.mPlacement.Offset.y);

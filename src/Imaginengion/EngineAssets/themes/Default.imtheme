@@ -15,7 +15,8 @@
       "Background": {
         "Normal": [0.250, 0.266, 0.358, 1.0],
         "Hovered": [0.375, 0.399, 0.537, 1.0],
-        "Pressed": [0.312, 0.322, 0.447, 1.0]
+        "Pressed": [0.312, 0.322, 0.447, 1.0],
+        "Disabled": [0.180, 0.185, 0.220, 1.0]
       },
       "Text": { "Normal": [1.0, 1.0, 1.0, 1.0] }
     },
@@ -49,7 +50,27 @@
       "BorderWidth": 1
     },
     "Text": {
-      "Text": { "Normal": [1.0, 1.0, 1.0, 1.0] }
+      "Text": { "Normal": [1.0, 1.0, 1.0, 1.0], "Disabled": [0.500, 0.500, 0.500, 1.0] }
+    },
+    "TextDim": {
+      "Text": { "Normal": [0.500, 0.500, 0.500, 1.0] }
+    },
+    "MenuBar": {
+      "Background": { "Normal": [0.140, 0.140, 0.140, 1.0] }
+    },
+    "MenuCheck": {
+      "Background": {
+        "Normal": [0.0, 0.0, 0.0, 0.0],
+        "Selected": [0.900, 0.900, 0.900, 1.0]
+      },
+      "CornerRadius": 2
+    },
+    "Arrow": {
+      "Background": {
+        "Normal": [0.0, 0.0, 0.0, 0.0],
+        "Hovered": [0.375, 0.399, 0.537, 1.0]
+      },
+      "CornerRadius": 3
     },
     "Checkbox": {
       "Background": {
@@ -98,6 +119,20 @@
       },
       "Text": { "Normal": [1.0, 1.0, 1.0, 1.0] },
       "Font": { "Path": "src/Imaginengion/EngineAssets/fonts/default/static/ChironGoRoundTC-Bold.ttf", "PathType": "Eng" }
+    },
+    "AxisW": {
+      "Background": {
+        "Normal": [0.400, 0.400, 0.400, 1.0],
+        "Hovered": [0.550, 0.550, 0.550, 1.0],
+        "Pressed": [0.450, 0.450, 0.450, 1.0]
+      },
+      "Text": { "Normal": [1.0, 1.0, 1.0, 1.0] },
+      "Font": { "Path": "src/Imaginengion/EngineAssets/fonts/default/static/ChironGoRoundTC-Bold.ttf", "PathType": "Eng" }
+    },
+    "Swatch": {
+      "Border": { "Normal": [0.430, 0.430, 0.500, 0.50] },
+      "BorderWidth": 1,
+      "CornerRadius": 3
     }
   }
 }

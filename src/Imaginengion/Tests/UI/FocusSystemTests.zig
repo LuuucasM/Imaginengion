@@ -210,6 +210,35 @@ test "typing goes in at the caret, and the keys move it and delete around it" {
     try std.testing.expectEqualStrings("Roby", TestWorld.TextOf(world.mName));
 }
 
+test "a text input that focuses on a double click ignores a single press, and takes the keyboard on a double click" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    UIManager.GetUIComponent(world.mName, TextInputComponent).?.mFocusOn = .DoubleClick;
+
+    try world.Press(world.mName, .BUTTON_LEFT);
+    try ExpectFocused(world, null);
+
+    //a double click comes as a pointer click to the text input and the form; only the text input's own counts
+    for ([_]Entity{ world.mName, world.mForm }) |entity| {
+        try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .PointerClicked = .{
+            .mEntity = entity,
+            .mButton = .BUTTON_LEFT,
+            .mClicks = 2,
+            .mPosition = .{ .x = 0, .y = 0, .z = 0 },
+            .mTarget = world.mName,
+        } });
+    }
+    try ExpectFocused(world, world.mName);
+    try std.testing.expectEqual(@as(usize, 3), engine_context.mUIManager.mFocusSystem.Caret());
+
+    //once it has the keyboard a press on it stays with it, and a press elsewhere still ends the edit
+    try world.Press(world.mName, .BUTTON_LEFT);
+    try ExpectFocused(world, world.mName);
+    try world.Press(world.mOK, .BUTTON_LEFT);
+    try ExpectFocused(world, null);
+}
+
 test "Enter keeps the edit and lets go of the keyboard" {
     const world = try TestWorld.Init();
     defer world.Deinit();

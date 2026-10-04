@@ -6,6 +6,8 @@ pub const ScrollComponent = @import("UIElement/ScrollComponent.zig");
 pub const ScrollStateComponent = @import("UIElement/ScrollStateComponent.zig");
 pub const StyleComponent = @import("UIElement/StyleComponent.zig");
 pub const PopupRefComponent = @import("UIElement/PopupRefComponent.zig");
+pub const NumberFieldComponent = @import("UIElement/NumberFieldComponent.zig");
+pub const SelectionGroupComponent = @import("UIElement/SelectionGroupComponent.zig");
 
 /// The components of the UIManager's objects, its UI elements: the parts of an entity's UI that only the UI ever uses
 /// (see UIElement.zig)
@@ -17,6 +19,8 @@ pub const ComponentsList = [_]type{
     ScrollStateComponent,
     StyleComponent,
     PopupRefComponent,
+    NumberFieldComponent,
+    SelectionGroupComponent,
 };
 
 /// What an element is saved with, inside its entity's UIElementComponent, and copied with when the entity is.
@@ -28,6 +32,8 @@ pub const SerializeList = [_]type{
     ScrollComponent,
     StyleComponent,
     PopupRefComponent,
+    NumberFieldComponent,
+    SelectionGroupComponent,
 };
 
 /// What the UI Element panel lists and offers to add
@@ -37,6 +43,8 @@ pub const ComponentsPanelList = [_]type{
     ScrollComponent,
     StyleComponent,
     PopupRefComponent,
+    NumberFieldComponent,
+    SelectionGroupComponent,
 };
 
 pub const EComponents = enum(u16) {
@@ -47,4 +55,6 @@ pub const EComponents = enum(u16) {
     ScrollStateComponent = ListInd(&ComponentsList, ScrollStateComponent),
     StyleComponent = ListInd(&ComponentsList, StyleComponent),
     PopupRefComponent = ListInd(&ComponentsList, PopupRefComponent),
+    NumberFieldComponent = ListInd(&ComponentsList, NumberFieldComponent),
+    SelectionGroupComponent = ListInd(&ComponentsList, SelectionGroupComponent),
 };

@@ -90,6 +90,18 @@ pub const SelectedTag = struct {
     pub fn Deinit(_: *SelectedTag, _: *EngineContext) void {}
 };
 
+/// On an entity that can't be used right now, along with everything inside it: a greyed out menu item or button, a
+/// locked door. The pointer passes it by (Pointer/PointerSystem.zig): it and what is inside it are never hovered,
+/// pressed, clicked, dragged or dropped on, and the pointer counts as over whatever it is inside instead, which still
+/// hears all of that. Its text inputs can't be typed into, and styles show the theme's Disabled colors for it and
+/// everything inside it. Saved, so a template can start out disabled
+pub const DisabledTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "DisabledTag";
+
+    pub fn Deinit(_: *DisabledTag, _: *EngineContext) void {}
+};
+
 /// On a drop target (DropTargetComponent) while a drag source it takes is held over it: for a "drop here" look. The
 /// moment the source is let go there is the PointerDropped event. Never saved
 pub const DropHoverTag = struct {

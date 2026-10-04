@@ -3,6 +3,7 @@ const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const AISlotComponent = @import("Entity/AISlotComponent.zig");
+pub const AttribComponent = @import("Shared/AttribComponent.zig");
 pub const AudioComponent = @import("Entity/AudioComponent.zig");
 pub const ColliderComponent = @import("Entity/ColliderComponent.zig");
 pub const ConstantForceComponent = @import("Entity/ConstantForceComponent.zig");
@@ -20,6 +21,7 @@ pub const HoveredTag = @import("Entity/TagComponents.zig").HoveredTag;
 pub const PressedTag = @import("Entity/TagComponents.zig").PressedTag;
 pub const DropHoverTag = @import("Entity/TagComponents.zig").DropHoverTag;
 pub const SelectedTag = @import("Entity/TagComponents.zig").SelectedTag;
+pub const DisabledTag = @import("Entity/TagComponents.zig").DisabledTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
 pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
@@ -58,6 +60,7 @@ pub const OnPhysicsUpdateScript = ScriptTags.EntityOnPhysicsUpdateScript;
 pub const ComponentsList = [_]type{
     //components
     AISlotComponent,
+    AttribComponent,
     AudioComponent,
     ColliderComponent,
     ConstantForceComponent,
@@ -88,6 +91,7 @@ pub const ComponentsList = [_]type{
     PressedTag,
     DropHoverTag,
     SelectedTag,
+    DisabledTag,
     DragSourceComponent,
     DropTargetComponent,
     FocusedTag,
@@ -110,6 +114,7 @@ pub const ComponentsList = [_]type{
 /// (ScriptComponent is not listed, scripts are saved separately and recreated with AddScript)
 pub const SerializeList = [_]type{
     AISlotComponent,
+    AttribComponent,
     AudioComponent,
     ColliderComponent,
     ConstantForceComponent,
@@ -135,6 +140,7 @@ pub const SerializeList = [_]type{
     LayoutItemComponent,
     ClipComponent,
     UIElementComponent,
+    DisabledTag,
 };
 
 /// What a linked copy keeps of its own when it is stripped down (see ECSObject.Core.Strip), everything
@@ -151,6 +157,7 @@ pub const ShellList = [_]type{
 /// popup menu for adding components as well
 pub const ComponentPanelList = [_]type{
     AISlotComponent,
+    AttribComponent,
     AudioComponent,
     ColliderComponent,
     ConstantForceComponent,
@@ -170,6 +177,7 @@ pub const ComponentPanelList = [_]type{
     LayoutItemComponent,
     ClipComponent,
     UIElementComponent,
+    DisabledTag,
 };
 
 ///A list of all the scripts
@@ -186,6 +194,7 @@ pub const ScriptsList = [_]type{
 
 pub const EComponents = enum(u16) {
     AISlotComponent = ListInd(&ComponentsList, AISlotComponent),
+    AttribComponent = ListInd(&ComponentsList, AttribComponent),
     AudioComponent = ListInd(&ComponentsList, AudioComponent),
     ColliderComponent = ListInd(&ComponentsList, ColliderComponent),
     ConstantForceComponent = ListInd(&ComponentsList, ConstantForceComponent),
@@ -224,6 +233,7 @@ pub const EComponents = enum(u16) {
     PressedTag = ListInd(&ComponentsList, PressedTag),
     DropHoverTag = ListInd(&ComponentsList, DropHoverTag),
     SelectedTag = ListInd(&ComponentsList, SelectedTag),
+    DisabledTag = ListInd(&ComponentsList, DisabledTag),
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
     FocusedTag = ListInd(&ComponentsList, FocusedTag),
