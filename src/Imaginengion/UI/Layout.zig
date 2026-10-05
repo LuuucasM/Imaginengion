@@ -227,7 +227,9 @@ const Solver = struct {
 
         var size: f32 = 0;
         if (node.Container) |container| {
-            size = switch (container.Direction) {
+            //a container that scrolls along this axis needs no room for its children there: what doesn't fit scrolls.
+            //Without this, a Fill one would grow to hold them all and never have anything to scroll
+            size = if (container.Scroll.Along(axis)) container.Padding.Along(axis) else switch (container.Direction) {
                 .Row, .Column => self.StackFit(index, container, axis),
                 .Grid => self.GridFit(index, container, axis),
             };

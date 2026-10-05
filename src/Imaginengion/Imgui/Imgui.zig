@@ -89,6 +89,27 @@ pub fn Deinit(self: *ImguiManager, engine_context: *EngineContext) void {
 pub fn ProcessEvent(_: *ImguiManager, event: *sdl.SDL_Event) void {
     _ = imgui.ImGui_ImplSDL3_ProcessEvent(@ptrCast(event));
 }
+/// Whether the next panel's igBegin is hosted in a pane of the editor shell (see HostNextPanel)
+var gHostNext: bool = false;
+
+/// Puts the next panel window at `pos` with `size` (window points), where the editor shell's pane for it is laid out.
+/// The panel's igBegin has to take its flags from PanelFlags, which keeps it there
+pub fn HostNextPanel(pos: Vec2(f32), size: Vec2(f32)) void {
+    imgui.igSetNextWindowPos(.{ .x = pos.x, .y = pos.y }, imgui.ImGuiCond_Always, .{ .x = 0, .y = 0 });
+    imgui.igSetNextWindowSize(.{ .x = size.x, .y = size.y }, imgui.ImGuiCond_Always);
+    gHostNext = true;
+}
+
+/// The flags a panel's igBegin takes: for one hosted in a pane (HostNextPanel), no title bar (its tab names it), no
+/// moving, resizing, collapsing or docking, and never in front of the floating windows. None for any other
+pub fn PanelFlags() c_int {
+    defer gHostNext = false;
+    if (!gHostNext) return 0;
+    return imgui.ImGuiWindowFlags_NoTitleBar | imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoResize |
+        imgui.ImGuiWindowFlags_NoCollapse | imgui.ImGuiWindowFlags_NoDocking | imgui.ImGuiWindowFlags_NoBringToFrontOnFocus |
+        imgui.ImGuiWindowFlags_NoSavedSettings;
+}
+
 /// Whether ImGui has the mouse: it is over one of its windows, or a button went down on one and is still held. As of
 /// the last frame ImGui ran, which is what was on screen
 pub fn WantsMouse(_: *const ImguiManager) bool {

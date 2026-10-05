@@ -2,6 +2,7 @@
 //! the quad's size on screen in pixels, so the view is never stretched, and the pixel of the view a ray through the
 //! quad lands on, for picking through it.
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const CameraView = @import("Renderer.zig").CameraView;
@@ -29,6 +30,8 @@ pub const PixelSize = struct {
 /// What a viewport quad samples: its player's render target, by the slot it is copied into. Null if the player has no
 /// render target to show yet
 pub fn ShownTarget(engine_context: *EngineContext, viewport: ViewportComponent) !?RenderTargetComponent.Shown {
+    const zone = Tracy.ZoneInit("Viewports::ShownTarget", @src());
+    defer zone.Deinit();
     if (!viewport.mPlayer.IsActive()) return null;
     const target = viewport.mPlayer.GetComponent(RenderTargetComponent) orelse return null;
     return try target.ShownSlot(engine_context);
@@ -95,6 +98,8 @@ pub fn QuadPixelOnRay(entity: Entity, ray: Ray, camera_view: CameraView, picture
 /// Sizes a viewport quad's player to the pixels the quad covers when seen through `camera_view`: its render target and
 /// its viewpoint, which the ray math reads. Nothing happens for a quad with no size yet, which has nothing to show
 pub fn FitPlayerToQuad(engine_context: *EngineContext, entity: Entity, camera_view: CameraView) !void {
+    const zone = Tracy.ZoneInit("Viewports::FitPlayerToQuad", @src());
+    defer zone.Deinit();
     const viewport = entity.GetComponent(ViewportComponent) orelse return;
     const size = PixelSizeOf(entity, camera_view) orelse return;
     if (size.Width < 1 or size.Height < 1 or !viewport.mPlayer.IsActive()) return;

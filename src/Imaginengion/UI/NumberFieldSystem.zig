@@ -8,6 +8,7 @@
 //!   - its text shows its value every frame it isn't being typed into, so code can just set the AttribComponent
 //!   - every change of value sends ValueChanged to the field and everything it is inside
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
@@ -33,6 +34,8 @@ mRemainder: f64 = 0,
 
 /// A frame's pointer events: a field being dragged changes its value
 pub fn OnPointerEvent(self: *NumberFieldSystem, engine_context: *EngineContext, event: PointerEvent) !void {
+    const zone = Tracy.ZoneInit("NumberFieldSystem::OnPointerEvent", @src());
+    defer zone.Deinit();
     switch (event) {
         .PointerDragStart => |e| if (e.mButton == .BUTTON_LEFT and IsField(e.mEntity)) {
             self.mDragged = e.mEntity;
@@ -54,6 +57,8 @@ pub fn OnPointerEvent(self: *NumberFieldSystem, engine_context: *EngineContext, 
 
 /// A frame's UI events: an edit kept in a field's text sets its value
 pub fn OnUIEvent(_: *NumberFieldSystem, engine_context: *EngineContext, event: UIEvent) !void {
+    const zone = Tracy.ZoneInit("NumberFieldSystem::OnUIEvent", @src());
+    defer zone.Deinit();
     const submitted = switch (event) {
         .TextSubmitted => |e| e,
         else => return,
@@ -74,6 +79,8 @@ pub fn OnUIEvent(_: *NumberFieldSystem, engine_context: *EngineContext, event: U
 
 /// Once a frame, before layout (the text's size can change): every field not being typed into shows its value
 pub fn Update(_: *NumberFieldSystem, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("NumberFieldSystem::Update", @src());
+    defer zone.Deinit();
     const ui_manager = &engine_context.mUIManager;
     const focused = ui_manager.mFocusSystem.Focused();
     const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = NumberFieldComponent });

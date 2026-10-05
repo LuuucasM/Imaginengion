@@ -1,3 +1,4 @@
+const ImguiManager = @import("Imgui.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const std = @import("std");
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -56,7 +57,7 @@ pub fn OnImguiRender(self: *ScriptsPanel, engine_context: *EngineContext, select
             .gamecontext => |g| try ObjectTraits(GameMode).HandleDragDropTarget(engine_context, g),
         }
     } else {
-        _ = imgui.igBegin("Scripts - No Entity###Scripts", null, 0);
+        _ = imgui.igBegin("Scripts - No Entity###Scripts", null, ImguiManager.PanelFlags());
         defer imgui.igEnd();
     }
 }
@@ -71,7 +72,7 @@ fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object
     const trimmed_name = object_name[0..name_len];
     const name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "Scripts - {s}###Scripts", .{trimmed_name}, 0);
 
-    _ = imgui.igBegin(name.ptr, null, 0);
+    _ = imgui.igBegin(name.ptr, null, ImguiManager.PanelFlags());
 }
 
 fn RenderScript(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {

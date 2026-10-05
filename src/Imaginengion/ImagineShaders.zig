@@ -1,7 +1,7 @@
 //Rendering Stuff -------------------------------------------
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").SDFPushConstants;
-pub const QuadData = @import("Renderer/Renderer2D.zig").QuadData;
-pub const GlyphData = @import("Renderer/Renderer2D.zig").GlyphData;
+pub const ShapeData = @import("Renderer/Renderer2D.zig").ShapeData;
+pub const ShapeSurface = @import("Renderer/Renderer2D.zig").ShapeSurface;
 pub const ClipData = @import("Renderer/Renderer2D.zig").ClipData;
 pub const SurfShadingData = @import("Renderer/Renderer.zig").SurfShadingData;
 pub const MedShadingData = @import("Renderer/Renderer.zig").MedShadingData;

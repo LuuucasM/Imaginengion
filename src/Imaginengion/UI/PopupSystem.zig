@@ -16,6 +16,7 @@
 //! placement is the popup system's: leave its LayoutItemComponent's placement at Flow. Its z is yours, like the rest
 //! of layout: give popups a z in front of the UI they open over.
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
@@ -91,6 +92,8 @@ pub fn OpenerOf(self: *const PopupSystem, popup: Entity) ?Entity {
 /// was above it; otherwise every other popup closes first. Opening one that is already open moves it to `at` and
 /// closes what is above it
 pub fn Open(self: *PopupSystem, engine_context: *EngineContext, popup: Entity, at: At) !void {
+    const zone = Tracy.ZoneInit("PopupSystem::Open", @src());
+    defer zone.Deinit();
     std.debug.assert(UIManager.HasUIComponent(popup, PopupComponent));
 
     if (self.IndexOf(popup)) |index| {
@@ -113,6 +116,8 @@ pub fn Open(self: *PopupSystem, engine_context: *EngineContext, popup: Entity, a
 
 /// Closes `popup` and every popup above it. Nothing happens if it isn't open
 pub fn Close(self: *PopupSystem, engine_context: *EngineContext, popup: Entity) !void {
+    const zone = Tracy.ZoneInit("PopupSystem::Close", @src());
+    defer zone.Deinit();
     const index = self.IndexOf(popup) orelse return;
     try self.CloseAbove(engine_context, index);
 }
@@ -166,6 +171,8 @@ pub fn PointerPoint(popup: Entity, pointer_input: PointerSystem.Input) ?Vec2(f32
 /// dropdown's or menu's button again is left to the button's own script to close it, rather than closing it here only
 /// for the click to open it again
 pub fn OnPressed(self: *PopupSystem, engine_context: *EngineContext, pointer: *const PointerSystem) !void {
+    const zone = Tracy.ZoneInit("PopupSystem::OnPressed", @src());
+    defer zone.Deinit();
     const chain = pointer.mHovered.items;
     var keep = self.TopmostContaining(chain);
     var index = self.mOpen.items.len;
@@ -188,6 +195,8 @@ pub fn OnPressed(self: *PopupSystem, engine_context: *EngineContext, pointer: *c
 /// go of popups that have been deleted. In `world`, every popup that isn't open is kept closed, so they all start
 /// closed however they were saved
 pub fn Update(self: *PopupSystem, engine_context: *EngineContext, world: *WorldManager) !void {
+    const zone = Tracy.ZoneInit("PopupSystem::Update", @src());
+    defer zone.Deinit();
     //one deleted, and the ones opened from it go with it
     for (self.mOpen.items, 0..) |open, index| {
         if (!open.mPopup.IsActive()) {

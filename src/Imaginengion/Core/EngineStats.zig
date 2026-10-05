@@ -1,6 +1,5 @@
 const std = @import("std");
 const EngineStats = @This();
-const ImguiManager = @import("../Imgui/Imgui.zig");
 const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const Tracy = @import("Tracy.zig");
@@ -18,14 +17,6 @@ pub const ShadingStats = struct {
         self.MedShadings = 0;
     }
 
-    pub fn ImguiRender(self: ShadingStats, frame_allocator: std.mem.Allocator) !void {
-        const total_shadings = try std.fmt.allocPrintSentinel(frame_allocator, "\t\t\tTotal Shadings: {d}\n", .{self.TotalShadings}, 0);
-        try ImguiManager.RenderText(total_shadings);
-        const surf_shadings = try std.fmt.allocPrintSentinel(frame_allocator, "\t\t\tSurface shadings: {d}", .{self.SurfShadings}, 0);
-        try ImguiManager.RenderText(surf_shadings);
-        const med_shadings = try std.fmt.allocPrintSentinel(frame_allocator, "\t\t\tMedium Shadings: {d}", .{self.MedShadings}, 0);
-        try ImguiManager.RenderText(med_shadings);
-    }
 };
 
 pub const RenderStats = struct {
@@ -41,19 +32,6 @@ pub const RenderStats = struct {
         self.Shadings.ResetStats();
     }
 
-    pub fn ImguiRender(self: RenderStats, frame_allocator: std.mem.Allocator) !void {
-        const total_obj_text = try std.fmt.allocPrintSentinel(frame_allocator, "\t\tTotal Objects: {d}\n", .{self.TotalObjects}, 0);
-        try ImguiManager.RenderText(total_obj_text);
-
-        const output_quad_text = try std.fmt.allocPrintSentinel(frame_allocator, "\t\tOutput Quad Num: {d}\n", .{self.OutputQuadNum}, 0);
-        try ImguiManager.RenderText(output_quad_text);
-
-        const output_glyph_text = try std.fmt.allocPrintSentinel(frame_allocator, "\t\tOutput Glyph Num: {d}\n", .{self.OutputGlyphNum}, 0);
-        try ImguiManager.RenderText(output_glyph_text);
-
-        try ImguiManager.RenderText("\t\tShading Data: \n");
-        try self.Shadings.ImguiRender(frame_allocator);
-    }
 };
 
 pub const ECSStats = struct {
@@ -63,9 +41,27 @@ pub const ECSStats = struct {
         self.TotalEntities = 0;
     }
 
-    pub fn ImguiRender(self: ECSStats, frame_allocator: std.mem.Allocator) !void {
-        const total_entities_text = try std.fmt.allocPrintSentinel(frame_allocator, "\t\tTotal Entities: {d}\n", .{self.TotalEntities}, 0);
-        try ImguiManager.RenderText(total_entities_text);
+};
+
+/// How many times something happens a second: Tick each time it happens, Advance with the time passed once a loop. The
+/// rate is worked out once a second, from that whole second, so it holds still long enough to be read
+pub const RateCounter = struct {
+    mCount: u32 = 0,
+    /// seconds since the rate was last worked out
+    mElapsed: f32 = 0,
+    /// how many times a second, over the last whole second
+    mRate: f32 = 0,
+
+    pub fn Tick(self: *RateCounter) void {
+        self.mCount += 1;
+    }
+
+    pub fn Advance(self: *RateCounter, dt: f32) void {
+        self.mElapsed += dt;
+        if (self.mElapsed < 1.0) return;
+        self.mRate = @as(f32, @floatFromInt(self.mCount)) / self.mElapsed;
+        self.mCount = 0;
+        self.mElapsed = 0;
     }
 };
 
@@ -78,20 +74,46 @@ pub const WorldStats = struct {
         self.mECSStats.ResetStats();
     }
 
-    pub fn ImguiRender(self: WorldStats, frame_allocator: std.mem.Allocator) !void {
-        try ImguiManager.RenderText("\tRender Data: \n");
-        try self.mRenderStats.ImguiRender(frame_allocator);
-        try ImguiManager.RenderText("\tECS Data: \n");
-        try self.mECSStats.ImguiRender(frame_allocator);
-    }
 };
 
 AppTimer: std.Io.Timestamp = undefined,
 GameWorldStats: WorldStats = .{},
 EditorWorldStats: WorldStats = .{},
 SimulateWorldStats: WorldStats = .{},
+/// The last rendered frame's stats, kept when ResetStats zeroes the frame's: the Stats panel shows these, since a
+/// frame's are only complete once it has rendered, which is after the panel has been laid out
+LastGameWorldStats: WorldStats = .{},
+LastEditorWorldStats: WorldStats = .{},
+LastSimulateWorldStats: WorldStats = .{},
+/// Passes of the main loop a second. A pass that finds no window image free to draw into skips rendering, so this can
+/// be far higher than FrameRate when the GPU is behind
+LoopRate: RateCounter = .{},
+/// Frames drawn a second: window images acquired to draw into, each of which is shown
+FrameRate: RateCounter = .{},
+/// Whether this pass of the loop got a window image and rendered
+FrameRendered: bool = false,
+
+/// The renderer got a window image to draw this frame into
+pub fn FrameAcquired(self: *EngineStats) void {
+    self.FrameRate.Tick();
+    self.FrameRendered = true;
+}
+
+/// Once at the end of each pass of the main loop, with how long it took
+pub fn CountLoop(self: *EngineStats, dt: f32) void {
+    self.LoopRate.Tick();
+    self.LoopRate.Advance(dt);
+    self.FrameRate.Advance(dt);
+}
 
 pub fn ResetStats(self: *EngineStats) void {
+    //a pass that skipped rendering drew nothing, so the last frame that did is kept
+    if (self.FrameRendered) {
+        self.LastGameWorldStats = self.GameWorldStats;
+        self.LastEditorWorldStats = self.EditorWorldStats;
+        self.LastSimulateWorldStats = self.SimulateWorldStats;
+    }
+    self.FrameRendered = false;
     self.GameWorldStats.ResetStats();
     self.EditorWorldStats.ResetStats();
     self.SimulateWorldStats.ResetStats();
@@ -131,11 +153,3 @@ fn PlotWorld(comptime prefix: [:0]const u8, stats: WorldStats, world: *WorldMana
     Tracy.Plot(prefix ++ "/Shadings", .{ .color = 0xFF9800 }, stats.mRenderStats.Shadings.TotalShadings);
 }
 
-pub fn ImguiRender(self: EngineStats, frame_allocator: std.mem.Allocator) !void {
-    try ImguiManager.RenderText("Game World Data: \n");
-    try self.GameWorldStats.ImguiRender(frame_allocator);
-    try ImguiManager.RenderText("Editor World Data: \n");
-    try self.EditorWorldStats.ImguiRender(frame_allocator);
-    try ImguiManager.RenderText("Simulate World Data: \n");
-    try self.SimulateWorldStats.ImguiRender(frame_allocator);
-}

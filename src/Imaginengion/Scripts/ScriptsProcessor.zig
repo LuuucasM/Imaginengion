@@ -261,10 +261,18 @@ pub const EventScripts = struct {
     }
 
     pub fn OnPointerEvent(self: *EventScripts, engine_context: *EngineContext, event: PointerEvent) !void {
+
+        const zone = Tracy.ZoneInit("EventScripts::OnPointerEvent", @src());
+
+        defer zone.Deinit();
         try self.Run(OnPointerEventScript, engine_context, event);
     }
 
     pub fn OnUIEvent(self: *EventScripts, engine_context: *EngineContext, event: UIEvent) !void {
+
+        const zone = Tracy.ZoneInit("EventScripts::OnUIEvent", @src());
+
+        defer zone.Deinit();
         try self.Run(OnUIEventScript, engine_context, event);
     }
 

@@ -1,4 +1,5 @@
 const std = @import("std");
+const ImguiManager = @import("Imgui.zig");
 const imgui = @import("../Core/CImports.zig").imgui;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ContentBrowserPanel = @This();
@@ -62,7 +63,7 @@ pub fn OnImguiRender(self: *ContentBrowserPanel, engine_context: *EngineContext)
 
     if (self.mIsVisible == false) return;
 
-    _ = imgui.igBegin("ContentBrowser", null, 0);
+    _ = imgui.igBegin("ContentBrowser", null, ImguiManager.PanelFlags());
     defer imgui.igEnd();
 
     try self.HandlePopupContext(engine_context);

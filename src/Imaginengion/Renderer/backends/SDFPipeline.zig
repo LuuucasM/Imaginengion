@@ -39,9 +39,11 @@ const Config: PipelineConfig = .{
 
 pub fn SDFPipeline(pipeline_type: PipelineType) type {
     return struct {
+        //the shaders as this build compiled them (build_shaders.zig's anonymous imports), so they always match the CPU
+        //side's structs. `zig build shaders` still writes copies to EngineAssets/shaders/ for inspecting
         const ComputeShader = switch (pipeline_type) {
-            .Overlay => @embedFile("../../EngineAssets/shaders/SDFComputeOverlay.spv"),
-            .Game => @embedFile("../../EngineAssets/shaders/SDFComputeGame.spv"),
+            .Overlay => @embedFile("SDFComputeOverlay"),
+            .Game => @embedFile("SDFComputeGame"),
         };
 
         const Self = @This();

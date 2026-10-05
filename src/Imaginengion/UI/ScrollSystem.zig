@@ -6,6 +6,7 @@
 //!     and deleted here like the text caret. Its length shows how much is in view, its place how far it is scrolled,
 //!     and dragging it scrolls
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
@@ -42,6 +43,8 @@ pub const empty: ScrollSystem = .{};
 /// The mouse wheel turned while the pointer is over what the pointer system has it over. Notches up (y) scroll up,
 /// notches right (x) scroll right
 pub fn OnWheel(_: *ScrollSystem, engine_context: *EngineContext, pointer: *const PointerSystem, notches_x: f32, notches_y: f32) !void {
+    const zone = Tracy.ZoneInit("ScrollSystem::OnWheel", @src());
+    defer zone.Deinit();
     if (notches_y != 0) {
         if (NearestScrolling(pointer.mHovered.items, .Y)) |region| try ScrollBy(engine_context, region, .{ .x = 0, .y = -notches_y * Step(region) });
     }
@@ -53,6 +56,8 @@ pub fn OnWheel(_: *ScrollSystem, engine_context: *EngineContext, pointer: *const
 /// A frame's pointer events: a scrollbar thumb being dragged scrolls its region, as much as keeps the thumb under the
 /// pointer
 pub fn OnPointerEvent(_: *ScrollSystem, engine_context: *EngineContext, event: PointerEvent) !void {
+    const zone = Tracy.ZoneInit("ScrollSystem::OnPointerEvent", @src());
+    defer zone.Deinit();
     const drag = switch (event) {
         .PointerDrag => |drag| drag,
         else => return,
@@ -86,6 +91,8 @@ pub fn OnPointerEvent(_: *ScrollSystem, engine_context: *EngineContext, event: P
 /// Once a frame, after layout and before world transforms: every scrolling region in `world` whose children run
 /// past it gets a thumb along that edge, placed for how far it is scrolled, and one that no longer needs one loses it
 pub fn Update(_: *ScrollSystem, engine_context: *EngineContext, world: *WorldManager) !void {
+    const zone = Tracy.ZoneInit("ScrollSystem::Update", @src());
+    defer zone.Deinit();
     const ui_manager = &engine_context.mUIManager;
     const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = ScrollComponent });
     for (element_ids.items) |element_id| {

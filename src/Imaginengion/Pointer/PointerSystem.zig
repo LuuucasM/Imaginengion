@@ -16,6 +16,7 @@
 //! It doesn't find what is under the pointer itself: whoever owns the views (the editor, a game's window) casts
 //! the ray and hands over the entity it hit, so this works the same for an overlay and for the world.
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
@@ -134,6 +135,8 @@ pub fn IsHolding(self: *const PointerSystem) bool {
 /// Once a frame: where the pointer is and what is under it. Checked every frame rather than only when the mouse
 /// moves, since what is under a still mouse can move, appear or go away
 pub fn Update(self: *PointerSystem, engine_context: *EngineContext, input: Input) !void {
+    const zone = Tracy.ZoneInit("PointerSystem::Update", @src());
+    defer zone.Deinit();
     self.mInput = input;
     try self.UpdateHover(engine_context);
     for (std.enums.values(MouseCodes)) |button| try self.UpdateDrag(engine_context, button);
@@ -268,6 +271,8 @@ fn DragPoint(held: Held, input: Input) ?Vec3(f32) {
 
 /// A mouse button went down: on whatever the pointer is over as of the last Update
 pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes) !void {
+    const zone = Tracy.ZoneInit("PointerSystem::OnPressed", @src());
+    defer zone.Deinit();
     const held = self.mHeld.getPtr(button);
     try Assign(&held.mChain, engine_context.EngineAllocator(), self.mHovered.items);
     held.mPressPixel = self.mInput.Pixel;
@@ -291,6 +296,8 @@ pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: M
 
 /// A mouse button came up: whatever it went down on is let go, wherever the pointer is now, and its drag ends
 pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes) !void {
+    const zone = Tracy.ZoneInit("PointerSystem::OnReleased", @src());
+    defer zone.Deinit();
     const held = self.mHeld.getPtr(button);
     //kept for the click that follows a release in place
     try Assign(self.mReleased.getPtr(button), engine_context.EngineAllocator(), held.mChain.items);
@@ -328,6 +335,8 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
 /// letting go on its background clicks the button, which was under both, but not the label. A release that ended
 /// a drag clicks nothing, even if the pointer came back to where it started
 pub fn OnClicked(self: *PointerSystem, engine_context: *EngineContext, button: MouseCodes, clicks: u8) !void {
+    const zone = Tracy.ZoneInit("PointerSystem::OnClicked", @src());
+    defer zone.Deinit();
     const released = self.mReleased.getPtr(button);
     defer released.clearRetainingCapacity();
     if (self.mWasDragged.get(button)) return;

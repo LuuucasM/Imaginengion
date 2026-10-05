@@ -33,6 +33,7 @@ const TextInputComponent = UIComponents.TextInputComponent;
 const PopupComponent = UIComponents.PopupComponent;
 const PopupRefComponent = UIComponents.PopupRefComponent;
 const SelectionGroupComponent = UIComponents.SelectionGroupComponent;
+const FloatingWindowComponent = UIComponents.FloatingWindowComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 
 /// What a widget is made under: an entity, or the top of a scene
@@ -62,6 +63,11 @@ pub const StockScript = enum {
     MenuItem,
     Submenu,
     MenuBarMenu,
+    Divider,
+    Tab,
+    Window,
+    WindowTitle,
+    CloseWindow,
 
     pub fn Path(self: StockScript) []const u8 {
         return switch (self) {
@@ -79,8 +85,37 @@ pub const PADDING: f32 = 6;
 pub const DEPTH_STEP: f32 = 0.01;
 /// A checkbox's box
 pub const CHECKBOX_SIZE: f32 = 16;
-/// How far in front of the rest of its scene a dropdown's list is, so it is drawn over what it hangs over
-pub const POPUP_DEPTH: f32 = 1;
+/// How far in front of the rest of its scene a dropdown's list or a menu is, so it is drawn over what it hangs over:
+/// in front of the floating windows too (WidgetActions.WINDOW_DEPTH), as many as a scene is likely to have. The overlay
+/// is drawn in perspective, so something this far in front is drawn a little bigger, about 0.3%
+pub const POPUP_DEPTH: f32 = 3;
+/// How thick a split's divider is: thick enough to grab
+pub const DIVIDER_SIZE: f32 = 8;
+/// A floating window's title bar's height, and the size of its close button
+pub const TITLE_SIZE: f32 = 22;
+
+/// What Split makes
+pub const SplitParts = struct {
+    /// what goes in the split's parent
+    Root: Entity,
+    /// left or top
+    First: Entity,
+    Divider: Entity,
+    /// right or bottom
+    Second: Entity,
+};
+
+/// Which of a split's panes keeps its size as the split's parent changes size
+pub const FixedPane = enum { First, Second };
+
+/// What FloatingWindow makes
+pub const WindowParts = struct {
+    /// the whole window, at the top of its scene
+    Window: Entity,
+    TitleBar: Entity,
+    /// where what is in the window goes
+    Content: Entity,
+};
 /// A color field's swatch
 pub const SWATCH_SIZE: f32 = 20;
 /// A folding header's arrow box, and the room a leaf tree node leaves where one would be
@@ -125,6 +160,42 @@ pub fn Label(engine_context: *EngineContext, parent: Parent, text: []const u8) !
     _ = try entity.AddComponent(engine_context, LayoutItemComponent{});
     try UIManager.Style(engine_context, entity, "Text");
     return entity;
+}
+
+/// A row to put things in side by side, e.g. buttons, with a gap between them. As big as what is in it
+pub fn Row(engine_context: *EngineContext, parent: Parent) !Entity {
+    const row = try NewEntity(engine_context, parent);
+    _ = try row.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mGap = PADDING, .mCrossAlign = .Center });
+    _ = try row.AddComponent(engine_context, LayoutItemComponent{});
+    return row;
+}
+
+/// A column of lines of text, one under the other, as wide as what it is in: for SyncLines to keep showing a list
+pub fn Lines(engine_context: *EngineContext, parent: Parent) !Entity {
+    const lines = try NewEntity(engine_context, parent);
+    _ = try lines.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try lines.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
+    return lines;
+}
+
+/// Keeps a column of lines (made by Lines) showing `lines`, in order: a label made for each one it is short of and the
+/// spare ones deleted, and a label's text only set when it is different. A list that hasn't changed costs a comparison
+pub fn SyncLines(engine_context: *EngineContext, column: Entity, lines: []const []const u8) !void {
+    var labels: std.ArrayList(Entity) = .empty;
+    var children = column.GetIterator(.Child);
+    while (children.next()) |child| try labels.append(engine_context.FrameAllocator(), child);
+
+    for (lines, 0..) |line, i| {
+        if (i < labels.items.len) {
+            try WidgetActions.SetText(engine_context, labels.items[i], line);
+        } else {
+            _ = try Label(engine_context, .{ .Entity = column }, line);
+        }
+    }
+    if (labels.items.len > lines.len) {
+        for (labels.items[lines.len..]) |spare| try spare.Delete(engine_context);
+        try column.MarkLayoutDirty(engine_context);
+    }
 }
 
 /// A thin line across whatever it is in. Style "Separator"
@@ -224,6 +295,24 @@ pub fn NumberField(engine_context: *EngineContext, parent: Parent, value: Attrib
     var buffer: [64]u8 = undefined;
     const text = try Label(engine_context, .{ .Entity = field }, NumberFieldSystem.Format(&buffer, value, settings.mDecimals));
     _ = try UIManager.ElementOf(text).?.AddComponent(engine_context, TextInputComponent{ .mFocusOn = .DoubleClick });
+    return field;
+}
+
+/// A line of text the player types into (a press on it starts typing), showing `text` to start with. Its text is a
+/// child of it, which Enter or a press elsewhere sends TextSubmitted from. Takes up the width it is given. Style "Field",
+/// its text style "Text"
+pub fn TextField(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
+    const field = try NewEntity(engine_context, parent);
+    _ = try field.AddComponent(engine_context, QuadComponent{});
+    _ = try field.AddComponent(engine_context, LayoutComponent{
+        .mDirection = .Row,
+        .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 },
+        .mCrossAlign = .Center,
+    });
+    _ = try field.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
+    try UIManager.Style(engine_context, field, "Field");
+    const shown = try Label(engine_context, .{ .Entity = field }, text);
+    _ = try UIManager.ElementOf(shown).?.AddComponent(engine_context, TextInputComponent{});
     return field;
 }
 
@@ -436,6 +525,121 @@ pub fn ContextMenu(engine_context: *EngineContext, target: Entity, options: Opti
     return menu;
 }
 
+/// Two panes side by side (a Row) or one above the other (a Column), with a divider between them that dragging moves (the
+/// stock Divider script). `fixed` keeps `size` along the split and the other pane takes the rest, so a side panel keeps
+/// its width as the window grows. Neither pane has a background of its own. The divider has style "Divider". The split
+/// fills what it is in
+pub fn Split(engine_context: *EngineContext, parent: Parent, direction: Layout.Direction, fixed: FixedPane, size: f32, options: Options) !SplitParts {
+    std.debug.assert(direction != .Grid);
+    const root = try NewEntity(engine_context, parent);
+    _ = try root.AddComponent(engine_context, LayoutComponent{ .mDirection = direction });
+    _ = try root.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
+
+    const fixed_size: Layout.Sizing = .{ .Fixed = @max(size, WidgetActions.MIN_PANE_SIZE) };
+    const fill: Layout.Sizing = .{ .Fill = 1 };
+    const first = try Pane(engine_context, root, direction, if (fixed == .First) fixed_size else fill);
+
+    const divider = try NewEntity(engine_context, .{ .Entity = root });
+    _ = try divider.AddComponent(engine_context, QuadComponent{});
+    const thin: Layout.Sizing = .{ .Fixed = DIVIDER_SIZE };
+    _ = try divider.AddComponent(engine_context, if (direction == .Row)
+        LayoutItemComponent{ .mWidth = thin, .mHeight = fill }
+    else
+        LayoutItemComponent{ .mWidth = fill, .mHeight = thin });
+    try UIManager.Style(engine_context, divider, "Divider");
+    if (options.StockScripts) try AddStockScript(engine_context, divider, .Divider);
+
+    const second = try Pane(engine_context, root, direction, if (fixed == .Second) fixed_size else fill);
+    return .{ .Root = root, .First = first, .Divider = divider, .Second = second };
+}
+
+/// A bar of tabs above the pages they show, one at a time. Add the tabs with AddTab. Fills what it is in. The bar has
+/// style "TabBar"
+pub fn Tabs(engine_context: *EngineContext, parent: Parent) !Entity {
+    const tabs = try NewEntity(engine_context, parent);
+    _ = try tabs.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try tabs.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
+
+    const bar = try NewEntity(engine_context, .{ .Entity = tabs });
+    _ = try bar.AddComponent(engine_context, QuadComponent{});
+    _ = try bar.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mGap = PADDING / 2, .mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = PADDING / 2, .Bottom = 0 } });
+    _ = try bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
+    try UIManager.Style(engine_context, bar, "TabBar");
+
+    const pages = try NewEntity(engine_context, .{ .Entity = tabs });
+    _ = try pages.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try pages.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
+    return tabs;
+}
+
+/// A tab at the end of a tab bar (made by Tabs), and the page it shows, which is returned to put what it shows in.
+/// Clicking the tab shows its page and hides the others (the stock Tab script); the first tab added starts out shown.
+/// The tab has style "Tab". Its page fills the space under the bar
+pub fn AddTab(engine_context: *EngineContext, tabs: Entity, title: []const u8, options: Options) !Entity {
+    var parts = tabs.GetIterator(.Child);
+    const bar = parts.next().?;
+    const pages = parts.next().?;
+    var existing = bar.GetIterator(.Child);
+    const first = existing.next() == null;
+
+    const tab = try NewEntity(engine_context, .{ .Entity = bar });
+    _ = try tab.AddComponent(engine_context, QuadComponent{});
+    _ = try tab.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 } });
+    _ = try tab.AddComponent(engine_context, LayoutItemComponent{});
+    try UIManager.Style(engine_context, tab, "Tab");
+    _ = try Label(engine_context, .{ .Entity = tab }, title);
+    if (options.StockScripts) try AddStockScript(engine_context, tab, .Tab);
+    if (first) _ = try tab.AddComponent(engine_context, EntityComponents.SelectedTag{});
+
+    const page = try NewEntity(engine_context, .{ .Entity = pages });
+    _ = try page.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try page.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 }, .mCollapsed = !first });
+    return page;
+}
+
+/// A window at the top of `scene` that floats over the rest of it: a title bar (style "Title") that dragging moves it
+/// by (the stock WindowTitle script) with a close button that hides it (the stock CloseWindow script), and under it the
+/// window's content, which scrolls when it runs past the bottom. Pressing anywhere on it brings it in front of the scene's other floating windows (the stock Window
+/// script), and it starts in front of them. `size` is the whole window's, `at` where its center is from the scene's
+/// center. Style "Window"
+pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []const u8, size: Vec2(f32), at: Vec2(f32), options: Options) !WindowParts {
+    const window = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try window.AddComponent(engine_context, QuadComponent{});
+    _ = try window.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try window.AddComponent(engine_context, LayoutItemComponent{
+        .mWidth = .{ .Fixed = size.x },
+        .mHeight = .{ .Fixed = size.y },
+        .mPlacement = .{ .Anchored = .{ .Offset = at } },
+    });
+    try UIManager.Style(engine_context, window, "Window");
+    _ = try UIManager.ElementOf(window).?.AddComponent(engine_context, FloatingWindowComponent{});
+    if (options.StockScripts) try AddStockScript(engine_context, window, .Window);
+
+    const title_bar = try NewEntity(engine_context, .{ .Entity = window });
+    _ = try title_bar.AddComponent(engine_context, QuadComponent{});
+    _ = try title_bar.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .{ .Left = PADDING, .Right = 2, .Top = 2, .Bottom = 2 }, .mCrossAlign = .Center });
+    _ = try title_bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fixed = TITLE_SIZE } });
+    try UIManager.Style(engine_context, title_bar, "Title");
+    if (options.StockScripts) try AddStockScript(engine_context, title_bar, .WindowTitle);
+    const shown_title = try Label(engine_context, .{ .Entity = title_bar }, title);
+    shown_title.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fill = 1 };
+    const close = try ButtonFrame(engine_context, .{ .Entity = title_bar });
+    close.GetComponent(LayoutComponent).?.mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = 0, .Bottom = 0 };
+    _ = try Label(engine_context, .{ .Entity = close }, "x");
+    if (options.StockScripts) try AddStockScript(engine_context, close, .CloseWindow);
+
+    //what runs past the bottom scrolls, with a scrollbar
+    const content = try NewEntity(engine_context, .{ .Entity = window });
+    _ = try content.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .All(PADDING) });
+    _ = try content.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
+    _ = try content.AddComponent(engine_context, EntityComponents.ClipComponent{});
+    _ = try content.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(content).?.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Vertical });
+
+    try WidgetActions.RaiseWindow(engine_context, window);
+    return .{ .Window = window, .TitleBar = title_bar, .Content = content };
+}
+
 /// Puts one of the stock scripts on `entity`
 pub fn AddStockScript(engine_context: *EngineContext, entity: Entity, script: StockScript) !void {
     const handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = script.Path(), .path_type = .Eng } });
@@ -519,6 +723,18 @@ fn SceneOf(parent: Parent) Scene {
         .Entity => |entity| entity.GetComponent(EntitySceneComponent).?.mScene,
         .Scene => |scene| scene,
     };
+}
+
+/// One pane of a split: `along` the split's direction, filling it across. No background
+fn Pane(engine_context: *EngineContext, split: Entity, direction: Layout.Direction, along: Layout.Sizing) !Entity {
+    const pane = try NewEntity(engine_context, .{ .Entity = split });
+    _ = try pane.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    const across: Layout.Sizing = .{ .Fill = 1 };
+    _ = try pane.AddComponent(engine_context, if (direction == .Row)
+        LayoutItemComponent{ .mWidth = along, .mHeight = across }
+    else
+        LayoutItemComponent{ .mWidth = across, .mHeight = along });
+    return pane;
 }
 
 /// The container Button and ImageButton put their content in

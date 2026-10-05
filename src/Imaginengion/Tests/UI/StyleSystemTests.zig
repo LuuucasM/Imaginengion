@@ -73,7 +73,8 @@ const TestWorld = struct {
     }
 
     fn Update(self: *TestWorld) !void {
-        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme);
+        //no plain texture to fill with: there are no assets here
+        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme, .uninit);
     }
 };
 
@@ -233,6 +234,9 @@ test "the engine's default theme reads, with every style the editor's look needs
         }
     }
     try std.testing.expect(theme.GetStyle("AxisX").?.Font.IsIDValid());
+    //every label's style names a font: text with none takes up no room and draws nothing
+    try std.testing.expect(theme.GetStyle("Text").?.Font.IsIDValid());
+    try std.testing.expect(theme.GetStyle("TextDim").?.Font.IsIDValid());
     theme.Deinit(engine_context);
 
     //the asset manager, minus the default assets Init never set up and the working directory handle it does not own

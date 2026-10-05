@@ -16,6 +16,7 @@ test {
     _ = @import("Tests/Physics/PhysicsQueriesTests.zig");
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
     _ = @import("Tests/Renderer/ViewShapesTests.zig");
+    _ = @import("Tests/Renderer/RayMarcherTests.zig");
     _ = @import("Tests/UI/LayoutComponentTests.zig");
     _ = @import("Tests/UI/LayoutSystemTests.zig");
     _ = @import("Tests/Pointer/PointerSystemTests.zig");
@@ -28,7 +29,15 @@ test {
     _ = @import("Tests/UI/WidgetsTests.zig");
     _ = @import("Tests/UI/NumberFieldSystemTests.zig");
     _ = @import("Tests/UI/TreeMenuTests.zig");
+    _ = @import("Tests/UI/ShellWidgetsTests.zig");
+    _ = @import("Tests/UI/EditorShellTests.zig");
+    _ = @import("Tests/UI/EditorMenuBarTests.zig");
+    _ = @import("Tests/UI/InspectorTests.zig");
+    _ = @import("Tests/EditorPanels/StatsPanelTests.zig");
+    _ = @import("Tests/EditorPanels/AudioBusesPanelTests.zig");
+    _ = @import("Tests/EditorPanels/AssetHandlesPanelTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
+    _ = @import("Tests/Core/EngineStatsTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }
 
@@ -74,8 +83,8 @@ pub const PhysicsQueries = @import("Physics/PhysicsQueries.zig");
 
 //Rendering Stuff -------------------------------------------
 pub const PushConstants = @import("Renderer/RenderPipeline.zig").PushConstants;
-pub const QuatData = @import("Renderer/Renderer2D.zig").QuadData;
-pub const GlyphData = @import("Renderer/Renderer2D.zig").GlyphData;
+pub const ShapeData = @import("Renderer/Renderer2D.zig").ShapeData;
+pub const ShapeSurface = @import("Renderer/Renderer2D.zig").ShapeSurface;
 pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig");
 
 //LinAlg stuff

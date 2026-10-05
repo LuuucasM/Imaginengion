@@ -1,12 +1,18 @@
 //! Styles: what a UI element's StyleComponent names, out of the current theme (ThemeAsset.zig), written into its
 //! entity's quad and text every frame. Part of the UIManager. The colors follow the state the entity is in, read from
 //! its tags, highest first: disabled (it or anything it is inside has DisabledTag), pressed, hovered, focused, selected,
-//! and otherwise normal. A state the style has no color for takes the normal one. Whatever a style leaves out is left as the entity has it.
+//! and otherwise normal. A state the style has no color for takes the normal one.
+//! A styled quad or text with no texture of its own is filled plain, with a white texture, so its color is the theme's
+//! alone: left with none, the renderer would fill it with the engine's default texture. Whatever a style leaves out is
+//! left as the entity has it.
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const ThemeAsset = @import("../ECSComponents/Asset/ThemeAsset.zig");
+const Texture2D = @import("../ECSComponents/Asset/Texture2D.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const Vec4 = @import("../Math/MathTypes.zig").Vec4;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
@@ -43,7 +49,9 @@ pub fn ClearWarnings(self: *StyleSystem, engine_allocator: std.mem.Allocator) vo
 
 /// Once a frame, before layout (a font changing changes sizes): every styled element's entity, in every world, takes
 /// its style out of `theme`
-pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const ThemeAsset) !void {
+pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const ThemeAsset, plain_texture: AssetHandle) !void {
+    const zone = Tracy.ZoneInit("StyleSystem::Update", @src());
+    defer zone.Deinit();
     const ui_manager = &engine_context.mUIManager;
     const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = StyleComponent });
     for (element_ids.items) |element_id| {
@@ -56,8 +64,18 @@ pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const 
             try self.WarnMissing(engine_context.EngineAllocator(), name);
             continue;
         };
-        try Apply(engine_context, entity, style.*);
+        try Apply(engine_context, entity, style.*, plain_texture);
     }
+}
+
+/// Gives a quad or text with no texture of its own the plain one, sampled only at its middle, so the edges of the texture
+/// manager's slot it is in never blend in
+fn FillPlain(texture: *AssetHandle, tex_options: *Texture2D.TexOptions, plain_texture: AssetHandle) void {
+    if (texture.IsIDValid() or !plain_texture.IsIDValid()) return;
+    plain_texture.RetainAsset();
+    texture.* = plain_texture;
+    tex_options.mTextureUV0 = .{ .x = 0.5, .y = 0.5 };
+    tex_options.mTextureUV1 = .{ .x = 0.5, .y = 0.5 };
 }
 
 /// The state `entity` is in, from its tags
@@ -70,11 +88,13 @@ pub fn StateOf(entity: Entity) State {
     return .Normal;
 }
 
-/// Writes `style`, for the state `entity` is in, into its quad and text
-pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.Style) !void {
+/// Writes `style`, for the state `entity` is in, into its quad and text. A quad or text with no texture of its own is
+/// given `plain_texture` (a white one) to fill with, unless that is uninit
+pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.Style, plain_texture: AssetHandle) !void {
     const state = StateOf(entity);
 
     if (entity.GetComponent(QuadComponent)) |quad| {
+        FillPlain(&quad.mTexture, &quad.mTexOptions, plain_texture);
         if (ColorFor(style.Background, state)) |color| {
             quad.mTexOptions.mColor = color;
             quad.mTexOptions.mIsTransparent = color.w < 1;
@@ -85,6 +105,7 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
     }
 
     if (entity.GetComponent(TextComponent)) |text| {
+        FillPlain(&text.mTexHandle, &text.mTexOptions, plain_texture);
         if (ColorFor(style.Text, state)) |color| {
             text.mTexOptions.mColor = color;
             text.mTexOptions.mIsTransparent = color.w < 1;

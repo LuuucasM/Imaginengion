@@ -46,7 +46,6 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     if (self._P_Open == false) return;
 
     const frame_allocator = engine_context.FrameAllocator();
-    const available_region = imgui.igGetContentRegionAvail();
 
     const world_manager = switch (world_type) {
         .Game => &engine_context.mGameWorld,
@@ -59,8 +58,9 @@ pub fn OnImguiRender(self: ECSDisplayPanel, engine_context: *EngineContext, worl
     //the same window instead of spawning a new one, so dock position/size/tab order carry over.
     const window_name = try std.fmt.allocPrintSentinel(frame_allocator, "{s} - {s}###ECSDisplay_{s}", .{ @tagName(world_type), @tagName(ecs_type), @tagName(ecs_type) }, 0);
 
-    _ = imgui.igBegin(window_name.ptr, null, 0);
+    _ = imgui.igBegin(window_name.ptr, null, ImguiManager.PanelFlags());
     defer imgui.igEnd();
+    const available_region = imgui.igGetContentRegionAvail();
 
     //child that is the width of the entire available region is needed so we can drag scenes from the content browser to load the scene
     if (imgui.igBeginChild_Str(@tagName(ecs_type), available_region, imgui.ImGuiChildFlags_None, imgui.ImGuiWindowFlags_NoMove | imgui.ImGuiWindowFlags_NoScrollbar)) {

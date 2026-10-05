@@ -93,7 +93,7 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyo
         .offset = offset,
         .size = @intCast(size),
     };
-    sdl.SDL_UploadToGPUBuffer(copy_pass, &src, &dst, false);
+    sdl.SDL_UploadToGPUBuffer(copy_pass, &src, &dst, true);
     sdl.SDL_EndGPUCopyPass(copy_pass);
 
     return resize;

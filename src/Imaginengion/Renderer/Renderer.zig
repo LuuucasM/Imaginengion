@@ -77,8 +77,6 @@ const ResetOptions = enum {
 const is_spirv = builtin.target.cpu.arch.isSpirV();
 
 pub const SurfShadingData = extern struct {
-    pub const FLAG_TRANSPARENT: u32 = 1 << 0;
-
     Color: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
     TextureUV0: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     TextureUV1: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
@@ -218,7 +216,7 @@ pub const ShadingBuffers = struct {
             },
         }
     }
-    pub fn SetBuffers(self: *ShadingBuffers, stats: *RenderStats, engine_context: *EngineContext) !void {
+    pub fn SetBuffers(self: *ShadingBuffers, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("Renderer::ShadingBuffers::SetBuffers", @src());
         defer zone.Deinit();
 
@@ -228,11 +226,12 @@ pub const ShadingBuffers = struct {
         //shadings
         _ = self.mSurfShadingBuff.SetData(engine_context, self.mSurfShadingBuffBase.items.ptr, surf_byte_size, 0);
         _ = self.mMedShadingBuff.SetData(engine_context, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
-
-        //fill out stats
-        stats.Shadings.TotalShadings = self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
-        stats.Shadings.SurfShadings = self.mSurfShadingBuffBase.items.len;
-        stats.Shadings.MedShadings = self.mMedShadingBuffBase.items.len;
+    }
+    /// Adds this draw's shadings to stats. Once a draw, since the overlay and game passes share the one set
+    pub fn AddStats(self: ShadingBuffers, stats: *RenderStats) void {
+        stats.Shadings.TotalShadings += self.mSurfShadingBuffBase.items.len + self.mMedShadingBuffBase.items.len;
+        stats.Shadings.SurfShadings += self.mSurfShadingBuffBase.items.len;
+        stats.Shadings.MedShadings += self.mMedShadingBuffBase.items.len;
     }
     pub fn BindBuffers(self: ShadingBuffers, render_pass: *anyopaque) void {
         self.mSurfShadingBuff.Bind(render_pass);
@@ -268,8 +267,11 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     try self.mSDFShading.Init(engine_context);
 }
 
+/// False when no window image is free to draw into yet, and the frame is skipped
 pub fn BeginFrame(self: *Renderer, engine_context: *EngineContext) bool {
-    return self.mPlatform.BeginFrame(&engine_context.mAppWindow);
+    const began = self.mPlatform.BeginFrame(&engine_context.mAppWindow);
+    if (began) engine_context.mEngineStats.FrameAcquired();
+    return began;
 }
 
 pub fn EndFrame(self: *Renderer) void {
@@ -288,8 +290,8 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 }
 
 /// The per view uniforms every render hands the renderer, from the camera's transform and viewpoint. The viewpoint's
-/// size has to be set for this frame before calling, since the ray params are derived from it. The quad and glyph
-/// counts are filled in by the renderer once it knows them.
+/// size has to be set for this frame before calling, since the ray params are derived from it. The shape count is
+/// filled in by the renderer once it knows it.
 pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
     const ray_params = viewpoint_component.GetRayParams();
     return .{
@@ -298,8 +300,7 @@ pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_co
         .mRayScale = ray_params.Scale.ToArray(),
         .mRayOffset = ray_params.Offset.ToArray(),
         .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
-        .mQuadsCount = 0,
-        .mGlyphsCount = 0,
+        .mShapesCount = 0,
         .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
         .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
     };
@@ -341,7 +342,8 @@ fn RenderShapes(self: *Renderer, shapes: []const ShapeGeometry.ViewShape, stats:
 
     try self.BeginRendering(engine_context.EngineAllocator());
 
-    stats.TotalObjects = shapes.len;
+    //added up over every draw this frame: a world drawn for two views counts both
+    stats.TotalObjects += shapes.len;
 
     {
         //one zone for the whole loop rather than one per shape, which would swamp the timeline
@@ -355,6 +357,8 @@ fn RenderShapes(self: *Renderer, shapes: []const ShapeGeometry.ViewShape, stats:
             try self.DrawShape(engine_context, shape);
         }
     }
+
+    self.mSDFShading.AddStats(stats);
 
     //TODO: sorting
     //TODO: other optimizsations?
@@ -426,7 +430,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         .Overlay, .OverlayGame => {
             self.mPlatform.PushDebugGroup("Upload Buffers - Overlay");
             try self.mR2D.SetBuffers(stats, engine_context, .OverlayPipeline);
-            try self.mSDFShading.SetBuffers(stats, engine_context);
+            try self.mSDFShading.SetBuffers(engine_context);
             self.mPlatform.PopDebugGroup();
 
             const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
@@ -440,8 +444,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
             //always sits CANVAS_DISTANCE out, so the overlay can't depend on how far the game camera sees
             var overlay_push_constants = self.mSDFPushConstants;
             overlay_push_constants.mPerspectiveFar = OverlayCanvas.FAR_DISTANCE;
-            overlay_push_constants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .OverlayPipeline);
-            overlay_push_constants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .OverlayPipeline);
+            overlay_push_constants.mShapesCount = self.mR2D.GetShapeCount(.OverlayPipeline);
             self.mOverlayPipeline.PushUniforms(cmd, overlay_push_constants);
 
             self.mPlatform.PushDebugGroup("Draw - Overlay");
@@ -458,7 +461,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         .Game => {
             self.mPlatform.PushDebugGroup("Upload Buffers - Game");
             try self.mR2D.SetBuffers(stats, engine_context, .GamePipeline);
-            try self.mSDFShading.SetBuffers(stats, engine_context);
+            try self.mSDFShading.SetBuffers(engine_context);
             self.mPlatform.PopDebugGroup();
 
             const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);
@@ -468,8 +471,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
             self.mSDFShading.BindBuffers(game_compute_pass);
             self.mTextureManager.BindCompute(game_compute_pass);
 
-            self.mSDFPushConstants.mQuadsCount = self.mR2D.GetBufferCount(.Quad, .GamePipeline);
-            self.mSDFPushConstants.mGlyphsCount = self.mR2D.GetBufferCount(.Glyph, .GamePipeline);
+            self.mSDFPushConstants.mShapesCount = self.mR2D.GetShapeCount(.GamePipeline);
             self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
             self.mPlatform.PushDebugGroup("Draw - Game");

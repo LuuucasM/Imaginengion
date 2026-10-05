@@ -12,8 +12,8 @@ const Node = @import("IM").Node;
 const Edge = @import("IM").Edge;
 
 const CameraUBO = SDFShared.CameraUBO;
-const QuadsSSBO = SDFShared.QuadsSSBO;
-const GlyphsSSBO = SDFShared.GlyphsSSBO;
+const ShapesSSBO = SDFShared.ShapesSSBO;
+const ShapeSurfacesSSBO = SDFShared.ShapeSurfacesSSBO;
 const ClipsSSBO = SDFShared.ClipsSSBO;
 const SurfShadingSSBO = SDFShared.SurfShadingSSBO;
 const MedShadingSSBO = SDFShared.MedShadingSSBO;
@@ -25,8 +25,8 @@ const imageRead = SDFShared.imageRead;
 const default_color = Vec4(f32){ .x = 0, .y = 0.28, .z = 0.39, .w = 1.0 };
 
 const GameRayMarcher = RayMarcherFn(
-    @TypeOf(&QuadsSSBO.ptr),
-    @TypeOf(&GlyphsSSBO.ptr),
+    @TypeOf(&ShapesSSBO.ptr),
+    @TypeOf(&ShapeSurfacesSSBO.ptr),
     @TypeOf(&ClipsSSBO.ptr),
     @TypeOf(&SurfShadingSSBO.ptr),
     @TypeOf(&MedShadingSSBO.ptr),
@@ -51,10 +51,9 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mNodeCount = 0,
         .mEdgeCount = 0,
         .mDefaultColor = default_color,
-        .mQuads = &QuadsSSBO.ptr,
-        .mGlyphs = &GlyphsSSBO.ptr,
-        .mQuadsCount = CameraUBO.mQuadsCount,
-        .mGlyphsCount = CameraUBO.mGlyphsCount,
+        .mShapes = &ShapesSSBO.ptr,
+        .mShapeSurfaces = &ShapeSurfacesSSBO.ptr,
+        .mShapesCount = CameraUBO.mShapesCount,
         .mClips = &ClipsSSBO.ptr,
         .mSurfShading = &SurfShadingSSBO.ptr,
         .mMedShading = &MedShadingSSBO.ptr,

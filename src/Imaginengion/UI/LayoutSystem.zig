@@ -87,6 +87,8 @@ pub fn MarkSceneDirty(scene: Scene, engine_context: *EngineContext) !void {
 /// because the view was resized or the scene's scale mode changed, its trees are laid out again. Called by the
 /// renderer as it draws each view, so a scene drawn by several views of different sizes fits the last one drawn
 pub fn RecordViewArea(world: *WorldManager, overlay_scenes: []const Scene.Type, camera_view: CameraView, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("LayoutSystem::RecordViewArea", @src());
+    defer zone.Deinit();
     for (overlay_scenes) |scene_id| {
         const scene = world.GetScene(scene_id);
         if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;

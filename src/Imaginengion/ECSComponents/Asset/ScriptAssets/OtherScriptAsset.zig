@@ -69,6 +69,8 @@ pub fn Init(self: *OtherScriptAsset, engine_context: *EngineContext, abs_path: [
         .EntityOnCollisionEnd => @constCast(self.mLib.lookup(EntityComponents.OnCollisionEndScript.RunFuncSig, "Run").?),
         .EntityOnPreSolve => @constCast(self.mLib.lookup(EntityComponents.OnPreSolveScript.RunFuncSig, "Run").?),
         .EntityOnPhysicsUpdate => @constCast(self.mLib.lookup(EntityComponents.OnPhysicsUpdateScript.RunFuncSig, "Run").?),
+        .EntityOnPointerEvent => @constCast(self.mLib.lookup(EntityComponents.OnPointerEventScript.RunFuncSig, "Run").?),
+        .EntityOnUIEvent => @constCast(self.mLib.lookup(EntityComponents.OnUIEventScript.RunFuncSig, "Run").?),
         .SceneSceneStart => @constCast(self.mLib.lookup(SceneSceneStartScript.RunFuncSig, "Run").?),
         .SceneInputPressed => @constCast(self.mLib.lookup(SceneInputPressedScript.RunFuncSig, "Run").?),
         .SceneOnUpdate => @constCast(self.mLib.lookup(SceneOnUpdateScript.RunFuncSig, "Run").?),

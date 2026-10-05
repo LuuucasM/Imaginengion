@@ -1,9 +1,6 @@
 const std = @import("std");
-const QuadData = @import("Renderer2D.zig").QuadData;
-const GlyphData = @import("Renderer2D.zig").GlyphData;
-const SurfShadingData = @import("Renderer.zig").SurfShadingData;
-const MedShadingData = @import("Renderer.zig").MedShadingData;
-const EShadingFlags = @import("Renderer.zig").EShadingFlags;
+const ShapeData = @import("Renderer2D.zig").ShapeData;
+const ShapeSurface = @import("Renderer2D.zig").ShapeSurface;
 
 const MathTypes = @import("../Math/MathTypes.zig");
 const Ray = @import("../Math/CameraRay.zig").Ray;
@@ -72,45 +69,24 @@ pub const Edge = extern struct {
     FromNode: u32,
     ToNode: u32,
     SiblingEdge: u32,
+    //the medium it travels through, into the medium shadings. 0 is air, the only one there is so far
     MaterialHandle: u32,
-    //the object this edge starts on, which the march ignores. A continuation edge starts within
+    //the shape this edge starts on, which the march ignores. A continuation edge starts within
     //epsilon of the plate it passed through, so without this it immediately re-hits that same plate
     //and spawns another edge, forever. Every shape is a flat plate, so a straight ray can't
     //legitimately hit the one it just left.
-    SkipObject: ObjectData = .{ .shape_type = .None, .shape_ind = 0 },
+    SkipShape: u32 = NO_SHAPE,
 };
 
-const ObjectData = extern struct {
-    shape_type: ShapeType,
-    shape_ind: usize,
-
-    pub fn Equals(self: ObjectData, other: ObjectData) bool {
-        if (self.shape_type == other.shape_type and self.shape_ind == other.shape_ind) return true else false;
-    }
-    pub fn Is2D(self: ObjectData) bool {
-        if (self.shape_type == ShapeType.Quad or self.shape_type == ShapeType.Glyph) return true;
-        return false;
-    }
-    pub fn GetShadingHandle(self: ObjectData, quads: anytype, glyphs: anytype) u32 {
-        return switch (self.shape_type) {
-            .Quad => quads[self.shape_ind].ShadingHandle,
-            .Glyph => glyphs[self.shape_ind].AtlasShadingHandle,
-            else => 0,
-        };
-    }
-    pub fn GetShadingFlags(self: ObjectData, quads: anytype, glyphs: anytype) u32 {
-        return switch (self.shape_type) {
-            .Quad => quads[self.shape_ind].ShadingFlags,
-            .Glyph => glyphs[self.shape_ind].TextureShadingFlags,
-            else => 0,
-        };
-    }
-};
+/// A shape index that is no shape: what a miss or an empty skip slot holds
+const NO_SHAPE: u32 = std.math.maxInt(u32);
 
 /// A hit the march has checked against the shape itself.
 const SurfaceHit = struct {
     Found: bool,
-    Object: ObjectData,
+    //the shape's index in the shape buffer, and its kind
+    Shape: u32,
+    Type: ShapeType,
     T: f32,
     Normal: Vec3(f32),
     TextureUV: Vec3(f32),
@@ -119,7 +95,8 @@ const SurfaceHit = struct {
 
     const none: SurfaceHit = .{
         .Found = false,
-        .Object = .{ .shape_type = .None, .shape_ind = 0 },
+        .Shape = NO_SHAPE,
+        .Type = .None,
         .T = 0,
         .Normal = .{ .x = 0, .y = 0, .z = 0 },
         .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
@@ -136,32 +113,32 @@ fn IsFrontHit(hit: HitInfo) bool {
 
 const MAX_SKIPS: u32 = 4;
 
-/// What one edge's march ignores: the object the edge starts on, and any the march has come within
+/// What one edge's march ignores: the shape the edge starts on, and any the march has come within
 /// epsilon of and SurfaceAt turned down. A straight ray can't come back round to a flat plate it has
-/// passed, so a turned down object stays skipped for the rest of the edge, which also stops the march
+/// passed, so a turned down shape stays skipped for the rest of the edge, which also stops the march
 /// sitting on it. When it's full the oldest goes, the one furthest behind the ray. Skipping is only to
-/// get past things: an object that drops out and gets touched again is just turned down again.
+/// get past things: a shape that drops out and gets touched again is just turned down again.
 const SkipList = struct {
-    mObjects: [MAX_SKIPS]ObjectData,
+    mShapes: [MAX_SKIPS]u32,
     mNext: u32,
 
-    fn Init(first: ObjectData) SkipList {
+    fn Init(first: u32) SkipList {
         var list = SkipList{
-            .mObjects = @splat(.{ .shape_type = .None, .shape_ind = 0 }),
+            .mShapes = @splat(NO_SHAPE),
             .mNext = 1,
         };
-        list.mObjects[0] = first;
+        list.mShapes[0] = first;
         return list;
     }
 
-    fn Add(self: *SkipList, object: ObjectData) void {
-        self.mObjects[self.mNext] = object;
+    fn Add(self: *SkipList, shape: u32) void {
+        self.mShapes[self.mNext] = shape;
         self.mNext = (self.mNext + 1) % MAX_SKIPS;
     }
 
-    fn Contains(self: SkipList, shape_type: ShapeType, shape_ind: usize) bool {
-        for (self.mObjects) |object| {
-            if (object.shape_type == shape_type and object.shape_ind == shape_ind) return true;
+    fn Contains(self: SkipList, shape: u32) bool {
+        for (self.mShapes) |skipped| {
+            if (skipped == shape) return true;
         }
         return false;
     }
@@ -172,10 +149,10 @@ const EdgeArr = [MAX_EDGES]Edge;
 
 const MarchData = extern struct {
     min_dist: f32,
-    object: ObjectData,
+    shape: u32,
 };
 
-pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
+pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
     return extern struct {
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
@@ -185,10 +162,11 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         mNodeCount: usize,
         mEdgeCount: usize,
         mDefaultColor: Vec4(f32),
-        mQuads: quads_type,
-        mGlyphs: glyphs_type,
-        mQuadsCount: usize,
-        mGlyphsCount: usize,
+        /// every shape the march looks for, every kind in one buffer (ShapeData), and what only a hit one needs
+        /// (ShapeSurface), by each shape's SurfaceIndex
+        mShapes: shapes_type,
+        mShapeSurfaces: shape_surfaces_type,
+        mShapesCount: usize,
         /// the clip regions shapes are cut to, by their ClipIndex
         mClips: clips_type,
         mSurfShading: surf_shading_type,
@@ -205,7 +183,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                 const from_point = self.mNodes[@intCast(curr_edge.FromNode)].Point;
 
                 const edge_ray = Ray{ .Origin = from_point, .Dir = curr_edge.Direction };
-                var skips = SkipList.Init(curr_edge.SkipObject);
+                var skips = SkipList.Init(curr_edge.SkipShape);
                 var surface: SurfaceHit = .none;
                 var dist_origin: f32 = 0;
 
@@ -221,9 +199,9 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                     //close enough to count, so ask the shape itself where exactly the ray meets it. only
                     //a plate's front is drawn, and a glyph only where the letter covers it: at its back,
                     //its sides or a gap in the letter the ray goes on to whatever is behind
-                    surface = self.SurfaceAt(edge_ray, march_data.object, sample_sampler, textures_array);
+                    surface = self.SurfaceAt(edge_ray, march_data.shape, sample_sampler, textures_array);
                     if (surface.Found) break;
-                    skips.Add(march_data.object);
+                    skips.Add(march_data.shape);
                 }
 
                 //out of steps or distance, the ray dies
@@ -258,19 +236,19 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                     .MaterialHandle = shading_handle,
                     .AccumColor = self.mDefaultColor,
                     .TextureUV = surface.TextureUV,
-                    .ShapeT = surface.Object.shape_type,
+                    .ShapeT = surface.Type,
                 };
 
                 self.mEdges[curr_edge_ind].ToNode = @intCast(new_node_ind);
 
                 //now for checking if we need to spawn more edges based off different material properties of the object
                 //in the future can expand this to do reflectivity, lighting, shadows, refraction, whatever else exists idk
-                const shading_flags = self.GetShadingFlags(surface.Object);
+                const shading_flags = self.mShapes[surface.Shape].Flags;
 
                 //if transparent bit is set, aka it can be some level of transparent and we are not already full of edges.
                 //mEdgeCount is the real bound: the stack is popped before each push so it never fills, and
                 //each edge adds exactly one node, so this also keeps mNodeCount <= MAX_NODES
-                if (shading_flags & SurfShadingData.FLAG_TRANSPARENT != 0 and self.mEdgeCount < MAX_EDGES and !edge_ind_stack.IsFull()) {
+                if (shading_flags & ShapeData.FLAG_TRANSPARENT != 0 and self.mEdgeCount < MAX_EDGES and !edge_ind_stack.IsFull()) {
                     const new_node = self.mNodes[new_node_ind];
                     const material_handle = new_node.MaterialHandle;
                     const material = self.mSurfShading[material_handle];
@@ -290,7 +268,7 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                             .SiblingEdge = NO_EDGE,
                             .AccumColor = self.mDefaultColor,
                             .MaterialHandle = 0,
-                            .SkipObject = surface.Object,
+                            .SkipShape = surface.Shape,
                         };
 
                         self.mNodes[new_node_ind].FirstEdge = @intCast(new_edge_ind);
@@ -328,26 +306,26 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         }
 
         fn NextSurface(self: Self, point: Vec3(f32), skips: SkipList) MarchData {
-            var data = MarchData{ .min_dist = self.mPerspectiveFar, .object = .{ .shape_type = .None, .shape_ind = 0 } };
+            var data = MarchData{ .min_dist = self.mPerspectiveFar, .shape = NO_SHAPE };
+            var nearest_type: ShapeType = .None;
 
-            for (0..self.mQuadsCount) |i| {
-                if (skips.Contains(.Quad, i)) continue;
-                const quad: QuadData = self.mQuads[i];
-                const dist = self.Clipped(SDFFunc.sdIMQuad(point, quad), point, quad.ClipIndex);
-                if (dist < data.min_dist) {
+            for (0..self.mShapesCount) |i| {
+                const shape_ind: u32 = @intCast(i);
+                if (skips.Contains(shape_ind)) continue;
+                const shape: ShapeData = self.mShapes[i];
+                const shape_dist = switch (shape.Type) {
+                    .Quad => SDFFunc.sdIMQuad(point, shape),
+                    .Glyph => SDFFunc.sdIMGlyph(point, shape),
+                    .None => continue,
+                };
+                const dist = self.Clipped(shape_dist, point, shape.ClipIndex);
+                //an exact tie goes to the first one in the buffer, except that a quad beats a glyph: the order they
+                //were marched in when each kind had its own buffer, quads first
+                const quad_over_glyph = dist == data.min_dist and shape.Type == .Quad and nearest_type == .Glyph;
+                if (dist < data.min_dist or quad_over_glyph) {
                     data.min_dist = dist;
-                    data.object.shape_type = .Quad;
-                    data.object.shape_ind = @intCast(i);
-                }
-            }
-            for (0..self.mGlyphsCount) |i| {
-                if (skips.Contains(.Glyph, i)) continue;
-                const glyph: GlyphData = self.mGlyphs[i];
-                const dist = self.Clipped(SDFFunc.sdIMGlyph(point, glyph), point, glyph.ClipIndex);
-                if (dist < data.min_dist) {
-                    data.min_dist = dist;
-                    data.object.shape_type = .Glyph;
-                    data.object.shape_ind = @intCast(i);
+                    data.shape = shape_ind;
+                    nearest_type = shape.Type;
                 }
             }
             return data;
@@ -367,33 +345,36 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             return SDFFunc.InIMClip(point, self.mClips[clip_index]);
         }
 
-        /// Where the ray meets `object`, if it does in a way that's drawn: the front of a plate, and for
+        /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: the front of a plate, and for
         /// a glyph, only where the letter covers it. Neither outside its clip region
-        fn SurfaceAt(self: Self, ray: Ray, object: ObjectData, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
-            switch (object.shape_type) {
+        fn SurfaceAt(self: Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            const shape: ShapeData = self.mShapes[shape_ind];
+            const surface: ShapeSurface = self.mShapeSurfaces[shape.SurfaceIndex];
+            switch (shape.Type) {
                 .Quad => {
-                    const quad: QuadData = self.mQuads[object.shape_ind];
-                    const hit = SDFFunc.rayIMQuad(ray, quad);
+                    const hit = SDFFunc.rayIMQuad(ray, shape);
                     if (!IsFrontHit(hit)) return .none;
                     const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
-                    if (!self.InClip(hit_point, quad.ClipIndex)) return .none;
+                    if (!self.InClip(hit_point, shape.ClipIndex)) return .none;
 
                     //the band around the edge is the border's solid color, the rest is the quad's own surface
-                    if (SDFFunc.InIMQuadBorder(hit_point, quad)) {
+                    if (SDFFunc.InIMQuadBorder(hit_point, shape, surface.BorderWidth)) {
                         return .{
                             .Found = true,
-                            .Object = object,
+                            .Shape = shape_ind,
+                            .Type = shape.Type,
                             .T = hit.T,
                             .Normal = hit.Normal,
                             .TextureUV = SDFFunc.UNTEXTURED_UV,
-                            .ShadingHandle = quad.BorderShadingHandle,
+                            .ShadingHandle = surface.BorderShadingHandle,
                         };
                     }
 
-                    const texture_shading_data = self.mSurfShading[quad.ShadingHandle];
+                    const texture_shading_data = self.mSurfShading[surface.ShadingHandle];
                     return .{
                         .Found = true,
-                        .Object = object,
+                        .Shape = shape_ind,
+                        .Type = shape.Type,
                         .T = hit.T,
                         .Normal = hit.Normal,
                         .TextureUV = SDFFunc.TextureUV(
@@ -402,24 +383,27 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                             texture_shading_data.TextureWidth,
                             texture_shading_data.TextureHeight,
                         ),
-                        .ShadingHandle = quad.ShadingHandle,
+                        .ShadingHandle = surface.ShadingHandle,
                     };
                 },
                 .Glyph => {
-                    const glyph: GlyphData = self.mGlyphs[object.shape_ind];
-                    const hit = SDFFunc.rayIMGlyph(ray, glyph);
+                    const hit = SDFFunc.rayIMGlyph(ray, shape);
                     if (!IsFrontHit(hit)) return .none;
-                    if (!self.InClip(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), glyph.ClipIndex)) return .none;
+                    if (!self.InClip(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), shape.ClipIndex)) return .none;
 
                     //the coverage test needs where in the glyph's box the hit is. the fill texture's UV
                     //is a different thing, a spot in its texture manager slot, and only for color
-                    const atlas_shading_data = self.mSurfShading[glyph.AtlasShadingHandle];
+                    const atlas_shading_data = self.mSurfShading[surface.ShadingHandle];
                     if (SDFFunc.GetMSD(hit.UV, atlas_shading_data, textures_array, sample_sampler) < 0.5) return .none;
 
-                    const texture_shading_data = self.mSurfShading[atlas_shading_data.SiblingShading];
+                    //the atlas only says where the letter is. What it is painted with, the text's color and texture, is
+                    //the fill surface the atlas entry points on to, so that is what the hit is shaded with
+                    const fill_handle = atlas_shading_data.SiblingShading;
+                    const texture_shading_data = self.mSurfShading[fill_handle];
                     return .{
                         .Found = true,
-                        .Object = object,
+                        .Shape = shape_ind,
+                        .Type = shape.Type,
                         .T = hit.T,
                         .Normal = hit.Normal,
                         .TextureUV = SDFFunc.TextureUV(
@@ -428,14 +412,14 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
                             texture_shading_data.TextureWidth,
                             texture_shading_data.TextureHeight,
                         ),
-                        .ShadingHandle = glyph.AtlasShadingHandle,
+                        .ShadingHandle = fill_handle,
                     };
                 },
-                else => return .none,
+                .None => return .none,
             }
         }
 
-        fn CalcNodeColor(self: *Self, node_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) void {
+        fn CalcNodeColor(self: *Self, node_ind: usize, sample_sampler: anytype, textures_array: textures_array_type) void {
             const curr_node = self.mNodes[node_ind];
 
             const child_accum = if (curr_node.FirstEdge == NO_EDGE) self.mDefaultColor else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
@@ -452,11 +436,12 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
         fn CalcEdgeColor(self: *Self, edge_ind: u32) void {
             const curr_edge = self.mEdges[edge_ind];
             const to_node = self.mNodes[curr_edge.ToNode];
-            const from_node = self.mNodes[curr_edge.FromNode];
 
             const child_accum = to_node.AccumColor;
 
-            const material = self.mMedShading[from_node.MaterialHandle];
+            //the medium the edge travels through is its own. The node it leaves is a surface, and its MaterialHandle
+            //is into the surface shadings, which say nothing about what is on the other side
+            const material = self.mMedShading[curr_edge.MaterialHandle];
 
             // Beer-Lambert for absorbtion  over edge length
             const extinction = Vec3(f32).FromArray(material.Absorption).AddVec(.FromArray(material.Scattering));
@@ -480,22 +465,6 @@ pub fn RayMarcher(comptime quads_type: type, comptime glyphs_type: type, comptim
             if (texture_uv.x < 0 or texture_uv.y < 0 or texture_uv.z < 0) return Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 };
 
             return .FromVector(sample_sampler(textures_array, texture_uv.ToVector(), 0.0));
-        }
-
-        fn GetShadingHandle(self: Self, obj_data: ObjectData) u32 {
-            return switch (obj_data.shape_type) {
-                .Quad => self.mQuads[obj_data.shape_ind].ShadingHandle,
-                .Glyph => self.mGlyphs[obj_data.shape_ind].AtlasShadingHandle,
-                else => 0,
-            };
-        }
-
-        fn GetShadingFlags(self: Self, obj_data: ObjectData) u32 {
-            return switch (obj_data.shape_type) {
-                .Quad => self.mQuads[obj_data.shape_ind].ShadingFlags,
-                .Glyph => self.mGlyphs[obj_data.shape_ind].TextureShadingFlags,
-                else => 0,
-            };
         }
     };
 }

@@ -13,6 +13,7 @@
 //! scenes above its scene first (ScriptsProcessor.RunScriptAbove), then hands the key here if none of them took it,
 //! and the scenes below never hear it. While it has the keyboard the input manager's IsKeyPressed reads false.
 const std = @import("std");
+const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
@@ -111,6 +112,8 @@ pub fn Caret(self: *const FocusSystem) usize {
 /// unless it waits for a double click (OnClicked). Any button anywhere outside the focused text input ends its edit,
 /// keeping it
 pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *const PointerSystem, button: MouseCodes) !void {
+    const zone = Tracy.ZoneInit("FocusSystem::OnPressed", @src());
+    defer zone.Deinit();
     var pressed: ?Entity = null;
     for (pointer.mHovered.items) |entity| {
         if (entity.IsActive() and UIManager.HasUIComponent(entity, TextInputComponent)) {
@@ -136,6 +139,8 @@ pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *c
 /// One of the frame's pointer clicks: a double click (left button) on a text input that focuses on one gives it the
 /// keyboard, with the caret at the end of its text
 pub fn OnClicked(self: *FocusSystem, engine_context: *EngineContext, e: PointerClickedEvent) !void {
+    const zone = Tracy.ZoneInit("FocusSystem::OnClicked", @src());
+    defer zone.Deinit();
     if (e.mButton != .BUTTON_LEFT or e.mClicks != 2) return;
     //one event per entity in the chain: the text input's own
     const text_input = UIManager.GetUIComponent(e.mEntity, TextInputComponent) orelse return;
@@ -195,6 +200,8 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
 
 /// A key went down (or repeated, from being held) and it is the focused text input's turn at it
 pub fn OnKeyPressed(self: *FocusSystem, engine_context: *EngineContext, e: KeyboardPressedEvent) !void {
+    const zone = Tracy.ZoneInit("FocusSystem::OnKeyPressed", @src());
+    defer zone.Deinit();
     const focused = self.Focused() orelse return;
     const text = focused.GetComponent(TextComponent) orelse return;
     //code may have changed the text since
@@ -222,6 +229,8 @@ pub fn OnKeyPressed(self: *FocusSystem, engine_context: *EngineContext, e: Keybo
 
 /// Text was typed (a TextTyped event): it goes in at the caret
 pub fn OnTextTyped(self: *FocusSystem, engine_context: *EngineContext, typed: []const u8) !void {
+    const zone = Tracy.ZoneInit("FocusSystem::OnTextTyped", @src());
+    defer zone.Deinit();
     const copy = try engine_context.FrameAllocator().dupe(u8, typed);
     try self.Type(engine_context, copy);
 }
@@ -242,6 +251,8 @@ fn Type(self: *FocusSystem, engine_context: *EngineContext, bytes: []u8) !void {
 /// Once a frame, after layout and before world transforms: keeps the caret on the text and blinking, and lets go if
 /// the focused text input has gone
 pub fn Update(self: *FocusSystem, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("FocusSystem::Update", @src());
+    defer zone.Deinit();
     defer self.SyncTextInput(engine_context);
     const focused = self.mFocused orelse return;
     if (!focused.IsActive()) {

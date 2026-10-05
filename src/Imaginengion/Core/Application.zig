@@ -87,6 +87,7 @@ pub fn Run(self: *Application) !void {
     const first_ns = first_duration.toNanoseconds();
     const first_seconds_f64 = @as(f64, @floatFromInt(first_ns)) / @as(f64, std.time.ns_per_s);
     self.mEngineContext.mDT = @floatCast(first_seconds_f64);
+    self.mEngineContext.mEngineStats.CountLoop(self.mEngineContext.mDT);
 
     while (self.mEngineContext.mIsRunning) {
         defer Tracy.FrameMark();
@@ -108,6 +109,7 @@ pub fn Run(self: *Application) !void {
         const ns = duration.toNanoseconds();
         const seconds_f64 = @as(f64, @floatFromInt(ns)) / @as(f64, std.time.ns_per_s);
         self.mEngineContext.mDT = @floatCast(seconds_f64);
+        self.mEngineContext.mEngineStats.CountLoop(self.mEngineContext.mDT);
     }
 }
 

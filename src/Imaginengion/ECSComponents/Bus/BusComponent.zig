@@ -1,4 +1,5 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 const BusComponent = @This();
 
 pub const Name: []const u8 = "BusComponent";
@@ -15,3 +16,8 @@ mPaused: bool = false,
 mGain: f32 = 1.0,
 
 pub fn Deinit(_: *BusComponent, _: *EngineContext) void {}
+
+/// Only whether it is paused: its gain is where the mixer has got to, not a setting
+pub fn UIRender(self: *BusComponent, ui: *Inspector.Builder) !void {
+    try ui.Bool(&self.mPaused, "Paused", .{});
+}

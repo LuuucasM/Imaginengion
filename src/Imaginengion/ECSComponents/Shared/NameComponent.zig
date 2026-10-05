@@ -3,6 +3,7 @@ const NameComponent = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable: bool = true;
@@ -23,6 +24,10 @@ pub fn Clone(self: *const NameComponent, engine_context: *EngineContext) !NameCo
 
 pub fn EditorRender(self: *NameComponent, engine_context: *EngineContext) !void {
     try ImguiManager.RenderTextInput(engine_context, &self.mName, "Text");
+}
+
+pub fn UIRender(self: *NameComponent, ui: *Inspector.Builder) !void {
+    try ui.Text(&self.mName, "Name", .{});
 }
 
 const Json = JsonUtils.JsonFields(NameComponent, .{ .Name = "mName" });

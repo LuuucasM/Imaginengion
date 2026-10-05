@@ -60,7 +60,7 @@ pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, sele
             .gamecontext => |g| try RenderComponents(GameMode, engine_context, g),
         }
     } else {
-        _ = imgui.igBegin("Components - No Entity###Components\x00", null, 0);
+        _ = imgui.igBegin("Components - No Entity###Components\x00", null, ImguiManager.PanelFlags());
         defer imgui.igEnd();
     }
 }
@@ -71,7 +71,7 @@ fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object
     const trimmed_name = object_name[0..name_len];
     const name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "Components - {s}###Components", .{trimmed_name}, 0);
 
-    _ = imgui.igBegin(name.ptr, null, 0);
+    _ = imgui.igBegin(name.ptr, null, ImguiManager.PanelFlags());
 }
 
 /// The component list of one object, drawn into the current window (a template window draws its own)

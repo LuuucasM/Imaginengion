@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
     //==============================ENGINE MODULE===========================================================
     const engine_module_eng = MakeEngineLib(b, target, optimize, .Full);
     const engine_module_script = MakeEngineLib(b, target, optimize, .Script);
-    const engine_module_shader = MakeEngineLib(b, spirv_target, optimize, .Shader);
+    const engine_module_shader = MakeEngineLib(b, spirv_target, .Debug, .Shader);
     //=================================END ENGINE MODULE============================================================
 
     //==================================OPTIONS============================================================
@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) void {
     //=======================================END OPTIONS========================================================
 
     //=========================================SHADER STEP=========================================
-    build_shaders.BuildShader(b, engine_module_shader, spirv_target, optimize, engine_module_eng);
+    build_shaders.BuildShader(b, engine_module_shader, spirv_target, .Debug, engine_module_eng);
     //=========================================END SHADER STEP=====================================
 
     //=========================================SCRIPT STEP=========================================

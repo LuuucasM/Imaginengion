@@ -12,6 +12,7 @@ test {
     _ = @import("Tests/Math/ScreenRectTests.zig");
     _ = @import("Tests/Math/OverlayCanvasTests.zig");
     _ = @import("Tests/Renderer/TextLayoutTests.zig");
+    _ = @import("Tests/Renderer/ShapeSortTests.zig");
     _ = @import("Tests/Inputs/InputTests.zig");
     _ = @import("Tests/UI/LayoutTests.zig");
     _ = @import("Tests/UI/TextEditTests.zig");

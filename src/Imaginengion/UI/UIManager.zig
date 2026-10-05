@@ -38,6 +38,7 @@ const PopupSystem = @import("PopupSystem.zig");
 const ScrollSystem = @import("ScrollSystem.zig");
 const StyleSystem = @import("StyleSystem.zig");
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
+const BindingSystem = @import("BindingSystem.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ThemeAsset = @import("../ECSComponents/AComponents.zig").ThemeAsset;
 const ScrollComponent = UIComponents.ScrollComponent;
@@ -69,12 +70,19 @@ mScrollSystem: ScrollSystem = .empty,
 mStyleSystem: StyleSystem = .empty,
 /// Dragging and typing number fields, and keeping their text showing their value
 mNumberFieldSystem: NumberFieldSystem = .empty,
+/// Widgets tied to fields of objects' components, kept showing them and writing edits back
+mBindingSystem: BindingSystem = .empty,
 /// The current theme, which styles are looked up in. uninit until something asks for it, and then the engine's
 /// default if no other has been set
 mTheme: AssetHandle = .uninit,
+/// The white texture styled shapes fill with (PLAIN_TEXTURE_PATH), loaded the first time it is needed
+mPlainTexture: AssetHandle = .uninit,
 
 /// The theme every project starts with
 pub const DEFAULT_THEME_PATH = "src/Imaginengion/EngineAssets/themes/Default.imtheme";
+/// What styled quads and text with no texture of their own fill with (see StyleSystem): plain white, so their color is
+/// the theme's alone
+pub const PLAIN_TEXTURE_PATH = "src/Imaginengion/EngineAssets/textures/White.png";
 
 pub fn Init(self: *UIManager, engine_allocator: std.mem.Allocator) !void {
     try self.mECSManager.Init(engine_allocator);
@@ -84,7 +92,9 @@ pub fn Deinit(self: *UIManager, engine_context: *EngineContext) void {
     self.mFocusSystem.Deinit(engine_context.EngineAllocator());
     self.mPopupSystem.Deinit(engine_context.EngineAllocator());
     self.mStyleSystem.Deinit(engine_context.EngineAllocator());
+    self.mBindingSystem.Deinit(engine_context.EngineAllocator());
     self.mTheme.ReleaseAsset();
+    self.mPlainTexture.ReleaseAsset();
     self.mECSManager.Deinit(engine_context);
     self.mEventManager.Deinit(engine_context.EngineAllocator());
 }
@@ -105,6 +115,8 @@ const DeleteObj = Core.DeleteObj;
 /// A press closes the popups it is outside and moves the keyboard to what it landed on, typed text goes into the text
 /// input that has the keyboard, and the wheel scrolls what is under the pointer
 pub fn OnInputEvent(self: *UIManager, engine_context: *EngineContext, pointer: *const PointerSystem, event: WindowEventData.EventT) !void {
+    const zone = Tracy.ZoneInit("UIManager::OnInputEvent", @src());
+    defer zone.Deinit();
     switch (event) {
         .MousePressed => |e| {
             //popups first, so a text input in one that closes ends its edit before the keyboard moves on
@@ -149,6 +161,8 @@ pub fn KeyTakerFor(self: *const UIManager, key: ScanCodes) ?KeyTaker {
 
 /// The key reached the UI's turn and nothing above it kept it
 pub fn OnKeyTaken(self: *UIManager, engine_context: *EngineContext, taker: KeyTaker, event: WindowEventData.KeyboardPressedEvent) !void {
+    const zone = Tracy.ZoneInit("UIManager::OnKeyTaken", @src());
+    defer zone.Deinit();
     switch (taker.Kind) {
         .Focus => try self.mFocusSystem.OnKeyPressed(engine_context, event),
         .Popup => try self.mPopupSystem.CloseTop(engine_context),
@@ -158,6 +172,8 @@ pub fn OnKeyTaken(self: *UIManager, engine_context: *EngineContext, taker: KeyTa
 /// One of the frame's pointer events: a dragged scrollbar scrolls its region, a dragged number field changes its value,
 /// and a double click can start typing
 pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: PointerEvent) !void {
+    const zone = Tracy.ZoneInit("UIManager::OnPointerEvent", @src());
+    defer zone.Deinit();
     try self.mScrollSystem.OnPointerEvent(engine_context, event);
     try self.mNumberFieldSystem.OnPointerEvent(engine_context, event);
     switch (event) {
@@ -170,6 +186,8 @@ pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: P
 /// parts have each event first (a number field takes the number typed into it), and what they send in turn is handed
 /// out in the same pass
 pub fn ProcessUIEvents(self: *UIManager, engine_context: *EngineContext, callback_list: std.DoublyLinkedList) !void {
+    const zone = Tracy.ZoneInit("UIManager::ProcessUIEvents", @src());
+    defer zone.Deinit();
     var own_callback = EventManagerT.MakeCallback(UIManager, OnOwnUIEvent, self);
     var callbacks = callback_list;
     callbacks.prepend(&own_callback.mNode);
@@ -179,21 +197,28 @@ pub fn ProcessUIEvents(self: *UIManager, engine_context: *EngineContext, callbac
 
 fn OnOwnUIEvent(self: *UIManager, engine_context: *EngineContext, event: *const UIEventData.EventT) !EventResult {
     try self.mNumberFieldSystem.OnUIEvent(engine_context, event.*);
+    try self.mBindingSystem.OnUIEvent(engine_context, event.*);
     return .Continue;
 }
 
 /// Once a frame, after game logic and before layout (a font or a text can change sizes): every styled element's entity
 /// takes its style out of the current theme, and every number field shows its value
 pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !void {
+    const zone = Tracy.ZoneInit("UIManager::UpdateBeforeLayout", @src());
+    defer zone.Deinit();
+    //fields' values onto their widgets first, which the number fields then show
+    try self.mBindingSystem.Update(engine_context);
     try self.mNumberFieldSystem.Update(engine_context);
     const theme = self.CurrentTheme(engine_context) orelse return;
-    try self.mStyleSystem.Update(engine_context, theme);
+    try self.mStyleSystem.Update(engine_context, theme, self.PlainTexture(engine_context));
 }
 
 /// Once a frame, after layout and before world transforms: open popups are placed against what opened them, scrollbars
 /// put where their regions are scrolled to, and the caret where the laid out text puts it. Popups and scrollbars are
 /// only for `worlds`, the ones whose UI is in use: the world being played, the editor's own
 pub fn UpdateAfterLayout(self: *UIManager, engine_context: *EngineContext, worlds: []const *WorldManager) !void {
+    const zone = Tracy.ZoneInit("UIManager::UpdateAfterLayout", @src());
+    defer zone.Deinit();
     for (worlds) |world| {
         try self.mPopupSystem.Update(engine_context, world);
         try self.mScrollSystem.Update(engine_context, world);
@@ -229,6 +254,18 @@ pub fn CurrentTheme(self: *UIManager, engine_context: *EngineContext) ?*ThemeAss
         };
     }
     return self.mTheme.GetAsset(engine_context, ThemeAsset) catch null;
+}
+
+/// The white texture styled shapes fill with, loaded the first time. uninit if it can't be found, and then they are left
+/// with the engine's default texture
+pub fn PlainTexture(self: *UIManager, engine_context: *EngineContext) AssetHandle {
+    if (!self.mPlainTexture.IsIDValid()) {
+        self.mPlainTexture = engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = PLAIN_TEXTURE_PATH, .path_type = .Eng } }) catch |err| {
+            std.log.err("The plain UI texture could not be found: {s}", .{@errorName(err)});
+            return .uninit;
+        };
+    }
+    return self.mPlainTexture;
 }
 
 /// The current theme is kept per project, see Project.zig
@@ -319,6 +356,8 @@ pub fn Adopt(self: *UIManager, engine_context: *EngineContext, owner: Entity) !v
 /// Adopt for every entity in a world, for one that has just been copied from another: its components were copied
 /// with an element each, which still has no entity
 pub fn AdoptWorld(self: *UIManager, engine_context: *EngineContext, world: *WorldManager) !void {
+    const zone = Tracy.ZoneInit("UIManager::AdoptWorld", @src());
+    defer zone.Deinit();
     const entity_ids = try world.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = UIElementComponent });
     for (entity_ids.items) |entity_id| try self.Adopt(engine_context, world.GetEntity(entity_id));
 }

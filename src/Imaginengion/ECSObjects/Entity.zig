@@ -414,5 +414,5 @@ pub const Invalidate = Core.Invalidate;
 pub const IsIDValid = Core.IsIDValid;
 
 fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
-    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate or script_type == .EntityOnCollisionBegin or script_type == .EntityOnCollisionEnd or script_type == .EntityOnPreSolve or script_type == .EntityOnPhysicsUpdate);
+    std.debug.assert(script_type == .EntityInputPressed or script_type == .EntityOnUpdate or script_type == .EntityOnCollisionBegin or script_type == .EntityOnCollisionEnd or script_type == .EntityOnPreSolve or script_type == .EntityOnPhysicsUpdate or script_type == .EntityOnPointerEvent or script_type == .EntityOnUIEvent);
 }

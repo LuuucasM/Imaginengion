@@ -4,8 +4,7 @@ const Quat = MathTypes.Quat;
 const Vec2 = MathTypes.Vec2;
 const Vec4 = MathTypes.Vec4;
 
-const GlyphData = @import("../Renderer/Renderer2D.zig").GlyphData;
-const QuadData = @import("../Renderer/Renderer2D.zig").QuadData;
+const ShapeData = @import("../Renderer/Renderer2D.zig").ShapeData;
 const ClipData = @import("../Renderer/Renderer2D.zig").ClipData;
 pub const NO_CLIP = @import("../Renderer/Renderer2D.zig").NO_CLIP;
 const SurfShadingData = @import("../Renderer/Renderer.zig").SurfShadingData;
@@ -138,43 +137,34 @@ pub fn normalExtrusion(point: Vec3(f32), distance_2d: f32, normal_2d: Vec2(f32),
     return .{ .x = 0.0, .y = 0.0, .z = z_sign };
 }
 
-fn GlyphLocalPoint(point: Vec3(f32), glyph: GlyphData) Vec3(f32) {
-    const local_point = GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation));
-    return .{
-        .x = local_point.x - glyph.PlaneCenter[0],
-        .y = local_point.y - glyph.PlaneCenter[1],
-        .z = local_point.z,
-    };
-}
-
 pub fn GetLocalPoint(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32)) Vec3(f32) {
     return point.SubVec(position).InvQuatRotate(rotation);
 }
 
 /// A quad is a thin plate: its 2D rounded box extruded to its thickness. Square corners (radii of 0) make it
-/// exactly the plain box
-pub fn sdIMQuad(point: Vec3(f32), quad: QuadData) f32 {
+/// exactly the plain box. Its corner radii are its Params
+pub fn sdIMQuad(point: Vec3(f32), quad: ShapeData) f32 {
     const local_point = GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation));
-    const half_extents: Vec3(f32) = .FromVector(quad.HalfExtents);
+    const half_extents: Vec3(f32) = .FromVector(quad.Size);
     const distance_2d = sdRoundedBox2D(
         .{ .x = local_point.x, .y = local_point.y },
         .{ .x = half_extents.x, .y = half_extents.y },
-        .FromVector(quad.CornerRadii),
+        .FromVector(quad.Params),
     );
     return opExtrusion(local_point, distance_2d, half_extents.z);
 }
 
-/// Whether a point on the quad is in its border band: within BorderWidth of its (rounded) edge
-pub fn InIMQuadBorder(point: Vec3(f32), quad: QuadData) bool {
-    if (quad.BorderWidth <= 0) return false;
+/// Whether a point on the quad is in its border band: within border_width (its ShapeSurface's) of its (rounded) edge
+pub fn InIMQuadBorder(point: Vec3(f32), quad: ShapeData, border_width: f32) bool {
+    if (border_width <= 0) return false;
     const local_point = GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation));
-    const half_extents: Vec3(f32) = .FromVector(quad.HalfExtents);
+    const half_extents: Vec3(f32) = .FromVector(quad.Size);
     const distance_2d = sdRoundedBox2D(
         .{ .x = local_point.x, .y = local_point.y },
         .{ .x = half_extents.x, .y = half_extents.y },
-        .FromVector(quad.CornerRadii),
+        .FromVector(quad.Params),
     );
-    return distance_2d > -quad.BorderWidth;
+    return distance_2d > -border_width;
 }
 
 /// iq's opIntersection: inside where both shapes are, so the distance to it is the further of the two
@@ -202,21 +192,19 @@ pub fn InIMClip(point: Vec3(f32), clip: ClipData) bool {
 /// solid color. A real UV's layer is never negative
 pub const UNTEXTURED_UV: Vec3(f32) = .{ .x = 0, .y = 0, .z = -2 };
 
-pub fn sdIMGlyph(point: Vec3(f32), glyph: GlyphData) f32 {
-    return sdBox(GlyphLocalPoint(point, glyph), .FromVector(glyph.HalfExtents));
+pub fn sdIMGlyph(point: Vec3(f32), glyph: ShapeData) f32 {
+    return sdBox(GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation)), .FromVector(glyph.Size));
 }
 
 /// The ray against the quad's box: where it hits, which face, and where on it.
-pub fn rayIMQuad(ray: Ray, quad: QuadData) HitInfo {
-    return RayIntersect.RayRoundedBox2D(ray, .FromVector(quad.Position), .FromVector(quad.Rotation), .FromVector(quad.HalfExtents), .FromVector(quad.CornerRadii));
+pub fn rayIMQuad(ray: Ray, quad: ShapeData) HitInfo {
+    return RayIntersect.RayRoundedBox2D(ray, .FromVector(quad.Position), .FromVector(quad.Rotation), .FromVector(quad.Size), .FromVector(quad.Params));
 }
 
-/// The ray against the glyph's box, which sits PlaneCenter off the glyph's position in its own plane.
+/// The ray against the glyph's box, centered on its Position.
 /// UV is where in the glyph's box, which is what GetMSD and TextureUV take, not a texture manager UV.
-pub fn rayIMGlyph(ray: Ray, glyph: GlyphData) HitInfo {
-    const rotation: Quat(f32) = .FromVector(glyph.Rotation);
-    const plane_offset = (Vec3(f32){ .x = glyph.PlaneCenter[0], .y = glyph.PlaneCenter[1], .z = 0 }).QuatRotate(rotation);
-    return RayIntersect.RayBox(ray, Vec3(f32).FromVector(glyph.Position).AddVec(plane_offset), rotation, .FromVector(glyph.HalfExtents));
+pub fn rayIMGlyph(ray: Ray, glyph: ShapeData) HitInfo {
+    return RayIntersect.RayBox(ray, .FromVector(glyph.Position), .FromVector(glyph.Rotation), .FromVector(glyph.Size));
 }
 
 /// A 0 to 1 position within a texture, as the texture manager's UV for that texture's slot.

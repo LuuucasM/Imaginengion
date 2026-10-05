@@ -30,8 +30,7 @@ pub const SDFPushConstants = extern struct {
     mRayScale: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
     mRayOffset: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     mPerspectiveFar: f32,
-    mQuadsCount: u32,
-    mGlyphsCount: u32,
+    mShapesCount: u32,
     mViewportWidth: f32,
     mViewportHeight: f32,
 };

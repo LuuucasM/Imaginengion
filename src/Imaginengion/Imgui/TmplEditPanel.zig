@@ -189,6 +189,8 @@ pub fn RenderPreview(self: *TmplEditPanel, engine_context: *EngineContext) !void
     try self.mPreviewTexture.Resize(engine_context, self.mPreviewWidth, self.mPreviewHeight);
     if (!self.mPreviewTexture.IsCreated()) return;
 
+    //the renderer adds to stats, and these are only ever this frame's preview
+    self.mPreviewStats.ResetStats();
     try engine_context.mRenderer.RenderScene(
         scene,
         &self.mPreviewStats,

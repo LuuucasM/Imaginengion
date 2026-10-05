@@ -19,6 +19,12 @@ const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const PopupRefComponent = UIComponents.PopupRefComponent;
 const PopupComponent = UIComponents.PopupComponent;
 const SelectionGroupComponent = UIComponents.SelectionGroupComponent;
+const FloatingWindowComponent = UIComponents.FloatingWindowComponent;
+const LayoutComponent = EntityComponents.LayoutComponent;
+const TransformComponent = EntityComponents.TransformComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const UIElement = @import("../ECSObjects/UIElement.zig");
+const Vec3 = @import("../Math/MathTypes.zig").Vec3;
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
 const ECSComponents = @import("../ECS/Components.zig");
 const EntityChildComponent = ECSComponents.ChildComponent(Entity.Type);
@@ -84,6 +90,36 @@ pub fn ChosenIndex(dropdown: Entity) ?usize {
         if (sibling.mID == row.mID) return index;
     }
     return null;
+}
+
+/// Shows the choice at `index` on a dropdown, without telling anyone: its row selected among the others and its text on
+/// the button. For showing a value it already has, not for picking one (Choose)
+pub fn ShowChosen(engine_context: *EngineContext, dropdown: Entity, index: usize) !void {
+    if (ChosenIndex(dropdown) == index) return;
+    const popup = PopupOf(dropdown) orelse return;
+    var position: usize = 0;
+    var rows = popup.GetIterator(.Child);
+    while (rows.next()) |row| : (position += 1) {
+        if (position != index) continue;
+        _ = try SelectAmongSiblings(engine_context, row);
+        try ShowChoice(engine_context, dropdown, row);
+        return;
+    }
+}
+
+/// Shows `color` on a color field, without telling anyone: its channels and its swatch. For showing a value it already
+/// has, not for setting one (SetColor)
+pub fn ShowColor(color_field: Entity, color: Vec4(f32)) void {
+    const channels = [4]f32{ color.x, color.y, color.z, color.w };
+    var index: usize = 0;
+    var children = color_field.GetIterator(.Child);
+    while (children.next()) |child| {
+        if (index == channels.len) break;
+        const attrib = child.GetComponent(AttribComponent) orelse continue;
+        attrib.mData.SetFromFloat(channels[index]);
+        index += 1;
+    }
+    UpdateSwatch(color_field);
 }
 
 /// Puts a row's text on a dropdown's button, the way a choice shows: both through their label (UIManager.LabelOf)
@@ -192,6 +228,26 @@ pub fn HoverMenuBarButton(engine_context: *EngineContext, button: Entity) !void 
     }
 }
 
+/// Puts `text` on a label (or the label in `entity`, see UIManager.LabelOf), if it doesn't say that already: new text has
+/// to be laid out again, so a label that already says it is left alone
+pub fn SetText(engine_context: *EngineContext, entity: Entity, text: []const u8) !void {
+    const label = UIManager.LabelOf(entity) orelse return;
+    const text_component = label.GetComponent(TextComponent).?;
+    if (std.mem.eql(u8, text_component.mText.items, text)) return;
+    try text_component.SetText(engine_context, text);
+    try label.MarkLayoutDirty(engine_context);
+}
+
+/// Greys an entity out (DisabledTag), or makes it usable again: a menu item that can't be used right now
+pub fn SetDisabled(engine_context: *EngineContext, entity: Entity, disabled: bool) !void {
+    if (disabled == entity.HasComponent(EntityComponents.DisabledTag)) return;
+    if (disabled) {
+        _ = try entity.AddComponent(engine_context, EntityComponents.DisabledTag{});
+    } else {
+        try entity.RemoveComponentSync(engine_context, EntityComponents.DisabledTag);
+    }
+}
+
 /// Checks or unchecks a checkable menu item: SelectedTag on its check box, its last child if that is a quad (see
 /// Widgets.MenuItem). Nothing happens for an item with no check box
 pub fn SetChecked(engine_context: *EngineContext, item: Entity, checked: bool) !void {
@@ -271,6 +327,189 @@ fn SelectAmongSiblings(engine_context: *EngineContext, entity: Entity) !bool {
     }
     _ = try entity.AddComponent(engine_context, SelectedTag{});
     return true;
+}
+
+/// The smallest a split's pane gets by dragging its divider, in the split's units (canvas units in an overlay)
+pub const MIN_PANE_SIZE: f32 = 40;
+
+/// Moves a split's divider (Widgets.Split) by `delta`, which is how far the pointer dragged it: the pane with a fixed
+/// size along the split grows or shrinks by that much, and the other pane takes the rest. Neither pane goes below
+/// MIN_PANE_SIZE, as far as their last laid out sizes tell
+pub fn DragDivider(engine_context: *EngineContext, divider: Entity, delta: Vec3(f32)) !void {
+    const split = Parent(divider) orelse return;
+    const direction = (split.GetComponent(LayoutComponent) orelse return).mDirection;
+    var panes = split.GetIterator(.Child);
+    const first = panes.next() orelse return;
+    _ = panes.next() orelse return; //the divider
+    const second = panes.next() orelse return;
+
+    //towards the second pane: right in a row, down in a column, which is -y on a canvas
+    const moved = switch (direction) {
+        .Row => delta.x,
+        .Column => -delta.y,
+        .Grid => return,
+    };
+    if (moved == 0) return;
+    const first_item = first.GetComponent(LayoutItemComponent) orelse return;
+    const second_item = second.GetComponent(LayoutItemComponent) orelse return;
+    const along_first = AlongAxis(first_item, direction);
+    const along_second = AlongAxis(second_item, direction);
+    const total = SizeAlong(first_item.mComputedSize, direction) + SizeAlong(second_item.mComputedSize, direction);
+
+    //the fixed pane is the one that keeps its size when the window does, the other fills what is left
+    if (along_first.* == .Fixed) {
+        along_first.* = .{ .Fixed = ClampPane(along_first.Fixed + moved, total) };
+    } else if (along_second.* == .Fixed) {
+        along_second.* = .{ .Fixed = ClampPane(along_second.Fixed - moved, total) };
+    } else return;
+    try split.MarkLayoutDirty(engine_context);
+}
+
+/// Shows a tab's page and hides the rest of its tabs' pages (Widgets.Tabs): the tab is selected among the tab bar's
+/// tabs (SelectedTag, the theme's "Tab" Selected color), and the page at its place among the pages is the one not
+/// collapsed. ValueChanged goes to the tab and everything it is inside, unless it was already the one shown
+pub fn SelectTab(engine_context: *EngineContext, tab: Entity) !void {
+    const bar = Parent(tab) orelse return;
+    const pages = NextSibling(bar) orelse return;
+    const index = IndexAmongSiblings(tab) orelse return;
+    var page_index: usize = 0;
+    var children = pages.GetIterator(.Child);
+    while (children.next()) |page| : (page_index += 1) {
+        const item = page.GetComponent(LayoutItemComponent) orelse continue;
+        item.mCollapsed = page_index != index;
+    }
+    try pages.MarkLayoutDirty(engine_context);
+    try Select(engine_context, tab);
+}
+
+/// The page a tab shows (Widgets.Tabs), null if it has none
+pub fn PageOf(tab: Entity) ?Entity {
+    const bar = Parent(tab) orelse return null;
+    const pages = NextSibling(bar) orelse return null;
+    const index = IndexAmongSiblings(tab) orelse return null;
+    var page_index: usize = 0;
+    var children = pages.GetIterator(.Child);
+    while (children.next()) |page| : (page_index += 1) {
+        if (page_index == index) return page;
+    }
+    return null;
+}
+
+/// How far in front of the rest of its scene the backmost floating window sits, and how much further each one in front
+/// of it does. Every entity inside a window sits a little in front of it (Widgets.DEPTH_STEP for each level in), which
+/// has to stay under the step to the next window, and every popup (Widgets.POPUP_DEPTH) goes in front of them all
+pub const WINDOW_DEPTH: f32 = 0.2;
+pub const WINDOW_DEPTH_STEP: f32 = 0.2;
+
+/// Brings a floating window (Widgets.FloatingWindow) in front of the other floating windows of its scene: they keep the
+/// order they were in behind it. `entity` is the window or anything inside it
+pub fn RaiseWindow(engine_context: *EngineContext, entity: Entity) !void {
+    const window = WindowContaining(entity) orelse return;
+    const scene = window.GetComponent(EntitySceneComponent).?.mScene;
+
+    //the scene's other windows, back to front
+    var others: std.ArrayList(Entity) = .empty;
+    const ui_manager = &engine_context.mUIManager;
+    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = FloatingWindowComponent });
+    for (element_ids.items) |element_id| {
+        const other = (UIElement{ .mID = element_id, .mManager = ui_manager }).GetOwner();
+        if (!other.IsIDValid() or !other.IsActive() or other.mManager != window.mManager or other.mID == window.mID) continue;
+        if (other.GetComponent(EntitySceneComponent).?.mScene.mID != scene.mID) continue;
+        try others.append(engine_context.FrameAllocator(), other);
+    }
+    std.mem.sort(Entity, others.items, {}, struct {
+        fn Behind(_: void, a: Entity, b: Entity) bool {
+            return DepthOf(a) < DepthOf(b);
+        }
+    }.Behind);
+
+    for (others.items, 0..) |other, i| try SetDepth(engine_context, other, WINDOW_DEPTH + @as(f32, @floatFromInt(i)) * WINDOW_DEPTH_STEP);
+    try SetDepth(engine_context, window, WINDOW_DEPTH + @as(f32, @floatFromInt(others.items.len)) * WINDOW_DEPTH_STEP);
+}
+
+/// Moves a floating window by `delta` (how far its title bar was dragged): its anchored offset. `entity` is the window
+/// or anything inside it
+pub fn MoveWindow(engine_context: *EngineContext, entity: Entity, delta: Vec3(f32)) !void {
+    const window = WindowContaining(entity) orelse return;
+    const item = window.GetComponent(LayoutItemComponent) orelse return;
+    switch (item.mPlacement) {
+        .Anchored => |*anchoring| anchoring.Offset = .{ .x = anchoring.Offset.x + delta.x, .y = anchoring.Offset.y + delta.y },
+        .Flow => return,
+    }
+    try window.MarkLayoutDirty(engine_context);
+}
+
+/// Hides a floating window, through its layout item. `entity` is the window or anything inside it, like its close button
+pub fn CloseWindow(engine_context: *EngineContext, entity: Entity) !void {
+    const window = WindowContaining(entity) orelse return;
+    const item = window.GetComponent(LayoutItemComponent) orelse return;
+    if (item.mCollapsed) return;
+    item.mCollapsed = true;
+    try window.MarkLayoutDirty(engine_context);
+}
+
+/// Shows a floating window again, in front of the others
+pub fn OpenWindow(engine_context: *EngineContext, window: Entity) !void {
+    const item = window.GetComponent(LayoutItemComponent) orelse return;
+    if (item.mCollapsed) {
+        item.mCollapsed = false;
+        try window.MarkLayoutDirty(engine_context);
+    }
+    try RaiseWindow(engine_context, window);
+}
+
+/// Whether a floating window is shown
+pub fn IsWindowOpen(window: Entity) bool {
+    const item = window.GetComponent(LayoutItemComponent) orelse return true;
+    return !item.mCollapsed;
+}
+
+/// The floating window `entity` is in: itself or the nearest entity above it whose UI element has a FloatingWindowComponent
+fn WindowContaining(entity: Entity) ?Entity {
+    var current = entity;
+    while (true) {
+        if (UIManager.HasUIComponent(current, FloatingWindowComponent)) return current;
+        current = Parent(current) orelse return null;
+    }
+}
+
+fn DepthOf(entity: Entity) f32 {
+    return entity.GetComponent(TransformComponent).?.GetTranslation().z;
+}
+
+/// Moves an entity to `depth`, leaving where it is across: that is layout's
+fn SetDepth(engine_context: *EngineContext, entity: Entity, depth: f32) !void {
+    var translation = entity.GetComponent(TransformComponent).?.GetTranslation();
+    if (translation.z == depth) return;
+    translation.z = depth;
+    try entity.SetTranslation(engine_context, translation);
+}
+
+/// A pane's size setting along a split's direction
+fn AlongAxis(item: *LayoutItemComponent, direction: @import("Layout.zig").Direction) *@import("Layout.zig").Sizing {
+    return if (direction == .Row) &item.mWidth else &item.mHeight;
+}
+
+fn SizeAlong(size: @import("../Math/MathTypes.zig").Vec2(f32), direction: @import("Layout.zig").Direction) f32 {
+    return if (direction == .Row) size.x else size.y;
+}
+
+/// A fixed pane's size kept so both panes of a split are at least MIN_PANE_SIZE, `total` being both together. A split
+/// that isn't laid out yet (total 0) only keeps the fixed pane's minimum
+fn ClampPane(size: f32, total: f32) f32 {
+    const most = if (total > 0) @max(total - MIN_PANE_SIZE, MIN_PANE_SIZE) else std.math.floatMax(f32);
+    return std.math.clamp(size, MIN_PANE_SIZE, most);
+}
+
+/// Where an entity is among its parent's children, 0 for the first. Null for one with no parent
+fn IndexAmongSiblings(entity: Entity) ?usize {
+    const parent = Parent(entity) orelse return null;
+    var index: usize = 0;
+    var children = parent.GetIterator(.Child);
+    while (children.next()) |child| : (index += 1) {
+        if (child.mID == entity.mID) return index;
+    }
+    return null;
 }
 
 /// A menu item's check box: its last child, if that is a quad

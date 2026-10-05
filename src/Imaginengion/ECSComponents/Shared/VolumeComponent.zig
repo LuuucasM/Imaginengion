@@ -1,4 +1,5 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 const VolumeComponent = @This();
 
 pub const Name: []const u8 = "VolumeComponent";
@@ -9,3 +10,7 @@ pub const Name: []const u8 = "VolumeComponent";
 mVolume: f32 = 1.0,
 
 pub fn Deinit(_: *VolumeComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *VolumeComponent, ui: *Inspector.Builder) !void {
+    try ui.Float(&self.mVolume, "Volume", .{ .Speed = 0.01, .Min = 0, .Max = 1, .Decimals = 2 });
+}

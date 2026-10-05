@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const WindowsScriptAsset = @This();
 
 const imgui = @import("../../../Core/CImports.zig").imgui;
@@ -42,6 +43,9 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
             "script",
             path_arg,
             name_arg,
+            //the same mode as the engine: a script shares the engine's structs (EngineContext and the rest), whose
+            //layout can differ between modes, so a script built in another one reads their fields from the wrong place
+            "-Doptimize=" ++ @tagName(builtin.mode),
         },
         .environ_map = &environ_map,
         .request_resource_usage_statistics = true,

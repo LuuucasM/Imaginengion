@@ -617,6 +617,31 @@ test "a scrolling container moves its children by its offset, kept between 0 and
     try ExpectVec(V(0, 10), results[rows[0]].Center);
 }
 
+test "a Fill container that scrolls stays the room it is given instead of growing to hold its children" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    //a 100 tall window: a 20 tall title, and under it content that fills the rest and scrolls its three 30 tall rows
+    const window = try tree.Add(null, .{
+        .Width = .{ .Fixed = 100 },
+        .Height = .{ .Fixed = 100 },
+        .Container = .{ .Direction = .Column },
+    });
+    _ = try tree.Add(window, .{ .Width = .{ .Fill = 1 }, .Height = .{ .Fixed = 20 } });
+    const content = try tree.Add(window, .{
+        .Width = .{ .Fill = 1 },
+        .Height = .{ .Fill = 1 },
+        .Container = .{ .Direction = .Column, .Scroll = .Vertical, .Padding = .{ .Top = 5, .Bottom = 5 } },
+    });
+    for (0..3) |_| _ = try tree.Add(content, .{ .Width = .{ .Fixed = 100 }, .Height = .{ .Fixed = 30 } });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    //80 of room, not 90 of rows plus padding: the rest scrolls
+    try ExpectVec(V(100, 80), results[content].Size);
+    try ExpectVec(V(100, 100), results[content].ContentSize);
+    try ExpectVec(V(100, 100), results[window].Size);
+}
+
 test "what overflows a scrolling container starts at its start edge, even when centered" {
     var tree: Tree = .{};
     defer tree.Deinit();

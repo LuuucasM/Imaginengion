@@ -108,7 +108,7 @@ pub fn OnImguiRenderPlay(self: *ViewportPanel, engine_context: *EngineContext, i
 
     if (self.mP_OpenPlay == false) return;
 
-    _ = imgui.igBegin("PlayPanel", null, 0);
+    _ = imgui.igBegin("PlayPanel", null, @import("Imgui.zig").PanelFlags());
     defer imgui.igEnd();
 
     //update viewport size if needed

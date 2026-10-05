@@ -1,8 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const PushConstants = @import("IM").PushConstants;
-const QuadData = @import("IM").QuadData;
-const GlyphData = @import("IM").GlyphData;
+const ShapeData = @import("IM").ShapeData;
+const ShapeSurface = @import("IM").ShapeSurface;
 const ClipData = @import("IM").ClipData;
 const SurfShadingData = @import("IM").SurfShadingData;
 const MedShadingData = @import("IM").MedShadingData;
@@ -41,11 +41,11 @@ pub const Image2D = @SpirvType(
 
 pub const Sampler2DArray = @SpirvType(.{ .sampled_image = Image2DArray });
 
-const QuadsArray = @SpirvType(.{ .runtime_array = QuadData });
-pub const QuadsBuf = extern struct { ptr: QuadsArray };
+const ShapesArray = @SpirvType(.{ .runtime_array = ShapeData });
+pub const ShapesBuf = extern struct { ptr: ShapesArray };
 
-const GlyphsArray = @SpirvType(.{ .runtime_array = GlyphData });
-pub const GlyphsBuf = extern struct { ptr: GlyphsArray };
+const ShapeSurfacesArray = @SpirvType(.{ .runtime_array = ShapeSurface });
+pub const ShapeSurfacesBuf = extern struct { ptr: ShapeSurfacesArray };
 
 const ClipsArray = @SpirvType(.{ .runtime_array = ClipData });
 pub const ClipsBuf = extern struct { ptr: ClipsArray };
@@ -60,8 +60,8 @@ pub const TexturesArray = @extern(*addrspace(.constant) Sampler2DArray, .{ .name
 
 pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, .{ .name = "SurfShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 1 } } });
 pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "MedShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 2 } } });
-pub const QuadsSSBO = @extern(*addrspace(.storage_buffer) QuadsBuf, .{ .name = "QuadsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
-pub const GlyphsSSBO = @extern(*addrspace(.storage_buffer) GlyphsBuf, .{ .name = "GlyphsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
+pub const ShapesSSBO = @extern(*addrspace(.storage_buffer) ShapesBuf, .{ .name = "ShapesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
+pub const ShapeSurfacesSSBO = @extern(*addrspace(.storage_buffer) ShapeSurfacesBuf, .{ .name = "ShapeSurfacesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
 pub const ClipsSSBO = @extern(*addrspace(.storage_buffer) ClipsBuf, .{ .name = "ClipsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 5 } } });
 
 pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 1, .binding = 0 } } });

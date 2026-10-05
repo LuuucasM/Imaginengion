@@ -173,6 +173,8 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
 /// `texture_location` was registered with, on the GPU, in the frame's work command buffer: after whatever drew into
 /// `source` earlier in it, and before anything that samples the slot later in it
 pub fn CopyFromTexture(self: *SGTextureManager, engine_context: *EngineContext, source: *anyopaque, texture_location: u32, width: usize, height: usize) void {
+    const zone = Tracy.ZoneInit("SGTextureManager::CopyFromTexture", @src());
+    defer zone.Deinit();
     const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetWorkCmdBuff()));
     const offset_x, const offset_y = GetPixelOffsets(GetBinIndex(texture_location), GetSlotIndex(texture_location));
     const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd) orelse return;

@@ -12,8 +12,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const RenderStats = @import("../Core/EngineStats.zig").RenderStats;
 const PipelineType = @import("RenderPipeline.zig").PipelineType;
 const ShadingBuffers = @import("Renderer.zig").ShadingBuffers;
-const SurfShadingData = @import("Renderer.zig").SurfShadingData;
-const MedShadingData = @import("Renderer.zig").MedShadingData;
+const ShapeType = @import("Renderer.zig").ShapeType;
 const GPUAsserts = @import("../Core/GPUAsserts.zig");
 
 const Assets = @import("../ECSComponents/AComponents.zig");
@@ -39,6 +38,7 @@ const StorageBufferBinding = @import("RenderPlatform.zig").StorageBufferBinding;
 const TextLayout = @import("TextLayout.zig");
 const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 const ShapeGeometry = @import("ShapeGeometry.zig");
+const ShapeSort = @import("ShapeSort.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -54,33 +54,42 @@ const ResetOptions = enum {
     ClearRetainingCapacity,
 };
 
-pub const QuadData = extern struct {
+/// One shape as the marcher finds it: everything every step of the search reads, the same layout for every kind of
+/// shape. What is only needed once a shape is the one hit lives in its ShapeSurface, so the search reads less per shape
+pub const ShapeData = extern struct {
+    /// The ray checks how see-through the surface it hits is, and if it is at all, goes on to what is behind it.
+    /// Without it a surface hides what is behind it whatever its alpha
+    pub const FLAG_TRANSPARENT: u32 = 1 << 0;
+
     Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    //the center of the shape. For a glyph that is its box's center, not the pen position it was laid out from
     Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
-    HalfExtents: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
-    //the shader's vec3 takes 16 bytes, so on the GPU this starts at 48, not right after the 12 bytes of [3]f32
-    ShadingHandle: u32 align(16),
-    ShadingFlags: u32,
-    //the surface drawn in the border band instead of ShadingHandle's, when BorderWidth isn't 0
-    BorderShadingHandle: u32,
-    //world units, already scaled and kept to at most half the smaller side
-    BorderWidth: f32,
-    //world units, already scaled and clamped like BorderWidth, in SDFFunctions' order (x top right, y bottom
-    //right, z top left, w bottom left)
-    CornerRadii: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
+    //half extents for the box shapes, quads and glyphs, including their THICKNESS_2D depth
+    Size: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
+    //what Type says. A quad's corner radii: world units, already scaled and clamped to at most half the smaller
+    //side, in SDFFunctions' order (x top right, y bottom right, z top left, w bottom left). Unused (0) for a glyph
+    Params: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
+    Type: ShapeType,
     //which ClipData it is cut to, NO_CLIP for none
     ClipIndex: u32,
+    //its ShapeSurface
+    SurfaceIndex: u32,
+    //the FLAG_ bits: behavior the developer turns on per shape that costs extra checks. A shape without a flag never
+    //pays for what it turns on. Never set on their own, only from what the shape's component asks for
+    Flags: u32,
 };
 
-pub const GlyphData = extern struct {
-    Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
-    Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
-    HalfExtents: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
-    PlaneCenter: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
-    AtlasShadingHandle: u32,
-    TextureShadingFlags: u32,
-    //which ClipData it is cut to, NO_CLIP for none
-    ClipIndex: u32,
+/// What only the shape that was hit needs: which surfaces it is shaded with. The same slots for every kind of shape,
+/// read the way its Type says
+pub const ShapeSurface = extern struct {
+    //a quad's surface, a glyph's atlas entry
+    ShadingHandle: u32,
+    //a quad's border band's solid color surface, drawn instead of ShadingHandle's within BorderWidth of its edge.
+    //ShadingHandle again for a shape without a border
+    BorderShadingHandle: u32,
+    //a quad's border: world units, already scaled and kept to at most half the smaller side. 0 for none
+    BorderWidth: f32,
+    _Pad: u32 = 0,
 };
 
 /// A clip region's rectangle (ClipComponent), in world space: a shape with its index is only drawn where it is inside
@@ -96,90 +105,127 @@ pub const ClipData = extern struct {
 pub const NO_CLIP: u32 = std.math.maxInt(u32);
 
 comptime {
-    GPUAsserts.AssertGPULayout(QuadData);
-    GPUAsserts.AssertGPULayout(GlyphData);
+    GPUAsserts.AssertGPULayout(ShapeData);
+    GPUAsserts.AssertGPULayout(ShapeSurface);
     GPUAsserts.AssertGPULayout(ClipData);
 }
 
-pub const BufferKind = enum {
-    Quad,
-    Glyph,
-    Shading,
-};
-
 pub const RenderBuffers = struct {
-    mQuadBuffer: SSBO = .{},
-    mQuadBufferBase: std.ArrayList(QuadData) = .empty,
+    mShapeBuffer: SSBO = .{},
+    mShapeBufferBase: std.ArrayList(ShapeData) = .empty,
 
-    mGlyphBuffer: SSBO = .{},
-    mGlyphBufferBase: std.ArrayList(GlyphData) = .empty,
+    mSurfaceBuffer: SSBO = .{},
+    mSurfaceBufferBase: std.ArrayList(ShapeSurface) = .empty,
 
     mClipBuffer: SSBO = .{},
     mClipBufferBase: std.ArrayList(ClipData) = .empty,
     /// Each clip region's index in mClipBufferBase this batch, so its shapes share one entry
     mClipIndices: std.AutoHashMapUnmanaged(Entity.Type, u32) = .empty,
 
-    pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
-        self.mQuadBuffer.Init(engine_context, @sizeOf(QuadData) * 100, 2, .Compute);
-        self.mQuadBufferBase = try std.ArrayList(QuadData).initCapacity(engine_context.EngineAllocator(), 100);
+    /// Each shape's sort key, in the order the shapes were added (ShapeSort). The buffer is uploaded in their sorted
+    /// order, which mSortedShapes holds once SortShapes has run
+    mSortEntries: std.ArrayList(ShapeSort.SortEntry) = .empty,
+    mSortedShapes: std.ArrayList(ShapeData) = .empty,
 
-        self.mGlyphBuffer.Init(engine_context, @sizeOf(GlyphData) * 100, 3, .Compute);
-        self.mGlyphBufferBase = try std.ArrayList(GlyphData).initCapacity(engine_context.EngineAllocator(), 100);
+    /// How many of the shapes are quads and how many glyphs, for the stats
+    mQuadCount: usize = 0,
+    mGlyphCount: usize = 0,
+
+    pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
+        self.mShapeBuffer.Init(engine_context, @sizeOf(ShapeData) * 100, 2, .Compute);
+        self.mShapeBufferBase = try std.ArrayList(ShapeData).initCapacity(engine_context.EngineAllocator(), 100);
+
+        self.mSurfaceBuffer.Init(engine_context, @sizeOf(ShapeSurface) * 100, 3, .Compute);
+        self.mSurfaceBufferBase = try std.ArrayList(ShapeSurface).initCapacity(engine_context.EngineAllocator(), 100);
 
         self.mClipBuffer.Init(engine_context, @sizeOf(ClipData) * 16, 4, .Compute);
         self.mClipBufferBase = try std.ArrayList(ClipData).initCapacity(engine_context.EngineAllocator(), 16);
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {
-        self.mQuadBuffer.Deinit(engine_context);
-        self.mQuadBufferBase.deinit(engine_context.EngineAllocator());
+        self.mShapeBuffer.Deinit(engine_context);
+        self.mShapeBufferBase.deinit(engine_context.EngineAllocator());
 
-        self.mGlyphBuffer.Deinit(engine_context);
-        self.mGlyphBufferBase.deinit(engine_context.EngineAllocator());
+        self.mSurfaceBuffer.Deinit(engine_context);
+        self.mSurfaceBufferBase.deinit(engine_context.EngineAllocator());
 
         self.mClipBuffer.Deinit(engine_context);
         self.mClipBufferBase.deinit(engine_context.EngineAllocator());
         self.mClipIndices.deinit(engine_context.EngineAllocator());
+
+        self.mSortEntries.deinit(engine_context.EngineAllocator());
+        self.mSortedShapes.deinit(engine_context.EngineAllocator());
     }
     pub fn Reset(self: *RenderBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
         switch (reset_options) {
             .ClearAndFree => {
-                self.mQuadBufferBase.clearAndFree(engine_allocator);
-                self.mGlyphBufferBase.clearAndFree(engine_allocator);
+                self.mShapeBufferBase.clearAndFree(engine_allocator);
+                self.mSurfaceBufferBase.clearAndFree(engine_allocator);
                 self.mClipBufferBase.clearAndFree(engine_allocator);
                 self.mClipIndices.clearAndFree(engine_allocator);
+                self.mSortEntries.clearAndFree(engine_allocator);
+                self.mSortedShapes.clearAndFree(engine_allocator);
             },
             .ClearRetainingCapacity => {
-                self.mQuadBufferBase.clearRetainingCapacity();
-                self.mGlyphBufferBase.clearRetainingCapacity();
+                self.mShapeBufferBase.clearRetainingCapacity();
+                self.mSurfaceBufferBase.clearRetainingCapacity();
                 self.mClipBufferBase.clearRetainingCapacity();
                 self.mClipIndices.clearRetainingCapacity();
+                self.mSortEntries.clearRetainingCapacity();
+                self.mSortedShapes.clearRetainingCapacity();
             },
         }
+        self.mQuadCount = 0;
+        self.mGlyphCount = 0;
     }
     pub fn SetBuffers(self: *RenderBuffers, stats: *RenderStats, engine_context: *EngineContext) !void {
         const zone = Tracy.ZoneInit("Renderer2D::SetBuffers", @src());
         defer zone.Deinit();
 
-        const quad_byte_size = self.mQuadBufferBase.items.len * @sizeOf(QuadData);
-        const glyph_byte_size = self.mGlyphBufferBase.items.len * @sizeOf(GlyphData);
+        try self.SortShapes(engine_context.EngineAllocator());
+        const shape_byte_size = self.mSortedShapes.items.len * @sizeOf(ShapeData);
+        _ = self.mShapeBuffer.SetData(engine_context, self.mSortedShapes.items.ptr, shape_byte_size, 0);
 
-        //quads
-        _ = self.mQuadBuffer.SetData(engine_context, self.mQuadBufferBase.items.ptr, quad_byte_size, 0);
-
-        //glyphs
-        _ = self.mGlyphBuffer.SetData(engine_context, self.mGlyphBufferBase.items.ptr, glyph_byte_size, 0);
+        const surface_byte_size = self.mSurfaceBufferBase.items.len * @sizeOf(ShapeSurface);
+        _ = self.mSurfaceBuffer.SetData(engine_context, self.mSurfaceBufferBase.items.ptr, surface_byte_size, 0);
 
         //clip regions
         const clip_byte_size = self.mClipBufferBase.items.len * @sizeOf(ClipData);
         _ = self.mClipBuffer.SetData(engine_context, self.mClipBufferBase.items.ptr, clip_byte_size, 0);
-        //fill out stats
-        stats.OutputQuadNum = @intCast(self.mQuadBufferBase.items.len);
-        stats.OutputGlyphNum = @intCast(self.mGlyphBufferBase.items.len);
+        //added to stats: the overlay and game passes each have their own quads and glyphs
+        stats.OutputQuadNum += self.mQuadCount;
+        stats.OutputGlyphNum += self.mGlyphCount;
     }
     pub fn BindBuffers(self: RenderBuffers, render_pass: *anyopaque) void {
-        self.mQuadBuffer.Bind(render_pass);
-        self.mGlyphBuffer.Bind(render_pass);
+        self.mShapeBuffer.Bind(render_pass);
+        self.mSurfaceBuffer.Bind(render_pass);
         self.mClipBuffer.Bind(render_pass);
+    }
+
+    /// The shapes in their keys' order, into mSortedShapes, ready to upload. Their surfaces and clips stay where they
+    /// are, since a shape points at those rather than the other way round
+    fn SortShapes(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
+        const zone = Tracy.ZoneInit("Renderer2D::SortShapes", @src());
+        defer zone.Deinit();
+        zone.Value(self.mSortEntries.items.len);
+
+        ShapeSort.Sort(self.mSortEntries.items);
+        try self.mSortedShapes.resize(engine_allocator, self.mShapeBufferBase.items.len);
+        ShapeSort.Gather(ShapeData, self.mShapeBufferBase.items, self.mSortEntries.items, self.mSortedShapes.items);
+    }
+
+    /// Adds a shape and its surface, pointing the shape at it, and the key it is sorted by. The shape's SurfaceIndex
+    /// is filled in here
+    fn AddShape(self: *RenderBuffers, engine_allocator: std.mem.Allocator, shape: ShapeData, surface: ShapeSurface, key: ShapeSort.ShapeSortKey) !void {
+        var added = shape;
+        added.SurfaceIndex = @intCast(self.mSurfaceBufferBase.items.len);
+        try self.mSortEntries.append(engine_allocator, .{ .Key = key, .Index = @intCast(self.mShapeBufferBase.items.len) });
+        try self.mSurfaceBufferBase.append(engine_allocator, surface);
+        try self.mShapeBufferBase.append(engine_allocator, added);
+        switch (shape.Type) {
+            .Quad => self.mQuadCount += 1,
+            .Glyph => self.mGlyphCount += 1,
+            .None => {},
+        }
     }
 
     /// The index of a shape's clip region in this batch's clips, adding it the first time one of its shapes asks.
@@ -231,33 +277,11 @@ pub fn BindBuffers(self: Renderer2D, render_pass: *anyopaque, pipeline_t: Pipeli
     }
 }
 
-pub fn GetBufferCount(self: Renderer2D, comptime buff_kind: BufferKind, pipeline_kind: PipelineType) u32 {
+/// How many shapes a pass has to march past, every kind together
+pub fn GetShapeCount(self: Renderer2D, pipeline_kind: PipelineType) u32 {
     return switch (pipeline_kind) {
-        .GamePipeline => switch (buff_kind) {
-            .Quad => @intCast(self.mGameData.mQuadBufferBase.items.len),
-            .Glyph => @intCast(self.mGameData.mGlyphBufferBase.items.len),
-            .Shading => @intCast(self.mGameData.mShadingBufferBase.items.len),
-        },
-        .OverlayPipeline => switch (buff_kind) {
-            .Quad => @intCast(self.mOverlayData.mQuadBufferBase.items.len),
-            .Glyph => @intCast(self.mOverlayData.mGlyphBufferBase.items.len),
-            .Shading => @intCast(self.mOverlayData.mShadingBufferBase.items.len),
-        },
-    };
-}
-
-pub fn GetBuffer(self: Renderer2D, comptime buff_kind: BufferKind, pipeline_kind: PipelineType) *anyopaque {
-    return switch (pipeline_kind) {
-        .GamePipeline => switch (buff_kind) {
-            .Quad => @intCast(self.mGameData.mQuadBuffer.GetBuffer()),
-            .Glyph => @intCast(self.mGameData.mGlyphBuffer.GetBuffer()),
-            .Shading => @intCast(self.mGameData.mShadingBuffer.GetBuffer()),
-        },
-        .OverlayPipeline => switch (buff_kind) {
-            .Quad => @intCast(self.mOverlayData.mQuadBuffer.GetBuffer()),
-            .Glyph => @intCast(self.mOverlayData.mGlyphBuffer.GetBuffer()),
-            .Shading => @intCast(self.mOverlayData.mShadingBuffer.GetBuffer()),
-        },
+        .GamePipeline => @intCast(self.mGameData.mShapeBufferBase.items.len),
+        .OverlayPipeline => @intCast(self.mOverlayData.mShapeBufferBase.items.len),
     };
 }
 
@@ -291,7 +315,7 @@ pub fn DrawQuad(
         );
 
     var shading_flag: u32 = 0;
-    if (quad_component.mTexOptions.mIsTransparent) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
+    if (quad_component.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
 
     //the border is a solid color: its own surface, which the marcher draws untextured
     var border_shading_handle = shading_handle;
@@ -299,24 +323,26 @@ pub fn DrawQuad(
         var border_options: Texture2D.TexOptions = .default;
         border_options.mColor = quad_component.mBorderColor;
         border_shading_handle = try shading_buff.AddSurface(engine_context.EngineAllocator(), &border_options, texture_asset, std.math.maxInt(u32));
-        if (quad_component.mBorderColor.w < 1.0) shading_flag |= SurfShadingData.FLAG_TRANSPARENT;
+        if (quad_component.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
-    const quad_buff_base = &buffers.mQuadBufferBase;
     const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
-    try quad_buff_base.append(engine_context.EngineAllocator(), .{
-        .Position = box.Center.ToArray(),
+    try buffers.AddShape(engine_context.EngineAllocator(), .{
         .Rotation = box.Rotation.ToArray(),
-        .HalfExtents = box.HalfExtents.ToArray(),
+        .Position = box.Center.ToArray(),
+        .Size = box.HalfExtents.ToArray(),
+        .Params = box.CornerRadii.ToArray(),
+        .Type = .Quad,
+        .ClipIndex = clip_index,
+        .SurfaceIndex = undefined,
+        .Flags = shading_flag,
+    }, .{
         .ShadingHandle = @intCast(shading_handle),
-        .ShadingFlags = shading_flag,
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = box.BorderWidth,
-        .CornerRadii = box.CornerRadii.ToArray(),
-        .ClipIndex = clip_index,
-    });
+    }, .{});
 }
 
 pub fn DrawText(
@@ -343,7 +369,7 @@ pub fn DrawText(
     );
 
     var texture_shading_flags: u32 = 0;
-    if (text_component.mTexOptions.mIsTransparent) texture_shading_flags |= SurfShadingData.FLAG_TRANSPARENT;
+    if (text_component.mTexOptions.mIsTransparent) texture_shading_flags |= ShapeData.FLAG_TRANSPARENT;
 
     //the text's own position and rotation, in canvas units for an overlay scene
     const text_pos = transform_component.GetWorldPosition();
@@ -354,7 +380,6 @@ pub fn DrawText(
     const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
 
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
-    const glyph_buff_base = &buffers.mGlyphBufferBase;
     const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
     //font size and bounds with the text's scale applied, the same ones picking measures the text with
@@ -365,15 +390,18 @@ pub fn DrawText(
         //the layout is in the text's own space, so the whole line turns with the transform instead
         //of each glyph turning in place along world x
         const local_pen = Vec3(f32){ .x = glyph.Pen.x - params.LeftBound, .y = glyph.Pen.y, .z = 0 };
-        var glyph_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
-        if (canvas) |c| glyph_pos = c.ToWorldPoint(glyph_pos);
+        var pen_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
+        if (canvas) |c| pen_pos = c.ToWorldPoint(pen_pos);
         const half_extents = Vec3(f32){ .x = glyph.HalfExtents.x * size_scale, .y = glyph.HalfExtents.y * size_scale, .z = THICKNESS_2D };
-        const plane_center = Vec2(f32){ .x = glyph.PlaneCenter.x * size_scale, .y = glyph.PlaneCenter.y * size_scale };
+
+        //the box sits PlaneCenter off the pen in the glyph's own plane. Worked out once here rather than for
+        //every pixel and step on the GPU
+        const plane_offset = (Vec3(f32){ .x = glyph.PlaneCenter.x * size_scale, .y = glyph.PlaneCenter.y * size_scale, .z = 0 }).QuatRotate(glyph_rot);
+        const glyph_center = pen_pos.AddVec(plane_offset);
 
         //a letter cut off altogether isn't sent
         if (clip) |view_clip| {
-            const plane_offset = (Vec3(f32){ .x = plane_center.x, .y = plane_center.y, .z = 0 }).QuatRotate(glyph_rot);
-            const glyph_box = ShapeGeometry.Box{ .Center = glyph_pos.AddVec(plane_offset), .Rotation = glyph_rot, .HalfExtents = half_extents };
+            const glyph_box = ShapeGeometry.Box{ .Center = glyph_center, .Rotation = glyph_rot, .HalfExtents = half_extents };
             if (ShapeGeometry.OutsideClip(glyph_box, view_clip.Rect)) continue;
         }
 
@@ -392,14 +420,19 @@ pub fn DrawText(
             texture_shading_handle,
         );
 
-        try glyph_buff_base.append(engine_context.EngineAllocator(), .{
-            .Position = glyph_pos.ToArray(),
-            .Rotation = glyph_rot.ToVector(),
-            .HalfExtents = half_extents.ToArray(),
-            .PlaneCenter = plane_center.ToArray(),
-            .AtlasShadingHandle = @intCast(atlas_shading_handle),
-            .TextureShadingFlags = @intCast(texture_shading_flags),
+        try buffers.AddShape(engine_context.EngineAllocator(), .{
+            .Rotation = glyph_rot.ToArray(),
+            .Position = glyph_center.ToArray(),
+            .Size = half_extents.ToArray(),
+            .Params = .{ 0, 0, 0, 0 },
+            .Type = .Glyph,
             .ClipIndex = clip_index,
-        });
+            .SurfaceIndex = undefined,
+            .Flags = texture_shading_flags,
+        }, .{
+            .ShadingHandle = @intCast(atlas_shading_handle),
+            .BorderShadingHandle = @intCast(atlas_shading_handle),
+            .BorderWidth = 0,
+        }, .{});
     }
 }
