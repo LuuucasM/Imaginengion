@@ -40,16 +40,13 @@ pub fn BeginFrame(self: *Platform, window: *Window) bool {
     return self._Impl.BeginFrame(window);
 }
 
-pub fn StartCmdBuff(self: *Platform) void {
-    const startcmdbuff_zone = Tracy.ZoneInit("RenderPlatform::StartCmdBuff", @src());
-    defer startcmdbuff_zone.Deinit();
-    self._Impl.StartCmdBuff();
+/// A copy pass in the frame's command buffer, for uploads and texture copies, until EndCopyPass
+pub fn BeginCopyPass(self: Platform) *anyopaque {
+    return self._Impl.BeginCopyPass();
 }
 
-pub fn EndCmdBuff(self: *Platform) void {
-    const endcmdbuff_zone = Tracy.ZoneInit("RenderPlatform::EndCmdBuff", @src());
-    defer endcmdbuff_zone.Deinit();
-    self._Impl.EndCmdBuff();
+pub fn EndCopyPass(self: Platform, copy_pass: *anyopaque) void {
+    self._Impl.EndCopyPass(copy_pass);
 }
 
 pub fn EndFrame(self: *Platform) void {
@@ -74,10 +71,6 @@ pub fn Present(self: Platform, compute_texture: *ComputeOutput) void {
 
 pub fn GetFrameCmdBuff(self: Platform) *anyopaque {
     return self._Impl.GetFrameCmdBuff();
-}
-
-pub fn GetWorkCmdBuff(self: Platform) *anyopaque {
-    return self._Impl.GetWorkCmdBuff();
 }
 
 pub fn GetSwapchain(self: Platform) *anyopaque {

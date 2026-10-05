@@ -13,8 +13,9 @@ const sdl = @import("../../Core/CImports.zig").sdl;
 const SDLPlatform = @This();
 
 mDevice: *sdl.SDL_GPUDevice = undefined,
+/// The one command buffer a frame records everything into, from its first render to the present, submitted at
+/// EndFrame. One submit a frame, and the GPU runs the work in the order it was recorded
 mFrameCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
-mWorkCmdBuffer: ?*sdl.SDL_GPUCommandBuffer = null,
 mSwapchainTexture: ?*sdl.SDL_GPUTexture = null,
 mSwapchainWidth: usize = 0,
 mSwapchainHeight: usize = 0,
@@ -54,7 +55,9 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     defer sdl.SDL_DestroyProperties(props);
 
     _ = sdl.SDL_SetPointerProperty(props, sdl.SDL_PROP_GPU_DEVICE_CREATE_VULKAN_OPTIONS_POINTER, &vulkan_options);
-    _ = sdl.SDL_SetBooleanProperty(props, sdl.SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, true);
+    //debug mode turns on SDL's own checks and the Vulkan validation layers, when the SDK has them, which cost CPU time
+    //on every GPU call: worth it while developing, not in a release build
+    _ = sdl.SDL_SetBooleanProperty(props, sdl.SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, builtin.mode == .debug);
     _ = sdl.SDL_SetBooleanProperty(props, sdl.SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN, true);
 
     self.mDevice = sdl.SDL_CreateGPUDeviceWithProperties(props) orelse unreachable;
@@ -70,7 +73,6 @@ pub fn Deinit(self: *SDLPlatform, window: *Window) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
     _ = sdl.SDL_WaitForGPUIdle(self.mDevice);
     _ = if (self.mFrameCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
-    _ = if (self.mWorkCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
     sdl.SDL_ReleaseWindowFromGPUDevice(self.mDevice, sdl_window);
     sdl.SDL_DestroyGPUDevice(self.mDevice);
 }
@@ -112,16 +114,16 @@ pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {
     return true;
 }
 
-pub fn StartCmdBuff(self: *SDLPlatform) void {
-    std.debug.assert(self.mWorkCmdBuffer == null);
-    self.mWorkCmdBuffer = sdl.SDL_AcquireGPUCommandBuffer(self.mDevice);
-    std.debug.assert(self.mWorkCmdBuffer != null);
+/// A copy pass in the frame's command buffer: uploads and texture copies go between this and EndCopyPass. Free on
+/// Vulkan, but a real pass on other backends, so a render puts all of its copies in one
+pub fn BeginCopyPass(self: SDLPlatform) *sdl.SDL_GPUCopyPass {
+    const copy_pass = sdl.SDL_BeginGPUCopyPass(self.GetFrameCmdBuff());
+    std.debug.assert(copy_pass != null);
+    return copy_pass.?;
 }
 
-pub fn EndCmdBuff(self: *SDLPlatform) void {
-    std.debug.assert(self.mWorkCmdBuffer != null);
-    _ = sdl.SDL_SubmitGPUCommandBuffer(self.mWorkCmdBuffer);
-    self.mWorkCmdBuffer = null;
+pub fn EndCopyPass(_: SDLPlatform, copy_pass: *anyopaque) void {
+    sdl.SDL_EndGPUCopyPass(@ptrCast(@alignCast(copy_pass)));
 }
 
 pub fn EndFrame(self: *SDLPlatform) void {
@@ -167,11 +169,6 @@ pub fn GetDevice(self: SDLPlatform) *sdl.SDL_GPUDevice {
 pub fn GetFrameCmdBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
     std.debug.assert(self.mFrameCmdBuffer != null);
     return self.mFrameCmdBuffer.?;
-}
-
-pub fn GetWorkCmdBuff(self: SDLPlatform) *sdl.SDL_GPUCommandBuffer {
-    std.debug.assert(self.mWorkCmdBuffer != null);
-    return self.mWorkCmdBuffer.?;
 }
 
 pub fn GetSwapchain(self: SDLPlatform) *sdl.SDL_GPUTexture {

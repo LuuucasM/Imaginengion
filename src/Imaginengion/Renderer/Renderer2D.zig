@@ -126,6 +126,8 @@ pub const RenderBuffers = struct {
     /// order, which mSortedShapes holds once SortShapes has run
     mSortEntries: std.ArrayList(ShapeSort.SortEntry) = .empty,
     mSortedShapes: std.ArrayList(ShapeData) = .empty,
+    /// How many of the sorted shapes are direct, which all come first. Set by SortShapes
+    mDirectCount: u32 = 0,
 
     /// How many of the shapes are quads and how many glyphs, for the stats
     mQuadCount: usize = 0,
@@ -176,21 +178,22 @@ pub const RenderBuffers = struct {
         }
         self.mQuadCount = 0;
         self.mGlyphCount = 0;
+        self.mDirectCount = 0;
     }
-    pub fn SetBuffers(self: *RenderBuffers, stats: *RenderStats, engine_context: *EngineContext) !void {
+    pub fn SetBuffers(self: *RenderBuffers, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque) !void {
         const zone = Tracy.ZoneInit("Renderer2D::SetBuffers", @src());
         defer zone.Deinit();
 
         try self.SortShapes(engine_context.EngineAllocator());
         const shape_byte_size = self.mSortedShapes.items.len * @sizeOf(ShapeData);
-        _ = self.mShapeBuffer.SetData(engine_context, self.mSortedShapes.items.ptr, shape_byte_size, 0);
+        _ = self.mShapeBuffer.SetData(engine_context, copy_pass, self.mSortedShapes.items.ptr, shape_byte_size, 0);
 
         const surface_byte_size = self.mSurfaceBufferBase.items.len * @sizeOf(ShapeSurface);
-        _ = self.mSurfaceBuffer.SetData(engine_context, self.mSurfaceBufferBase.items.ptr, surface_byte_size, 0);
+        _ = self.mSurfaceBuffer.SetData(engine_context, copy_pass, self.mSurfaceBufferBase.items.ptr, surface_byte_size, 0);
 
         //clip regions
         const clip_byte_size = self.mClipBufferBase.items.len * @sizeOf(ClipData);
-        _ = self.mClipBuffer.SetData(engine_context, self.mClipBufferBase.items.ptr, clip_byte_size, 0);
+        _ = self.mClipBuffer.SetData(engine_context, copy_pass, self.mClipBufferBase.items.ptr, clip_byte_size, 0);
         //added to stats: the overlay and game passes each have their own quads and glyphs
         stats.OutputQuadNum += self.mQuadCount;
         stats.OutputGlyphNum += self.mGlyphCount;
@@ -211,6 +214,7 @@ pub const RenderBuffers = struct {
         ShapeSort.Sort(self.mSortEntries.items);
         try self.mSortedShapes.resize(engine_allocator, self.mShapeBufferBase.items.len);
         ShapeSort.Gather(ShapeData, self.mShapeBufferBase.items, self.mSortEntries.items, self.mSortedShapes.items);
+        self.mDirectCount = ShapeSort.DirectCount(self.mSortEntries.items);
     }
 
     /// Adds a shape and its surface, pointing the shape at it, and the key it is sorted by. The shape's SurfaceIndex
@@ -263,10 +267,10 @@ pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mOverlayData.Reset(engine_allocator, .ClearRetainingCapacity);
 }
 
-pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, pipeline_t: PipelineType) !void {
+pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque, pipeline_t: PipelineType) !void {
     try switch (pipeline_t) {
-        .GamePipeline => self.mGameData.SetBuffers(stats, engine_context),
-        .OverlayPipeline => self.mOverlayData.SetBuffers(stats, engine_context),
+        .GamePipeline => self.mGameData.SetBuffers(stats, engine_context, copy_pass),
+        .OverlayPipeline => self.mOverlayData.SetBuffers(stats, engine_context, copy_pass),
     };
 }
 
@@ -282,6 +286,15 @@ pub fn GetShapeCount(self: Renderer2D, pipeline_kind: PipelineType) u32 {
     return switch (pipeline_kind) {
         .GamePipeline => @intCast(self.mGameData.mShapeBufferBase.items.len),
         .OverlayPipeline => @intCast(self.mOverlayData.mShapeBufferBase.items.len),
+    };
+}
+
+/// How many of a pass's shapes, from the front of its buffer, are found with a ray test straight against them. The
+/// rest are marched. Only right once its SetBuffers has sorted them
+pub fn GetDirectCount(self: Renderer2D, pipeline_kind: PipelineType) u32 {
+    return switch (pipeline_kind) {
+        .GamePipeline => self.mGameData.mDirectCount,
+        .OverlayPipeline => self.mOverlayData.mDirectCount,
     };
 }
 

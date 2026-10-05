@@ -28,7 +28,7 @@ pub fn Init(self: *SDLSSBO, engine_context: *EngineContext, size: usize, slot: u
     if (size == 0) return;
 
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-    self.mBuffer = CreateBuffer(device, size);
+    self.mBuffer = CreateBuffer(device, size, stage);
     self.mTransferBuff = CreateTransferBuffer(device, size);
 }
 
@@ -53,17 +53,18 @@ pub fn Bind(self: SDLSSBO, pass: *anyopaque) void {
     }
 }
 
-pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyopaque, size: usize, offset: u32) bool {
+/// Uploads `size` bytes of `data` at `offset`, in `copy_pass` (RenderPlatform.BeginCopyPass), so a render's uploads can
+/// all share one
+pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, copy_pass: *anyopaque, data: *const anyopaque, size: usize, offset: u32) bool {
     if (size == 0) return false;
 
     var resize: bool = false;
     const device: *sdl.SDL_GPUDevice = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetDevice()));
-    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetWorkCmdBuff()));
 
     if (size + offset > self.mSize) {
         if (self.mBuffer) |buf| sdl.SDL_ReleaseGPUBuffer(device, buf);
         self.mSize = size + offset;
-        self.mBuffer = CreateBuffer(device, self.mSize);
+        self.mBuffer = CreateBuffer(device, self.mSize, self.mStage);
         resize = true;
     }
 
@@ -81,9 +82,6 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyo
     );
     sdl.SDL_UnmapGPUTransferBuffer(device, self.mTransferBuff);
 
-    const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd);
-    std.debug.assert(copy_pass != null);
-
     const src = sdl.SDL_GPUTransferBufferLocation{
         .transfer_buffer = self.mTransferBuff,
         .offset = 0,
@@ -93,8 +91,10 @@ pub fn SetData(self: *SDLSSBO, engine_context: *EngineContext, data: *const anyo
         .offset = offset,
         .size = @intCast(size),
     };
-    sdl.SDL_UploadToGPUBuffer(copy_pass, &src, &dst, true);
-    sdl.SDL_EndGPUCopyPass(copy_pass);
+    //cycling: if the GPU is still reading the buffer from an earlier render, this one gets a fresh one rather than
+    //waiting for it. A fresh one's contents are gone though, so only for an upload that starts at the beginning, which
+    //is all of what the buffer holds
+    sdl.SDL_UploadToGPUBuffer(@ptrCast(@alignCast(copy_pass)), &src, &dst, offset == 0);
 
     return resize;
 }
@@ -108,9 +108,14 @@ pub fn GetBinding(self: SDLSSBO) usize {
     return self.mSlot;
 }
 
-fn CreateBuffer(device: *sdl.SDL_GPUDevice, size: usize) ?*sdl.SDL_GPUBuffer {
+/// A storage buffer the shaders of `stage` read. The usage is what SDL puts the buffer back to between passes, so it
+/// matches the stage it is bound to
+fn CreateBuffer(device: *sdl.SDL_GPUDevice, size: usize, stage: Stage) ?*sdl.SDL_GPUBuffer {
     const buffer_info = sdl.SDL_GPUBufferCreateInfo{
-        .usage = sdl.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+        .usage = switch (stage) {
+            .Vertex, .Fragment => sdl.SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ,
+            .Compute => sdl.SDL_GPU_BUFFERUSAGE_COMPUTE_STORAGE_READ,
+        },
         .size = @intCast(size),
         .props = 0,
     };

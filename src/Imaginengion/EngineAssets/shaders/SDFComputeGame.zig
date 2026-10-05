@@ -54,6 +54,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mShapes = &ShapesSSBO.ptr,
         .mShapeSurfaces = &ShapeSurfacesSSBO.ptr,
         .mShapesCount = CameraUBO.mShapesCount,
+        .mDirectCount = CameraUBO.mDirectCount,
         .mClips = &ClipsSSBO.ptr,
         .mSurfShading = &SurfShadingSSBO.ptr,
         .mMedShading = &MedShadingSSBO.ptr,

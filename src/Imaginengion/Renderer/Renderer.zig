@@ -216,7 +216,7 @@ pub const ShadingBuffers = struct {
             },
         }
     }
-    pub fn SetBuffers(self: *ShadingBuffers, engine_context: *EngineContext) !void {
+    pub fn SetBuffers(self: *ShadingBuffers, engine_context: *EngineContext, copy_pass: *anyopaque) !void {
         const zone = Tracy.ZoneInit("Renderer::ShadingBuffers::SetBuffers", @src());
         defer zone.Deinit();
 
@@ -224,8 +224,8 @@ pub const ShadingBuffers = struct {
         const med_byte_size = self.mMedShadingBuffBase.items.len * @sizeOf(MedShadingData);
 
         //shadings
-        _ = self.mSurfShadingBuff.SetData(engine_context, self.mSurfShadingBuffBase.items.ptr, surf_byte_size, 0);
-        _ = self.mMedShadingBuff.SetData(engine_context, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
+        _ = self.mSurfShadingBuff.SetData(engine_context, copy_pass, self.mSurfShadingBuffBase.items.ptr, surf_byte_size, 0);
+        _ = self.mMedShadingBuff.SetData(engine_context, copy_pass, self.mMedShadingBuffBase.items.ptr, med_byte_size, 0);
     }
     /// Adds this draw's shadings to stats. Once a draw, since the overlay and game passes share the one set
     pub fn AddStats(self: ShadingBuffers, stats: *RenderStats) void {
@@ -290,8 +290,8 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 }
 
 /// The per view uniforms every render hands the renderer, from the camera's transform and viewpoint. The viewpoint's
-/// size has to be set for this frame before calling, since the ray params are derived from it. The shape count is
-/// filled in by the renderer once it knows it.
+/// size has to be set for this frame before calling, since the ray params are derived from it. The shape counts are
+/// filled in by the renderer once it knows them.
 pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
     const ray_params = viewpoint_component.GetRayParams();
     return .{
@@ -301,6 +301,7 @@ pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_co
         .mRayOffset = ray_params.Offset.ToArray(),
         .mPerspectiveFar = viewpoint_component.mPerspectiveFar,
         .mShapesCount = 0,
+        .mDirectCount = 0,
         .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
         .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
     };
@@ -416,72 +417,72 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
     const zone = Tracy.ZoneInit("Renderer::EndRendering", @src());
     defer zone.Deinit();
 
-    self.mPlatform.StartCmdBuff();
+    //recorded into the frame's command buffer along with every other render this frame, and the present after them
+    const cmd = self.mPlatform.GetFrameCmdBuff();
 
     self.mPlatform.PushDebugGroup("End Rendering");
+    defer self.mPlatform.PopDebugGroup();
 
-    //the render targets this draw shows, as they were last drawn, into the slots its quads sample
-    for (self.mShownCopies.items) |shown| self.mTextureManager.CopyFromTexture(engine_context, shown.Source, shown.Handle, shown.Width, shown.Height);
+    const draws_overlay = rendering_mode != .Game;
+    const draws_game = rendering_mode != .Overlay;
 
-    const cmd = self.mPlatform.GetWorkCmdBuff();
+    //everything this render reads, copied up front in one copy pass, before either compute pass reads any of it: the
+    //render targets its quads show, as they were last drawn, into the slots they sample, then its shapes and
+    //shadings. The shadings are shared by both passes, so they go up once. Uploading between the passes instead would
+    //make the second upload wait for the first pass to finish reading
+    {
+        self.mPlatform.PushDebugGroup("Upload Buffers");
+        defer self.mPlatform.PopDebugGroup();
+        const copy_pass = self.mPlatform.BeginCopyPass();
+        defer self.mPlatform.EndCopyPass(copy_pass);
+
+        for (self.mShownCopies.items) |shown| self.mTextureManager.CopyFromTexture(copy_pass, shown.Source, shown.Handle, shown.Width, shown.Height);
+        if (draws_overlay) try self.mR2D.SetBuffers(stats, engine_context, copy_pass, .OverlayPipeline);
+        if (draws_game) try self.mR2D.SetBuffers(stats, engine_context, copy_pass, .GamePipeline);
+        try self.mSDFShading.SetBuffers(engine_context, copy_pass);
+    }
 
     //====================first overlay render pipeline======================================
-    mode_switch: switch (rendering_mode) {
-        .Overlay, .OverlayGame => {
-            self.mPlatform.PushDebugGroup("Upload Buffers - Overlay");
-            try self.mR2D.SetBuffers(stats, engine_context, .OverlayPipeline);
-            try self.mSDFShading.SetBuffers(engine_context);
-            self.mPlatform.PopDebugGroup();
+    if (draws_overlay) {
+        self.mPlatform.PushDebugGroup("Draw - Overlay");
+        defer self.mPlatform.PopDebugGroup();
 
-            const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
+        const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
 
-            self.mOverlayPipeline.Bind(overlay_compute_pass);
-            self.mR2D.BindBuffers(overlay_compute_pass, .OverlayPipeline);
-            self.mSDFShading.BindBuffers(overlay_compute_pass);
-            self.mTextureManager.BindCompute(overlay_compute_pass);
+        self.mOverlayPipeline.Bind(overlay_compute_pass);
+        self.mR2D.BindBuffers(overlay_compute_pass, .OverlayPipeline);
+        self.mSDFShading.BindBuffers(overlay_compute_pass);
+        self.mTextureManager.BindCompute(overlay_compute_pass);
 
-            //a copy, since the game pass below still needs the camera's own far distance. the canvas
-            //always sits CANVAS_DISTANCE out, so the overlay can't depend on how far the game camera sees
-            var overlay_push_constants = self.mSDFPushConstants;
-            overlay_push_constants.mPerspectiveFar = OverlayCanvas.FAR_DISTANCE;
-            overlay_push_constants.mShapesCount = self.mR2D.GetShapeCount(.OverlayPipeline);
-            self.mOverlayPipeline.PushUniforms(cmd, overlay_push_constants);
+        //a copy, since the game pass below still needs the camera's own far distance. the canvas
+        //always sits CANVAS_DISTANCE out, so the overlay can't depend on how far the game camera sees
+        var overlay_push_constants = self.mSDFPushConstants;
+        overlay_push_constants.mPerspectiveFar = OverlayCanvas.FAR_DISTANCE;
+        overlay_push_constants.mShapesCount = self.mR2D.GetShapeCount(.OverlayPipeline);
+        overlay_push_constants.mDirectCount = self.mR2D.GetDirectCount(.OverlayPipeline);
+        self.mOverlayPipeline.PushUniforms(cmd, overlay_push_constants);
 
-            self.mPlatform.PushDebugGroup("Draw - Overlay");
-
-            self.mOverlayPipeline.Dispatch(overlay_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
-
-            compute_texture.EndComputePass(overlay_compute_pass);
-            self.mPlatform.PopDebugGroup(); //pop Draw - Overlay
-
-            if (rendering_mode == .OverlayGame) {
-                continue :mode_switch .Game;
-            }
-        },
-        .Game => {
-            self.mPlatform.PushDebugGroup("Upload Buffers - Game");
-            try self.mR2D.SetBuffers(stats, engine_context, .GamePipeline);
-            try self.mSDFShading.SetBuffers(engine_context);
-            self.mPlatform.PopDebugGroup();
-
-            const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);
-
-            self.mGamePipeline.Bind(game_compute_pass);
-            self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
-            self.mSDFShading.BindBuffers(game_compute_pass);
-            self.mTextureManager.BindCompute(game_compute_pass);
-
-            self.mSDFPushConstants.mShapesCount = self.mR2D.GetShapeCount(.GamePipeline);
-            self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
-
-            self.mPlatform.PushDebugGroup("Draw - Game");
-            self.mGamePipeline.Dispatch(game_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
-
-            compute_texture.EndComputePass(game_compute_pass);
-            self.mPlatform.PopDebugGroup(); //pop Draw DebugGroup
-        },
+        self.mOverlayPipeline.Dispatch(overlay_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
+        compute_texture.EndComputePass(overlay_compute_pass);
     }
-    self.mPlatform.PopDebugGroup(); //pop end rendering group
 
-    self.mPlatform.EndCmdBuff();
+    //====================then the game layer, under what the overlay drew======================================
+    if (draws_game) {
+        self.mPlatform.PushDebugGroup("Draw - Game");
+        defer self.mPlatform.PopDebugGroup();
+
+        const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);
+
+        self.mGamePipeline.Bind(game_compute_pass);
+        self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
+        self.mSDFShading.BindBuffers(game_compute_pass);
+        self.mTextureManager.BindCompute(game_compute_pass);
+
+        self.mSDFPushConstants.mShapesCount = self.mR2D.GetShapeCount(.GamePipeline);
+        self.mSDFPushConstants.mDirectCount = self.mR2D.GetDirectCount(.GamePipeline);
+        self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
+
+        self.mGamePipeline.Dispatch(game_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
+        compute_texture.EndComputePass(game_compute_pass);
+    }
 }

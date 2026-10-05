@@ -46,6 +46,14 @@ pub fn Sort(entries: []SortEntry) void {
     std.sort.pdq(SortEntry, entries, {}, LessThan);
 }
 
+/// How many of the sorted entries are direct, which all come before the marched ones: where the direct shapes end
+pub fn DirectCount(sorted: []const SortEntry) u32 {
+    for (sorted, 0..) |entry, i| {
+        if (entry.Key.Path == .Marched) return @intCast(i);
+    }
+    return @intCast(sorted.len);
+}
+
 /// `items` in the sorted entries' order, into `out`, which is as long as they are
 pub fn Gather(comptime T: type, items: []const T, entries: []const SortEntry, out: []T) void {
     std.debug.assert(items.len == entries.len and out.len == entries.len);

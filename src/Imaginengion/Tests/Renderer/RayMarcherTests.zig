@@ -147,12 +147,26 @@ const TestMarcher = SDFRayMarcher.RayMarcher(
     *const FakeTextures,
 );
 
-const MAX_TEST_SHAPES = 16;
+const MAX_TEST_SHAPES = 32;
 
-/// The color one ray comes out with, set up the way SDFComputeGame's main sets up a pixel's ray
-fn Trace(scene: TestScene, ray: Ray) Vec4(f32) {
+/// The color one ray comes out with, found both ways a shape can be: with every shape direct (a ray test straight
+/// against each) and with every shape marched. The two have to agree, which keeps the march working while nothing
+/// the engine draws uses it yet
+fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
+    const direct = TraceWith(scene, ray, scene.Shapes.len);
+    const marched = TraceWith(scene, ray, 0);
+    ExpectColor(direct, marched) catch |err| {
+        std.debug.print("all direct and all marched disagree: direct {any}, marched {any}\n", .{ direct, marched });
+        return err;
+    };
+    return direct;
+}
+
+/// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, set up the
+/// way SDFComputeGame's main sets up a pixel's ray
+fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
     std.debug.assert(scene.Shadings.len > 0);
-    std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES);
+    std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and direct_count <= scene.Shapes.len);
 
     var shapes: [MAX_TEST_SHAPES]ShapeData = undefined;
     var surfaces: [MAX_TEST_SHAPES]ShapeSurface = undefined;
@@ -171,6 +185,7 @@ fn Trace(scene: TestScene, ray: Ray) Vec4(f32) {
         .mShapes = &shapes,
         .mShapeSurfaces = &surfaces,
         .mShapesCount = scene.Shapes.len,
+        .mDirectCount = direct_count,
         .mClips = scene.Clips.ptr,
         .mSurfShading = scene.Shadings.ptr,
         .mMedShading = scene.Mediums.ptr,
@@ -222,13 +237,13 @@ fn ExpectColor(expected: Vec4(f32), actual: Vec4(f32)) !void {
 test "a ray that hits nothing comes out as the default color" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 5, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
-    try ExpectColor(DEFAULT_COLOR, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a quad seen straight on is its color" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
-    try ExpectColor(RED, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.5, -0.5)));
+    try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.5, -0.5)));
 }
 
 test "a turned quad is hit just inside its edges and missed just past them" {
@@ -245,22 +260,22 @@ test "a turned quad is hit just inside its edges and missed just past them" {
     const past_side = center.AddVec((Vec3(f32){ .x = 1.1 * half.x, .y = 0, .z = 0 }).QuatRotate(rotation));
     const past_top = center.AddVec((Vec3(f32){ .x = 0, .y = 1.1 * half.y, .z = 0 }).QuatRotate(rotation));
 
-    try ExpectColor(RED, Trace(scene, .{ .Origin = camera, .Dir = inside.SubVec(camera).Dir() }));
-    try ExpectColor(DEFAULT_COLOR, Trace(scene, .{ .Origin = camera, .Dir = past_side.SubVec(camera).Dir() }));
-    try ExpectColor(DEFAULT_COLOR, Trace(scene, .{ .Origin = camera, .Dir = past_top.SubVec(camera).Dir() }));
+    try ExpectColor(RED, try Trace(scene, .{ .Origin = camera, .Dir = inside.SubVec(camera).Dir() }));
+    try ExpectColor(DEFAULT_COLOR, try Trace(scene, .{ .Origin = camera, .Dir = past_side.SubVec(camera).Dir() }));
+    try ExpectColor(DEFAULT_COLOR, try Trace(scene, .{ .Origin = camera, .Dir = past_top.SubVec(camera).Dir() }));
 }
 
 test "only a quad's front is drawn" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
     const from_behind = Ray{ .Origin = .{ .x = 0, .y = 0, .z = -10 }, .Dir = .{ .x = 0, .y = 0, .z = 1 } };
-    try ExpectColor(DEFAULT_COLOR, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, from_behind));
+    try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, from_behind));
 }
 
 test "a quad past the far distance is not drawn" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = -2 * FAR }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
-    try ExpectColor(DEFAULT_COLOR, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a ray grazing just past a thin quad misses it" {
@@ -272,7 +287,7 @@ test "a ray grazing just past a thin quad misses it" {
         .Origin = .{ .x = -20, .y = 0, .z = 0.01 },
         .Dir = (Vec3(f32){ .x = 1, .y = 0, .z = -0.0001 }).Dir(),
     };
-    try ExpectColor(DEFAULT_COLOR, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, grazing));
+    try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, grazing));
 }
 
 //==================================which shape is in front==================================
@@ -284,8 +299,8 @@ test "the nearer of two overlapping quads is drawn, whichever order they are in"
 
     const near_first = [_]TestShape{ near, far };
     const far_first = [_]TestShape{ far, near };
-    try ExpectColor(RED, Trace(.{ .Shapes = &near_first, .Shadings = &shadings }, RayAt(0, 0)));
-    try ExpectColor(RED, Trace(.{ .Shapes = &far_first, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(.{ .Shapes = &near_first, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(.{ .Shapes = &far_first, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 //How exact ties come out today. Step 4 of the renderer plan picks a tie rule on purpose; if it changes these,
@@ -296,7 +311,7 @@ test "of two quads at the same depth, the first one in the buffer is drawn" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
-    try ExpectColor(RED, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a quad and a glyph at the same depth: the quad is drawn, whichever comes first in the buffer" {
@@ -311,8 +326,8 @@ test "a quad and a glyph at the same depth: the quad is drawn, whichever comes f
 
     const quad_first = [_]TestShape{ quad, glyph };
     const glyph_first = [_]TestShape{ glyph, quad };
-    try ExpectColor(RED, Trace(.{ .Shapes = &quad_first, .Shadings = &shadings }, RayAt(-0.25, 0)));
-    try ExpectColor(RED, Trace(.{ .Shapes = &glyph_first, .Shadings = &shadings }, RayAt(-0.25, 0)));
+    try ExpectColor(RED, try Trace(.{ .Shapes = &quad_first, .Shadings = &shadings }, RayAt(-0.25, 0)));
+    try ExpectColor(RED, try Trace(.{ .Shapes = &glyph_first, .Shadings = &shadings }, RayAt(-0.25, 0)));
 }
 
 //==================================seeing through==================================
@@ -325,14 +340,14 @@ test "a see-through quad blends with the quad behind it" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
     //half of each, and the alpha half way from the front's 0.5 to the back's 1
-    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a see-through quad with nothing behind it blends with the default color" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ColorShading(half_red)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, SDFFunc.NO_CLIP)};
-    try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a stack of see-through quads blends every layer, back to front" {
@@ -345,7 +360,7 @@ test "a stack of see-through quads blends every layer, back to front" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, SDFFunc.NO_CLIP),
     };
     const middle = half_green.Lerp(BLUE, 0.5);
-    try ExpectColor(half_red.Lerp(middle, 0.5), Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(half_red.Lerp(middle, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "the ray past a see-through quad goes through the edge's own medium, not one picked by the quad's shading" {
@@ -359,7 +374,7 @@ test "the ray past a see-through quad goes through the edge's own medium, not on
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, SDFFunc.NO_CLIP),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
     };
-    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, Trace(.{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &mediums }, RayAt(0, 0)));
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &mediums }, RayAt(0, 0)));
 }
 
 test "a quad without the see-through flag hides what is behind it, even with a see-through color" {
@@ -370,7 +385,7 @@ test "a quad without the see-through flag hides what is behind it, even with a s
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
-    try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+    try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 //==================================cut off and gaps==================================
@@ -384,8 +399,8 @@ test "a clipped quad is only drawn inside its clip region, and the ray goes on p
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
     const scene = TestScene{ .Shapes = &shapes, .Clips = &clips, .Shadings = &shadings };
-    try ExpectColor(RED, Trace(scene, RayAt(-0.5, 0)));
-    try ExpectColor(BLUE, Trace(scene, RayAt(0.5, 0)));
+    try ExpectColor(RED, try Trace(scene, RayAt(-0.5, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.5, 0)));
 }
 
 test "a glyph is drawn where its letter covers it, and the ray goes through its gaps" {
@@ -400,8 +415,8 @@ test "a glyph is drawn where its letter covers it, and the ray goes through its 
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0),
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
-    try ExpectColor(GREEN, Trace(scene, RayAt(-0.25, 0)));
-    try ExpectColor(BLUE, Trace(scene, RayAt(0.25, 0)));
+    try ExpectColor(GREEN, try Trace(scene, RayAt(-0.25, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.25, 0)));
 }
 
 test "a glyph is tinted by its text's color" {
@@ -413,7 +428,7 @@ test "a glyph is tinted by its text's color" {
         ColorShading(grey),
     };
     const shapes = [_]TestShape{MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 0, 0)};
-    try ExpectColor(grey, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
+    try ExpectColor(grey, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
 }
 
 test "see-through text blends with what is behind it" {
@@ -428,5 +443,70 @@ test "see-through text blends with what is behind it" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, TRANSPARENT),
     };
-    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
+}
+
+test "a ray through the gaps of several overlapping glyphs at the same depth reaches what is behind them" {
+    //three glyph boxes on top of each other, the way neighbouring letters' boxes overlap. Every letter covers the left
+    //half, so on the right the ray is turned down by each in turn before it gets to the blue quad behind
+    const shadings = [_]SurfShadingData{
+        ColorShading(BLUE),
+        Shading(WHITE, ATLAS_HANDLE, 2),
+        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+    };
+    const glyph = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
+    const shapes = [_]TestShape{
+        glyph,
+        glyph,
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
+        glyph,
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(GREEN, try Trace(scene, RayAt(-0.25, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.25, 0)));
+}
+
+//==================================direct and marched together==================================
+
+test "a marched quad in front of a direct quad is drawn" {
+    //the blue quad is direct and the red one in front of it marched
+    const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(RED) };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+    };
+    try ExpectColor(RED, TraceWith(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 1));
+}
+
+test "a direct quad in front hides a marched one behind it, which still shows past the direct one's edge" {
+    //the small red quad is direct, the bigger blue one behind it marched
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 0.5, .y = 0.5 }, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(RED, TraceWith(scene, RayAt(0, 0), 1));
+    try ExpectColor(BLUE, TraceWith(scene, RayAt(0.75, 0), 1));
+}
+
+test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge, then counts it as a miss" {
+    //a blue quad behind a stack of glyph boxes the ray goes through the gaps of. Only direct: the march's own limit
+    //on what it can get past is its SkipList
+    const rejects = SDFRayMarcher.MAX_DIRECT_REJECTS;
+    const shadings = [_]SurfShadingData{
+        ColorShading(BLUE),
+        Shading(WHITE, ATLAS_HANDLE, 2),
+        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+    };
+    var shapes: [rejects + 2]TestShape = undefined;
+    shapes[0] = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP);
+    for (shapes[1..]) |*shape| shape.* = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
+
+    //as many gaps as it may turn down: the next search still finds the quad
+    const at_limit = TestScene{ .Shapes = shapes[0 .. rejects + 1], .Shadings = &shadings };
+    try ExpectColor(BLUE, TraceWith(at_limit, RayAt(0.25, 0), rejects + 1));
+    //one more and it gives up
+    const past_limit = TestScene{ .Shapes = shapes[0 .. rejects + 2], .Shadings = &shadings };
+    try ExpectColor(DEFAULT_COLOR, TraceWith(past_limit, RayAt(0.25, 0), rejects + 2));
 }

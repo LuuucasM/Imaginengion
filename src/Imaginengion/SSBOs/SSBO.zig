@@ -28,10 +28,11 @@ pub fn Unbind(self: SSBO) void {
     self.mImpl.Unbind();
 }
 
-pub fn SetData(self: *SSBO, engine_context: *EngineContext, data: *anyopaque, size: usize, offset: u32) bool {
+/// Uploads in `copy_pass` (RenderPlatform.BeginCopyPass)
+pub fn SetData(self: *SSBO, engine_context: *EngineContext, copy_pass: *anyopaque, data: *anyopaque, size: usize, offset: u32) bool {
     const setdata_zone = Tracy.ZoneInit("SSBO::SetData", @src());
     defer setdata_zone.Deinit();
-    return self.mImpl.SetData(engine_context, data, size, offset);
+    return self.mImpl.SetData(engine_context, copy_pass, data, size, offset);
 }
 
 pub fn GetBuffer(self: SSBO) *anyopaque {

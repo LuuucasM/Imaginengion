@@ -19,11 +19,17 @@ const THICKNESS_2D = SDFFunc.THICKNESS_2D;
 const Stack = @import("../Core/Stack.zig").Stack;
 
 //A ray that runs out of steps is treated as a miss, so this is a budget rather than a safety net:
-//every step costs one SDF evaluation against every quad and glyph, for every pixel. At 9999 a
+//every step costs one SDF evaluation against every marched shape, for every pixel. At 9999 a
 //single grazing band of pixels was enough to push one dispatch into the seconds and trip the
 //driver's watchdog. With a distance-scaled hit threshold (see SurfaceEpsilon) rays converge in
 //far fewer steps than this, so the budget is only reached by rays that were going to miss.
 const MAX_STEPS: u32 = 256;
+
+//How many hits the direct search turns down along one edge before it gives up and counts the edge as a miss. A hit is
+//turned down when it is outside its clip region or in a gap in a letter, and each one costs another pass over every
+//direct shape, so this keeps a pixel looking through a long run of letter gaps from looping. Text is the usual
+//case: a ray between letters passes through the edges of a few overlapping glyph boxes, well under this
+pub const MAX_DIRECT_REJECTS: u32 = 16;
 
 //The hit threshold at the camera. SurfaceEpsilon grows it with distance; this is the t = 0 value.
 const SURF_DIST: f32 = 0.00099;
@@ -71,7 +77,7 @@ pub const Edge = extern struct {
     SiblingEdge: u32,
     //the medium it travels through, into the medium shadings. 0 is air, the only one there is so far
     MaterialHandle: u32,
-    //the shape this edge starts on, which the march ignores. A continuation edge starts within
+    //the shape this edge starts on, which the search ignores. A continuation edge starts within
     //epsilon of the plate it passed through, so without this it immediately re-hits that same plate
     //and spawns another edge, forever. Every shape is a flat plate, so a straight ray can't
     //legitimately hit the one it just left.
@@ -110,6 +116,41 @@ fn IsFrontHit(hit: HitInfo) bool {
     const face = hit.Face orelse return false;
     return face == .PosZ;
 }
+
+/// The ray straight against a shape, by its kind
+fn HitShape(ray: Ray, shape: ShapeData) HitInfo {
+    return switch (shape.Type) {
+        .Quad => SDFFunc.rayIMQuad(ray, shape),
+        .Glyph => SDFFunc.rayIMGlyph(ray, shape),
+        .None => .miss,
+    };
+}
+
+/// Where a hit comes along a ray, which settles exact ties too: nearer first, then a quad before a glyph, then the
+/// first in the buffer. The order the march has always taken them in
+const HitOrder = struct {
+    T: f32,
+    Rank: u32,
+    Shape: u32,
+
+    /// Before every hit, where the direct search starts from
+    const start: HitOrder = .{ .T = -std.math.inf(f32), .Rank = 0, .Shape = 0 };
+
+    fn Of(t: f32, shape_type: ShapeType, shape: u32) HitOrder {
+        const rank: u32 = switch (shape_type) {
+            .Quad => 0,
+            .Glyph => 1,
+            .None => 2,
+        };
+        return .{ .T = t, .Rank = rank, .Shape = shape };
+    }
+
+    fn Before(self: HitOrder, other: HitOrder) bool {
+        if (self.T != other.T) return self.T < other.T;
+        if (self.Rank != other.Rank) return self.Rank < other.Rank;
+        return self.Shape < other.Shape;
+    }
+};
 
 const MAX_SKIPS: u32 = 4;
 
@@ -162,11 +203,14 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         mNodeCount: usize,
         mEdgeCount: usize,
         mDefaultColor: Vec4(f32),
-        /// every shape the march looks for, every kind in one buffer (ShapeData), and what only a hit one needs
+        /// every shape a ray looks for, every kind in one buffer (ShapeData), and what only a hit one needs
         /// (ShapeSurface), by each shape's SurfaceIndex
         mShapes: shapes_type,
         mShapeSurfaces: shape_surfaces_type,
         mShapesCount: usize,
+        /// the shapes are sorted direct first (ShapeSort): [0, mDirectCount) are found with a ray test straight
+        /// against each, the rest by marching
+        mDirectCount: usize,
         /// the clip regions shapes are cut to, by their ClipIndex
         mClips: clips_type,
         mSurfShading: surf_shading_type,
@@ -183,33 +227,22 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 const from_point = self.mNodes[@intCast(curr_edge.FromNode)].Point;
 
                 const edge_ray = Ray{ .Origin = from_point, .Dir = curr_edge.Direction };
-                var skips = SkipList.Init(curr_edge.SkipShape);
-                var surface: SurfaceHit = .none;
-                var dist_origin: f32 = 0;
 
-                var i: u32 = 0;
-                while (i < MAX_STEPS and dist_origin < self.mPerspectiveFar) : (i += 1) {
-                    const point = from_point.AddVec(curr_edge.Direction.MulScalar(dist_origin));
-                    const march_data = self.NextSurface(point, skips);
-                    if (march_data.min_dist > SurfaceEpsilon(dist_origin)) {
-                        dist_origin += march_data.min_dist;
-                        continue;
-                    }
-
-                    //close enough to count, so ask the shape itself where exactly the ray meets it. only
-                    //a plate's front is drawn, and a glyph only where the letter covers it: at its back,
-                    //its sides or a gap in the letter the ray goes on to whatever is behind
-                    surface = self.SurfaceAt(edge_ray, march_data.shape, sample_sampler, textures_array);
-                    if (surface.Found) break;
-                    skips.Add(march_data.shape);
+                //the direct shapes first, then the marched ones only as far as that hit, since nothing behind it
+                //can show. With no marched shapes, every pixel skips the march together
+                var surface = self.DirectSurface(edge_ray, curr_edge.SkipShape, sample_sampler, textures_array);
+                if (self.mDirectCount < self.mShapesCount) {
+                    const limit = if (surface.Found) surface.T else self.mPerspectiveFar;
+                    const marched = self.MarchedSurface(edge_ray, curr_edge.SkipShape, limit, sample_sampler, textures_array);
+                    if (marched.Found and marched.T < limit) surface = marched;
                 }
 
-                //out of steps or distance, the ray dies
+                //nothing drawn along it before the far distance, the ray dies
                 if (!surface.Found) {
                     self.mEdges[curr_edge_ind].Length = self.mPerspectiveFar;
                     const miss_node_ind = self.GetNodeIndex();
                     self.mNodes[miss_node_ind] = .{
-                        .Point = from_point.AddVec(curr_edge.Direction.MulScalar(dist_origin)),
+                        .Point = from_point.AddVec(curr_edge.Direction.MulScalar(self.mPerspectiveFar)),
                         .Normal = .{ .x = 0, .y = 0, .z = 0 },
                         .ParentEdge = @intCast(curr_edge_ind),
                         .FirstEdge = NO_EDGE,
@@ -222,7 +255,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     continue;
                 }
 
-                //the exact point on the surface, rather than wherever within epsilon the march stopped
+                //the exact point on the surface, rather than wherever within epsilon a march stopped
                 self.mEdges[curr_edge_ind].Length = surface.T;
                 const end_point = from_point.AddVec(curr_edge.Direction.MulScalar(surface.T));
                 const shading_handle = surface.ShadingHandle;
@@ -305,11 +338,69 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             return self.mEdgeCount;
         }
 
+        /// The nearest surface a ray draws among the direct shapes, by a ray test straight against each. The nearest hit
+        /// is then checked against the shape itself (SurfaceFromHit), and one turned down, outside its clip region or
+        /// in a gap in a letter, is passed for the next one after it, up to MAX_DIRECT_REJECTS of them
+        fn DirectSurface(self: Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            var after = HitOrder.start;
+            var searches: u32 = 0;
+            while (searches <= MAX_DIRECT_REJECTS) : (searches += 1) {
+                var nearest = HitOrder{ .T = self.mPerspectiveFar, .Rank = std.math.maxInt(u32), .Shape = NO_SHAPE };
+                var nearest_hit: HitInfo = .miss;
+
+                for (0..self.mDirectCount) |i| {
+                    const shape_ind: u32 = @intCast(i);
+                    if (shape_ind == skip_shape) continue;
+                    const shape: ShapeData = self.mShapes[i];
+                    const hit = HitShape(ray, shape);
+                    if (!IsFrontHit(hit)) continue;
+                    const order = HitOrder.Of(hit.T, shape.Type, shape_ind);
+                    if (after.Before(order) and order.Before(nearest)) {
+                        nearest = order;
+                        nearest_hit = hit;
+                    }
+                }
+
+                if (nearest.Shape == NO_SHAPE) return .none;
+                const surface = self.SurfaceFromHit(ray, nearest.Shape, nearest_hit, sample_sampler, textures_array);
+                if (surface.Found) return surface;
+                after = nearest;
+            }
+            return .none;
+        }
+
+        /// The nearest surface a ray draws among the marched shapes, stepping along it no further than `limit`. Each
+        /// shape the march gets within epsilon of is checked against the shape itself, and one turned down is skipped
+        /// for the rest of the edge (SkipList)
+        fn MarchedSurface(self: Self, ray: Ray, skip_shape: u32, limit: f32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            var skips = SkipList.Init(skip_shape);
+            var dist_origin: f32 = 0;
+
+            var i: u32 = 0;
+            while (i < MAX_STEPS and dist_origin < limit) : (i += 1) {
+                const point = ray.Origin.AddVec(ray.Dir.MulScalar(dist_origin));
+                const march_data = self.NextSurface(point, skips);
+                if (march_data.min_dist > SurfaceEpsilon(dist_origin)) {
+                    dist_origin += march_data.min_dist;
+                    continue;
+                }
+
+                //close enough to count, so ask the shape itself where exactly the ray meets it. only
+                //a plate's front is drawn, and a glyph only where the letter covers it: at its back,
+                //its sides or a gap in the letter the ray goes on to whatever is behind
+                const surface = self.SurfaceAt(ray, march_data.shape, sample_sampler, textures_array);
+                if (surface.Found) return surface;
+                skips.Add(march_data.shape);
+            }
+            return .none;
+        }
+
+        /// The nearest marched shape to `point`, cut to its clip region
         fn NextSurface(self: Self, point: Vec3(f32), skips: SkipList) MarchData {
             var data = MarchData{ .min_dist = self.mPerspectiveFar, .shape = NO_SHAPE };
             var nearest_type: ShapeType = .None;
 
-            for (0..self.mShapesCount) |i| {
+            for (self.mDirectCount..self.mShapesCount) |i| {
                 const shape_ind: u32 = @intCast(i);
                 if (skips.Contains(shape_ind)) continue;
                 const shape: ShapeData = self.mShapes[i];
@@ -348,12 +439,17 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: the front of a plate, and for
         /// a glyph, only where the letter covers it. Neither outside its clip region
         fn SurfaceAt(self: Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            return self.SurfaceFromHit(ray, shape_ind, HitShape(ray, self.mShapes[shape_ind]), sample_sampler, textures_array);
+        }
+
+        /// SurfaceAt for a hit already found against the shape (HitShape), so the direct search doesn't test the ray
+        /// against it twice
+        fn SurfaceFromHit(self: Self, ray: Ray, shape_ind: u32, hit: HitInfo, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            if (!IsFrontHit(hit)) return .none;
             const shape: ShapeData = self.mShapes[shape_ind];
             const surface: ShapeSurface = self.mShapeSurfaces[shape.SurfaceIndex];
             switch (shape.Type) {
                 .Quad => {
-                    const hit = SDFFunc.rayIMQuad(ray, shape);
-                    if (!IsFrontHit(hit)) return .none;
                     const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
                     if (!self.InClip(hit_point, shape.ClipIndex)) return .none;
 
@@ -387,8 +483,6 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     };
                 },
                 .Glyph => {
-                    const hit = SDFFunc.rayIMGlyph(ray, shape);
-                    if (!IsFrontHit(hit)) return .none;
                     if (!self.InClip(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), shape.ClipIndex)) return .none;
 
                     //the coverage test needs where in the glyph's box the hit is. the fill texture's UV

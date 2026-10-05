@@ -31,6 +31,8 @@ pub const SDFPushConstants = extern struct {
     mRayOffset: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     mPerspectiveFar: f32,
     mShapesCount: u32,
+    //the shapes before this are found with a ray test straight against them, the rest by marching (ShapeSort)
+    mDirectCount: u32,
     mViewportWidth: f32,
     mViewportHeight: f32,
 };

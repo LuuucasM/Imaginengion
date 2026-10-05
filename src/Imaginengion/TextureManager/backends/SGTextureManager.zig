@@ -170,15 +170,12 @@ pub fn Register(self: *SGTextureManager, engine_context: *EngineContext, data: ?
 }
 
 /// Copies `width` x `height` of `source` (a GPU texture of the same RGBA8 format, from its top left corner) into the slot
-/// `texture_location` was registered with, on the GPU, in the frame's work command buffer: after whatever drew into
-/// `source` earlier in it, and before anything that samples the slot later in it
-pub fn CopyFromTexture(self: *SGTextureManager, engine_context: *EngineContext, source: *anyopaque, texture_location: u32, width: usize, height: usize) void {
+/// `texture_location` was registered with, on the GPU, in `copy_pass` (RenderPlatform.BeginCopyPass) of the frame's
+/// command buffer: after whatever drew into `source` earlier in it, and before anything that samples the slot later in it
+pub fn CopyFromTexture(self: *SGTextureManager, copy_pass: *anyopaque, source: *anyopaque, texture_location: u32, width: usize, height: usize) void {
     const zone = Tracy.ZoneInit("SGTextureManager::CopyFromTexture", @src());
     defer zone.Deinit();
-    const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetWorkCmdBuff()));
     const offset_x, const offset_y = GetPixelOffsets(GetBinIndex(texture_location), GetSlotIndex(texture_location));
-    const copy_pass = sdl.SDL_BeginGPUCopyPass(cmd) orelse return;
-    defer sdl.SDL_EndGPUCopyPass(copy_pass);
 
     const src = sdl.SDL_GPUTextureLocation{ .texture = @ptrCast(@alignCast(source)), .mip_level = 0, .layer = 0, .x = 0, .y = 0, .z = 0 };
     const dst = sdl.SDL_GPUTextureLocation{
@@ -189,7 +186,7 @@ pub fn CopyFromTexture(self: *SGTextureManager, engine_context: *EngineContext, 
         .y = @intCast(offset_y),
         .z = 0,
     };
-    sdl.SDL_CopyGPUTextureToTexture(copy_pass, &src, &dst, @intCast(width), @intCast(height), 1, false);
+    sdl.SDL_CopyGPUTextureToTexture(@ptrCast(@alignCast(copy_pass)), &src, &dst, @intCast(width), @intCast(height), 1, false);
 }
 
 pub fn Bind(self: SGTextureManager, render_pass: *anyopaque) void {
