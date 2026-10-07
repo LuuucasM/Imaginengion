@@ -14,6 +14,8 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const Bus = @import("../ECSObjects/Bus.zig");
+const UIElement = @import("../ECSObjects/UIElement.zig");
+const WidgetActions = @import("WidgetActions.zig");
 const UIManager = @import("UIManager.zig");
 const Widgets = @import("Widgets.zig");
 const LayoutSystem = @import("LayoutSystem.zig");
@@ -29,20 +31,25 @@ const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
+const NameComponent = EntityComponents.NameComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const FieldBindingComponent = UIComponents.FieldBindingComponent;
 const NumberFieldComponent = UIComponents.NumberFieldComponent;
+const ScrollComponent = UIComponents.ScrollComponent;
+const PopupComponent = UIComponents.PopupComponent;
 
 /// How wide a field's label is, in canvas units: every field of an inspector lines up after it
 pub const LABEL_WIDTH: f32 = 120;
 
-/// The object a component being edited is on: any of the four object types, or an audio bus (in the AudioManager's ECS)
+/// The object a component being edited is on: any of the four object types, an audio bus (in the AudioManager's ECS),
+/// or an entity's UI element (in the UIManager's)
 pub const ObjectRef = union(enum) {
     Entity: Entity,
     Scene: Scene,
     Player: Player,
     GameContext: GameContext,
     Bus: Bus,
+    UIElement: UIElement,
 
     fn Of(object: anytype) ObjectRef {
         return switch (@TypeOf(object)) {
@@ -51,6 +58,7 @@ pub const ObjectRef = union(enum) {
             Player => .{ .Player = object },
             GameContext => .{ .GameContext = object },
             Bus => .{ .Bus = object },
+            UIElement => .{ .UIElement = object },
             else => @compileError("Not an object type: " ++ @typeName(@TypeOf(object))),
         };
     }
@@ -124,6 +132,48 @@ pub const Builder = struct {
 
     pub fn UInt(self: *Builder, field: *u32, label: []const u8, options: NumberOptions) !void {
         try self.Number(u32, field, label, options);
+    }
+
+    pub fn UInt8(self: *Builder, field: *u8, label: []const u8, options: NumberOptions) !void {
+        try self.Number(u8, field, label, options);
+    }
+
+    /// A number that can be left out, like a limit: a checkbox for whether there is one, and the number beside it,
+    /// greyed out while there isn't. Ticking it starts the number at 0. Ticking or unticking builds the inspector again
+    pub fn OptionalFloat(self: *Builder, field: *?f32, label: []const u8, options: NumberOptions) !void {
+        const row = try self.Row(label);
+        const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = row }, "", self.mOptions);
+        //the box, which the toggle's ValueChanged is sent from
+        var parts = checkbox.GetIterator(.Child);
+        try self.Bind(parts.next().?, field, &OPTIONAL_SET, options.OnChange, null, true);
+
+        const number_field = try Widgets.NumberField(self.mEngineContext, .{ .Entity = row }, .{ .float32 = field.* orelse 0 }, .{
+            .mSpeed = options.Speed,
+            .mMin = options.Min,
+            .mMax = options.Max,
+            .mDecimals = options.Decimals,
+        });
+        try self.Bind(number_field, field, &OPTIONAL_VALUE, options.OnChange, options.Convert, false);
+        if (field.* == null) try WidgetActions.SetDisabled(self.mEngineContext, number_field, true);
+    }
+
+    /// A dropdown of `choices` for a field that isn't an enum, read and written by `access`, whose Read gives the
+    /// .Choice shown: e.g. a preset that sets several values at once
+    pub fn Choice(self: *Builder, field: anytype, label: []const u8, choices: []const []const u8, access: *const Access, options: FieldOptions) !void {
+        const row = try self.Row(label);
+        const chosen: ?usize = switch (access.Read(@ptrCast(field))) {
+            .Choice => |index| index,
+            else => null,
+        };
+        const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, choices, chosen, self.mOptions);
+        try self.Bind(dropdown, field, access, options.OnChange, null, options.Rebuilds);
+    }
+
+    /// The name of the entity an entity field points at, "None" when it points at none. Shown only, not edited
+    pub fn EntityName(self: *Builder, field: *Entity, label: []const u8) !void {
+        const row = try self.Row(label);
+        const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, NameOf(field.*));
+        try self.Bind(shown, field, &ENTITY_NAME, null, null, false);
     }
 
     pub fn Bool(self: *Builder, field: *bool, label: []const u8, options: FieldOptions) !void {
@@ -201,7 +251,8 @@ pub const Builder = struct {
         var value: EntityComponents.AttribComponent.ValueTypes = switch (T) {
             f32 => .{ .float32 = 0 },
             i32 => .{ .int32 = 0 },
-            u32 => .{ .uint32 = 0 },
+            //no attribute is a byte: shown as a u32, and kept to a byte when written
+            u32, u8 => .{ .uint32 = 0 },
             else => @compileError("Not a number field type: " ++ @typeName(T)),
         };
         value.SetFromFloat(shown);
@@ -269,16 +320,31 @@ pub fn BuildComponent(engine_context: *EngineContext, parent: Entity, root: Enti
     const zone = Tracy.ZoneInit("Inspector::BuildComponent", @src());
     defer zone.Deinit();
     if (!@hasDecl(component_type, "UIRender")) return null;
-    const component = object.GetComponent(component_type) orelse return null;
+    if (!object.HasComponent(component_type)) return null;
 
     const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = parent }, component_type.Name, true, options);
-    var builder = ForComponent(engine_context, section.Content.?, root, object, component_type, options);
-    try component.UIRender(&builder);
+    try RenderComponent(engine_context, section.Content.?, root, object, component_type, options);
     return section.Content.?;
 }
 
-/// A Builder for `object`'s component of type `component_type`, putting its rows under `parent`. For BuildComponent,
-/// and for calling the Builder's fields directly
+/// The rows `object`'s component of type `component_type` asks for (its UIRender), under `parent`, with no header.
+/// UIRender is handed a copy of the component, which its field offsets are measured from: making widgets adds
+/// components to ECSs, and when that is the ECS the component is in (a UI element's own components are in the
+/// UIManager's, like the widgets' styles) it can move in memory part way through. The bindings find the real one
+pub fn RenderComponent(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options) !void {
+    const zone = Tracy.ZoneInit("Inspector::RenderComponent", @src());
+    defer zone.Deinit();
+    const component = object.GetComponent(component_type) orelse return;
+    const copy = try engine_context.FrameAllocator().create(component_type);
+    copy.* = component.*;
+    var builder = ForComponent(engine_context, parent, root, object, component_type, options);
+    builder.mBase = @intFromPtr(copy);
+    try copy.UIRender(&builder);
+}
+
+/// A Builder for `object`'s component of type `component_type`, putting its rows under `parent`, its field offsets
+/// measured from the component where it is now. For calling the Builder's fields directly, when building can't move
+/// the component (see RenderComponent)
 pub fn ForComponent(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options) Builder {
     const component = object.GetComponent(component_type).?;
     return .{
@@ -309,6 +375,15 @@ fn ResolveFor(comptime object_type: type, comptime component_type: type) *const 
 fn AfterEditFor(comptime object_type: type, comptime component_type: type) *const fn (*EngineContext, ObjectRef) anyerror!void {
     return &struct {
         fn AfterEdit(engine_context: *EngineContext, object: ObjectRef) anyerror!void {
+            //a scroll or popup setting changes how the element's entity is laid out
+            if (object_type == UIElement) {
+                if (component_type != ScrollComponent and component_type != PopupComponent) return;
+                const element = object.UIElement;
+                if (!element.IsActive()) return;
+                const owner = element.GetOwner();
+                if (owner.IsActive()) try owner.MarkLayoutDirty(engine_context);
+                return;
+            }
             if (object_type != Entity) return;
             const entity = object.Entity;
             if (!entity.IsActive()) return;
@@ -332,6 +407,7 @@ fn ObjectTag(comptime object_type: type) []const u8 {
         Player => "Player",
         GameContext => "GameContext",
         Bus => "Bus",
+        UIElement => "UIElement",
         else => @compileError("Not an object type: " ++ @typeName(object_type)),
     };
 }
@@ -345,7 +421,7 @@ pub fn AccessFor(comptime T: type) *const Access {
             const value: *T = @ptrCast(@alignCast(field));
             return switch (T) {
                 f32 => .{ .Number = value.* },
-                i32, u32 => .{ .Number = @floatFromInt(value.*) },
+                i32, u32, u8 => .{ .Number = @floatFromInt(value.*) },
                 bool => .{ .Bool = value.* },
                 Vec4(f32) => .{ .Color = value.* },
                 std.ArrayList(u8) => .{ .Text = value.items },
@@ -359,6 +435,7 @@ pub fn AccessFor(comptime T: type) *const Access {
                 f32 => value.* = @floatCast(written.Number),
                 i32 => value.* = @intFromFloat(std.math.clamp(@round(written.Number), std.math.minInt(i32), std.math.maxInt(i32))),
                 u32 => value.* = @intFromFloat(std.math.clamp(@round(written.Number), 0, std.math.maxInt(u32))),
+                u8 => value.* = @intFromFloat(std.math.clamp(@round(written.Number), 0, std.math.maxInt(u8))),
                 bool => value.* = written.Bool,
                 Vec4(f32) => value.* = written.Color,
                 std.ArrayList(u8) => {
@@ -372,6 +449,58 @@ pub fn AccessFor(comptime T: type) *const Access {
             }
         }
     }.access;
+}
+
+/// An optional number's checkbox: whether it has a number. Ticked, it starts at 0
+const OPTIONAL_SET = Access{
+    .Read = struct {
+        fn Read(field: *anyopaque) Value {
+            const value: *?f32 = @ptrCast(@alignCast(field));
+            return .{ .Bool = value.* != null };
+        }
+    }.Read,
+    .Write = struct {
+        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+            const value: *?f32 = @ptrCast(@alignCast(field));
+            if (written.Bool == (value.* != null)) return;
+            value.* = if (written.Bool) 0 else null;
+        }
+    }.Write,
+};
+
+/// An optional number's number, 0 while it has none. Only written while it has one
+const OPTIONAL_VALUE = Access{
+    .Read = struct {
+        fn Read(field: *anyopaque) Value {
+            const value: *?f32 = @ptrCast(@alignCast(field));
+            return .{ .Number = value.* orelse 0 };
+        }
+    }.Read,
+    .Write = struct {
+        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+            const value: *?f32 = @ptrCast(@alignCast(field));
+            if (value.* != null) value.* = @floatCast(written.Number);
+        }
+    }.Write,
+};
+
+/// An entity field's entity's name, never written
+const ENTITY_NAME = Access{
+    .Read = struct {
+        fn Read(field: *anyopaque) Value {
+            const entity: *Entity = @ptrCast(@alignCast(field));
+            return .{ .Text = NameOf(entity.*) };
+        }
+    }.Read,
+    .Write = struct {
+        fn Write(_: *EngineContext, _: *anyopaque, _: Value) anyerror!void {}
+    }.Write,
+};
+
+fn NameOf(entity: Entity) []const u8 {
+    if (!entity.IsActive()) return "None";
+    const name = entity.GetComponent(NameComponent) orelse return "Entity";
+    return name.mName.items;
 }
 
 /// Where an enum's value is among its values

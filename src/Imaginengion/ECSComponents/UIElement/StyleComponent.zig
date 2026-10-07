@@ -3,6 +3,7 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 
 const StyleComponent = @This();
 
@@ -28,6 +29,10 @@ pub fn Init(engine_context: *EngineContext, name: []const u8) !StyleComponent {
     var style = StyleComponent{};
     try style.mStyle.appendSlice(engine_context.EngineAllocator(), name);
     return style;
+}
+
+pub fn UIRender(self: *StyleComponent, ui: *Inspector.Builder) !void {
+    try ui.Text(&self.mStyle, "Style", .{});
 }
 
 pub fn EditorRender(self: *StyleComponent, engine_context: *EngineContext) !void {

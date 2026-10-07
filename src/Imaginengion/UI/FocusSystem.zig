@@ -343,8 +343,7 @@ fn LocalPoint(entity: Entity, pointer_input: PointerSystem.Input) ?Vec2(f32) {
     var point = pointer_input.Position;
     if (entity.GetLayer() == .OverlayLayer) {
         const view = pointer_input.View orelse return null;
-        const scene = entity.GetComponent(EntitySceneComponent).?.mScene;
-        point = ShapeGeometry.SceneCanvas(scene, view.CameraView).ToCanvasPoint(point);
+        point = ShapeGeometry.WorldCanvas(entity.mManager, view.CameraView).ToCanvasPoint(point);
     }
     const scale = transform.GetWorldScale();
     if (scale.x == 0 or scale.y == 0) return null;

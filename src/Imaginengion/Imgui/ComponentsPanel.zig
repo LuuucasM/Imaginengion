@@ -33,6 +33,7 @@ const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 const Tracy = @import("../Core/Tracy.zig");
+const ComponentList = @import("../EditorPanels/ComponentList.zig");
 
 _P_Open: bool = true,
 
@@ -205,45 +206,7 @@ fn NewObjectComponentPopup(comptime ObjectType: type, engine_context: *EngineCon
         if (is_addable and !object.HasComponent(component_type)) {
             if (imgui.igMenuItem_Bool(component_type.Name.ptr, "", false, true)) {
                 defer imgui.igCloseCurrentPopup();
-                try AddFromPanel(component_type, engine_context, object);
-            }
-        }
-    }
-}
-
-/// Adds a component the way picking it from the panel's menu does: at its defaults, except that adding layout to
-/// something with a quad keeps the quad the size it is. A layout item starts at the quad's size, fixed, and a
-/// container with no item gets one like that. Fitting would shrink the quad to nothing, since layout only ever sizes
-/// a quad (it's the element's background), and never fits to one. Code, files and templates add exactly what they're
-/// given instead: a saved Fit is a real choice, and can't be told apart from a default one
-pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContext, object: anytype) !void {
-    if (comptime @TypeOf(object) == Entity and (component_type == LayoutItemComponent or component_type == LayoutComponent)) {
-        if (object.GetComponent(QuadComponent)) |quad| {
-            const keeps_size = LayoutItemComponent{ .mWidth = .{ .Fixed = quad.mSize.x }, .mHeight = .{ .Fixed = quad.mSize.y } };
-            if (component_type == LayoutItemComponent) {
-                _ = try object.AddComponent(engine_context, keeps_size);
-                return;
-            }
-            _ = try object.AddComponent(engine_context, LayoutComponent{});
-            if (!object.HasComponent(LayoutItemComponent)) _ = try object.AddComponent(engine_context, keeps_size);
-            return;
-        }
-    }
-    _ = try object.AddComponent(engine_context, component_type{});
-    //what a UI component needs of its entity, given the way picking it from the entity's menu would give it: a popup
-    //opens and closes through the entity's layout item, a scroll cuts off what runs past with the entity's clip, and a
-    //number field shows the entity's attribute, a float to start with
-    if (comptime @TypeOf(object) == UIElement) {
-        const owner = object.GetOwner();
-        if (owner.IsActive()) {
-            if (comptime component_type == PopupComponent) {
-                if (!owner.HasComponent(LayoutItemComponent)) try AddFromPanel(LayoutItemComponent, engine_context, owner);
-            }
-            if (comptime component_type == ScrollComponent) {
-                if (!owner.HasComponent(ClipComponent)) _ = try owner.AddComponent(engine_context, ClipComponent{});
-            }
-            if (comptime component_type == UIComponents.NumberFieldComponent) {
-                if (!owner.HasComponent(AttribComponent)) _ = try owner.AddComponent(engine_context, AttribComponent{ .mData = .{ .float32 = 0 } });
+                try ComponentList.AddFromPanel(component_type, engine_context, object);
             }
         }
     }

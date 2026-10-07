@@ -96,6 +96,16 @@ test "an entity tree round trips, children included" {
     try std.testing.expect(grandchild_iter.next() != null);
 }
 
+test "a scene component from before the scale mode moved to the world still loads, its old key skipped" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const json = "{\"OverlayScaleMode\":\"ConstantPixelSize\"}";
+    const scene_component = try std.json.parseFromSliceLeaky(SceneComponent, engine_context.FrameAllocator(), json, .{});
+    try std.testing.expect(scene_component.mLayoutArea == null);
+}
+
 test "a scene round trips with its entities and takes its slot in the scene stack" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -104,7 +114,6 @@ test "a scene round trips with its entities and takes its slot in the scene stac
 
     const game_layer = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    overlay.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
     const button = try overlay.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try button.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     _ = try overlay.CreateEntity(engine_context, Entity.DefaultConfig);
@@ -115,9 +124,8 @@ test "a scene round trips with its entities and takes its slot in the scene stac
     const loaded = try scene_manager.CreateBlankScene(engine_context);
     try TextSerializer.DeserializeECSObj(engine_context, loaded, path);
 
-    const scene_component = loaded.GetComponent(SceneComponent).?;
+    try std.testing.expect(loaded.GetComponent(SceneComponent) != null);
     try std.testing.expectEqual(.OverlayLayer, loaded.GetLayer());
-    try std.testing.expectEqual(.ConstantPixelSize, scene_component.mOverlayScaleMode);
     try std.testing.expectEqual(overlay.GetUUID(), loaded.GetUUID());
 
     //slotted in above the game layer and the first overlay, the same as a new overlay would be

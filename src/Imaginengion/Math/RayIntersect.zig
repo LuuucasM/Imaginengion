@@ -109,14 +109,25 @@ fn SlabTest(local_origin: V3, local_dir: V3, half: V3) ?Slabs {
 /// read the right way round from outside, so the Neg faces come out mirrored.
 pub fn RayBox(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_extents: Vec3(f32)) HitInfo {
     //in the box's own space it is axis aligned and centered on the origin
-    const local_origin = ray.Origin.SubVec(center).InvQuatRotate(rotation).ToVector();
-    const local_dir = ray.Dir.InvQuatRotate(rotation).ToVector();
+    const local_origin = ray.Origin.SubVec(center).InvQuatRotate(rotation);
+    const local_dir = ray.Dir.InvQuatRotate(rotation);
+    var hit = RayBoxLocal(local_origin, local_dir, half_extents);
+    if (hit.IsHit()) hit.Normal = hit.Normal.QuatRotate(rotation);
+    return hit;
+}
+
+/// RayBox with the ray already in the box's own space, where it is axis aligned and centered on the origin: for a
+/// caller that has its own way into that space, like the renderer's precomputed shape axes. Everything it returns is
+/// in that space too, Normal included. `local_dir` has to be normalized, so T is still in world units
+pub fn RayBoxLocal(local_origin_vec: Vec3(f32), local_dir_vec: Vec3(f32), half_extents: Vec3(f32)) HitInfo {
+    const local_origin = local_origin_vec.ToVector();
+    const local_dir = local_dir_vec.ToVector();
     const half = half_extents.ToVector();
 
     const slabs = SlabTest(local_origin, local_dir, half) orelse return .miss;
 
     if (slabs.Enter < 0) {
-        return .{ .T = 0, .TExit = slabs.Exit, .Normal = ray.Dir.Neg(), .StartedInside = true };
+        return .{ .T = 0, .TExit = slabs.Exit, .Normal = local_dir_vec.Neg(), .StartedInside = true };
     }
 
     //the face that was entered through belongs to the axis whose enter time is the box's.
@@ -146,7 +157,7 @@ pub fn RayBox(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_extents: Ve
     return .{
         .T = slabs.Enter,
         .TExit = slabs.Exit,
-        .Normal = Vec3(f32).FromVector(local_normal).Dir().QuatRotate(rotation),
+        .Normal = Vec3(f32).FromVector(local_normal).Dir(),
         .StartedInside = false,
         .Face = face,
         .UV = uv,
@@ -284,6 +295,27 @@ fn RoundedBoxEntry(local_origin: V3, local_dir: V3, inner: V3, radius: f32) f32 
 pub fn RayRoundedBox2D(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_extents: Vec3(f32), radii: Vec4(f32)) HitInfo {
     const local_origin = ray.Origin.SubVec(center).InvQuatRotate(rotation);
     const local_dir = ray.Dir.InvQuatRotate(rotation);
+    var hit = RayRoundedBox2DLocal(local_origin, local_dir, half_extents, radii);
+    if (hit.IsHit()) hit.Normal = hit.Normal.QuatRotate(rotation);
+    return hit;
+}
+
+/// RayRoundedBox2D with the ray already in the plate's own space, the same as RayBoxLocal: everything it returns is
+/// in that space too, Normal included, and `local_dir` has to be normalized
+pub fn RayRoundedBox2DLocal(local_origin: Vec3(f32), local_dir: Vec3(f32), half_extents: Vec3(f32), radii: Vec4(f32)) HitInfo {
+    //square corners leave nothing to round, so it's the plain box, without the corner circles. Only its sides differ:
+    //here a hit on one has no Face, the same as on the rounded path
+    if (radii.x == 0 and radii.y == 0 and radii.z == 0 and radii.w == 0) {
+        var hit = RayBoxLocal(local_origin, local_dir, half_extents);
+        if (hit.Face) |face| {
+            if (face != .PosZ and face != .NegZ) {
+                hit.Face = null;
+                hit.UV = .{ .x = -1, .y = -1 };
+            }
+        }
+        return hit;
+    }
+
     const origin_2d = Vec2(f32){ .x = local_origin.x, .y = local_origin.y };
     const dir_2d = Vec2(f32){ .x = local_dir.x, .y = local_dir.y };
     const half_2d = Vec2(f32){ .x = half_extents.x, .y = half_extents.y };
@@ -298,7 +330,7 @@ pub fn RayRoundedBox2D(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_ex
     if (enter > exit or exit < 0) return .miss;
 
     if (enter < 0) {
-        return .{ .T = 0, .TExit = exit, .Normal = ray.Dir.Neg(), .StartedInside = true };
+        return .{ .T = 0, .TExit = exit, .Normal = local_dir.Neg(), .StartedInside = true };
     }
 
     const local_point = local_origin.AddVec(local_dir.MulScalar(enter));
@@ -309,7 +341,7 @@ pub fn RayRoundedBox2D(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_ex
         return .{
             .T = enter,
             .TExit = exit,
-            .Normal = (Vec3(f32){ .x = 0, .y = 0, .z = if (front) 1.0 else -1.0 }).QuatRotate(rotation),
+            .Normal = .{ .x = 0, .y = 0, .z = if (front) 1.0 else -1.0 },
             .StartedInside = false,
             .Face = if (front) .PosZ else .NegZ,
             .UV = .{
@@ -323,16 +355,32 @@ pub fn RayRoundedBox2D(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_ex
     return .{
         .T = enter,
         .TExit = exit,
-        .Normal = (Vec3(f32){ .x = side.x, .y = side.y, .z = 0 }).QuatRotate(rotation),
+        .Normal = .{ .x = side.x, .y = side.y, .z = 0 },
         .StartedInside = false,
     };
 }
 
 /// The span of a whole line, forward and back, that is inside something.
-const Span = struct {
+pub const Span = struct {
     Enter: f32,
     Exit: f32,
 };
+
+/// The part of a ray inside an axis aligned box (min to max): from where it enters to where it leaves, in the ray's
+/// own distance units. Enter is negative for a ray that starts inside. Null when the ray never is, or only behind
+/// its origin. `inv_dir` is 1 / the ray's direction per axis, worked out once per ray by the caller, since a BVH walk
+/// tests one ray against many boxes. The same slab test as SlabTest, so a direction parallel to an axis works the
+/// same way: its slab either never limits the ray or rules it out
+pub fn RayAabb(origin: Vec3(f32), inv_dir: Vec3(f32), min: Vec3(f32), max: Vec3(f32)) ?Span {
+    const o = origin.ToVector();
+    const inv = inv_dir.ToVector();
+    const t_min = (min.ToVector() - o) * inv;
+    const t_max = (max.ToVector() - o) * inv;
+    const enter = @reduce(.Max, @min(t_min, t_max));
+    const exit = @reduce(.Min, @max(t_min, t_max));
+    if (enter > exit or exit < 0) return null;
+    return .{ .Enter = enter, .Exit = exit };
+}
 
 /// When a line along one axis is between -half and half. Parallel to it is always or never.
 fn LineSpan(origin: f32, dir: f32, half: f32) ?Span {

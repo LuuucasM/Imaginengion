@@ -13,6 +13,7 @@ const TextureManager = @import("../TextureManager/TextureManager.zig");
 
 const RayIntersect = @import("RayIntersect.zig");
 const HitInfo = RayIntersect.HitInfo;
+const Aabb = @import("Aabb.zig");
 const Ray = @import("CameraRay.zig").Ray;
 
 pub const THICKNESS_2D: f32 = 0.001;
@@ -56,6 +57,16 @@ pub fn gradBox(point: Vec3(f32), half_extents: Vec3(f32)) Vec3(f32) {
         .y = if (point.y < 0.0) -grad.y else grad.y,
         .z = if (point.z < 0.0) -grad.z else grad.z,
     };
+}
+
+/// The bounding box of a box of `half_extents` centered on `center` and turned so its own axes point along `axis_x`,
+/// `axis_y` and `axis_z` (unit length, in world space). Each of its axes reaches |axis| times its half extent along
+/// the world axes, and those add up. Exact: it touches the box's furthest corner on every side, however it is turned
+pub fn aabbBox(center: Vec3(f32), axis_x: Vec3(f32), axis_y: Vec3(f32), axis_z: Vec3(f32), half_extents: Vec3(f32)) Aabb {
+    const reach = axis_x.Abs().MulScalar(half_extents.x)
+        .AddVec(axis_y.Abs().MulScalar(half_extents.y))
+        .AddVec(axis_z.Abs().MulScalar(half_extents.z));
+    return .{ .Min = center.SubVec(reach), .Max = center.AddVec(reach) };
 }
 
 /// iq's opRound: pushes a shape's surface out by `radius`, which rounds its edges and corners. It takes
@@ -141,11 +152,88 @@ pub fn GetLocalPoint(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32))
     return point.SubVec(position).InvQuatRotate(rotation);
 }
 
+/// A world point in a shape's own space, where it is axis aligned and centered on the origin, by its precomputed axes
+pub fn ShapeLocalPoint(shape: ShapeData, point: Vec3(f32)) Vec3(f32) {
+    const axis_x: Vec4(f32) = .FromVector(shape.AxisX);
+    const axis_y: Vec4(f32) = .FromVector(shape.AxisY);
+    const axis_z: Vec4(f32) = .FromVector(shape.AxisZ);
+    return .{
+        .x = axis_x.ToVec3().Dot(point) + axis_x.w,
+        .y = axis_y.ToVec3().Dot(point) + axis_y.w,
+        .z = axis_z.ToVec3().Dot(point) + axis_z.w,
+    };
+}
+
+/// A world direction in a shape's own space: turned, not moved
+pub fn ShapeLocalDir(shape: ShapeData, dir: Vec3(f32)) Vec3(f32) {
+    return .{
+        .x = Vec4(f32).FromVector(shape.AxisX).ToVec3().Dot(dir),
+        .y = Vec4(f32).FromVector(shape.AxisY).ToVec3().Dot(dir),
+        .z = Vec4(f32).FromVector(shape.AxisZ).ToVec3().Dot(dir),
+    };
+}
+
+/// A direction in a shape's own space back in world space, the other way from ShapeLocalDir: along each of its axes
+pub fn ShapeWorldDir(shape: ShapeData, local_dir: Vec3(f32)) Vec3(f32) {
+    return Vec4(f32).FromVector(shape.AxisX).ToVec3().MulScalar(local_dir.x)
+        .AddVec(Vec4(f32).FromVector(shape.AxisY).ToVec3().MulScalar(local_dir.y))
+        .AddVec(Vec4(f32).FromVector(shape.AxisZ).ToVec3().MulScalar(local_dir.z));
+}
+
+/// Where a shape is centered, back out of its precomputed axes: each axis's w is -dot(axis, center), and the axes are
+/// at right angles to each other and unit length, so the center is minus the sum of each axis times its w
+pub fn ShapeCenter(shape: ShapeData) Vec3(f32) {
+    const axis_x: Vec4(f32) = .FromVector(shape.AxisX);
+    const axis_y: Vec4(f32) = .FromVector(shape.AxisY);
+    const axis_z: Vec4(f32) = .FromVector(shape.AxisZ);
+    return axis_x.ToVec3().MulScalar(-axis_x.w)
+        .AddVec(axis_y.ToVec3().MulScalar(-axis_y.w))
+        .AddVec(axis_z.ToVec3().MulScalar(-axis_z.w));
+}
+
+/// aabbBox for a shape whose bounds are its Size box, turned by its axes
+fn aabbIMBoxShape(shape: ShapeData) Aabb {
+    return aabbBox(
+        ShapeCenter(shape),
+        Vec4(f32).FromVector(shape.AxisX).ToVec3(),
+        Vec4(f32).FromVector(shape.AxisY).ToVec3(),
+        Vec4(f32).FromVector(shape.AxisZ).ToVec3(),
+        .FromVector(shape.Size),
+    );
+}
+
+/// A quad's bounding box: its whole plate. Rounded corners only cut into it, so the box around the square one still
+/// touches its flat sides and is as tight as any box can be
+pub fn aabbIMQuad(quad: ShapeData) Aabb {
+    return aabbIMBoxShape(quad);
+}
+
+/// A glyph's bounding box: its box
+pub fn aabbIMGlyph(glyph: ShapeData) Aabb {
+    return aabbIMBoxShape(glyph);
+}
+
+/// Any shape's bounding box, by its kind: the aabb function of each, the way the shader picks each one's sd and ray
+/// functions. A new kind of shape adds its own here
+pub fn aabbIMShape(shape: ShapeData) Aabb {
+    return switch (shape.Type) {
+        .Quad => aabbIMQuad(shape),
+        .Glyph => aabbIMGlyph(shape),
+        .None => Aabb.empty,
+    };
+}
+
+fn HasSquareCorners(quad: ShapeData) bool {
+    const radii: Vec4(f32) = .FromVector(quad.Params);
+    return radii.x == 0 and radii.y == 0 and radii.z == 0 and radii.w == 0;
+}
+
 /// A quad is a thin plate: its 2D rounded box extruded to its thickness. Square corners (radii of 0) make it
-/// exactly the plain box. Its corner radii are its Params
+/// exactly the plain box, which is what one with them gets, without the rounding's math. Its corner radii are its Params
 pub fn sdIMQuad(point: Vec3(f32), quad: ShapeData) f32 {
-    const local_point = GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation));
+    const local_point = ShapeLocalPoint(quad, point);
     const half_extents: Vec3(f32) = .FromVector(quad.Size);
+    if (HasSquareCorners(quad)) return sdBox(local_point, half_extents);
     const distance_2d = sdRoundedBox2D(
         .{ .x = local_point.x, .y = local_point.y },
         .{ .x = half_extents.x, .y = half_extents.y },
@@ -157,7 +245,7 @@ pub fn sdIMQuad(point: Vec3(f32), quad: ShapeData) f32 {
 /// Whether a point on the quad is in its border band: within border_width (its ShapeSurface's) of its (rounded) edge
 pub fn InIMQuadBorder(point: Vec3(f32), quad: ShapeData, border_width: f32) bool {
     if (border_width <= 0) return false;
-    const local_point = GetLocalPoint(point, .FromVector(quad.Position), .FromVector(quad.Rotation));
+    const local_point = ShapeLocalPoint(quad, point);
     const half_extents: Vec3(f32) = .FromVector(quad.Size);
     const distance_2d = sdRoundedBox2D(
         .{ .x = local_point.x, .y = local_point.y },
@@ -193,18 +281,23 @@ pub fn InIMClip(point: Vec3(f32), clip: ClipData) bool {
 pub const UNTEXTURED_UV: Vec3(f32) = .{ .x = 0, .y = 0, .z = -2 };
 
 pub fn sdIMGlyph(point: Vec3(f32), glyph: ShapeData) f32 {
-    return sdBox(GetLocalPoint(point, .FromVector(glyph.Position), .FromVector(glyph.Rotation)), .FromVector(glyph.Size));
+    return sdBox(ShapeLocalPoint(glyph, point), .FromVector(glyph.Size));
 }
 
-/// The ray against the quad's box: where it hits, which face, and where on it.
+/// The ray against the quad's box: where it hits, which face, and where on it. Tested in the quad's own space, with
+/// the normal turned back into world space
 pub fn rayIMQuad(ray: Ray, quad: ShapeData) HitInfo {
-    return RayIntersect.RayRoundedBox2D(ray, .FromVector(quad.Position), .FromVector(quad.Rotation), .FromVector(quad.Size), .FromVector(quad.Params));
+    var hit = RayIntersect.RayRoundedBox2DLocal(ShapeLocalPoint(quad, ray.Origin), ShapeLocalDir(quad, ray.Dir), .FromVector(quad.Size), .FromVector(quad.Params));
+    if (hit.IsHit()) hit.Normal = ShapeWorldDir(quad, hit.Normal);
+    return hit;
 }
 
-/// The ray against the glyph's box, centered on its Position.
+/// The ray against the glyph's box, the same way as rayIMQuad.
 /// UV is where in the glyph's box, which is what GetMSD and TextureUV take, not a texture manager UV.
 pub fn rayIMGlyph(ray: Ray, glyph: ShapeData) HitInfo {
-    return RayIntersect.RayBox(ray, .FromVector(glyph.Position), .FromVector(glyph.Rotation), .FromVector(glyph.Size));
+    var hit = RayIntersect.RayBoxLocal(ShapeLocalPoint(glyph, ray.Origin), ShapeLocalDir(glyph, ray.Dir), .FromVector(glyph.Size));
+    if (hit.IsHit()) hit.Normal = ShapeWorldDir(glyph, hit.Normal);
+    return hit;
 }
 
 /// A 0 to 1 position within a texture, as the texture manager's UV for that texture's slot.

@@ -6,6 +6,7 @@ const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
 const RefMap = @import("../../ECSObjects/ECSObject.zig").RefMap;
 const UIManager = @import("../../UI/UIManager.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 
 const PopupRefComponent = @This();
 
@@ -18,6 +19,11 @@ pub const Name: []const u8 = "PopupRefComponent";
 mPopup: Entity = .uninit,
 
 pub fn Deinit(_: *PopupRefComponent, _: *EngineContext) void {}
+
+/// The popup's name, shown only: there is nothing in the editor's own UI to drag an entity from yet
+pub fn UIRender(self: *PopupRefComponent, ui: *Inspector.Builder) !void {
+    try ui.EntityName(&self.mPopup, "Popup");
+}
 
 pub fn EditorRender(self: *PopupRefComponent, engine_context: *EngineContext) !void {
     if (try ImguiManager.RenderEntityRef(engine_context, &self.mPopup, "Popup")) |entity| self.mPopup = entity;

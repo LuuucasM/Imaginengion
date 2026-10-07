@@ -154,8 +154,7 @@ pub fn PointerPoint(popup: Entity, pointer_input: PointerSystem.Input) ?Vec2(f32
     switch (popup.GetLayer()) {
         .OverlayLayer => {
             const view = pointer_input.View orelse return null;
-            const scene = popup.GetComponent(EntitySceneComponent).?.mScene;
-            const point = ShapeGeometry.SceneCanvas(scene, view.CameraView).RayToCanvasPoint(view.Ray) orelse return null;
+            const point = ShapeGeometry.WorldCanvas(popup.mManager, view.CameraView).RayToCanvasPoint(view.Ray) orelse return null;
             return .{ .x = point.x, .y = point.y };
         },
         .GameLayer => {

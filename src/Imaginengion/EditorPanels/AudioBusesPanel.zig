@@ -172,9 +172,7 @@ fn BuildBus(self: *AudioBusesPanel, engine_context: *EngineContext, bus: Bus, pa
 
 /// The rows of one of the bus's components. A bus read from a hand edited file may be missing any of them
 fn Rows(self: AudioBusesPanel, engine_context: *EngineContext, bus: Bus, content: Entity, comptime component_type: type) !void {
-    const component = bus.GetComponent(component_type) orelse return;
-    var builder = Inspector.ForComponent(engine_context, content, content, bus, component_type, self.mOptions);
-    try component.UIRender(&builder);
+    try Inspector.RenderComponent(engine_context, content, content, bus, component_type, self.mOptions);
 }
 
 fn NameOf(bus: Bus) []const u8 {

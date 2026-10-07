@@ -126,18 +126,17 @@ pub fn OnImguiRender(self: PickingDebugPanel, engine_context: *EngineContext, vi
     imgui.igSeparator();
 
     //the canvas point under the mouse for each overlay scene this view shows, placed the same way the
-    //renderer placed it (see ShapeGeometry.SceneCanvas)
+    //renderer placed it (see ShapeGeometry.WorldCanvas): the world's one screen space, which they all share
+    const pixels_per_unit = world.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
+    const canvas = ShapeGeometry.WorldCanvas(world, camera_view);
     var overlay_count: usize = 0;
     for (view_scenes.Overlays) |scene_id| {
         const scene = world.GetScene(scene_id);
-        const scene_component = scene.GetComponent(SceneComponent).?;
         overlay_count += 1;
 
-        const pixels_per_unit = scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
-        const canvas = ShapeGeometry.SceneCanvas(scene, camera_view);
         const scene_name = if (scene.GetComponent(SceneNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
 
-        try Text(frame_allocator, "Overlay '{s}' ({s}, {d:.2} px per unit)", .{ scene_name, @tagName(scene_component.mOverlayScaleMode), pixels_per_unit });
+        try Text(frame_allocator, "Overlay '{s}' ({s}, {d:.2} px per unit)", .{ scene_name, @tagName(world.mOverlayScaleMode), pixels_per_unit });
         if (canvas.RayToCanvasPoint(ray)) |point| {
             try Text(frame_allocator, "\tCanvas point: {d:.1}, {d:.1}", .{ point.x, point.y });
         } else {

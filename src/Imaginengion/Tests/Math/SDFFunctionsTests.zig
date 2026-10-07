@@ -4,6 +4,8 @@ const SDFFunc = @import("../../Math/SDFFunctions.zig");
 const RayIntersect = @import("../../Math/RayIntersect.zig");
 const Ray = @import("../../Math/CameraRay.zig").Ray;
 const ShapeData = @import("../../Renderer/Renderer2D.zig").ShapeData;
+const ShapeAxes = @import("../../Renderer/Renderer2D.zig").ShapeAxes;
+const Aabb = @import("../../Math/Aabb.zig");
 const ClipData = @import("../../Renderer/Renderer2D.zig").ClipData;
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
@@ -19,9 +21,11 @@ fn MakeQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32)) ShapeData {
 }
 
 fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32), radii: Vec4(f32)) ShapeData {
+    const axes = ShapeAxes(center, rotation);
     return .{
-        .Rotation = rotation.ToArray(),
-        .Position = center.ToArray(),
+        .AxisX = axes[0],
+        .AxisY = axes[1],
+        .AxisZ = axes[2],
         .Size = half.ToArray(),
         .Params = radii.ToArray(),
         .Type = .Quad,
@@ -61,9 +65,11 @@ test "gradBox past an edge blends the two faces" {
 //==================================rayIM==================================
 
 fn MakeGlyph(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32)) ShapeData {
+    const axes = ShapeAxes(center, rotation);
     return .{
-        .Rotation = rotation.ToArray(),
-        .Position = center.ToArray(),
+        .AxisX = axes[0],
+        .AxisY = axes[1],
+        .AxisZ = axes[2],
         .Size = half.ToArray(),
         .Params = .{ 0, 0, 0, 0 },
         .Type = .Glyph,
@@ -263,4 +269,103 @@ test "a turned clip region turns its rectangle" {
     const clip = MakeClip(.{ .x = 0, .y = 0, .z = 0 }, quarter, .{ .x = 2, .y = 1 });
     try std.testing.expect(SDFFunc.InIMClip(.{ .x = 0, .y = 1.5, .z = 0 }, clip));
     try std.testing.expect(!SDFFunc.InIMClip(.{ .x = 1.5, .y = 0, .z = 0 }, clip));
+}
+
+//==================================a shape's own space==================================
+
+test "a shape's axes take a world point into its own space, and a direction there and back" {
+    const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = 1, .y = -2, .z = 0.5 }).Dir(), 1.1);
+    const center = Vec3(f32){ .x = 3, .y = -1, .z = 2 };
+    const shape = MakeQuad(center, rotation, .{ .x = 1, .y = 1, .z = SDFFunc.THICKNESS_2D });
+
+    //a point that is `local` in the shape's space is the center plus `local` turned by the shape
+    const local = Vec3(f32){ .x = 0.4, .y = -0.7, .z = 0.2 };
+    try ExpectVec3(local, SDFFunc.ShapeLocalPoint(shape, center.AddVec(local.QuatRotate(rotation))));
+    try ExpectVec3(.{ .x = 0, .y = 0, .z = 0 }, SDFFunc.ShapeLocalPoint(shape, center));
+
+    //directions turn the same way, aren't moved by the center, and come back out as they went in
+    try ExpectVec3(.{ .x = 1, .y = 0, .z = 0 }, SDFFunc.ShapeLocalDir(shape, (Vec3(f32){ .x = 1, .y = 0, .z = 0 }).QuatRotate(rotation)));
+    const dir = (Vec3(f32){ .x = -0.3, .y = 0.8, .z = 0.5 }).Dir();
+    try ExpectVec3(dir, SDFFunc.ShapeWorldDir(shape, SDFFunc.ShapeLocalDir(shape, dir)));
+}
+
+test "a turned quad's ray hit and distance agree with a quaternion turned one" {
+    //the precomputed axes have to put the quad where RayRoundedBox2D with its center and rotation does
+    const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = 0.2, .y = 1, .z = -0.4 }).Dir(), 0.6);
+    const center = Vec3(f32){ .x = -1, .y = 0.5, .z = 0.3 };
+    const half = Vec3(f32){ .x = 1.5, .y = 0.75, .z = SDFFunc.THICKNESS_2D };
+    const radii = Vec4(f32){ .x = 0.2, .y = 0.1, .z = 0.3, .w = 0 };
+    const quad = MakeRoundedQuad(center, rotation, half, radii);
+
+    const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 8 }, .Dir = center.SubVec(.{ .x = 0, .y = 0, .z = 8 }).Dir() };
+    const expected = RayIntersect.RayRoundedBox2D(ray, center, rotation, half, radii);
+    const actual = SDFFunc.rayIMQuad(ray, quad);
+    try std.testing.expect(expected.IsHit() and actual.IsHit());
+    try std.testing.expectApproxEqAbs(expected.T, actual.T, eps);
+    try ExpectVec3(expected.Normal, actual.Normal);
+    try std.testing.expectEqual(expected.Face, actual.Face);
+
+    const point = ray.Origin.AddVec(ray.Dir.MulScalar(actual.T));
+    try std.testing.expectApproxEqAbs(@as(f32, 0), SDFFunc.sdIMQuad(point, quad), 0.001);
+}
+
+//==================================bounding boxes==================================
+
+/// The 8 corners of a box of `half` around `center`, turned by `rotation`
+fn BoxCorners(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32)) [8]Vec3(f32) {
+    var corners: [8]Vec3(f32) = undefined;
+    for (&corners, 0..) |*corner, i| {
+        const local = Vec3(f32){
+            .x = if (i & 1 != 0) half.x else -half.x,
+            .y = if (i & 2 != 0) half.y else -half.y,
+            .z = if (i & 4 != 0) half.z else -half.z,
+        };
+        corner.* = center.AddVec(local.QuatRotate(rotation));
+    }
+    return corners;
+}
+
+fn Axis(rotation: Quat(f32), x: f32, y: f32, z: f32) Vec3(f32) {
+    return (Vec3(f32){ .x = x, .y = y, .z = z }).QuatRotate(rotation);
+}
+
+test "an unturned box's bounding box is its center plus and minus its half extents" {
+    const center = Vec3(f32){ .x = 2, .y = -1, .z = 3 };
+    const half = Vec3(f32){ .x = 1, .y = 0.5, .z = 2 };
+    const bounds = SDFFunc.aabbBox(center, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 0, .y = 0, .z = 1 }, half);
+    try ExpectVec3(center.SubVec(half), bounds.Min);
+    try ExpectVec3(center.AddVec(half), bounds.Max);
+}
+
+test "a turned box's bounding box holds all its corners and touches one on every side" {
+    const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = 0.3, .y = -1, .z = 0.7 }).Dir(), 0.9);
+    const center = Vec3(f32){ .x = -1, .y = 2, .z = 0.5 };
+    const half = Vec3(f32){ .x = 1.5, .y = 0.4, .z = 0.8 };
+    const bounds = SDFFunc.aabbBox(center, Axis(rotation, 1, 0, 0), Axis(rotation, 0, 1, 0), Axis(rotation, 0, 0, 1), half);
+    //the box around the corners themselves: holding every corner, and reaching one on every side, is being exactly it
+    var around_corners = Aabb.empty;
+    for (BoxCorners(center, rotation, half)) |corner| around_corners = around_corners.Union(.{ .Min = corner, .Max = corner });
+    try ExpectVec3(around_corners.Min, bounds.Min);
+    try ExpectVec3(around_corners.Max, bounds.Max);
+}
+
+test "a thin plate facing the camera keeps its thickness in its bounding box" {
+    const quad = MakeQuad(.{ .x = 0, .y = 0, .z = 5 }, IDENTITY, .{ .x = 2, .y = 1, .z = SDFFunc.THICKNESS_2D });
+    const bounds = SDFFunc.aabbIMQuad(quad);
+    try std.testing.expectApproxEqAbs(@as(f32, 2 * SDFFunc.THICKNESS_2D), bounds.Max.z - bounds.Min.z, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 4), bounds.Max.x - bounds.Min.x, eps);
+}
+
+test "a shape's bounding box comes from its axes the same as from its center and rotation" {
+    const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = 1, .y = 0.5, .z = -0.2 }).Dir(), 2.1);
+    const center = Vec3(f32){ .x = 4, .y = -3, .z = 1 };
+    const half = Vec3(f32){ .x = 0.6, .y = 1.2, .z = SDFFunc.THICKNESS_2D };
+    const expected = SDFFunc.aabbBox(center, Axis(rotation, 1, 0, 0), Axis(rotation, 0, 1, 0), Axis(rotation, 0, 0, 1), half);
+
+    const quad = MakeRoundedQuad(center, rotation, half, .{ .x = 0.2, .y = 0.2, .z = 0.2, .w = 0.2 });
+    try ExpectVec3(center, SDFFunc.ShapeCenter(quad));
+    for ([_]Aabb{ SDFFunc.aabbIMQuad(quad), SDFFunc.aabbIMShape(quad), SDFFunc.aabbIMShape(MakeGlyph(center, rotation, half)) }) |bounds| {
+        try ExpectVec3(expected.Min, bounds.Min);
+        try ExpectVec3(expected.Max, bounds.Max);
+    }
 }

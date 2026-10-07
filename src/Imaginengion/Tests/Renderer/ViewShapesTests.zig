@@ -146,31 +146,40 @@ test "the game layer can be the whole world, one scene or none" {
     try std.testing.expectEqual(@as(usize, 0), (try Gather(engine_context, .{ .Game = .None, .Overlays = &.{} })).len);
 }
 
-test "each overlay scene gets the canvas of its own scale mode" {
+test "every overlay scene of a world is on the world's one canvas" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
     const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    hud.GetComponent(SceneComponent).?.mOverlayScaleMode = .ScaleWithScreen;
     const tools = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    tools.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
-    const health = try AddQuad(engine_context, hud);
-    const gizmo = try AddQuad(engine_context, tools);
+    _ = try AddQuad(engine_context, hud);
+    _ = try AddQuad(engine_context, tools);
 
     const shapes = try Gather(engine_context, .{ .Overlays = &.{ hud.mID, tools.mID } });
-
+    try std.testing.expectEqual(@as(usize, 2), shapes.len);
+    const expected = ShapeGeometry.WorldCanvas(&engine_context.mEditorWorld, VIEW);
     for (shapes) |shape| {
-        const scene = if (shape.Entity.mID == health.mID) hud else if (shape.Entity.mID == gizmo.mID) tools else unreachable;
-        const expected = ShapeGeometry.SceneCanvas(scene, VIEW);
         try std.testing.expectEqual(expected.Scale, shape.Canvas.?.Scale);
+        try std.testing.expect(expected.Position.x == shape.Canvas.?.Position.x and expected.Position.y == shape.Canvas.?.Position.y and expected.Position.z == shape.Canvas.?.Position.z);
     }
+}
+
+test "the world's scale mode decides how big its canvas unit is" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const editor_world = &engine_context.mEditorWorld;
+
+    editor_world.mOverlayScaleMode = .ScaleWithScreen;
+    const scaled = ShapeGeometry.WorldCanvas(editor_world, VIEW).Scale;
+    editor_world.mOverlayScaleMode = .ConstantPixelSize;
+    const constant = ShapeGeometry.WorldCanvas(editor_world, VIEW).Scale;
 
     //a canvas unit is k pixels, so the canvases are scaled apart by the ratio of their pixels per unit
-    const hud_k = OverlayCanvas.PixelsPerUnit(.ScaleWithScreen, HEIGHT, DISPLAY_SCALE);
-    const tools_k = OverlayCanvas.PixelsPerUnit(.ConstantPixelSize, HEIGHT, DISPLAY_SCALE);
-    const ratio = ShapeGeometry.SceneCanvas(hud, VIEW).Scale / ShapeGeometry.SceneCanvas(tools, VIEW).Scale;
-    try std.testing.expectApproxEqRel(hud_k / tools_k, ratio, 0.0001);
+    const scaled_k = OverlayCanvas.PixelsPerUnit(.ScaleWithScreen, HEIGHT, DISPLAY_SCALE);
+    const constant_k = OverlayCanvas.PixelsPerUnit(.ConstantPixelSize, HEIGHT, DISPLAY_SCALE);
+    try std.testing.expectApproxEqRel(scaled_k / constant_k, scaled / constant, 0.0001);
 }
 
 test "only entities matching the query are gathered" {
@@ -311,7 +320,7 @@ test "a clip region inside another is cut to both, and an overlay's is placed by
     try std.testing.expectEqual(inner.mID, deep_clip.Owner);
     try ExpectRect(.{ .x = 10.5, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 1 }, deep_clip.Rect);
 
-    const canvas = ShapeGeometry.SceneCanvas(hud, VIEW);
+    const canvas = ShapeGeometry.WorldCanvas(hud.mManager, VIEW);
     try ExpectRect(canvas.ToWorldPoint(.{ .x = 100, .y = 50, .z = 0 }), .{ .x = 100 * canvas.Scale, .y = 50 * canvas.Scale }, Find(shapes, row).Clip.?.Rect);
 }
 
@@ -346,14 +355,14 @@ test "a viewport quad covers its size times the pixels a canvas unit covers, and
     const viewport = try AddQuad(engine_context, overlay);
     viewport.GetComponent(QuadComponent).?.mSize = .{ .x = 400, .y = 225 };
 
-    //a constant pixel size overlay: a canvas unit is a pixel at the display's scale
-    overlay.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
+    //a constant pixel size world's overlay: a canvas unit is a pixel at the display's scale
+    engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
     const sharp = Viewports.PixelSizeOf(viewport, VIEW).?;
     try std.testing.expectEqual(@as(usize, 800), sharp.Width);
     try std.testing.expectEqual(@as(usize, 450), sharp.Height);
 
     //one that scales with the screen: a 900 tall view is 900 / 1080 of a pixel a unit
-    overlay.GetComponent(SceneComponent).?.mOverlayScaleMode = .ScaleWithScreen;
+    engine_context.mEditorWorld.mOverlayScaleMode = .ScaleWithScreen;
     const scaled = Viewports.PixelSizeOf(viewport, VIEW).?;
     try std.testing.expectEqual(@as(usize, 333), scaled.Width);
     try std.testing.expectEqual(@as(usize, 188), scaled.Height);
@@ -364,7 +373,7 @@ test "a viewport quad covers its size times the pixels a canvas unit covers, and
 
 /// The ray from VIEW's camera through a point of an overlay scene's canvas
 fn RayThroughCanvas(scene: Scene, canvas_point: Vec3(f32)) @import("../../Math/CameraRay.zig").Ray {
-    const world_point = ShapeGeometry.SceneCanvas(scene, VIEW).ToWorldPoint(canvas_point);
+    const world_point = ShapeGeometry.WorldCanvas(scene.mManager, VIEW).ToWorldPoint(canvas_point);
     var dir = world_point.SubVec(VIEW.Pose.Position);
     dir.Normalize();
     return .{ .Origin = VIEW.Pose.Position, .Dir = dir };

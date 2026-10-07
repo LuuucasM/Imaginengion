@@ -1,6 +1,7 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 const TextInputComponent = @This();
 
 pub const Editable: bool = true;
@@ -21,6 +22,10 @@ pub const FocusOn = enum {
 };
 
 pub fn Deinit(_: *TextInputComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *TextInputComponent, ui: *Inspector.Builder) !void {
+    try ui.Enum(FocusOn, &self.mFocusOn, "Focus On", .{});
+}
 
 pub fn EditorRender(self: *TextInputComponent, _: *EngineContext) !void {
     try ImguiManager.RenderEnum(FocusOn, &self.mFocusOn, "Focus On");

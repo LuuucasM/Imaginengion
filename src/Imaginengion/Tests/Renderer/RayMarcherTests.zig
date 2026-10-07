@@ -20,6 +20,7 @@ const Renderer = @import("../../Renderer/Renderer.zig");
 const SurfShadingData = Renderer.SurfShadingData;
 const MedShadingData = Renderer.MedShadingData;
 const SDFRayMarcher = @import("../../Renderer/SDFRayMarcher.zig");
+const BVH = @import("../../Core/BVH.zig");
 
 const eps: f32 = 0.0001;
 
@@ -87,15 +88,25 @@ fn ColorShading(color: Vec4(f32)) SurfShadingData {
 const TestShape = struct {
     Shape: ShapeData,
     Surface: ShapeSurface,
+    /// When it was drawn, which is its SurfaceIndex. Its place in the scene's list when null. Set it to have the shape
+    /// buffer's order differ from the draw order, the way sorting the shapes for the BVH leaves them
+    DrawOrder: ?u32 = null,
 };
 
 fn MakeQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), shading: u32, flags: u32, clip_index: u32) TestShape {
+    return MakeRoundedQuad(center, rotation, half, 0, shading, flags, clip_index);
+}
+
+/// A quad with every corner rounded by `radius`. 0 is a square cornered one, which takes the plain box's fast path
+fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), radius: f32, shading: u32, flags: u32, clip_index: u32) TestShape {
+    const axes = Renderer2D.ShapeAxes(center, rotation);
     return .{
         .Shape = .{
-            .Rotation = rotation.ToArray(),
-            .Position = center.ToArray(),
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
             .Size = .{ half.x, half.y, SDFFunc.THICKNESS_2D },
-            .Params = .{ 0, 0, 0, 0 },
+            .Params = .{ radius, radius, radius, radius },
             .Type = .Quad,
             .ClipIndex = clip_index,
             .SurfaceIndex = undefined,
@@ -106,10 +117,12 @@ fn MakeQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), shading: u3
 }
 
 fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, flags: u32) TestShape {
+    const axes = Renderer2D.ShapeAxes(center, IDENTITY);
     return .{
         .Shape = .{
-            .Rotation = IDENTITY.ToArray(),
-            .Position = center.ToArray(),
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
             .Size = .{ half.x, half.y, SDFFunc.THICKNESS_2D },
             .Params = .{ 0, 0, 0, 0 },
             .Type = .Glyph,
@@ -141,6 +154,7 @@ const TestScene = struct {
 const TestMarcher = SDFRayMarcher.RayMarcher(
     [*]const ShapeData,
     [*]const ShapeSurface,
+    [*]const BVH.Node,
     [*]const ClipData,
     [*]const SurfShadingData,
     [*]const MedShadingData,
@@ -148,6 +162,8 @@ const TestMarcher = SDFRayMarcher.RayMarcher(
 );
 
 const MAX_TEST_SHAPES = 32;
+
+const NO_BVH_NODES = [0]BVH.Node{};
 
 /// The color one ray comes out with, found both ways a shape can be: with every shape direct (a ray test straight
 /// against each) and with every shape marched. The two have to agree, which keeps the march working while nothing
@@ -170,10 +186,12 @@ fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
 
     var shapes: [MAX_TEST_SHAPES]ShapeData = undefined;
     var surfaces: [MAX_TEST_SHAPES]ShapeSurface = undefined;
+    //surfaces are in draw order, the shapes wherever the scene put them, the way Renderer2D uploads them once sorted
     for (scene.Shapes, 0..) |test_shape, i| {
+        const draw_order: u32 = test_shape.DrawOrder orelse @intCast(i);
         shapes[i] = test_shape.Shape;
-        shapes[i].SurfaceIndex = @intCast(i);
-        surfaces[i] = test_shape.Surface;
+        shapes[i].SurfaceIndex = draw_order;
+        surfaces[draw_order] = test_shape.Surface;
     }
 
     var marcher = TestMarcher{
@@ -186,6 +204,8 @@ fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
         .mShapeSurfaces = &surfaces,
         .mShapesCount = scene.Shapes.len,
         .mDirectCount = direct_count,
+        //not walked yet: the direct search still tests every direct shape
+        .mBVHNodes = &NO_BVH_NODES,
         .mClips = scene.Clips.ptr,
         .mSurfShading = scene.Shadings.ptr,
         .mMedShading = scene.Mediums.ptr,
@@ -305,12 +325,23 @@ test "the nearer of two overlapping quads is drawn, whichever order they are in"
 
 //How exact ties come out today. Step 4 of the renderer plan picks a tie rule on purpose; if it changes these,
 //change them with it rather than to make them pass
-test "of two quads at the same depth, the first one in the buffer is drawn" {
+test "of two quads at the same depth, the one drawn first is drawn" {
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
     const shapes = [_]TestShape{
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
+    try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+}
+
+test "a tie at the same depth goes by draw order, wherever sorting put the shapes in the buffer" {
+    //the red quad was drawn first, but the BVH's sort put the blue one ahead of it in the shape buffer
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    var red = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP);
+    red.DrawOrder = 0;
+    var blue = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP);
+    blue.DrawOrder = 1;
+    const shapes = [_]TestShape{ blue, red };
     try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
@@ -509,4 +540,20 @@ test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge
     //one more and it gives up
     const past_limit = TestScene{ .Shapes = shapes[0 .. rejects + 2], .Shadings = &shadings };
     try ExpectColor(DEFAULT_COLOR, TraceWith(past_limit, RayAt(0.25, 0), rejects + 2));
+}
+
+test "a quad's rounded corner is cut away: the ray goes past it there, and hits just inside the curve" {
+    //every corner of the red quad is rounded by 0.5, so the top right one curves around (0.5, 0.5). A blue quad behind
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeRoundedQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0.5, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, SDFFunc.NO_CLIP),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    //0.64 from the curve's center: in the cut away corner
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.95, 0.95)));
+    //0.42 from it: inside
+    try ExpectColor(RED, try Trace(scene, RayAt(0.8, 0.8)));
+    //well away from the corners, the flat part
+    try ExpectColor(RED, try Trace(scene, RayAt(0.95, 0)));
 }

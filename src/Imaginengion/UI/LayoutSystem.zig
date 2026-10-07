@@ -83,21 +83,22 @@ pub fn MarkSceneDirty(scene: Scene, engine_context: *EngineContext) !void {
 }
 
 /// Each overlay scene in `overlay_scenes` records the screen this view draws it on, in its own canvas units (the
-/// view's size in pixels over the scene's pixels per unit): what its layout roots fit into. When that changes,
-/// because the view was resized or the scene's scale mode changed, its trees are laid out again. Called by the
+/// view's size in pixels over the world's pixels per unit): what its layout roots fit into. When that changes,
+/// because the view was resized or the world's scale mode changed, its trees are laid out again. Called by the
 /// renderer as it draws each view, so a scene drawn by several views of different sizes fits the last one drawn
 pub fn RecordViewArea(world: *WorldManager, overlay_scenes: []const Scene.Type, camera_view: CameraView, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("LayoutSystem::RecordViewArea", @src());
     defer zone.Deinit();
+    //every overlay scene of the world is on the one screen space, so they all fit into the same area
+    const pixels_per_unit = world.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
+    //a view with no size has nothing to fit into, and would divide by nothing
+    if (pixels_per_unit <= 0) return;
+    const area = Vec2(f32){ .x = camera_view.TargetWidth / pixels_per_unit, .y = camera_view.TargetHeight / pixels_per_unit };
     for (overlay_scenes) |scene_id| {
         const scene = world.GetScene(scene_id);
         if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
 
         const scene_component = scene.GetComponent(SceneComponent).?;
-        const pixels_per_unit = scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
-        //a view with no size has nothing to fit into, and would divide by nothing
-        if (pixels_per_unit <= 0) continue;
-        const area = Vec2(f32){ .x = camera_view.TargetWidth / pixels_per_unit, .y = camera_view.TargetHeight / pixels_per_unit };
 
         if (scene_component.mLayoutArea) |old_area| {
             if (old_area.x == area.x and old_area.y == area.y) continue;

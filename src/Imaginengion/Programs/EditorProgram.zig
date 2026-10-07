@@ -103,7 +103,7 @@ const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../EditorPanels/StatsPanel.zig");
 const PickingDebugPanel = @import("../Imgui/PickingDebugPanel.zig");
-const UIElementPanel = @import("../Imgui/UIElementPanel.zig");
+const UIElementPanel = @import("../EditorPanels/UIElementPanel.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const UIECSEvent = UIManager.ECSManagerT.ECSEventManager.EventType;
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
@@ -154,7 +154,8 @@ _ScriptsPanel: ScriptsPanel = .{},
 /// The Stats window, in the editor UI
 mStatsPanel: StatsPanel = .{},
 _PickingDebugPanel: PickingDebugPanel = .{},
-_UIElementPanel: UIElementPanel = .{},
+/// The UI Element window, in the editor UI
+mUIElementPanel: UIElementPanel = .{},
 /// Hands the pointer's and the UI's events to entities' event scripts
 mEventScripts: ScriptsProcessor.EventScripts = .{},
 _ViewportPanel: ViewportPanel = .{},
@@ -207,9 +208,10 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
 
     //EDITOR UI STUFF================================================
 
+    //editor UI keeps its pixel size when the window grows, like ImGui does, instead of scaling up: the editor world's
+    //overlays all measure the screen in pixels
+    engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
     self.mEditorUIScene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    //editor UI keeps its pixel size when the window grows, like ImGui does, instead of scaling up
-    self.mEditorUIScene.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
     self.mEditorUIEntity = try self.mEditorUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     self.mEditorUIPlayer = try engine_context.mEditorWorld.CreatePlayer(engine_context, .{
         .bAddNameComponent = true,
@@ -245,6 +247,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mStatsPanel = try StatsPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mUIElementPanel = try UIElementPanel.Build(engine_context, self.mEditorUIScene, .{});
     //=================================================================
 
     //EDITOR VIEWPORT STUFF==================================================
@@ -285,6 +288,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     self.mViewportQuads.deinit(engine_context.EngineAllocator());
     self.mMenuBar.Deinit(engine_context.EngineAllocator());
     self.mAudioBusesPanel.Deinit(engine_context.EngineAllocator());
+    self.mUIElementPanel.Deinit(engine_context.EngineAllocator());
 }
 
 //Note other systems to consider in the on update loop
@@ -453,7 +457,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             if (EditorShell.Host(shell.mComponentsPage, self._ComponentsPanel._P_Open, engine_context)) try self._ComponentsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             if (EditorShell.Host(shell.mScriptsPage, self._ScriptsPanel._P_Open, engine_context)) try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             //the floating ones
-            try self._UIElementPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             //before RenderViewports, so it reads last frame's view rects the way input picking will
             try self._PickingDebugPanel.OnImguiRender(engine_context, &self._ViewportPanel, self);
             try self.RenderTmplEditPanels(engine_context);
@@ -632,6 +635,7 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
         .PointerClicked => |click| if (click.mButton == .BUTTON_LEFT) {
             if (self.mMenuBar.ActionOf(click.mEntity)) |action| try self.RunMenuAction(engine_context, action);
             if (self.mAudioBusesPanel.ActionOf(click.mEntity)) |action| try AudioBusesPanel.Run(engine_context, action);
+            if (self.mUIElementPanel.ActionOf(click.mEntity)) |action| try self.mUIElementPanel.Run(engine_context, action);
         },
         else => {},
     }
@@ -978,7 +982,7 @@ pub fn OnImguiEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         .SelectObjectEvent => |e| {
             self.mSelectedObj = e.mObject;
         },
-        .OpenUIElementPanelEvent => self._UIElementPanel._P_Open = true,
+        .OpenUIElementPanelEvent => try self.mUIElementPanel.Open(engine_context),
         .MakeTmplEvent => |e| switch (e.mObject) {
             inline else => |object| try self.MakeTmpl(engine_context, object),
         },
@@ -1112,7 +1116,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     shown.set(.Scripts, self._ScriptsPanel._P_Open);
     shown.set(.Stats, self.mStatsPanel.IsOpen());
     shown.set(.PickingDebug, self._PickingDebugPanel._P_Open);
-    shown.set(.UIElement, self._UIElementPanel._P_Open);
+    shown.set(.UIElement, self.mUIElementPanel.IsOpen());
     shown.set(.Viewport, self.mShowViewport);
 
     //only the players the preview can actually draw
@@ -1184,7 +1188,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             .Scripts => self._ScriptsPanel._P_Open = !self._ScriptsPanel._P_Open,
             .Stats => try self.mStatsPanel.Toggle(engine_context),
             .PickingDebug => self._PickingDebugPanel._P_Open = !self._PickingDebugPanel._P_Open,
-            .UIElement => self._UIElementPanel._P_Open = !self._UIElementPanel._P_Open,
+            .UIElement => try self.mUIElementPanel.Toggle(engine_context),
             .Viewport => self.mShowViewport = !self.mShowViewport,
         },
         .PickTheme => try self.PickTheme(engine_context),
@@ -1208,6 +1212,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mStatsPanel.Update(engine_context, &engine_context.mEngineStats);
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
+    try self.mUIElementPanel.Update(engine_context, self.mSelectedObj);
 
     //the viewport's views share the area it was last laid out at
     const viewport_area = self.mShell.mViewportArea;

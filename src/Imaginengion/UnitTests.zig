@@ -5,10 +5,12 @@ test {
     _ = @import("Tests/Core/SkipFieldTests.zig");
     _ = @import("Tests/Core/SparseSetTests.zig");
     _ = @import("Tests/Core/SPSCRingBufferTests.zig");
+    _ = @import("Tests/Core/BVHTests.zig");
     _ = @import("Tests/Math/AudioTests.zig");
     _ = @import("Tests/Math/MathTypesTests.zig");
     _ = @import("Tests/Math/CameraRayTests.zig");
     _ = @import("Tests/Math/RayIntersectTests.zig");
+    _ = @import("Tests/Math/AabbTests.zig");
     _ = @import("Tests/Math/ScreenRectTests.zig");
     _ = @import("Tests/Math/OverlayCanvasTests.zig");
     _ = @import("Tests/Renderer/TextLayoutTests.zig");

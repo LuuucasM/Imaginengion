@@ -312,8 +312,8 @@ test "drawing an overlay records its screen, and only a changed screen lays it o
     const engine_context = world.mEngineContext;
     const game_world = &engine_context.mEditorWorld;
 
+    game_world.mOverlayScaleMode = .ScaleWithScreen;
     const scene = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    scene.GetComponent(SceneComponent).?.mOverlayScaleMode = .ScaleWithScreen;
     //pinned to the top right corner, with a child that doesn't need its own tag
     const corner = try Element(engine_context, scene, null, .{
         .mWidth = .{ .Fixed = 100 },
@@ -344,19 +344,22 @@ test "drawing an overlay records its screen, and only a changed screen lays it o
     try ExpectXY(450, 515, corner);
 }
 
-test "a constant pixel size overlay's screen is its size in pixels over the display scale" {
+test "a constant pixel size world's overlays fit its size in pixels over the display scale, every one the same" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
+    engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
-    scene.GetComponent(SceneComponent).?.mOverlayScaleMode = .ConstantPixelSize;
-    const scenes = [_]Scene.Type{scene.mID};
+    const other = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const scenes = [_]Scene.Type{ scene.mID, other.mID };
 
     try LayoutSystem.RecordViewArea(&engine_context.mEditorWorld, &scenes, ViewOf(1600, 900, 2), engine_context);
-    const area = scene.GetComponent(SceneComponent).?.mLayoutArea.?;
-    try std.testing.expectApproxEqAbs(@as(f32, 800), area.x, eps);
-    try std.testing.expectApproxEqAbs(@as(f32, 450), area.y, eps);
+    for ([_]Scene{ scene, other }) |overlay| {
+        const area = overlay.GetComponent(SceneComponent).?.mLayoutArea.?;
+        try std.testing.expectApproxEqAbs(@as(f32, 800), area.x, eps);
+        try std.testing.expectApproxEqAbs(@as(f32, 450), area.y, eps);
+    }
 }
 
 test "a game scene among the overlays records nothing" {
@@ -537,7 +540,7 @@ test "a collapsed element and everything under it are hidden, and shown again wh
 
 //------------------------------adding layout in the editor------------------------------
 
-const ComponentsPanel = @import("../../Imgui/ComponentsPanel.zig");
+const ComponentList = @import("../../EditorPanels/ComponentList.zig");
 
 test "adding layout from the panel keeps a quad the size it is" {
     const world = try TestWorld.Init();
@@ -548,23 +551,23 @@ test "adding layout from the panel keeps a quad the size it is" {
     //an item on a quad starts fixed at the quad's size, where fitting would shrink it to nothing
     const panel = try New(engine_context, scene, null);
     _ = try panel.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 30, .y = 20 } });
-    try ComponentsPanel.AddFromPanel(LayoutItemComponent, engine_context, panel);
+    try ComponentList.AddFromPanel(LayoutItemComponent, engine_context, panel);
     try world.Update();
     try ExpectQuad(30, 20, panel);
 
     //a container on a quad comes with an item like that
     const box = try New(engine_context, scene, null);
     _ = try box.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 8, .y = 6 } });
-    try ComponentsPanel.AddFromPanel(LayoutComponent, engine_context, box);
+    try ComponentList.AddFromPanel(LayoutComponent, engine_context, box);
     try std.testing.expect(box.HasComponent(LayoutItemComponent));
     try world.Update();
     try ExpectQuad(8, 6, box);
 
     //with no quad there's nothing to keep, so the defaults it has always had
     const bare = try New(engine_context, scene, null);
-    try ComponentsPanel.AddFromPanel(LayoutComponent, engine_context, bare);
+    try ComponentList.AddFromPanel(LayoutComponent, engine_context, bare);
     try std.testing.expect(!bare.HasComponent(LayoutItemComponent));
-    try ComponentsPanel.AddFromPanel(LayoutItemComponent, engine_context, bare);
+    try ComponentList.AddFromPanel(LayoutItemComponent, engine_context, bare);
     try std.testing.expectEqual(Layout.Sizing.Fit, bare.GetComponent(LayoutItemComponent).?.mWidth);
 }
 

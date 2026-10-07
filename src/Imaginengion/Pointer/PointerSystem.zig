@@ -254,10 +254,7 @@ fn DragPoint(held: Held, input: Input) ?Vec3(f32) {
     if (!target.IsActive()) return null;
 
     switch (target.GetLayer()) {
-        .OverlayLayer => {
-            const scene = target.GetComponent(EntitySceneComponent).?.mScene;
-            return ShapeGeometry.SceneCanvas(scene, view.CameraView).RayToCanvasPoint(view.Ray);
-        },
+        .OverlayLayer => return ShapeGeometry.WorldCanvas(target.mManager, view.CameraView).RayToCanvasPoint(view.Ray),
         .GameLayer => {
             const normal = (Vec3(f32){ .x = 0, .y = 0, .z = 1 }).QuatRotate(view.CameraView.Pose.Rotation);
             const facing = view.Ray.Dir.Dot(normal);

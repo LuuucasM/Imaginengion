@@ -126,29 +126,36 @@ fn HitShape(ray: Ray, shape: ShapeData) HitInfo {
     };
 }
 
+/// Which kind of shape wins an exact tie: a quad before a glyph, the order the march has always taken them in
+fn TieRank(shape_type: ShapeType) u32 {
+    return switch (shape_type) {
+        .Quad => 0,
+        .Glyph => 1,
+        .None => 2,
+    };
+}
+
 /// Where a hit comes along a ray, which settles exact ties too: nearer first, then a quad before a glyph, then the
-/// first in the buffer. The order the march has always taken them in
+/// one drawn first. Draw order is each shape's SurfaceIndex, since surfaces are added in the order shapes are drawn
+/// and are never reordered, where the shapes are (sorted for the BVH)
 const HitOrder = struct {
     T: f32,
     Rank: u32,
+    DrawOrder: u32,
+    //the shape's place in the shape buffer, which isn't compared: what the search hands back
     Shape: u32,
 
     /// Before every hit, where the direct search starts from
-    const start: HitOrder = .{ .T = -std.math.inf(f32), .Rank = 0, .Shape = 0 };
+    const start: HitOrder = .{ .T = -std.math.inf(f32), .Rank = 0, .DrawOrder = 0, .Shape = 0 };
 
-    fn Of(t: f32, shape_type: ShapeType, shape: u32) HitOrder {
-        const rank: u32 = switch (shape_type) {
-            .Quad => 0,
-            .Glyph => 1,
-            .None => 2,
-        };
-        return .{ .T = t, .Rank = rank, .Shape = shape };
+    fn Of(t: f32, shape: ShapeData, shape_ind: u32) HitOrder {
+        return .{ .T = t, .Rank = TieRank(shape.Type), .DrawOrder = shape.SurfaceIndex, .Shape = shape_ind };
     }
 
     fn Before(self: HitOrder, other: HitOrder) bool {
         if (self.T != other.T) return self.T < other.T;
         if (self.Rank != other.Rank) return self.Rank < other.Rank;
-        return self.Shape < other.Shape;
+        return self.DrawOrder < other.DrawOrder;
     }
 };
 
@@ -193,7 +200,7 @@ const MarchData = extern struct {
     shape: u32,
 };
 
-pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
+pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
     return extern struct {
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
@@ -211,6 +218,9 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// the shapes are sorted direct first (ShapeSort): [0, mDirectCount) are found with a ray test straight
         /// against each, the rest by marching
         mDirectCount: usize,
+        /// the BVH over the direct shapes (Core/BVH.zig), its leaves' items their place in mShapes. The root's Skip is
+        /// the node count, and there are no nodes when mDirectCount is 0
+        mBVHNodes: bvh_nodes_type,
         /// the clip regions shapes are cut to, by their ClipIndex
         mClips: clips_type,
         mSurfShading: surf_shading_type,
@@ -345,7 +355,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             var after = HitOrder.start;
             var searches: u32 = 0;
             while (searches <= MAX_DIRECT_REJECTS) : (searches += 1) {
-                var nearest = HitOrder{ .T = self.mPerspectiveFar, .Rank = std.math.maxInt(u32), .Shape = NO_SHAPE };
+                var nearest = HitOrder{ .T = self.mPerspectiveFar, .Rank = std.math.maxInt(u32), .DrawOrder = std.math.maxInt(u32), .Shape = NO_SHAPE };
                 var nearest_hit: HitInfo = .miss;
 
                 for (0..self.mDirectCount) |i| {
@@ -354,7 +364,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     const shape: ShapeData = self.mShapes[i];
                     const hit = HitShape(ray, shape);
                     if (!IsFrontHit(hit)) continue;
-                    const order = HitOrder.Of(hit.T, shape.Type, shape_ind);
+                    const order = HitOrder.Of(hit.T, shape, shape_ind);
                     if (after.Before(order) and order.Before(nearest)) {
                         nearest = order;
                         nearest_hit = hit;
@@ -398,7 +408,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// The nearest marched shape to `point`, cut to its clip region
         fn NextSurface(self: Self, point: Vec3(f32), skips: SkipList) MarchData {
             var data = MarchData{ .min_dist = self.mPerspectiveFar, .shape = NO_SHAPE };
-            var nearest_type: ShapeType = .None;
+            var nearest_rank: u32 = std.math.maxInt(u32);
+            var nearest_draw_order: u32 = std.math.maxInt(u32);
 
             for (self.mDirectCount..self.mShapesCount) |i| {
                 const shape_ind: u32 = @intCast(i);
@@ -410,13 +421,15 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     .None => continue,
                 };
                 const dist = self.Clipped(shape_dist, point, shape.ClipIndex);
-                //an exact tie goes to the first one in the buffer, except that a quad beats a glyph: the order they
-                //were marched in when each kind had its own buffer, quads first
-                const quad_over_glyph = dist == data.min_dist and shape.Type == .Quad and nearest_type == .Glyph;
-                if (dist < data.min_dist or quad_over_glyph) {
+                //an exact tie goes the way HitOrder settles one: a quad before a glyph, then the one drawn first
+                const rank = TieRank(shape.Type);
+                const wins_tie = dist == data.min_dist and
+                    (rank < nearest_rank or (rank == nearest_rank and shape.SurfaceIndex < nearest_draw_order));
+                if (dist < data.min_dist or wins_tie) {
                     data.min_dist = dist;
                     data.shape = shape_ind;
-                    nearest_type = shape.Type;
+                    nearest_rank = rank;
+                    nearest_draw_order = shape.SurfaceIndex;
                 }
             }
             return data;

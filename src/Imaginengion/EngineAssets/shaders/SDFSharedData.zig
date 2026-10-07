@@ -4,6 +4,7 @@ const PushConstants = @import("IM").PushConstants;
 const ShapeData = @import("IM").ShapeData;
 const ShapeSurface = @import("IM").ShapeSurface;
 const ClipData = @import("IM").ClipData;
+const BVHNode = @import("IM").BVHNode;
 const SurfShadingData = @import("IM").SurfShadingData;
 const MedShadingData = @import("IM").MedShadingData;
 const RayMarcher = @import("IM").RayMarcher;
@@ -50,6 +51,9 @@ pub const ShapeSurfacesBuf = extern struct { ptr: ShapeSurfacesArray };
 const ClipsArray = @SpirvType(.{ .runtime_array = ClipData });
 pub const ClipsBuf = extern struct { ptr: ClipsArray };
 
+const BVHNodesArray = @SpirvType(.{ .runtime_array = BVHNode });
+pub const BVHNodesBuf = extern struct { ptr: BVHNodesArray };
+
 const SurfShadingArray = @SpirvType(.{ .runtime_array = SurfShadingData });
 pub const SurfShadingBuf = extern struct { ptr: SurfShadingArray };
 
@@ -63,6 +67,8 @@ pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{
 pub const ShapesSSBO = @extern(*addrspace(.storage_buffer) ShapesBuf, .{ .name = "ShapesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
 pub const ShapeSurfacesSSBO = @extern(*addrspace(.storage_buffer) ShapeSurfacesBuf, .{ .name = "ShapeSurfacesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
 pub const ClipsSSBO = @extern(*addrspace(.storage_buffer) ClipsBuf, .{ .name = "ClipsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 5 } } });
+//the direct shapes' BVH (Core/BVH.zig), depth first
+pub const BVHNodesSSBO = @extern(*addrspace(.storage_buffer) BVHNodesBuf, .{ .name = "BVHNodesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 6 } } });
 
 pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 1, .binding = 0 } } });
 

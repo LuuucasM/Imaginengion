@@ -26,7 +26,9 @@ const Vec4 = MathTypes.Vec4;
 const Quat = MathTypes.Quat;
 const Mat4 = MathTypes.Mat4;
 
-const THICKNESS_2D = @import("../Math/SDFFunctions.zig").THICKNESS_2D;
+const SDFFunctions = @import("../Math/SDFFunctions.zig");
+const THICKNESS_2D = SDFFunctions.THICKNESS_2D;
+const Aabb = @import("../Math/Aabb.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
@@ -39,6 +41,7 @@ const TextLayout = @import("TextLayout.zig");
 const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 const ShapeGeometry = @import("ShapeGeometry.zig");
 const ShapeSort = @import("ShapeSort.zig");
+const BVH = @import("../Core/BVH.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -61,11 +64,16 @@ pub const ShapeData = extern struct {
     /// Without it a surface hides what is behind it whatever its alpha
     pub const FLAG_TRANSPARENT: u32 = 1 << 0;
 
-    Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
-    //the center of the shape. For a glyph that is its box's center, not the pen position it was laid out from
-    Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
+    //where the shape is and how it is turned, as the move from world space into the shape's own space, where it is axis
+    //aligned and centered on the origin: the shape's own x, y and z axes in world space, each with -dot(axis, center)
+    //in w. A world point's coordinate along one is dot(axis.xyz, point) + axis.w, and a direction's dot(axis.xyz, dir).
+    //Worked out once on the CPU (ShapeAxes) rather than rotating by a quaternion for every ray test. For a glyph the
+    //center is its box's center, not the pen position it was laid out from
+    AxisX: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    AxisY: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
+    AxisZ: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
     //half extents for the box shapes, quads and glyphs, including their THICKNESS_2D depth
-    Size: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT align(16),
+    Size: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
     //what Type says. A quad's corner radii: world units, already scaled and clamped to at most half the smaller
     //side, in SDFFunctions' order (x top right, y bottom right, z top left, w bottom left). Unused (0) for a glyph
     Params: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
@@ -78,6 +86,18 @@ pub const ShapeData = extern struct {
     //pays for what it turns on. Never set on their own, only from what the shape's component asks for
     Flags: u32,
 };
+
+/// The AxisX, AxisY and AxisZ of a shape centered at `center` and turned by `rotation`: its own axes in world space,
+/// each with -dot(axis, center) in w (see ShapeData)
+pub fn ShapeAxes(center: Vec3(f32), rotation: Quat(f32)) [3]Vec4(f32).ArrayT {
+    const unit_axes = [3]Vec3(f32){ .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 0, .y = 1, .z = 0 }, .{ .x = 0, .y = 0, .z = 1 } };
+    var axes: [3]Vec4(f32).ArrayT = undefined;
+    for (unit_axes, &axes) |unit_axis, *axis| {
+        const world_axis = unit_axis.QuatRotate(rotation);
+        axis.* = .{ world_axis.x, world_axis.y, world_axis.z, -world_axis.Dot(center) };
+    }
+    return axes;
+}
 
 /// What only the shape that was hit needs: which surfaces it is shaded with. The same slots for every kind of shape,
 /// read the way its Type says
@@ -129,6 +149,18 @@ pub const RenderBuffers = struct {
     /// How many of the sorted shapes are direct, which all come first. Set by SortShapes
     mDirectCount: u32 = 0,
 
+    /// Each shape's world space bounding box (SDFFunctions.aabbIMShape), in the order the shapes were added, like
+    /// mShapeBufferBase. CPU only: what the BVH is built from
+    mShapeBounds: std.ArrayList(Aabb) = .empty,
+
+    /// The BVH over the direct shapes, built by SortShapes: its items are the direct shapes in their sorted order, so a
+    /// leaf's items are a run of mSortedShapes
+    mBVHItems: std.ArrayList(BVH.Item) = .empty,
+    mBVHNodes: std.ArrayList(BVH.Node) = .empty,
+    /// mBVHNodes on the GPU, uploaded with the shapes. Its node count is the root's Skip, and there is no tree when
+    /// there are no direct shapes
+    mNodeBuffer: SSBO = .{},
+
     /// How many of the shapes are quads and how many glyphs, for the stats
     mQuadCount: usize = 0,
     mGlyphCount: usize = 0,
@@ -142,6 +174,9 @@ pub const RenderBuffers = struct {
 
         self.mClipBuffer.Init(engine_context, @sizeOf(ClipData) * 16, 4, .Compute);
         self.mClipBufferBase = try std.ArrayList(ClipData).initCapacity(engine_context.EngineAllocator(), 16);
+
+        //a tree over 100 shapes in leaves of up to 4 is around 50 to 70 nodes
+        self.mNodeBuffer.Init(engine_context, @sizeOf(BVH.Node) * 64, 5, .Compute);
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {
         self.mShapeBuffer.Deinit(engine_context);
@@ -156,6 +191,10 @@ pub const RenderBuffers = struct {
 
         self.mSortEntries.deinit(engine_context.EngineAllocator());
         self.mSortedShapes.deinit(engine_context.EngineAllocator());
+        self.mShapeBounds.deinit(engine_context.EngineAllocator());
+        self.mBVHItems.deinit(engine_context.EngineAllocator());
+        self.mBVHNodes.deinit(engine_context.EngineAllocator());
+        self.mNodeBuffer.Deinit(engine_context);
     }
     pub fn Reset(self: *RenderBuffers, engine_allocator: std.mem.Allocator, reset_options: ResetOptions) void {
         switch (reset_options) {
@@ -166,6 +205,9 @@ pub const RenderBuffers = struct {
                 self.mClipIndices.clearAndFree(engine_allocator);
                 self.mSortEntries.clearAndFree(engine_allocator);
                 self.mSortedShapes.clearAndFree(engine_allocator);
+                self.mShapeBounds.clearAndFree(engine_allocator);
+                self.mBVHItems.clearAndFree(engine_allocator);
+                self.mBVHNodes.clearAndFree(engine_allocator);
             },
             .ClearRetainingCapacity => {
                 self.mShapeBufferBase.clearRetainingCapacity();
@@ -174,6 +216,9 @@ pub const RenderBuffers = struct {
                 self.mClipIndices.clearRetainingCapacity();
                 self.mSortEntries.clearRetainingCapacity();
                 self.mSortedShapes.clearRetainingCapacity();
+                self.mShapeBounds.clearRetainingCapacity();
+                self.mBVHItems.clearRetainingCapacity();
+                self.mBVHNodes.clearRetainingCapacity();
             },
         }
         self.mQuadCount = 0;
@@ -194,6 +239,10 @@ pub const RenderBuffers = struct {
         //clip regions
         const clip_byte_size = self.mClipBufferBase.items.len * @sizeOf(ClipData);
         _ = self.mClipBuffer.SetData(engine_context, copy_pass, self.mClipBufferBase.items.ptr, clip_byte_size, 0);
+
+        //the BVH over the direct shapes, built by SortShapes
+        const node_byte_size = self.mBVHNodes.items.len * @sizeOf(BVH.Node);
+        _ = self.mNodeBuffer.SetData(engine_context, copy_pass, self.mBVHNodes.items.ptr, node_byte_size, 0);
         //added to stats: the overlay and game passes each have their own quads and glyphs
         stats.OutputQuadNum += self.mQuadCount;
         stats.OutputGlyphNum += self.mGlyphCount;
@@ -202,6 +251,7 @@ pub const RenderBuffers = struct {
         self.mShapeBuffer.Bind(render_pass);
         self.mSurfaceBuffer.Bind(render_pass);
         self.mClipBuffer.Bind(render_pass);
+        self.mNodeBuffer.Bind(render_pass);
     }
 
     /// The shapes in their keys' order, into mSortedShapes, ready to upload. Their surfaces and clips stay where they
@@ -211,10 +261,42 @@ pub const RenderBuffers = struct {
         defer zone.Deinit();
         zone.Value(self.mSortEntries.items.len);
 
+        self.SetMortonOrders();
         ShapeSort.Sort(self.mSortEntries.items);
         try self.mSortedShapes.resize(engine_allocator, self.mShapeBufferBase.items.len);
         ShapeSort.Gather(ShapeData, self.mShapeBufferBase.items, self.mSortEntries.items, self.mSortedShapes.items);
         self.mDirectCount = ShapeSort.DirectCount(self.mSortEntries.items);
+        try self.BuildBVH(engine_allocator);
+    }
+
+    /// The BVH over the direct shapes, which the sort has just put first and in Morton order: each one's code, box and
+    /// mask, in that order
+    fn BuildBVH(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
+        const zone = Tracy.ZoneInit("Renderer2D::BuildBVH", @src());
+        defer zone.Deinit();
+        zone.Value(self.mDirectCount);
+
+        try self.mBVHItems.resize(engine_allocator, self.mDirectCount);
+        for (self.mSortEntries.items[0..self.mDirectCount], self.mBVHItems.items) |entry, *item| {
+            item.* = .{ .Code = entry.Key.Order, .Bounds = self.mShapeBounds.items[entry.Index], .Mask = BVH.Mask.RENDER };
+        }
+        try BVH.Build(engine_allocator, self.mBVHItems.items, &self.mBVHNodes);
+    }
+
+    /// Each direct shape's key gets its Morton code (BVH.MortonCode) as its Order, from where its bounding box's center
+    /// is among all the direct shapes' centers, so sorting puts shapes close in space next to each other: the order
+    /// the BVH is built from. Marched shapes keep their Order, which is their place in their group
+    fn SetMortonOrders(self: *RenderBuffers) void {
+        var centers = Aabb.empty;
+        for (self.mSortEntries.items) |entry| {
+            if (entry.Key.Path != .Direct) continue;
+            const center = self.mShapeBounds.items[entry.Index].Center();
+            centers = centers.Union(.{ .Min = center, .Max = center });
+        }
+        for (self.mSortEntries.items) |*entry| {
+            if (entry.Key.Path != .Direct) continue;
+            entry.Key.Order = BVH.MortonCode(self.mShapeBounds.items[entry.Index].Center(), centers);
+        }
     }
 
     /// Adds a shape and its surface, pointing the shape at it, and the key it is sorted by. The shape's SurfaceIndex
@@ -225,6 +307,7 @@ pub const RenderBuffers = struct {
         try self.mSortEntries.append(engine_allocator, .{ .Key = key, .Index = @intCast(self.mShapeBufferBase.items.len) });
         try self.mSurfaceBufferBase.append(engine_allocator, surface);
         try self.mShapeBufferBase.append(engine_allocator, added);
+        try self.mShapeBounds.append(engine_allocator, SDFFunctions.aabbIMShape(added));
         switch (shape.Type) {
             .Quad => self.mQuadCount += 1,
             .Glyph => self.mGlyphCount += 1,
@@ -342,9 +425,11 @@ pub fn DrawQuad(
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
     const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
+    const axes = ShapeAxes(box.Center, box.Rotation);
     try buffers.AddShape(engine_context.EngineAllocator(), .{
-        .Rotation = box.Rotation.ToArray(),
-        .Position = box.Center.ToArray(),
+        .AxisX = axes[0],
+        .AxisY = axes[1],
+        .AxisZ = axes[2],
         .Size = box.HalfExtents.ToArray(),
         .Params = box.CornerRadii.ToArray(),
         .Type = .Quad,
@@ -433,9 +518,11 @@ pub fn DrawText(
             texture_shading_handle,
         );
 
+        const axes = ShapeAxes(glyph_center, glyph_rot);
         try buffers.AddShape(engine_context.EngineAllocator(), .{
-            .Rotation = glyph_rot.ToArray(),
-            .Position = glyph_center.ToArray(),
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
             .Size = half_extents.ToArray(),
             .Params = .{ 0, 0, 0, 0 },
             .Type = .Glyph,

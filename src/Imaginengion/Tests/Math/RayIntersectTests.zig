@@ -37,6 +37,41 @@ fn sdBox(point: Vec3(f32), half_extents: Vec3(f32)) f32 {
     return q.ClampScalar(0).Len() + @min(@max(q.x, @max(q.y, q.z)), 0.0);
 }
 
+//==================================RayAabb==================================
+
+fn AabbSpan(origin: Vec3(f32), dir: Vec3(f32), min: Vec3(f32), max: Vec3(f32)) ?RayIntersect.Span {
+    const d = dir.Dir();
+    const inv = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / d.ToVector());
+    return RayIntersect.RayAabb(origin, inv, min, max);
+}
+
+test "RayAabb from outside enters at the near face and leaves at the far one" {
+    const span = AabbSpan(.{ .x = -5, .y = 0.5, .z = 0.5 }, .{ .x = 1, .y = 0, .z = 0 }, ORIGIN, UNIT_HALF).?;
+    try std.testing.expectApproxEqAbs(@as(f32, 5), span.Enter, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 6), span.Exit, eps);
+}
+
+test "RayAabb starting inside enters behind the origin" {
+    const span = AabbSpan(.{ .x = 0.5, .y = 0.5, .z = 0.5 }, .{ .x = 0, .y = 1, .z = 0 }, ORIGIN, UNIT_HALF).?;
+    try std.testing.expect(span.Enter < 0);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), span.Exit, eps);
+}
+
+test "RayAabb misses a box beside the ray and one behind it" {
+    try std.testing.expect(AabbSpan(.{ .x = -5, .y = 3, .z = 0.5 }, .{ .x = 1, .y = 0, .z = 0 }, ORIGIN, UNIT_HALF) == null);
+    try std.testing.expect(AabbSpan(.{ .x = 5, .y = 0.5, .z = 0.5 }, .{ .x = 1, .y = 0, .z = 0 }, ORIGIN, UNIT_HALF) == null);
+}
+
+test "RayAabb at an angle agrees with RayBox on the same unturned box" {
+    //an unturned, centered RayBox is the same box: the same entry
+    const origin = Vec3(f32){ .x = -4, .y = 2.5, .z = 3 };
+    const dir = (Vec3(f32){ .x = 1, .y = -0.4, .z = -0.6 }).Dir();
+    const span = AabbSpan(origin, dir, UNIT_HALF.Neg(), UNIT_HALF).?;
+    const hit = RayIntersect.RayBox(MakeRay(origin, dir), ORIGIN, IDENTITY, UNIT_HALF);
+    try std.testing.expectApproxEqAbs(hit.T, span.Enter, eps);
+    try std.testing.expectApproxEqAbs(hit.TExit, span.Exit, eps);
+}
+
 //==================================RayBox==================================
 
 test "RayBox straight at the front face" {
@@ -498,6 +533,47 @@ test "RayRoundedBox2D with no rounding is RayBox" {
     try std.testing.expectEqual(plain.Face.?, rounded.Face.?);
     try std.testing.expectApproxEqAbs(plain.UV.x, rounded.UV.x, eps);
     try std.testing.expectApproxEqAbs(plain.UV.y, rounded.UV.y, eps);
+}
+
+test "RayRoundedBox2D's square corner shortcut agrees with the rounded math" {
+    //square corners take the plain box's slab test. A radius too small to matter takes the rounded path, so the two
+    //have to find the same hits
+    var prng = std.Random.DefaultPrng.init(0x5A0C0E2D);
+    const random = prng.random();
+    const square = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 };
+    const tiny = Vec4(f32){ .x = 1e-7, .y = 1e-7, .z = 1e-7, .w = 1e-7 };
+
+    var hits: usize = 0;
+    for (0..1000) |_| {
+        const rotation = Quat(f32).FromAxisAngle((Vec3(f32){ .x = random.float(f32) - 0.5, .y = random.float(f32) - 0.5, .z = random.float(f32) - 0.5 }).Dir(), random.float(f32) * 6);
+        const origin = (Vec3(f32){ .x = random.float(f32) - 0.5, .y = random.float(f32) - 0.5, .z = random.float(f32) - 0.5 }).Dir().MulScalar(6);
+        const target = Vec3(f32){ .x = random.float(f32) * 3 - 1.5, .y = random.float(f32) * 3 - 1.5, .z = (random.float(f32) * 2 - 1) * QUAD_HALF.z };
+        const ray = MakeRay(origin, target.SubVec(origin));
+
+        const shortcut = RayIntersect.RayRoundedBox2D(ray, ORIGIN, rotation, QUAD_HALF, square);
+        const rounded = RayIntersect.RayRoundedBox2D(ray, ORIGIN, rotation, QUAD_HALF, tiny);
+        try std.testing.expectEqual(rounded.IsHit(), shortcut.IsHit());
+        if (!rounded.IsHit()) continue;
+        hits += 1;
+
+        try std.testing.expectApproxEqAbs(rounded.T, shortcut.T, eps);
+        try std.testing.expectEqual(rounded.StartedInside, shortcut.StartedInside);
+        try std.testing.expectEqual(rounded.Face, shortcut.Face);
+        if (rounded.Face != null) {
+            try ExpectVec3(rounded.Normal, shortcut.Normal);
+            try std.testing.expectApproxEqAbs(rounded.UV.x, shortcut.UV.x, eps);
+            try std.testing.expectApproxEqAbs(rounded.UV.y, shortcut.UV.y, eps);
+        }
+    }
+    try std.testing.expect(hits > 300);
+}
+
+test "RayRoundedBox2D's square corner shortcut leaves a thin side with no Face, like the rounded math" {
+    const side_on = MakeRay(.{ .x = 5, .y = 0.2, .z = 0 }, .{ .x = -1, .y = 0, .z = 0 });
+    const hit = RayIntersect.RayRoundedBox2D(side_on, ORIGIN, IDENTITY, QUAD_HALF, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
+    try std.testing.expect(hit.IsHit());
+    try std.testing.expectEqual(@as(?RayIntersect.BoxFace, null), hit.Face);
+    try ExpectVec3(.{ .x = 1, .y = 0, .z = 0 }, hit.Normal);
 }
 
 fn MarchRoundedBox2D(origin: Vec3(f32), dir: Vec3(f32), half: Vec3(f32), radii: Vec4(f32)) f32 {

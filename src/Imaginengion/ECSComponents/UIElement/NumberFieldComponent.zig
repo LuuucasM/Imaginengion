@@ -3,6 +3,7 @@ const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 
 const NumberFieldComponent = @This();
 
@@ -31,6 +32,13 @@ pub fn Clamp(self: NumberFieldComponent, value: f64) f64 {
     if (self.mMin) |min| clamped = @max(clamped, min);
     if (self.mMax) |max| clamped = @min(clamped, max);
     return clamped;
+}
+
+pub fn UIRender(self: *NumberFieldComponent, ui: *Inspector.Builder) !void {
+    try ui.Float(&self.mSpeed, "Speed", .{ .Speed = 0.01, .Min = 0 });
+    try ui.OptionalFloat(&self.mMin, "Min", .{});
+    try ui.OptionalFloat(&self.mMax, "Max", .{});
+    try ui.UInt8(&self.mDecimals, "Decimals", .{ .Speed = 0.1, .Min = 0, .Max = 9, .Decimals = 0 });
 }
 
 pub fn EditorRender(self: *NumberFieldComponent, _: *EngineContext) !void {

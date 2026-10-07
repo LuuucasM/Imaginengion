@@ -99,6 +99,16 @@ test "a copied world's object handles point at the copy, not the world it came f
     try std.testing.expectEqual(sim_world, entity_scene.mManager);
 }
 
+test "a copied world's overlays measure the screen the way the original's do" {
+    const worlds = try TestWorlds.Init();
+    defer worlds.Deinit();
+    const engine_context = worlds.mEngineContext;
+
+    engine_context.mGameWorld.mOverlayScaleMode = .ConstantPixelSize;
+    try engine_context.mGameWorld.Copy(engine_context, &engine_context.mSimulateWorld);
+    try std.testing.expectEqual(.ConstantPixelSize, engine_context.mSimulateWorld.mOverlayScaleMode);
+}
+
 test "copying a world leaves the original's object handles on the original" {
     const worlds = try TestWorlds.Init();
     defer worlds.Deinit();

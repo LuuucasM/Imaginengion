@@ -42,9 +42,7 @@ pub fn ShownTarget(engine_context: *EngineContext, viewport: ViewportComponent) 
 pub fn PixelSizeOf(entity: Entity, camera_view: CameraView) ?PixelSize {
     const quad = entity.GetComponent(QuadComponent) orelse return null;
     if (entity.GetLayer() != .OverlayLayer) return null;
-    const scene = entity.GetComponent(EntitySceneComponent).?.mScene;
-    const mode = scene.GetComponent(SceneComponent).?.mOverlayScaleMode;
-    const pixels_per_unit = OverlayCanvas.PixelsPerUnit(mode, camera_view.TargetHeight, camera_view.DisplayScale);
+    const pixels_per_unit = entity.mManager.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
     return .{
         .Width = @intFromFloat(@max(@round(quad.mSize.x * pixels_per_unit), 0)),
         .Height = @intFromFloat(@max(@round(quad.mSize.y * pixels_per_unit), 0)),
@@ -81,8 +79,7 @@ pub fn QuadPixelOnRay(entity: Entity, ray: Ray, camera_view: CameraView, picture
     if (entity.GetLayer() != .OverlayLayer or quad.mSize.x <= 0 or quad.mSize.y <= 0) return null;
 
     //onto the canvas, then into the quad's own space, which is what its size is in
-    const scene = entity.GetComponent(EntitySceneComponent).?.mScene;
-    const point = ShapeGeometry.SceneCanvas(scene, camera_view).RayToCanvasPoint(ray) orelse return null;
+    const point = ShapeGeometry.WorldCanvas(entity.mManager, camera_view).RayToCanvasPoint(ray) orelse return null;
     const transform = entity.GetComponent(TransformComponent).?;
     const scale = transform.GetWorldScale();
     if (scale.x == 0 or scale.y == 0) return null;

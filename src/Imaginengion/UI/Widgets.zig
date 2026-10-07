@@ -170,6 +170,14 @@ pub fn Row(engine_context: *EngineContext, parent: Parent) !Entity {
     return row;
 }
 
+/// A column to put things in one under the other, as wide as what it is in and as tall as what is in it
+pub fn Column(engine_context: *EngineContext, parent: Parent) !Entity {
+    const column = try NewEntity(engine_context, parent);
+    _ = try column.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
+    _ = try column.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
+    return column;
+}
+
 /// A column of lines of text, one under the other, as wide as what it is in: for SyncLines to keep showing a list
 pub fn Lines(engine_context: *EngineContext, parent: Parent) !Entity {
     const lines = try NewEntity(engine_context, parent);

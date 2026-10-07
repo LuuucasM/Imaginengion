@@ -84,21 +84,20 @@ pub const ViewShape = struct {
     Clip: ?ViewClip = null,
 };
 
-/// An overlay scene's canvas in front of this camera: its entities' transforms are in canvas units and this
-/// is what places them in the world
-pub fn SceneCanvas(scene: Scene, camera_view: CameraView) CanvasTransform {
-    const scene_component = scene.GetComponent(SceneComponent).?;
+/// A world's screen space in front of this camera, the canvas every one of its overlay scenes is on: their entities'
+/// transforms are in canvas units and this is what places them in the world
+pub fn WorldCanvas(world: *const WorldManager, camera_view: CameraView) CanvasTransform {
     return OverlayCanvas.ComputeCanvasTransform(
         camera_view.Pose,
         camera_view.TanHalfFov,
         camera_view.TargetHeight,
-        scene_component.GetPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale),
+        world.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale),
     );
 }
 
 /// Every entity matching `query` that this view shows, each with its canvas: the renderer draws this list and
-/// picking tests it, so the two always agree on what a view contains. Overlay scenes come first, each canvas
-/// worked out once for its whole scene, then the game layer. Overlay scenes that are gone, or aren't overlays,
+/// picking tests it, so the two always agree on what a view contains. Overlay scenes come first, all on the world's
+/// one canvas, then the game layer. Overlay scenes that are gone, or aren't overlays,
 /// are left out. Only valid for the frame it was built in
 pub fn GatherViewShapes(
     frame_allocator: std.mem.Allocator,
@@ -117,11 +116,11 @@ pub fn GatherViewShapes(
     var shapes: std.ArrayList(ViewShape) = .empty;
     var clips = ClipFinder{ .mAllocator = frame_allocator };
 
+    const canvas = WorldCanvas(world, camera_view);
     for (view_scenes.Overlays) |scene_id| {
         const scene = world.GetScene(scene_id);
         if (!scene.IsActive() or scene.GetLayer() != .OverlayLayer) continue;
 
-        const canvas = SceneCanvas(scene, camera_view);
         const entity_ids = try scene.GetEntityGroup(frame_allocator, overlay_query);
         try shapes.ensureUnusedCapacity(frame_allocator, entity_ids.items.len);
         for (entity_ids.items) |entity_id| {

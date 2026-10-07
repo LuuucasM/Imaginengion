@@ -4,6 +4,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Layout = @import("../../UI/Layout.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 
 const ScrollComponent = @This();
 
@@ -20,6 +21,11 @@ mScroll: Layout.Scroll = .Vertical,
 mWheelStep: f32 = 40,
 
 pub fn Deinit(_: *ScrollComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *ScrollComponent, ui: *Inspector.Builder) !void {
+    try ui.Enum(Layout.Scroll, &self.mScroll, "Scroll", .{});
+    try ui.Float(&self.mWheelStep, "Wheel Step", .{ .Speed = 0.5, .Min = 0, .Decimals = 1 });
+}
 
 pub fn EditorRender(self: *ScrollComponent, _: *EngineContext) !void {
     try ImguiManager.RenderEnum(Layout.Scroll, &self.mScroll, "Scroll");

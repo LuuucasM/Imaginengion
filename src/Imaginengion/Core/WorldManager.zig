@@ -6,6 +6,7 @@ const EngineContext = @import("EngineContext.zig");
 const Tracy = @import("Tracy.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
+const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 const ESceneComponents = @import("../ECSComponents/SComponents.zig").EComponents;
 
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -43,6 +44,16 @@ mSManager: SManager = .empty,
 /// What physics carries from one step of this world to the next: leftover step time and which pairs
 /// were touching. It is about this world's entities, so it lives and is cleared with them
 mPhysicsManager: PhysicsManager = .{},
+
+/// How every overlay scene in this world turns its units into screen pixels: one for all of them, so they all share
+/// the one screen space, and the renderer can hold all their shapes in one tree. Each view still places that space
+/// on its own camera and resolution. Not saved yet: the editor sets its own world's, game worlds keep the default
+mOverlayScaleMode: OverlayCanvas.OverlayScaleMode = .ScaleWithScreen,
+
+/// How many screen pixels one unit of this world's screen space covers, on a target this tall
+pub fn OverlayPixelsPerUnit(self: *const WorldManager, target_height: f32, display_scale: f32) f32 {
+    return OverlayCanvas.PixelsPerUnit(self.mOverlayScaleMode, target_height, display_scale);
+}
 
 pub fn GetEntity(self: *WorldManager, entity_id: Entity.Type) Entity {
     return Entity{ .mID = entity_id, .mManager = self };
@@ -125,6 +136,9 @@ pub fn Copy(self: *WorldManager, engine_context: *EngineContext, other_world: *W
 
     //every copied UIElementComponent was copied with an element of its own, which has to be told whose it is
     try engine_context.mUIManager.AdoptWorld(engine_context, other_world);
+
+    //its overlays measure the screen the same way
+    other_world.mOverlayScaleMode = self.mOverlayScaleMode;
 
     //physics state is not copied: the copy starts its own stepping, so nothing in it has touched yet
     other_world.mPhysicsManager.Reset(engine_context.EngineAllocator());

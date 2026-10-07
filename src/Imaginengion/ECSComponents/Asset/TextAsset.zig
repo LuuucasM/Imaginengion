@@ -78,7 +78,7 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
                     "-font",
                     abs_path,
                     "-charset",
-                    "assets/fonts/charset.txt",
+                    "./src/Imaginengion/EngineAssets/fonts/charset.txt",
                     "-size",
                     "64",
                     "-pxrange",
