@@ -15,7 +15,8 @@ const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TransformComponent = EntityComponents.TransformComponent;
@@ -114,12 +115,15 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    const quad = try world.mObject.AddComponent(engine_context, QuadComponent{ .mBorderWidth = 2, .mSize = .{ .x = 3, .y = 4 } });
-    var ui = world.Builder(QuadComponent);
-    try ui.Float(&quad.mBorderWidth, "Border Width", .{ .Convert = .{ .ToShown = Double, .FromShown = Half }, .OnChange = CountChange });
-    try ui.Vec2Field(&quad.mSize, "Size", .{});
-    try ui.Bool(&quad.mShouldRender, "Should Render?", .{});
-    try ui.Color(&quad.mBorderColor, "Border Color", .{});
+    const surface = try world.mObject.AddComponent(engine_context, SurfaceComponent{ .mBorderWidth = 2 });
+    const shape = try world.mObject.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 3, .y = 4 } }));
+    //two components' fields as rows of the same panel, in the order they are built
+    var ui = world.Builder(SurfaceComponent);
+    try ui.Float(&surface.mBorderWidth, "Border Width", .{ .Convert = .{ .ToShown = Double, .FromShown = Half }, .OnChange = CountChange });
+    var shape_ui = world.Builder(ShapeComponent);
+    try shape_ui.Vec2Field(&shape.GetQuad().?.Size, "Size", .{});
+    try ui.Bool(&surface.mShouldRender, "Should Render?", .{});
+    try ui.Color(&surface.mBorderColor, "Border Color", .{});
 
     //shown as built, converted
     const border = world.Widget(0);
@@ -127,11 +131,11 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     //written back converted, with the field's OnChange after
     gChanges = 0;
     try EditNumber(world, border, 10);
-    try std.testing.expectEqual(@as(f32, 5), world.mObject.GetComponent(QuadComponent).?.mBorderWidth);
+    try std.testing.expectEqual(@as(f32, 5), world.mObject.GetComponent(SurfaceComponent).?.mBorderWidth);
     try std.testing.expectEqual(@as(usize, 1), gChanges);
 
     //a field changed by code: its widget catches up
-    world.mObject.GetComponent(QuadComponent).?.mSize.y = 9;
+    world.mObject.GetComponent(ShapeComponent).?.GetQuad().?.Size.y = 9;
     try world.ShowFields();
     var size_numbers = world.Widget(1).GetIterator(.Child);
     _ = size_numbers.next(); //the X box
@@ -140,21 +144,21 @@ test "numbers, vectors, bools and colors show their fields and write edits back,
     const size_y = size_numbers.next().?;
     try std.testing.expectEqual(@as(f32, 9), size_y.GetComponent(AttribComponent).?.mData.float32);
     try EditNumber(world, size_y, 7);
-    try std.testing.expectEqual(@as(f32, 7), world.mObject.GetComponent(QuadComponent).?.mSize.y);
+    try std.testing.expectEqual(@as(f32, 7), world.mObject.GetComponent(ShapeComponent).?.GetQuad().?.Size.y);
 
     //a bool is a checkbox's box
     const box = FirstChild(world.Widget(2));
     try std.testing.expect(box.HasComponent(SelectedTag));
     try WidgetActions.Toggle(engine_context, box);
     try world.ProcessUIEvents();
-    try std.testing.expect(!world.mObject.GetComponent(QuadComponent).?.mShouldRender);
+    try std.testing.expect(!world.mObject.GetComponent(SurfaceComponent).?.mShouldRender);
 
     //a color is a color field
     const color = world.Widget(3);
     try WidgetActions.SetColor(engine_context, color, .{ .x = 0.5, .y = 0.25, .z = 1, .w = 1 });
     try world.ProcessUIEvents();
-    try std.testing.expectEqual(@as(f32, 0.25), world.mObject.GetComponent(QuadComponent).?.mBorderColor.y);
-    world.mObject.GetComponent(QuadComponent).?.mBorderColor = .{ .x = 0, .y = 0, .z = 0, .w = 1 };
+    try std.testing.expectEqual(@as(f32, 0.25), world.mObject.GetComponent(SurfaceComponent).?.mBorderColor.y);
+    world.mObject.GetComponent(SurfaceComponent).?.mBorderColor = .{ .x = 0, .y = 0, .z = 0, .w = 1 };
     try world.ShowFields();
     try std.testing.expectEqual(@as(f32, 0), WidgetActions.ColorOf(color).x);
 }

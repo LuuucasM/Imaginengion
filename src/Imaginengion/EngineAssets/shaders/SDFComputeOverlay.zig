@@ -20,7 +20,10 @@ const MedShadingSSBO = SDFShared.MedShadingSSBO;
 const OutTexture = SDFShared.OutTexture;
 const TexturesArray = SDFShared.TexturesArray;
 
-const default_color = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 0 };
+const PushConstants = @import("IM").PushConstants;
+//kept a constant rather than picked per pass: a ray that hits nothing ends on nothing, so the shader compiler folds that
+//case away for every pixel. The game's background goes under at the end instead (FLAG_GAME_BACKGROUND)
+const background: Vec4(f32) = .FromArray(PushConstants.OVERLAY_BACKGROUND);
 
 const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&ShapesSSBO.ptr),
@@ -30,6 +33,7 @@ const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&SurfShadingSSBO.ptr),
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
+    .BVH,
 );
 
 export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void {
@@ -46,7 +50,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mEdges = undefined,
         .mNodeCount = 0,
         .mEdgeCount = 0,
-        .mDefaultColor = default_color,
+        .mDefaultColor = background,
         .mShapes = &ShapesSSBO.ptr,
         .mShapeSurfaces = &ShapeSurfacesSSBO.ptr,
         .mShapesCount = CameraUBO.mShapesCount,
@@ -65,7 +69,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .ParentEdge = OverlayRayMarcher.NO_EDGE,
         .FirstEdge = OverlayRayMarcher.NO_EDGE,
         .MaterialHandle = 0,
-        .AccumColor = default_color,
+        .AccumColor = background,
         .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
         .ShapeT = .None,
     };
@@ -77,7 +81,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .FromNode = 0,
         .ToNode = 0,
         .SiblingEdge = OverlayRayMarcher.NO_EDGE,
-        .AccumColor = default_color,
+        .AccumColor = background,
         .MaterialHandle = 0,
     };
     marcher.mNodes[0].FirstEdge = 0;
@@ -86,8 +90,12 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     marcher.March(SDFShared.imageSampleExplicitLod, TexturesArray);
 
     //traverse ray tree backwards to obtain final output color
-    const final_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
-    //const final_color = Vec4(f32){ .x = 1.0, .y = 0.0, .z = 0.0, .w = 1.0 };
+    const overlay_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
+    //the game layer has nothing in it this render, so its pass is skipped and this puts its background under instead
+    const final_color = if (CameraUBO.mFlags & PushConstants.FLAG_GAME_BACKGROUND != 0)
+        SDFShared.Over(overlay_color, .FromArray(PushConstants.GAME_BACKGROUND))
+    else
+        overlay_color;
 
     std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, final_color.ToVector());
 }

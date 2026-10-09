@@ -21,7 +21,8 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const GameLayerTag = EntityComponents.GameLayerTag;
@@ -43,11 +44,9 @@ pub const Box = struct {
     BorderWidth: f32 = 0,
 };
 
-/// Everything that is drawn: quads and text. What the renderer draws and what picking clicks on
-pub const VISUALS_QUERY = GroupQuery{ .Or = &[_]GroupQuery{
-    .{ .Component = QuadComponent },
-    .{ .Component = TextComponent },
-} };
+/// Everything that is drawn: whatever has a surface, which paints its shape or its text. What the renderer draws and
+/// what picking clicks on
+pub const VISUALS_QUERY = GroupQuery{ .Component = SurfaceComponent };
 
 /// Which scenes a view shows. The game layer is usually the whole world, which everyone sees; overlays are
 /// chosen per view, e.g. the ones a player has (Player.GetOverlayScenes) or every one for the editor camera
@@ -182,14 +181,14 @@ fn ClipRegionAbove(entity: Entity) ?Entity {
     return null;
 }
 
-/// A clip region's own rectangle in the world: the size layout gave it, or its quad's if it isn't in a layout, grown
+/// A clip region's own rectangle in the world: the size layout gave it, or its quad shape's if it isn't in a layout, grown
 /// by its scale, placed by its transform and then the canvas. Null if it has neither
 pub fn RegionRect(region: Entity, canvas: ?CanvasTransform) ?ClipRect {
     const transform = region.GetComponent(TransformComponent) orelse return null;
     const size = if (region.GetComponent(LayoutItemComponent)) |item|
         item.mComputedSize
-    else if (region.GetComponent(QuadComponent)) |quad|
-        quad.mSize
+    else if (QuadOf(region)) |quad|
+        quad.Size
     else
         return null;
 
@@ -250,14 +249,21 @@ pub fn OutsideClip(box: Box, clip: ClipRect) bool {
     return @abs(center.x) - reach_x > clip.HalfExtents.x or @abs(center.y) - reach_y > clip.HalfExtents.y;
 }
 
+/// An entity's shape, if it is a quad
+pub fn QuadOf(entity: Entity) ?*ShapeComponent.Quad {
+    const shape = entity.GetComponent(ShapeComponent) orelse return null;
+    return shape.GetQuad();
+}
+
 /// The quad's own size grown by its scale (and everything above it in the hierarchy), placed by the
-/// canvas for an overlay quad. Thickness stays THICKNESS_2D in world units either way.
-pub fn QuadBox(transform: *const TransformComponent, quad: *const QuadComponent, canvas: ?CanvasTransform) Box {
+/// canvas for an overlay quad. Thickness stays THICKNESS_2D in world units either way. `border_width` is its surface's
+/// border, which grows with it; 0 where only the shape matters, like picking
+pub fn QuadBox(transform: *const TransformComponent, quad: ShapeComponent.Quad, border_width: f32, canvas: ?CanvasTransform) Box {
     const world_scale = transform.GetWorldScale();
     var center = transform.GetWorldPosition();
     var rotation = transform.GetWorldRotation();
-    var half_x = quad.mSize.x * world_scale.x * 0.5;
-    var half_y = quad.mSize.y * world_scale.y * 0.5;
+    var half_x = quad.Size.x * world_scale.x * 0.5;
+    var half_y = quad.Size.y * world_scale.y * 0.5;
 
     if (canvas) |c| {
         center = c.ToWorldPoint(center);
@@ -270,7 +276,7 @@ pub fn QuadBox(transform: *const TransformComponent, quad: *const QuadComponent,
     //more than half the smaller side: past that the corners would overlap, and the border would cover it all
     const size_scale = @min(world_scale.x, world_scale.y) * if (canvas) |c| c.Scale else 1.0;
     const most = @min(half_x, half_y);
-    const radii = quad.mCornerRadii.MulScalar(size_scale);
+    const radii = quad.CornerRadii.MulScalar(size_scale);
 
     return .{
         .Center = center,
@@ -282,7 +288,7 @@ pub fn QuadBox(transform: *const TransformComponent, quad: *const QuadComponent,
             .z = std.math.clamp(radii.z, 0, most),
             .w = std.math.clamp(radii.w, 0, most),
         },
-        .BorderWidth = std.math.clamp(quad.mBorderWidth * size_scale, 0, most),
+        .BorderWidth = std.math.clamp(border_width * size_scale, 0, most),
     };
 }
 

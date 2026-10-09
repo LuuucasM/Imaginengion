@@ -14,7 +14,6 @@ const Vec2 = MathTypes.Vec2;
 const TransformComponent = EntityComponents.TransformComponent;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const QuadComponent = EntityComponents.QuadComponent;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const ViewportComponent = EntityComponents.ViewportComponent;
@@ -40,12 +39,12 @@ pub fn ShownTarget(engine_context: *EngineContext, viewport: ViewportComponent) 
 /// How many pixels an overlay viewport quad covers when its scene is seen through `camera_view`: its laid out size in
 /// canvas units, times the pixels a canvas unit covers. Null for one with no quad, or not in an overlay
 pub fn PixelSizeOf(entity: Entity, camera_view: CameraView) ?PixelSize {
-    const quad = entity.GetComponent(QuadComponent) orelse return null;
+    const quad = ShapeGeometry.QuadOf(entity) orelse return null;
     if (entity.GetLayer() != .OverlayLayer) return null;
     const pixels_per_unit = entity.mManager.OverlayPixelsPerUnit(camera_view.TargetHeight, camera_view.DisplayScale);
     return .{
-        .Width = @intFromFloat(@max(@round(quad.mSize.x * pixels_per_unit), 0)),
-        .Height = @intFromFloat(@max(@round(quad.mSize.y * pixels_per_unit), 0)),
+        .Width = @intFromFloat(@max(@round(quad.Size.x * pixels_per_unit), 0)),
+        .Height = @intFromFloat(@max(@round(quad.Size.y * pixels_per_unit), 0)),
     };
 }
 
@@ -75,8 +74,8 @@ pub fn ViewPixelOnRay(entity: Entity, ray: Ray, camera_view: CameraView, bounds:
 /// Where `ray` lands on an overlay quad, as a pixel of a picture `picture_size` big stretched over the quad: from its
 /// top left, x to the right and y down. Null if the ray misses the quad's plane, or misses the quad when it must be on it
 pub fn QuadPixelOnRay(entity: Entity, ray: Ray, camera_view: CameraView, picture_size: Vec2(f32), bounds: Bounds) ?Vec2(f32) {
-    const quad = entity.GetComponent(QuadComponent) orelse return null;
-    if (entity.GetLayer() != .OverlayLayer or quad.mSize.x <= 0 or quad.mSize.y <= 0) return null;
+    const quad = ShapeGeometry.QuadOf(entity) orelse return null;
+    if (entity.GetLayer() != .OverlayLayer or quad.Size.x <= 0 or quad.Size.y <= 0) return null;
 
     //onto the canvas, then into the quad's own space, which is what its size is in
     const point = ShapeGeometry.WorldCanvas(entity.mManager, camera_view).RayToCanvasPoint(ray) orelse return null;
@@ -86,8 +85,8 @@ pub fn QuadPixelOnRay(entity: Entity, ray: Ray, camera_view: CameraView, picture
     const local = point.SubVec(transform.GetWorldPosition()).InvQuatRotate(transform.GetWorldRotation());
 
     //0 to 1 across the quad, left to right and top to bottom: canvas y is up, a picture's pixels run down
-    const u = local.x / scale.x / quad.mSize.x + 0.5;
-    const v = 0.5 - local.y / scale.y / quad.mSize.y;
+    const u = local.x / scale.x / quad.Size.x + 0.5;
+    const v = 0.5 - local.y / scale.y / quad.Size.y;
     if (bounds == .OnView and (u < 0 or u > 1 or v < 0 or v > 1)) return null;
     return .{ .x = u * picture_size.x, .y = v * picture_size.y };
 }

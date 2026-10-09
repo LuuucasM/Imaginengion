@@ -47,7 +47,8 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
         }
 
         /// Begins a compute pass with this texture bound read-write at slot 0.
-        /// cycle: true for overlay pass (fresh write), false for game pass (must see overlay's writes).
+        /// cycle: true for a pass that writes every pixel fresh, false for a game pass under an overlay (it must see the
+        /// overlay's writes).
         pub fn BeginComputePass(self: *Self, engine_context: *EngineContext, cycle: bool) *sdl.SDL_GPUComputePass {
             const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetFrameCmdBuff()));
 
@@ -72,6 +73,23 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
         pub fn EndComputePass(_: Self, pass: *anyopaque) void {
             const p: *sdl.SDL_GPUComputePass = @ptrCast(@alignCast(pass));
             sdl.SDL_EndGPUComputePass(p);
+        }
+
+        /// Fills the whole texture with `color`, for a render with nothing to draw: a render pass that only clears,
+        /// far cheaper than a compute pass over every pixel. A fresh texture is cycled in, since nothing earlier shows
+        pub fn Clear(self: *Self, engine_context: *EngineContext, color: [4]f32) void {
+            const cmd: *sdl.SDL_GPUCommandBuffer = @ptrCast(@alignCast(engine_context.mRenderer.mPlatform.GetFrameCmdBuff()));
+
+            const target = sdl.SDL_GPUColorTargetInfo{
+                .texture = self.mTexture.?,
+                .clear_color = .{ .r = color[0], .g = color[1], .b = color[2], .a = color[3] },
+                .load_op = sdl.SDL_GPU_LOADOP_CLEAR,
+                .store_op = sdl.SDL_GPU_STOREOP_STORE,
+                .cycle = true,
+            };
+            const pass = sdl.SDL_BeginGPURenderPass(cmd, &target, 1, null);
+            std.debug.assert(pass != null);
+            sdl.SDL_EndGPURenderPass(pass);
         }
 
         /// For the blit/present pass — samples this texture as a regular fragment sampler.
@@ -108,7 +126,9 @@ pub fn SDLComputeStorageTexture(comptime format: TextureFormat) type {
                 .format = ToSDLTextureFormat(format),
                 .usage = sdl.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_READ |
                     sdl.SDL_GPU_TEXTUREUSAGE_COMPUTE_STORAGE_WRITE |
-                    sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
+                    sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER |
+                    //only for Clear
+                    sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET,
                 .width = @intCast(self.mWidth),
                 .height = @intCast(self.mHeight),
                 .layer_count_or_depth = 1,

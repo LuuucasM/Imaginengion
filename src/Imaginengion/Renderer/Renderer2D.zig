@@ -32,7 +32,8 @@ const Aabb = @import("../Math/Aabb.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityTransformComponent = EntityComponents.TransformComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 
 
@@ -385,41 +386,42 @@ pub fn DrawQuad(
     self: *Renderer2D,
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
-    quad_component: *QuadComponent,
+    quad: ShapeComponent.Quad,
+    surface: *SurfaceComponent, //what it is painted with
     shown: ?RenderTargetComponent.Shown, //a render target it shows in place of its texture (ViewportComponent)
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
     shading_buff: *ShadingBuffers,
 ) !void {
     //the same box picking tests against
-    const box = ShapeGeometry.QuadBox(transform_component, quad_component, canvas);
+    const box = ShapeGeometry.QuadBox(transform_component, quad, surface.mBorderWidth, canvas);
     //cut off altogether: nothing to draw, and nothing for every pixel to march past
     if (clip) |view_clip| {
         if (ShapeGeometry.OutsideClip(box, view_clip.Rect)) return;
     }
 
-    const texture_asset = try quad_component.mTexture.GetAsset(engine_context, Texture2D);
+    const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
 
     const shading_handle = if (shown) |target|
-        try shading_buff.AddSurfaceSlot(engine_context.EngineAllocator(), &quad_component.mTexOptions, target.Handle, target.Width, target.Height)
+        try shading_buff.AddSurfaceSlot(engine_context.EngineAllocator(), &surface.mTexOptions, target.Handle, target.Width, target.Height)
     else
         try shading_buff.AddSurface(
             engine_context.EngineAllocator(),
-            &quad_component.mTexOptions,
+            &surface.mTexOptions,
             texture_asset,
             std.math.maxInt(u32),
         );
 
     var shading_flag: u32 = 0;
-    if (quad_component.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+    if (surface.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
 
     //the border is a solid color: its own surface, which the marcher draws untextured
     var border_shading_handle = shading_handle;
     if (box.BorderWidth > 0) {
         var border_options: Texture2D.TexOptions = .default;
-        border_options.mColor = quad_component.mBorderColor;
+        border_options.mColor = surface.mBorderColor;
         border_shading_handle = try shading_buff.AddSurface(engine_context.EngineAllocator(), &border_options, texture_asset, std.math.maxInt(u32));
-        if (quad_component.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+        if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
@@ -448,6 +450,7 @@ pub fn DrawText(
     engine_context: *EngineContext,
     transform_component: *EntityTransformComponent,
     text_component: *TextComponent,
+    surface: *SurfaceComponent, //what it is painted with
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
     clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
     shading_buff: *ShadingBuffers,
@@ -457,17 +460,17 @@ pub fn DrawText(
 
     const text_asset = try text_component.mTextAssetHandle.GetAsset(engine_context, TextAsset);
     const atlas_asset = &text_asset.mAtlas;
-    const texture_asset = try text_component.mTexHandle.GetAsset(engine_context, Texture2D);
+    const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
 
     const texture_shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
-        &text_component.mTexOptions,
+        &surface.mTexOptions,
         texture_asset,
         std.math.maxInt(u32),
     );
 
     var texture_shading_flags: u32 = 0;
-    if (text_component.mTexOptions.mIsTransparent) texture_shading_flags |= ShapeData.FLAG_TRANSPARENT;
+    if (surface.mTexOptions.mIsTransparent) texture_shading_flags |= ShapeData.FLAG_TRANSPARENT;
 
     //the text's own position and rotation, in canvas units for an overlay scene
     const text_pos = transform_component.GetWorldPosition();

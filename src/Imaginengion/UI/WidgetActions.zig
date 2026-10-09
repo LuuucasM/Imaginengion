@@ -12,7 +12,8 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const SelectedTag = EntityComponents.SelectedTag;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TextComponent = EntityComponents.TextComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const AttribComponent = EntityComponents.AttribComponent;
 const Vec4 = @import("../Math/MathTypes.zig").Vec4;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
@@ -309,9 +310,10 @@ pub fn UpdateSwatch(color_field: Entity) void {
     var children = color_field.GetIterator(.Child);
     while (children.next()) |child| {
         if (child.HasComponent(AttribComponent)) continue;
-        const quad = child.GetComponent(QuadComponent) orelse continue;
-        quad.mTexOptions.mColor = color;
-        quad.mTexOptions.mIsTransparent = color.w < 1;
+        if (!child.HasComponent(ShapeComponent)) continue;
+        const surface = child.GetComponent(SurfaceComponent) orelse continue;
+        surface.mTexOptions.mColor = color;
+        surface.mTexOptions.mIsTransparent = color.w < 1;
         return;
     }
 }
@@ -518,7 +520,7 @@ fn CheckOf(item: Entity) ?Entity {
     var children = item.GetIterator(.Child);
     while (children.next()) |child| last = child;
     const check = last orelse return null;
-    return if (check.HasComponent(QuadComponent)) check else null;
+    return if (check.HasComponent(ShapeComponent)) check else null;
 }
 
 /// The nearest entity above `entity` whose UI element has a SelectionGroupComponent

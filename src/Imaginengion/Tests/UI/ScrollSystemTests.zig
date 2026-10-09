@@ -20,7 +20,8 @@ const ScrollComponent = UIComponents.ScrollComponent;
 const ScrollStateComponent = UIComponents.ScrollStateComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const SceneComponent = @import("../../ECSComponents/SComponents.zig").SceneComponent;
 const EntityChildComponent = @import("../../ECS/Components.zig").ChildComponent(Entity.Type);
@@ -112,10 +113,10 @@ fn Clip(entity: Entity) *ScrollStateComponent {
 }
 
 fn ExpectThumb(thumb: Entity, width: f32, height: f32, x: f32, y: f32) !void {
-    const quad = thumb.GetComponent(QuadComponent).?;
-    try std.testing.expect(quad.mShouldRender);
-    try std.testing.expectApproxEqAbs(width, quad.mSize.x, eps);
-    try std.testing.expectApproxEqAbs(height, quad.mSize.y, eps);
+    try std.testing.expect(thumb.GetComponent(SurfaceComponent).?.mShouldRender);
+    const quad = thumb.GetComponent(ShapeComponent).?.GetQuad().?;
+    try std.testing.expectApproxEqAbs(width, quad.Size.x, eps);
+    try std.testing.expectApproxEqAbs(height, quad.Size.y, eps);
     const translation = thumb.GetComponent(TransformComponent).?.GetTranslation();
     try std.testing.expectApproxEqAbs(x, translation.x, eps);
     try std.testing.expectApproxEqAbs(y, translation.y, eps);
@@ -216,7 +217,7 @@ test "a region that no longer overflows loses its thumb" {
     try world.Frame();
     try std.testing.expect(Clip(world.mList).mThumbY == null);
     //hidden now, gone at the end of the frame
-    try std.testing.expect(!thumb.GetComponent(QuadComponent).?.mShouldRender);
+    try std.testing.expect(!thumb.GetComponent(SurfaceComponent).?.mShouldRender);
     try world.EndFrame();
     try std.testing.expect(!thumb.IsActive());
 }

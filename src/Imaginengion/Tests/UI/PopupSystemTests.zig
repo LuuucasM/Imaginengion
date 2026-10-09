@@ -20,7 +20,8 @@ const UIManager = @import("../../UI/UIManager.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const TextInputComponent = UIComponents.TextInputComponent;
 const TransformComponent = EntityComponents.TransformComponent;
@@ -60,7 +61,8 @@ const TestWorld = struct {
         self.mPanel = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
         self.mButton = try self.mPanel.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         try self.mButton.SetTranslation(engine_context, .{ .x = 100, .y = 200, .z = 0 });
-        _ = try self.mButton.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 100, .y = 20 } });
+        _ = try self.mButton.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 100, .y = 20 } }));
+        _ = try self.mButton.AddComponent(engine_context, SurfaceComponent{});
 
         //80 x 60, hanging below what opens it (the default)
         self.mMenu = try Popup(engine_context, scene, .{}, 80, 60);
@@ -69,6 +71,7 @@ const TestWorld = struct {
         _ = try self.mNewRow.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = 80 }, .mHeight = .{ .Fixed = 20 } });
         self.mField = try self.mMenu.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         _ = try self.mField.AddComponent(engine_context, TextComponent{});
+        _ = try self.mField.AddComponent(engine_context, SurfaceComponent{});
         try AddUI(engine_context, self.mField, TextInputComponent{});
 
         //50 x 40, beside what opens it, top edges lined up

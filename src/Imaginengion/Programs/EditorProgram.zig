@@ -34,7 +34,6 @@ const EntityUUIDComponent = EntityComponents.UUIDComponent;
 const OnKeyPressedScript = EntityComponents.OnKeyPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
-const QuadComponent = EntityComponents.QuadComponent;
 const ViewportComponent = EntityComponents.ViewportComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const Viewports = @import("../Renderer/Viewports.zig");
@@ -102,13 +101,12 @@ const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
 const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
 const StatsPanel = @import("../EditorPanels/StatsPanel.zig");
-const PickingDebugPanel = @import("../Imgui/PickingDebugPanel.zig");
+const PickingDebugPanel = @import("../EditorPanels/PickingDebugPanel.zig");
 const UIElementPanel = @import("../EditorPanels/UIElementPanel.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const UIECSEvent = UIManager.ECSManagerT.ECSEventManager.EventType;
 const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ECSDisplayPanel = @import("../Imgui/ECSDisplay.zig");
-const RunSettings = @import("../Imgui/RunSettings.zig");
 
 const WorldManager = @import("../Core/WorldManager.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
@@ -153,7 +151,8 @@ mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
 _ScriptsPanel: ScriptsPanel = .{},
 /// The Stats window, in the editor UI
 mStatsPanel: StatsPanel = .{},
-_PickingDebugPanel: PickingDebugPanel = .{},
+/// The Picking Debug window, in the editor UI
+mPickingDebugPanel: PickingDebugPanel = .{},
 /// The UI Element window, in the editor UI
 mUIElementPanel: UIElementPanel = .{},
 /// Hands the pointer's and the UI's events to entities' event scripts
@@ -233,7 +232,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     //the whole window, in the window's background color
     self.mEditorUIRoot = try self.mEditorUIScene.CreateEntity(engine_context, Entity.DefaultConfig);
     try self.mEditorUIRoot.SetName(engine_context, "Editor UI Root");
-    _ = try self.mEditorUIRoot.AddComponent(engine_context, QuadComponent{});
+    try Widgets.AddQuad(engine_context, self.mEditorUIRoot, .{}, .{});
     _ = try self.mEditorUIRoot.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     _ = try self.mEditorUIRoot.AddComponent(engine_context, LayoutItemComponent{
         .mWidth = .{ .Percent = 1 },
@@ -248,6 +247,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mUIElementPanel = try UIElementPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mPickingDebugPanel = try PickingDebugPanel.Build(engine_context, self.mEditorUIScene, .{});
     //=================================================================
 
     //EDITOR VIEWPORT STUFF==================================================
@@ -457,8 +457,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             if (EditorShell.Host(shell.mComponentsPage, self._ComponentsPanel._P_Open, engine_context)) try self._ComponentsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             if (EditorShell.Host(shell.mScriptsPage, self._ScriptsPanel._P_Open, engine_context)) try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             //the floating ones
-            //before RenderViewports, so it reads last frame's view rects the way input picking will
-            try self._PickingDebugPanel.OnImguiRender(engine_context, &self._ViewportPanel, self);
             try self.RenderTmplEditPanels(engine_context);
             try self.RenderViewports(engine_context);
 
@@ -626,7 +624,7 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
     const zone = Tracy.ZoneInit("EditorProgram::OnPointerEvent", @src());
     defer zone.Deinit();
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
-    self._PickingDebugPanel.OnPointerEvent(event.*);
+    self.mPickingDebugPanel.OnPointerEvent(event.*);
     //e.g. a dragged scrollbar scrolls its region
     try engine_context.mUIManager.OnPointerEvent(engine_context, event.*);
     //a menu bar item or a panel's button picked: one event per entity in the chain, the item's own is the one with its
@@ -649,7 +647,7 @@ pub fn OnUIEvent(editor_program: *anyopaque, engine_context: *EngineContext, eve
     const zone = Tracy.ZoneInit("EditorProgram::OnUIEvent", @src());
     defer zone.Deinit();
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
-    self._PickingDebugPanel.OnUIEvent(event.*);
+    self.mPickingDebugPanel.OnUIEvent(event.*);
     try self.mEventScripts.OnUIEvent(engine_context, event.*);
     return .Continue;
 }
@@ -1115,7 +1113,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     shown.set(.ContentBrowser, self._ContentBrowserPanel.mIsVisible);
     shown.set(.Scripts, self._ScriptsPanel._P_Open);
     shown.set(.Stats, self.mStatsPanel.IsOpen());
-    shown.set(.PickingDebug, self._PickingDebugPanel._P_Open);
+    shown.set(.PickingDebug, self.mPickingDebugPanel.IsOpen());
     shown.set(.UIElement, self.mUIElementPanel.IsOpen());
     shown.set(.Viewport, self.mShowViewport);
 
@@ -1187,7 +1185,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             .ContentBrowser => self._ContentBrowserPanel.mIsVisible = !self._ContentBrowserPanel.mIsVisible,
             .Scripts => self._ScriptsPanel._P_Open = !self._ScriptsPanel._P_Open,
             .Stats => try self.mStatsPanel.Toggle(engine_context),
-            .PickingDebug => self._PickingDebugPanel._P_Open = !self._PickingDebugPanel._P_Open,
+            .PickingDebug => try self.mPickingDebugPanel.Toggle(engine_context),
             .UIElement => try self.mUIElementPanel.Toggle(engine_context),
             .Viewport => self.mShowViewport = !self.mShowViewport,
         },
@@ -1213,6 +1211,8 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
     try self.mUIElementPanel.Update(engine_context, self.mSelectedObj);
+    //before this frame's views are drawn, so it reads last frame's view rects the way input picking will
+    try self.mPickingDebugPanel.Update(engine_context, &self._ViewportPanel, self);
 
     //the viewport's views share the area it was last laid out at
     const viewport_area = self.mShell.mViewportArea;
@@ -1239,7 +1239,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     while (self.mViewportQuads.items.len < views.items.len) {
         const quad = try viewport_area.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         try quad.SetName(engine_context, "Viewport");
-        _ = try quad.AddComponent(engine_context, QuadComponent{});
+        try Widgets.AddQuad(engine_context, quad, .{}, .{});
         _ = try quad.AddComponent(engine_context, ViewportComponent{});
         _ = try quad.AddComponent(engine_context, LayoutItemComponent{});
         try self.mViewportQuads.append(engine_context.EngineAllocator(), quad);

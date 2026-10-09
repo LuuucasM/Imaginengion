@@ -7,7 +7,7 @@
 //! Written back for each element:
 //!   - its translation's x and y, when layout decided where it goes. Never z: how things stack in depth is up
 //!     to whoever places them. Only written when it changed, so an unchanged tree doesn't dirty any transforms
-//!   - its own QuadComponent's size, as its background. A quad is only ever written, never read as something to
+//!   - its own quad shape's size (ShapeComponent), as its background. A quad is only ever written, never read as something to
 //!     fit to: layout reading back its own output would keep elements at the largest size they have ever been
 //!   - its own TextComponent's bounds, for a leaf, whose text is what it fits to
 //!   - LayoutItemComponent.mComputedSize
@@ -34,7 +34,7 @@ const ScrollStateComponent = UIComponents.ScrollStateComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -302,7 +302,7 @@ fn WriteBack(entity: Entity, text_center: ?Vec2(f32), result: Layout.Result, eng
     }
 
     //the element's background
-    if (entity.GetComponent(QuadComponent)) |quad| quad.mSize = result.Size;
+    if (ShapeGeometry.QuadOf(entity)) |quad| quad.Size = result.Size;
 
     //text runs from its bounds' left edge, so even bounds put its room across the element. Its room is then moved
     //to the element's middle, rather than its first line's baseline

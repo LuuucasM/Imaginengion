@@ -23,7 +23,8 @@ const TexturesArray = SDFShared.TexturesArray;
 
 const imageRead = SDFShared.imageRead;
 
-const default_color = Vec4(f32){ .x = 0, .y = 0.28, .z = 0.39, .w = 1.0 };
+const PushConstants = @import("IM").PushConstants;
+const background: Vec4(f32) = .FromArray(PushConstants.GAME_BACKGROUND);
 
 const GameRayMarcher = RayMarcherFn(
     @TypeOf(&ShapesSSBO.ptr),
@@ -33,13 +34,19 @@ const GameRayMarcher = RayMarcherFn(
     @TypeOf(&SurfShadingSSBO.ptr),
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
+    .BVH,
 );
 
 export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void {
     const global = spirv.global_invocation_id;
     if (@as(f32, @floatFromInt(global[0])) >= CameraUBO.mViewportWidth or @as(f32, @floatFromInt(global[1])) >= CameraUBO.mViewportHeight) return;
 
-    const sample: Vec4(f32) = .FromVector(imageRead(OutTexture, u32, .{ global[0], global[1] }));
+    //what the overlay pass drew here, which this goes under. Without an overlay pass this render the texture holds
+    //nothing of this frame, so there is nothing above
+    const sample: Vec4(f32) = if (CameraUBO.mFlags & PushConstants.FLAG_UNDER_OVERLAY != 0)
+        .FromVector(imageRead(OutTexture, u32, .{ global[0], global[1] }))
+    else
+        .{ .x = 0, .y = 0, .z = 0, .w = 0 };
     if (sample.w >= 0.999) return;
 
     //the pixel center, CameraRay takes continuous pixel coordinates
@@ -52,7 +59,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mEdges = undefined,
         .mNodeCount = 0,
         .mEdgeCount = 0,
-        .mDefaultColor = default_color,
+        .mDefaultColor = background,
         .mShapes = &ShapesSSBO.ptr,
         .mShapeSurfaces = &ShapeSurfacesSSBO.ptr,
         .mShapesCount = CameraUBO.mShapesCount,
@@ -71,7 +78,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .ParentEdge = GameRayMarcher.NO_EDGE,
         .FirstEdge = GameRayMarcher.NO_EDGE,
         .MaterialHandle = 0,
-        .AccumColor = default_color,
+        .AccumColor = background,
         .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
         .ShapeT = .None,
     };
@@ -83,7 +90,7 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .FromNode = 0,
         .ToNode = 0,
         .SiblingEdge = GameRayMarcher.NO_EDGE,
-        .AccumColor = default_color,
+        .AccumColor = background,
         .MaterialHandle = 0,
     };
     marcher.mNodes[0].FirstEdge = 0;
@@ -94,11 +101,8 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     //traverse ray tree backwards to obtain final output color
     const march_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
 
-    const out_a = march_color.w + sample.w * (1.0 - march_color.w);
-
-    const out_rgb = if (out_a > 0) march_color.ToVec3().MulScalar(march_color.w).AddVec(sample.ToVec3().MulScalar(sample.w * (1.0 - march_color.w))).DivScalar(out_a) else Vec3(f32){ .x = 0, .y = 0, .z = 0 };
-
-    const final_color = Vec4(f32){ .x = out_rgb.x, .y = out_rgb.y, .z = out_rgb.z, .w = out_a };
+    //the overlay over the game
+    const final_color = SDFShared.Over(sample, march_color);
 
     std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, final_color.ToVector());
 }

@@ -41,6 +41,10 @@ pub fn ComputeStorageTexture(comptime format: TextureFormat) type {
             self._Impl.EndComputePass(pass);
         }
 
+        pub fn Clear(self: *Self, engine_context: *EngineContext, color: [4]f32) void {
+            self._Impl.Clear(engine_context, color);
+        }
+
         pub fn BindSampler(self: Self, render_pass: *anyopaque, slot: u32) void {
             self._Impl.BindSampler(render_pass, slot);
         }

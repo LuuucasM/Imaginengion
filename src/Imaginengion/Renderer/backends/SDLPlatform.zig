@@ -6,6 +6,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const PushConstants = @import("../RenderPlatform.zig").PushConstants;
 const ComputeOutput = @import("../Renderer.zig").ComputeOutput;
 const StorageBufferBinding = @import("../RenderPlatform.zig").StorageBufferBinding;
+const PresentMode = @import("../RenderPlatform.zig").PresentMode;
 const Tracy = @import("../../Core/Tracy.zig");
 
 const sdl = @import("../../Core/CImports.zig").sdl;
@@ -20,7 +21,7 @@ mSwapchainTexture: ?*sdl.SDL_GPUTexture = null,
 mSwapchainWidth: usize = 0,
 mSwapchainHeight: usize = 0,
 
-pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
+pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, present_mode: PresentMode) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
     const vk_api_1_3_0: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0;
 
@@ -64,6 +65,12 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
 
     const claimed = sdl.SDL_ClaimWindowForGPUDevice(self.mDevice, sdl_window);
     std.debug.assert(claimed);
+
+    //a claimed window starts out with vsync. not every driver can turn it off, and the window keeps it then
+    if (present_mode == .Off and sdl.SDL_WindowSupportsGPUPresentMode(self.mDevice, sdl_window, sdl.SDL_GPU_PRESENTMODE_IMMEDIATE)) {
+        const set = sdl.SDL_SetGPUSwapchainParameters(self.mDevice, sdl_window, sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR, sdl.SDL_GPU_PRESENTMODE_IMMEDIATE);
+        std.debug.assert(set);
+    }
 
     std.log.info("SDL_GPU Info:", .{});
     std.log.info("\tDriver: {s}", .{sdl.SDL_GetGPUDeviceDriver(self.mDevice)});

@@ -34,7 +34,9 @@ const UIManager = @import("UIManager.zig");
 const TextInputComponent = @import("../ECSComponents/UIComponents.zig").TextInputComponent;
 const FocusedTag = EntityComponents.FocusedTag;
 const TextComponent = EntityComponents.TextComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
+const Widgets = @import("Widgets.zig");
 const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
@@ -178,7 +180,7 @@ pub fn EndEdit(self: *FocusSystem, engine_context: *EngineContext, how: EndHow) 
     //deletes wait for the end of the frame, which is after this frame is drawn
     if (self.mCaretEntity) |caret| {
         if (caret.IsActive()) {
-            if (caret.GetComponent(QuadComponent)) |quad| quad.mShouldRender = false;
+            if (caret.GetComponent(SurfaceComponent)) |surface| surface.mShouldRender = false;
             try caret.Delete(engine_context);
         }
     }
@@ -275,10 +277,10 @@ fn UpdateCaret(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
     const place = try CaretPlace(engine_context, text, self.mCaret);
 
     const caret = try self.CaretEntity(engine_context, focused);
-    const quad = caret.GetComponent(QuadComponent).?;
-    quad.mShouldRender = @mod(self.mBlinkTime, 2 * BLINK_SECONDS) < BLINK_SECONDS;
-    quad.mSize = .{ .x = text.mFontSize * CARET_WIDTH, .y = place.Height };
-    quad.mMaterial = text.mMaterial;
+    const surface = caret.GetComponent(SurfaceComponent).?;
+    surface.mShouldRender = @mod(self.mBlinkTime, 2 * BLINK_SECONDS) < BLINK_SECONDS;
+    caret.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = text.mFontSize * CARET_WIDTH, .y = place.Height };
+    if (focused.GetComponent(SurfaceComponent)) |text_surface| surface.mMaterial = text_surface.mMaterial;
 
     const translation = Vec3(f32){ .x = place.Center.x, .y = place.Center.y, .z = CARET_DEPTH };
     const transform = caret.GetComponent(TransformComponent).?;
@@ -298,7 +300,7 @@ fn CaretEntity(self: *FocusSystem, engine_context: *EngineContext, focused: Enti
         name.mName.clearRetainingCapacity();
         try name.mName.appendSlice(engine_context.EngineAllocator(), "Caret");
     }
-    _ = try caret.AddComponent(engine_context, QuadComponent{});
+    try Widgets.AddQuad(engine_context, caret, .{}, .{});
     //its color is the theme's
     try UIManager.Style(engine_context, caret, "Caret");
     self.mCaretEntity = caret;

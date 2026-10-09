@@ -10,7 +10,8 @@ const CameraView = @import("../../Renderer/Renderer.zig").CameraView;
 const OverlayCanvas = @import("../../Math/OverlayCanvas.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const ClipComponent = EntityComponents.ClipComponent;
@@ -69,7 +70,8 @@ const VIEW = CameraView{
 
 fn AddQuad(engine_context: *EngineContext, scene: Scene) !Entity {
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try entity.AddComponent(engine_context, QuadComponent{});
+    _ = try entity.AddComponent(engine_context, ShapeComponent{});
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     return entity;
 }
 
@@ -253,7 +255,8 @@ fn Find(shapes: []const ShapeGeometry.ViewShape, entity: Entity) ShapeGeometry.V
 fn QuadAt(engine_context: *EngineContext, parent: Entity, position: Vec3(f32), size: Vec2(f32)) !Entity {
     const entity = try parent.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try entity.SetTranslation(engine_context, position);
-    _ = try entity.AddComponent(engine_context, QuadComponent{ .mSize = size });
+    _ = try entity.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = size }));
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     return entity;
 }
 
@@ -275,7 +278,7 @@ test "everything under a clip region is cut to its rectangle, the region itself 
     //a 4 x 2 region at (10, 0), a child in it and a grandchild under that, and a quad outside it
     const region = try AddQuad(engine_context, level);
     try region.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
-    region.GetComponent(QuadComponent).?.mSize = .{ .x = 4, .y = 2 };
+    region.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 4, .y = 2 };
     _ = try region.AddComponent(engine_context, ClipComponent{});
     const child = try QuadAt(engine_context, region, .{ .x = 0, .y = 0, .z = 1 }, .{ .x = 10, .y = 10 });
     const grandchild = try QuadAt(engine_context, child, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
@@ -301,7 +304,7 @@ test "a clip region inside another is cut to both, and an overlay's is placed by
     //x from 8 to 12, and inside it one from 9 to 13: the overlap is 9 to 12
     const outer = try AddQuad(engine_context, level);
     try outer.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
-    outer.GetComponent(QuadComponent).?.mSize = .{ .x = 4, .y = 2 };
+    outer.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 4, .y = 2 };
     _ = try outer.AddComponent(engine_context, ClipComponent{});
     const inner = try QuadAt(engine_context, outer, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 4, .y = 4 });
     _ = try inner.AddComponent(engine_context, ClipComponent{});
@@ -310,7 +313,7 @@ test "a clip region inside another is cut to both, and an overlay's is placed by
     const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const panel = try AddQuad(engine_context, hud);
     try panel.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
-    panel.GetComponent(QuadComponent).?.mSize = .{ .x = 200, .y = 100 };
+    panel.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 200, .y = 100 };
     _ = try panel.AddComponent(engine_context, ClipComponent{});
     const row = try QuadAt(engine_context, panel, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 10, .y = 10 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
@@ -353,7 +356,7 @@ test "a viewport quad covers its size times the pixels a canvas unit covers, and
 
     const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const viewport = try AddQuad(engine_context, overlay);
-    viewport.GetComponent(QuadComponent).?.mSize = .{ .x = 400, .y = 225 };
+    viewport.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 400, .y = 225 };
 
     //a constant pixel size world's overlay: a canvas unit is a pixel at the display's scale
     engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
@@ -388,7 +391,7 @@ test "a ray through a viewport quad lands on the pixel of the picture under it, 
     //400 x 200 canvas units, centered at (100, 50), showing an 800 x 400 picture
     const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const quad = try AddQuad(engine_context, overlay);
-    quad.GetComponent(QuadComponent).?.mSize = .{ .x = 400, .y = 200 };
+    quad.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 400, .y = 200 };
     try quad.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
     const picture = Vec2(f32){ .x = 800, .y = 400 };

@@ -17,7 +17,8 @@ const TextInputComponent = @import("../../ECSComponents/UIComponents.zig").TextI
 const UIElementComponent = EntityComponents.UIElementComponent;
 const UIManager = @import("../../UI/UIManager.zig");
 const TextComponent = EntityComponents.TextComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
 const EntityChildComponent = @import("../../ECS/Components.zig").ChildComponent(Entity.Type);
 const StackPosComponent = @import("../../ECSComponents/SComponents.zig").StackPosComponent;
@@ -56,6 +57,7 @@ const TestWorld = struct {
         const entity = try self.mForm.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
         const text_component = try entity.AddComponent(engine_context, TextComponent{});
         try text_component.SetText(engine_context, text);
+        _ = try entity.AddComponent(engine_context, SurfaceComponent{});
         try AddUI(engine_context, entity, TextInputComponent{});
         return entity;
     }
@@ -315,19 +317,19 @@ test "the caret is a quad on a child of the text input, there only while it has 
     try world.Press(world.mName, .BUTTON_LEFT);
     try focus.Update(engine_context);
     const caret = focus.mCaretEntity.?;
-    try std.testing.expect(caret.HasComponent(QuadComponent));
+    try std.testing.expect(caret.HasComponent(ShapeComponent));
     //colored by the theme
     try std.testing.expectEqualStrings("Caret", UIManager.GetUIComponent(caret, @import("../../ECSComponents/UIComponents.zig").StyleComponent).?.mStyle.items);
     try std.testing.expectEqual(world.mName.mID, caret.GetComponent(EntityChildComponent).?.mParent);
     //showing straight away, then blinking off
-    try std.testing.expect(caret.GetComponent(QuadComponent).?.mShouldRender);
+    try std.testing.expect(caret.GetComponent(SurfaceComponent).?.mShouldRender);
     focus.mBlinkTime = 0.75;
     try focus.Update(engine_context);
-    try std.testing.expect(!caret.GetComponent(QuadComponent).?.mShouldRender);
+    try std.testing.expect(!caret.GetComponent(SurfaceComponent).?.mShouldRender);
     //an edit shows it again
     try world.Type("!");
     try focus.Update(engine_context);
-    try std.testing.expect(caret.GetComponent(QuadComponent).?.mShouldRender);
+    try std.testing.expect(caret.GetComponent(SurfaceComponent).?.mShouldRender);
 
     //the same caret every frame
     try focus.Update(engine_context);
@@ -336,7 +338,7 @@ test "the caret is a quad on a child of the text input, there only while it has 
     try world.Key(.RETURN);
     try std.testing.expect(focus.mCaretEntity == null);
     //hidden now, gone at the end of the frame
-    try std.testing.expect(!caret.GetComponent(QuadComponent).?.mShouldRender);
+    try std.testing.expect(!caret.GetComponent(SurfaceComponent).?.mShouldRender);
     try world.EndFrame();
     try std.testing.expect(!caret.IsActive());
 }

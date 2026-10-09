@@ -21,6 +21,7 @@ const SurfShadingData = Renderer.SurfShadingData;
 const MedShadingData = Renderer.MedShadingData;
 const SDFRayMarcher = @import("../../Renderer/SDFRayMarcher.zig");
 const BVH = @import("../../Core/BVH.zig");
+const Aabb = @import("../../Math/Aabb.zig");
 
 const eps: f32 = 0.0001;
 
@@ -151,26 +152,27 @@ const TestScene = struct {
     Mediums: []const MedShadingData = &.{CLEAR_MEDIUM},
 };
 
-const TestMarcher = SDFRayMarcher.RayMarcher(
-    [*]const ShapeData,
-    [*]const ShapeSurface,
-    [*]const BVH.Node,
-    [*]const ClipData,
-    [*]const SurfShadingData,
-    [*]const MedShadingData,
-    *const FakeTextures,
-);
+fn TestMarcher(comptime search: SDFRayMarcher.DirectSearch) type {
+    return SDFRayMarcher.RayMarcher(
+        [*]const ShapeData,
+        [*]const ShapeSurface,
+        [*]const BVH.Node,
+        [*]const ClipData,
+        [*]const SurfShadingData,
+        [*]const MedShadingData,
+        *const FakeTextures,
+        search,
+    );
+}
 
 const MAX_TEST_SHAPES = 32;
 
-const NO_BVH_NODES = [0]BVH.Node{};
-
-/// The color one ray comes out with, found both ways a shape can be: with every shape direct (a ray test straight
-/// against each) and with every shape marched. The two have to agree, which keeps the march working while nothing
-/// the engine draws uses it yet
+/// The color one ray comes out with, found every way a shape can be: with every shape direct (a ray test straight
+/// against each, by walking the BVH and by testing them all) and with every shape marched. They all have to agree,
+/// which keeps the march working while nothing the engine draws uses it yet
 fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
-    const direct = TraceWith(scene, ray, scene.Shapes.len);
-    const marched = TraceWith(scene, ray, 0);
+    const direct = try TraceWith(scene, ray, scene.Shapes.len);
+    const marched = try TraceSearch(scene, ray, 0, .BVH);
     ExpectColor(direct, marched) catch |err| {
         std.debug.print("all direct and all marched disagree: direct {any}, marched {any}\n", .{ direct, marched });
         return err;
@@ -178,9 +180,49 @@ fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
     return direct;
 }
 
-/// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, set up the
-/// way SDFComputeGame's main sets up a pixel's ray
-fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
+/// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, found both
+/// ways the direct shapes can be searched: walking their BVH, and testing every one. The two have to agree
+fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) !Vec4(f32) {
+    const bvh = try TraceSearch(scene, ray, direct_count, .BVH);
+    const linear = try TraceSearch(scene, ray, direct_count, .Linear);
+    ExpectColor(bvh, linear) catch |err| {
+        std.debug.print("the BVH walk and testing every shape disagree: bvh {any}, linear {any}\n", .{ bvh, linear });
+        return err;
+    };
+    return bvh;
+}
+
+/// Sorts the direct shapes the way Renderer2D.SortShapes does for its BVH: by the Morton code of their bounding box's
+/// center among all of theirs, ties in draw order. Fills in the tree's items in that order too
+fn SortForBVH(shapes: []ShapeData, items: []BVH.Item) void {
+    var centers = Aabb.empty;
+    for (shapes) |shape| {
+        const center = SDFFunc.aabbIMShape(shape).Center();
+        centers = centers.Union(.{ .Min = center, .Max = center });
+    }
+
+    const Keyed = struct { Code: u32, Shape: ShapeData };
+    var keyed: [MAX_TEST_SHAPES]Keyed = undefined;
+    for (shapes, keyed[0..shapes.len]) |shape, *entry| {
+        entry.* = .{ .Code = BVH.MortonCode(SDFFunc.aabbIMShape(shape).Center(), centers), .Shape = shape };
+    }
+    std.mem.sort(Keyed, keyed[0..shapes.len], {}, struct {
+        fn lessThan(_: void, a: Keyed, b: Keyed) bool {
+            if (a.Code != b.Code) return a.Code < b.Code;
+            return a.Shape.SurfaceIndex < b.Shape.SurfaceIndex;
+        }
+    }.lessThan);
+
+    for (keyed[0..shapes.len], shapes, items) |entry, *shape, *item| {
+        shape.* = entry.Shape;
+        item.* = .{ .Code = entry.Code, .Bounds = SDFFunc.aabbIMShape(entry.Shape), .Mask = BVH.Mask.RENDER };
+    }
+}
+
+/// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, the direct
+/// ones found by `search`. Set up the way Renderer2D and SDFComputeGame's main set up a pixel's ray: the direct shapes
+/// sorted for their BVH and the tree built over them, then the first node and edge
+fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch) !Vec4(f32) {
     std.debug.assert(scene.Shadings.len > 0);
     std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and direct_count <= scene.Shapes.len);
 
@@ -194,7 +236,14 @@ fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
         surfaces[draw_order] = test_shape.Surface;
     }
 
-    var marcher = TestMarcher{
+    var items: [MAX_TEST_SHAPES]BVH.Item = undefined;
+    SortForBVH(shapes[0..direct_count], items[0..direct_count]);
+    var bvh_nodes: std.ArrayList(BVH.Node) = .empty;
+    defer bvh_nodes.deinit(std.testing.allocator);
+    try BVH.Build(std.testing.allocator, items[0..direct_count], &bvh_nodes);
+
+    const Marcher = TestMarcher(search);
+    var marcher = Marcher{
         .mNodes = undefined,
         .mEdges = undefined,
         .mNodeCount = 0,
@@ -204,8 +253,7 @@ fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
         .mShapeSurfaces = &surfaces,
         .mShapesCount = scene.Shapes.len,
         .mDirectCount = direct_count,
-        //not walked yet: the direct search still tests every direct shape
-        .mBVHNodes = &NO_BVH_NODES,
+        .mBVHNodes = bvh_nodes.items.ptr,
         .mClips = scene.Clips.ptr,
         .mSurfShading = scene.Shadings.ptr,
         .mMedShading = scene.Mediums.ptr,
@@ -215,8 +263,8 @@ fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
     marcher.mNodes[0] = .{
         .Point = ray.Origin,
         .Normal = .{ .x = 0, .y = 0, .z = 0 },
-        .ParentEdge = TestMarcher.NO_EDGE,
-        .FirstEdge = TestMarcher.NO_EDGE,
+        .ParentEdge = Marcher.NO_EDGE,
+        .FirstEdge = Marcher.NO_EDGE,
         .MaterialHandle = 0,
         .AccumColor = DEFAULT_COLOR,
         .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
@@ -229,7 +277,7 @@ fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) Vec4(f32) {
         .Length = 0.0,
         .FromNode = 0,
         .ToNode = 0,
-        .SiblingEdge = TestMarcher.NO_EDGE,
+        .SiblingEdge = Marcher.NO_EDGE,
         .AccumColor = DEFAULT_COLOR,
         .MaterialHandle = 0,
     };
@@ -506,7 +554,7 @@ test "a marched quad in front of a direct quad is drawn" {
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
-    try ExpectColor(RED, TraceWith(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 1));
+    try ExpectColor(RED, try TraceWith(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 1));
 }
 
 test "a direct quad in front hides a marched one behind it, which still shows past the direct one's edge" {
@@ -517,8 +565,8 @@ test "a direct quad in front hides a marched one behind it, which still shows pa
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
-    try ExpectColor(RED, TraceWith(scene, RayAt(0, 0), 1));
-    try ExpectColor(BLUE, TraceWith(scene, RayAt(0.75, 0), 1));
+    try ExpectColor(RED, try TraceWith(scene, RayAt(0, 0), 1));
+    try ExpectColor(BLUE, try TraceWith(scene, RayAt(0.75, 0), 1));
 }
 
 test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge, then counts it as a miss" {
@@ -536,10 +584,10 @@ test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge
 
     //as many gaps as it may turn down: the next search still finds the quad
     const at_limit = TestScene{ .Shapes = shapes[0 .. rejects + 1], .Shadings = &shadings };
-    try ExpectColor(BLUE, TraceWith(at_limit, RayAt(0.25, 0), rejects + 1));
+    try ExpectColor(BLUE, try TraceWith(at_limit, RayAt(0.25, 0), rejects + 1));
     //one more and it gives up
     const past_limit = TestScene{ .Shapes = shapes[0 .. rejects + 2], .Shadings = &shadings };
-    try ExpectColor(DEFAULT_COLOR, TraceWith(past_limit, RayAt(0.25, 0), rejects + 2));
+    try ExpectColor(DEFAULT_COLOR, try TraceWith(past_limit, RayAt(0.25, 0), rejects + 2));
 }
 
 test "a quad's rounded corner is cut away: the ray goes past it there, and hits just inside the curve" {
@@ -556,4 +604,76 @@ test "a quad's rounded corner is cut away: the ray goes past it there, and hits 
     try ExpectColor(RED, try Trace(scene, RayAt(0.8, 0.8)));
     //well away from the corners, the flat part
     try ExpectColor(RED, try Trace(scene, RayAt(0.95, 0)));
+}
+
+//==================================the BVH walk against testing every shape==================================
+
+test "walking the BVH finds the same color as testing every shape, on random scenes and rays" {
+    //every kind of thing a search has to get right: quads turned or not, rounded or not, opaque and see-through,
+    //clipped or not, glyphs with gaps, and shapes at exactly the same depth so ties have to be settled. TraceWith
+    //checks the BVH walk against testing every direct shape on each ray
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const half_blue = Vec4(f32){ .x = 0, .y = 0, .z = 1, .w = 0.5 };
+    const shadings = [_]SurfShadingData{
+        ColorShading(RED),
+        ColorShading(GREEN),
+        ColorShading(BLUE),
+        ColorShading(half_red),
+        ColorShading(half_blue),
+        Shading(WHITE, ATLAS_HANDLE, 6),
+        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+    };
+    const clips = [_]ClipData{
+        MakeClip(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 3 }),
+        MakeClip(.{ .x = 1, .y = 1, .z = 0 }, .{ .x = 2, .y = 1 }),
+    };
+
+    var prng = std.Random.DefaultPrng.init(0xB5B5);
+    const random = prng.random();
+    var hits: usize = 0;
+    for (0..12) |_| {
+        var shapes: [MAX_TEST_SHAPES]TestShape = undefined;
+        const count = 8 + random.uintLessThan(usize, MAX_TEST_SHAPES - 8 + 1);
+        for (shapes[0..count]) |*shape| {
+            const half = Vec2(f32){ .x = 0.2 + random.float(f32) * 1.3, .y = 0.2 + random.float(f32) * 1.3 };
+            //some on one of two shared planes facing the camera, so exact ties come up; the rest anywhere, tilted
+            const on_plane = random.float(f32) < 0.4;
+            const center = Vec3(f32){
+                .x = random.float(f32) * 6 - 3,
+                .y = random.float(f32) * 6 - 3,
+                .z = if (on_plane) @floatFromInt(random.uintLessThan(u32, 2)) else random.float(f32) * 4 - 2,
+            };
+            if (random.float(f32) < 0.3) {
+                shape.* = MakeGlyph(center, half, 5, if (random.boolean()) TRANSPARENT else 0);
+                continue;
+            }
+            const tilt_axis = (Vec3(f32){ .x = random.float(f32) - 0.5, .y = random.float(f32) - 0.5, .z = random.float(f32) - 0.5 }).Dir();
+            const rotation = if (on_plane) IDENTITY else Quat(f32).FromAxisAngle(tilt_axis, random.float(f32) * 0.8);
+            const radius = if (random.boolean()) 0 else random.float(f32) * @min(half.x, half.y);
+            const shading = random.uintLessThan(u32, 5);
+            const flags = if (shading >= 3) TRANSPARENT else 0;
+            const clip_index = switch (random.uintLessThan(u32, 4)) {
+                0 => @as(u32, 0),
+                1 => 1,
+                else => SDFFunc.NO_CLIP,
+            };
+            shape.* = MakeRoundedQuad(center, rotation, half, radius, shading, flags, clip_index);
+        }
+        const scene = TestScene{ .Shapes = shapes[0..count], .Clips = &clips, .Shadings = &shadings };
+
+        for (0..100) |_| {
+            const origin = Vec3(f32){ .x = random.float(f32) * 8 - 4, .y = random.float(f32) * 8 - 4, .z = 10 };
+            //half aimed near some shape's center, so most go through shapes, their overlaps, gaps and ties
+            const aimed_at = SDFFunc.ShapeCenter(shapes[random.uintLessThan(usize, count)].Shape);
+            const target = if (random.boolean())
+                aimed_at.AddVec(.{ .x = random.float(f32) - 0.5, .y = random.float(f32) - 0.5, .z = 0 })
+            else
+                Vec3(f32){ .x = random.float(f32) * 8 - 4, .y = random.float(f32) * 8 - 4, .z = 0 };
+            const ray = Ray{ .Origin = origin, .Dir = target.SubVec(origin).Dir() };
+            const color = try TraceWith(scene, ray, count);
+            if (!std.meta.eql(color, DEFAULT_COLOR)) hits += 1;
+        }
+    }
+    //about half the 1200 rays land on something (631 with this seed), so the walk was really tested
+    try std.testing.expect(hits > 500);
 }

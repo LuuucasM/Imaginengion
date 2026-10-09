@@ -74,6 +74,14 @@ pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTex
 
 pub const CameraUBO = @extern(*addrspace(.uniform) PushConstants, .{ .name = "CameraUBO", .decoration = .{ .descriptor = .{ .set = 2, .binding = 0 } } });
 
+/// `top` drawn over `bottom`: as much of the bottom shows as the top lets through
+pub fn Over(top: Vec4(f32), bottom: Vec4(f32)) Vec4(f32) {
+    const out_a = top.w + bottom.w * (1.0 - top.w);
+    if (out_a <= 0) return .{ .x = 0, .y = 0, .z = 0, .w = 0 };
+    const out_rgb = top.ToVec3().MulScalar(top.w).AddVec(bottom.ToVec3().MulScalar(bottom.w * (1.0 - top.w))).DivScalar(out_a);
+    return .{ .x = out_rgb.x, .y = out_rgb.y, .z = out_rgb.z, .w = out_a };
+}
+
 /// Read a texel from an image without a sampler.
 /// The type of `image` must be a pointer to a SPIR-V image.
 pub fn imageRead(

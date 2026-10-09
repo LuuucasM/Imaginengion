@@ -16,8 +16,9 @@ const Inspector = @import("../UI/Inspector.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const ClipComponent = EntityComponents.ClipComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const AttribComponent = EntityComponents.AttribComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 
@@ -158,12 +159,13 @@ fn IsAddable(comptime component_type: type) bool {
 /// Adds a component the way picking it from a panel's menu does: at its defaults, except that adding layout to
 /// something with a quad keeps the quad the size it is. A layout item starts at the quad's size, fixed, and a
 /// container with no item gets one like that. Fitting would shrink the quad to nothing, since layout only ever sizes
-/// a quad (it's the element's background), and never fits to one. Code, files and templates add exactly what they're
-/// given instead: a saved Fit is a real choice, and can't be told apart from a default one
+/// a quad (it's the element's background), and never fits to one. A shape or text comes with a surface if the entity
+/// has none, so it shows up. Code, files and templates add exactly what they're given instead: a saved Fit is a real
+/// choice, and can't be told apart from a default one
 pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContext, object: anytype) !void {
     if (comptime @TypeOf(object) == Entity and (component_type == LayoutItemComponent or component_type == LayoutComponent)) {
-        if (object.GetComponent(QuadComponent)) |quad| {
-            const keeps_size = LayoutItemComponent{ .mWidth = .{ .Fixed = quad.mSize.x }, .mHeight = .{ .Fixed = quad.mSize.y } };
+        if (ShapeGeometry.QuadOf(object)) |quad| {
+            const keeps_size = LayoutItemComponent{ .mWidth = .{ .Fixed = quad.Size.x }, .mHeight = .{ .Fixed = quad.Size.y } };
             if (component_type == LayoutItemComponent) {
                 _ = try object.AddComponent(engine_context, keeps_size);
                 return;
@@ -174,6 +176,9 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
         }
     }
     _ = try object.AddComponent(engine_context, component_type{});
+    if (comptime @TypeOf(object) == Entity and (component_type == EntityComponents.ShapeComponent or component_type == EntityComponents.TextComponent)) {
+        if (!object.HasComponent(SurfaceComponent)) _ = try object.AddComponent(engine_context, SurfaceComponent{});
+    }
     //what a UI component needs of its entity, given the way picking it from the entity's menu would give it: a popup
     //opens and closes through the entity's layout item, a scroll cuts off what runs past with the entity's clip, and a
     //number field shows the entity's attribute, a float to start with

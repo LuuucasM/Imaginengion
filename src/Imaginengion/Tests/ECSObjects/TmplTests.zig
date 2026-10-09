@@ -15,10 +15,12 @@ const GameContext = @import("../../ECSObjects/GameContext.zig");
 
 const AssetMetaData = @import("../../ECSComponents/AComponents.zig").AssetMetaData;
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
+const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
 const UUIDComponent = EntityComponents.UUIDComponent;
 const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const TmplRefComponent = EntityComponents.TmplRefComponent;
 const SceneComponents = @import("../../ECSComponents/SComponents.zig");
@@ -199,7 +201,8 @@ test "spawned entities copy the template's tree, keep their own transform and ar
     try SetName(engine_context, goblin, "Goblin");
     try goblin.SetTranslation(engine_context, .{ .x = 7.0, .y = 0.0, .z = 0.0 });
     const texture = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = TEXTURE_PATH, .path_type = .Eng } });
-    _ = try goblin.AddComponent(engine_context, QuadComponent{ .mTexture = texture });
+    _ = try goblin.AddComponent(engine_context, ShapeComponent{});
+    _ = try goblin.AddComponent(engine_context, SurfaceComponent{ .mTexture = texture });
     const sword = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try SetName(engine_context, sword, "Sword");
     try sword.SetTranslation(engine_context, .{ .x = 1.0, .y = 2.0, .z = 0.0 });
@@ -213,7 +216,7 @@ test "spawned entities copy the template's tree, keep their own transform and ar
     const tmpl_refs = world.Refs(tmpl);
     const texture_refs = world.Refs(texture);
     const b = try scene.Spawn(engine_context, tmpl);
-    //each copy's TmplRefComponent and Quad hold a reference of their own
+    //each copy's TmplRefComponent and Surface hold a reference of their own
     try std.testing.expectEqual(tmpl_refs + 1, world.Refs(tmpl));
     try std.testing.expectEqual(texture_refs + 1, world.Refs(texture));
 
@@ -222,7 +225,7 @@ test "spawned entities copy the template's tree, keep their own transform and ar
     try std.testing.expect(!a.HasComponent(UUIDComponent));
     try std.testing.expectEqual(tmpl.mID, a.GetComponent(TmplRefComponent).?.mTmpl.mID);
     try std.testing.expectEqual(@as(f32, 0.0), a.GetComponent(TransformComponent).?.GetTranslation().x);
-    try std.testing.expectEqual(texture.mID, a.GetComponent(QuadComponent).?.mTexture.mID);
+    try std.testing.expectEqual(texture.mID, a.GetComponent(SurfaceComponent).?.mTexture.mID);
 
     //the tree below it: copied names and relative transforms, no UUIDs, all in the copy's scene
     const a_sword = FirstChild(a);
@@ -480,7 +483,8 @@ fn SaveSwordTmpl(world: *TestWorld) !AssetHandle {
     const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const sword = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
     try SetName(engine_context, sword, "Sword");
-    _ = try sword.AddComponent(engine_context, QuadComponent{});
+    _ = try sword.AddComponent(engine_context, ShapeComponent{});
+    _ = try sword.AddComponent(engine_context, SurfaceComponent{});
     const gem = try sword.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try SetName(engine_context, gem, "Gem");
     return try world.SaveTmpl(sword, "sword.imen");
@@ -492,7 +496,7 @@ fn ExpectSwordCopy(sword: Entity, name: []const u8, x: f32, sword_tmpl: AssetHan
     try std.testing.expect(!sword.HasComponent(UUIDComponent));
     try std.testing.expectEqual(x, sword.GetComponent(TransformComponent).?.GetTranslation().x);
     try std.testing.expectEqual(sword_tmpl.mID, sword.GetComponent(TmplRefComponent).?.mTmpl.mID);
-    try std.testing.expect(sword.HasComponent(QuadComponent));
+    try std.testing.expect(sword.HasComponent(ShapeComponent));
     const gem = FirstChild(sword);
     try ExpectName(gem, "Gem");
     try std.testing.expect(!gem.HasComponent(UUIDComponent));
@@ -535,7 +539,7 @@ test "copies of another template inside an entity template are filled from it wh
 
     //the loaded goblin template still only has the shells: filling happens in the copy
     const tmpl_left = try ChildNamed((try goblin_tmpl.GetAsset(engine_context, EntityAsset)).mObject, "Left Sword");
-    try std.testing.expect(!tmpl_left.HasComponent(QuadComponent));
+    try std.testing.expect(!tmpl_left.HasComponent(ShapeComponent));
     var tmpl_left_children = tmpl_left.GetIterator(.Child);
     try std.testing.expect(tmpl_left_children.next() == null);
 
@@ -722,7 +726,8 @@ test "making an entity a template writes its whole tree and leaves a shell that 
     try SetName(engine_context, goblin, "Goblin");
     try goblin.SetTranslation(engine_context, .{ .x = 7.0, .y = 0.0, .z = 0.0 });
     const texture = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = TEXTURE_PATH, .path_type = .Eng } });
-    _ = try goblin.AddComponent(engine_context, QuadComponent{ .mTexture = texture });
+    _ = try goblin.AddComponent(engine_context, ShapeComponent{});
+    _ = try goblin.AddComponent(engine_context, SurfaceComponent{ .mTexture = texture });
     const sword = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try SetName(engine_context, sword, "Sword");
     const gem = try sword.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
@@ -734,7 +739,7 @@ test "making an entity a template writes its whole tree and leaves a shell that 
     //the shell: same UUID, name and place, no quad, nothing under it
     try ExpectShell(goblin, goblin_uuid, "Goblin");
     try std.testing.expectEqual(@as(f32, 7.0), goblin.GetComponent(TransformComponent).?.GetTranslation().x);
-    try std.testing.expect(!goblin.HasComponent(QuadComponent));
+    try std.testing.expect(!goblin.HasComponent(ShapeComponent));
     try std.testing.expect(!sword.IsActive());
     try std.testing.expect(!gem.IsActive());
 
@@ -743,12 +748,12 @@ test "making an entity a template writes its whole tree and leaves a shell that 
     const tmpl_root = (try tmpl.GetAsset(engine_context, EntityAsset)).mObject;
     try std.testing.expect(tmpl_root.GetUUID() != goblin_uuid);
     try std.testing.expectEqual(@as(f32, 0.0), tmpl_root.GetComponent(TransformComponent).?.GetTranslation().x);
-    try std.testing.expectEqual(texture.mID, tmpl_root.GetComponent(QuadComponent).?.mTexture.mID);
+    try std.testing.expectEqual(texture.mID, tmpl_root.GetComponent(SurfaceComponent).?.mTexture.mID);
     try ExpectName(FirstChild(tmpl_root), "Sword");
 
     //and spawning from it gives the whole tree back
     const copy = try scene.Spawn(engine_context, tmpl);
-    try std.testing.expect(copy.HasComponent(QuadComponent));
+    try std.testing.expect(copy.HasComponent(ShapeComponent));
     try ExpectName(FirstChild(copy), "Sword");
     try std.testing.expect(FirstChild(FirstChild(copy)).IsActive());
 }
@@ -968,11 +973,14 @@ test "two open entity templates are in scenes of their own, so each preview only
 
     const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try goblin.AddComponent(engine_context, QuadComponent{});
+    _ = try goblin.AddComponent(engine_context, ShapeComponent{});
+    _ = try goblin.AddComponent(engine_context, SurfaceComponent{});
     const sword = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    _ = try sword.AddComponent(engine_context, QuadComponent{});
+    _ = try sword.AddComponent(engine_context, ShapeComponent{});
+    _ = try sword.AddComponent(engine_context, SurfaceComponent{});
     const tree = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try tree.AddComponent(engine_context, QuadComponent{});
+    _ = try tree.AddComponent(engine_context, ShapeComponent{});
+    _ = try tree.AddComponent(engine_context, SurfaceComponent{});
 
     const goblin_tmpl = try world.SaveTmpl(goblin, "goblin.imen");
     const tree_tmpl = try world.SaveTmpl(tree, "tree.imen");
@@ -982,7 +990,7 @@ test "two open entity templates are in scenes of their own, so each preview only
     var tree_panel = try TmplEditPanel.Open(engine_context, tree_tmpl, camera_scene);
 
     //the same query RenderScene draws
-    const shapes_query = GroupQuery{ .Component = QuadComponent };
+    const shapes_query = ShapeGeometry.VISUALS_QUERY;
     const goblin_shapes = try goblin_panel.mEntityScene.?.GetEntityGroup(engine_context.FrameAllocator(), shapes_query);
     const tree_shapes = try tree_panel.mEntityScene.?.GetEntityGroup(engine_context.FrameAllocator(), shapes_query);
     try std.testing.expectEqual(@as(usize, 2), goblin_shapes.items.len);

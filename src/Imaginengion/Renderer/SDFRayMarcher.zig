@@ -10,7 +10,10 @@ const Vec4 = MathTypes.Vec4;
 const Quat = MathTypes.Quat;
 
 const SDFFunc = @import("../Math/SDFFunctions.zig");
-const HitInfo = @import("../Math/RayIntersect.zig").HitInfo;
+const RayIntersect = @import("../Math/RayIntersect.zig");
+const HitInfo = RayIntersect.HitInfo;
+const BVH = @import("../Core/BVH.zig");
+const BVHNode = BVH.Node;
 
 const ShapeType = @import("Renderer.zig").ShapeType;
 
@@ -200,7 +203,24 @@ const MarchData = extern struct {
     shape: u32,
 };
 
-pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type) type {
+/// How the direct search finds which shapes to ray test, picked when the marcher is compiled. Everything else about
+/// the search is the same either way (DirectSurface, ConsiderShape), so the two differ only in NearestByBVH and
+/// NearestByLinearSearch
+pub const DirectSearch = enum {
+    /// Walks the BVH over the direct shapes, testing only the shapes in leaves the ray reaches. What the shaders use
+    BVH,
+    /// Tests every direct shape. Kept as the answer key the BVH walk is tested against, and as a way to rule the
+    /// tree out when hunting a rendering bug. Never compiled into the shaders
+    Linear,
+};
+
+/// How far a BVH node's box can reach past what it was built around and still count, as a share of the distance
+/// along the ray (at least 1 unit's worth). A box is worked out on the CPU from a shape's axes and a hit on the GPU
+/// in the shape's own space, so for a plate facing the ray the box's face and the plate's are the same distance away
+/// up to rounding. Without this a box could round to just past a hit it holds and be pruned, losing an exact tie
+const BVH_BOX_SLACK: f32 = 0.0001;
+
+pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch) type {
     return extern struct {
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
@@ -348,41 +368,102 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             return self.mEdgeCount;
         }
 
-        /// The nearest surface a ray draws among the direct shapes, by a ray test straight against each. The nearest hit
-        /// is then checked against the shape itself (SurfaceFromHit), and one turned down, outside its clip region or
-        /// in a gap in a letter, is passed for the next one after it, up to MAX_DIRECT_REJECTS of them
-        fn DirectSurface(self: Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        /// The nearest surface a ray draws among the direct shapes, by a ray test straight against each candidate
+        /// (picked by `direct_search`). The nearest hit is then checked against the shape itself (SurfaceFromHit), and
+        /// one turned down, outside its clip region or in a gap in a letter, is passed for the next one after it, up to
+        /// MAX_DIRECT_REJECTS of them
+        fn DirectSurface(self: *const Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            if (self.mDirectCount == 0) return .none;
             var after = HitOrder.start;
             var searches: u32 = 0;
             while (searches <= MAX_DIRECT_REJECTS) : (searches += 1) {
-                var nearest = HitOrder{ .T = self.mPerspectiveFar, .Rank = std.math.maxInt(u32), .DrawOrder = std.math.maxInt(u32), .Shape = NO_SHAPE };
-                var nearest_hit: HitInfo = .miss;
-
-                for (0..self.mDirectCount) |i| {
-                    const shape_ind: u32 = @intCast(i);
-                    if (shape_ind == skip_shape) continue;
-                    const shape: ShapeData = self.mShapes[i];
-                    const hit = HitShape(ray, shape);
-                    if (!IsFrontHit(hit)) continue;
-                    const order = HitOrder.Of(hit.T, shape, shape_ind);
-                    if (after.Before(order) and order.Before(nearest)) {
-                        nearest = order;
-                        nearest_hit = hit;
-                    }
-                }
-
-                if (nearest.Shape == NO_SHAPE) return .none;
-                const surface = self.SurfaceFromHit(ray, nearest.Shape, nearest_hit, sample_sampler, textures_array);
+                const nearest = switch (direct_search) {
+                    .BVH => self.NearestByBVH(ray, skip_shape, after),
+                    .Linear => self.NearestByLinearSearch(ray, skip_shape, after),
+                };
+                if (nearest.Order.Shape == NO_SHAPE) return .none;
+                const surface = self.SurfaceFromHit(ray, nearest.Order.Shape, nearest.Hit, sample_sampler, textures_array);
                 if (surface.Found) return surface;
-                after = nearest;
+                after = nearest.Order;
             }
             return .none;
+        }
+
+        /// The nearest direct hit a search has found so far, and the hit itself for SurfaceFromHit
+        const Candidate = struct {
+            Order: HitOrder,
+            Hit: HitInfo,
+        };
+
+        /// Nothing found yet: anything nearer than the far distance beats it
+        fn NoCandidate(self: *const Self) Candidate {
+            return .{
+                .Order = .{ .T = self.mPerspectiveFar, .Rank = std.math.maxInt(u32), .DrawOrder = std.math.maxInt(u32), .Shape = NO_SHAPE },
+                .Hit = .miss,
+            };
+        }
+
+        /// Ray tests one direct shape, and makes it the nearest if its front is hit after `after` and before the
+        /// nearest so far. All a search does with a shape, whichever way it found it
+        fn ConsiderShape(self: *const Self, ray: Ray, shape_ind: u32, skip_shape: u32, after: HitOrder, nearest: *Candidate) void {
+            if (shape_ind == skip_shape) return;
+            const shape: ShapeData = self.mShapes[shape_ind];
+            const hit = HitShape(ray, shape);
+            if (!IsFrontHit(hit)) return;
+            const order = HitOrder.Of(hit.T, shape, shape_ind);
+            if (after.Before(order) and order.Before(nearest.Order)) nearest.* = .{ .Order = order, .Hit = hit };
+        }
+
+        //==================================the two direct searches (DirectSearch)==================================
+
+        /// DirectSearch.BVH: walks the tree over the direct shapes the stack free way (Core/BVH.zig), into each node the
+        /// ray reaches and on to its Skip past each it doesn't, considering the shapes of every leaf it reaches. A leaf's
+        /// shapes are a run of mShapes, since the tree was built over them in that order
+        fn NearestByBVH(self: *const Self, ray: Ray, skip_shape: u32, after: HitOrder) Candidate {
+            var nearest = self.NoCandidate();
+            const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
+            const node_count = self.mBVHNodes[0].Skip;
+            var node_ind: u32 = 0;
+            while (node_ind < node_count) {
+                const node: BVHNode = self.mBVHNodes[node_ind];
+                if (!ReachesNode(ray, inv_dir, node, after, nearest.Order)) {
+                    node_ind = node.Skip;
+                    continue;
+                }
+                if (!node.IsLeaf()) {
+                    node_ind += 1;
+                    continue;
+                }
+                const first = node.FirstItem();
+                for (first..first + node.ItemCount()) |shape_ind| self.ConsiderShape(ray, @intCast(shape_ind), skip_shape, after, &nearest);
+                node_ind = node.Skip;
+            }
+            return nearest;
+        }
+
+        /// DirectSearch.Linear: considers every direct shape, the BVH walk's answer key
+        fn NearestByLinearSearch(self: *const Self, ray: Ray, skip_shape: u32, after: HitOrder) Candidate {
+            var nearest = self.NoCandidate();
+            for (0..self.mDirectCount) |shape_ind| self.ConsiderShape(ray, @intCast(shape_ind), skip_shape, after, &nearest);
+            return nearest;
+        }
+
+        /// Whether a BVH walk goes into `node`: it holds shapes to draw, the ray goes through its box, and the box
+        /// could hold a hit between `after` (the last one turned down) and `nearest`. A box starting past the nearest
+        /// hit so far can't hold anything nearer, and one ending before the turned down hit was all passed already.
+        /// Both are let off by BVH_BOX_SLACK, and an exact equal is kept, so a tie at the same distance still gets looked at
+        fn ReachesNode(ray: Ray, inv_dir: Vec3(f32), node: BVHNode, after: HitOrder, nearest: HitOrder) bool {
+            if (node.ItemMask() & BVH.Mask.RENDER == 0) return false;
+            const bounds = node.Bounds();
+            const span = RayIntersect.RayAabb(ray.Origin, inv_dir, bounds.Min, bounds.Max) orelse return false;
+            const slack = BVH_BOX_SLACK * @max(1.0, @abs(nearest.T));
+            return span.Enter <= nearest.T + slack and span.Exit >= after.T - slack;
         }
 
         /// The nearest surface a ray draws among the marched shapes, stepping along it no further than `limit`. Each
         /// shape the march gets within epsilon of is checked against the shape itself, and one turned down is skipped
         /// for the rest of the edge (SkipList)
-        fn MarchedSurface(self: Self, ray: Ray, skip_shape: u32, limit: f32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn MarchedSurface(self: *const Self, ray: Ray, skip_shape: u32, limit: f32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             var skips = SkipList.Init(skip_shape);
             var dist_origin: f32 = 0;
 
@@ -406,7 +487,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         }
 
         /// The nearest marched shape to `point`, cut to its clip region
-        fn NextSurface(self: Self, point: Vec3(f32), skips: SkipList) MarchData {
+        fn NextSurface(self: *const Self, point: Vec3(f32), skips: SkipList) MarchData {
             var data = MarchData{ .min_dist = self.mPerspectiveFar, .shape = NO_SHAPE };
             var nearest_rank: u32 = std.math.maxInt(u32);
             var nearest_draw_order: u32 = std.math.maxInt(u32);
@@ -437,27 +518,27 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
         /// A shape's distance cut to its clip region: the intersection of the two, so the march doesn't step
         /// toward a part of it that is never drawn
-        fn Clipped(self: Self, distance: f32, point: Vec3(f32), clip_index: u32) f32 {
+        fn Clipped(self: *const Self, distance: f32, point: Vec3(f32), clip_index: u32) f32 {
             if (clip_index == SDFFunc.NO_CLIP) return distance;
             return SDFFunc.opIntersection(distance, SDFFunc.sdIMClip(point, self.mClips[clip_index]));
         }
 
         /// Whether a hit on a shape is inside its clip region. One outside isn't drawn, and the ray goes on
         /// to whatever is behind, the same as through a gap in a letter
-        fn InClip(self: Self, point: Vec3(f32), clip_index: u32) bool {
+        fn InClip(self: *const Self, point: Vec3(f32), clip_index: u32) bool {
             if (clip_index == SDFFunc.NO_CLIP) return true;
             return SDFFunc.InIMClip(point, self.mClips[clip_index]);
         }
 
         /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: the front of a plate, and for
         /// a glyph, only where the letter covers it. Neither outside its clip region
-        fn SurfaceAt(self: Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn SurfaceAt(self: *const Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             return self.SurfaceFromHit(ray, shape_ind, HitShape(ray, self.mShapes[shape_ind]), sample_sampler, textures_array);
         }
 
         /// SurfaceAt for a hit already found against the shape (HitShape), so the direct search doesn't test the ray
         /// against it twice
-        fn SurfaceFromHit(self: Self, ray: Ray, shape_ind: u32, hit: HitInfo, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn SurfaceFromHit(self: *const Self, ray: Ray, shape_ind: u32, hit: HitInfo, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             if (!IsFrontHit(hit)) return .none;
             const shape: ShapeData = self.mShapes[shape_ind];
             const surface: ShapeSurface = self.mShapeSurfaces[shape.SurfaceIndex];

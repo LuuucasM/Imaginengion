@@ -16,7 +16,8 @@ const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TextAsset = @import("../ECSComponents/AComponents.zig").TextAsset;
@@ -97,21 +98,25 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                 const best = if (canvas != null) &best_overlay else &best_game;
                 const far = if (canvas != null) OverlayCanvas.FAR_DISTANCE else camera_view.FarDistance;
 
-                if (entity.GetComponent(QuadComponent)) |quad| {
-                    if (quad.mShouldRender) {
-                        const box = ShapeGeometry.QuadBox(transform, quad, canvas);
-                        //rounded, so a click in a cut off corner goes through to whatever is behind
-                        const hit = RayIntersect.RayRoundedBox2D(ray, box.Center, box.Rotation, box.HalfExtents, box.CornerRadii);
-                        if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Quad }, hit, far, options.SkipStartedInside);
+                //what isn't drawn can't be clicked
+                const surface = entity.GetComponent(SurfaceComponent) orelse continue;
+                if (!surface.mShouldRender) continue;
+
+                if (entity.GetComponent(ShapeComponent)) |shape_component| {
+                    switch (shape_component.mKind) {
+                        .Quad => |quad| {
+                            const box = ShapeGeometry.QuadBox(transform, quad, 0, canvas);
+                            //rounded, so a click in a cut off corner goes through to whatever is behind
+                            const hit = RayIntersect.RayRoundedBox2D(ray, box.Center, box.Rotation, box.HalfExtents, box.CornerRadii);
+                            if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Quad }, hit, far, options.SkipStartedInside);
+                        },
                     }
                 }
                 if (entity.GetComponent(TextComponent)) |text| {
-                    if (text.mShouldRender) {
-                        const font = try text.mTextAssetHandle.GetAsset(engine_context, TextAsset);
-                        const box = ShapeGeometry.TextBox(TextAsset, transform, text, font, canvas);
-                        const hit = RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents);
-                        if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Text }, hit, far, options.SkipStartedInside);
-                    }
+                    const font = try text.mTextAssetHandle.GetAsset(engine_context, TextAsset);
+                    const box = ShapeGeometry.TextBox(TextAsset, transform, text, font, canvas);
+                    const hit = RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents);
+                    if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Text }, hit, far, options.SkipStartedInside);
                 }
             }
         },

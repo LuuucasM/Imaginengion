@@ -19,14 +19,23 @@ const Impl = switch (builtin.os.tag) {
     else => @import("UnsupportedContext.zig"),
 };
 
+/// How finished frames reach the window
+pub const PresentMode = enum {
+    /// each frame waits for its screen refresh, so the frame rate is held to the refresh rate and nothing tears
+    VSync,
+    /// each frame goes to the screen as soon as it's done, even partway through a refresh, so it can tear. Without a
+    /// frame limit every pass of the loop renders
+    Off,
+};
+
 const Platform = @This();
 
 _Impl: Impl = .{},
 
-pub fn Init(self: *Platform, engine_context: *EngineContext) void {
+pub fn Init(self: *Platform, engine_context: *EngineContext, present_mode: PresentMode) void {
     const init_zone = Tracy.ZoneInit("RenderPlatform::Init", @src());
     defer init_zone.Deinit();
-    self._Impl.Init(engine_context);
+    self._Impl.Init(engine_context, present_mode);
 }
 pub fn Deinit(self: *Platform, window: *Window) void {
     const deinit_zone = Tracy.ZoneInit("RenderPlatform::Deinit", @src());

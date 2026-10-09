@@ -21,7 +21,9 @@ const Vec3 = MathTypes.Vec3;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
+const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
+const Widgets = @import("Widgets.zig");
 const NameComponent = EntityComponents.NameComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
@@ -126,7 +128,7 @@ fn UpdateThumb(engine_context: *EngineContext, region: Entity, scroll: ScrollCom
         if (thumb_slot.*) |thumb| {
             if (thumb.IsActive()) {
                 //deletes wait for the end of the frame, which is after this frame is drawn
-                if (thumb.GetComponent(QuadComponent)) |quad| quad.mShouldRender = false;
+                if (thumb.GetComponent(SurfaceComponent)) |surface| surface.mShouldRender = false;
                 try thumb.Delete(engine_context);
             }
         }
@@ -140,19 +142,19 @@ fn UpdateThumb(engine_context: *EngineContext, region: Entity, scroll: ScrollCom
     //how far along its travel, from the start (the top, or the left)
     const along = (track - length) * std.math.clamp(scrolled / (content - track), 0, 1);
 
-    const quad = thumb.GetComponent(QuadComponent).?;
-    quad.mShouldRender = true;
+    thumb.GetComponent(SurfaceComponent).?.mShouldRender = true;
+    const quad = ShapeGeometry.QuadOf(thumb).?;
     const radius = THUMB_THICKNESS / 2;
-    quad.mCornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
+    quad.CornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
     const translation: Vec3(f32) = switch (axis) {
         //down the right edge
         .Y => blk: {
-            quad.mSize = .{ .x = THUMB_THICKNESS, .y = length };
+            quad.Size = .{ .x = THUMB_THICKNESS, .y = length };
             break :blk .{ .x = size.x / 2 - THUMB_THICKNESS / 2, .y = size.y / 2 - length / 2 - along, .z = THUMB_DEPTH };
         },
         //along the bottom edge
         .X => blk: {
-            quad.mSize = .{ .x = length, .y = THUMB_THICKNESS };
+            quad.Size = .{ .x = length, .y = THUMB_THICKNESS };
             break :blk .{ .x = -size.x / 2 + length / 2 + along, .y = -size.y / 2 + THUMB_THICKNESS / 2, .z = THUMB_DEPTH };
         },
     };
@@ -173,7 +175,7 @@ fn ThumbEntity(engine_context: *EngineContext, region: Entity, thumb_slot: *?Ent
         name.mName.clearRetainingCapacity();
         try name.mName.appendSlice(engine_context.EngineAllocator(), "Scrollbar");
     }
-    _ = try thumb.AddComponent(engine_context, QuadComponent{});
+    try Widgets.AddQuad(engine_context, thumb, .{}, .{});
     //its colors, including when it is hovered and dragged, are the theme's
     try UIManager.Style(engine_context, thumb, "Scrollbar");
     thumb_slot.* = thumb;
@@ -199,7 +201,7 @@ fn NearestScrolling(chain: []const Entity, axis: Layout.Axis) ?Entity {
 /// The region's size in its own units: what layout gave it, or its quad's
 fn RegionSize(region: Entity) ?Vec2(f32) {
     if (region.GetComponent(LayoutItemComponent)) |item| return item.mComputedSize;
-    if (region.GetComponent(QuadComponent)) |quad| return quad.mSize;
+    if (ShapeGeometry.QuadOf(region)) |quad| return quad.Size;
     return null;
 }
 

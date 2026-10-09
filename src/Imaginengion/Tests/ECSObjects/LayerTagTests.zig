@@ -11,7 +11,8 @@ const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const SceneComponents = @import("../../ECSComponents/SComponents.zig");
 const GameLayerTag = EntityComponents.GameLayerTag;
 const OverlayLayerTag = EntityComponents.OverlayLayerTag;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -86,21 +87,21 @@ test "a layer query only finds that layer's shapes" {
     const overlay = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
 
     const rock = try game.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try rock.AddComponent(engine_context, QuadComponent{});
+    _ = try rock.AddComponent(engine_context, ShapeComponent{});
     const button = try overlay.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try button.AddComponent(engine_context, QuadComponent{});
-    //no quad, so neither query should find it
+    _ = try button.AddComponent(engine_context, ShapeComponent{});
+    //no shape, so neither query should find it
     _ = try overlay.CreateEntity(engine_context, Entity.DefaultConfig);
 
     const game_quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .And = &.{
-        .{ .Component = QuadComponent },
+        .{ .Component = ShapeComponent },
         .{ .Component = GameLayerTag },
     } });
     try std.testing.expectEqual(@as(usize, 1), game_quads.items.len);
     try std.testing.expectEqual(rock.mID, game_quads.items[0]);
 
     const overlay_quads = try engine_context.mEditorWorld.GetEntityGroup(engine_context.FrameAllocator(), .{ .And = &.{
-        .{ .Component = QuadComponent },
+        .{ .Component = ShapeComponent },
         .{ .Component = OverlayLayerTag },
     } });
     try std.testing.expectEqual(@as(usize, 1), overlay_quads.items.len);

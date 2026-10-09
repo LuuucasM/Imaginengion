@@ -19,7 +19,8 @@ const DropHoverTag = EntityComponents.DropHoverTag;
 const DisabledTag = EntityComponents.DisabledTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const DropTargetComponent = EntityComponents.DropTargetComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 
 const SEventData = @import("../../Events/SManagerData.zig");
@@ -409,12 +410,12 @@ test "a drag on something in the world is in world units, across a plane facing 
 
 //-----------------------------drag and drop-----------------------------
 
-/// The Play button can be picked up, and what it carries is its quad: it stands in for whatever a real source would
+/// The Play button can be picked up, and what it carries is its shape: it stands in for whatever a real source would
 /// carry. Pressed on its label, then dragged 40 pixels to the right over `over`
 fn PickUpPlay(world: *TestWorld, over: ?Entity) !void {
     const engine_context = world.mEngineContext;
     _ = try world.mPlay.AddComponent(engine_context, DragSourceComponent{});
-    _ = try world.mPlay.AddComponent(engine_context, QuadComponent{});
+    _ = try world.mPlay.AddComponent(engine_context, ShapeComponent{});
     try world.MoveTo(world.mLabel, .{ .x = 960, .y = 540 }, 1920, 1080);
     try engine_context.mPointerSystem.OnPressed(engine_context, .BUTTON_LEFT);
     try world.MoveTo(over, .{ .x = 1000, .y = 540 }, 1920, 1080);
@@ -426,7 +427,7 @@ test "a drag source held over a target that takes it lights it up, and letting g
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const pointer = &engine_context.mPointerSystem;
-    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
 
     try PickUpPlay(world, world.mQuit);
     try std.testing.expectEqual(world.mPlay.mID, pointer.Carrying().?.mID);
@@ -457,8 +458,8 @@ test "the nearest target that takes it wins, going up from what is under the poi
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     //the Quit button takes it, and so does the menu it is in
-    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
-    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
 
     try PickUpPlay(world, world.mQuit);
     try std.testing.expect(world.mQuit.HasComponent(DropHoverTag));
@@ -475,8 +476,8 @@ test "only a drag that starts on a source carries anything, and only with the le
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const pointer = &engine_context.mPointerSystem;
-    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
-    _ = try world.mQuit.AddComponent(engine_context, QuadComponent{});
+    _ = try world.mMenu.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
+    _ = try world.mQuit.AddComponent(engine_context, ShapeComponent{});
 
     //the Quit button has what the menu takes, but it isn't a drag source
     try world.MoveTo(world.mQuit, .{ .x = 960, .y = 540 }, 1920, 1080);
@@ -499,7 +500,7 @@ test "a source deleted mid drag drops nothing" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
-    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{QuadComponent}));
+    _ = try world.mQuit.AddComponent(engine_context, DropTargetComponent.Accepting(&.{ShapeComponent}));
 
     try PickUpPlay(world, world.mQuit);
     try world.mPlay.Delete(engine_context);

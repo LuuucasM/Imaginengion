@@ -24,7 +24,8 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
 const EntityParentComponent = @import("../ECS/Components.zig").ParentComponent(Entity.Type);
@@ -34,6 +35,8 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const FrameBuffer = @import("../FrameBuffers/FrameBuffer.zig").FrameBuffer;
 const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const RenderPlatform = @import("RenderPlatform.zig");
+const FrameLimiter = @import("FrameLimiter.zig");
+const PassPlan = @import("PassPlan.zig");
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const Viewports = @import("Viewports.zig");
 const RenderTargetComponent = @import("../ECSComponents/Shared/RenderTargetComponent.zig");
@@ -75,6 +78,11 @@ const ResetOptions = enum {
 };
 
 const is_spirv = builtin.target.cpu.arch.isSpirV();
+
+//TODO: a setting the developer and the player can pick, once project and run settings are ported
+const PRESENT_MODE: RenderPlatform.PresentMode = .VSync;
+/// Frames a second at most, 0 for no limit. Works with either present mode
+const FRAME_LIMIT: u32 = 0;
 
 pub const SurfShadingData = extern struct {
     Color: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
@@ -240,6 +248,7 @@ pub const ShadingBuffers = struct {
 };
 
 mPlatform: RenderPlatform = .{},
+mFrameLimiter: FrameLimiter = .Init(FRAME_LIMIT),
 mTextureManager: TextureManager = .{},
 mOverlayPipeline: SDFPipeline(.Overlay) = .empty,
 mGamePipeline: SDFPipeline(.Game) = .empty,
@@ -254,7 +263,7 @@ mShownCopies: std.ArrayList(RenderTargetComponent.Shown) = .empty,
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Renderer::Init", @src());
     defer zone.Deinit();
-    self.mPlatform.Init(engine_context);
+    self.mPlatform.Init(engine_context, PRESENT_MODE);
 
     try self.mTextureManager.Init(engine_context, 1_000_000_000);
 
@@ -267,10 +276,17 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     try self.mSDFShading.Init(engine_context);
 }
 
-/// False when no window image is free to draw into yet, and the frame is skipped
+/// False when the frame is skipped: the frame limit says it's too soon, or no window image is free to draw into yet
 pub fn BeginFrame(self: *Renderer, engine_context: *EngineContext) bool {
+    const now = std.Io.Timestamp.now(engine_context.Io(), .awake).toNanoseconds();
+    if (!self.mFrameLimiter.IsDue(now)) return false;
+
     const began = self.mPlatform.BeginFrame(&engine_context.mAppWindow);
-    if (began) engine_context.mEngineStats.FrameAcquired();
+    if (began) {
+        //only a frame that started counts against the limit, so one that found no image free is tried again next pass
+        self.mFrameLimiter.FrameStarted(now);
+        engine_context.mEngineStats.FrameAcquired();
+    }
     return began;
 }
 
@@ -290,8 +306,8 @@ pub fn Deinit(self: *Renderer, engine_context: *EngineContext) void {
 }
 
 /// The per view uniforms every render hands the renderer, from the camera's transform and viewpoint. The viewpoint's
-/// size has to be set for this frame before calling, since the ray params are derived from it. The shape counts are
-/// filled in by the renderer once it knows them.
+/// size has to be set for this frame before calling, since the ray params are derived from it. The shape counts and
+/// flags are filled in by the renderer once it knows them.
 pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_component: *ViewpointComponent) PushConstants {
     const ray_params = viewpoint_component.GetRayParams();
     return .{
@@ -304,6 +320,7 @@ pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_co
         .mDirectCount = 0,
         .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
         .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
+        .mFlags = 0,
     };
 }
 
@@ -384,28 +401,37 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
     const entity = shape.Entity;
     const transform_component = entity.GetComponent(TransformComponent).?;
 
-    //check for specific shapes and draw them if they exist. a hidden shape is skipped here and by
-    //picking alike, so nothing can be clicked that isn't drawn. an overlay shape's canvas places it
-    //in front of this view's camera, and sends it to the overlay pass
-    if (entity.GetComponent(QuadComponent)) |quad_component| {
-        //a quad showing a player's view samples its render target instead of its texture
-        const shown = if (entity.GetComponent(ViewportComponent)) |viewport| try Viewports.ShownTarget(engine_context, viewport.*) else null;
-        if (shown) |target| try self.mShownCopies.append(engine_context.EngineAllocator(), target);
-        if (quad_component.mShouldRender) try self.mR2D.DrawQuad(
-            engine_context,
-            transform_component,
-            quad_component,
-            shown,
-            shape.Canvas,
-            shape.Clip,
-            &self.mSDFShading,
-        );
+    //a surface paints whatever the entity has, its shape or its text. a hidden one is skipped here and by picking
+    //alike, so nothing can be clicked that isn't drawn. an overlay shape's canvas places it in front of this view's
+    //camera, and sends it to the overlay pass
+    const surface = entity.GetComponent(SurfaceComponent) orelse return;
+    if (!surface.mShouldRender) return;
+
+    if (entity.GetComponent(ShapeComponent)) |shape_component| {
+        switch (shape_component.mKind) {
+            .Quad => |quad| {
+                //a quad showing a player's view samples its render target instead of its texture
+                const shown = if (entity.GetComponent(ViewportComponent)) |viewport| try Viewports.ShownTarget(engine_context, viewport.*) else null;
+                if (shown) |target| try self.mShownCopies.append(engine_context.EngineAllocator(), target);
+                try self.mR2D.DrawQuad(
+                    engine_context,
+                    transform_component,
+                    quad,
+                    surface,
+                    shown,
+                    shape.Canvas,
+                    shape.Clip,
+                    &self.mSDFShading,
+                );
+            },
+        }
     }
     if (entity.GetComponent(TextComponent)) |text_component| {
-        if (text_component.mShouldRender) try self.mR2D.DrawText(
+        try self.mR2D.DrawText(
             engine_context,
             transform_component,
             text_component,
+            surface,
             shape.Canvas,
             shape.Clip,
             &self.mSDFShading,
@@ -423,8 +449,20 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
     self.mPlatform.PushDebugGroup("End Rendering");
     defer self.mPlatform.PopDebugGroup();
 
-    const draws_overlay = rendering_mode != .Game;
-    const draws_game = rendering_mode != .Overlay;
+    //a layer with nothing in it skips its pass, and the other pass is told what it would have done
+    const plan = PassPlan.Init(
+        rendering_mode != .Game,
+        rendering_mode != .Overlay,
+        self.mR2D.GetShapeCount(.OverlayPipeline),
+        self.mR2D.GetShapeCount(.GamePipeline),
+    );
+
+    if (plan.ClearTo != .None) {
+        self.mPlatform.PushDebugGroup("Clear");
+        defer self.mPlatform.PopDebugGroup();
+        compute_texture.Clear(engine_context, if (plan.ClearTo == .GameBackground) PushConstants.GAME_BACKGROUND else PushConstants.OVERLAY_BACKGROUND);
+        return;
+    }
 
     //everything this render reads, copied up front in one copy pass, before either compute pass reads any of it: the
     //render targets its quads show, as they were last drawn, into the slots they sample, then its shapes and
@@ -437,13 +475,13 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         defer self.mPlatform.EndCopyPass(copy_pass);
 
         for (self.mShownCopies.items) |shown| self.mTextureManager.CopyFromTexture(copy_pass, shown.Source, shown.Handle, shown.Width, shown.Height);
-        if (draws_overlay) try self.mR2D.SetBuffers(stats, engine_context, copy_pass, .OverlayPipeline);
-        if (draws_game) try self.mR2D.SetBuffers(stats, engine_context, copy_pass, .GamePipeline);
+        if (plan.Overlay) try self.mR2D.SetBuffers(stats, engine_context, copy_pass, .OverlayPipeline);
+        if (plan.Game) try self.mR2D.SetBuffers(stats, engine_context, copy_pass, .GamePipeline);
         try self.mSDFShading.SetBuffers(engine_context, copy_pass);
     }
 
     //====================first overlay render pipeline======================================
-    if (draws_overlay) {
+    if (plan.Overlay) {
         self.mPlatform.PushDebugGroup("Draw - Overlay");
         defer self.mPlatform.PopDebugGroup();
 
@@ -460,6 +498,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         overlay_push_constants.mPerspectiveFar = OverlayCanvas.FAR_DISTANCE;
         overlay_push_constants.mShapesCount = self.mR2D.GetShapeCount(.OverlayPipeline);
         overlay_push_constants.mDirectCount = self.mR2D.GetDirectCount(.OverlayPipeline);
+        overlay_push_constants.mFlags = if (plan.OverlayOnGameBackground) PushConstants.FLAG_GAME_BACKGROUND else 0;
         self.mOverlayPipeline.PushUniforms(cmd, overlay_push_constants);
 
         self.mOverlayPipeline.Dispatch(overlay_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
@@ -467,11 +506,12 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
     }
 
     //====================then the game layer, under what the overlay drew======================================
-    if (draws_game) {
+    if (plan.Game) {
         self.mPlatform.PushDebugGroup("Draw - Game");
         defer self.mPlatform.PopDebugGroup();
 
-        const game_compute_pass = compute_texture.BeginComputePass(engine_context, false);
+        //under an overlay it reads what that pass wrote, so the texture can't be swapped for a fresh one
+        const game_compute_pass = compute_texture.BeginComputePass(engine_context, !plan.GameUnderOverlay);
 
         self.mGamePipeline.Bind(game_compute_pass);
         self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
@@ -480,6 +520,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
 
         self.mSDFPushConstants.mShapesCount = self.mR2D.GetShapeCount(.GamePipeline);
         self.mSDFPushConstants.mDirectCount = self.mR2D.GetDirectCount(.GamePipeline);
+        self.mSDFPushConstants.mFlags = if (plan.GameUnderOverlay) PushConstants.FLAG_UNDER_OVERLAY else 0;
         self.mGamePipeline.PushUniforms(cmd, self.mSDFPushConstants);
 
         self.mGamePipeline.Dispatch(game_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));

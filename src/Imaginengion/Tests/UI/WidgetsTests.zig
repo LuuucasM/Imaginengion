@@ -14,7 +14,8 @@ const Layout = @import("../../UI/Layout.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const SelectedTag = EntityComponents.SelectedTag;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
@@ -188,7 +189,7 @@ test "the builders make each widget out of quads, text, layout and styles" {
     const no_scripts = Widgets.Options{ .StockScripts = false };
 
     const button = try Widgets.Button(engine_context, list, "Play");
-    try std.testing.expect(button.HasComponent(QuadComponent));
+    try std.testing.expect(button.HasComponent(ShapeComponent));
     try std.testing.expectEqual(Layout.Direction.Row, button.GetComponent(LayoutComponent).?.mDirection);
     try std.testing.expectEqualStrings("Button", StyleOf(button));
     const label = FirstChild(button);
@@ -325,7 +326,7 @@ test "a color field's four channels make its color, which its swatch shows" {
     var swatch = children.next().?;
     while (swatch.HasComponent(AttribComponent)) swatch = children.next().?;
     try std.testing.expectEqualStrings("Swatch", StyleOf(swatch));
-    try std.testing.expectEqual(@as(f32, 0.25), swatch.GetComponent(QuadComponent).?.mTexOptions.mColor.z);
+    try std.testing.expectEqual(@as(f32, 0.25), swatch.GetComponent(SurfaceComponent).?.mTexOptions.mColor.z);
 
     //set from code: the channels within their limits, and the swatch with them
     _ = try world.TakeValueChanged();
@@ -333,14 +334,14 @@ test "a color field's four channels make its color, which its swatch shows" {
     const set = WidgetActions.ColorOf(color_field);
     try std.testing.expectEqual(@as(f32, 0), set.x);
     try std.testing.expectEqual(@as(f32, 0), set.w);
-    try std.testing.expectEqual(@as(f32, 1), swatch.GetComponent(QuadComponent).?.mTexOptions.mColor.z);
+    try std.testing.expectEqual(@as(f32, 1), swatch.GetComponent(SurfaceComponent).?.mTexOptions.mColor.z);
     //red, blue and alpha changed, each telling its field, the color field and the list
     try std.testing.expectEqual(@as(usize, 9), (try world.TakeValueChanged()).len);
 
     //a channel set straight on its field: the swatch catches up when the stock script calls UpdateSwatch
     fields[1].GetComponent(AttribComponent).?.mData = .{ .float32 = 0 };
     WidgetActions.UpdateSwatch(color_field);
-    try std.testing.expectEqual(@as(f32, 0), swatch.GetComponent(QuadComponent).?.mTexOptions.mColor.y);
+    try std.testing.expectEqual(@as(f32, 0), swatch.GetComponent(SurfaceComponent).?.mTexOptions.mColor.y);
 }
 
 test "an opener in a copied world opens the copied world's popup" {

@@ -14,7 +14,8 @@ const THICKNESS_2D = @import("../../Math/SDFFunctions.zig").THICKNESS_2D;
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const OverlayLayerTag = @import("../../ECSComponents/SComponents.zig").OverlayLayerTag;
@@ -81,7 +82,8 @@ fn CastIn(engine_context: *EngineContext, view_scenes: RayCast.ViewScenes, pose:
 fn AddQuad(engine_context: *EngineContext, scene: Scene, position: Vec3(f32), size: Vec2(f32)) !Entity {
     const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     try entity.SetTranslation(engine_context, position);
-    _ = try entity.AddComponent(engine_context, QuadComponent{ .mSize = size });
+    _ = try entity.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = size }));
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     return entity;
 }
 
@@ -172,7 +174,7 @@ test "a hidden quad can't be hit" {
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const hidden = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    hidden.GetComponent(QuadComponent).?.mShouldRender = false;
+    hidden.GetComponent(SurfaceComponent).?.mShouldRender = false;
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 4, .y = 4 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
@@ -334,7 +336,7 @@ test "a click in a rounded quad's cut off corner goes through it" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     //4 x 4 with corners rounded by 1, right in front of the camera, and a plain quad behind it
     const rounded = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    rounded.GetComponent(QuadComponent).?.mCornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
+    rounded.GetComponent(ShapeComponent).?.GetQuad().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
@@ -357,7 +359,8 @@ test "a click on the part of a shape its clip region cuts off goes through to wh
     _ = try region.AddComponent(engine_context, EntityComponents.ClipComponent{});
     const content = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try content.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
-    _ = try content.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 10, .y = 10 } });
+    _ = try content.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
+    _ = try content.AddComponent(engine_context, SurfaceComponent{});
     const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 40, .y = 40 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
@@ -370,13 +373,12 @@ test "a click on the part of a shape its clip region cuts off goes through to wh
 test "corner radii and borders grow with the quad's smaller axis and stay within half its smaller side" {
     var transform: TransformComponent = .{};
     transform.SetWorldScale(.{ .x = 3, .y = 2, .z = 1 });
-    const quad = QuadComponent{
-        .mSize = .{ .x = 4, .y = 4 },
-        .mCornerRadii = .{ .x = 1, .y = 0, .z = 100, .w = 0.5 },
-        .mBorderWidth = 0.25,
+    const quad = ShapeComponent.Quad{
+        .Size = .{ .x = 4, .y = 4 },
+        .CornerRadii = .{ .x = 1, .y = 0, .z = 100, .w = 0.5 },
     };
 
-    const box = ShapeGeometry.QuadBox(&transform, &quad, null);
+    const box = ShapeGeometry.QuadBox(&transform, quad, 0.25, null);
     //scaled by 2, the smaller axis; the quad is 12 x 8, so nothing can be more than 4
     try std.testing.expectApproxEqAbs(@as(f32, 2), box.CornerRadii.x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 0), box.CornerRadii.y, eps);

@@ -21,7 +21,8 @@ const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
@@ -151,12 +152,19 @@ pub const MenuItemOptions = struct {
     StockScripts: bool = true,
 };
 
+/// Gives `entity` a quad shape painted with `surface`: every widget's background, box and bar
+pub fn AddQuad(engine_context: *EngineContext, entity: Entity, quad: ShapeComponent.Quad, surface: SurfaceComponent) !void {
+    _ = try entity.AddComponent(engine_context, ShapeComponent.MakeQuad(quad));
+    _ = try entity.AddComponent(engine_context, surface);
+}
+
 /// A line of text, sized to fit it. Style "Text"
 pub fn Label(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
     const entity = try NewEntity(engine_context, parent);
     var text_component = TextComponent{ .mFontSize = TEXT_SIZE };
     try text_component.SetText(engine_context, text);
     _ = try entity.AddComponent(engine_context, text_component);
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
     _ = try entity.AddComponent(engine_context, LayoutItemComponent{});
     try UIManager.Style(engine_context, entity, "Text");
     return entity;
@@ -209,7 +217,7 @@ pub fn SyncLines(engine_context: *EngineContext, column: Entity, lines: []const 
 /// A thin line across whatever it is in. Style "Separator"
 pub fn Separator(engine_context: *EngineContext, parent: Parent) !Entity {
     const entity = try NewEntity(engine_context, parent);
-    _ = try entity.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, entity, .{}, .{});
     _ = try entity.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fixed = 1 } });
     try UIManager.Style(engine_context, entity, "Separator");
     return entity;
@@ -219,7 +227,7 @@ pub fn Separator(engine_context: *EngineContext, parent: Parent) !Entity {
 pub fn Image(engine_context: *EngineContext, parent: Parent, texture: AssetHandle, size: Vec2(f32)) !Entity {
     const entity = try NewEntity(engine_context, parent);
     texture.RetainAsset();
-    _ = try entity.AddComponent(engine_context, QuadComponent{ .mTexture = texture });
+    try AddQuad(engine_context, entity, .{}, .{ .mTexture = texture });
     _ = try entity.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = size.x }, .mHeight = .{ .Fixed = size.y } });
     return entity;
 }
@@ -248,7 +256,7 @@ pub fn Checkbox(engine_context: *EngineContext, parent: Parent, text: []const u8
     _ = try row.AddComponent(engine_context, LayoutItemComponent{});
 
     const box = try NewEntity(engine_context, .{ .Entity = row });
-    _ = try box.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, box, .{}, .{});
     _ = try box.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = CHECKBOX_SIZE }, .mHeight = .{ .Fixed = CHECKBOX_SIZE } });
     try UIManager.Style(engine_context, box, "Checkbox");
     if (options.StockScripts) try AddStockScript(engine_context, box, .Toggle);
@@ -267,7 +275,7 @@ pub fn SelectableRow(engine_context: *EngineContext, parent: Parent, text: []con
 /// SelectableRow, with `script` as what clicking it does
 fn SelectableRowWith(engine_context: *EngineContext, parent: Parent, text: []const u8, script: ?StockScript) !Entity {
     const row = try NewEntity(engine_context, parent);
-    _ = try row.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, row, .{}, .{});
     _ = try row.AddComponent(engine_context, LayoutComponent{
         .mDirection = .Row,
         .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 },
@@ -287,7 +295,7 @@ fn SelectableRowWith(engine_context: *EngineContext, parent: Parent, text: []con
 /// everything it is inside a ValueChanged. Style "Field", its text style "Text"
 pub fn NumberField(engine_context: *EngineContext, parent: Parent, value: AttribComponent.ValueTypes, settings: NumberFieldComponent) !Entity {
     const field = try NewEntity(engine_context, parent);
-    _ = try field.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, field, .{}, .{});
     _ = try field.AddComponent(engine_context, LayoutComponent{
         .mDirection = .Row,
         .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 },
@@ -311,7 +319,7 @@ pub fn NumberField(engine_context: *EngineContext, parent: Parent, value: Attrib
 /// its text style "Text"
 pub fn TextField(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
     const field = try NewEntity(engine_context, parent);
-    _ = try field.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, field, .{}, .{});
     _ = try field.AddComponent(engine_context, LayoutComponent{
         .mDirection = .Row,
         .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 },
@@ -337,7 +345,7 @@ pub fn NumberRow(engine_context: *EngineContext, parent: Parent, values: []const
     const styles = [_][]const u8{ "AxisX", "AxisY", "AxisZ", "AxisW" };
     for (values, 0..) |value, i| {
         const axis = try NewEntity(engine_context, .{ .Entity = row });
-        _ = try axis.AddComponent(engine_context, QuadComponent{});
+        try AddQuad(engine_context, axis, .{}, .{});
         _ = try axis.AddComponent(engine_context, LayoutComponent{
             .mDirection = .Row,
             .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 },
@@ -371,7 +379,7 @@ pub fn Dropdown(engine_context: *EngineContext, parent: Parent, choices: []const
 
     //the button: the choice, and an arrow
     const button = try NewEntity(engine_context, parent);
-    _ = try button.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, button, .{}, .{});
     _ = try button.AddComponent(engine_context, LayoutComponent{
         .mDirection = .Row,
         .mGap = PADDING,
@@ -407,7 +415,7 @@ pub fn ColorField(engine_context: *EngineContext, parent: Parent, color: Vec4(f3
     }
 
     const swatch = try NewEntity(engine_context, .{ .Entity = row });
-    _ = try swatch.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, swatch, .{}, .{});
     _ = try swatch.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = SWATCH_SIZE }, .mHeight = .{ .Fixed = SWATCH_SIZE } });
     try UIManager.Style(engine_context, swatch, "Swatch");
     WidgetActions.UpdateSwatch(row);
@@ -460,7 +468,7 @@ pub fn CollapsingHeader(engine_context: *EngineContext, parent: Parent, text: []
 /// A row of menus along the top of a window. Put its menus in with Menu. Style "MenuBar"
 pub fn MenuBar(engine_context: *EngineContext, parent: Parent) !Entity {
     const bar = try NewEntity(engine_context, parent);
-    _ = try bar.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, bar, .{}, .{});
     _ = try bar.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .All(PADDING / 2) });
     _ = try bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
     try UIManager.Style(engine_context, bar, "MenuBar");
@@ -472,7 +480,7 @@ pub fn MenuBar(engine_context: *EngineContext, parent: Parent) !Entity {
 /// in (MenuItem, Submenu, Separator)
 pub fn Menu(engine_context: *EngineContext, bar: Entity, text: []const u8, options: Options) !Entity {
     const button = try NewEntity(engine_context, .{ .Entity = bar });
-    _ = try button.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, button, .{}, .{});
     _ = try button.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 }, .mCrossAlign = .Center });
     _ = try button.AddComponent(engine_context, LayoutItemComponent{});
     try UIManager.Style(engine_context, button, "Header");
@@ -495,7 +503,7 @@ pub fn MenuItem(engine_context: *EngineContext, menu: Entity, text: []const u8, 
     }
     if (options.Checkable) {
         const check = try NewEntity(engine_context, .{ .Entity = item });
-        _ = try check.AddComponent(engine_context, QuadComponent{});
+        try AddQuad(engine_context, check, .{}, .{});
         _ = try check.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = MENU_CHECK_SIZE }, .mHeight = .{ .Fixed = MENU_CHECK_SIZE } });
         try UIManager.Style(engine_context, check, "MenuCheck");
     }
@@ -548,7 +556,7 @@ pub fn Split(engine_context: *EngineContext, parent: Parent, direction: Layout.D
     const first = try Pane(engine_context, root, direction, if (fixed == .First) fixed_size else fill);
 
     const divider = try NewEntity(engine_context, .{ .Entity = root });
-    _ = try divider.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, divider, .{}, .{});
     const thin: Layout.Sizing = .{ .Fixed = DIVIDER_SIZE };
     _ = try divider.AddComponent(engine_context, if (direction == .Row)
         LayoutItemComponent{ .mWidth = thin, .mHeight = fill }
@@ -569,7 +577,7 @@ pub fn Tabs(engine_context: *EngineContext, parent: Parent) !Entity {
     _ = try tabs.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
 
     const bar = try NewEntity(engine_context, .{ .Entity = tabs });
-    _ = try bar.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, bar, .{}, .{});
     _ = try bar.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mGap = PADDING / 2, .mPadding = .{ .Left = PADDING / 2, .Right = PADDING / 2, .Top = PADDING / 2, .Bottom = 0 } });
     _ = try bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
     try UIManager.Style(engine_context, bar, "TabBar");
@@ -591,7 +599,7 @@ pub fn AddTab(engine_context: *EngineContext, tabs: Entity, title: []const u8, o
     const first = existing.next() == null;
 
     const tab = try NewEntity(engine_context, .{ .Entity = bar });
-    _ = try tab.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, tab, .{}, .{});
     _ = try tab.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 } });
     _ = try tab.AddComponent(engine_context, LayoutItemComponent{});
     try UIManager.Style(engine_context, tab, "Tab");
@@ -612,7 +620,7 @@ pub fn AddTab(engine_context: *EngineContext, tabs: Entity, title: []const u8, o
 /// center. Style "Window"
 pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []const u8, size: Vec2(f32), at: Vec2(f32), options: Options) !WindowParts {
     const window = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try window.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, window, .{}, .{});
     _ = try window.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     _ = try window.AddComponent(engine_context, LayoutItemComponent{
         .mWidth = .{ .Fixed = size.x },
@@ -624,7 +632,7 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
     if (options.StockScripts) try AddStockScript(engine_context, window, .Window);
 
     const title_bar = try NewEntity(engine_context, .{ .Entity = window });
-    _ = try title_bar.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, title_bar, .{}, .{});
     _ = try title_bar.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .{ .Left = PADDING, .Right = 2, .Top = 2, .Bottom = 2 }, .mCrossAlign = .Center });
     _ = try title_bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fixed = TITLE_SIZE } });
     try UIManager.Style(engine_context, title_bar, "Title");
@@ -659,7 +667,7 @@ pub fn AddStockScript(engine_context: *EngineContext, entity: Entity, script: St
 /// closed until something opens it: a dropdown's list, a menu. Style "Popup"
 fn PopupList(engine_context: *EngineContext, scene: Scene, placement: PopupComponent) !Entity {
     const list = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
-    _ = try list.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, list, .{}, .{});
     _ = try list.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .All(PADDING / 2) });
     _ = try list.AddComponent(engine_context, LayoutItemComponent{ .mCollapsed = true });
     try UIManager.Style(engine_context, list, "Popup");
@@ -671,7 +679,7 @@ fn PopupList(engine_context: *EngineContext, scene: Scene, placement: PopupCompo
 /// A row of a menu as wide as the menu: its text, and room after it for what goes at the right. Style "Header"
 fn MenuRow(engine_context: *EngineContext, menu: Entity, text: []const u8) !Entity {
     const row = try NewEntity(engine_context, .{ .Entity = menu });
-    _ = try row.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, row, .{}, .{});
     _ = try row.AddComponent(engine_context, LayoutComponent{
         .mDirection = .Row,
         .mGap = PADDING * 2,
@@ -690,7 +698,7 @@ fn MenuRow(engine_context: *EngineContext, menu: Entity, text: []const u8) !Enti
 /// label. Style "Header", the arrow box "Arrow"
 fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: ?bool) !Entity {
     const header = try NewEntity(engine_context, parent);
-    _ = try header.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, header, .{}, .{});
     _ = try header.AddComponent(engine_context, LayoutComponent{
         .mDirection = .Row,
         .mGap = PADDING / 2,
@@ -703,7 +711,7 @@ fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, 
     const arrow = try NewEntity(engine_context, .{ .Entity = header });
     _ = try arrow.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = ARROW_SIZE }, .mHeight = .{ .Fixed = ARROW_SIZE } });
     if (open) |is_open| {
-        _ = try arrow.AddComponent(engine_context, QuadComponent{});
+        try AddQuad(engine_context, arrow, .{}, .{});
         _ = try arrow.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mMainAlign = .Center, .mCrossAlign = .Center });
         try UIManager.Style(engine_context, arrow, "Arrow");
         _ = try Label(engine_context, .{ .Entity = arrow }, if (is_open) WidgetActions.ARROW_OPEN else WidgetActions.ARROW_FOLDED);
@@ -748,7 +756,7 @@ fn Pane(engine_context: *EngineContext, split: Entity, direction: Layout.Directi
 /// The container Button and ImageButton put their content in
 fn ButtonFrame(engine_context: *EngineContext, parent: Parent) !Entity {
     const button = try NewEntity(engine_context, parent);
-    _ = try button.AddComponent(engine_context, QuadComponent{});
+    try AddQuad(engine_context, button, .{}, .{});
     _ = try button.AddComponent(engine_context, LayoutComponent{ .mDirection = .Row, .mPadding = .All(PADDING), .mMainAlign = .Center, .mCrossAlign = .Center });
     _ = try button.AddComponent(engine_context, LayoutItemComponent{});
     try UIManager.Style(engine_context, button, "Button");

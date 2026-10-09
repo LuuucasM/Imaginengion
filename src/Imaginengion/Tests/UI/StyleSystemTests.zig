@@ -12,7 +12,8 @@ const UIManager = @import("../../UI/UIManager.zig");
 const Vec4 = @import("../../Math/MathTypes.zig").Vec4;
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const HoveredTag = EntityComponents.HoveredTag;
 const PressedTag = EntityComponents.PressedTag;
@@ -62,12 +63,15 @@ const TestWorld = struct {
         std.heap.page_allocator.destroy(self);
     }
 
-    /// An entity with a quad and text, styled `style`
-    fn Styled(self: *TestWorld, style: []const u8) !Entity {
+    /// An entity with a quad shape or a text, and the surface it is painted with, styled `style`
+    fn Styled(self: *TestWorld, style: []const u8, what: enum { Shape, Text }) !Entity {
         const engine_context = self.mEngineContext;
         const entity = try self.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
-        _ = try entity.AddComponent(engine_context, QuadComponent{});
-        _ = try entity.AddComponent(engine_context, TextComponent{});
+        switch (what) {
+            .Shape => _ = try entity.AddComponent(engine_context, ShapeComponent{}),
+            .Text => _ = try entity.AddComponent(engine_context, TextComponent{}),
+        }
+        _ = try entity.AddComponent(engine_context, SurfaceComponent{});
         try UIManager.Style(engine_context, entity, style);
         return entity;
     }
@@ -106,8 +110,8 @@ test "an entity's colors follow its state, highest first, and a state with no co
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
-    const entity = try world.Styled("Button");
-    const quad = entity.GetComponent(QuadComponent).?;
+    const entity = try world.Styled("Button", .Shape);
+    const quad = entity.GetComponent(SurfaceComponent).?;
     try world.Update();
     try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, quad.mTexOptions.mColor);
 
@@ -141,34 +145,40 @@ test "everything inside a disabled entity shows its disabled colors too" {
 
     const item = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     const label = try item.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    _ = try label.AddComponent(engine_context, QuadComponent{});
+    _ = try label.AddComponent(engine_context, ShapeComponent{});
+    _ = try label.AddComponent(engine_context, SurfaceComponent{});
     try UIManager.Style(engine_context, label, "Button");
     _ = try item.AddComponent(engine_context, EntityComponents.DisabledTag{});
     try world.Update();
     try std.testing.expectEqual(StyleSystem.State.Disabled, StyleSystem.StateOf(label));
-    try ExpectColor(.{ 0.2, 0.2, 0.2, 1 }, label.GetComponent(QuadComponent).?.mTexOptions.mColor);
+    try ExpectColor(.{ 0.2, 0.2, 0.2, 1 }, label.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
 }
 
 test "a style writes the border, corners and text it has, and leaves the rest as the entity has it" {
     const world = try TestWorld.Init();
     defer world.Deinit();
 
-    const button = try world.Styled("Button");
-    const plain = try world.Styled("Plain");
-    plain.GetComponent(QuadComponent).?.mBorderWidth = 7;
-    plain.GetComponent(TextComponent).?.mTexOptions.mColor = .{ .x = 0.25, .y = 0.25, .z = 0.25, .w = 1 };
+    const button = try world.Styled("Button", .Shape);
+    const button_text = try world.Styled("Button", .Text);
+    const plain = try world.Styled("Plain", .Shape);
+    const plain_text = try world.Styled("Plain", .Text);
+    plain.GetComponent(SurfaceComponent).?.mBorderWidth = 7;
+    plain_text.GetComponent(SurfaceComponent).?.mTexOptions.mColor = .{ .x = 0.25, .y = 0.25, .z = 0.25, .w = 1 };
     try world.Update();
 
-    const quad = button.GetComponent(QuadComponent).?;
-    try ExpectColor(.{ 1, 1, 1, 0.5 }, quad.mBorderColor);
-    try std.testing.expectEqual(@as(f32, 2), quad.mBorderWidth);
-    try std.testing.expectEqual(@as(f32, 4), quad.mCornerRadii.w);
-    try ExpectColor(.{ 1, 1, 1, 1 }, button.GetComponent(TextComponent).?.mTexOptions.mColor);
+    //a shape's surface takes the background and border, its shape the corners
+    const surface = button.GetComponent(SurfaceComponent).?;
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, surface.mTexOptions.mColor);
+    try ExpectColor(.{ 1, 1, 1, 0.5 }, surface.mBorderColor);
+    try std.testing.expectEqual(@as(f32, 2), surface.mBorderWidth);
+    try std.testing.expectEqual(@as(f32, 4), button.GetComponent(ShapeComponent).?.GetQuad().?.CornerRadii.w);
+    //a text's surface takes the text color
+    try ExpectColor(.{ 1, 1, 1, 1 }, button_text.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
 
     //plain only has a background
-    try ExpectColor(.{ 0.5, 0.5, 0.5, 1 }, plain.GetComponent(QuadComponent).?.mTexOptions.mColor);
-    try std.testing.expectEqual(@as(f32, 7), plain.GetComponent(QuadComponent).?.mBorderWidth);
-    try ExpectColor(.{ 0.25, 0.25, 0.25, 1 }, plain.GetComponent(TextComponent).?.mTexOptions.mColor);
+    try ExpectColor(.{ 0.5, 0.5, 0.5, 1 }, plain.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+    try std.testing.expectEqual(@as(f32, 7), plain.GetComponent(SurfaceComponent).?.mBorderWidth);
+    try ExpectColor(.{ 0.25, 0.25, 0.25, 1 }, plain_text.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
 }
 
 test "a new font size has layout fit the text again, a new color doesn't" {
@@ -176,7 +186,7 @@ test "a new font size has layout fit the text again, a new color doesn't" {
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
-    const button = try world.Styled("Button");
+    const button = try world.Styled("Button", .Text);
     try button.ClearLayoutDirty(engine_context);
     try world.Update();
     try std.testing.expectEqual(@as(f32, 18), button.GetComponent(TextComponent).?.mFontSize);
@@ -193,11 +203,11 @@ test "an element whose style the theme hasn't is left alone" {
     const world = try TestWorld.Init();
     defer world.Deinit();
 
-    const entity = try world.Styled("Missing");
-    entity.GetComponent(QuadComponent).?.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
+    const entity = try world.Styled("Missing", .Shape);
+    entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
     try world.Update();
     try world.Update();
-    try ExpectColor(.{ 0.3, 0.3, 0.3, 1 }, entity.GetComponent(QuadComponent).?.mTexOptions.mColor);
+    try ExpectColor(.{ 0.3, 0.3, 0.3, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
 }
 
 test "styling an entity gives it a UI element, and styling it again changes its style" {
@@ -205,7 +215,7 @@ test "styling an entity gives it a UI element, and styling it again changes its 
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
-    const entity = try world.Styled("Plain");
+    const entity = try world.Styled("Plain", .Shape);
     try std.testing.expectEqualStrings("Plain", UIManager.GetUIComponent(entity, StyleComponent).?.mStyle.items);
     try UIManager.Style(engine_context, entity, "Button");
     try std.testing.expectEqualStrings("Button", UIManager.GetUIComponent(entity, StyleComponent).?.mStyle.items);

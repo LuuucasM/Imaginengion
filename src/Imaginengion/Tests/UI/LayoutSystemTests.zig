@@ -14,7 +14,8 @@ const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const TransformDirtyTag = EntityComponents.TransformDirtyTag;
 const SceneComponent = @import("../../ECSComponents/SComponents.zig").SceneComponent;
@@ -83,7 +84,7 @@ fn Element(engine_context: *EngineContext, scene: Scene, parent: ?Entity, item: 
     const entity = try New(engine_context, scene, parent);
     _ = try entity.AddComponent(engine_context, item);
     if (container) |layout| _ = try entity.AddComponent(engine_context, layout);
-    _ = try entity.AddComponent(engine_context, QuadComponent{});
+    _ = try entity.AddComponent(engine_context, ShapeComponent{});
     return entity;
 }
 
@@ -98,7 +99,7 @@ fn ExpectXY(expected_x: f32, expected_y: f32, entity: Entity) !void {
 }
 
 fn ExpectQuad(expected_x: f32, expected_y: f32, entity: Entity) !void {
-    const size = entity.GetComponent(QuadComponent).?.mSize;
+    const size = entity.GetComponent(ShapeComponent).?.GetQuad().?.Size;
     try std.testing.expectApproxEqAbs(expected_x, size.x, eps);
     try std.testing.expectApproxEqAbs(expected_y, size.y, eps);
 }
@@ -130,7 +131,7 @@ const PongMenu = struct {
 
         //no layout components: layout leaves it alone
         const sparkle = try New(engine_context, scene, menu);
-        _ = try sparkle.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 7, .y = 7 } });
+        _ = try sparkle.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 7, .y = 7 } }));
         try sparkle.SetTranslation(engine_context, .{ .x = 150, .y = 100, .z = 3 });
 
         return .{ .mMenu = menu, .mTitle = title, .mPlay = play, .mPlayLabel = play_label, .mQuit = quit, .mSparkle = sparkle };
@@ -248,7 +249,7 @@ test "a container without an item fits its children, and one under a hand-placed
     //a column with no LayoutItemComponent, and a hand-placed entity in it
     const column = try New(engine_context, scene, null);
     _ = try column.AddComponent(engine_context, LayoutComponent{ .mGap = 10 });
-    _ = try column.AddComponent(engine_context, QuadComponent{});
+    _ = try column.AddComponent(engine_context, ShapeComponent{});
     _ = try Element(engine_context, scene, column, Fixed(40, 20), null);
     const holder = try New(engine_context, scene, column);
     try holder.SetTranslation(engine_context, .{ .x = 500, .y = 500, .z = 0 });
@@ -267,7 +268,7 @@ test "a container without an item fits its children, and one under a hand-placed
     try ExpectXY(7.5, 0, b);
 
     //a change in the row's tree lays out only the row's tree: the column's background, scribbled on, stays scribbled
-    column.GetComponent(QuadComponent).?.mSize = .{ .x = 1, .y = 1 };
+    column.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 1, .y = 1 };
     row.GetComponent(LayoutComponent).?.mGap = 15;
     try b.MarkLayoutDirty(engine_context);
     try world.Update();
@@ -550,14 +551,14 @@ test "adding layout from the panel keeps a quad the size it is" {
 
     //an item on a quad starts fixed at the quad's size, where fitting would shrink it to nothing
     const panel = try New(engine_context, scene, null);
-    _ = try panel.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 30, .y = 20 } });
+    _ = try panel.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 30, .y = 20 } }));
     try ComponentList.AddFromPanel(LayoutItemComponent, engine_context, panel);
     try world.Update();
     try ExpectQuad(30, 20, panel);
 
     //a container on a quad comes with an item like that
     const box = try New(engine_context, scene, null);
-    _ = try box.AddComponent(engine_context, QuadComponent{ .mSize = .{ .x = 8, .y = 6 } });
+    _ = try box.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 8, .y = 6 } }));
     try ComponentList.AddFromPanel(LayoutComponent, engine_context, box);
     try std.testing.expect(box.HasComponent(LayoutItemComponent));
     try world.Update();
@@ -569,6 +570,22 @@ test "adding layout from the panel keeps a quad the size it is" {
     try std.testing.expect(!bare.HasComponent(LayoutItemComponent));
     try ComponentList.AddFromPanel(LayoutItemComponent, engine_context, bare);
     try std.testing.expectEqual(Layout.Sizing.Fit, bare.GetComponent(LayoutItemComponent).?.mWidth);
+}
+
+test "a shape or text added from a panel comes with a surface, so it shows up, and keeps the one it has" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const scene = try world.DrawnOverlay();
+
+    const shape = try New(engine_context, scene, null);
+    try ComponentList.AddFromPanel(ShapeComponent, engine_context, shape);
+    try std.testing.expect(shape.HasComponent(SurfaceComponent));
+
+    const text = try New(engine_context, scene, null);
+    _ = try text.AddComponent(engine_context, SurfaceComponent{ .mBorderWidth = 3 });
+    try ComponentList.AddFromPanel(EntityComponents.TextComponent, engine_context, text);
+    try std.testing.expectEqual(@as(f32, 3), text.GetComponent(SurfaceComponent).?.mBorderWidth);
 }
 
 test "a child laid out in a panel in the world is gathered for drawing where layout put it" {
@@ -583,7 +600,8 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
     _ = try panel.AddComponent(engine_context, Fixed(200, 200));
     const child = try New(engine_context, scene, panel);
     _ = try child.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
-    _ = try child.AddComponent(engine_context, QuadComponent{});
+    _ = try child.AddComponent(engine_context, ShapeComponent{});
+    _ = try child.AddComponent(engine_context, SurfaceComponent{});
 
     try world.Update();
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
@@ -592,7 +610,7 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
     const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, ViewOf(1600, 900, 1), .{ .Overlays = &.{} }, ShapeGeometry.VISUALS_QUERY);
     try std.testing.expectEqual(@as(usize, 1), shapes.items.len);
     try std.testing.expectEqual(child.mID, shapes.items[0].Entity.mID);
-    const box = ShapeGeometry.QuadBox(child.GetComponent(TransformComponent).?, child.GetComponent(QuadComponent).?, null);
+    const box = ShapeGeometry.QuadBox(child.GetComponent(TransformComponent).?, child.GetComponent(ShapeComponent).?.GetQuad().?.*, 0, null);
     try std.testing.expectEqual(Vec3(f32){ .x = 0, .y = 0, .z = 0 }, box.Center);
     try std.testing.expectApproxEqAbs(@as(f32, 100), box.HalfExtents.x, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 100), box.HalfExtents.y, eps);

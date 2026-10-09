@@ -33,7 +33,6 @@ const UIManager = @import("UIManager.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const PopupComponent = @import("../ECSComponents/UIComponents.zig").PopupComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
-const QuadComponent = EntityComponents.QuadComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
@@ -257,8 +256,8 @@ fn RectSize(opener: Entity) Vec2(f32) {
     var size = Vec2(f32){ .x = 0, .y = 0 };
     if (opener.GetComponent(LayoutItemComponent)) |item| {
         size = item.mComputedSize;
-    } else if (opener.GetComponent(QuadComponent)) |quad| {
-        size = quad.mSize;
+    } else if (ShapeGeometry.QuadOf(opener)) |quad| {
+        size = quad.Size;
     }
     const scale = if (opener.GetComponent(TransformComponent)) |transform| transform.GetWorldScale() else Vec3(f32){ .x = 1, .y = 1, .z = 1 };
     return .{ .x = size.x * scale.x, .y = size.y * scale.y };

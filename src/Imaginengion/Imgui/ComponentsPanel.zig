@@ -27,7 +27,6 @@ const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const PopupComponent = UIComponents.PopupComponent;
 const ScrollComponent = UIComponents.ScrollComponent;
 const TextComponent = @import("../ECSComponents/Entity/TextComponent.zig");
-const QuadComponent = @import("../ECSComponents/Entity/QuadComponent.zig");
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const ImguiManager = @import("Imgui.zig");
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;

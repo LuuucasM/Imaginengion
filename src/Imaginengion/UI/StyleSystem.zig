@@ -16,7 +16,8 @@ const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const Vec4 = @import("../Math/MathTypes.zig").Vec4;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
-const QuadComponent = EntityComponents.QuadComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const PressedTag = EntityComponents.PressedTag;
 const HoveredTag = EntityComponents.HoveredTag;
@@ -68,7 +69,7 @@ pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const 
     }
 }
 
-/// Gives a quad or text with no texture of its own the plain one, sampled only at its middle, so the edges of the texture
+/// Gives a surface with no texture of its own the plain one, sampled only at its middle, so the edges of the texture
 /// manager's slot it is in never blend in
 fn FillPlain(texture: *AssetHandle, tex_options: *Texture2D.TexOptions, plain_texture: AssetHandle) void {
     if (texture.IsIDValid() or !plain_texture.IsIDValid()) return;
@@ -76,6 +77,12 @@ fn FillPlain(texture: *AssetHandle, tex_options: *Texture2D.TexOptions, plain_te
     texture.* = plain_texture;
     tex_options.mTextureUV0 = .{ .x = 0.5, .y = 0.5 };
     tex_options.mTextureUV1 = .{ .x = 0.5, .y = 0.5 };
+}
+
+/// A surface's color, which is see-through for the renderer when it is at all
+fn SetColor(surface: *SurfaceComponent, color: Vec4(f32)) void {
+    surface.mTexOptions.mColor = color;
+    surface.mTexOptions.mIsTransparent = color.w < 1;
 }
 
 /// The state `entity` is in, from its tags
@@ -88,27 +95,28 @@ pub fn StateOf(entity: Entity) State {
     return .Normal;
 }
 
-/// Writes `style`, for the state `entity` is in, into its quad and text. A quad or text with no texture of its own is
-/// given `plain_texture` (a white one) to fill with, unless that is uninit
+/// Writes `style`, for the state `entity` is in, into its surface, and its shape or text. A surface with no texture of
+/// its own is given `plain_texture` (a white one) to fill with, unless that is uninit. A shape's surface takes the
+/// background and border colors, a text's the text color
 pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.Style, plain_texture: AssetHandle) !void {
     const state = StateOf(entity);
+    const surface = entity.GetComponent(SurfaceComponent);
+    if (surface) |surf| FillPlain(&surf.mTexture, &surf.mTexOptions, plain_texture);
 
-    if (entity.GetComponent(QuadComponent)) |quad| {
-        FillPlain(&quad.mTexture, &quad.mTexOptions, plain_texture);
-        if (ColorFor(style.Background, state)) |color| {
-            quad.mTexOptions.mColor = color;
-            quad.mTexOptions.mIsTransparent = color.w < 1;
+    if (entity.GetComponent(ShapeComponent)) |shape| {
+        if (surface) |surf| {
+            if (ColorFor(style.Background, state)) |color| SetColor(surf, color);
+            if (ColorFor(style.Border, state)) |color| surf.mBorderColor = color;
+            if (style.BorderWidth) |width| surf.mBorderWidth = width;
         }
-        if (ColorFor(style.Border, state)) |color| quad.mBorderColor = color;
-        if (style.BorderWidth) |width| quad.mBorderWidth = width;
-        if (style.CornerRadius) |radius| quad.mCornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
+        if (style.CornerRadius) |radius| {
+            if (shape.GetQuad()) |quad| quad.CornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
+        }
     }
 
     if (entity.GetComponent(TextComponent)) |text| {
-        FillPlain(&text.mTexHandle, &text.mTexOptions, plain_texture);
-        if (ColorFor(style.Text, state)) |color| {
-            text.mTexOptions.mColor = color;
-            text.mTexOptions.mIsTransparent = color.w < 1;
+        if (surface) |surf| {
+            if (ColorFor(style.Text, state)) |color| SetColor(surf, color);
         }
         //a different font or size is a different size of text, which layout has to fit again
         var resized = false;
