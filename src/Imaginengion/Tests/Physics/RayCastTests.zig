@@ -348,15 +348,15 @@ test "a click in a rounded quad's cut off corner goes through it" {
     try ExpectEntity(rounded, try Cast(engine_context, ORIGIN_POSE, inside_curve, .{}));
 }
 
-test "a click on the part of a shape its clip region cuts off goes through to what is behind" {
+test "a click on the part of a shape its mask cuts off goes through to what is behind" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
 
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
-    //a 4 x 4 clip region, a 10 x 10 quad inside it a little in front, and a big quad behind both
+    //a 4 x 4 mask, a 10 x 10 quad inside it a little in front, and a big quad behind both
     const region = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
-    _ = try region.AddComponent(engine_context, EntityComponents.ClipComponent{});
+    _ = try region.AddComponent(engine_context, EntityComponents.MaskComponent{});
     const content = try region.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     try content.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
     _ = try content.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
@@ -368,6 +368,40 @@ test "a click on the part of a shape its clip region cuts off goes through to wh
     try ExpectEntity(content, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1, .y = 1, .z = 0 }, .Dir = down }, .{}));
     //on the content, but outside the region: cut off
     try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 3, .y = 1, .z = 0 }, .Dir = down }, .{}));
+}
+
+test "a click in the hole a subtract mask cuts, or past a rounded mask's corner, goes through to what is behind" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
+    //a 4 x 4 mask rounded by 1 at each corner, a 10 x 10 quad under it in front, and a big quad behind both
+    const rounded = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -10 }, .{ .x = 4, .y = 4 });
+    rounded.GetComponent(ShapeComponent).?.GetQuad().?.CornerRadii = .{ .x = 1, .y = 1, .z = 1, .w = 1 };
+    _ = try rounded.AddComponent(engine_context, EntityComponents.MaskComponent{});
+    const cut = try rounded.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try cut.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
+    _ = try cut.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
+    _ = try cut.AddComponent(engine_context, SurfaceComponent{});
+    //a 2 x 2 hole cut out of everything under it, the mask's own shape not drawn
+    const hole = try AddQuad(engine_context, scene, .{ .x = 20, .y = 0, .z = -10 }, .{ .x = 2, .y = 2 });
+    _ = try hole.AddComponent(engine_context, EntityComponents.MaskComponent{ .mOp = .Subtract });
+    hole.GetComponent(SurfaceComponent).?.mShouldRender = false;
+    const holed = try hole.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try holed.SetTranslation(engine_context, .{ .x = 0, .y = 0, .z = 1 });
+    _ = try holed.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 10, .y = 10 } }));
+    _ = try holed.AddComponent(engine_context, SurfaceComponent{});
+    const behind = try AddQuad(engine_context, scene, .{ .x = 10, .y = 0, .z = -20 }, .{ .x = 100, .y = 100 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    //inside the rounded mask's corner curve, and just past it
+    try ExpectEntity(cut, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1.5, .y = 1.5, .z = 0 }, .Dir = down }, .{}));
+    try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1.9, .y = 1.9, .z = 0 }, .Dir = down }, .{}));
+    //in the hole, and around it
+    try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 20.5, .y = 0, .z = 0 }, .Dir = down }, .{}));
+    try ExpectEntity(holed, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 22, .y = 0, .z = 0 }, .Dir = down }, .{}));
 }
 
 test "corner radii and borders grow with the quad's smaller axis and stay within half its smaller side" {

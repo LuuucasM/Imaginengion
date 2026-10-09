@@ -12,7 +12,7 @@ const ScrollSystem = @import("../../UI/ScrollSystem.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
-const ClipComponent = EntityComponents.ClipComponent;
+const MaskComponent = EntityComponents.MaskComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const UIManager = @import("../../UI/UIManager.zig");
 const UIComponents = @import("../../ECSComponents/UIComponents.zig");
@@ -62,11 +62,11 @@ const TestWorld = struct {
         return self;
     }
 
-    /// A scrolling region: a sized layout container with a clip, whose UI element scrolls the way `scroll` says
+    /// A scrolling region: a sized layout container with a mask, whose UI element scrolls the way `scroll` says
     fn Region(engine_context: *EngineContext, entity: Entity, width: f32, height: f32, direction: @import("../../UI/Layout.zig").Direction, scroll: ScrollComponent) !void {
         _ = try entity.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = width }, .mHeight = .{ .Fixed = height } });
         _ = try entity.AddComponent(engine_context, LayoutComponent{ .mDirection = direction });
-        _ = try entity.AddComponent(engine_context, ClipComponent{});
+        _ = try entity.AddComponent(engine_context, MaskComponent{});
         _ = try entity.AddComponent(engine_context, UIElementComponent{});
         _ = try UIManager.ElementOf(entity).?.AddComponent(engine_context, scroll);
     }

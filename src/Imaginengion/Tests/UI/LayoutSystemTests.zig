@@ -608,8 +608,8 @@ test "a child laid out in a panel in the world is gathered for drawing where lay
 
     //the panel has no quad, so the child is all there is to draw: filling the panel, at its middle
     const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, ViewOf(1600, 900, 1), .{ .Overlays = &.{} }, ShapeGeometry.VISUALS_QUERY);
-    try std.testing.expectEqual(@as(usize, 1), shapes.items.len);
-    try std.testing.expectEqual(child.mID, shapes.items[0].Entity.mID);
+    try std.testing.expectEqual(@as(usize, 1), shapes.Shapes.items.len);
+    try std.testing.expectEqual(child.mID, shapes.Shapes.items[0].Entity.mID);
     const box = ShapeGeometry.QuadBox(child.GetComponent(TransformComponent).?, child.GetComponent(ShapeComponent).?.GetQuad().?.*, 0, null);
     try std.testing.expectEqual(Vec3(f32){ .x = 0, .y = 0, .z = 0 }, box.Center);
     try std.testing.expectApproxEqAbs(@as(f32, 100), box.HalfExtents.x, eps);

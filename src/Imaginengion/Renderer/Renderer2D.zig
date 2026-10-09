@@ -43,6 +43,7 @@ const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 const ShapeGeometry = @import("ShapeGeometry.zig");
 const ShapeSort = @import("ShapeSort.zig");
 const BVH = @import("../Core/BVH.zig");
+const SDFProgram = @import("SDFProgram.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -79,8 +80,8 @@ pub const ShapeData = extern struct {
     //side, in SDFFunctions' order (x top right, y bottom right, z top left, w bottom left). Unused (0) for a glyph
     Params: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
     Type: ShapeType,
-    //which ClipData it is cut to, NO_CLIP for none
-    ClipIndex: u32,
+    //the mask it is cut by (SDFProgram.MaskData), which is cut by the masks around it in turn. SDFProgram.NO_MASK for none
+    MaskIndex: u32,
     //its ShapeSurface
     SurfaceIndex: u32,
     //the FLAG_ bits: behavior the developer turns on per shape that costs extra checks. A shape without a flag never
@@ -113,22 +114,9 @@ pub const ShapeSurface = extern struct {
     _Pad: u32 = 0,
 };
 
-/// A clip region's rectangle (ClipComponent), in world space: a shape with its index is only drawn where it is inside
-/// it, measured in the rectangle's own plane, so the cut goes straight through depth. Shared by every shape under the
-/// region, which is why it is a buffer of its own rather than a copy in each shape
-pub const ClipData = extern struct {
-    Rotation: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
-    Position: if (is_spirv) Vec3(f32).VectorT else Vec3(f32).ArrayT,
-    HalfExtents: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT align(16),
-};
-
-/// A shape's ClipIndex when it isn't inside any clip region
-pub const NO_CLIP: u32 = std.math.maxInt(u32);
-
 comptime {
     GPUAsserts.AssertGPULayout(ShapeData);
     GPUAsserts.AssertGPULayout(ShapeSurface);
-    GPUAsserts.AssertGPULayout(ClipData);
 }
 
 pub const RenderBuffers = struct {
@@ -138,10 +126,14 @@ pub const RenderBuffers = struct {
     mSurfaceBuffer: SSBO = .{},
     mSurfaceBufferBase: std.ArrayList(ShapeSurface) = .empty,
 
-    mClipBuffer: SSBO = .{},
-    mClipBufferBase: std.ArrayList(ClipData) = .empty,
-    /// Each clip region's index in mClipBufferBase this batch, so its shapes share one entry
-    mClipIndices: std.AutoHashMapUnmanaged(Entity.Type, u32) = .empty,
+    /// The view's masks (ShapeGeometry.ViewMasks), shared by every shape under each, and their shapes' programs.
+    /// Uploaded as they are: a shape's MaskIndex is into them
+    mMaskBuffer: SSBO = .{},
+    mMaskBufferBase: std.ArrayList(SDFProgram.MaskData) = .empty,
+    mInstrBuffer: SSBO = .{},
+    mInstrBufferBase: std.ArrayList(SDFProgram.Instr) = .empty,
+    mPartBuffer: SSBO = .{},
+    mPartBufferBase: std.ArrayList(SDFProgram.Part) = .empty,
 
     /// Each shape's sort key, in the order the shapes were added (ShapeSort). The buffer is uploaded in their sorted
     /// order, which mSortedShapes holds once SortShapes has run
@@ -173,11 +165,14 @@ pub const RenderBuffers = struct {
         self.mSurfaceBuffer.Init(engine_context, @sizeOf(ShapeSurface) * 100, 3, .Compute);
         self.mSurfaceBufferBase = try std.ArrayList(ShapeSurface).initCapacity(engine_context.EngineAllocator(), 100);
 
-        self.mClipBuffer.Init(engine_context, @sizeOf(ClipData) * 16, 4, .Compute);
-        self.mClipBufferBase = try std.ArrayList(ClipData).initCapacity(engine_context.EngineAllocator(), 16);
+        self.mMaskBuffer.Init(engine_context, @sizeOf(SDFProgram.MaskData) * 16, 4, .Compute);
 
         //a tree over 100 shapes in leaves of up to 4 is around 50 to 70 nodes
         self.mNodeBuffer.Init(engine_context, @sizeOf(BVH.Node) * 64, 5, .Compute);
+
+        //a one shape mask is one instruction and one part
+        self.mInstrBuffer.Init(engine_context, @sizeOf(SDFProgram.Instr) * 16, 6, .Compute);
+        self.mPartBuffer.Init(engine_context, @sizeOf(SDFProgram.Part) * 16, 7, .Compute);
     }
     pub fn Deinit(self: *RenderBuffers, engine_context: *EngineContext) void {
         self.mShapeBuffer.Deinit(engine_context);
@@ -186,9 +181,12 @@ pub const RenderBuffers = struct {
         self.mSurfaceBuffer.Deinit(engine_context);
         self.mSurfaceBufferBase.deinit(engine_context.EngineAllocator());
 
-        self.mClipBuffer.Deinit(engine_context);
-        self.mClipBufferBase.deinit(engine_context.EngineAllocator());
-        self.mClipIndices.deinit(engine_context.EngineAllocator());
+        self.mMaskBuffer.Deinit(engine_context);
+        self.mMaskBufferBase.deinit(engine_context.EngineAllocator());
+        self.mInstrBuffer.Deinit(engine_context);
+        self.mInstrBufferBase.deinit(engine_context.EngineAllocator());
+        self.mPartBuffer.Deinit(engine_context);
+        self.mPartBufferBase.deinit(engine_context.EngineAllocator());
 
         self.mSortEntries.deinit(engine_context.EngineAllocator());
         self.mSortedShapes.deinit(engine_context.EngineAllocator());
@@ -202,8 +200,9 @@ pub const RenderBuffers = struct {
             .ClearAndFree => {
                 self.mShapeBufferBase.clearAndFree(engine_allocator);
                 self.mSurfaceBufferBase.clearAndFree(engine_allocator);
-                self.mClipBufferBase.clearAndFree(engine_allocator);
-                self.mClipIndices.clearAndFree(engine_allocator);
+                self.mMaskBufferBase.clearAndFree(engine_allocator);
+                self.mInstrBufferBase.clearAndFree(engine_allocator);
+                self.mPartBufferBase.clearAndFree(engine_allocator);
                 self.mSortEntries.clearAndFree(engine_allocator);
                 self.mSortedShapes.clearAndFree(engine_allocator);
                 self.mShapeBounds.clearAndFree(engine_allocator);
@@ -213,8 +212,9 @@ pub const RenderBuffers = struct {
             .ClearRetainingCapacity => {
                 self.mShapeBufferBase.clearRetainingCapacity();
                 self.mSurfaceBufferBase.clearRetainingCapacity();
-                self.mClipBufferBase.clearRetainingCapacity();
-                self.mClipIndices.clearRetainingCapacity();
+                self.mMaskBufferBase.clearRetainingCapacity();
+                self.mInstrBufferBase.clearRetainingCapacity();
+                self.mPartBufferBase.clearRetainingCapacity();
                 self.mSortEntries.clearRetainingCapacity();
                 self.mSortedShapes.clearRetainingCapacity();
                 self.mShapeBounds.clearRetainingCapacity();
@@ -237,9 +237,13 @@ pub const RenderBuffers = struct {
         const surface_byte_size = self.mSurfaceBufferBase.items.len * @sizeOf(ShapeSurface);
         _ = self.mSurfaceBuffer.SetData(engine_context, copy_pass, self.mSurfaceBufferBase.items.ptr, surface_byte_size, 0);
 
-        //clip regions
-        const clip_byte_size = self.mClipBufferBase.items.len * @sizeOf(ClipData);
-        _ = self.mClipBuffer.SetData(engine_context, copy_pass, self.mClipBufferBase.items.ptr, clip_byte_size, 0);
+        //masks and their shapes' programs
+        const mask_byte_size = self.mMaskBufferBase.items.len * @sizeOf(SDFProgram.MaskData);
+        _ = self.mMaskBuffer.SetData(engine_context, copy_pass, self.mMaskBufferBase.items.ptr, mask_byte_size, 0);
+        const instr_byte_size = self.mInstrBufferBase.items.len * @sizeOf(SDFProgram.Instr);
+        _ = self.mInstrBuffer.SetData(engine_context, copy_pass, self.mInstrBufferBase.items.ptr, instr_byte_size, 0);
+        const part_byte_size = self.mPartBufferBase.items.len * @sizeOf(SDFProgram.Part);
+        _ = self.mPartBuffer.SetData(engine_context, copy_pass, self.mPartBufferBase.items.ptr, part_byte_size, 0);
 
         //the BVH over the direct shapes, built by SortShapes
         const node_byte_size = self.mBVHNodes.items.len * @sizeOf(BVH.Node);
@@ -251,11 +255,13 @@ pub const RenderBuffers = struct {
     pub fn BindBuffers(self: RenderBuffers, render_pass: *anyopaque) void {
         self.mShapeBuffer.Bind(render_pass);
         self.mSurfaceBuffer.Bind(render_pass);
-        self.mClipBuffer.Bind(render_pass);
+        self.mMaskBuffer.Bind(render_pass);
         self.mNodeBuffer.Bind(render_pass);
+        self.mInstrBuffer.Bind(render_pass);
+        self.mPartBuffer.Bind(render_pass);
     }
 
-    /// The shapes in their keys' order, into mSortedShapes, ready to upload. Their surfaces and clips stay where they
+    /// The shapes in their keys' order, into mSortedShapes, ready to upload. Their surfaces and masks stay where they
     /// are, since a shape points at those rather than the other way round
     fn SortShapes(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
         const zone = Tracy.ZoneInit("Renderer2D::SortShapes", @src());
@@ -315,22 +321,6 @@ pub const RenderBuffers = struct {
             .None => {},
         }
     }
-
-    /// The index of a shape's clip region in this batch's clips, adding it the first time one of its shapes asks.
-    /// NO_CLIP for a shape not in one
-    fn ClipIndex(self: *RenderBuffers, engine_allocator: std.mem.Allocator, clip: ?ShapeGeometry.ViewClip) !u32 {
-        const view_clip = clip orelse return NO_CLIP;
-        const entry = try self.mClipIndices.getOrPut(engine_allocator, view_clip.Owner);
-        if (!entry.found_existing) {
-            entry.value_ptr.* = @intCast(self.mClipBufferBase.items.len);
-            try self.mClipBufferBase.append(engine_allocator, .{
-                .Rotation = view_clip.Rect.Rotation.ToArray(),
-                .Position = view_clip.Rect.Center.ToArray(),
-                .HalfExtents = view_clip.Rect.HalfExtents.ToArray(),
-            });
-        }
-        return entry.value_ptr.*;
-    }
 };
 
 mGameData: RenderBuffers = .{},
@@ -349,6 +339,16 @@ pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
     self.mGameData.Reset(engine_allocator, .ClearRetainingCapacity);
     self.mOverlayData.Reset(engine_allocator, .ClearRetainingCapacity);
+}
+
+/// The view's masks (ShapeGeometry.ViewMasks), which every shape drawn this batch points into by its MaskIndex. Both
+/// passes get all of them: a mask only ever cuts shapes in its own layer, and there are few
+pub fn SetMasks(self: *Renderer2D, engine_allocator: std.mem.Allocator, masks: *const ShapeGeometry.ViewMasks) !void {
+    for ([_]*RenderBuffers{ &self.mGameData, &self.mOverlayData }) |buffers| {
+        try buffers.mMaskBufferBase.appendSlice(engine_allocator, masks.mMasks.items);
+        try buffers.mInstrBufferBase.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
+        try buffers.mPartBufferBase.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
+    }
 }
 
 pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque, pipeline_t: PipelineType) !void {
@@ -390,15 +390,14 @@ pub fn DrawQuad(
     surface: *SurfaceComponent, //what it is painted with
     shown: ?RenderTargetComponent.Shown, //a render target it shows in place of its texture (ViewportComponent)
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
-    clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
+    mask: u32, //the mask it is cut by, into `masks`, SDFProgram.NO_MASK for none
+    masks: *const ShapeGeometry.ViewMasks,
     shading_buff: *ShadingBuffers,
 ) !void {
     //the same box picking tests against
     const box = ShapeGeometry.QuadBox(transform_component, quad, surface.mBorderWidth, canvas);
     //cut off altogether: nothing to draw, and nothing for every pixel to march past
-    if (clip) |view_clip| {
-        if (ShapeGeometry.OutsideClip(box, view_clip.Rect)) return;
-    }
+    if (masks.CutsOff(mask, box)) return;
 
     const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
 
@@ -425,7 +424,6 @@ pub fn DrawQuad(
     }
 
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
-    const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
     const axes = ShapeAxes(box.Center, box.Rotation);
     try buffers.AddShape(engine_context.EngineAllocator(), .{
@@ -435,7 +433,7 @@ pub fn DrawQuad(
         .Size = box.HalfExtents.ToArray(),
         .Params = box.CornerRadii.ToArray(),
         .Type = .Quad,
-        .ClipIndex = clip_index,
+        .MaskIndex = mask,
         .SurfaceIndex = undefined,
         .Flags = shading_flag,
     }, .{
@@ -452,7 +450,8 @@ pub fn DrawText(
     text_component: *TextComponent,
     surface: *SurfaceComponent, //what it is painted with
     canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
-    clip: ?ShapeGeometry.ViewClip, //the clip region it is inside, if any
+    mask: u32, //the mask it is cut by, into `masks`, SDFProgram.NO_MASK for none
+    masks: *const ShapeGeometry.ViewMasks,
     shading_buff: *ShadingBuffers,
 ) !void {
     const zone = Tracy.ZoneInit("Renderer2D::DrawText", @src());
@@ -481,7 +480,6 @@ pub fn DrawText(
     const size_scale: f32 = if (canvas) |c| c.Scale else 1.0;
 
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
-    const clip_index = try buffers.ClipIndex(engine_context.EngineAllocator(), clip);
 
     //font size and bounds with the text's scale applied, the same ones picking measures the text with
     const params = ShapeGeometry.GetTextParams(transform_component, text_component);
@@ -501,10 +499,8 @@ pub fn DrawText(
         const glyph_center = pen_pos.AddVec(plane_offset);
 
         //a letter cut off altogether isn't sent
-        if (clip) |view_clip| {
-            const glyph_box = ShapeGeometry.Box{ .Center = glyph_center, .Rotation = glyph_rot, .HalfExtents = half_extents };
-            if (ShapeGeometry.OutsideClip(glyph_box, view_clip.Rect)) continue;
-        }
+        const glyph_box = ShapeGeometry.Box{ .Center = glyph_center, .Rotation = glyph_rot, .HalfExtents = half_extents };
+        if (masks.CutsOff(mask, glyph_box)) continue;
 
         var tex_options = Texture2D.TexOptions{
             .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
@@ -529,7 +525,7 @@ pub fn DrawText(
             .Size = half_extents.ToArray(),
             .Params = .{ 0, 0, 0, 0 },
             .Type = .Glyph,
-            .ClipIndex = clip_index,
+            .MaskIndex = mask,
             .SurfaceIndex = undefined,
             .Flags = texture_shading_flags,
         }, .{

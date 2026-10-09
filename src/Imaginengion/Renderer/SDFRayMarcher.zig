@@ -14,6 +14,7 @@ const RayIntersect = @import("../Math/RayIntersect.zig");
 const HitInfo = RayIntersect.HitInfo;
 const BVH = @import("../Core/BVH.zig");
 const BVHNode = BVH.Node;
+const SDFProgram = @import("SDFProgram.zig");
 
 const ShapeType = @import("Renderer.zig").ShapeType;
 
@@ -29,7 +30,7 @@ const Stack = @import("../Core/Stack.zig").Stack;
 const MAX_STEPS: u32 = 256;
 
 //How many hits the direct search turns down along one edge before it gives up and counts the edge as a miss. A hit is
-//turned down when it is outside its clip region or in a gap in a letter, and each one costs another pass over every
+//turned down when its masks cut it off or it is in a gap in a letter, and each one costs another pass over every
 //direct shape, so this keeps a pixel looking through a long run of letter gaps from looping. Text is the usual
 //case: a ray between letters passes through the edges of a few overlapping glyph boxes, well under this
 pub const MAX_DIRECT_REJECTS: u32 = 16;
@@ -220,7 +221,7 @@ pub const DirectSearch = enum {
 /// up to rounding. Without this a box could round to just past a hit it holds and be pruned, losing an exact tie
 const BVH_BOX_SLACK: f32 = 0.0001;
 
-pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime clips_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch) type {
+pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime masks_type: type, comptime instrs_type: type, comptime parts_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch) type {
     return extern struct {
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
@@ -241,8 +242,10 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// the BVH over the direct shapes (Core/BVH.zig), its leaves' items their place in mShapes. The root's Skip is
         /// the node count, and there are no nodes when mDirectCount is 0
         mBVHNodes: bvh_nodes_type,
-        /// the clip regions shapes are cut to, by their ClipIndex
-        mClips: clips_type,
+        /// the masks shapes are cut by, by their MaskIndex, and the programs of the masks' shapes (SDFProgram)
+        mMasks: masks_type,
+        mInstrs: instrs_type,
+        mParts: parts_type,
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
@@ -370,7 +373,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
         /// The nearest surface a ray draws among the direct shapes, by a ray test straight against each candidate
         /// (picked by `direct_search`). The nearest hit is then checked against the shape itself (SurfaceFromHit), and
-        /// one turned down, outside its clip region or in a gap in a letter, is passed for the next one after it, up to
+        /// one turned down, cut off by its masks or in a gap in a letter, is passed for the next one after it, up to
         /// MAX_DIRECT_REJECTS of them
         fn DirectSurface(self: *const Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             if (self.mDirectCount == 0) return .none;
@@ -486,7 +489,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             return .none;
         }
 
-        /// The nearest marched shape to `point`, cut to its clip region
+        /// The nearest marched shape to `point`, cut by its masks
         fn NextSurface(self: *const Self, point: Vec3(f32), skips: SkipList) MarchData {
             var data = MarchData{ .min_dist = self.mPerspectiveFar, .shape = NO_SHAPE };
             var nearest_rank: u32 = std.math.maxInt(u32);
@@ -501,7 +504,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     .Glyph => SDFFunc.sdIMGlyph(point, shape),
                     .None => continue,
                 };
-                const dist = self.Clipped(shape_dist, point, shape.ClipIndex);
+                const dist = SDFProgram.Masked(self.mMasks, self.mInstrs, self.mParts, shape.MaskIndex, shape_dist, point);
                 //an exact tie goes the way HitOrder settles one: a quad before a glyph, then the one drawn first
                 const rank = TieRank(shape.Type);
                 const wins_tie = dist == data.min_dist and
@@ -516,22 +519,14 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             return data;
         }
 
-        /// A shape's distance cut to its clip region: the intersection of the two, so the march doesn't step
-        /// toward a part of it that is never drawn
-        fn Clipped(self: *const Self, distance: f32, point: Vec3(f32), clip_index: u32) f32 {
-            if (clip_index == SDFFunc.NO_CLIP) return distance;
-            return SDFFunc.opIntersection(distance, SDFFunc.sdIMClip(point, self.mClips[clip_index]));
-        }
-
-        /// Whether a hit on a shape is inside its clip region. One outside isn't drawn, and the ray goes on
-        /// to whatever is behind, the same as through a gap in a letter
-        fn InClip(self: *const Self, point: Vec3(f32), clip_index: u32) bool {
-            if (clip_index == SDFFunc.NO_CLIP) return true;
-            return SDFFunc.InIMClip(point, self.mClips[clip_index]);
+        /// Whether a hit on a shape is kept by its masks. One cut off isn't drawn, and the ray goes on to whatever is
+        /// behind, the same as through a gap in a letter
+        fn InMasks(self: *const Self, point: Vec3(f32), mask_ind: u32) bool {
+            return SDFProgram.InMasks(self.mMasks, self.mInstrs, self.mParts, mask_ind, point);
         }
 
         /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: the front of a plate, and for
-        /// a glyph, only where the letter covers it. Neither outside its clip region
+        /// a glyph, only where the letter covers it. Neither where its masks cut it off
         fn SurfaceAt(self: *const Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             return self.SurfaceFromHit(ray, shape_ind, HitShape(ray, self.mShapes[shape_ind]), sample_sampler, textures_array);
         }
@@ -545,7 +540,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             switch (shape.Type) {
                 .Quad => {
                     const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
-                    if (!self.InClip(hit_point, shape.ClipIndex)) return .none;
+                    if (!self.InMasks(hit_point, shape.MaskIndex)) return .none;
 
                     //the band around the edge is the border's solid color, the rest is the quad's own surface
                     if (SDFFunc.InIMQuadBorder(hit_point, shape, surface.BorderWidth)) {
@@ -577,7 +572,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     };
                 },
                 .Glyph => {
-                    if (!self.InClip(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), shape.ClipIndex)) return .none;
+                    if (!self.InMasks(ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)), shape.MaskIndex)) return .none;
 
                     //the coverage test needs where in the glyph's box the hit is. the fill texture's UV
                     //is a different thing, a spot in its texture manager slot, and only for color

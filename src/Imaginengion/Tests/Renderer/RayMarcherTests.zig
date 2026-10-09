@@ -15,7 +15,9 @@ const BINS_BYTES = @import("../../TextureManager/backends/SGTextureManager.zig")
 const Renderer2D = @import("../../Renderer/Renderer2D.zig");
 const ShapeData = Renderer2D.ShapeData;
 const ShapeSurface = Renderer2D.ShapeSurface;
-const ClipData = Renderer2D.ClipData;
+const SDFProgram = @import("../../Renderer/SDFProgram.zig");
+const MaskData = SDFProgram.MaskData;
+const NO_MASK = SDFProgram.NO_MASK;
 const Renderer = @import("../../Renderer/Renderer.zig");
 const SurfShadingData = Renderer.SurfShadingData;
 const MedShadingData = Renderer.MedShadingData;
@@ -94,12 +96,12 @@ const TestShape = struct {
     DrawOrder: ?u32 = null,
 };
 
-fn MakeQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), shading: u32, flags: u32, clip_index: u32) TestShape {
-    return MakeRoundedQuad(center, rotation, half, 0, shading, flags, clip_index);
+fn MakeQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), shading: u32, flags: u32, mask_index: u32) TestShape {
+    return MakeRoundedQuad(center, rotation, half, 0, shading, flags, mask_index);
 }
 
 /// A quad with every corner rounded by `radius`. 0 is a square cornered one, which takes the plain box's fast path
-fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), radius: f32, shading: u32, flags: u32, clip_index: u32) TestShape {
+fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), radius: f32, shading: u32, flags: u32, mask_index: u32) TestShape {
     const axes = Renderer2D.ShapeAxes(center, rotation);
     return .{
         .Shape = .{
@@ -109,7 +111,7 @@ fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), radi
             .Size = .{ half.x, half.y, SDFFunc.THICKNESS_2D },
             .Params = .{ radius, radius, radius, radius },
             .Type = .Quad,
-            .ClipIndex = clip_index,
+            .MaskIndex = mask_index,
             .SurfaceIndex = undefined,
             .Flags = flags,
         },
@@ -127,7 +129,7 @@ fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, flags: u32)
             .Size = .{ half.x, half.y, SDFFunc.THICKNESS_2D },
             .Params = .{ 0, 0, 0, 0 },
             .Type = .Glyph,
-            .ClipIndex = SDFFunc.NO_CLIP,
+            .MaskIndex = NO_MASK,
             .SurfaceIndex = undefined,
             .Flags = flags,
         },
@@ -135,9 +137,25 @@ fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, flags: u32)
     };
 }
 
-fn MakeClip(center: Vec3(f32), half: Vec2(f32)) ClipData {
-    return .{ .Rotation = IDENTITY.ToArray(), .Position = center.ToArray(), .HalfExtents = half.ToArray() };
-}
+/// The masks a scene's shapes are cut by, each a quad facing the camera: the program of each is its one quad
+const TestMasks = struct {
+    const MAX = 4;
+    Masks: [MAX]MaskData = undefined,
+    Instrs: [MAX]SDFProgram.Instr = undefined,
+    Parts: [MAX]SDFProgram.Part = undefined,
+    Count: u32 = 0,
+
+    /// Adds a mask of a `half` sized quad at `center`, which does `op`, inside mask `parent`. Returns its index
+    fn Add(self: *TestMasks, center: Vec3(f32), half: Vec2(f32), op: SDFProgram.MaskOp, parent: u32) u32 {
+        const ind = self.Count;
+        const axes = Renderer2D.ShapeAxes(center, IDENTITY);
+        self.Parts[ind] = .{ .AxisX = axes[0], .AxisY = axes[1], .AxisZ = axes[2], .Size = half.ToArray(), .Kind = .Quad, .Params = .{ 0, 0, 0, 0 }, .Color = .{ 0, 0, 0, 0 } };
+        self.Instrs[ind] = .{ .Code = .Shape, .Part = ind };
+        self.Masks[ind] = .{ .First = ind, .Count = 1, .Op = op, .Parent = parent };
+        self.Count += 1;
+        return ind;
+    }
+};
 
 const TRANSPARENT = ShapeData.FLAG_TRANSPARENT;
 
@@ -146,7 +164,7 @@ const CLEAR_MEDIUM = MedShadingData{ .Color = .{ 0, 0, 0, 0 }, .Absorption = .{ 
 
 const TestScene = struct {
     Shapes: []const TestShape = &.{},
-    Clips: []const ClipData = &.{},
+    Masks: TestMasks = .{},
     Shadings: []const SurfShadingData,
     //by an edge's MaterialHandle, which is always 0 so far
     Mediums: []const MedShadingData = &.{CLEAR_MEDIUM},
@@ -157,7 +175,9 @@ fn TestMarcher(comptime search: SDFRayMarcher.DirectSearch) type {
         [*]const ShapeData,
         [*]const ShapeSurface,
         [*]const BVH.Node,
-        [*]const ClipData,
+        [*]const MaskData,
+        [*]const SDFProgram.Instr,
+        [*]const SDFProgram.Part,
         [*]const SurfShadingData,
         [*]const MedShadingData,
         *const FakeTextures,
@@ -254,7 +274,9 @@ fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search:
         .mShapesCount = scene.Shapes.len,
         .mDirectCount = direct_count,
         .mBVHNodes = bvh_nodes.items.ptr,
-        .mClips = scene.Clips.ptr,
+        .mMasks = &scene.Masks.Masks,
+        .mInstrs = &scene.Masks.Instrs,
+        .mParts = &scene.Masks.Parts,
         .mSurfShading = scene.Shadings.ptr,
         .mMedShading = scene.Mediums.ptr,
         .mPerspectiveFar = FAR,
@@ -304,13 +326,13 @@ fn ExpectColor(expected: Vec4(f32), actual: Vec4(f32)) !void {
 
 test "a ray that hits nothing comes out as the default color" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
-    const shapes = [_]TestShape{MakeQuad(.{ .x = 5, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 5, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 test "a quad seen straight on is its color" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
-    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.5, -0.5)));
 }
 
@@ -320,7 +342,7 @@ test "a turned quad is hit just inside its edges and missed just past them" {
     const center = Vec3(f32){ .x = 0.3, .y = -0.2, .z = 0 };
     const half = Vec2(f32){ .x = 1, .y = 0.5 };
     const shadings = [_]SurfShadingData{ColorShading(RED)};
-    const shapes = [_]TestShape{MakeQuad(center, rotation, half, 0, 0, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(center, rotation, half, 0, 0, NO_MASK)};
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
 
     const camera = Vec3(f32){ .x = 0, .y = 0, .z = 10 };
@@ -335,14 +357,14 @@ test "a turned quad is hit just inside its edges and missed just past them" {
 
 test "only a quad's front is drawn" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
-    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const from_behind = Ray{ .Origin = .{ .x = 0, .y = 0, .z = -10 }, .Dir = .{ .x = 0, .y = 0, .z = 1 } };
     try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, from_behind));
 }
 
 test "a quad past the far distance is not drawn" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
-    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = -2 * FAR }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = -2 * FAR }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
@@ -350,7 +372,7 @@ test "a ray grazing just past a thin quad misses it" {
     //nearly along the quad's face, passing above it by a few times its thickness: the case that used to creep along
     //a step at a time
     const shadings = [_]SurfShadingData{ColorShading(RED)};
-    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
     const grazing = Ray{
         .Origin = .{ .x = -20, .y = 0, .z = 0.01 },
         .Dir = (Vec3(f32){ .x = 1, .y = 0, .z = -0.0001 }).Dir(),
@@ -362,8 +384,8 @@ test "a ray grazing just past a thin quad misses it" {
 
 test "the nearer of two overlapping quads is drawn, whichever order they are in" {
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
-    const near = MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP);
-    const far = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP);
+    const near = MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
+    const far = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK);
 
     const near_first = [_]TestShape{ near, far };
     const far_first = [_]TestShape{ far, near };
@@ -376,8 +398,8 @@ test "the nearer of two overlapping quads is drawn, whichever order they are in"
 test "of two quads at the same depth, the one drawn first is drawn" {
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
     try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
@@ -385,9 +407,9 @@ test "of two quads at the same depth, the one drawn first is drawn" {
 test "a tie at the same depth goes by draw order, wherever sorting put the shapes in the buffer" {
     //the red quad was drawn first, but the BVH's sort put the blue one ahead of it in the shape buffer
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
-    var red = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP);
+    var red = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
     red.DrawOrder = 0;
-    var blue = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP);
+    var blue = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK);
     blue.DrawOrder = 1;
     const shapes = [_]TestShape{ blue, red };
     try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
@@ -400,7 +422,7 @@ test "a quad and a glyph at the same depth: the quad is drawn, whichever comes f
         Shading(WHITE, ATLAS_HANDLE, 2),
         Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
     };
-    const quad = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP);
+    const quad = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
     const glyph = MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
 
     const quad_first = [_]TestShape{ quad, glyph };
@@ -415,8 +437,8 @@ test "a see-through quad blends with the quad behind it" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
     //half of each, and the alpha half way from the front's 0.5 to the back's 1
     try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
@@ -425,7 +447,7 @@ test "a see-through quad blends with the quad behind it" {
 test "a see-through quad with nothing behind it blends with the default color" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ColorShading(half_red)};
-    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, SDFFunc.NO_CLIP)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK)};
     try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
@@ -434,9 +456,9 @@ test "a stack of see-through quads blends every layer, back to front" {
     const half_green = Vec4(f32){ .x = 0, .y = 1, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(half_green), ColorShading(BLUE) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 2, 0, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 2 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 2, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 2 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
     };
     const middle = half_green.Lerp(BLUE, 0.5);
     try ExpectColor(half_red.Lerp(middle, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
@@ -450,8 +472,8 @@ test "the ray past a see-through quad goes through the edge's own medium, not on
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
     };
     try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings, .Mediums = &mediums }, RayAt(0, 0)));
 }
@@ -461,25 +483,42 @@ test "a quad without the see-through flag hides what is behind it, even with a s
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(BLUE) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
     try ExpectColor(half_red.Lerp(DEFAULT_COLOR, 0.5), try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
 }
 
 //==================================cut off and gaps==================================
 
-test "a clipped quad is only drawn inside its clip region, and the ray goes on past the rest" {
+test "a masked quad is only drawn inside its mask, and the ray goes on past the rest" {
     //the red quad is cut to its left half, the blue one behind it isn't cut at all
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
-    const clips = [_]ClipData{MakeClip(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1, .y = 2 })};
+    var masks = TestMasks{};
+    const mask = masks.Add(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1, .y = 2 }, .Intersect, NO_MASK);
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, 0),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, mask),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
-    const scene = TestScene{ .Shapes = &shapes, .Clips = &clips, .Shadings = &shadings };
+    const scene = TestScene{ .Shapes = &shapes, .Masks = masks, .Shadings = &shadings };
     try ExpectColor(RED, try Trace(scene, RayAt(-0.5, 0)));
     try ExpectColor(BLUE, try Trace(scene, RayAt(0.5, 0)));
+}
+
+test "a subtract mask cuts a hole the ray goes through, and a mask inside it cuts too" {
+    //a hole in the middle of the red quad, and the whole thing cut to above y = -0.5 by the mask around the hole
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    var masks = TestMasks{};
+    const outer = masks.Add(.{ .x = 0, .y = 1, .z = 0 }, .{ .x = 2, .y = 1.5 }, .Intersect, NO_MASK);
+    const hole = masks.Add(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.25, .y = 0.25 }, .Subtract, outer);
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, hole),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Masks = masks, .Shadings = &shadings };
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(scene, RayAt(0.5, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.5, -0.75)));
 }
 
 test "a glyph is drawn where its letter covers it, and the ray goes through its gaps" {
@@ -490,7 +529,7 @@ test "a glyph is drawn where its letter covers it, and the ray goes through its 
         Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
     };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0),
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
@@ -519,7 +558,7 @@ test "see-through text blends with what is behind it" {
         ColorShading(half_red),
     };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
         MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, TRANSPARENT),
     };
     try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
@@ -537,7 +576,7 @@ test "a ray through the gaps of several overlapping glyphs at the same depth rea
     const shapes = [_]TestShape{
         glyph,
         glyph,
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
         glyph,
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
@@ -551,8 +590,8 @@ test "a marched quad in front of a direct quad is drawn" {
     //the blue quad is direct and the red one in front of it marched
     const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(RED) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
     try ExpectColor(RED, try TraceWith(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 1));
 }
@@ -561,8 +600,8 @@ test "a direct quad in front hides a marched one behind it, which still shows pa
     //the small red quad is direct, the bigger blue one behind it marched
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
     const shapes = [_]TestShape{
-        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 0.5, .y = 0.5 }, 0, 0, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 0.5, .y = 0.5 }, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     try ExpectColor(RED, try TraceWith(scene, RayAt(0, 0), 1));
@@ -579,7 +618,7 @@ test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge
         Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
     };
     var shapes: [rejects + 2]TestShape = undefined;
-    shapes[0] = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, SDFFunc.NO_CLIP);
+    shapes[0] = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
     for (shapes[1..]) |*shape| shape.* = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
 
     //as many gaps as it may turn down: the next search still finds the quad
@@ -594,8 +633,8 @@ test "a quad's rounded corner is cut away: the ray goes past it there, and hits 
     //every corner of the red quad is rounded by 0.5, so the top right one curves around (0.5, 0.5). A blue quad behind
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
     const shapes = [_]TestShape{
-        MakeRoundedQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0.5, 0, 0, SDFFunc.NO_CLIP),
-        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, SDFFunc.NO_CLIP),
+        MakeRoundedQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0.5, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     //0.64 from the curve's center: in the cut away corner
@@ -610,7 +649,7 @@ test "a quad's rounded corner is cut away: the ray goes past it there, and hits 
 
 test "walking the BVH finds the same color as testing every shape, on random scenes and rays" {
     //every kind of thing a search has to get right: quads turned or not, rounded or not, opaque and see-through,
-    //clipped or not, glyphs with gaps, and shapes at exactly the same depth so ties have to be settled. TraceWith
+    //masked or not, glyphs with gaps, and shapes at exactly the same depth so ties have to be settled. TraceWith
     //checks the BVH walk against testing every direct shape on each ray
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const half_blue = Vec4(f32){ .x = 0, .y = 0, .z = 1, .w = 0.5 };
@@ -623,10 +662,11 @@ test "walking the BVH finds the same color as testing every shape, on random sce
         Shading(WHITE, ATLAS_HANDLE, 6),
         Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
     };
-    const clips = [_]ClipData{
-        MakeClip(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 3 }),
-        MakeClip(.{ .x = 1, .y = 1, .z = 0 }, .{ .x = 2, .y = 1 }),
-    };
+    var masks = TestMasks{};
+    _ = masks.Add(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 3 }, .Intersect, NO_MASK);
+    _ = masks.Add(.{ .x = 1, .y = 1, .z = 0 }, .{ .x = 2, .y = 1 }, .Intersect, NO_MASK);
+    //a hole in the second one
+    _ = masks.Add(.{ .x = 1.5, .y = 1, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, .Subtract, 1);
 
     var prng = std.Random.DefaultPrng.init(0xB5B5);
     const random = prng.random();
@@ -652,14 +692,15 @@ test "walking the BVH finds the same color as testing every shape, on random sce
             const radius = if (random.boolean()) 0 else random.float(f32) * @min(half.x, half.y);
             const shading = random.uintLessThan(u32, 5);
             const flags = if (shading >= 3) TRANSPARENT else 0;
-            const clip_index = switch (random.uintLessThan(u32, 4)) {
+            const mask_index = switch (random.uintLessThan(u32, 5)) {
                 0 => @as(u32, 0),
                 1 => 1,
-                else => SDFFunc.NO_CLIP,
+                2 => 2,
+                else => NO_MASK,
             };
-            shape.* = MakeRoundedQuad(center, rotation, half, radius, shading, flags, clip_index);
+            shape.* = MakeRoundedQuad(center, rotation, half, radius, shading, flags, mask_index);
         }
-        const scene = TestScene{ .Shapes = shapes[0..count], .Clips = &clips, .Shadings = &shadings };
+        const scene = TestScene{ .Shapes = shapes[0..count], .Masks = masks, .Shadings = &shadings };
 
         for (0..100) |_| {
             const origin = Vec3(f32){ .x = random.float(f32) * 8 - 4, .y = random.float(f32) * 8 - 4, .z = 10 };

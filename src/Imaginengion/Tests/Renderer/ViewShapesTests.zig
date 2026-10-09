@@ -14,7 +14,8 @@ const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
-const ClipComponent = EntityComponents.ClipComponent;
+const MaskComponent = EntityComponents.MaskComponent;
+const NO_MASK = @import("../../Renderer/SDFProgram.zig").NO_MASK;
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
@@ -75,9 +76,12 @@ fn AddQuad(engine_context: *EngineContext, scene: Scene) !Entity {
     return entity;
 }
 
+fn GatherView(engine_context: *EngineContext, view_scenes: ShapeGeometry.ViewScenes) !ShapeGeometry.ViewShapes {
+    return ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, view_scenes, ShapeGeometry.VISUALS_QUERY);
+}
+
 fn Gather(engine_context: *EngineContext, view_scenes: ShapeGeometry.ViewScenes) ![]const ShapeGeometry.ViewShape {
-    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, view_scenes, ShapeGeometry.VISUALS_QUERY);
-    return shapes.items;
+    return (try GatherView(engine_context, view_scenes)).Shapes.items;
 }
 
 fn Contains(shapes: []const ShapeGeometry.ViewShape, entity: Entity) bool {
@@ -200,8 +204,8 @@ test "only entities matching the query are gathered" {
     try std.testing.expect(Contains(visuals, rock) and !Contains(visuals, wall) and !Contains(visuals, empty));
 
     const colliders = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, .{ .Overlays = &.{} }, .{ .Component = ColliderComponent });
-    try std.testing.expectEqual(@as(usize, 1), colliders.items.len);
-    try std.testing.expectEqual(wall.mID, colliders.items[0].Entity.mID);
+    try std.testing.expectEqual(@as(usize, 1), colliders.Shapes.items.len);
+    try std.testing.expectEqual(wall.mID, colliders.Shapes.items[0].Entity.mID);
 }
 
 test "an overlay scene that is gone, or isn't an overlay, is skipped" {
@@ -260,90 +264,119 @@ fn QuadAt(engine_context: *EngineContext, parent: Entity, position: Vec3(f32), s
     return entity;
 }
 
-fn ExpectRect(center: Vec3(f32), half: Vec2(f32), rect: ShapeGeometry.ClipRect) !void {
-    const eps: f32 = 0.001;
-    try std.testing.expectApproxEqAbs(center.x, rect.Center.x, eps);
-    try std.testing.expectApproxEqAbs(center.y, rect.Center.y, eps);
-    try std.testing.expectApproxEqAbs(center.z, rect.Center.z, eps);
-    try std.testing.expectApproxEqAbs(half.x, rect.HalfExtents.x, eps);
-    try std.testing.expectApproxEqAbs(half.y, rect.HalfExtents.y, eps);
+fn At(x: f32, y: f32, z: f32) Vec3(f32) {
+    return .{ .x = x, .y = y, .z = z };
 }
 
-test "everything under a clip region is cut to its rectangle, the region itself isn't" {
+test "everything under a mask is cut by it, through any depth, the mask itself isn't" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
-    //a 4 x 2 region at (10, 0), a child in it and a grandchild under that, and a quad outside it
+    //a 4 x 2 mask at (10, 0), a child in it and a grandchild under that, and a quad outside it
     const region = try AddQuad(engine_context, level);
     try region.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
     region.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 4, .y = 2 };
-    _ = try region.AddComponent(engine_context, ClipComponent{});
+    _ = try region.AddComponent(engine_context, MaskComponent{});
     const child = try QuadAt(engine_context, region, .{ .x = 0, .y = 0, .z = 1 }, .{ .x = 10, .y = 10 });
     const grandchild = try QuadAt(engine_context, child, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
     const outside = try AddQuad(engine_context, level);
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
-    const shapes = try Gather(engine_context, .{ .Overlays = &.{} });
-    try std.testing.expect(Find(shapes, region).Clip == null);
-    try std.testing.expect(Find(shapes, outside).Clip == null);
-    for ([_]Entity{ child, grandchild }) |entity| {
-        const clip = Find(shapes, entity).Clip.?;
-        try std.testing.expectEqual(region.mID, clip.Owner);
-        try ExpectRect(.{ .x = 10, .y = 0, .z = 0 }, .{ .x = 2, .y = 1 }, clip.Rect);
-    }
+    const view = try GatherView(engine_context, .{ .Overlays = &.{} });
+    const shapes = view.Shapes.items;
+    try std.testing.expectEqual(NO_MASK, Find(shapes, region).Mask);
+    try std.testing.expectEqual(NO_MASK, Find(shapes, outside).Mask);
+    //one mask, shared
+    try std.testing.expectEqual(@as(usize, 1), view.Masks.mMasks.items.len);
+    const mask = Find(shapes, child).Mask;
+    try std.testing.expectEqual(mask, Find(shapes, grandchild).Mask);
+    try std.testing.expect(view.Masks.Contains(mask, At(11, 0.5, 0)));
+    try std.testing.expect(view.Masks.Contains(mask, At(11, 0.5, 50)));
+    try std.testing.expect(view.Masks.Contains(mask, At(9, -0.5, -50)));
+    try std.testing.expect(!view.Masks.Contains(mask, At(12.5, 0, 0)));
+    try std.testing.expect(!view.Masks.Contains(mask, At(10, 1.5, 0)));
 }
 
-test "a clip region inside another is cut to both, and an overlay's is placed by its canvas" {
+test "a mask inside another is cut by both, and an overlay's is placed by its canvas" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
-    //x from 8 to 12, and inside it one from 9 to 13: the overlap is 9 to 12
+    //x from 8 to 12, and inside it one from 9 to 13 and taller: what is kept is 9 to 12, the outer's height
     const outer = try AddQuad(engine_context, level);
     try outer.SetTranslation(engine_context, .{ .x = 10, .y = 0, .z = 0 });
     outer.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 4, .y = 2 };
-    _ = try outer.AddComponent(engine_context, ClipComponent{});
+    _ = try outer.AddComponent(engine_context, MaskComponent{});
     const inner = try QuadAt(engine_context, outer, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 4, .y = 4 });
-    _ = try inner.AddComponent(engine_context, ClipComponent{});
+    _ = try inner.AddComponent(engine_context, MaskComponent{});
     const deep = try QuadAt(engine_context, inner, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
 
     const hud = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
     const panel = try AddQuad(engine_context, hud);
     try panel.SetTranslation(engine_context, .{ .x = 100, .y = 50, .z = 0 });
     panel.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 200, .y = 100 };
-    _ = try panel.AddComponent(engine_context, ClipComponent{});
+    _ = try panel.AddComponent(engine_context, MaskComponent{});
     const row = try QuadAt(engine_context, panel, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 10, .y = 10 });
     try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
 
-    const shapes = try Gather(engine_context, .{ .Overlays = &.{hud.mID} });
-    const deep_clip = Find(shapes, deep).Clip.?;
-    try std.testing.expectEqual(inner.mID, deep_clip.Owner);
-    try ExpectRect(.{ .x = 10.5, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 1 }, deep_clip.Rect);
+    const view = try GatherView(engine_context, .{ .Overlays = &.{hud.mID} });
+    const shapes = view.Shapes.items;
+    const deep_mask = Find(shapes, deep).Mask;
+    try std.testing.expectEqual(Find(shapes, inner).Mask, view.Masks.mMasks.items[deep_mask].Parent);
+    try std.testing.expect(view.Masks.Contains(deep_mask, At(10.5, 0, 0)));
+    //cut by the inner one, then by the outer one
+    try std.testing.expect(!view.Masks.Contains(deep_mask, At(8.5, 0, 0)));
+    try std.testing.expect(!view.Masks.Contains(deep_mask, At(12.5, 0, 0)));
+    try std.testing.expect(!view.Masks.Contains(deep_mask, At(10.5, 1.5, 0)));
 
     const canvas = ShapeGeometry.WorldCanvas(hud.mManager, VIEW);
-    try ExpectRect(canvas.ToWorldPoint(.{ .x = 100, .y = 50, .z = 0 }), .{ .x = 100 * canvas.Scale, .y = 50 * canvas.Scale }, Find(shapes, row).Clip.?.Rect);
+    const row_mask = Find(shapes, row).Mask;
+    try std.testing.expect(view.Masks.Contains(row_mask, canvas.ToWorldPoint(At(190, 50, 0))));
+    try std.testing.expect(!view.Masks.Contains(row_mask, canvas.ToWorldPoint(At(210, 50, 0))));
 }
 
-test "a box is only outside a clip when none of it reaches into it, through any depth" {
-    const identity = Quat(f32){ .w = 1, .x = 0, .y = 0, .z = 0 };
-    const clip = ShapeGeometry.ClipRect{ .Center = .{ .x = 0, .y = 0, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 2, .y = 1 } };
-    const Box = ShapeGeometry.Box;
+test "a subtract mask keeps what is outside it, and a mask with no shape leaves things to the one around it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
 
-    try std.testing.expect(ShapeGeometry.OutsideClip(Box{ .Center = .{ .x = 4, .y = 0, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 1, .y = 1, .z = 0.001 } }, clip));
+    //a 2 x 2 hole, and under it a mask with no shape
+    const hole = try AddQuad(engine_context, level);
+    hole.GetComponent(ShapeComponent).?.GetQuad().?.Size = .{ .x = 2, .y = 2 };
+    _ = try hole.AddComponent(engine_context, MaskComponent{ .mOp = .Subtract });
+    const shapeless = try hole.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try shapeless.AddComponent(engine_context, MaskComponent{});
+    const holed = try QuadAt(engine_context, shapeless, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 10, .y = 10 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    const view = try GatherView(engine_context, .{ .Overlays = &.{} });
+    const mask = Find(view.Shapes.items, holed).Mask;
+    try std.testing.expectEqual(@as(usize, 1), view.Masks.mMasks.items.len);
+    try std.testing.expect(!view.Masks.Contains(mask, At(0.5, 0, 0)));
+    try std.testing.expect(view.Masks.Contains(mask, At(2, 0, 0)));
+    //a subtract mask can't cut a whole shape off, however far away it is
+    const far = ShapeGeometry.Box{ .Center = At(50, 0, 0), .Rotation = .{ .w = 1, .x = 0, .y = 0, .z = 0 }, .HalfExtents = At(1, 1, 0.001) };
+    try std.testing.expect(!view.Masks.CutsOff(mask, far));
+}
+
+test "a box is only cut off by a mask's quad when none of it reaches into it, through any depth" {
+    const identity = Quat(f32){ .w = 1, .x = 0, .y = 0, .z = 0 };
+    const Box = ShapeGeometry.Box;
+    const mask = Box{ .Center = .{ .x = 0, .y = 0, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 2, .y = 1, .z = 0.001 } };
+
+    try std.testing.expect(ShapeGeometry.OutsideMaskBox(Box{ .Center = .{ .x = 4, .y = 0, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 1, .y = 1, .z = 0.001 } }, mask));
     //just reaching over the edge
-    try std.testing.expect(!ShapeGeometry.OutsideClip(Box{ .Center = .{ .x = 2.9, .y = 0, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 1, .y = 1, .z = 0.001 } }, clip));
+    try std.testing.expect(!ShapeGeometry.OutsideMaskBox(Box{ .Center = .{ .x = 2.9, .y = 0, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 1, .y = 1, .z = 0.001 } }, mask));
     //far in front, but over it
-    try std.testing.expect(!ShapeGeometry.OutsideClip(Box{ .Center = .{ .x = 0, .y = 0, .z = 30 }, .Rotation = identity, .HalfExtents = .{ .x = 1, .y = 1, .z = 0.001 } }, clip));
+    try std.testing.expect(!ShapeGeometry.OutsideMaskBox(Box{ .Center = .{ .x = 0, .y = 0, .z = 30 }, .Rotation = identity, .HalfExtents = .{ .x = 1, .y = 1, .z = 0.001 } }, mask));
     //a quarter turn makes a 1 x 3 box 3 tall: it reaches down into it from above
     const quarter = Quat(f32){ .w = std.math.sqrt1_2, .x = 0, .y = 0, .z = std.math.sqrt1_2 };
-    try std.testing.expect(!ShapeGeometry.OutsideClip(Box{ .Center = .{ .x = 0, .y = 3.5, .z = 0 }, .Rotation = quarter, .HalfExtents = .{ .x = 3, .y = 0.5, .z = 0.001 } }, clip));
-    try std.testing.expect(ShapeGeometry.OutsideClip(Box{ .Center = .{ .x = 0, .y = 3.5, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 3, .y = 0.5, .z = 0.001 } }, clip));
-
-    try std.testing.expect(ShapeGeometry.ClipContains(clip, .{ .x = 1.5, .y = -0.5, .z = -40 }));
-    try std.testing.expect(!ShapeGeometry.ClipContains(clip, .{ .x = 2.5, .y = 0, .z = 0 }));
+    try std.testing.expect(!ShapeGeometry.OutsideMaskBox(Box{ .Center = .{ .x = 0, .y = 3.5, .z = 0 }, .Rotation = quarter, .HalfExtents = .{ .x = 3, .y = 0.5, .z = 0.001 } }, mask));
+    try std.testing.expect(ShapeGeometry.OutsideMaskBox(Box{ .Center = .{ .x = 0, .y = 3.5, .z = 0 }, .Rotation = identity, .HalfExtents = .{ .x = 3, .y = 0.5, .z = 0.001 } }, mask));
 }
 
 test "a viewport quad covers its size times the pixels a canvas unit covers, and only an overlay's has a size" {

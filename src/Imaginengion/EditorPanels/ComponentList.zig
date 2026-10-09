@@ -17,7 +17,8 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
-const ClipComponent = EntityComponents.ClipComponent;
+const MaskComponent = EntityComponents.MaskComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const AttribComponent = EntityComponents.AttribComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
@@ -180,7 +181,8 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
         if (!object.HasComponent(SurfaceComponent)) _ = try object.AddComponent(engine_context, SurfaceComponent{});
     }
     //what a UI component needs of its entity, given the way picking it from the entity's menu would give it: a popup
-    //opens and closes through the entity's layout item, a scroll cuts off what runs past with the entity's clip, and a
+    //opens and closes through the entity's layout item, a scroll cuts off what runs past with the entity's mask (and a
+    //shape for it to mask with, which layout sizes, if it has none), and a
     //number field shows the entity's attribute, a float to start with
     if (comptime @TypeOf(object) == UIElement) {
         const owner = object.GetOwner();
@@ -189,7 +191,8 @@ pub fn AddFromPanel(comptime component_type: type, engine_context: *EngineContex
                 if (!owner.HasComponent(LayoutItemComponent)) try AddFromPanel(LayoutItemComponent, engine_context, owner);
             }
             if (comptime component_type == UIComponents.ScrollComponent) {
-                if (!owner.HasComponent(ClipComponent)) _ = try owner.AddComponent(engine_context, ClipComponent{});
+                if (!owner.HasComponent(MaskComponent)) _ = try owner.AddComponent(engine_context, MaskComponent{});
+                if (!owner.HasComponent(ShapeComponent)) _ = try owner.AddComponent(engine_context, ShapeComponent{});
             }
             if (comptime component_type == UIComponents.NumberFieldComponent) {
                 if (!owner.HasComponent(AttribComponent)) _ = try owner.AddComponent(engine_context, AttribComponent{ .mData = .{ .float32 = 0 } });

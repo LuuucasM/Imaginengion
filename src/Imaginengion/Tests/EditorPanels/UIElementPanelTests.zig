@@ -18,7 +18,8 @@ const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const TextComponent = EntityComponents.TextComponent;
 const AttribComponent = EntityComponents.AttribComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
-const ClipComponent = EntityComponents.ClipComponent;
+const MaskComponent = EntityComponents.MaskComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const SelectedTag = EntityComponents.SelectedTag;
 const DisabledTag = EntityComponents.DisabledTag;
@@ -163,11 +164,13 @@ test "a header per component, rows from UIRender, and the add and delete menus" 
     }
     try std.testing.expect(adds_scroll);
 
-    //adding a scroll the way the menu does gives the entity the clip it needs, and the list is built again with it
+    //adding a scroll the way the menu does gives the entity the mask it needs and a shape to mask with, and the list is
+    //built again with it
     const old_root = panel.mList.mRoot.?;
     try panel.Run(engine_context, .{ .Add = IndexOf(UIComponents.ScrollComponent) });
     try std.testing.expect(element.HasComponent(UIComponents.ScrollComponent));
-    try std.testing.expect(entity.HasComponent(ClipComponent));
+    try std.testing.expect(entity.HasComponent(MaskComponent));
+    try std.testing.expect(entity.HasComponent(ShapeComponent));
     try test_panel.Update(entity);
     try std.testing.expect(panel.mList.mRoot.?.mID != old_root.mID);
     try std.testing.expect(old_root.GetComponent(LayoutItemComponent).?.mCollapsed);

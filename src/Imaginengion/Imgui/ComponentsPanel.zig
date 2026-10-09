@@ -20,7 +20,6 @@ const AudioComponent = @import("../ECSComponents/Entity/AudioComponent.zig");
 const SceneComponent = @import("../ECSComponents/Scene/SceneComponent.zig");
 const LayoutComponent = @import("../ECSComponents/Entity/LayoutComponent.zig");
 const LayoutItemComponent = @import("../ECSComponents/Entity/LayoutItemComponent.zig");
-const ClipComponent = @import("../ECSComponents/Entity/ClipComponent.zig");
 const AttribComponent = @import("../ECSComponents/Shared/AttribComponent.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const UIComponents = @import("../ECSComponents/UIComponents.zig");

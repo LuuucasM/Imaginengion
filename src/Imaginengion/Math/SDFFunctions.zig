@@ -5,8 +5,6 @@ const Vec2 = MathTypes.Vec2;
 const Vec4 = MathTypes.Vec4;
 
 const ShapeData = @import("../Renderer/Renderer2D.zig").ShapeData;
-const ClipData = @import("../Renderer/Renderer2D.zig").ClipData;
-pub const NO_CLIP = @import("../Renderer/Renderer2D.zig").NO_CLIP;
 const SurfShadingData = @import("../Renderer/Renderer.zig").SurfShadingData;
 
 const TextureManager = @import("../TextureManager/TextureManager.zig");
@@ -307,22 +305,6 @@ pub fn opSmoothSubtraction(distance_a: f32, distance_b: f32, smoothness: f32) Bl
 /// opIntersection with the edge where the two meet rounded off by `smoothness`
 pub fn opSmoothIntersection(distance_a: f32, distance_b: f32, smoothness: f32) Blend {
     return SmoothMax(distance_a, distance_b, smoothness);
-}
-
-/// A clip region (ClipComponent): its rectangle in its own plane, running on through depth either way, so the cut
-/// is the same for everything in front of it or behind it. Inside is negative
-pub fn sdClipPrism(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32), half_extents: Vec2(f32)) f32 {
-    const local_point = GetLocalPoint(point, position, rotation);
-    return sdRoundedBox2D(.{ .x = local_point.x, .y = local_point.y }, half_extents, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
-}
-
-pub fn sdIMClip(point: Vec3(f32), clip: ClipData) f32 {
-    return sdClipPrism(point, .FromVector(clip.Position), .FromVector(clip.Rotation), .{ .x = clip.HalfExtents[0], .y = clip.HalfExtents[1] });
-}
-
-/// Whether a point on a shape is inside the clip region it is cut to
-pub fn InIMClip(point: Vec3(f32), clip: ClipData) bool {
-    return sdIMClip(point, clip) <= 0;
 }
 
 /// A texture UV that means "no texture, just the surface's color", for surfaces like a border that are a

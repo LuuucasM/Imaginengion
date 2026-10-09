@@ -6,7 +6,7 @@ const Ray = @import("../../Math/CameraRay.zig").Ray;
 const ShapeData = @import("../../Renderer/Renderer2D.zig").ShapeData;
 const ShapeAxes = @import("../../Renderer/Renderer2D.zig").ShapeAxes;
 const Aabb = @import("../../Math/Aabb.zig");
-const ClipData = @import("../../Renderer/Renderer2D.zig").ClipData;
+const NO_MASK = @import("../../Renderer/SDFProgram.zig").NO_MASK;
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;
@@ -29,7 +29,7 @@ fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32), radi
         .Size = half.ToArray(),
         .Params = radii.ToArray(),
         .Type = .Quad,
-        .ClipIndex = SDFFunc.NO_CLIP,
+        .MaskIndex = NO_MASK,
         .SurfaceIndex = 0,
         .Flags = 0,
     };
@@ -73,7 +73,7 @@ fn MakeGlyph(center: Vec3(f32), rotation: Quat(f32), half: Vec3(f32)) ShapeData 
         .Size = half.ToArray(),
         .Params = .{ 0, 0, 0, 0 },
         .Type = .Glyph,
-        .ClipIndex = SDFFunc.NO_CLIP,
+        .MaskIndex = NO_MASK,
         .SurfaceIndex = 0,
         .Flags = 0,
     };
@@ -240,35 +240,11 @@ test "the border band runs along the edge, round the rounded corners, and only a
     try std.testing.expect(!SDFFunc.InIMQuadBorder(.{ .x = 1.99, .y = 0, .z = 0 }, quad, 0));
 }
 
-//==================================clipping==================================
-
-fn MakeClip(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32)) ClipData {
-    return .{ .Rotation = rotation.ToArray(), .Position = center.ToArray(), .HalfExtents = half.ToArray() };
-}
+//==================================combining==================================
 
 test "opIntersection is inside only where both are" {
     try std.testing.expectEqual(@as(f32, 2), SDFFunc.opIntersection(-1, 2));
     try std.testing.expectEqual(@as(f32, -1), SDFFunc.opIntersection(-1, -3));
-}
-
-test "a clip region is its rectangle in its own plane, through any depth" {
-    const clip = MakeClip(.{ .x = 10, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 1 });
-    try std.testing.expect(SDFFunc.InIMClip(.{ .x = 11, .y = 0.5, .z = 0 }, clip));
-    //far in front of it or behind it, still inside
-    try std.testing.expect(SDFFunc.InIMClip(.{ .x = 11, .y = 0.5, .z = 50 }, clip));
-    try std.testing.expect(SDFFunc.InIMClip(.{ .x = 9, .y = -0.5, .z = -50 }, clip));
-    //past its sides
-    try std.testing.expect(!SDFFunc.InIMClip(.{ .x = 12.5, .y = 0, .z = 0 }, clip));
-    try std.testing.expect(!SDFFunc.InIMClip(.{ .x = 10, .y = 1.5, .z = 0 }, clip));
-    try std.testing.expectApproxEqAbs(@as(f32, 0.5), SDFFunc.sdIMClip(.{ .x = 12.5, .y = 0, .z = 3 }, clip), eps);
-}
-
-test "a turned clip region turns its rectangle" {
-    //a quarter turn about z: its 2 wide side runs up and down
-    const quarter = Quat(f32){ .w = std.math.sqrt1_2, .x = 0, .y = 0, .z = std.math.sqrt1_2 };
-    const clip = MakeClip(.{ .x = 0, .y = 0, .z = 0 }, quarter, .{ .x = 2, .y = 1 });
-    try std.testing.expect(SDFFunc.InIMClip(.{ .x = 0, .y = 1.5, .z = 0 }, clip));
-    try std.testing.expect(!SDFFunc.InIMClip(.{ .x = 1.5, .y = 0, .z = 0 }, clip));
 }
 
 //==================================a shape's own space==================================

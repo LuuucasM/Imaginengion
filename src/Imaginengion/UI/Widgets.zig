@@ -644,11 +644,13 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
     _ = try Label(engine_context, .{ .Entity = close }, "x");
     if (options.StockScripts) try AddStockScript(engine_context, close, .CloseWindow);
 
-    //what runs past the bottom scrolls, with a scrollbar
+    //what runs past the bottom scrolls, with a scrollbar, cut off by a mask the shape of the content area. The shape has
+    //no surface, so it isn't drawn, and layout keeps it the content area's size
     const content = try NewEntity(engine_context, .{ .Entity = window });
     _ = try content.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .All(PADDING) });
     _ = try content.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
-    _ = try content.AddComponent(engine_context, EntityComponents.ClipComponent{});
+    _ = try content.AddComponent(engine_context, ShapeComponent{});
+    _ = try content.AddComponent(engine_context, EntityComponents.MaskComponent{});
     _ = try content.AddComponent(engine_context, UIElementComponent{});
     _ = try UIManager.ElementOf(content).?.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Vertical });
 

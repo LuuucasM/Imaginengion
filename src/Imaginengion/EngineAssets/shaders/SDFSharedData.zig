@@ -3,7 +3,9 @@ const builtin = @import("builtin");
 const PushConstants = @import("IM").PushConstants;
 const ShapeData = @import("IM").ShapeData;
 const ShapeSurface = @import("IM").ShapeSurface;
-const ClipData = @import("IM").ClipData;
+const MaskData = @import("IM").MaskData;
+const ProgramInstr = @import("IM").ProgramInstr;
+const ProgramPart = @import("IM").ProgramPart;
 const BVHNode = @import("IM").BVHNode;
 const SurfShadingData = @import("IM").SurfShadingData;
 const MedShadingData = @import("IM").MedShadingData;
@@ -48,8 +50,14 @@ pub const ShapesBuf = extern struct { ptr: ShapesArray };
 const ShapeSurfacesArray = @SpirvType(.{ .runtime_array = ShapeSurface });
 pub const ShapeSurfacesBuf = extern struct { ptr: ShapeSurfacesArray };
 
-const ClipsArray = @SpirvType(.{ .runtime_array = ClipData });
-pub const ClipsBuf = extern struct { ptr: ClipsArray };
+const MasksArray = @SpirvType(.{ .runtime_array = MaskData });
+pub const MasksBuf = extern struct { ptr: MasksArray };
+
+const ProgramInstrsArray = @SpirvType(.{ .runtime_array = ProgramInstr });
+pub const ProgramInstrsBuf = extern struct { ptr: ProgramInstrsArray };
+
+const ProgramPartsArray = @SpirvType(.{ .runtime_array = ProgramPart });
+pub const ProgramPartsBuf = extern struct { ptr: ProgramPartsArray };
 
 const BVHNodesArray = @SpirvType(.{ .runtime_array = BVHNode });
 pub const BVHNodesBuf = extern struct { ptr: BVHNodesArray };
@@ -66,9 +74,12 @@ pub const SurfShadingSSBO = @extern(*addrspace(.storage_buffer) SurfShadingBuf, 
 pub const MedShadingSSBO = @extern(*addrspace(.storage_buffer) MedShadingBuf, .{ .name = "MedShadingSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 2 } } });
 pub const ShapesSSBO = @extern(*addrspace(.storage_buffer) ShapesBuf, .{ .name = "ShapesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 3 } } });
 pub const ShapeSurfacesSSBO = @extern(*addrspace(.storage_buffer) ShapeSurfacesBuf, .{ .name = "ShapeSurfacesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 4 } } });
-pub const ClipsSSBO = @extern(*addrspace(.storage_buffer) ClipsBuf, .{ .name = "ClipsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 5 } } });
+//the masks shapes are cut by (SDFProgram.MaskData), and the programs (SDFProgram) of the masks' shapes
+pub const MasksSSBO = @extern(*addrspace(.storage_buffer) MasksBuf, .{ .name = "MasksSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 5 } } });
 //the direct shapes' BVH (Core/BVH.zig), depth first
 pub const BVHNodesSSBO = @extern(*addrspace(.storage_buffer) BVHNodesBuf, .{ .name = "BVHNodesSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 6 } } });
+pub const ProgramInstrsSSBO = @extern(*addrspace(.storage_buffer) ProgramInstrsBuf, .{ .name = "ProgramInstrsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 7 } } });
+pub const ProgramPartsSSBO = @extern(*addrspace(.storage_buffer) ProgramPartsBuf, .{ .name = "ProgramPartsSSBO", .decoration = .{ .descriptor = .{ .set = 0, .binding = 8 } } });
 
 pub const OutTexture = @extern(*addrspace(.constant) Image2D, .{ .name = "OutTexture", .decoration = .{ .descriptor = .{ .set = 1, .binding = 0 } } });
 

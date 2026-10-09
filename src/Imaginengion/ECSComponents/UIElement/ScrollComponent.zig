@@ -13,7 +13,7 @@ pub const Name: []const u8 = "ScrollComponent";
 
 /// On an entity's UI element (UIElementComponent): scrolls the entity's children when they run past it. The entity has to
 /// be a layout container (LayoutComponent) with a size that doesn't come from its children (Fixed, Fill or Percent),
-/// and is cut off at its edges by a ClipComponent, which it is given if it has none. The mouse wheel over it scrolls it,
+/// and is cut off at its edges by a MaskComponent with its shape (ShapeComponent), which it is given if it has none. The mouse wheel over it scrolls it,
 /// and a scrollbar shows along each edge it overflows, which can be dragged (see UI/ScrollSystem.zig). How far it is
 /// scrolled is the element's ScrollStateComponent
 mScroll: Layout.Scroll = .Vertical,

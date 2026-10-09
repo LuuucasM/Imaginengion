@@ -86,9 +86,9 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
 
     switch (options.Targets) {
         .Visuals => {
-            const shapes = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+            const view = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
 
-            for (shapes.items) |shape| {
+            for (view.Shapes.items) |shape| {
                 //overlays come first and any overlay hit wins, so once there is one the game layer can't change the answer
                 if (shape.Canvas == null and best_overlay.mBest != null) break;
 
@@ -108,7 +108,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                             const box = ShapeGeometry.QuadBox(transform, quad, 0, canvas);
                             //rounded, so a click in a cut off corner goes through to whatever is behind
                             const hit = RayIntersect.RayRoundedBox2D(ray, box.Center, box.Rotation, box.HalfExtents, box.CornerRadii);
-                            if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Quad }, hit, far, options.SkipStartedInside);
+                            if (InMasks(&view.Masks, shape.Mask, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Quad }, hit, far, options.SkipStartedInside);
                         },
                     }
                 }
@@ -116,14 +116,14 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                     const font = try text.mTextAssetHandle.GetAsset(engine_context, TextAsset);
                     const box = ShapeGeometry.TextBox(TextAsset, transform, text, font, canvas);
                     const hit = RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents);
-                    if (InClip(shape.Clip, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Text }, hit, far, options.SkipStartedInside);
+                    if (InMasks(&view.Masks, shape.Mask, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Text }, hit, far, options.SkipStartedInside);
                 }
             }
         },
         .Colliders => {
             const colliders = try ShapeGeometry.GatherViewShapes(frame_allocator, world, camera_view, view_scenes, .{ .Component = ColliderComponent });
 
-            for (colliders.items) |shape| {
+            for (colliders.Shapes.items) |shape| {
                 //the same as for visuals: an overlay hit already decides it
                 if (shape.Canvas == null and best_overlay.mBest != null) break;
 
@@ -154,10 +154,9 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
     return null;
 }
 
-/// Whether a hit lands inside the clip region its shape is cut to: a part cut off isn't drawn, so it can't be clicked,
-/// and whatever is behind it can be
-fn InClip(clip: ?ShapeGeometry.ViewClip, ray: Ray, hit: HitInfo) bool {
-    const view_clip = clip orelse return true;
+/// Whether a hit lands where its shape's masks keep it: a part cut off isn't drawn, so it can't be clicked, and
+/// whatever is behind it can be
+fn InMasks(masks: *const ShapeGeometry.ViewMasks, mask: u32, ray: Ray, hit: HitInfo) bool {
     if (!hit.IsHit()) return true;
-    return ShapeGeometry.ClipContains(view_clip.Rect, ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)));
+    return masks.Contains(mask, ray.Origin.AddVec(ray.Dir.MulScalar(hit.T)));
 }

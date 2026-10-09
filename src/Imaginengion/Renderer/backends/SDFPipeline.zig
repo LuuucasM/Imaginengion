@@ -22,8 +22,9 @@ pub const PipelineType = enum {
 const ShaderInfo: StageInfo = .{
     .mNumSamplers = 1,
     .mNumROStorageTextures = 0,
-    //surface shading, medium shading, shapes, shape surfaces, clip regions and the BVH's nodes
-    .mNumROStorageBuffers = 6,
+    //surface shading, medium shading, shapes, shape surfaces, masks, the BVH's nodes, and the mask programs' instructions
+    //and parts
+    .mNumROStorageBuffers = 8,
     .mNumRWStorageTextures = 1,
     .mNumRWStorageBuffers = 0,
     .mNumUniformBuffers = 1,

@@ -28,7 +28,7 @@ pub const DisabledTag = @import("Entity/TagComponents.zig").DisabledTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
 pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
-pub const ClipComponent = @import("Entity/ClipComponent.zig");
+pub const MaskComponent = @import("Entity/MaskComponent.zig");
 pub const ViewportComponent = @import("Entity/ViewportComponent.zig");
 pub const UIElementComponent = @import("Entity/UIElementComponent.zig");
 pub const LayoutComponent = @import("Entity/LayoutComponent.zig");
@@ -102,7 +102,7 @@ pub const ComponentsList = [_]type{
     DragSourceComponent,
     DropTargetComponent,
     FocusedTag,
-    ClipComponent,
+    MaskComponent,
     UIElementComponent,
     //never saved yet: the editor makes its viewports in code
     ViewportComponent,
@@ -150,7 +150,7 @@ pub const SerializeList = [_]type{
     TmplRefComponent,
     LayoutComponent,
     LayoutItemComponent,
-    ClipComponent,
+    MaskComponent,
     UIElementComponent,
     DisabledTag,
 };
@@ -190,7 +190,7 @@ pub const ComponentPanelList = [_]type{
     TmplRefComponent,
     LayoutComponent,
     LayoutItemComponent,
-    ClipComponent,
+    MaskComponent,
     UIElementComponent,
     DisabledTag,
 };
@@ -255,7 +255,7 @@ pub const EComponents = enum(u16) {
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
     FocusedTag = ListInd(&ComponentsList, FocusedTag),
-    ClipComponent = ListInd(&ComponentsList, ClipComponent),
+    MaskComponent = ListInd(&ComponentsList, MaskComponent),
     ViewportComponent = ListInd(&ComponentsList, ViewportComponent),
     UIElementComponent = ListInd(&ComponentsList, UIElementComponent),
 };

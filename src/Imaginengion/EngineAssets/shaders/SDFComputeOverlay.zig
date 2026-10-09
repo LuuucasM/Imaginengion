@@ -14,7 +14,9 @@ const CameraUBO = SDFShared.CameraUBO;
 const ShapesSSBO = SDFShared.ShapesSSBO;
 const ShapeSurfacesSSBO = SDFShared.ShapeSurfacesSSBO;
 const BVHNodesSSBO = SDFShared.BVHNodesSSBO;
-const ClipsSSBO = SDFShared.ClipsSSBO;
+const MasksSSBO = SDFShared.MasksSSBO;
+const ProgramInstrsSSBO = SDFShared.ProgramInstrsSSBO;
+const ProgramPartsSSBO = SDFShared.ProgramPartsSSBO;
 const SurfShadingSSBO = SDFShared.SurfShadingSSBO;
 const MedShadingSSBO = SDFShared.MedShadingSSBO;
 const OutTexture = SDFShared.OutTexture;
@@ -29,7 +31,9 @@ const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&ShapesSSBO.ptr),
     @TypeOf(&ShapeSurfacesSSBO.ptr),
     @TypeOf(&BVHNodesSSBO.ptr),
-    @TypeOf(&ClipsSSBO.ptr),
+    @TypeOf(&MasksSSBO.ptr),
+    @TypeOf(&ProgramInstrsSSBO.ptr),
+    @TypeOf(&ProgramPartsSSBO.ptr),
     @TypeOf(&SurfShadingSSBO.ptr),
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
@@ -56,7 +60,9 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
         .mShapesCount = CameraUBO.mShapesCount,
         .mDirectCount = CameraUBO.mDirectCount,
         .mBVHNodes = &BVHNodesSSBO.ptr,
-        .mClips = &ClipsSSBO.ptr,
+        .mMasks = &MasksSSBO.ptr,
+        .mInstrs = &ProgramInstrsSSBO.ptr,
+        .mParts = &ProgramPartsSSBO.ptr,
         .mSurfShading = &SurfShadingSSBO.ptr,
         .mMedShading = &MedShadingSSBO.ptr,
         .mPerspectiveFar = CameraUBO.mPerspectiveFar,

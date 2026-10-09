@@ -125,6 +125,66 @@ fn Combine(instr: Instr, a: Value, b: Value) Value {
     };
 }
 
+//==================================masks==================================
+
+/// A shape's mask index when no mask is over it
+pub const NO_MASK: u32 = std.math.maxInt(u32);
+
+pub const MaskOp = enum(u32) {
+    /// keeps only what is inside the mask's shape
+    Intersect,
+    /// cuts the mask's shape out
+    Subtract,
+};
+
+/// A mask (MaskComponent) as the GPU reads it: its shape's program, what it does with it, and the mask it is inside
+/// itself. A mask is always added after the one it is inside, so following Parent always ends
+pub const MaskData = extern struct {
+    First: u32,
+    Count: u32,
+    Op: MaskOp,
+    //the mask around this one, NO_MASK for none
+    Parent: u32,
+};
+
+comptime {
+    GPUAsserts.AssertGPULayout(MaskData);
+}
+
+/// Whether `point` is kept by mask `mask_ind` and every mask around it. Each mask's program is run at the point, and
+/// it is measured in the mask's own plane, so the cut goes straight through depth
+pub fn InMasks(masks: anytype, instrs: anytype, parts: anytype, mask_ind: u32, point: Vec3(f32)) bool {
+    var ind = mask_ind;
+    while (ind != NO_MASK) {
+        const mask: MaskData = masks[ind];
+        const distance = Eval(instrs, parts, .{ .First = mask.First, .Count = mask.Count }, point).D;
+        const kept = switch (mask.Op) {
+            .Intersect => distance <= 0,
+            .Subtract => distance > 0,
+        };
+        if (!kept) return false;
+        ind = mask.Parent;
+    }
+    return true;
+}
+
+/// A shape's `distance` cut by mask `mask_ind` and every mask around it, so a march doesn't step toward a part of the
+/// shape that is never drawn
+pub fn Masked(masks: anytype, instrs: anytype, parts: anytype, mask_ind: u32, distance: f32, point: Vec3(f32)) f32 {
+    var masked = distance;
+    var ind = mask_ind;
+    while (ind != NO_MASK) {
+        const mask: MaskData = masks[ind];
+        const mask_distance = Eval(instrs, parts, .{ .First = mask.First, .Count = mask.Count }, point).D;
+        masked = switch (mask.Op) {
+            .Intersect => SDFFunctions.opIntersection(masked, mask_distance),
+            .Subtract => SDFFunctions.opSubtraction(masked, mask_distance),
+        };
+        ind = mask.Parent;
+    }
+    return masked;
+}
+
 /// A part's 2D distance at a point, measured in the part's own plane
 fn PartDistance(part: Part, point: Vec3(f32)) f32 {
     const axis_x: Vec4(f32) = .FromVector(part.AxisX);

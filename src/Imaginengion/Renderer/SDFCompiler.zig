@@ -76,6 +76,17 @@ pub fn Compile(allocator: std.mem.Allocator, root: Entity, canvas: ?CanvasTransf
     return .{ .Range = .{ .First = first, .Count = @intCast(level.Code.items.len) }, .Depth = level.Depth };
 }
 
+/// Compiles just `entity`'s own shape onto the end of `programs`, a program of one part: what a mask (MaskComponent)
+/// cuts with. Its surface doesn't matter, a hidden or missing one still cuts. Null for an entity with no shape or
+/// transform
+pub fn CompileShape(allocator: std.mem.Allocator, entity: Entity, canvas: ?CanvasTransform, programs: *Programs) Error!?Compiled {
+    var compiler = Compiler{ .mAllocator = allocator, .mTemp = allocator, .mCanvas = canvas, .mPrograms = programs };
+    const part_ind = try compiler.AddPart(entity, DEFAULT_COLOR) orelse return null;
+    const first: u32 = @intCast(programs.mInstrs.items.len);
+    try programs.mInstrs.append(allocator, .{ .Code = .Shape, .Part = part_ind });
+    return .{ .Range = .{ .First = first, .Count = 1 }, .Depth = 1 };
+}
+
 /// One thing a level joins: a part, or a merge below it in brackets, as the code that pushes it
 const Operand = struct {
     Code: std.ArrayList(Instr),
@@ -164,12 +175,23 @@ const Compiler = struct {
     /// `entity` as a part: a Shape instruction for it, with its part added to the programs. Null if it has no shape or
     /// transform, or its surface is hidden. A part with no surface (a cutter, usually) takes `color`
     fn PartOperand(self: *Compiler, entity: Entity, color: Vec4(f32)) Error!?Operand {
+        if (entity.GetComponent(SurfaceComponent)) |surface| {
+            if (!surface.mShouldRender) return null;
+        }
+        const part_ind = try self.AddPart(entity, color) orelse return null;
+
+        const op = OpOf(entity);
+        var code: std.ArrayList(Instr) = .empty;
+        try code.append(self.mTemp, .{ .Code = .Shape, .Part = part_ind });
+        return .{ .Code = code, .Depth = 1, .Op = op.mOp, .Smoothness = self.WorldSmoothness(entity, op.mSmoothness) };
+    }
+
+    /// Adds `entity`'s shape to the programs' parts, placed the way drawing and picking place it, and colored with its
+    /// surface or else `color`. Returns its index, or null if it has no shape or transform
+    fn AddPart(self: *Compiler, entity: Entity, color: Vec4(f32)) Error!?u32 {
         const shape = entity.GetComponent(ShapeComponent) orelse return null;
         const transform = entity.GetComponent(TransformComponent) orelse return null;
         const surface = entity.GetComponent(SurfaceComponent);
-        if (surface) |found| {
-            if (!found.mShouldRender) return null;
-        }
 
         const part_ind: u32 = @intCast(self.mPrograms.mParts.items.len);
         switch (shape.mKind) {
@@ -187,11 +209,7 @@ const Compiler = struct {
                 });
             },
         }
-
-        const op = OpOf(entity);
-        var code: std.ArrayList(Instr) = .empty;
-        try code.append(self.mTemp, .{ .Code = .Shape, .Part = part_ind });
-        return .{ .Code = code, .Depth = 1, .Op = op.mOp, .Smoothness = self.WorldSmoothness(entity, op.mSmoothness) };
+        return part_ind;
     }
 
     /// A smoothness in world units: grown by the entity's scale the way a quad's corner radii are, by its smaller axis

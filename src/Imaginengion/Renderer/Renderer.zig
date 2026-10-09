@@ -335,8 +335,8 @@ pub fn RenderWorld(self: *Renderer, world_manager: *WorldManager, view_scenes: V
 
     //the screen each overlay is drawn on is what its layout fits into
     try LayoutSystem.RecordViewArea(world_manager, view_scenes.Overlays, camera_view, engine_context);
-    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), world_manager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
-    try self.RenderShapes(shapes.items, stats, engine_context, push_constants, compute_texture, rendering_mode);
+    const view = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), world_manager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+    try self.RenderShapes(&view, stats, engine_context, push_constants, compute_texture, rendering_mode);
 }
 
 /// RenderWorld for only the shapes in one scene, e.g. one template out of the several open in the template editing world
@@ -350,15 +350,17 @@ pub fn RenderScene(self: *Renderer, scene: Scene, stats: *RenderStats, engine_co
         .OverlayLayer => .{ .Game = .None, .Overlays = &scene_id },
     };
     try LayoutSystem.RecordViewArea(scene.mManager, view_scenes.Overlays, camera_view, engine_context);
-    const shapes = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), scene.mManager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
-    try self.RenderShapes(shapes.items, stats, engine_context, push_constants, compute_texture, rendering_mode);
+    const view = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), scene.mManager, camera_view, view_scenes, ShapeGeometry.VISUALS_QUERY);
+    try self.RenderShapes(&view, stats, engine_context, push_constants, compute_texture, rendering_mode);
 }
 
-/// Draws shapes already gathered for a view (ShapeGeometry.GatherViewShapes), each carrying its canvas
-fn RenderShapes(self: *Renderer, shapes: []const ShapeGeometry.ViewShape, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
+/// Draws shapes already gathered for a view (ShapeGeometry.GatherViewShapes), each carrying its canvas and its mask
+fn RenderShapes(self: *Renderer, view: *const ShapeGeometry.ViewShapes, stats: *RenderStats, engine_context: *EngineContext, push_constants: PushConstants, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     self.mSDFPushConstants = push_constants;
 
     try self.BeginRendering(engine_context.EngineAllocator());
+    try self.mR2D.SetMasks(engine_context.EngineAllocator(), &view.Masks);
+    const shapes = view.Shapes.items;
 
     //added up over every draw this frame: a world drawn for two views counts both
     stats.TotalObjects += shapes.len;
@@ -372,7 +374,7 @@ fn RenderShapes(self: *Renderer, shapes: []const ShapeGeometry.ViewShape, stats:
         for (shapes) |shape| {
             //TODO: distance based culling
             //because since rays have max distances we know if something is greater than the camera point to the object then we can ignore
-            try self.DrawShape(engine_context, shape);
+            try self.DrawShape(engine_context, shape, &view.Masks);
         }
     }
 
@@ -397,7 +399,7 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
     _ = try self.mSDFShading.AddMedium(engine_allocator, Vec4(f32){ .x = 0.0, .y = 0.0, .z = 0.0, .w = 0.0 }, air_mat.RenderData.Absorption, air_mat.RenderData.Scattering);
 }
 
-fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeometry.ViewShape) anyerror!void {
+fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeometry.ViewShape, masks: *const ShapeGeometry.ViewMasks) anyerror!void {
     const entity = shape.Entity;
     const transform_component = entity.GetComponent(TransformComponent).?;
 
@@ -420,7 +422,8 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
                     surface,
                     shown,
                     shape.Canvas,
-                    shape.Clip,
+                    shape.Mask,
+            masks,
                     &self.mSDFShading,
                 );
             },
@@ -433,7 +436,8 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
             text_component,
             surface,
             shape.Canvas,
-            shape.Clip,
+            shape.Mask,
+            masks,
             &self.mSDFShading,
         );
     }
