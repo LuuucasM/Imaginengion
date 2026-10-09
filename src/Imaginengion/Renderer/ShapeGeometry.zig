@@ -30,6 +30,8 @@ const OverlayLayerTag = EntityComponents.OverlayLayerTag;
 const LayoutHiddenTag = EntityComponents.LayoutHiddenTag;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const MaskComponent = EntityComponents.MaskComponent;
+const MergeComponent = EntityComponents.MergeComponent;
+const MainObjectComponent = EntityComponents.MainObjectComponent;
 const SDFProgram = @import("SDFProgram.zig");
 const SDFCompiler = @import("SDFCompiler.zig");
 const NO_MASK = SDFProgram.NO_MASK;
@@ -92,11 +94,14 @@ pub const ViewMasks = struct {
 };
 
 /// One entity a view shows, with the canvas that places it for an overlay entity (null in the game layer,
-/// whose transforms are already world space), and the mask it is cut by, if any: an index into its view's ViewMasks
+/// whose transforms are already world space), and the mask it is cut by, if any: an index into its view's ViewMasks.
+/// A merge (MergeComponent) is one of these for its root, standing for every part of it, which aren't in the list
 pub const ViewShape = struct {
     Entity: Entity,
     Canvas: ?CanvasTransform,
     Mask: u32 = NO_MASK,
+    /// the entity is a merge's root, drawn and picked as the whole merge
+    Merge: bool = false,
 };
 
 /// What a view shows (GatherViewShapes): the entities, and the masks they are cut by
@@ -137,6 +142,9 @@ pub fn GatherViewShapes(
     var view = ViewShapes{};
     const shapes = &view.Shapes;
     var masks = MaskFinder{ .mAllocator = frame_allocator, .mMasks = &view.Masks };
+    //only what is drawn folds into merges: a collider on a part is still its own collider
+    const fold_merges = comptime IsVisuals(query);
+    var merges = MergeFinder{ .mAllocator = frame_allocator };
 
     const canvas = WorldCanvas(world, camera_view);
     for (view_scenes.Overlays) |scene_id| {
@@ -147,7 +155,7 @@ pub fn GatherViewShapes(
         try shapes.ensureUnusedCapacity(frame_allocator, entity_ids.items.len);
         for (entity_ids.items) |entity_id| {
             const entity = world.GetEntity(entity_id);
-            shapes.appendAssumeCapacity(.{ .Entity = entity, .Canvas = canvas, .Mask = try masks.MaskOf(entity, canvas) });
+            try AddViewShape(shapes, frame_allocator, &masks, if (fold_merges) &merges else null, entity, canvas);
         }
     }
 
@@ -159,10 +167,67 @@ pub fn GatherViewShapes(
     try shapes.ensureUnusedCapacity(frame_allocator, game_ids.items.len);
     for (game_ids.items) |entity_id| {
         const entity = world.GetEntity(entity_id);
-        shapes.appendAssumeCapacity(.{ .Entity = entity, .Canvas = null, .Mask = try masks.MaskOf(entity, null) });
+        try AddViewShape(shapes, frame_allocator, &masks, if (fold_merges) &merges else null, entity, null);
     }
 
     return view;
+}
+
+/// Adds `entity` to what the view shows, cut by its mask. A part of a merge is shown as its merge's root instead, once
+fn AddViewShape(shapes: *std.ArrayList(ViewShape), frame_allocator: std.mem.Allocator, masks: *MaskFinder, merges: ?*MergeFinder, entity: Entity, canvas: ?CanvasTransform) !void {
+    if (merges) |found| {
+        if (MergeRootOf(entity)) |root| {
+            if (!try found.FirstSight(root)) return;
+            try shapes.append(frame_allocator, .{ .Entity = root, .Canvas = canvas, .Mask = try masks.MaskOf(root, canvas), .Merge = true });
+            return;
+        }
+    }
+    try shapes.append(frame_allocator, .{ .Entity = entity, .Canvas = canvas, .Mask = try masks.MaskOf(entity, canvas) });
+}
+
+/// Whether a gather's query is VISUALS_QUERY, what the renderer draws and picking clicks on
+fn IsVisuals(comptime query: GroupQuery) bool {
+    return query == .Component and query.Component == VISUALS_QUERY.Component;
+}
+
+/// The merges a gather has already shown, so each is shown once however many of its parts there are
+const MergeFinder = struct {
+    mAllocator: std.mem.Allocator,
+    mShown: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
+
+    /// Whether this is the first time `root` has come up
+    fn FirstSight(self: *MergeFinder, root: Entity) !bool {
+        const entry = try self.mShown.getOrPut(self.mAllocator, root.mID);
+        return !entry.found_existing;
+    }
+};
+
+/// The merge `entity` is a part of, the outermost one: the furthest entity up from it (itself included) with a
+/// MergeComponent, not past one with a MainObjectComponent, which is a game object of its own. Null for one that isn't
+/// a part of any, or isn't a shape or a merge at all (text under a merge is drawn on its own)
+pub fn MergeRootOf(entity: Entity) ?Entity {
+    if (!entity.HasComponent(ShapeComponent) and !entity.HasComponent(MergeComponent)) return null;
+    var root: ?Entity = null;
+    var current = entity;
+    while (true) {
+        if (current.HasComponent(MergeComponent)) root = current;
+        if (current.HasComponent(MainObjectComponent)) break;
+        const child_component = current.GetComponent(EntityChildComponent) orelse break;
+        current = Entity{ .mID = child_component.mParent, .mManager = entity.mManager };
+    }
+    return root;
+}
+
+/// A compiled merge's box (SDFCompiler.Compiled): its plate over the rectangle its parts lie within, in its root's
+/// plane. What it is drawn and picked as before its program says where in it it is
+pub fn MergeBox(compiled: SDFCompiler.Compiled) Box {
+    const middle = compiled.Min.AddVec(compiled.Max).MulScalar(0.5);
+    const half = compiled.Max.SubVec(compiled.Min).MulScalar(0.5);
+    return .{
+        .Center = compiled.Center.AddVec((Vec3(f32){ .x = middle.x, .y = middle.y, .z = 0 }).QuatRotate(compiled.Rotation)),
+        .Rotation = compiled.Rotation,
+        .HalfExtents = .{ .x = half.x, .y = half.y, .z = THICKNESS_2D },
+    };
 }
 
 /// Works out which mask each shape is cut by, compiling each mask the first time one of its shapes asks and remembering

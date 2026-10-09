@@ -217,6 +217,8 @@ pub fn aabbIMShape(shape: ShapeData) Aabb {
     return switch (shape.Type) {
         .Quad => aabbIMQuad(shape),
         .Glyph => aabbIMGlyph(shape),
+        //the rectangle its parts lie within
+        .Merge => aabbIMBoxShape(shape),
         .None => Aabb.empty,
     };
 }
@@ -329,6 +331,12 @@ pub fn rayIMGlyph(ray: Ray, glyph: ShapeData) HitInfo {
     var hit = RayIntersect.RayBoxLocal(ShapeLocalPoint(glyph, ray.Origin), ShapeLocalDir(glyph, ray.Dir), .FromVector(glyph.Size));
     if (hit.IsHit()) hit.Normal = ShapeWorldDir(glyph, hit.Normal);
     return hit;
+}
+
+/// The ray against a merge's box, its plate over the rectangle its parts lie within, the same way as rayIMGlyph: where
+/// in the box it is hit decides nothing, its program does (SDFProgram)
+pub fn rayIMMerge(ray: Ray, merge: ShapeData) HitInfo {
+    return rayIMGlyph(ray, merge);
 }
 
 /// A 0 to 1 position within a texture, as the texture manager's UV for that texture's slot.

@@ -100,8 +100,10 @@ const SurfaceHit = struct {
     T: f32,
     Normal: Vec3(f32),
     TextureUV: Vec3(f32),
-    //which surface the hit is shaded with: usually the shape's own, but a quad's border band has its own
+    //which surface the hit is shaded with: usually the shape's own, but a quad's border band has its own. OWN_COLOR for
+    //a merge, whose color at the hit is Color
     ShadingHandle: u32,
+    Color: Vec4(f32) = .{ .x = 0, .y = 0, .z = 0, .w = 0 },
 
     const none: SurfaceHit = .{
         .Found = false,
@@ -126,18 +128,24 @@ fn HitShape(ray: Ray, shape: ShapeData) HitInfo {
     return switch (shape.Type) {
         .Quad => SDFFunc.rayIMQuad(ray, shape),
         .Glyph => SDFFunc.rayIMGlyph(ray, shape),
+        .Merge => SDFFunc.rayIMMerge(ray, shape),
         .None => .miss,
     };
 }
 
-/// Which kind of shape wins an exact tie: a quad before a glyph, the order the march has always taken them in
+/// Which kind of shape wins an exact tie: a quad, then a merge, then a glyph, so text on either stays on top
 fn TieRank(shape_type: ShapeType) u32 {
     return switch (shape_type) {
         .Quad => 0,
-        .Glyph => 1,
-        .None => 2,
+        .Merge => 1,
+        .Glyph => 2,
+        .None => 3,
     };
 }
+
+/// A node's MaterialHandle when its surface color was worked out at the hit and is already in its AccumColor: a merge,
+/// whose color comes from its program, not a surface shading
+const OWN_COLOR: u32 = std.math.maxInt(u32);
 
 /// Where a hit comes along a ray, which settles exact ties too: nearer first, then a quad before a glyph, then the
 /// one drawn first. Draw order is each shape's SurfaceIndex, since surfaces are added in the order shapes are drawn
@@ -300,7 +308,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     .ParentEdge = @intCast(curr_edge_ind),
                     .FirstEdge = NO_EDGE,
                     .MaterialHandle = shading_handle,
-                    .AccumColor = self.mDefaultColor,
+                    .AccumColor = if (shading_handle == OWN_COLOR) surface.Color else self.mDefaultColor,
                     .TextureUV = surface.TextureUV,
                     .ShapeT = surface.Type,
                 };
@@ -315,14 +323,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 //mEdgeCount is the real bound: the stack is popped before each push so it never fills, and
                 //each edge adds exactly one node, so this also keeps mNodeCount <= MAX_NODES
                 if (shading_flags & ShapeData.FLAG_TRANSPARENT != 0 and self.mEdgeCount < MAX_EDGES and !edge_ind_stack.IsFull()) {
-                    const new_node = self.mNodes[new_node_ind];
-                    const material_handle = new_node.MaterialHandle;
-                    const material = self.mSurfShading[material_handle];
-
-                    const texture_color = SampleTexture(new_node.TextureUV, sample_sampler, textures_array);
-                    const material_color = Vec4(f32).FromVector(material.Color);
-                    const color = material_color.MulVec(texture_color); // tint
-                    const alpha = color.w;
+                    const alpha = self.SurfaceColor(self.mNodes[new_node_ind], sample_sampler, textures_array).w;
                     if (alpha < 1.0) {
                         const new_edge_ind = self.GetEdgeIndex();
 
@@ -502,6 +503,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 const shape_dist = switch (shape.Type) {
                     .Quad => SDFFunc.sdIMQuad(point, shape),
                     .Glyph => SDFFunc.sdIMGlyph(point, shape),
+                    .Merge => SDFProgram.sdIMMerge(point, shape, self.mInstrs, self.mParts),
                     .None => continue,
                 };
                 const dist = SDFProgram.Masked(self.mMasks, self.mInstrs, self.mParts, shape.MaskIndex, shape_dist, point);
@@ -598,6 +600,38 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                         .ShadingHandle = fill_handle,
                     };
                 },
+                .Merge => {
+                    const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
+                    if (!self.InMasks(hit_point, shape.MaskIndex)) return .none;
+
+                    //the box only says where it could be: the program says whether it is there, the way a letter's
+                    //coverage does for a glyph
+                    const value = SDFProgram.Eval(self.mInstrs, self.mParts, SDFProgram.MergeRange(shape), hit_point);
+                    if (value.D > 0) return .none;
+
+                    //the band around the whole merged outline is the border's solid color
+                    if (surface.BorderWidth > 0 and value.D > -surface.BorderWidth) {
+                        return .{
+                            .Found = true,
+                            .Shape = shape_ind,
+                            .Type = shape.Type,
+                            .T = hit.T,
+                            .Normal = hit.Normal,
+                            .TextureUV = SDFFunc.UNTEXTURED_UV,
+                            .ShadingHandle = surface.BorderShadingHandle,
+                        };
+                    }
+                    return .{
+                        .Found = true,
+                        .Shape = shape_ind,
+                        .Type = shape.Type,
+                        .T = hit.T,
+                        .Normal = hit.Normal,
+                        .TextureUV = SDFFunc.UNTEXTURED_UV,
+                        .ShadingHandle = OWN_COLOR,
+                        .Color = value.Color,
+                    };
+                },
                 .None => return .none,
             }
         }
@@ -607,13 +641,20 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
             const child_accum = if (curr_node.FirstEdge == NO_EDGE) self.mDefaultColor else self.mEdges[@intCast(curr_node.FirstEdge)].AccumColor;
 
-            const material = self.mSurfShading[curr_node.MaterialHandle];
-            const texture_color = SampleTexture(curr_node.TextureUV, sample_sampler, textures_array);
-            const material_color = Vec4(f32).FromVector(material.Color);
-            const color = material_color.MulVec(texture_color); // tint
+            const color = self.SurfaceColor(curr_node, sample_sampler, textures_array);
             const alpha = color.w;
 
             self.mNodes[node_ind].AccumColor = color.Lerp(child_accum, 1.0 - alpha);
+        }
+
+        /// The color of the surface a node is on, before anything behind it shows through: its surface shading's
+        /// color tinting its texture, or for a merge the color its program gave it at the hit
+        fn SurfaceColor(self: *const Self, node: Node, sample_sampler: anytype, textures_array: textures_array_type) Vec4(f32) {
+            if (node.MaterialHandle == OWN_COLOR) return node.AccumColor;
+            const material = self.mSurfShading[node.MaterialHandle];
+            const texture_color = SampleTexture(node.TextureUV, sample_sampler, textures_array);
+            const material_color = Vec4(f32).FromVector(material.Color);
+            return material_color.MulVec(texture_color); // tint
         }
 
         fn CalcEdgeColor(self: *Self, edge_ind: u32) void {

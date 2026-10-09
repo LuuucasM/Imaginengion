@@ -141,6 +141,8 @@ pub const ShapeType = enum(u32) {
     None = 0,
     Quad,
     Glyph,
+    /// a compound SDF (MergeComponent), 2D: a plate in its root's plane, shaped by its program (SDFProgram)
+    Merge,
 };
 
 pub const ShadingBuffers = struct {
@@ -401,6 +403,8 @@ fn BeginRendering(self: *Renderer, engine_allocator: std.mem.Allocator) !void {
 
 fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeometry.ViewShape, masks: *const ShapeGeometry.ViewMasks) anyerror!void {
     const entity = shape.Entity;
+    //a merge is drawn as one shape for all its parts, whether its root has a shape, a surface or a transform or not
+    if (shape.Merge) return self.mR2D.DrawMerge(engine_context, entity, shape.Canvas, shape.Mask, masks, &self.mSDFShading);
     const transform_component = entity.GetComponent(TransformComponent).?;
 
     //a surface paints whatever the entity has, its shape or its text. a hidden one is skipped here and by picking

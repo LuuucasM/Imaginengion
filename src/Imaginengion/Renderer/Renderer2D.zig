@@ -44,6 +44,7 @@ const ShapeGeometry = @import("ShapeGeometry.zig");
 const ShapeSort = @import("ShapeSort.zig");
 const BVH = @import("../Core/BVH.zig");
 const SDFProgram = @import("SDFProgram.zig");
+const SDFCompiler = @import("SDFCompiler.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 
 const Tracy = @import("../Core/Tracy.zig");
@@ -126,14 +127,14 @@ pub const RenderBuffers = struct {
     mSurfaceBuffer: SSBO = .{},
     mSurfaceBufferBase: std.ArrayList(ShapeSurface) = .empty,
 
-    /// The view's masks (ShapeGeometry.ViewMasks), shared by every shape under each, and their shapes' programs.
-    /// Uploaded as they are: a shape's MaskIndex is into them
+    /// The view's masks (ShapeGeometry.ViewMasks), shared by every shape under each. Uploaded as they are: a shape's
+    /// MaskIndex is into them
     mMaskBuffer: SSBO = .{},
     mMaskBufferBase: std.ArrayList(SDFProgram.MaskData) = .empty,
+    /// Every program this batch runs: the masks' first, as the view made them, then each merge's (DrawMerge)
+    mPrograms: SDFCompiler.Programs = .{},
     mInstrBuffer: SSBO = .{},
-    mInstrBufferBase: std.ArrayList(SDFProgram.Instr) = .empty,
     mPartBuffer: SSBO = .{},
-    mPartBufferBase: std.ArrayList(SDFProgram.Part) = .empty,
 
     /// Each shape's sort key, in the order the shapes were added (ShapeSort). The buffer is uploaded in their sorted
     /// order, which mSortedShapes holds once SortShapes has run
@@ -157,6 +158,7 @@ pub const RenderBuffers = struct {
     /// How many of the shapes are quads and how many glyphs, for the stats
     mQuadCount: usize = 0,
     mGlyphCount: usize = 0,
+    mMergeCount: usize = 0,
 
     pub fn Init(self: *RenderBuffers, engine_context: *EngineContext) !void {
         self.mShapeBuffer.Init(engine_context, @sizeOf(ShapeData) * 100, 2, .Compute);
@@ -183,10 +185,9 @@ pub const RenderBuffers = struct {
 
         self.mMaskBuffer.Deinit(engine_context);
         self.mMaskBufferBase.deinit(engine_context.EngineAllocator());
+        self.mPrograms.Deinit(engine_context.EngineAllocator());
         self.mInstrBuffer.Deinit(engine_context);
-        self.mInstrBufferBase.deinit(engine_context.EngineAllocator());
         self.mPartBuffer.Deinit(engine_context);
-        self.mPartBufferBase.deinit(engine_context.EngineAllocator());
 
         self.mSortEntries.deinit(engine_context.EngineAllocator());
         self.mSortedShapes.deinit(engine_context.EngineAllocator());
@@ -201,8 +202,8 @@ pub const RenderBuffers = struct {
                 self.mShapeBufferBase.clearAndFree(engine_allocator);
                 self.mSurfaceBufferBase.clearAndFree(engine_allocator);
                 self.mMaskBufferBase.clearAndFree(engine_allocator);
-                self.mInstrBufferBase.clearAndFree(engine_allocator);
-                self.mPartBufferBase.clearAndFree(engine_allocator);
+                self.mPrograms.Deinit(engine_allocator);
+                self.mPrograms = .{};
                 self.mSortEntries.clearAndFree(engine_allocator);
                 self.mSortedShapes.clearAndFree(engine_allocator);
                 self.mShapeBounds.clearAndFree(engine_allocator);
@@ -213,8 +214,7 @@ pub const RenderBuffers = struct {
                 self.mShapeBufferBase.clearRetainingCapacity();
                 self.mSurfaceBufferBase.clearRetainingCapacity();
                 self.mMaskBufferBase.clearRetainingCapacity();
-                self.mInstrBufferBase.clearRetainingCapacity();
-                self.mPartBufferBase.clearRetainingCapacity();
+                self.mPrograms.Clear();
                 self.mSortEntries.clearRetainingCapacity();
                 self.mSortedShapes.clearRetainingCapacity();
                 self.mShapeBounds.clearRetainingCapacity();
@@ -224,6 +224,7 @@ pub const RenderBuffers = struct {
         }
         self.mQuadCount = 0;
         self.mGlyphCount = 0;
+        self.mMergeCount = 0;
         self.mDirectCount = 0;
     }
     pub fn SetBuffers(self: *RenderBuffers, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque) !void {
@@ -240,10 +241,10 @@ pub const RenderBuffers = struct {
         //masks and their shapes' programs
         const mask_byte_size = self.mMaskBufferBase.items.len * @sizeOf(SDFProgram.MaskData);
         _ = self.mMaskBuffer.SetData(engine_context, copy_pass, self.mMaskBufferBase.items.ptr, mask_byte_size, 0);
-        const instr_byte_size = self.mInstrBufferBase.items.len * @sizeOf(SDFProgram.Instr);
-        _ = self.mInstrBuffer.SetData(engine_context, copy_pass, self.mInstrBufferBase.items.ptr, instr_byte_size, 0);
-        const part_byte_size = self.mPartBufferBase.items.len * @sizeOf(SDFProgram.Part);
-        _ = self.mPartBuffer.SetData(engine_context, copy_pass, self.mPartBufferBase.items.ptr, part_byte_size, 0);
+        const instrs = self.mPrograms.mInstrs.items;
+        _ = self.mInstrBuffer.SetData(engine_context, copy_pass, instrs.ptr, instrs.len * @sizeOf(SDFProgram.Instr), 0);
+        const parts = self.mPrograms.mParts.items;
+        _ = self.mPartBuffer.SetData(engine_context, copy_pass, parts.ptr, parts.len * @sizeOf(SDFProgram.Part), 0);
 
         //the BVH over the direct shapes, built by SortShapes
         const node_byte_size = self.mBVHNodes.items.len * @sizeOf(BVH.Node);
@@ -251,6 +252,7 @@ pub const RenderBuffers = struct {
         //added to stats: the overlay and game passes each have their own quads and glyphs
         stats.OutputQuadNum += self.mQuadCount;
         stats.OutputGlyphNum += self.mGlyphCount;
+        stats.OutputMergeNum += self.mMergeCount;
     }
     pub fn BindBuffers(self: RenderBuffers, render_pass: *anyopaque) void {
         self.mShapeBuffer.Bind(render_pass);
@@ -318,6 +320,7 @@ pub const RenderBuffers = struct {
         switch (shape.Type) {
             .Quad => self.mQuadCount += 1,
             .Glyph => self.mGlyphCount += 1,
+            .Merge => self.mMergeCount += 1,
             .None => {},
         }
     }
@@ -325,6 +328,8 @@ pub const RenderBuffers = struct {
 
 mGameData: RenderBuffers = .{},
 mOverlayData: RenderBuffers = .{},
+/// The merges already warned about being nested too deep to draw, so each is only warned about once
+mWarnedMerges: std.AutoHashMapUnmanaged(Entity.Type, void) = .empty,
 
 pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
     try self.mGameData.Init(engine_context);
@@ -334,6 +339,7 @@ pub fn Init(self: *Renderer2D, engine_context: *EngineContext) !void {
 pub fn Deinit(self: *Renderer2D, engine_context: *EngineContext) void {
     self.mGameData.Deinit(engine_context);
     self.mOverlayData.Deinit(engine_context);
+    self.mWarnedMerges.deinit(engine_context.EngineAllocator());
 }
 
 pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
@@ -345,9 +351,11 @@ pub fn StartBatch(self: *Renderer2D, engine_allocator: std.mem.Allocator) void {
 /// passes get all of them: a mask only ever cuts shapes in its own layer, and there are few
 pub fn SetMasks(self: *Renderer2D, engine_allocator: std.mem.Allocator, masks: *const ShapeGeometry.ViewMasks) !void {
     for ([_]*RenderBuffers{ &self.mGameData, &self.mOverlayData }) |buffers| {
+        //first, while they are empty, so the masks' program ranges stay right
+        std.debug.assert(buffers.mPrograms.mInstrs.items.len == 0);
         try buffers.mMaskBufferBase.appendSlice(engine_allocator, masks.mMasks.items);
-        try buffers.mInstrBufferBase.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
-        try buffers.mPartBufferBase.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
+        try buffers.mPrograms.mInstrs.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
+        try buffers.mPrograms.mParts.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
     }
 }
 
@@ -440,6 +448,80 @@ pub fn DrawQuad(
         .ShadingHandle = @intCast(shading_handle),
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = box.BorderWidth,
+    }, .{});
+}
+
+/// Draws a merge (MergeComponent) as one shape: compiled into its pass's programs, a plate over the rectangle its parts
+/// lie within, where its program says, painted with its parts' colors. Its root's surface, if it has one, gives its
+/// material and its border, around the whole merged outline
+pub fn DrawMerge(
+    self: *Renderer2D,
+    engine_context: *EngineContext,
+    root: Entity,
+    canvas: ?CanvasTransform, //set for overlay scenes, whose transforms are in canvas units, and drawn in the overlay pass
+    mask: u32, //the mask it is cut by, into `masks`, SDFProgram.NO_MASK for none
+    masks: *const ShapeGeometry.ViewMasks,
+    shading_buff: *ShadingBuffers,
+) !void {
+    const zone = Tracy.ZoneInit("Renderer2D::DrawMerge", @src());
+    defer zone.Deinit();
+    const engine_allocator = engine_context.EngineAllocator();
+
+    const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
+    const compiled = SDFCompiler.Compile(engine_allocator, root, canvas, &buffers.mPrograms) catch |err| switch (err) {
+        error.MergeTooDeep => {
+            const warned = try self.mWarnedMerges.getOrPut(engine_allocator, root.mID);
+            if (!warned.found_existing) std.log.warn("merge on entity {d} isn't drawn: merges subtracted or intersected inside each other need more than {d} stack slots", .{ root.mID, SDFProgram.MAX_STACK });
+            return;
+        },
+        else => return err,
+    };
+    if (compiled.Parts.Count == 0) return;
+
+    const box = ShapeGeometry.MergeBox(compiled);
+    //cut off altogether: nothing to draw, and nothing for every pixel to march past
+    if (masks.CutsOff(mask, box)) return;
+
+    //a root with no surface draws with a plain one
+    var plain = SurfaceComponent{};
+    plain.mTexture.mManager = &engine_context.mAssetManager;
+    const surface = root.GetComponent(SurfaceComponent) orelse &plain;
+    const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
+    const shading_handle = try shading_buff.AddSurface(engine_allocator, &surface.mTexOptions, texture_asset, std.math.maxInt(u32));
+
+    //see-through where any part is
+    var shading_flag: u32 = 0;
+    for (buffers.mPrograms.mParts.items[compiled.Parts.First..][0..compiled.Parts.Count]) |part| {
+        if (part.Color[3] < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+    }
+
+    //the border grows with the root, by its smaller axis, the way a quad's does
+    var border_width: f32 = 0;
+    var border_shading_handle = shading_handle;
+    if (surface.mBorderWidth > 0) {
+        const world_scale = if (root.GetComponent(EntityTransformComponent)) |transform| transform.GetWorldScale() else Vec3(f32){ .x = 1, .y = 1, .z = 1 };
+        border_width = surface.mBorderWidth * @min(world_scale.x, world_scale.y) * if (canvas) |c| c.Scale else 1.0;
+        var border_options: Texture2D.TexOptions = .default;
+        border_options.mColor = surface.mBorderColor;
+        border_shading_handle = try shading_buff.AddSurface(engine_allocator, &border_options, texture_asset, std.math.maxInt(u32));
+        if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+    }
+
+    const axes = ShapeAxes(box.Center, box.Rotation);
+    try buffers.AddShape(engine_allocator, .{
+        .AxisX = axes[0],
+        .AxisY = axes[1],
+        .AxisZ = axes[2],
+        .Size = box.HalfExtents.ToArray(),
+        .Params = SDFProgram.MergeParams(compiled.Range),
+        .Type = .Merge,
+        .MaskIndex = mask,
+        .SurfaceIndex = undefined,
+        .Flags = shading_flag,
+    }, .{
+        .ShadingHandle = @intCast(shading_handle),
+        .BorderShadingHandle = @intCast(border_shading_handle),
+        .BorderWidth = border_width,
     }, .{});
 }
 

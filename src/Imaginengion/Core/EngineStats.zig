@@ -23,12 +23,14 @@ pub const RenderStats = struct {
     TotalObjects: usize = 0,
     OutputQuadNum: usize = 0,
     OutputGlyphNum: usize = 0,
+    OutputMergeNum: usize = 0,
     Shadings: ShadingStats = .{},
 
     pub fn ResetStats(self: *RenderStats) void {
         self.TotalObjects = 0;
         self.OutputQuadNum = 0;
         self.OutputGlyphNum = 0;
+        self.OutputMergeNum = 0;
         self.Shadings.ResetStats();
     }
 
@@ -150,6 +152,7 @@ fn PlotWorld(comptime prefix: [:0]const u8, stats: WorldStats, world: *WorldMana
     Tracy.Plot(prefix ++ "/Render Objects", .{ .color = 0x2196F3 }, stats.mRenderStats.TotalObjects);
     Tracy.Plot(prefix ++ "/Quads", .{ .color = 0x03A9F4 }, stats.mRenderStats.OutputQuadNum);
     Tracy.Plot(prefix ++ "/Glyphs", .{ .color = 0x00BCD4 }, stats.mRenderStats.OutputGlyphNum);
+    Tracy.Plot(prefix ++ "/Merges", .{ .color = 0x26A69A }, stats.mRenderStats.OutputMergeNum);
     Tracy.Plot(prefix ++ "/Shadings", .{ .color = 0xFF9800 }, stats.mRenderStats.Shadings.TotalShadings);
 }
 

@@ -363,6 +363,39 @@ test "a subtract mask keeps what is outside it, and a mask with no shape leaves 
     try std.testing.expect(!view.Masks.CutsOff(mask, far));
 }
 
+test "a merge is gathered once, as its root, in place of its parts, but not text or a game object of its own under it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+
+    //a merge root with no shape or surface, two parts (one under a merge of its own), a label and a held game object
+    const root = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try root.AddComponent(engine_context, EntityComponents.MergeComponent{});
+    const part = try QuadAt(engine_context, root, .{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
+    const inner = try QuadAt(engine_context, root, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
+    _ = try inner.AddComponent(engine_context, EntityComponents.MergeComponent{});
+    const inner_part = try QuadAt(engine_context, inner, .{ .x = 1, .y = 0, .z = 0 }, .{ .x = 1, .y = 1 });
+    const label = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try label.AddComponent(engine_context, EntityComponents.TextComponent{});
+    _ = try label.AddComponent(engine_context, SurfaceComponent{});
+    const held = try QuadAt(engine_context, part, .{ .x = 0, .y = 2, .z = 0 }, .{ .x = 1, .y = 1 });
+    _ = try held.AddComponent(engine_context, EntityComponents.MainObjectComponent{});
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    const shapes = try Gather(engine_context, .{ .Overlays = &.{} });
+    try std.testing.expectEqual(@as(usize, 3), shapes.len);
+    try std.testing.expect(Find(shapes, root).Merge);
+    try std.testing.expect(!Find(shapes, label).Merge);
+    try std.testing.expect(!Find(shapes, held).Merge);
+    for ([_]Entity{ part, inner, inner_part }) |merged| try std.testing.expect(!Contains(shapes, merged));
+
+    //a collider on a part is still its own
+    _ = try part.AddComponent(engine_context, ColliderComponent{});
+    const colliders = try ShapeGeometry.GatherViewShapes(engine_context.FrameAllocator(), &engine_context.mEditorWorld, VIEW, .{ .Overlays = &.{} }, .{ .Component = ColliderComponent });
+    try std.testing.expectEqual(part.mID, colliders.Shapes.items[0].Entity.mID);
+}
+
 test "a box is only cut off by a mask's quad when none of it reaches into it, through any depth" {
     const identity = Quat(f32){ .w = 1, .x = 0, .y = 0, .z = 0 };
     const Box = ShapeGeometry.Box;

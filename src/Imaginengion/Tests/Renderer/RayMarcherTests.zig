@@ -137,25 +137,66 @@ fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, flags: u32)
     };
 }
 
-/// The masks a scene's shapes are cut by, each a quad facing the camera: the program of each is its one quad
-const TestMasks = struct {
-    const MAX = 4;
+/// The programs (SDFProgram) a scene's masks and merges run, and its masks: each mask a quad facing the camera, its
+/// program that one quad
+const TestPrograms = struct {
+    const MAX = 16;
     Masks: [MAX]MaskData = undefined,
     Instrs: [MAX]SDFProgram.Instr = undefined,
     Parts: [MAX]SDFProgram.Part = undefined,
-    Count: u32 = 0,
+    MaskCount: u32 = 0,
+    InstrCount: u32 = 0,
+    PartCount: u32 = 0,
 
     /// Adds a mask of a `half` sized quad at `center`, which does `op`, inside mask `parent`. Returns its index
-    fn Add(self: *TestMasks, center: Vec3(f32), half: Vec2(f32), op: SDFProgram.MaskOp, parent: u32) u32 {
-        const ind = self.Count;
-        const axes = Renderer2D.ShapeAxes(center, IDENTITY);
-        self.Parts[ind] = .{ .AxisX = axes[0], .AxisY = axes[1], .AxisZ = axes[2], .Size = half.ToArray(), .Kind = .Quad, .Params = .{ 0, 0, 0, 0 }, .Color = .{ 0, 0, 0, 0 } };
-        self.Instrs[ind] = .{ .Code = .Shape, .Part = ind };
-        self.Masks[ind] = .{ .First = ind, .Count = 1, .Op = op, .Parent = parent };
-        self.Count += 1;
+    fn Add(self: *TestPrograms, center: Vec3(f32), half: Vec2(f32), op: SDFProgram.MaskOp, parent: u32) u32 {
+        const first = self.InstrCount;
+        self.Push(.{ .Code = .Shape, .Part = self.AddPart(center, half, 0, WHITE) });
+        const ind = self.MaskCount;
+        self.Masks[ind] = .{ .First = first, .Count = 1, .Op = op, .Parent = parent };
+        self.MaskCount += 1;
         return ind;
     }
+
+    /// Adds a part, a quad facing the camera, `half` sized at `center`, its corners rounded by `radius`
+    fn AddPart(self: *TestPrograms, center: Vec3(f32), half: Vec2(f32), radius: f32, color: Vec4(f32)) u32 {
+        const ind = self.PartCount;
+        const axes = Renderer2D.ShapeAxes(center, IDENTITY);
+        self.Parts[ind] = .{ .AxisX = axes[0], .AxisY = axes[1], .AxisZ = axes[2], .Size = half.ToArray(), .Kind = .Quad, .Params = .{ radius, radius, radius, radius }, .Color = color.ToArray() };
+        self.PartCount += 1;
+        return ind;
+    }
+
+    fn Push(self: *TestPrograms, instr: SDFProgram.Instr) void {
+        self.Instrs[self.InstrCount] = instr;
+        self.InstrCount += 1;
+    }
+
+    /// The instructions pushed since `first`, as a program
+    fn Since(self: *const TestPrograms, first: u32) SDFProgram.Range {
+        return .{ .First = first, .Count = self.InstrCount - first };
+    }
 };
+
+/// A merge facing the camera over the box `center` +- `half`, running `range` of the scene's programs. `shading` is its
+/// border's, which is only seen within `border_width` of its outline
+fn MakeMerge(center: Vec3(f32), half: Vec2(f32), range: SDFProgram.Range, shading: u32, border_width: f32, flags: u32, mask_index: u32) TestShape {
+    const axes = Renderer2D.ShapeAxes(center, IDENTITY);
+    return .{
+        .Shape = .{
+            .AxisX = axes[0],
+            .AxisY = axes[1],
+            .AxisZ = axes[2],
+            .Size = .{ half.x, half.y, SDFFunc.THICKNESS_2D },
+            .Params = SDFProgram.MergeParams(range),
+            .Type = .Merge,
+            .MaskIndex = mask_index,
+            .SurfaceIndex = undefined,
+            .Flags = flags,
+        },
+        .Surface = .{ .ShadingHandle = shading, .BorderShadingHandle = shading, .BorderWidth = border_width },
+    };
+}
 
 const TRANSPARENT = ShapeData.FLAG_TRANSPARENT;
 
@@ -164,7 +205,7 @@ const CLEAR_MEDIUM = MedShadingData{ .Color = .{ 0, 0, 0, 0 }, .Absorption = .{ 
 
 const TestScene = struct {
     Shapes: []const TestShape = &.{},
-    Masks: TestMasks = .{},
+    Programs: TestPrograms = .{},
     Shadings: []const SurfShadingData,
     //by an edge's MaterialHandle, which is always 0 so far
     Mediums: []const MedShadingData = &.{CLEAR_MEDIUM},
@@ -274,9 +315,9 @@ fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search:
         .mShapesCount = scene.Shapes.len,
         .mDirectCount = direct_count,
         .mBVHNodes = bvh_nodes.items.ptr,
-        .mMasks = &scene.Masks.Masks,
-        .mInstrs = &scene.Masks.Instrs,
-        .mParts = &scene.Masks.Parts,
+        .mMasks = &scene.Programs.Masks,
+        .mInstrs = &scene.Programs.Instrs,
+        .mParts = &scene.Programs.Parts,
         .mSurfShading = scene.Shadings.ptr,
         .mMedShading = scene.Mediums.ptr,
         .mPerspectiveFar = FAR,
@@ -494,13 +535,13 @@ test "a quad without the see-through flag hides what is behind it, even with a s
 test "a masked quad is only drawn inside its mask, and the ray goes on past the rest" {
     //the red quad is cut to its left half, the blue one behind it isn't cut at all
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
-    var masks = TestMasks{};
+    var masks = TestPrograms{};
     const mask = masks.Add(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1, .y = 2 }, .Intersect, NO_MASK);
     const shapes = [_]TestShape{
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, mask),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
     };
-    const scene = TestScene{ .Shapes = &shapes, .Masks = masks, .Shadings = &shadings };
+    const scene = TestScene{ .Shapes = &shapes, .Programs = masks, .Shadings = &shadings };
     try ExpectColor(RED, try Trace(scene, RayAt(-0.5, 0)));
     try ExpectColor(BLUE, try Trace(scene, RayAt(0.5, 0)));
 }
@@ -508,17 +549,85 @@ test "a masked quad is only drawn inside its mask, and the ray goes on past the 
 test "a subtract mask cuts a hole the ray goes through, and a mask inside it cuts too" {
     //a hole in the middle of the red quad, and the whole thing cut to above y = -0.5 by the mask around the hole
     const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
-    var masks = TestMasks{};
+    var masks = TestPrograms{};
     const outer = masks.Add(.{ .x = 0, .y = 1, .z = 0 }, .{ .x = 2, .y = 1.5 }, .Intersect, NO_MASK);
     const hole = masks.Add(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.25, .y = 0.25 }, .Subtract, outer);
     const shapes = [_]TestShape{
         MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, hole),
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
     };
-    const scene = TestScene{ .Shapes = &shapes, .Masks = masks, .Shadings = &shadings };
+    const scene = TestScene{ .Shapes = &shapes, .Programs = masks, .Shadings = &shadings };
     try ExpectColor(BLUE, try Trace(scene, RayAt(0, 0)));
     try ExpectColor(RED, try Trace(scene, RayAt(0.5, 0)));
     try ExpectColor(BLUE, try Trace(scene, RayAt(0.5, -0.75)));
+}
+
+//==================================merges==================================
+
+/// A red quad 2 wide with a square hole half a unit wide cut in its middle, as a merge's program in `programs`
+fn HoledMerge(programs: *TestPrograms, z: f32) SDFProgram.Range {
+    const first = programs.InstrCount;
+    programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(.{ .x = 0, .y = 0, .z = z }, .{ .x = 1, .y = 1 }, 0, RED) });
+    programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(.{ .x = 0, .y = 0, .z = z }, .{ .x = 0.25, .y = 0.25 }, 0, WHITE) });
+    programs.Push(.{ .Code = .Subtract });
+    return programs.Since(first);
+}
+
+test "a merge is drawn where its program says, in its parts' color, and the ray goes on through its holes" {
+    const shadings = [_]SurfShadingData{ ColorShading(GREEN), ColorShading(BLUE) };
+    var programs = TestPrograms{};
+    const range = HoledMerge(&programs, 1);
+    const shapes = [_]TestShape{
+        MakeMerge(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 1, .y = 1 }, range, 0, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Programs = programs, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(0.5, 0.5)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(1.5, 0)));
+}
+
+test "where two parts tie in a smooth union a merge is half each color, and its border goes round the whole outline" {
+    const shadings = [_]SurfShadingData{ColorShading(GREEN)};
+    var programs = TestPrograms{};
+    //a red square left of the middle, a blue one right of it, both 1.2 wide: the middle is 0.4 from each, filled in. The
+    //blend reaches to where they are 4 times the smoothness apart, so each square's middle is all its own color
+    const first = programs.InstrCount;
+    programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 0.6, .y = 0.6 }, 0, RED) });
+    programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(.{ .x = 1, .y = 0, .z = 0 }, .{ .x = 0.6, .y = 0.6 }, 0, BLUE) });
+    programs.Push(.{ .Code = .Union, .Smoothness = 0.5 });
+    const shapes = [_]TestShape{MakeMerge(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 2.5, .y = 1.5 }, programs.Since(first), 0, 0.1, 0, NO_MASK)};
+    const scene = TestScene{ .Shapes = &shapes, .Programs = programs, .Shadings = &shadings };
+    try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 1 }, try Trace(scene, RayAt(0, 0)));
+    try ExpectColor(RED, try Trace(scene, RayAt(-1, 0)));
+    //just inside the left square's far edge: the border
+    try ExpectColor(GREEN, try Trace(scene, RayAt(-1.55, 0)));
+}
+
+test "a masked merge is cut by its mask, and a see-through one shows what is behind it" {
+    const shadings = [_]SurfShadingData{ ColorShading(GREEN), ColorShading(BLUE) };
+    var programs = TestPrograms{};
+    const range = HoledMerge(&programs, 1);
+    const left_half = programs.Add(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1, .y = 2 }, .Intersect, NO_MASK);
+    const shapes = [_]TestShape{
+        MakeMerge(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 1, .y = 1 }, range, 0, 0, 0, left_half),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Programs = programs, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(-0.5, 0.5)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.5, 0.5)));
+
+    //the same merge painted half see-through red
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    var see_through = TestPrograms{};
+    const see_through_range = HoledMerge(&see_through, 1);
+    see_through.Parts[0].Color = half_red.ToArray();
+    const see_through_shapes = [_]TestShape{
+        MakeMerge(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 1, .y = 1 }, see_through_range, 0, 0, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 2, .y = 2 }, 1, 0, NO_MASK),
+    };
+    const see_through_scene = TestScene{ .Shapes = &see_through_shapes, .Programs = see_through, .Shadings = &shadings };
+    try ExpectColor(half_red.Lerp(BLUE, 0.5), try Trace(see_through_scene, RayAt(0.5, 0.5)));
 }
 
 test "a glyph is drawn where its letter covers it, and the ray goes through its gaps" {
@@ -662,7 +771,7 @@ test "walking the BVH finds the same color as testing every shape, on random sce
         Shading(WHITE, ATLAS_HANDLE, 6),
         Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
     };
-    var masks = TestMasks{};
+    var masks = TestPrograms{};
     _ = masks.Add(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 3 }, .Intersect, NO_MASK);
     _ = masks.Add(.{ .x = 1, .y = 1, .z = 0 }, .{ .x = 2, .y = 1 }, .Intersect, NO_MASK);
     //a hole in the second one
@@ -700,7 +809,17 @@ test "walking the BVH finds the same color as testing every shape, on random sce
             };
             shape.* = MakeRoundedQuad(center, rotation, half, radius, shading, flags, mask_index);
         }
-        const scene = TestScene{ .Shapes = shapes[0..count], .Masks = masks, .Shadings = &shadings };
+        //and a merge somewhere: two rounded parts joined smoothly, with a hole between them
+        var programs = masks;
+        const merge_center = Vec3(f32){ .x = random.float(f32) * 6 - 3, .y = random.float(f32) * 6 - 3, .z = @floatFromInt(random.uintLessThan(u32, 2)) };
+        const first = programs.InstrCount;
+        programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(merge_center.AddVec(.{ .x = -0.4, .y = 0, .z = 0 }), .{ .x = 0.3, .y = 0.3 }, 0.1, RED) });
+        programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(merge_center.AddVec(.{ .x = 0.4, .y = 0, .z = 0 }), .{ .x = 0.3, .y = 0.3 }, 0.1, GREEN) });
+        programs.Push(.{ .Code = .Union, .Smoothness = 0.2 });
+        programs.Push(.{ .Code = .Shape, .Part = programs.AddPart(merge_center, .{ .x = 0.1, .y = 0.1 }, 0, WHITE) });
+        programs.Push(.{ .Code = .Subtract });
+        shapes[0] = MakeMerge(merge_center, .{ .x = 0.9, .y = 0.5 }, programs.Since(first), 1, 0.05, 0, if (random.boolean()) 0 else NO_MASK);
+        const scene = TestScene{ .Shapes = shapes[0..count], .Programs = programs, .Shadings = &shadings };
 
         for (0..100) |_| {
             const origin = Vec3(f32){ .x = random.float(f32) * 8 - 4, .y = random.float(f32) * 8 - 4, .z = 10 };

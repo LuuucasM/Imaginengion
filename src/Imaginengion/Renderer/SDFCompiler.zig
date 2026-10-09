@@ -16,6 +16,9 @@ const ShapeAxes = @import("Renderer2D.zig").ShapeAxes;
 const CanvasTransform = @import("../Math/OverlayCanvas.zig").CanvasTransform;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
+const Vec3 = MathTypes.Vec3;
+const Vec2 = MathTypes.Vec2;
+const Quat = MathTypes.Quat;
 const Entity = @import("../ECSObjects/Entity.zig");
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
@@ -48,10 +51,20 @@ pub const Programs = struct {
     }
 };
 
-/// A compiled merge: where its program is, and how many stack slots it needs
+/// A compiled merge: where its program is, how many stack slots it needs, where its parts are, and the rectangle in its
+/// root's plane it can reach
 pub const Compiled = struct {
     Range: SDFProgram.Range,
     Depth: u32,
+    /// its parts, in the programs' parts
+    Parts: SDFProgram.Range,
+    /// the merge root's plane in the world: its place and turn, placed by the canvas for an overlay one
+    Center: Vec3(f32),
+    Rotation: Quat(f32),
+    /// the rectangle in that plane, in the root's own x and y, that every part lies within, grown by the smoothest join
+    /// since a smooth union can push the surface out by up to its smoothness. Min past Max when there are no parts
+    Min: Vec2(f32),
+    Max: Vec2(f32),
 };
 
 /// The color a part with no surface of its own is given when its merge root has none either
@@ -73,7 +86,7 @@ pub fn Compile(allocator: std.mem.Allocator, root: Entity, canvas: ?CanvasTransf
     const level = try compiler.CompileLevel(root, DEFAULT_COLOR);
     const first: u32 = @intCast(programs.mInstrs.items.len);
     try programs.mInstrs.appendSlice(allocator, level.Code.items);
-    return .{ .Range = .{ .First = first, .Count = @intCast(level.Code.items.len) }, .Depth = level.Depth };
+    return compiler.Finish(root, .{ .First = first, .Count = @intCast(level.Code.items.len) }, level.Depth, @intCast(parts_before));
 }
 
 /// Compiles just `entity`'s own shape onto the end of `programs`, a program of one part: what a mask (MaskComponent)
@@ -84,7 +97,7 @@ pub fn CompileShape(allocator: std.mem.Allocator, entity: Entity, canvas: ?Canva
     const part_ind = try compiler.AddPart(entity, DEFAULT_COLOR) orelse return null;
     const first: u32 = @intCast(programs.mInstrs.items.len);
     try programs.mInstrs.append(allocator, .{ .Code = .Shape, .Part = part_ind });
-    return .{ .Range = .{ .First = first, .Count = 1 }, .Depth = 1 };
+    return compiler.Finish(entity, .{ .First = first, .Count = 1 }, 1, part_ind);
 }
 
 /// One thing a level joins: a part, or a merge below it in brackets, as the code that pushes it
@@ -106,6 +119,59 @@ const Compiler = struct {
     mTemp: std.mem.Allocator,
     mCanvas: ?CanvasTransform,
     mPrograms: *Programs,
+    //the smoothest join so far, in world units: how far past its parts the merge can reach
+    mMaxSmoothness: f32 = 0,
+
+    /// The compiled program's place, and the plane and rectangle its parts (from `first_part` on) lie within
+    fn Finish(self: *Compiler, root: Entity, range: SDFProgram.Range, depth: u32, first_part: u32) Compiled {
+        const transform = root.GetComponent(TransformComponent);
+        var center = if (transform) |found| found.GetWorldPosition() else Vec3(f32){ .x = 0, .y = 0, .z = 0 };
+        var rotation = if (transform) |found| found.GetWorldRotation() else Quat(f32){ .w = 1, .x = 0, .y = 0, .z = 0 };
+        if (self.mCanvas) |c| {
+            center = c.ToWorldPoint(center);
+            rotation = c.ToWorldRotation(rotation);
+        }
+
+        //each part's corners in the root's plane: its own x and y axes are the rows of its axes, unit length
+        const plane = ShapeAxes(center, rotation);
+        const big = std.math.floatMax(f32);
+        var min = Vec2(f32){ .x = big, .y = big };
+        var max = Vec2(f32){ .x = -big, .y = -big };
+        const parts = self.mPrograms.mParts.items[first_part..];
+        for (parts) |part| {
+            const axis_x: Vec4(f32) = .FromArray(part.AxisX);
+            const axis_y: Vec4(f32) = .FromArray(part.AxisY);
+            const axis_z: Vec4(f32) = .FromArray(part.AxisZ);
+            const part_center = axis_x.ToVec3().MulScalar(-axis_x.w).AddVec(axis_y.ToVec3().MulScalar(-axis_y.w)).AddVec(axis_z.ToVec3().MulScalar(-axis_z.w));
+            const reach_x = axis_x.ToVec3().MulScalar(part.Size[0]);
+            const reach_y = axis_y.ToVec3().MulScalar(part.Size[1]);
+            for ([_]f32{ -1, 1 }) |sx| {
+                for ([_]f32{ -1, 1 }) |sy| {
+                    const corner = part_center.AddVec(reach_x.MulScalar(sx)).AddVec(reach_y.MulScalar(sy));
+                    const local = Vec2(f32){
+                        .x = Vec4(f32).FromArray(plane[0]).ToVec3().Dot(corner) + plane[0][3],
+                        .y = Vec4(f32).FromArray(plane[1]).ToVec3().Dot(corner) + plane[1][3],
+                    };
+                    min = .{ .x = @min(min.x, local.x), .y = @min(min.y, local.y) };
+                    max = .{ .x = @max(max.x, local.x), .y = @max(max.y, local.y) };
+                }
+            }
+        }
+        if (parts.len > 0) {
+            min = min.SubVec(.{ .x = self.mMaxSmoothness, .y = self.mMaxSmoothness });
+            max = max.AddVec(.{ .x = self.mMaxSmoothness, .y = self.mMaxSmoothness });
+        }
+
+        return .{
+            .Range = range,
+            .Depth = depth,
+            .Parts = .{ .First = first_part, .Count = @intCast(parts.len) },
+            .Center = center,
+            .Rotation = rotation,
+            .Min = min,
+            .Max = max,
+        };
+    }
 
     /// The code for one level, rooted at `root`. `inherited` is the color its parts take when neither they nor the root
     /// have a surface. A merge below it is compiled by calling this again, so it goes as deep as merges are put in
@@ -170,6 +236,7 @@ const Compiler = struct {
         try level.Code.appendSlice(self.mTemp, operand.Code.items);
         try level.Code.append(self.mTemp, .{ .Code = code, .Smoothness = operand.Smoothness });
         level.Depth = @max(level.Depth, operand.Depth + 1);
+        self.mMaxSmoothness = @max(self.mMaxSmoothness, operand.Smoothness);
     }
 
     /// `entity` as a part: a Shape instruction for it, with its part added to the programs. Null if it has no shape or

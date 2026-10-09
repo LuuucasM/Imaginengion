@@ -16,6 +16,7 @@ const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;
 const SDFFunctions = @import("../Math/SDFFunctions.zig");
 const GPUAsserts = @import("../Core/GPUAsserts.zig");
+const ShapeData = @import("Renderer2D.zig").ShapeData;
 
 const is_spirv = builtin.target.cpu.arch.isSpirV();
 
@@ -183,6 +184,27 @@ pub fn Masked(masks: anytype, instrs: anytype, parts: anytype, mask_ind: u32, di
         ind = mask.Parent;
     }
     return masked;
+}
+
+//==================================merges==================================
+
+/// A merge's program range as its ShapeData keeps it: First's and Count's bits in Params x and y
+pub fn MergeParams(range: Range) [4]f32 {
+    return .{ @bitCast(range.First), @bitCast(range.Count), 0, 0 };
+}
+
+/// The program range a merge's ShapeData keeps in its Params (MergeParams)
+pub fn MergeRange(merge: ShapeData) Range {
+    const params: Vec4(f32) = .FromVector(merge.Params);
+    return .{ .First = @bitCast(params.x), .Count = @bitCast(params.y) };
+}
+
+/// A merge's distance as a plate: its program's 2D distance given its plate's thickness, the way a quad is its rounded
+/// rectangle given its. What a march steps by
+pub fn sdIMMerge(point: Vec3(f32), merge: ShapeData, instrs: anytype, parts: anytype) f32 {
+    const local = SDFFunctions.ShapeLocalPoint(merge, point);
+    const distance_2d = Eval(instrs, parts, MergeRange(merge), point).D;
+    return SDFFunctions.opExtrusion(local, distance_2d, Vec3(f32).FromVector(merge.Size).z);
 }
 
 /// A part's 2D distance at a point, measured in the part's own plane

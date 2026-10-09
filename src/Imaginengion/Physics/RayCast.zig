@@ -18,6 +18,8 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const TransformComponent = EntityComponents.TransformComponent;
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
+const SDFCompiler = @import("../Renderer/SDFCompiler.zig");
+const SDFProgram = @import("../Renderer/SDFProgram.zig");
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
 const TextAsset = @import("../ECSComponents/AComponents.zig").TextAsset;
@@ -27,6 +29,8 @@ pub const RayHitKind = enum {
     Quad,
     Text,
     Collider,
+    /// a merge (MergeComponent): the entity is its root, whichever part was clicked
+    Merge,
 };
 
 /// A ray hitting one of an entity's shapes. No hit is a null ?RayHit, never a half filled one.
@@ -94,9 +98,28 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
 
                 const entity = shape.Entity;
                 const canvas = shape.Canvas;
-                const transform = entity.GetComponent(TransformComponent) orelse continue;
                 const best = if (canvas != null) &best_overlay else &best_game;
                 const far = if (canvas != null) OverlayCanvas.FAR_DISTANCE else camera_view.FarDistance;
+
+                //compiled the way the renderer does, its box hit the way the renderer hits it, then its program at the
+                //hit says whether it is there
+                if (shape.Merge) {
+                    var programs: SDFCompiler.Programs = .{};
+                    const compiled = SDFCompiler.Compile(frame_allocator, entity, canvas, &programs) catch |err| switch (err) {
+                        error.MergeTooDeep => continue,
+                        else => return err,
+                    };
+                    if (compiled.Parts.Count == 0) continue;
+                    const box = ShapeGeometry.MergeBox(compiled);
+                    const hit = RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents);
+                    if (!hit.IsHit()) continue;
+                    const point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
+                    if (SDFProgram.Eval(programs.mInstrs.items, programs.mParts.items, compiled.Range, point).D > 0) continue;
+                    if (InMasks(&view.Masks, shape.Mask, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Merge }, hit, far, options.SkipStartedInside);
+                    continue;
+                }
+
+                const transform = entity.GetComponent(TransformComponent) orelse continue;
 
                 //what isn't drawn can't be clicked
                 const surface = entity.GetComponent(SurfaceComponent) orelse continue;

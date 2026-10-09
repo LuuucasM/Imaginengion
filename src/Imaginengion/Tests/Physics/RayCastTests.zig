@@ -404,6 +404,46 @@ test "a click in the hole a subtract mask cuts, or past a rounded mask's corner,
     try ExpectEntity(holed, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 22, .y = 0, .z = 0 }, .Dir = down }, .{}));
 }
 
+test "a merge is clicked as its root where its program says, its holes and what its mask cuts off go through" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    //an invisible mask from x -2 to 1, and under it a merge with no shape of its own: two 1 x 1 quads 2 apart joined
+    //smoothly enough to fill the gap between them, and a hole cut in the left one
+    const mask = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try mask.SetTranslation(engine_context, .{ .x = -0.5, .y = 0, .z = -10 });
+    _ = try mask.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 3, .y = 4 } }));
+    _ = try mask.AddComponent(engine_context, EntityComponents.MaskComponent{});
+    const root = try mask.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try root.SetTranslation(engine_context, .{ .x = 0.5, .y = 0, .z = 0 });
+    _ = try root.AddComponent(engine_context, EntityComponents.MergeComponent{});
+    for ([_]f32{ -1, 1 }) |x| {
+        const part = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+        try part.SetTranslation(engine_context, .{ .x = x, .y = 0, .z = 0 });
+        _ = try part.AddComponent(engine_context, ShapeComponent{});
+        _ = try part.AddComponent(engine_context, SurfaceComponent{});
+        _ = try part.AddComponent(engine_context, EntityComponents.CombineOpComponent{ .mSmoothness = 1 });
+    }
+    const hole = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try hole.SetTranslation(engine_context, .{ .x = -1, .y = 0, .z = 0 });
+    _ = try hole.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 0.4, .y = 0.4 } }));
+    _ = try hole.AddComponent(engine_context, EntityComponents.CombineOpComponent{ .mOp = .Subtract });
+    const behind = try AddQuad(engine_context, scene, .{ .x = 0, .y = 0, .z = -20 }, .{ .x = 100, .y = 100 });
+    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
+
+    const down = Vec3(f32){ .x = 0, .y = 0, .z = -1 };
+    //a part, and the filled in gap between the two: the root either way
+    try ExpectEntity(root, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = -0.3, .y = 0, .z = 0 }, .Dir = down }, .{}));
+    try ExpectEntity(root, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 0.5, .y = 0, .z = 0 }, .Dir = down }, .{}));
+    //the hole, and the right part past the mask's edge
+    try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = -1, .y = 0, .z = 0 }, .Dir = down }, .{}));
+    try ExpectEntity(behind, try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 1.3, .y = 0, .z = 0 }, .Dir = down }, .{}));
+    const hit = (try Cast(engine_context, ORIGIN_POSE, .{ .Origin = .{ .x = 0.5, .y = 0, .z = 0 }, .Dir = down }, .{})).?;
+    try std.testing.expectEqual(RayCast.RayHitKind.Merge, hit.Kind);
+}
+
 test "corner radii and borders grow with the quad's smaller axis and stay within half its smaller side" {
     var transform: TransformComponent = .{};
     transform.SetWorldScale(.{ .x = 3, .y = 2, .z = 1 });
