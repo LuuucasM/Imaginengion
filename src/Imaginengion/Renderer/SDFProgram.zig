@@ -63,11 +63,11 @@ pub const Part = extern struct {
     //a quad's half width and height, in world units
     Size: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     Kind: PartKind,
-    _Pad: u32 = 0,
+    //the surface shading it is painted with (Renderer.SurfShadingData), the way a quad's surface is: its tint and
+    //texture. Filled in by whoever draws the merge, unused by a mask
+    Shading: u32 = 0,
     //a quad's corner radii, in world units, in SDFFunctions' order
     Params: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT align(16),
-    //its surface's color
-    Color: if (is_spirv) Vec4(f32).VectorT else Vec4(f32).ArrayT,
 };
 
 comptime {
@@ -87,9 +87,19 @@ pub const Value = struct {
     Color: Vec4(f32),
 };
 
+/// A colorer for Eval that colors nothing, for when only the distance is wanted: masks, marching, picking
+pub const NoColor = struct {
+    pub fn Color(_: NoColor, _: u32, _: Part, _: Vec3(f32), _: void, _: void) Vec4(f32) {
+        return .{ .x = 0, .y = 0, .z = 0, .w = 0 };
+    }
+};
+
 /// Runs the program in `range` of `instrs` at `point`, a world point in the merge root's plane. `instrs` and `parts`
-/// are anything indexed like an array of Instr and of Part: slices on the CPU, storage buffers on the GPU
-pub fn Eval(instrs: anytype, parts: anytype, range: Range, point: Vec3(f32)) Value {
+/// are anything indexed like an array of Instr and of Part: slices on the CPU, storage buffers on the GPU. `colorer`
+/// says each part's color at the point, `colorer.Color(part_index, part, point, shadings, textures)`, and the ops blend
+/// them; NoColor (with `{}` for both) when only the distance is wanted. What a colorer reads is passed alongside it
+/// rather than kept in it: Vulkan won't have a pointer inside a struct, so a colorer holds nothing
+pub fn Eval(instrs: anytype, parts: anytype, range: Range, point: Vec3(f32), colorer: anytype, shadings: anytype, textures: anytype) Value {
     var stack: [MAX_STACK]Value = undefined;
     var top: u32 = 0;
     for (range.First..range.First + range.Count) |i| {
@@ -97,7 +107,7 @@ pub fn Eval(instrs: anytype, parts: anytype, range: Range, point: Vec3(f32)) Val
         switch (instr.Code) {
             .Shape => {
                 const part: Part = parts[instr.Part];
-                stack[top] = .{ .D = PartDistance(part, point), .Color = .FromVector(part.Color) };
+                stack[top] = .{ .D = PartDistance(part, point), .Color = colorer.Color(instr.Part, part, point, shadings, textures) };
                 top += 1;
             },
             .Empty => {
@@ -158,7 +168,7 @@ pub fn InMasks(masks: anytype, instrs: anytype, parts: anytype, mask_ind: u32, p
     var ind = mask_ind;
     while (ind != NO_MASK) {
         const mask: MaskData = masks[ind];
-        const distance = Eval(instrs, parts, .{ .First = mask.First, .Count = mask.Count }, point).D;
+        const distance = Eval(instrs, parts, .{ .First = mask.First, .Count = mask.Count }, point, NoColor{}, {}, {}).D;
         const kept = switch (mask.Op) {
             .Intersect => distance <= 0,
             .Subtract => distance > 0,
@@ -176,7 +186,7 @@ pub fn Masked(masks: anytype, instrs: anytype, parts: anytype, mask_ind: u32, di
     var ind = mask_ind;
     while (ind != NO_MASK) {
         const mask: MaskData = masks[ind];
-        const mask_distance = Eval(instrs, parts, .{ .First = mask.First, .Count = mask.Count }, point).D;
+        const mask_distance = Eval(instrs, parts, .{ .First = mask.First, .Count = mask.Count }, point, NoColor{}, {}, {}).D;
         masked = switch (mask.Op) {
             .Intersect => SDFFunctions.opIntersection(masked, mask_distance),
             .Subtract => SDFFunctions.opSubtraction(masked, mask_distance),
@@ -203,18 +213,35 @@ pub fn MergeRange(merge: ShapeData) Range {
 /// rectangle given its. What a march steps by
 pub fn sdIMMerge(point: Vec3(f32), merge: ShapeData, instrs: anytype, parts: anytype) f32 {
     const local = SDFFunctions.ShapeLocalPoint(merge, point);
-    const distance_2d = Eval(instrs, parts, MergeRange(merge), point).D;
+    const distance_2d = Eval(instrs, parts, MergeRange(merge), point, NoColor{}, {}, {}).D;
     return SDFFunctions.opExtrusion(local, distance_2d, Vec3(f32).FromVector(merge.Size).z);
+}
+
+/// Where a point is on a part, 0 to 1 across its quad from its bottom left: the same UV a ray hitting a quad gets
+/// (RayIntersect.RayBox), so a part's texture lies on it the way it would on a quad. A point past the part's edge, in
+/// the fill between it and another, takes its edge's, which stretches the texture's edge into the fill
+pub fn PartUV(part: Part, point: Vec3(f32)) Vec2(f32) {
+    const local = PartLocal(part, point);
+    const half: Vec2(f32) = .FromVector(part.Size);
+    return .{
+        .x = std.math.clamp((local.x + half.x) / (2.0 * half.x), 0.0, 1.0),
+        .y = std.math.clamp((local.y + half.y) / (2.0 * half.y), 0.0, 1.0),
+    };
+}
+
+/// A world point in a part's own plane
+fn PartLocal(part: Part, point: Vec3(f32)) Vec2(f32) {
+    const axis_x: Vec4(f32) = .FromVector(part.AxisX);
+    const axis_y: Vec4(f32) = .FromVector(part.AxisY);
+    return .{
+        .x = axis_x.ToVec3().Dot(point) + axis_x.w,
+        .y = axis_y.ToVec3().Dot(point) + axis_y.w,
+    };
 }
 
 /// A part's 2D distance at a point, measured in the part's own plane
 fn PartDistance(part: Part, point: Vec3(f32)) f32 {
-    const axis_x: Vec4(f32) = .FromVector(part.AxisX);
-    const axis_y: Vec4(f32) = .FromVector(part.AxisY);
-    const local = Vec2(f32){
-        .x = axis_x.ToVec3().Dot(point) + axis_x.w,
-        .y = axis_y.ToVec3().Dot(point) + axis_y.w,
-    };
+    const local = PartLocal(part, point);
     return switch (part.Kind) {
         .Quad => SDFFunctions.sdRoundedBox2D(local, .FromVector(part.Size), .FromVector(part.Params)),
     };

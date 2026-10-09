@@ -86,12 +86,21 @@ const TestWorld = struct {
         return SDFCompiler.Compile(engine_context.EngineAllocator(), root, null, &self.mPrograms);
     }
 
+    /// The program at (x, y), each part colored by the surface that paints it, white for none
     fn Eval(self: *TestWorld, compiled: SDFCompiler.Compiled, x: f32, y: f32) SDFProgram.Value {
-        return SDFProgram.Eval(self.mPrograms.mInstrs.items, self.mPrograms.mParts.items, compiled.Range, .{ .x = x, .y = y, .z = 0 });
+        return SDFProgram.Eval(self.mPrograms.mInstrs.items, self.mPrograms.mParts.items, compiled.Range, .{ .x = x, .y = y, .z = 0 }, SurfaceColorer{}, self.mPrograms.mPartSurfaces.items, {});
     }
 
     fn Codes(self: *TestWorld, compiled: SDFCompiler.Compiled) []const SDFProgram.Instr {
         return self.mPrograms.mInstrs.items[compiled.Range.First..][0..compiled.Range.Count];
+    }
+};
+
+/// A colorer that paints each part its painting surface's color, the way the renderer's tints it, without a texture
+const SurfaceColorer = struct {
+    pub fn Color(_: SurfaceColorer, part_ind: u32, _: SDFProgram.Part, _: Vec3(f32), surfaces: []const ?Entity, _: void) Vec4(f32) {
+        const painter = surfaces[part_ind] orelse return .{ .x = 1, .y = 1, .z = 1, .w = 1 };
+        return painter.GetComponent(SurfaceComponent).?.mTexOptions.mColor;
     }
 };
 
@@ -229,6 +238,33 @@ test "colors blend half and half where two parts tie in a smooth union, and a pa
     //well inside each, each its own color
     try std.testing.expectApproxEqAbs(@as(f32, 1), world.Eval(compiled, 1, 0).Color.z, eps);
     try std.testing.expectApproxEqAbs(@as(f32, 1), world.Eval(compiled, -1, 5).Color.x, eps);
+}
+
+test "a part with no surface is painted by the nearest merge root that has one, or by nothing" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+
+    //a red root, a plain part, and a blue merge under it with a plain part of its own; then a root with no surface
+    const root = try world.Quad(null, ORIGIN, SQUARE_4, RED);
+    try world.Merge(root);
+    _ = try world.Quad(root, ORIGIN, .{ .x = 1, .y = 1 }, null);
+    const inner = try world.Quad(root, ORIGIN, .{ .x = 1, .y = 1 }, BLUE);
+    try world.Merge(inner);
+    _ = try world.Quad(inner, ORIGIN, .{ .x = 1, .y = 1 }, null);
+    _ = try world.Compile(root);
+
+    const unpainted = try world.Quad(null, ORIGIN, SQUARE_4, null);
+    try world.Merge(unpainted);
+    _ = try world.Compile(unpainted);
+
+    //parts in the order they were compiled: the root, then its subtree, then the second merge
+    const surfaces = world.mPrograms.mPartSurfaces.items;
+    try std.testing.expectEqual(@as(usize, 5), surfaces.len);
+    try std.testing.expectEqual(root.mID, surfaces[0].?.mID);
+    try std.testing.expectEqual(root.mID, surfaces[1].?.mID);
+    try std.testing.expectEqual(inner.mID, surfaces[2].?.mID);
+    try std.testing.expectEqual(inner.mID, surfaces[3].?.mID);
+    try std.testing.expect(surfaces[4] == null);
 }
 
 test "a part's smoothness grows with its scale" {

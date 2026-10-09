@@ -114,7 +114,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                     const hit = RayIntersect.RayBox(ray, box.Center, box.Rotation, box.HalfExtents);
                     if (!hit.IsHit()) continue;
                     const point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
-                    if (SDFProgram.Eval(programs.mInstrs.items, programs.mParts.items, compiled.Range, point).D > 0) continue;
+                    if (SDFProgram.Eval(programs.mInstrs.items, programs.mParts.items, compiled.Range, point, SDFProgram.NoColor{}, {}, {}).D > 0) continue;
                     if (InMasks(&view.Masks, shape.Mask, ray, hit)) best.Consider(.{ .Entity = entity, .Kind = .Merge }, hit, far, options.SkipStartedInside);
                     continue;
                 }

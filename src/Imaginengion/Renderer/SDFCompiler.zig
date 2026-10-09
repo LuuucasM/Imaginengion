@@ -39,15 +39,21 @@ pub const Error = error{
 pub const Programs = struct {
     mInstrs: std.ArrayList(Instr) = .empty,
     mParts: std.ArrayList(Part) = .empty,
+    /// Which entity's surface paints each part, by the part's index, null for none (plain white): its own surface, or
+    /// else its merge root's, or else the merge around that's. CPU only: whoever draws a merge turns these into its
+    /// parts' Shading
+    mPartSurfaces: std.ArrayList(?Entity) = .empty,
 
     pub fn Deinit(self: *Programs, allocator: std.mem.Allocator) void {
         self.mInstrs.deinit(allocator);
         self.mParts.deinit(allocator);
+        self.mPartSurfaces.deinit(allocator);
     }
 
     pub fn Clear(self: *Programs) void {
         self.mInstrs.clearRetainingCapacity();
         self.mParts.clearRetainingCapacity();
+        self.mPartSurfaces.clearRetainingCapacity();
     }
 };
 
@@ -67,8 +73,6 @@ pub const Compiled = struct {
     Max: Vec2(f32),
 };
 
-/// The color a part with no surface of its own is given when its merge root has none either
-const DEFAULT_COLOR = Vec4(f32){ .x = 1, .y = 1, .z = 1, .w = 1 };
 
 /// Compiles the merge rooted at `root` onto the end of `programs`, which `allocator` is for. `canvas` places it for an
 /// overlay scene, as it does for drawing
@@ -82,8 +86,11 @@ pub fn Compile(allocator: std.mem.Allocator, root: Entity, canvas: ?CanvasTransf
     var compiler = Compiler{ .mAllocator = allocator, .mTemp = temp.allocator(), .mCanvas = canvas, .mPrograms = programs };
     //a merge turned down leaves nothing behind
     const parts_before = programs.mParts.items.len;
-    errdefer programs.mParts.shrinkRetainingCapacity(parts_before);
-    const level = try compiler.CompileLevel(root, DEFAULT_COLOR);
+    errdefer {
+        programs.mParts.shrinkRetainingCapacity(parts_before);
+        programs.mPartSurfaces.shrinkRetainingCapacity(parts_before);
+    }
+    const level = try compiler.CompileLevel(root, null);
     const first: u32 = @intCast(programs.mInstrs.items.len);
     try programs.mInstrs.appendSlice(allocator, level.Code.items);
     return compiler.Finish(root, .{ .First = first, .Count = @intCast(level.Code.items.len) }, level.Depth, @intCast(parts_before));
@@ -94,7 +101,7 @@ pub fn Compile(allocator: std.mem.Allocator, root: Entity, canvas: ?CanvasTransf
 /// transform
 pub fn CompileShape(allocator: std.mem.Allocator, entity: Entity, canvas: ?CanvasTransform, programs: *Programs) Error!?Compiled {
     var compiler = Compiler{ .mAllocator = allocator, .mTemp = allocator, .mCanvas = canvas, .mPrograms = programs };
-    const part_ind = try compiler.AddPart(entity, DEFAULT_COLOR) orelse return null;
+    const part_ind = try compiler.AddPart(entity, null) orelse return null;
     const first: u32 = @intCast(programs.mInstrs.items.len);
     try programs.mInstrs.append(allocator, .{ .Code = .Shape, .Part = part_ind });
     return compiler.Finish(entity, .{ .First = first, .Count = 1 }, 1, part_ind);
@@ -173,18 +180,18 @@ const Compiler = struct {
         };
     }
 
-    /// The code for one level, rooted at `root`. `inherited` is the color its parts take when neither they nor the root
+    /// The code for one level, rooted at `root`. `inherited` is the entity whose surface paints its parts when neither
     /// have a surface. A merge below it is compiled by calling this again, so it goes as deep as merges are put in
     /// merges, which MAX_STACK keeps short for any that isn't the first thing added
-    fn CompileLevel(self: *Compiler, root: Entity, inherited: Vec4(f32)) Error!Operand {
-        const color = if (root.GetComponent(SurfaceComponent)) |surface| surface.mTexOptions.mColor else inherited;
+    fn CompileLevel(self: *Compiler, root: Entity, inherited: ?Entity) Error!Operand {
+        const painter = if (root.HasComponent(SurfaceComponent)) root else inherited;
 
         var adds: std.ArrayList(Operand) = .empty;
         var subtracts: std.ArrayList(Operand) = .empty;
         var intersects: std.ArrayList(Operand) = .empty;
 
         //the root's own shape is the first thing added. its op says how this level joins the one around it, if any
-        if (try self.PartOperand(root, color)) |own| try adds.append(self.mTemp, .{ .Code = own.Code, .Depth = own.Depth, .Op = .Union, .Smoothness = 0 });
+        if (try self.PartOperand(root, painter)) |own| try adds.append(self.mTemp, .{ .Code = own.Code, .Depth = own.Depth, .Op = .Union, .Smoothness = 0 });
 
         //the rest of the subtree, in order: a work list rather than recursion, children pushed last first
         var to_visit: std.ArrayList(Entity) = .empty;
@@ -193,12 +200,12 @@ const Compiler = struct {
             if (entity.HasComponent(MainObjectComponent)) continue;
 
             const operand: ?Operand = if (entity.HasComponent(MergeComponent)) blk: {
-                var bracket = try self.CompileLevel(entity, color);
+                var bracket = try self.CompileLevel(entity, painter);
                 const op = OpOf(entity);
                 bracket.Op = op.mOp;
                 bracket.Smoothness = self.WorldSmoothness(entity, op.mSmoothness);
                 break :blk bracket;
-            } else try self.PartOperand(entity, color);
+            } else try self.PartOperand(entity, painter);
 
             if (operand) |found| {
                 switch (found.Op) {
@@ -240,12 +247,12 @@ const Compiler = struct {
     }
 
     /// `entity` as a part: a Shape instruction for it, with its part added to the programs. Null if it has no shape or
-    /// transform, or its surface is hidden. A part with no surface (a cutter, usually) takes `color`
-    fn PartOperand(self: *Compiler, entity: Entity, color: Vec4(f32)) Error!?Operand {
+    /// transform, or its surface is hidden. A part with no surface (a cutter, usually) is painted by `painter`'s
+    fn PartOperand(self: *Compiler, entity: Entity, painter: ?Entity) Error!?Operand {
         if (entity.GetComponent(SurfaceComponent)) |surface| {
             if (!surface.mShouldRender) return null;
         }
-        const part_ind = try self.AddPart(entity, color) orelse return null;
+        const part_ind = try self.AddPart(entity, painter) orelse return null;
 
         const op = OpOf(entity);
         var code: std.ArrayList(Instr) = .empty;
@@ -253,12 +260,12 @@ const Compiler = struct {
         return .{ .Code = code, .Depth = 1, .Op = op.mOp, .Smoothness = self.WorldSmoothness(entity, op.mSmoothness) };
     }
 
-    /// Adds `entity`'s shape to the programs' parts, placed the way drawing and picking place it, and colored with its
-    /// surface or else `color`. Returns its index, or null if it has no shape or transform
-    fn AddPart(self: *Compiler, entity: Entity, color: Vec4(f32)) Error!?u32 {
+    /// Adds `entity`'s shape to the programs' parts, placed the way drawing and picking place it, and painted by its
+    /// own surface or else `painter`'s. Returns its index, or null if it has no shape or transform
+    fn AddPart(self: *Compiler, entity: Entity, painter: ?Entity) Error!?u32 {
         const shape = entity.GetComponent(ShapeComponent) orelse return null;
         const transform = entity.GetComponent(TransformComponent) orelse return null;
-        const surface = entity.GetComponent(SurfaceComponent);
+        try self.mPrograms.mPartSurfaces.append(self.mAllocator, if (entity.HasComponent(SurfaceComponent)) entity else painter);
 
         const part_ind: u32 = @intCast(self.mPrograms.mParts.items.len);
         switch (shape.mKind) {
@@ -272,7 +279,6 @@ const Compiler = struct {
                     .Size = .{ box.HalfExtents.x, box.HalfExtents.y },
                     .Kind = .Quad,
                     .Params = box.CornerRadii.ToArray(),
-                    .Color = (if (surface) |found| found.mTexOptions.mColor else color).ToArray(),
                 });
             },
         }

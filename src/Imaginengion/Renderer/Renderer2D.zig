@@ -356,6 +356,7 @@ pub fn SetMasks(self: *Renderer2D, engine_allocator: std.mem.Allocator, masks: *
         try buffers.mMaskBufferBase.appendSlice(engine_allocator, masks.mMasks.items);
         try buffers.mPrograms.mInstrs.appendSlice(engine_allocator, masks.mPrograms.mInstrs.items);
         try buffers.mPrograms.mParts.appendSlice(engine_allocator, masks.mPrograms.mParts.items);
+        try buffers.mPrograms.mPartSurfaces.appendSlice(engine_allocator, masks.mPrograms.mPartSurfaces.items);
     }
 }
 
@@ -452,8 +453,8 @@ pub fn DrawQuad(
 }
 
 /// Draws a merge (MergeComponent) as one shape: compiled into its pass's programs, a plate over the rectangle its parts
-/// lie within, where its program says, painted with its parts' colors. Its root's surface, if it has one, gives its
-/// material and its border, around the whole merged outline
+/// lie within, where its program says, each part painted with its surface the way a quad is, blended where they meet.
+/// Its root's surface, if it has one, gives its border, around the whole merged outline
 pub fn DrawMerge(
     self: *Renderer2D,
     engine_context: *EngineContext,
@@ -489,10 +490,27 @@ pub fn DrawMerge(
     const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
     const shading_handle = try shading_buff.AddSurface(engine_allocator, &surface.mTexOptions, texture_asset, std.math.maxInt(u32));
 
-    //see-through where any part is
+    //each part's shading, from the surface that paints it, added once for every part it paints. See-through where any
+    //of them is, the way a quad's surface is
     var shading_flag: u32 = 0;
-    for (buffers.mPrograms.mParts.items[compiled.Parts.First..][0..compiled.Parts.Count]) |part| {
-        if (part.Color[3] < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+    var painters: std.AutoHashMapUnmanaged(Entity.Type, u32) = .empty;
+    defer painters.deinit(engine_allocator);
+    var plain_shading: ?u32 = null;
+    const first = compiled.Parts.First;
+    for (buffers.mPrograms.mParts.items[first..][0..compiled.Parts.Count], buffers.mPrograms.mPartSurfaces.items[first..][0..compiled.Parts.Count]) |*part, painter| {
+        const painter_entity = painter orelse {
+            if (plain_shading == null) plain_shading = @intCast(try PlainShading(engine_context, shading_buff, &plain));
+            part.Shading = plain_shading.?;
+            continue;
+        };
+        const known = try painters.getOrPut(engine_allocator, painter_entity.mID);
+        if (!known.found_existing) {
+            const painter_surface = painter_entity.GetComponent(SurfaceComponent).?;
+            const painter_texture = try painter_surface.mTexture.GetAsset(engine_context, Texture2D);
+            known.value_ptr.* = @intCast(try shading_buff.AddSurface(engine_allocator, &painter_surface.mTexOptions, painter_texture, std.math.maxInt(u32)));
+            if (painter_surface.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
+        }
+        part.Shading = known.value_ptr.*;
     }
 
     //the border grows with the root, by its smaller axis, the way a quad's does
@@ -523,6 +541,12 @@ pub fn DrawMerge(
         .BorderShadingHandle = @intCast(border_shading_handle),
         .BorderWidth = border_width,
     }, .{});
+}
+
+/// A plain white surface's shading, for a merge's parts that nothing paints
+fn PlainShading(engine_context: *EngineContext, shading_buff: *ShadingBuffers, plain: *SurfaceComponent) !usize {
+    const texture_asset = try plain.mTexture.GetAsset(engine_context, Texture2D);
+    return shading_buff.AddSurface(engine_context.EngineAllocator(), &plain.mTexOptions, texture_asset, std.math.maxInt(u32));
 }
 
 pub fn DrawText(

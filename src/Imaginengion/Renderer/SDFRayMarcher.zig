@@ -606,7 +606,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
                     //the box only says where it could be: the program says whether it is there, the way a letter's
                     //coverage does for a glyph
-                    const value = SDFProgram.Eval(self.mInstrs, self.mParts, SDFProgram.MergeRange(shape), hit_point);
+                    const value = SDFProgram.Eval(self.mInstrs, self.mParts, SDFProgram.MergeRange(shape), hit_point, PartShader(sample_sampler){}, self.mSurfShading, textures_array);
                     if (value.D > 0) return .none;
 
                     //the band around the whole merged outline is the border's solid color
@@ -634,6 +634,18 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 },
                 .None => return .none,
             }
+        }
+
+        /// The colorer a merge's hit is shaded with (SDFProgram.Eval), given the surface shadings and the textures: each
+        /// part painted at the hit the way a quad's surface is, its texture at its own UV tinted by its color
+        fn PartShader(comptime sample_sampler: anytype) type {
+            return struct {
+                pub fn Color(_: @This(), _: u32, part: SDFProgram.Part, point: Vec3(f32), shadings: surf_shading_type, textures: textures_array_type) Vec4(f32) {
+                    const shading = shadings[part.Shading];
+                    const texture_uv = SDFFunc.TextureUV(shading.Texturehandle, SDFProgram.PartUV(part, point), shading.TextureWidth, shading.TextureHeight);
+                    return Vec4(f32).FromVector(shading.Color).MulVec(SampleTexture(texture_uv, sample_sampler, textures));
+                }
+            };
         }
 
         fn CalcNodeColor(self: *Self, node_ind: usize, sample_sampler: anytype, textures_array: textures_array_type) void {
