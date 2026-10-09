@@ -751,25 +751,24 @@ test "a direct quad in front hides a marched one behind it, which still shows pa
     try ExpectColor(BLUE, try TraceWith(scene, RayAt(0.75, 0), 1));
 }
 
-test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge, then counts it as a miss" {
-    //a blue quad behind a stack of glyph boxes the ray goes through the gaps of. Only direct: the march's own limit
-    //on what it can get past is its SkipList
-    const rejects = SDFRayMarcher.MAX_DIRECT_REJECTS;
+test "a ray through the gaps of many glyphs at once still reaches what is behind them" {
+    //a blue quad behind 30 glyph boxes the ray goes through the gaps of, nearly twice the 16 turn downs the direct
+    //search used to give up after. Each glyph is passed over within the one search, so none of them costs it anything
+    //more than its own check. Only direct: the march's own limit on what it can get past is its SkipList
     const shadings = [_]SurfShadingData{
         ColorShading(BLUE),
         Shading(WHITE, ATLAS_HANDLE),
         Shading(WHITE, GREEN_HANDLE),
     };
-    var shapes: [rejects + 2]TestShape = undefined;
+    var shapes: [31]TestShape = undefined;
     shapes[0] = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
     for (shapes[1..]) |*shape| shape.* = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0);
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
 
-    //as many gaps as it may turn down: the next search still finds the quad
-    const at_limit = TestScene{ .Shapes = shapes[0 .. rejects + 1], .Shadings = &shadings };
-    try ExpectColor(BLUE, try TraceWith(at_limit, RayAt(0.25, 0), rejects + 1));
-    //one more and it gives up
-    const past_limit = TestScene{ .Shapes = shapes[0 .. rejects + 2], .Shadings = &shadings };
-    try ExpectColor(DEFAULT_COLOR, try TraceWith(past_limit, RayAt(0.25, 0), rejects + 2));
+    //in the gaps, the quad behind
+    try ExpectColor(BLUE, try TraceWith(scene, RayAt(0.25, 0), shapes.len));
+    //on the letters, the nearest glyph
+    try ExpectColor(GREEN, try TraceWith(scene, RayAt(-0.25, 0), shapes.len));
 }
 
 test "a quad's rounded corner is cut away: the ray goes past it there, and hits just inside the curve" {

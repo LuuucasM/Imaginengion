@@ -173,6 +173,125 @@ test "ECS create, add components and query groups" {
     try std.testing.expectEqual(entity_2, position_without_label.items[0]);
 }
 
+/// The group has exactly `expected`, in any order, each once
+fn ExpectGroup(group: std.ArrayList(u32), expected: []const u32) !void {
+    try std.testing.expectEqual(expected.len, group.items.len);
+    for (expected) |entity_id| {
+        try std.testing.expectEqual(@as(usize, 1), std.mem.count(u32, group.items, &.{entity_id}));
+    }
+}
+
+test "ECS entity list difference, union and intersection" {
+    const test_ecs = try TestECS.Init();
+    defer test_ecs.Deinit() catch unreachable;
+    const allocator = test_ecs.Allocator();
+    const ecs = &test_ecs.mECSManager;
+
+    const a = try ecs.CreateEntity(allocator);
+    const b = try ecs.CreateEntity(allocator);
+    const c = try ecs.CreateEntity(allocator);
+    const d = try ecs.CreateEntity(allocator);
+
+    var list2: std.ArrayList(u32) = .empty;
+    defer list2.deinit(allocator);
+    try list2.appendSlice(allocator, &.{ b, c, c, d });
+
+    var difference: std.ArrayList(u32) = .empty;
+    defer difference.deinit(allocator);
+    try difference.appendSlice(allocator, &.{ a, b, c });
+    try ecs.EntityListDifference(&difference, list2, allocator);
+    try ExpectGroup(difference, &.{a});
+
+    // the repeat of c inside list2 is only added once
+    var union_list: std.ArrayList(u32) = .empty;
+    defer union_list.deinit(allocator);
+    try union_list.appendSlice(allocator, &.{ a, b });
+    try ecs.EntityListUnion(&union_list, list2, allocator);
+    try ExpectGroup(union_list, &.{ a, b, c, d });
+
+    var intersection: std.ArrayList(u32) = .empty;
+    defer intersection.deinit(allocator);
+    try intersection.appendSlice(allocator, &.{ a, b, c });
+    try ecs.EntityListIntersection(&intersection, list2, allocator);
+    try ExpectGroup(intersection, &.{ b, c });
+
+    // an id whose index was reused by a newer entity is not the same entity
+    try ecs.DestroyEntity(test_ecs.mEngineContext, d);
+    try test_ecs.ProcessEvents();
+    const new_d = try ecs.CreateEntity(allocator);
+    try std.testing.expect(new_d != d);
+
+    var stale: std.ArrayList(u32) = .empty;
+    defer stale.deinit(allocator);
+    try stale.append(allocator, new_d);
+    try ecs.EntityListIntersection(&stale, list2, allocator);
+    try ExpectGroup(stale, &.{});
+}
+
+test "ECS compound queries walk the right lists and give each match once" {
+    const test_ecs = try TestECS.Init();
+    defer test_ecs.Deinit() catch unreachable;
+    const allocator = test_ecs.Allocator();
+    const ecs = &test_ecs.mECSManager;
+
+    // p: Position only, h: Health only, ph: both, phl: all three, none: no components
+    const p = try ecs.CreateEntity(allocator);
+    const h = try ecs.CreateEntity(allocator);
+    const ph = try ecs.CreateEntity(allocator);
+    const phl = try ecs.CreateEntity(allocator);
+    _ = try ecs.CreateEntity(allocator);
+
+    _ = try ecs.AddComponent(allocator, p, Position{});
+    _ = try ecs.AddComponent(allocator, h, Health{});
+    _ = try ecs.AddComponent(allocator, ph, Position{});
+    _ = try ecs.AddComponent(allocator, ph, Health{});
+    _ = try ecs.AddComponent(allocator, phl, Position{});
+    _ = try ecs.AddComponent(allocator, phl, Health{});
+    _ = try ecs.AddComponent(allocator, phl, try MakeLabel(test_ecs, "all"));
+
+    const position_query = ECS.GroupQuery{ .Component = Position };
+    const health_query = ECS.GroupQuery{ .Component = Health };
+    const label_query = ECS.GroupQuery{ .Component = Label };
+
+    // entities in both lists come up once
+    var either = try ecs.GetGroup(allocator, .{ .Or = &.{ position_query, health_query } });
+    defer either.deinit(allocator);
+    try ExpectGroup(either, &.{ p, h, ph, phl });
+
+    // the same list on both sides is only walked once
+    var either_same = try ecs.GetGroup(allocator, .{ .Or = &.{ position_query, .{ .And = &.{ position_query, health_query } } } });
+    defer either_same.deinit(allocator);
+    try ExpectGroup(either_same, &.{ p, ph, phl });
+
+    // walks Label's list, the shortest, whichever side it is on
+    var all_three = try ecs.GetGroup(allocator, .{ .And = &.{ position_query, health_query, label_query } });
+    defer all_three.deinit(allocator);
+    try ExpectGroup(all_three, &.{phl});
+
+    // not (Health and Label) still lets Health-only and Label-only through
+    const health_and_label = ECS.GroupQuery{ .And = &.{ health_query, label_query } };
+    var not_both = try ecs.GetGroup(allocator, .{ .Not = .{ .mFirst = &position_query, .mSecond = &health_and_label } });
+    defer not_both.deinit(allocator);
+    try ExpectGroup(not_both, &.{ p, ph });
+
+    // not (Health or Label) drops anything with either
+    const health_or_label = ECS.GroupQuery{ .Or = &.{ health_query, label_query } };
+    var neither = try ecs.GetGroup(allocator, .{ .Not = .{ .mFirst = &position_query, .mSecond = &health_or_label } });
+    defer neither.deinit(allocator);
+    try ExpectGroup(neither, &.{p});
+
+    // an And with an Or side: the Or's lists (Health) against Label's, Label being fewer
+    var label_and_either = try ecs.GetGroup(allocator, .{ .And = &.{ health_or_label, label_query } });
+    defer label_and_either.deinit(allocator);
+    try ExpectGroup(label_and_either, &.{phl});
+
+    // nothing has every component in an empty list
+    try ecs.RemoveComponentSync(test_ecs.mEngineContext, phl, Label.Ind);
+    var none_left = try ecs.GetGroup(allocator, .{ .And = &.{ position_query, label_query } });
+    defer none_left.deinit(allocator);
+    try ExpectGroup(none_left, &.{});
+}
+
 test "ECS destroy is deferred until ProcessEvents" {
     const test_ecs = try TestECS.Init();
     defer test_ecs.Deinit() catch unreachable;

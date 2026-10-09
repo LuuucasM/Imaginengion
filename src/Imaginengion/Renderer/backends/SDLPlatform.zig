@@ -21,7 +21,7 @@ mSwapchainTexture: ?*sdl.SDL_GPUTexture = null,
 mSwapchainWidth: usize = 0,
 mSwapchainHeight: usize = 0,
 
-pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, present_mode: PresentMode) void {
+pub fn Init(self: *SDLPlatform, engine_context: *EngineContext) void {
     const sdl_window: ?*sdl.SDL_Window = @ptrCast(engine_context.mAppWindow.GetNativeWindow());
     const vk_api_1_3_0: u32 = (0 << 29) | (1 << 22) | (3 << 12) | 0;
 
@@ -66,12 +66,6 @@ pub fn Init(self: *SDLPlatform, engine_context: *EngineContext, present_mode: Pr
     const claimed = sdl.SDL_ClaimWindowForGPUDevice(self.mDevice, sdl_window);
     std.debug.assert(claimed);
 
-    //a claimed window starts out with vsync. not every driver can turn it off, and the window keeps it then
-    if (present_mode == .Off and sdl.SDL_WindowSupportsGPUPresentMode(self.mDevice, sdl_window, sdl.SDL_GPU_PRESENTMODE_IMMEDIATE)) {
-        const set = sdl.SDL_SetGPUSwapchainParameters(self.mDevice, sdl_window, sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR, sdl.SDL_GPU_PRESENTMODE_IMMEDIATE);
-        std.debug.assert(set);
-    }
-
     std.log.info("SDL_GPU Info:", .{});
     std.log.info("\tDriver: {s}", .{sdl.SDL_GetGPUDeviceDriver(self.mDevice)});
 }
@@ -82,6 +76,23 @@ pub fn Deinit(self: *SDLPlatform, window: *Window) void {
     _ = if (self.mFrameCmdBuffer) |cmd| sdl.SDL_CancelGPUCommandBuffer(cmd);
     sdl.SDL_ReleaseWindowFromGPUDevice(self.mDevice, sdl_window);
     sdl.SDL_DestroyGPUDevice(self.mDevice);
+}
+
+/// Switches how frames reach the window, between frames only (not while one has its window image). False when it
+/// couldn't, and the window keeps the mode it had: not every driver can turn vsync off
+pub fn SetPresentMode(self: *SDLPlatform, window: *Window, present_mode: PresentMode) bool {
+    std.debug.assert(self.mFrameCmdBuffer == null);
+    const sdl_window: *sdl.SDL_Window = @ptrCast(window.GetNativeWindow());
+    const sdl_mode: sdl.SDL_GPUPresentMode = switch (present_mode) {
+        .VSync => sdl.SDL_GPU_PRESENTMODE_VSYNC,
+        .Off => sdl.SDL_GPU_PRESENTMODE_IMMEDIATE,
+    };
+    if (!sdl.SDL_WindowSupportsGPUPresentMode(self.mDevice, sdl_window, sdl_mode)) return false;
+    if (!sdl.SDL_SetGPUSwapchainParameters(self.mDevice, sdl_window, sdl.SDL_GPU_SWAPCHAINCOMPOSITION_SDR, sdl_mode)) {
+        std.log.err("SetPresentMode({s}) failed: {s}", .{ @tagName(present_mode), sdl.SDL_GetError() });
+        return false;
+    }
+    return true;
 }
 
 pub fn BeginFrame(self: *SDLPlatform, window: *Window) bool {

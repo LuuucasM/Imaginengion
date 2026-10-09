@@ -42,7 +42,7 @@ const TestWorld = struct {
 fn State(players: []const Player, following: ?Player) EditorMenuBar.State {
     var shown = std.EnumArray(EditorMenuBar.Panel, bool).initFill(true);
     shown.set(.Stats, false);
-    return .{ .Shown = shown, .ProjectOpen = false, .CanPlayStop = true, .PlayPreview = false, .Players = players, .Following = following };
+    return .{ .Shown = shown, .ProjectOpen = false, .CanPlayStop = true, .PlayPreview = false, .VSync = true, .Players = players, .Following = following };
 }
 
 test "each item has its action, and the editor's state shows as check marks and greyed out items" {
@@ -64,6 +64,23 @@ test "each item has its action, and the editor's state shows as check marks and 
     //no project to save
     try std.testing.expect(menu_bar.mSaveProject.HasComponent(DisabledTag));
     try std.testing.expect(!menu_bar.mPlayStop.HasComponent(DisabledTag));
+}
+
+test "the VSync item toggles vsync, and is checked while it is on" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
+    defer menu_bar.Deinit(engine_context.EngineAllocator());
+
+    try std.testing.expectEqual(EditorMenuBar.Action.ToggleVSync, menu_bar.ActionOf(menu_bar.mVSync).?);
+
+    var state = State(&.{}, null);
+    try menu_bar.Update(engine_context, state);
+    try std.testing.expect(WidgetActions.IsChecked(menu_bar.mVSync));
+    state.VSync = false;
+    try menu_bar.Update(engine_context, state);
+    try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mVSync));
 }
 
 test "the players to follow are listed, checked when followed, and listed again when they change" {

@@ -1081,6 +1081,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
         //stopping is always allowed, starting needs a run player that can be drawn
         .CanPlayStop = self.mEditorState == .Play or (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false),
         .PlayPreview = self.mShowPlayPreview,
+        .VSync = engine_context.mRenderer.mPresentMode == .VSync,
         .Players = players.items,
         .Following = self.mRunPlayer,
     });
@@ -1142,6 +1143,8 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         .PickTheme => try self.PickTheme(engine_context),
         .PlayStop => try self.OnChangeEditorStateEvent(engine_context),
         .TogglePlayPreview => self.mShowPlayPreview = !self.mShowPlayPreview,
+        //menu actions run before this pass of the loop renders, so no frame has its window image yet
+        .ToggleVSync => _ = engine_context.mRenderer.SetPresentMode(engine_context, if (engine_context.mRenderer.mPresentMode == .VSync) .Off else .VSync),
         .FollowPlayer => |player| {
             const already = if (self.mRunPlayer) |run_player| run_player.mID == player.mID else false;
             self.mRunPlayer = if (already) null else player;

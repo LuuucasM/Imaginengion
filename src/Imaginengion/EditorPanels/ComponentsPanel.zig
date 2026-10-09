@@ -288,7 +288,15 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
 fn Rebuild(self: *ComponentsPanel, engine_context: *EngineContext, object: SelectedObject, present: u64) !void {
     const zone = Tracy.ZoneInit("ComponentsPanel::Rebuild", @src());
     defer zone.Deinit();
-    try self.Clear(engine_context);
+    //every list but the one about to be built, which takes itself away as it builds: that way it keeps which of its
+    //headers are open while it is built again for the same object
+    if (object != .entity) try self.mEntityList.Clear(engine_context);
+    if (object != .scene_layer) try self.mSceneList.Clear(engine_context);
+    if (object != .player) try self.mPlayerList.Clear(engine_context);
+    if (object != .gamecontext) try self.mGameContextList.Clear(engine_context);
+    self.mButtons.clearRetainingCapacity();
+    self.mBodyType = null;
+    self.mPossessBox = null;
     self.mBuiltFor = object;
     self.mBuiltPresent = present;
     switch (object) {

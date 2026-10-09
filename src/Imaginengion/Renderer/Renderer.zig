@@ -77,8 +77,7 @@ const ResetOptions = enum {
 
 const is_spirv = builtin.target.cpu.arch.isSpirV();
 
-//TODO: a setting the developer and the player can pick, once project and run settings are ported
-const PRESENT_MODE: RenderPlatform.PresentMode = .VSync;
+//TODO: a project and run setting the developer and the player can pick (the editor's menu switches vsync for now)
 /// Frames a second at most, 0 for no limit. Works with either present mode
 const FRAME_LIMIT: u32 = 0;
 
@@ -285,6 +284,8 @@ pub const ShadingBuffers = struct {
 };
 
 mPlatform: RenderPlatform = .{},
+/// How frames reach the window: vsync until something switches it (SetPresentMode)
+mPresentMode: RenderPlatform.PresentMode = .VSync,
 mFrameLimiter: FrameLimiter = .Init(FRAME_LIMIT),
 mTextureManager: TextureManager = .{},
 mOverlayPipeline: SDFPipeline(.Overlay) = .empty,
@@ -300,7 +301,10 @@ mShownCopies: std.ArrayList(RenderTargetComponent.Shown) = .empty,
 pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Renderer::Init", @src());
     defer zone.Deinit();
-    self.mPlatform.Init(engine_context, PRESENT_MODE);
+    self.mPlatform.Init(engine_context);
+    //a claimed window starts out with vsync, but the swapchain is set to it here anyway, so mPresentMode is always
+    //what the window really does
+    _ = self.SetPresentMode(engine_context, self.mPresentMode);
 
     try self.mTextureManager.Init(engine_context, 1_000_000_000);
 
@@ -311,6 +315,14 @@ pub fn Init(self: *Renderer, engine_context: *EngineContext) !void {
     self.mR3D.Init();
 
     try self.mSDFShading.Init(engine_context);
+}
+
+/// Switches vsync on or off, between frames only. A driver that can't turn it off leaves it on, and mPresentMode stays
+/// what the window really does
+pub fn SetPresentMode(self: *Renderer, engine_context: *EngineContext, present_mode: RenderPlatform.PresentMode) bool {
+    if (!self.mPlatform.SetPresentMode(&engine_context.mAppWindow, present_mode)) return false;
+    self.mPresentMode = present_mode;
+    return true;
 }
 
 /// False when the frame is skipped: the frame limit says it's too soon, or no window image is free to draw into yet

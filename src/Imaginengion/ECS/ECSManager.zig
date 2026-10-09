@@ -213,23 +213,13 @@ pub fn ECSManager(entity_t: type, comptime components_types: []const type, compt
             return self.mComponentManager.GetComponentSlice(component_type);
         }
 
-        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {
-            _ValidateGroupQuery(query);
-            return ComponentManagerT.GetGroupMask(query);
-        }
-
         //for getting groups of entities
         pub fn GetGroup(self: Self, allocator: std.mem.Allocator, comptime query: GroupQuery) !std.ArrayList(entity_t) {
             _ValidateGroupQuery(query);
             const zone = Tracy.ZoneInit(debug_name ++ "::GetGroup", @src());
             defer zone.Deinit();
 
-            const mask = comptime ComponentManagerT.GetGroupMask(query);
-            return try self.mComponentManager.GetGroup(query, &mask, allocator);
-        }
-
-        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT, allocator: std.mem.Allocator) !void {
-            try self.mComponentManager.EntityListMask(result, mask, allocator);
+            return try self.mComponentManager.GetGroup(query, allocator);
         }
 
         pub fn EntityListDifference(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {

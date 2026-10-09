@@ -1,6 +1,6 @@
 //! The editor's menu bar, built out of the editor UI's menu widgets (Widgets.MenuBar, Menu, MenuItem, Submenu): File,
-//! Window and Editor. Opening, closing and switching menus is the stock menu scripts'. What an item does is the editor's:
-//! this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
+//! Window and Editor (theme, play options, vsync). Opening, closing and switching menus is the stock menu scripts'.
+//! What an item does is the editor's: this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
 //! Update puts the editor's state on the items: which panels are shown (check marks), what can't be done right now
 //! (greyed out, DisabledTag), and the players the play preview can follow, a list rebuilt when they change.
 const std = @import("std");
@@ -60,6 +60,8 @@ pub const Action = union(enum) {
     TogglePlayPreview,
     /// make the player the one the play preview follows, or stop following it if it already is
     FollowPlayer: Player,
+    /// turn vsync off if it is on, on if it is off
+    ToggleVSync,
 };
 
 /// The editor's state the items show, for Update
@@ -70,6 +72,8 @@ pub const State = struct {
     /// whether Play/Stop can be used: stopping always, starting with a run player that can be drawn
     CanPlayStop: bool,
     PlayPreview: bool,
+    /// whether frames wait for the screen's refresh (Renderer.mPresentMode)
+    VSync: bool,
     /// the players the play preview can follow, and the one it does
     Players: []const Player,
     Following: ?Player,
@@ -85,6 +89,7 @@ mPanelItems: std.EnumArray(Panel, Entity) = .initFill(.uninit),
 mSaveProject: Entity = .uninit,
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
+mVSync: Entity = .uninit,
 /// The Player Camera submenu, and its items, one per player, in the order of the players
 mPlayersMenu: Entity = .uninit,
 mPlayerItems: std.ArrayList(ItemAction) = .empty,
@@ -128,6 +133,8 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     self.mPlayStop = try self.Add(engine_context, play_menu, "Play/Stop", .{ .Shortcut = "F5", .StockScripts = options.StockScripts }, .PlayStop);
     self.mPlayPreview = try self.Add(engine_context, editor, "Use Preview Panel", check_options, .TogglePlayPreview);
     self.mPlayersMenu = try Widgets.Submenu(engine_context, editor, "Player Camera", options);
+    _ = try Widgets.Separator(engine_context, .{ .Entity = editor });
+    self.mVSync = try self.Add(engine_context, editor, "VSync", check_options, .ToggleVSync);
     return self;
 }
 
@@ -154,6 +161,7 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
         try WidgetActions.SetChecked(engine_context, self.mPanelItems.get(panel), state.Shown.get(panel));
     }
     try WidgetActions.SetChecked(engine_context, self.mPlayPreview, state.PlayPreview);
+    try WidgetActions.SetChecked(engine_context, self.mVSync, state.VSync);
     try WidgetActions.SetDisabled(engine_context, self.mSaveProject, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mPlayStop, !state.CanPlayStop);
 

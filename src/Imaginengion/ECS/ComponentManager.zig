@@ -5,7 +5,6 @@ const BuiltinComponentCount = @import("Components.zig").BuiltinComponentCount;
 const MainObjectComponent = @import("Components.zig").MainObjectComponent;
 const EntityTagComponent = @import("Components.zig").EntityTagComponent;
 const ScriptTagComponent = @import("Components.zig").ScriptTagComponent;
-const HashSet = @import("../Vendor/ziglang-set/src/hash_set/managed.zig").HashSetManaged;
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const GroupQuery = @import("ECSManager.zig").GroupQuery;
@@ -244,127 +243,208 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             return self._SkipFieldArray().mComponents.HasSparse(entity_id);
         }
 
-        //provides a mask for a group query
         /// How many entities currently have `component_type`: the length of its dense array, so no walk.
         /// Every live entity carries a SkipFieldComponent, which makes that one the total live count.
         pub fn NumWithComponent(self: Self, comptime component_type: type) usize {
-            const internal_array: *InternalComponentArray(entity_t, component_type) = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
-            return internal_array.NumOfComponents();
+            return self._InternalArray(component_type).NumOfComponents();
         }
 
-        pub fn GetGroupMask(comptime query: GroupQuery) SkipFieldComponent.StaticSkipFieldT {
-            switch (query) {
-                .Component => |component_type| {
-                    var empty_field: SkipFieldComponent.StaticSkipFieldT = .AllSkip;
-                    empty_field.ChangeToUnskipped(ComponentInd(component_type));
-                    return empty_field;
-                },
-                .Not => |not| {
-                    var result_first = GetGroupMask(not.mFirst.*);
-                    const result_second = GetGroupMask(not.mSecond.*);
-                    result_first.Difference(&result_second);
-                    return result_first;
-                },
-                .Or => |ors| {
-                    var result = GetGroupMask(ors[0]);
-                    inline for (ors[1..]) |or_query| {
-                        const intermediate = GetGroupMask(or_query);
-                        result.Union(&intermediate);
-                    }
-                    return result;
-                },
-                .And => |ands| {
-                    var result = GetGroupMask(ands[0]);
-                    inline for (ands[1..]) |and_query| {
-                        const intermediate = GetGroupMask(and_query);
-                        result.Intersect(&intermediate);
-                    }
-                    return result;
-                },
+        /// Every entity matching `query`. Each part of the query is a node (QueryNode) that answers two questions:
+        /// which component lists hold every entity it can match (Sources), and whether one entity matches it
+        /// (Matches). GetGroup walks the lists the whole query's node picks once, checking each entity against it
+        pub fn GetGroup(self: Self, comptime query: GroupQuery, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
+            var result: std.ArrayList(entity_t) = .empty;
+
+            // every entity in a component's list has that component, so there is nothing to check
+            if (query == .Component) {
+                try result.appendSlice(allocator, self._InternalArray(query.Component).mComponents.mDenseToSparse.items);
+                return result;
             }
-        }
 
-        pub fn GetGroup(self: Self, comptime query: GroupQuery, mask: *const SkipFieldComponent.StaticSkipFieldT, allocator: std.mem.Allocator) !std.ArrayList(entity_t) {
-            switch (query) {
-                .Component => |component_type| {
-                    const internal_array_t = InternalComponentArray(entity_t, component_type);
-                    const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
+            const Node = QueryNode(query);
 
-                    var result = try internal_array.GetAllEntities(allocator);
+            var sources: [Node.MaxSources]GroupSource = undefined;
+            const source_count = Node.Sources(self, &sources);
 
-                    try self.EntityListMask(&result, mask, allocator);
+            // there can't be more matches than entities walked, so this is the only allocation
+            try result.ensureTotalCapacity(allocator, TotalEntities(sources[0..source_count]));
 
-                    return result;
-                },
-                .Not => |not| {
-                    var result = try self.GetGroup(not.mFirst.*, mask, allocator);
-                    var second = try self.GetGroup(not.mSecond.*, mask, allocator);
-                    defer second.deinit(allocator);
-                    try self.EntityListDifference(&result, second, allocator);
-                    return result;
-                },
-                .Or => |ors| {
-                    var result = try self.GetGroup(ors[0], mask, allocator);
-                    inline for (ors[1..]) |or_query| {
-                        var intermediate = try self.GetGroup(or_query, mask, allocator);
-                        defer intermediate.deinit(allocator);
-                        try self.EntityListUnion(&result, intermediate, allocator);
-                    }
-                    return result;
-                },
-                .And => |ands| {
-                    var result = try self.GetGroup(ands[0], mask, allocator);
-                    inline for (ands[1..]) |and_query| {
-                        var intermediate = try self.GetGroup(and_query, mask, allocator);
-                        defer intermediate.deinit(allocator);
-                        try self.EntityListIntersection(&result, intermediate, allocator);
-                    }
-                    return result;
-                },
-            }
-        }
-
-        pub fn EntityListMask(self: Self, result: *std.ArrayList(entity_t), mask: *const SkipFieldComponent.StaticSkipFieldT, _: std.mem.Allocator) !void {
-            const zone = Tracy.ZoneInit("ComponentManager::EntityListMask", @src());
-            defer zone.Deinit();
-
-            // a mask that requires nothing keeps every entity, so there is nothing to filter out
-            if (mask.mNumUnskipped == 0) return;
-            if (result.items.len == 0) return;
-
-            const internal_array_t = InternalComponentArray(entity_t, SkipFieldComponent);
-            const internal_array: *internal_array_t = @ptrCast(@alignCast(self.mComponentsArrays.items[SkipFieldComponent.Ind].mPtr));
-
-            var end_index: usize = result.items.len;
-            var i: usize = 0;
-            while (i < end_index) {
-                const entity_id = result.items[i];
-                const skip_comp = internal_array.GetComponent(entity_id).?;
-                if (!skip_comp.mSkipField.IsUnskippedSuperSet(mask)) {
-                    result.items[i] = result.items[end_index - 1];
-                    end_index -= 1;
-                } else {
-                    i += 1;
+            const skip_array = self._SkipFieldArray();
+            for (sources[0..source_count], 0..) |source, i| {
+                for (source.mEntities) |entity_id| {
+                    const skip_field = &skip_array.GetComponentAssume(entity_id).mSkipField;
+                    // an entity in an earlier list was already checked there
+                    if (InSources(sources[0..i], skip_field)) continue;
+                    if (Node.Matches(skip_field)) result.appendAssumeCapacity(entity_id);
                 }
             }
 
-            result.shrinkRetainingCapacity(end_index);
+            return result;
         }
 
-        pub fn EntityListDifference(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
+        /// One component's entity list for GetGroup to walk, and that component's slot for telling whether an
+        /// entity is in it
+        const GroupSource = struct {
+            mEntities: []const entity_t,
+            mInd: SkipFieldComponent.StaticSkipFieldT.SkipFieldType,
+        };
+
+        /// The node for one part of a query. Every node has:
+        ///  - MaxSources: the most lists its Sources can fill, to size the buffer for it
+        ///  - Sources: fills the buffer with component lists that between them hold every entity it can match,
+        ///    and returns how many it filled
+        ///  - Matches: whether the entity with a skipfield matches it. The query is comptime, so a whole query's
+        ///    Matches unrolls into a fixed check of a few skipfield slots, e.g. has A and has B and not C
+        fn QueryNode(comptime query: GroupQuery) type {
+            return switch (query) {
+                .Component => |component_type| ComponentNode(component_type),
+                .And => |ands| AndNode(ands),
+                .Or => |ors| OrNode(ors),
+                .Not => |not| NotNode(not.mFirst.*, not.mSecond.*),
+            };
+        }
+
+        /// One component, the leaf every other node is built from
+        fn ComponentNode(comptime component_type: type) type {
+            return struct {
+                const MaxSources = 1;
+                const Ind: SkipFieldComponent.StaticSkipFieldT.SkipFieldType = ComponentInd(component_type);
+
+                /// its own list holds everything that has it
+                fn Sources(manager: Self, sources: []GroupSource) usize {
+                    sources[0] = .{
+                        .mEntities = manager._InternalArray(component_type).mComponents.mDenseToSparse.items,
+                        .mInd = Ind,
+                    };
+                    return 1;
+                }
+
+                fn Matches(skip_field: *const SkipFieldComponent.StaticSkipFieldT) bool {
+                    return skip_field.IndexIsUnskipped(Ind);
+                }
+            };
+        }
+
+        /// Matches every side, what used to be EntityListIntersection
+        fn AndNode(comptime ands: []const GroupQuery) type {
+            return struct {
+                const MaxSources = blk: {
+                    var max: usize = 0;
+                    for (ands) |and_query| max = @max(max, QueryNode(and_query).MaxSources);
+                    break :blk max;
+                };
+
+                /// a match has to be in every side, so the lists of the side with the fewest entities hold them all
+                fn Sources(manager: Self, sources: []GroupSource) usize {
+                    var best_count = QueryNode(ands[0]).Sources(manager, sources);
+                    var best_total = TotalEntities(sources[0..best_count]);
+                    inline for (ands[1..]) |and_query| {
+                        var side: [QueryNode(and_query).MaxSources]GroupSource = undefined;
+                        const side_count = QueryNode(and_query).Sources(manager, &side);
+                        const side_total = TotalEntities(side[0..side_count]);
+                        if (side_total < best_total) {
+                            @memcpy(sources[0..side_count], side[0..side_count]);
+                            best_count = side_count;
+                            best_total = side_total;
+                        }
+                    }
+                    return best_count;
+                }
+
+                fn Matches(skip_field: *const SkipFieldComponent.StaticSkipFieldT) bool {
+                    inline for (ands) |and_query| {
+                        if (!QueryNode(and_query).Matches(skip_field)) return false;
+                    }
+                    return true;
+                }
+            };
+        }
+
+        /// Matches any side, what used to be EntityListUnion
+        fn OrNode(comptime ors: []const GroupQuery) type {
+            return struct {
+                const MaxSources = blk: {
+                    var total: usize = 0;
+                    for (ors) |or_query| total += QueryNode(or_query).MaxSources;
+                    break :blk total;
+                };
+
+                /// a match can come from any side, so it takes every side's lists. a list already taken from
+                /// another side is only taken once
+                fn Sources(manager: Self, sources: []GroupSource) usize {
+                    var count: usize = 0;
+                    inline for (ors) |or_query| {
+                        var side: [QueryNode(or_query).MaxSources]GroupSource = undefined;
+                        const side_count = QueryNode(or_query).Sources(manager, &side);
+                        for (side[0..side_count]) |source| {
+                            if (HasSource(sources[0..count], source.mInd)) continue;
+                            sources[count] = source;
+                            count += 1;
+                        }
+                    }
+                    return count;
+                }
+
+                fn Matches(skip_field: *const SkipFieldComponent.StaticSkipFieldT) bool {
+                    inline for (ors) |or_query| {
+                        if (QueryNode(or_query).Matches(skip_field)) return true;
+                    }
+                    return false;
+                }
+            };
+        }
+
+        /// Matches the first side but not the second, what used to be EntityListDifference
+        fn NotNode(comptime first: GroupQuery, comptime second: GroupQuery) type {
+            return struct {
+                const MaxSources = QueryNode(first).MaxSources;
+
+                /// a match has to match the first side, so its lists hold them all
+                fn Sources(manager: Self, sources: []GroupSource) usize {
+                    return QueryNode(first).Sources(manager, sources);
+                }
+
+                fn Matches(skip_field: *const SkipFieldComponent.StaticSkipFieldT) bool {
+                    return QueryNode(first).Matches(skip_field) and !QueryNode(second).Matches(skip_field);
+                }
+            };
+        }
+
+        fn TotalEntities(sources: []const GroupSource) usize {
+            var total: usize = 0;
+            for (sources) |source| total += source.mEntities.len;
+            return total;
+        }
+
+        fn HasSource(sources: []const GroupSource, ind: SkipFieldComponent.StaticSkipFieldT.SkipFieldType) bool {
+            for (sources) |source| {
+                if (source.mInd == ind) return true;
+            }
+            return false;
+        }
+
+        /// Whether the entity with `skip_field` is in any of `sources`
+        fn InSources(sources: []const GroupSource, skip_field: *const SkipFieldComponent.StaticSkipFieldT) bool {
+            for (sources) |source| {
+                if (skip_field.IndexIsUnskipped(source.mInd)) return true;
+            }
+            return false;
+        }
+
+        /// Removes from `result` every id in `list2`. Both lists have to hold ids from this ECS
+        pub fn EntityListDifference(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ComponentManager::EntityListDifference", @src());
             defer zone.Deinit();
 
             if (result.items.len == 0) return;
 
-            var list2_set = HashSet(entity_t).init(allocator);
-            defer list2_set.deinit();
-            _ = try list2_set.appendSlice(list2.items);
+            const list2_marks = try self._MarkEntities(list2.items, allocator);
+            defer allocator.free(list2_marks);
 
             var end_index: usize = result.items.len;
             var i: usize = 0;
             while (i < end_index) {
-                if (list2_set.contains(result.items[i]) == true) {
+                if (_IsMarked(list2_marks, result.items[i])) {
                     result.items[i] = result.items[end_index - 1];
                     end_index -= 1;
                 } else {
@@ -375,34 +455,37 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             result.shrinkRetainingCapacity(end_index);
         }
 
-        pub fn EntityListUnion(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
+        /// Appends to `result` every id in `list2` it doesn't already have. Both lists have to hold ids from this ECS
+        pub fn EntityListUnion(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ComponentManager::EntityListUnion", @src());
             defer zone.Deinit();
 
-            var result_set = HashSet(entity_t).init(allocator);
-            defer result_set.deinit();
-            _ = try result_set.appendSlice(result.items);
+            const result_marks = try self._MarkEntities(result.items, allocator);
+            defer allocator.free(result_marks);
 
+            try result.ensureUnusedCapacity(allocator, list2.items.len);
             for (list2.items) |entity_id| {
-                // added to the set as well, so a repeat inside list2 is not appended twice
-                if ((try result_set.add(entity_id)) == true) {
-                    try result.append(allocator, entity_id);
-                }
+                if (_IsMarked(result_marks, entity_id)) continue;
+                // marked as well, so a repeat inside list2 is not appended twice
+                result_marks[SkipFieldArrayT.SparseSetT.GetIndexFrom(entity_id)] = entity_id;
+                result.appendAssumeCapacity(entity_id);
             }
         }
 
-        pub fn EntityListIntersection(_: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
+        /// Keeps only the ids in `result` that are also in `list2`. Both lists have to hold ids from this ECS
+        pub fn EntityListIntersection(self: Self, result: *std.ArrayList(entity_t), list2: std.ArrayList(entity_t), allocator: std.mem.Allocator) !void {
             const zone = Tracy.ZoneInit("ComponentManager::EntityListIntersection", @src());
             defer zone.Deinit();
 
-            var list2_set = HashSet(entity_t).init(allocator);
-            defer list2_set.deinit();
-            _ = try list2_set.appendSlice(list2.items);
+            if (result.items.len == 0) return;
+
+            const list2_marks = try self._MarkEntities(list2.items, allocator);
+            defer allocator.free(list2_marks);
 
             var end_index: usize = result.items.len;
             var i: usize = 0;
             while (i < end_index) {
-                if (list2_set.contains(result.items[i]) == true) {
+                if (_IsMarked(list2_marks, result.items[i])) {
                     i += 1;
                 } else {
                     result.items[i] = result.items[end_index - 1];
@@ -411,6 +494,31 @@ pub fn ComponentManager(entity_t: type, comptime components_types: []const type)
             }
 
             result.shrinkRetainingCapacity(end_index);
+        }
+
+        /// One slot per entity index this ECS has ever handed out, holding the id from `list` at that index and
+        /// NoEntity everywhere else. Lets the EntityList functions ask "is this id in the list" with one read
+        /// (_IsMarked) instead of a hash lookup. The full id is kept rather than a bit so an id from an older
+        /// generation of the same index doesn't count
+        fn _MarkEntities(self: Self, list: []const entity_t, allocator: std.mem.Allocator) ![]entity_t {
+            const marks = try allocator.alloc(entity_t, self._SkipFieldArray().mComponents.mSparseToDense.items.len);
+            @memset(marks, NoEntity);
+            for (list) |entity_id| {
+                marks[SkipFieldArrayT.SparseSetT.GetIndexFrom(entity_id)] = entity_id;
+            }
+            return marks;
+        }
+
+        fn _IsMarked(marks: []const entity_t, entity_id: entity_t) bool {
+            return marks[SkipFieldArrayT.SparseSetT.GetIndexFrom(entity_id)] == entity_id;
+        }
+
+        /// The empty mark in _MarkEntities. Its index is the largest there is, so it only clashes with a real id
+        /// once an ECS has handed out every index
+        const NoEntity: entity_t = std.math.maxInt(entity_t);
+
+        fn _InternalArray(self: Self, comptime component_type: type) *InternalComponentArray(entity_t, component_type) {
+            return @ptrCast(@alignCast(self.mComponentsArrays.items[ComponentInd(component_type)].mPtr));
         }
     };
 }

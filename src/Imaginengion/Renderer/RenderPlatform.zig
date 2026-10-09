@@ -32,10 +32,15 @@ const Platform = @This();
 
 _Impl: Impl = .{},
 
-pub fn Init(self: *Platform, engine_context: *EngineContext, present_mode: PresentMode) void {
+pub fn Init(self: *Platform, engine_context: *EngineContext) void {
     const init_zone = Tracy.ZoneInit("RenderPlatform::Init", @src());
     defer init_zone.Deinit();
-    self._Impl.Init(engine_context, present_mode);
+    self._Impl.Init(engine_context);
+}
+
+/// Switches how frames reach the window, between frames only. False when it couldn't, and the window keeps its mode
+pub fn SetPresentMode(self: *Platform, window: *Window, present_mode: PresentMode) bool {
+    return self._Impl.SetPresentMode(window, present_mode);
 }
 pub fn Deinit(self: *Platform, window: *Window) void {
     const deinit_zone = Tracy.ZoneInit("RenderPlatform::Deinit", @src());

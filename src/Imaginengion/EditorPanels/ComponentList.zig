@@ -4,7 +4,9 @@
 //! component, and right clicking the panel (the menu target the panel hands in) offers to add one the object doesn't
 //! have. The menus' clicks come in through the editor's pointer events (ActionOf), and Run does what was picked.
 //! Built once for an object: the panel builds it again when the object or which components it has change, or when a
-//! field asks for it (BindingSystem.TakeRebuild with Root).
+//! field asks for it (BindingSystem.TakeRebuild with Root). Every header starts folded for an object just picked, and
+//! one that was opened stays open while the list is built again for the same object, so adding a component (which
+//! starts folded too) or editing a field doesn't fold or open anything.
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -50,6 +52,10 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
         mAddMenu: ?Entity = null,
         /// What each of the menus' items does
         mItems: std.ArrayList(ItemAction) = .empty,
+        /// The content under each component's header, null for a component the object hasn't got
+        mSections: [components.len]?Entity = @splat(null),
+        /// Which headers are open, kept from one build to the next for the same object
+        mOpen: Present = .empty,
 
         pub fn Deinit(self: *Self, engine_allocator: std.mem.Allocator) void {
             self.mMenus.deinit(engine_allocator);
@@ -70,6 +76,8 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
         pub fn Build(self: *Self, engine_context: *EngineContext, parent: Entity, menu_target: Entity, object: ObjectType, options: Widgets.Options, extras: anytype) !void {
             const zone = Tracy.ZoneInit("ComponentList::Build", @src());
             defer zone.Deinit();
+            const same_object = self.mRoot != null and self.mObject.mID == object.mID and self.mObject.mManager == object.mManager;
+            self.mOpen = if (same_object) self.OpenSections() else .empty;
             try self.Clear(engine_context);
             const engine_allocator = engine_context.EngineAllocator();
             self.mObject = object;
@@ -78,7 +86,8 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             self.mRoot = root;
             inline for (components, 0..) |component_type, i| {
                 if (object.HasComponent(component_type)) {
-                    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = root }, component_type.Name, true, options);
+                    const section = try Widgets.CollapsingHeader(engine_context, .{ .Entity = root }, component_type.Name, self.mOpen.isSet(i), options);
+                    self.mSections[i] = section.Content;
                     if (comptime @hasDecl(component_type, "UIRender") or @TypeOf(extras) != @TypeOf(null)) {
                         try Inspector.RenderComponentWith(engine_context, section.Content.?, root, object, component_type, options, extras);
                     }
@@ -116,6 +125,19 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             self.mRoot = null;
             self.mMenus.clearRetainingCapacity();
             self.mItems.clearRetainingCapacity();
+            self.mSections = @splat(null);
+        }
+
+        /// Which of the built headers are open right now
+        fn OpenSections(self: *const Self) Present {
+            var open: Present = .empty;
+            for (self.mSections, 0..) |maybe_content, i| {
+                const content = maybe_content orelse continue;
+                if (!content.IsActive()) continue;
+                const item = content.GetComponent(LayoutItemComponent) orelse continue;
+                if (!item.mCollapsed) open.set(i);
+            }
+            return open;
         }
 
         /// What clicking `item` does, null if it isn't one of the list's menu items

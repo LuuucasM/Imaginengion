@@ -182,6 +182,53 @@ test "Add and Delete through the menus, built again when the components change" 
     try std.testing.expect(delete_collider != null);
 }
 
+/// Whether the entity list's header for `component_type` is open, null if the entity hasn't it
+fn IsOpen(panel: *ComponentsPanel, comptime component_type: type) ?bool {
+    const index = comptime blk: {
+        for (EntityComponents.ComponentPanelList, 0..) |listed, i| {
+            if (listed == component_type) break :blk i;
+        }
+        unreachable;
+    };
+    const content = panel.mEntityList.mSections[index] orelse return null;
+    return !content.GetComponent(LayoutItemComponent).?.mCollapsed;
+}
+
+test "headers start folded, and one opened stays open while the same object is built again" {
+    const test_panel = try TestPanel.Init();
+    defer test_panel.Deinit();
+    const engine_context = test_panel.mEngineContext;
+    const panel = &test_panel.mPanel;
+    const entity = try test_panel.mGameScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const other = try test_panel.mGameScene.CreateEntity(engine_context, Entity.DefaultConfig);
+
+    try test_panel.Update(.{ .entity = entity });
+    try std.testing.expectEqual(false, IsOpen(panel, EntityComponents.TransformComponent).?);
+    try std.testing.expectEqual(false, IsOpen(panel, EntityComponents.NameComponent).?);
+
+    //opened by hand, then a component added: the list is built again, the open one stays open, the new one is folded
+    const transform_index = comptime blk: {
+        for (EntityComponents.ComponentPanelList, 0..) |listed, i| {
+            if (listed == EntityComponents.TransformComponent) break :blk i;
+        }
+        unreachable;
+    };
+    panel.mEntityList.mSections[transform_index].?.GetComponent(LayoutItemComponent).?.mCollapsed = false;
+    try std.testing.expect(IsOpen(panel, EntityComponents.TransformComponent).?);
+    _ = try entity.AddComponent(engine_context, EntityComponents.ColliderComponent{});
+    const root = test_panel.Root();
+    try test_panel.Update(.{ .entity = entity });
+    try std.testing.expect(test_panel.Root().mID != root.mID);
+    try std.testing.expectEqual(true, IsOpen(panel, EntityComponents.TransformComponent).?);
+    try std.testing.expectEqual(false, IsOpen(panel, EntityComponents.ColliderComponent).?);
+
+    //another object picked: everything folded again, and back to the first, still folded
+    try test_panel.Update(.{ .entity = other });
+    try std.testing.expectEqual(false, IsOpen(panel, EntityComponents.TransformComponent).?);
+    try test_panel.Update(.{ .entity = entity });
+    try std.testing.expectEqual(false, IsOpen(panel, EntityComponents.TransformComponent).?);
+}
+
 test "a rigid body's type is picked under it, a scene shows its layer, and audio has Preview and Stop" {
     const test_panel = try TestPanel.Init();
     defer test_panel.Deinit();
