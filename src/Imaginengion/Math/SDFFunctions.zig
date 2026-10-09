@@ -260,6 +260,55 @@ pub fn opIntersection(distance_a: f32, distance_b: f32) f32 {
     return @max(distance_a, distance_b);
 }
 
+/// iq's opUnion: inside either shape, so the distance to it is the nearer of the two
+pub fn opUnion(distance_a: f32, distance_b: f32) f32 {
+    return @min(distance_a, distance_b);
+}
+
+/// iq's opSubtraction: a with b cut out of it, inside a and outside b. b's inside turned outward is what bounds it,
+/// which is why both have to be signed
+pub fn opSubtraction(distance_a: f32, distance_b: f32) f32 {
+    return @max(distance_a, -distance_b);
+}
+
+/// Two shapes combined smoothly, and how much of b is in the result: 0 is all a, 1 all b, what their colors are
+/// mixed by. A smoothness of 0 is the sharp op exactly, with a weight of 0 or 1 (a when they tie)
+pub const Blend = struct {
+    D: f32,
+    W: f32,
+};
+
+/// iq's quadratic smooth minimum (with its mix factor): a union that fills in where the two meet. `smoothness` is the
+/// most the surface moves out, right where they are the same distance; the blend reaches to where they are 4 times
+/// that apart
+pub fn opSmoothUnion(distance_a: f32, distance_b: f32, smoothness: f32) Blend {
+    if (smoothness <= 0) {
+        return if (distance_a <= distance_b) .{ .D = distance_a, .W = 0 } else .{ .D = distance_b, .W = 1 };
+    }
+    const k = smoothness * 4.0;
+    const h = @max(k - @abs(distance_a - distance_b), 0.0) / k;
+    const m = h * h * 0.5;
+    const s = m * k * 0.5;
+    return if (distance_a < distance_b) .{ .D = distance_a - s, .W = m } else .{ .D = distance_b - s, .W = 1.0 - m };
+}
+
+/// The smooth maximum, opSmoothUnion turned inside out: what the smooth subtract and intersect are made of
+fn SmoothMax(distance_a: f32, distance_b: f32, smoothness: f32) Blend {
+    const inverted = opSmoothUnion(-distance_a, -distance_b, smoothness);
+    return .{ .D = -inverted.D, .W = inverted.W };
+}
+
+/// opSubtraction with the edge of the cut rounded off by `smoothness`. The weight is how much of the cutter's side the
+/// result is on
+pub fn opSmoothSubtraction(distance_a: f32, distance_b: f32, smoothness: f32) Blend {
+    return SmoothMax(distance_a, -distance_b, smoothness);
+}
+
+/// opIntersection with the edge where the two meet rounded off by `smoothness`
+pub fn opSmoothIntersection(distance_a: f32, distance_b: f32, smoothness: f32) Blend {
+    return SmoothMax(distance_a, distance_b, smoothness);
+}
+
 /// A clip region (ClipComponent): its rectangle in its own plane, running on through depth either way, so the cut
 /// is the same for everything in front of it or behind it. Inside is negative
 pub fn sdClipPrism(point: Vec3(f32), position: Vec3(f32), rotation: Quat(f32), half_extents: Vec2(f32)) f32 {

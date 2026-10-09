@@ -369,3 +369,46 @@ test "a shape's bounding box comes from its axes the same as from its center and
         try ExpectVec3(expected.Max, bounds.Max);
     }
 }
+
+test "the sharp ops: union is the nearer, intersection the further, subtraction a outside b" {
+    try std.testing.expectEqual(@as(f32, -1), SDFFunc.opUnion(-1, 2));
+    try std.testing.expectEqual(@as(f32, 2), SDFFunc.opIntersection(-1, 2));
+    //inside a and inside the cutter: cut out, so outside
+    try std.testing.expectEqual(@as(f32, 0.5), SDFFunc.opSubtraction(-1, -0.5));
+    //inside a, outside the cutter: kept
+    try std.testing.expectEqual(@as(f32, -1), SDFFunc.opSubtraction(-1, 3));
+}
+
+test "a smoothness of 0 is the sharp op, with all of whichever side wins" {
+    const pairs = [_][2]f32{ .{ -1, 2 }, .{ 3, 0.5 }, .{ 0.25, 0.25 }, .{ -2, -3 } };
+    for (pairs) |pair| {
+        const a = pair[0];
+        const b = pair[1];
+        const join = SDFFunc.opSmoothUnion(a, b, 0);
+        try std.testing.expectEqual(SDFFunc.opUnion(a, b), join.D);
+        try std.testing.expectEqual(@as(f32, if (a <= b) 0 else 1), join.W);
+        try std.testing.expectEqual(SDFFunc.opSubtraction(a, b), SDFFunc.opSmoothSubtraction(a, b, 0).D);
+        try std.testing.expectEqual(SDFFunc.opIntersection(a, b), SDFFunc.opSmoothIntersection(a, b, 0).D);
+    }
+}
+
+test "a smooth union fills in by the smoothness where the two tie, half each, and not at all 4 times it apart" {
+    const tie = SDFFunc.opSmoothUnion(1, 1, 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), tie.D, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), tie.W, eps);
+
+    const apart = SDFFunc.opSmoothUnion(1, 3, 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), apart.D, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0), apart.W, eps);
+
+    //nearer b, so mostly b
+    const leaning = SDFFunc.opSmoothUnion(1.5, 1, 0.5);
+    try std.testing.expect(leaning.D < 1);
+    try std.testing.expect(leaning.W > 0.5 and leaning.W < 1);
+}
+
+test "smooth subtraction and intersection round the edge the other way, pushing the surface in" {
+    //on both surfaces at once: the sharp ops say 0, the rounded edge is further out of the shape
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), SDFFunc.opSmoothIntersection(0, 0, 0.5).D, eps);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), SDFFunc.opSmoothSubtraction(0, 0, 0.5).D, eps);
+}
