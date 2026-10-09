@@ -2,9 +2,6 @@ const std = @import("std");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
 
 const shaders = .{
-    //.{ "SDFVertShader", "src/Imaginengion/EngineAssets/shaders/SDFVertShader.zig", "vert" },
-    //.{ "SDFFragShaderOverlay", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderOverlay.zig", "frag_overlay" },
-    //.{ "SDFFragShaderGame", "src/Imaginengion/EngineAssets/shaders/SDFFragShaderGame.zig", "frag_game" },
     .{ "SDFComputeGame", "src/Imaginengion/EngineAssets/shaders/SDFComputeGame.zig", "compute_game" },
     .{ "SDFComputeOverlay", "src/Imaginengion/EngineAssets/shaders/SDFComputeOverlay.zig", "compute_overlay" },
 };

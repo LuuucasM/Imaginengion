@@ -53,11 +53,3 @@ pub const SDFPushConstants = extern struct {
 comptime {
     GPUAsserts.AssertGPULayout(SDFPushConstants);
 }
-
-pub fn Pipeline(pipeline_t: PipelineType) type {
-    return switch (pipeline_t) {
-        .GamePipeline => @import("backends/GamePipeline.zig"),
-        .OverlayPipeline => @import("backends/OverlayPipeline.zig"),
-        //.CustomShader =>
-    };
-}

@@ -63,8 +63,6 @@ const Renderer = @This();
 pub const ComputeOutput = ComputeTexture(.RGBA8);
 
 //pub const OutputFrameBuffer = FrameBuffer(&[_]TextureFormat{.RGBA8}, .None, 1);
-pub const GamePipielineT = RenderPipeline.Pipeline(.GamePipeline);
-pub const OverlayPipelineT = RenderPipeline.Pipeline(.OverlayPipeline);
 
 pub const RenderingMode = enum {
     Overlay,

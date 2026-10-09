@@ -306,10 +306,6 @@ fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search:
 
     const Marcher = TestMarcher(search);
     var marcher = Marcher{
-        .mNodes = undefined,
-        .mEdges = undefined,
-        .mNodeCount = 0,
-        .mEdgeCount = 0,
         .mDefaultColor = DEFAULT_COLOR,
         .mShapes = &shapes,
         .mShapeSurfaces = &surfaces,
@@ -324,29 +320,7 @@ fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search:
         .mPerspectiveFar = FAR,
     };
 
-    marcher.mNodes[0] = .{
-        .Point = ray.Origin,
-        .Normal = .{ .x = 0, .y = 0, .z = 0 },
-        .ParentEdge = Marcher.NO_EDGE,
-        .FirstEdge = Marcher.NO_EDGE,
-        .MaterialHandle = 0,
-        .AccumColor = DEFAULT_COLOR,
-        .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
-        .ShapeT = .None,
-    };
-    marcher.mNodeCount = 1;
-
-    marcher.mEdges[0] = .{
-        .Direction = ray.Dir,
-        .Length = 0.0,
-        .FromNode = 0,
-        .ToNode = 0,
-        .SiblingEdge = Marcher.NO_EDGE,
-        .AccumColor = DEFAULT_COLOR,
-        .MaterialHandle = 0,
-    };
-    marcher.mNodes[0].FirstEdge = 0;
-    marcher.mEdgeCount = 1;
+    marcher.Start(ray);
 
     marcher.March(FakeSample, &TEXTURES);
     return marcher.GenerateColor(FakeSample, &TEXTURES);

@@ -234,10 +234,11 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
 
-        mNodes: NodeArr,
-        mEdges: EdgeArr,
-        mNodeCount: usize,
-        mEdgeCount: usize,
+        /// the ray tree, filled from Start on
+        mNodes: NodeArr = undefined,
+        mEdges: EdgeArr = undefined,
+        mNodeCount: usize = 0,
+        mEdgeCount: usize = 0,
         mDefaultColor: Vec4(f32),
         /// every shape a ray looks for, every kind in one buffer (ShapeData), and what only a hit one needs
         /// (ShapeSurface), by each shape's SurfaceIndex
@@ -257,6 +258,32 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
+
+        /// Plants the ray tree's root for `ray`: the node it starts from and the edge it sets out along, through air.
+        /// Every trace starts here, then March, then GenerateColor
+        pub fn Start(self: *Self, ray: Ray) void {
+            self.mNodes[0] = .{
+                .Point = ray.Origin,
+                .Normal = .{ .x = 0, .y = 0, .z = 0 },
+                .ParentEdge = NO_EDGE,
+                .FirstEdge = 0,
+                .MaterialHandle = 0,
+                .AccumColor = self.mDefaultColor,
+                .TextureUV = .{ .x = -1, .y = -1, .z = -1 },
+                .ShapeT = .None,
+            };
+            self.mEdges[0] = .{
+                .Direction = ray.Dir,
+                .Length = 0.0,
+                .FromNode = 0,
+                .ToNode = 0,
+                .SiblingEdge = NO_EDGE,
+                .AccumColor = self.mDefaultColor,
+                .MaterialHandle = 0,
+            };
+            self.mNodeCount = 1;
+            self.mEdgeCount = 1;
+        }
 
         pub fn March(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) void {
             var edge_ind_stack: Stack(usize, MAX_EDGES) = .empty;
