@@ -99,7 +99,7 @@ const AudioBusesPanel = @import("../EditorPanels/AudioBusesPanel.zig");
 const ComponentsPanel = @import("../Imgui/ComponentsPanel.zig");
 const ContentBrowserPanel = @import("../Imgui/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../Imgui/TmplEditPanel.zig");
-const ScriptsPanel = @import("../Imgui/ScriptsPanel.zig");
+const ScriptsPanel = @import("../EditorPanels/ScriptsPanel.zig");
 const StatsPanel = @import("../EditorPanels/StatsPanel.zig");
 const PickingDebugPanel = @import("../EditorPanels/PickingDebugPanel.zig");
 const UIElementPanel = @import("../EditorPanels/UIElementPanel.zig");
@@ -148,7 +148,8 @@ _ComponentsPanel: ComponentsPanel = .{},
 _ContentBrowserPanel: ContentBrowserPanel = .{},
 /// One per template open for editing, see OpenTmpl
 mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
-_ScriptsPanel: ScriptsPanel = .{},
+/// The Scripts tab, in the editor UI
+mScriptsPanel: ScriptsPanel = .{},
 /// The Stats window, in the editor UI
 mStatsPanel: StatsPanel = .{},
 /// The Picking Debug window, in the editor UI
@@ -248,6 +249,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mUIElementPanel = try UIElementPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mPickingDebugPanel = try PickingDebugPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mScriptsPanel = try ScriptsPanel.Build(engine_context, self.mShell.mScriptsPage, .{});
     //=================================================================
 
     //EDITOR VIEWPORT STUFF==================================================
@@ -289,6 +291,7 @@ pub fn Deinit(self: *EditorProgram, engine_context: *EngineContext) void {
     self.mMenuBar.Deinit(engine_context.EngineAllocator());
     self.mAudioBusesPanel.Deinit(engine_context.EngineAllocator());
     self.mUIElementPanel.Deinit(engine_context.EngineAllocator());
+    self.mScriptsPanel.Deinit(engine_context.EngineAllocator());
 }
 
 //Note other systems to consider in the on update loop
@@ -455,7 +458,6 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             if (EditorShell.Host(shell.mPlayersPage, self.mPlayerPanel._P_Open, engine_context)) try self.mPlayerPanel.OnImguiRender(engine_context, current_world, .Players, &self.mSelectedObj);
             if (EditorShell.Host(shell.mGameModesPage, self.mGameModePanel._P_Open, engine_context)) try self.mGameModePanel.OnImguiRender(engine_context, current_world, .GameModes, &self.mSelectedObj);
             if (EditorShell.Host(shell.mComponentsPage, self._ComponentsPanel._P_Open, engine_context)) try self._ComponentsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
-            if (EditorShell.Host(shell.mScriptsPage, self._ScriptsPanel._P_Open, engine_context)) try self._ScriptsPanel.OnImguiRender(engine_context, &self.mSelectedObj);
             //the floating ones
             try self.RenderTmplEditPanels(engine_context);
             try self.RenderViewports(engine_context);
@@ -634,6 +636,7 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
             if (self.mMenuBar.ActionOf(click.mEntity)) |action| try self.RunMenuAction(engine_context, action);
             if (self.mAudioBusesPanel.ActionOf(click.mEntity)) |action| try AudioBusesPanel.Run(engine_context, action);
             if (self.mUIElementPanel.ActionOf(click.mEntity)) |action| try self.mUIElementPanel.Run(engine_context, action);
+            if (self.mScriptsPanel.ActionOf(click.mEntity)) |script| try ScriptsPanel.Run(engine_context, script);
         },
         else => {},
     }
@@ -1111,7 +1114,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     shown.set(.AudioBuses, self.mAudioBusesPanel.IsOpen());
     shown.set(.Components, self._ComponentsPanel._P_Open);
     shown.set(.ContentBrowser, self._ContentBrowserPanel.mIsVisible);
-    shown.set(.Scripts, self._ScriptsPanel._P_Open);
+    shown.set(.Scripts, self.mScriptsPanel.IsOpen());
     shown.set(.Stats, self.mStatsPanel.IsOpen());
     shown.set(.PickingDebug, self.mPickingDebugPanel.IsOpen());
     shown.set(.UIElement, self.mUIElementPanel.IsOpen());
@@ -1183,7 +1186,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             .AudioBuses => try self.mAudioBusesPanel.Toggle(engine_context),
             .Components => self._ComponentsPanel._P_Open = !self._ComponentsPanel._P_Open,
             .ContentBrowser => self._ContentBrowserPanel.mIsVisible = !self._ContentBrowserPanel.mIsVisible,
-            .Scripts => self._ScriptsPanel._P_Open = !self._ScriptsPanel._P_Open,
+            .Scripts => try self.mScriptsPanel.Toggle(engine_context),
             .Stats => try self.mStatsPanel.Toggle(engine_context),
             .PickingDebug => try self.mPickingDebugPanel.Toggle(engine_context),
             .UIElement => try self.mUIElementPanel.Toggle(engine_context),
@@ -1211,6 +1214,7 @@ fn UpdateShell(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mAssetHandlesPanel.Update(engine_context);
     try self.mAudioBusesPanel.Update(engine_context);
     try self.mUIElementPanel.Update(engine_context, self.mSelectedObj);
+    try self.mScriptsPanel.Update(engine_context, self.mSelectedObj);
     //before this frame's views are drawn, so it reads last frame's view rects the way input picking will
     try self.mPickingDebugPanel.Update(engine_context, &self._ViewportPanel, self);
 

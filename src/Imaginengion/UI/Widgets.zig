@@ -170,6 +170,20 @@ pub fn Label(engine_context: *EngineContext, parent: Parent, text: []const u8) !
     return entity;
 }
 
+/// A column filling what it is in, with room around its edges, whose content scrolls with a scrollbar when it runs past
+/// the bottom, cut off by a mask the shape of the area: a panel's or a window's content. The mask's shape has no
+/// surface, so it isn't drawn, and layout keeps it the area's size
+pub fn ScrollArea(engine_context: *EngineContext, parent: Parent) !Entity {
+    const area = try NewEntity(engine_context, parent);
+    _ = try area.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .All(PADDING) });
+    _ = try area.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
+    _ = try area.AddComponent(engine_context, ShapeComponent{});
+    _ = try area.AddComponent(engine_context, EntityComponents.MaskComponent{});
+    _ = try area.AddComponent(engine_context, UIElementComponent{});
+    _ = try UIManager.ElementOf(area).?.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Vertical });
+    return area;
+}
+
 /// A row to put things in side by side, e.g. buttons, with a gap between them. As big as what is in it
 pub fn Row(engine_context: *EngineContext, parent: Parent) !Entity {
     const row = try NewEntity(engine_context, parent);
@@ -644,15 +658,7 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
     _ = try Label(engine_context, .{ .Entity = close }, "x");
     if (options.StockScripts) try AddStockScript(engine_context, close, .CloseWindow);
 
-    //what runs past the bottom scrolls, with a scrollbar, cut off by a mask the shape of the content area. The shape has
-    //no surface, so it isn't drawn, and layout keeps it the content area's size
-    const content = try NewEntity(engine_context, .{ .Entity = window });
-    _ = try content.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .All(PADDING) });
-    _ = try content.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
-    _ = try content.AddComponent(engine_context, ShapeComponent{});
-    _ = try content.AddComponent(engine_context, EntityComponents.MaskComponent{});
-    _ = try content.AddComponent(engine_context, UIElementComponent{});
-    _ = try UIManager.ElementOf(content).?.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Vertical });
+    const content = try ScrollArea(engine_context, .{ .Entity = window });
 
     try WidgetActions.RaiseWindow(engine_context, window);
     return .{ .Window = window, .TitleBar = title_bar, .Content = content };
