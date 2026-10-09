@@ -22,6 +22,7 @@ const Renderer = @import("../../Renderer/Renderer.zig");
 const SurfShadingData = Renderer.SurfShadingData;
 const MedShadingData = Renderer.MedShadingData;
 const SDFRayMarcher = @import("../../Renderer/SDFRayMarcher.zig");
+const PassPlan = @import("../../Renderer/PassPlan.zig");
 const BVH = @import("../../Core/BVH.zig");
 const Aabb = @import("../../Math/Aabb.zig");
 
@@ -212,7 +213,7 @@ const TestScene = struct {
     Mediums: []const MedShadingData = &.{CLEAR_MEDIUM},
 };
 
-fn TestMarcher(comptime search: SDFRayMarcher.DirectSearch) type {
+fn TestMarcher(comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) type {
     return SDFRayMarcher.RayMarcher(
         [*]const ShapeData,
         [*]const ShapeSurface,
@@ -224,6 +225,7 @@ fn TestMarcher(comptime search: SDFRayMarcher.DirectSearch) type {
         [*]const MedShadingData,
         *const FakeTextures,
         search,
+        features,
     );
 }
 
@@ -234,7 +236,7 @@ const MAX_TEST_SHAPES = 32;
 /// which keeps the march working while nothing the engine draws uses it yet
 fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
     const direct = try TraceWith(scene, ray, scene.Shapes.len);
-    const marched = try TraceSearch(scene, ray, 0, .BVH);
+    const marched = try TraceSearch(scene, ray, 0, .BVH, .full);
     ExpectColor(direct, marched) catch |err| {
         std.debug.print("all direct and all marched disagree: direct {any}, marched {any}\n", .{ direct, marched });
         return err;
@@ -243,15 +245,31 @@ fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
 }
 
 /// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, found both
-/// ways the direct shapes can be searched: walking their BVH, and testing every one. The two have to agree
+/// ways the direct shapes can be searched: walking their BVH, and testing every one. The two have to agree. A scene
+/// the lean shader can draw, every shape direct and none a merge, is traced by the lean marcher too, which has to
+/// agree as well
 fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) !Vec4(f32) {
-    const bvh = try TraceSearch(scene, ray, direct_count, .BVH);
-    const linear = try TraceSearch(scene, ray, direct_count, .Linear);
+    const bvh = try TraceSearch(scene, ray, direct_count, .BVH, .full);
+    const linear = try TraceSearch(scene, ray, direct_count, .Linear, .full);
     ExpectColor(bvh, linear) catch |err| {
         std.debug.print("the BVH walk and testing every shape disagree: bvh {any}, linear {any}\n", .{ bvh, linear });
         return err;
     };
+    if (PassPlan.VariantFor(MergeCount(scene), scene.Shapes.len, direct_count) == .Lean) {
+        const lean = try TraceSearch(scene, ray, direct_count, .BVH, .lean);
+        ExpectColor(bvh, lean) catch |err| {
+            std.debug.print("the full and lean marchers disagree: full {any}, lean {any}\n", .{ bvh, lean });
+            return err;
+        };
+    }
     return bvh;
+}
+
+/// How many of a scene's shapes are merges, which only the full marcher draws
+fn MergeCount(scene: TestScene) usize {
+    var count: usize = 0;
+    for (scene.Shapes) |shape| count += @intFromBool(shape.Shape.Type == .Merge);
+    return count;
 }
 
 /// Sorts the direct shapes the way Renderer2D.SortShapes does for its BVH: by the Morton code of their bounding box's
@@ -284,7 +302,7 @@ fn SortForBVH(shapes: []ShapeData, items: []BVH.Item) void {
 /// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, the direct
 /// ones found by `search`. Set up the way Renderer2D and SDFComputeGame's main set up a pixel's ray: the direct shapes
 /// sorted for their BVH and the tree built over them, then the first node and edge
-fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch) !Vec4(f32) {
+fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) !Vec4(f32) {
     std.debug.assert(scene.Shadings.len > 0);
     std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and direct_count <= scene.Shapes.len);
 
@@ -304,7 +322,7 @@ fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search:
     defer bvh_nodes.deinit(std.testing.allocator);
     try BVH.Build(std.testing.allocator, items[0..direct_count], &bvh_nodes);
 
-    const Marcher = TestMarcher(search);
+    const Marcher = TestMarcher(search, features);
     var marcher = Marcher{
         .mDefaultColor = DEFAULT_COLOR,
         .mShapes = &shapes,

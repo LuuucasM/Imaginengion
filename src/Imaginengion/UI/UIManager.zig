@@ -41,6 +41,9 @@ const NumberFieldSystem = @import("NumberFieldSystem.zig");
 const BindingSystem = @import("BindingSystem.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const ThemeAsset = @import("../ECSComponents/AComponents.zig").ThemeAsset;
+const Texture2D = @import("../ECSComponents/AComponents.zig").Texture2D;
+const StyleComponent = UIComponents.StyleComponent;
+const StyleDirtyTag = UIComponents.StyleDirtyTag;
 const ScrollComponent = UIComponents.ScrollComponent;
 const ScrollStateComponent = UIComponents.ScrollStateComponent;
 const WindowEventData = @import("../Events/WindowEventData.zig");
@@ -77,6 +80,9 @@ mBindingSystem: BindingSystem = .empty,
 mTheme: AssetHandle = .uninit,
 /// The white texture styled shapes fill with (PLAIN_TEXTURE_PATH), loaded the first time it is needed
 mPlainTexture: AssetHandle = .uninit,
+/// The theme every styled element last took its style from, null before the first. Another one, or this one read
+/// again after its file changed, restyles everything
+mStyledTheme: ?AssetHandle.Type = null,
 
 /// The theme every project starts with
 pub const DEFAULT_THEME_PATH = "src/Imaginengion/EngineAssets/themes/Default.imtheme";
@@ -203,16 +209,21 @@ fn OnOwnUIEvent(self: *UIManager, engine_context: *EngineContext, event: *const 
     return .Continue;
 }
 
-/// Once a frame, after game logic and before layout (a font or a text can change sizes): every styled element's entity
-/// takes its style out of the current theme, and every number field shows its value
+/// Once a frame, after game logic and before layout (a font or a text can change sizes): the styled elements marked
+/// dirty take their style out of the current theme (all of them when the theme is new), and every number field shows
+/// its value
 pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("UIManager::UpdateBeforeLayout", @src());
     defer zone.Deinit();
     //fields' values onto their widgets first, which the number fields then show
     try self.mBindingSystem.Update(engine_context);
     try self.mNumberFieldSystem.Update(engine_context);
+    //not loaded before CurrentTheme: read for the first time, or again after its file changed
+    const was_loaded = self.mTheme.IsIDValid() and engine_context.mAssetManager.IsLoaded(ThemeAsset, self.mTheme.mID);
     const theme = self.CurrentTheme(engine_context) orelse return;
-    try self.mStyleSystem.Update(engine_context, theme, self.PlainTexture(engine_context));
+    const restyle_all = !was_loaded or self.mStyledTheme != self.mTheme.mID;
+    self.mStyledTheme = self.mTheme.mID;
+    try self.mStyleSystem.Update(engine_context, theme, self.PlainTexture(engine_context), restyle_all);
 }
 
 /// Once a frame, after layout and before world transforms: open popups are placed against what opened them, scrollbars
@@ -244,6 +255,18 @@ pub fn SetTheme(self: *UIManager, engine_context: *EngineContext, theme: AssetHa
     self.mTheme.ReleaseAsset();
     self.mTheme = theme;
     self.mStyleSystem.ClearWarnings(engine_context.EngineAllocator());
+}
+
+/// Reads the current theme (and so its fonts, see ThemeAsset) and the plain texture now, for a program to call while it
+/// starts: left to the first frame that needs them, that frame waits on reading them
+pub fn LoadTheme(self: *UIManager, engine_context: *EngineContext) void {
+    const zone = Tracy.ZoneInit("UIManager::LoadTheme", @src());
+    defer zone.Deinit();
+    _ = self.CurrentTheme(engine_context);
+    const plain_texture = self.PlainTexture(engine_context);
+    if (plain_texture.IsIDValid()) _ = plain_texture.GetAsset(engine_context, Texture2D) catch |err| {
+        std.log.err("The plain UI texture could not be read: {s}", .{@errorName(err)});
+    };
 }
 
 /// The current theme, loading the engine's default the first time if no other was set. Null if it can't be read, and
@@ -349,6 +372,8 @@ pub fn Adopt(self: *UIManager, engine_context: *EngineContext, owner: Entity) !v
     if (!component.mElement.IsActive()) component.mElement = try self.NewElement(engine_context);
     const element = component.mElement;
     element.GetComponent(ElementOwnerComponent).?.mOwner = owner;
+    //styled for the entity it now belongs to: one read from a file or copied hasn't been yet
+    try self.MarkElementStyleDirty(engine_context, element);
     //what its components point at is in its entity's world: a copied world's ids carry over, so only the world changes
     if (element.GetComponent(UIComponents.PopupRefComponent)) |popup_ref| {
         if (popup_ref.mPopup.IsIDValid()) popup_ref.mPopup.mManager = owner.mManager;
@@ -414,6 +439,7 @@ pub fn Style(engine_context: *EngineContext, entity: Entity, style_name: []const
     if (element.GetComponent(UIComponents.StyleComponent)) |existing| {
         existing.Deinit(engine_context);
         existing.* = style;
+        try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
     } else {
         _ = try element.AddComponent(engine_context, style);
     }
@@ -425,6 +451,29 @@ pub fn OnElementComponentAdded(self: *UIManager, engine_context: *EngineContext,
     if (component_type == ScrollComponent and !self.mECSManager.HasComponent(ScrollStateComponent, element_id)) {
         _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), element_id, ScrollStateComponent{});
     }
+    if (component_type == StyleComponent) try self.MarkElementStyleDirty(engine_context, .{ .mID = element_id, .mManager = self });
+}
+
+/// Asks for `entity` to take its style again at the next style pass, because something its style depends on changed:
+/// its state (hovered, pressed, focused, selected, disabled) or a part the style colors. Nothing for an entity that
+/// isn't styled. Called from Manager.AddComponent and RemoveComponent, which every change of those goes through
+pub fn MarkStyleDirty(self: *UIManager, engine_context: *EngineContext, entity: Entity) !void {
+    const element = ElementOf(entity) orelse return;
+    try self.MarkElementStyleDirty(engine_context, element);
+}
+
+/// MarkStyleDirty for `entity` and everything inside it, for a change they all show: disabling it disables them too
+pub fn MarkStyleDirtyTree(self: *UIManager, engine_context: *EngineContext, entity: Entity) !void {
+    try self.MarkStyleDirty(engine_context, entity);
+    var children = entity.GetIterator(.Child);
+    while (children.next()) |child| try self.MarkStyleDirtyTree(engine_context, child);
+}
+
+/// The element's StyleDirtyTag, if it is styled and hasn't one already
+pub fn MarkElementStyleDirty(self: *UIManager, engine_context: *EngineContext, element: UIElement) !void {
+    if (!self.mECSManager.HasComponent(StyleComponent, element.mID)) return;
+    if (self.mECSManager.HasComponent(StyleDirtyTag, element.mID)) return;
+    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), element.mID, StyleDirtyTag{});
 }
 
 /// Once a frame, at its end: deletes every element its entity no longer points at (gone, its component removed, or

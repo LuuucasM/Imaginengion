@@ -34,3 +34,18 @@ pub fn Init(draws_overlay: bool, draws_game: bool, overlay_count: u32, game_coun
         .ClearTo = if (overlay or game) .None else if (draws_game) .GameBackground else .Transparent,
     };
 }
+
+/// Which compile of a pass's shader runs it (build_shaders.zig, SDFRayMarcher.Features)
+pub const ShaderVariant = enum {
+    /// everything the marcher can do
+    Full,
+    /// only direct shapes and their masks, with merges and marching compiled out: fewer registers, so more pixels in
+    /// flight at once
+    Lean,
+};
+
+/// The leanest compile that can draw a pass: Lean unless it has a merge, or a shape found by marching (every shape past
+/// the first `direct_count`)
+pub fn VariantFor(merge_count: usize, shape_count: usize, direct_count: usize) ShaderVariant {
+    return if (merge_count == 0 and direct_count == shape_count) .Lean else .Full;
+}

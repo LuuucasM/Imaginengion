@@ -530,7 +530,13 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
 
         const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
 
-        self.mOverlayPipeline.Bind(overlay_compute_pass);
+        //the lean compile unless this pass has merges or marched shapes. Its shapes are sorted by now, so the direct count
+        //is right
+        self.mOverlayPipeline.Bind(overlay_compute_pass, PassPlan.VariantFor(
+            self.mR2D.GetMergeCount(.OverlayPipeline),
+            self.mR2D.GetShapeCount(.OverlayPipeline),
+            self.mR2D.GetDirectCount(.OverlayPipeline),
+        ));
         self.mR2D.BindBuffers(overlay_compute_pass, .OverlayPipeline);
         self.mSDFShading.BindBuffers(overlay_compute_pass);
         self.mTextureManager.BindCompute(overlay_compute_pass);
@@ -556,7 +562,11 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         //under an overlay it reads what that pass wrote, so the texture can't be swapped for a fresh one
         const game_compute_pass = compute_texture.BeginComputePass(engine_context, !plan.GameUnderOverlay);
 
-        self.mGamePipeline.Bind(game_compute_pass);
+        self.mGamePipeline.Bind(game_compute_pass, PassPlan.VariantFor(
+            self.mR2D.GetMergeCount(.GamePipeline),
+            self.mR2D.GetShapeCount(.GamePipeline),
+            self.mR2D.GetDirectCount(.GamePipeline),
+        ));
         self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
         self.mSDFShading.BindBuffers(game_compute_pass);
         self.mTextureManager.BindCompute(game_compute_pass);

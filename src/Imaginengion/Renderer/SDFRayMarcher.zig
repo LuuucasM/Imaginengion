@@ -123,12 +123,12 @@ fn IsFrontHit(hit: HitInfo) bool {
     return face == .PosZ;
 }
 
-/// The ray straight against a shape, by its kind
-fn HitShape(ray: Ray, shape: ShapeData) HitInfo {
+/// The ray straight against a shape, by its kind. A kind `features` leaves out is never hit, so its code isn't compiled
+fn HitShape(comptime features: Features, ray: Ray, shape: ShapeData) HitInfo {
     return switch (shape.Type) {
         .Quad => SDFFunc.rayIMQuad(ray, shape),
         .Glyph => SDFFunc.rayIMGlyph(ray, shape),
-        .Merge => SDFFunc.rayIMMerge(ray, shape),
+        .Merge => if (features.Merges) SDFFunc.rayIMMerge(ray, shape) else .miss,
         .None => .miss,
     };
 }
@@ -223,13 +223,28 @@ pub const DirectSearch = enum {
     Linear,
 };
 
+/// What kinds of work a marcher is compiled to do. A GPU reserves registers for the most demanding path in the whole
+/// shader, taken or not, so a pass with none of a kind runs a variant without it and fits more pixels in flight. The
+/// CPU picks the variant from the pass's own counts
+pub const Features = struct {
+    /// compound shapes (MergeComponent), drawn by running their programs (SDFProgram)
+    Merges: bool = true,
+    /// shapes found by marching, past the direct ones (mDirectCount < mShapesCount)
+    Marched: bool = true,
+
+    /// everything: what a pass needs when it has merges or marched shapes
+    pub const full: Features = .{};
+    /// only direct shapes and their masks: the editor's own UI
+    pub const lean: Features = .{ .Merges = false, .Marched = false };
+};
+
 /// How far a BVH node's box can reach past what it was built around and still count, as a share of the distance
 /// along the ray (at least 1 unit's worth). A box is worked out on the CPU from a shape's axes and a hit on the GPU
 /// in the shape's own space, so for a plate facing the ray the box's face and the plate's are the same distance away
 /// up to rounding. Without this a box could round to just past a hit it holds and be pruned, losing an exact tie
 const BVH_BOX_SLACK: f32 = 0.0001;
 
-pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime masks_type: type, comptime instrs_type: type, comptime parts_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch) type {
+pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime masks_type: type, comptime instrs_type: type, comptime parts_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch, comptime features: Features) type {
     return extern struct {
         pub const NO_EDGE: u32 = std.math.maxInt(u32);
         const Self = @This();
@@ -299,7 +314,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 //the direct shapes first, then the marched ones only as far as that hit, since nothing behind it
                 //can show. With no marched shapes, every pixel skips the march together
                 var surface = self.DirectSurface(edge_ray, curr_edge.SkipShape, sample_sampler, textures_array);
-                if (self.mDirectCount < self.mShapesCount) {
+                if (features.Marched and self.mDirectCount < self.mShapesCount) {
                     const limit = if (surface.Found) surface.T else self.mPerspectiveFar;
                     const marched = self.MarchedSurface(edge_ray, curr_edge.SkipShape, limit, sample_sampler, textures_array);
                     if (marched.Found and marched.T < limit) surface = marched;
@@ -439,7 +454,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         fn ConsiderShape(self: *const Self, ray: Ray, shape_ind: u32, skip_shape: u32, after: HitOrder, nearest: *Candidate) void {
             if (shape_ind == skip_shape) return;
             const shape: ShapeData = self.mShapes[shape_ind];
-            const hit = HitShape(ray, shape);
+            const hit = HitShape(features, ray, shape);
             if (!IsFrontHit(hit)) return;
             const order = HitOrder.Of(hit.T, shape, shape_ind);
             if (after.Before(order) and order.Before(nearest.Order)) nearest.* = .{ .Order = order, .Hit = hit };
@@ -557,7 +572,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: the front of a plate, and for
         /// a glyph, only where the letter covers it. Neither where its masks cut it off
         fn SurfaceAt(self: *const Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
-            return self.SurfaceFromHit(ray, shape_ind, HitShape(ray, self.mShapes[shape_ind]), sample_sampler, textures_array);
+            return self.SurfaceFromHit(ray, shape_ind, HitShape(features, ray, self.mShapes[shape_ind]), sample_sampler, textures_array);
         }
 
         /// SurfaceAt for a hit already found against the shape (HitShape), so the direct search doesn't test the ray
@@ -627,40 +642,44 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                         .ShadingHandle = fill_handle,
                     };
                 },
-                .Merge => {
-                    const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
-                    if (!self.InMasks(hit_point, shape.MaskIndex)) return .none;
-
-                    //the box only says where it could be: the program says whether it is there, the way a letter's
-                    //coverage does for a glyph
-                    const value = SDFProgram.Eval(self.mInstrs, self.mParts, SDFProgram.MergeRange(shape), hit_point, PartShader(sample_sampler){}, self.mSurfShading, textures_array);
-                    if (value.D > 0) return .none;
-
-                    //the band around the whole merged outline is the border's solid color
-                    if (surface.BorderWidth > 0 and value.D > -surface.BorderWidth) {
-                        return .{
-                            .Found = true,
-                            .Shape = shape_ind,
-                            .Type = shape.Type,
-                            .T = hit.T,
-                            .Normal = hit.Normal,
-                            .TextureUV = SDFFunc.UNTEXTURED_UV,
-                            .ShadingHandle = surface.BorderShadingHandle,
-                        };
-                    }
-                    return .{
-                        .Found = true,
-                        .Shape = shape_ind,
-                        .Type = shape.Type,
-                        .T = hit.T,
-                        .Normal = hit.Normal,
-                        .TextureUV = SDFFunc.UNTEXTURED_UV,
-                        .ShadingHandle = OWN_COLOR,
-                        .Color = value.Color,
-                    };
-                },
+                //left out of a variant without merges (Features), along with all it calls
+                .Merge => return if (features.Merges) self.MergeSurface(ray, shape_ind, shape, surface, hit, sample_sampler, textures_array) else .none,
                 .None => return .none,
             }
+        }
+
+        /// SurfaceFromHit for a merge: its masks, then whether its program says the hit is inside it, and its color there
+        fn MergeSurface(self: *const Self, ray: Ray, shape_ind: u32, shape: ShapeData, surface: ShapeSurface, hit: HitInfo, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+            const hit_point = ray.Origin.AddVec(ray.Dir.MulScalar(hit.T));
+            if (!self.InMasks(hit_point, shape.MaskIndex)) return .none;
+
+            //the box only says where it could be: the program says whether it is there, the way a letter's
+            //coverage does for a glyph
+            const value = SDFProgram.Eval(self.mInstrs, self.mParts, SDFProgram.MergeRange(shape), hit_point, PartShader(sample_sampler){}, self.mSurfShading, textures_array);
+            if (value.D > 0) return .none;
+
+            //the band around the whole merged outline is the border's solid color
+            if (surface.BorderWidth > 0 and value.D > -surface.BorderWidth) {
+                return .{
+                    .Found = true,
+                    .Shape = shape_ind,
+                    .Type = shape.Type,
+                    .T = hit.T,
+                    .Normal = hit.Normal,
+                    .TextureUV = SDFFunc.UNTEXTURED_UV,
+                    .ShadingHandle = surface.BorderShadingHandle,
+                };
+            }
+            return .{
+                .Found = true,
+                .Shape = shape_ind,
+                .Type = shape.Type,
+                .T = hit.T,
+                .Normal = hit.Normal,
+                .TextureUV = SDFFunc.UNTEXTURED_UV,
+                .ShadingHandle = OWN_COLOR,
+                .Color = value.Color,
+            };
         }
 
         /// The colorer a merge's hit is shaded with (SDFProgram.Eval), given the surface shadings and the textures: each

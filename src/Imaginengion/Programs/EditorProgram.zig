@@ -203,6 +203,8 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("EditorProgram::Init", @src());
     defer zone.Deinit();
     //EDITOR UI STUFF================================================
+    //the theme and its fonts now, rather than in the middle of the first frame
+    engine_context.mUIManager.LoadTheme(engine_context);
 
     //editor UI keeps its pixel size when the window grows instead of scaling up: the editor world's
     //overlays all measure the screen in pixels

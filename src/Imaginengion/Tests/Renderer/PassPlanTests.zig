@@ -32,3 +32,19 @@ test "a game-only render ignores the overlay's shapes" {
     try ExpectPlan(.{ .Overlay = false, .Game = true, .OverlayOnGameBackground = false, .GameUnderOverlay = false, .ClearTo = .None }, PassPlan.Init(false, true, 5, 7));
     try ExpectPlan(.{ .Overlay = false, .Game = false, .OverlayOnGameBackground = false, .GameUnderOverlay = false, .ClearTo = .GameBackground }, PassPlan.Init(false, true, 5, 0));
 }
+
+test "a pass with only direct shapes and no merges runs the lean shader" {
+    try std.testing.expectEqual(PassPlan.ShaderVariant.Lean, PassPlan.VariantFor(0, 40, 40));
+}
+
+test "an empty pass would run the lean shader" {
+    try std.testing.expectEqual(PassPlan.ShaderVariant.Lean, PassPlan.VariantFor(0, 0, 0));
+}
+
+test "a merge needs the full shader" {
+    try std.testing.expectEqual(PassPlan.ShaderVariant.Full, PassPlan.VariantFor(1, 40, 40));
+}
+
+test "a marched shape needs the full shader" {
+    try std.testing.expectEqual(PassPlan.ShaderVariant.Full, PassPlan.VariantFor(0, 40, 39));
+}

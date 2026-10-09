@@ -225,6 +225,12 @@ pub fn ReleaseAssetHandle(self: *AManager, asset_handle: *AssetHandle) void {
     asset_handle.mID = AssetHandle.NullObject;
 }
 
+/// Whether an asset is read in right now: not before the first GetAsset, nor between a change to its file unloading it
+/// and the next GetAsset reading it again
+pub fn IsLoaded(self: *AManager, comptime asset_type: type, asset_id: AssetHandle.Type) bool {
+    return self.mECSManager.IsActiveEntity(asset_id) and self.mECSManager.HasComponent(asset_type, asset_id);
+}
+
 pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
     _ValidateAssetType(asset_type);
 

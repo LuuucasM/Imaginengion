@@ -3,6 +3,7 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const PathType = @import("../../ECSManagers/AManager.zig").PathType;
 const Vec4 = @import("../../Math/MathTypes.zig").Vec4;
+const TextAsset = @import("TextAsset.zig");
 const ThemeAsset = @This();
 
 pub const Name: []const u8 = "ThemeAsset";
@@ -77,6 +78,19 @@ pub fn Init(self: *ThemeAsset, engine_context: *EngineContext, _: []const u8, re
         self.Deinit(engine_context);
         return error.AssetInitFailed;
     };
+    self.LoadFonts(engine_context);
+}
+
+/// Reads every font the theme's styles use now, while the theme is being read: left until something is first drawn with
+/// one, that frame would wait on it (a big font takes about 100 ms). A font that can't be read is logged and left to
+/// the text drawing it, as before
+fn LoadFonts(self: *ThemeAsset, engine_context: *EngineContext) void {
+    for (self.mStyles.values()) |style| {
+        if (!style.Font.IsIDValid()) continue;
+        _ = style.Font.GetAsset(engine_context, TextAsset) catch |err| {
+            std.log.err("A theme font could not be read: {s}", .{@errorName(err)});
+        };
+    }
 }
 
 /// Reads a theme's styles from the text of a theme file

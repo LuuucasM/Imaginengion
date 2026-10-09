@@ -35,6 +35,10 @@ const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TextComponent = EntityComponents.TextComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const LayoutSystem = @import("../UI/LayoutSystem.zig");
+const StyleSystem = @import("../UI/StyleSystem.zig");
+const ShapeComponent = EntityComponents.ShapeComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
+const DisabledTag = EntityComponents.DisabledTag;
 const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 
 const Serializer = @import("../Serializer/Serializer.zig");
@@ -187,6 +191,17 @@ pub fn Core(comptime Self: type) type {
             //a UI element's component may need another to go with it, e.g. a scroll needs a scroll state
             if (comptime Self == UIManager) try self.OnElementComponentAdded(engine_context, obj_id, @TypeOf(new_component));
 
+            //what a style reads: the state tags, and the parts it colors. The same one place every route goes through,
+            //so a styled entity is restyled only when one of these comes or goes (see StyleSystem)
+            if (comptime Self == EManager and (StyleSystem.IsStateTag(@TypeOf(new_component)) or
+                @TypeOf(new_component) == ShapeComponent or
+                @TypeOf(new_component) == SurfaceComponent or
+                @TypeOf(new_component) == TextComponent))
+            {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try MarkStyleDirty(engine_context, entity, @TypeOf(new_component));
+            }
+
             //an entity taking a UI element: a new one if the component came without, and either way pointed back at the
             //entity. Every route a component comes in by ends here: code, the panel, a file, a template
             if (comptime Self == EManager and @TypeOf(new_component) == UIElementComponent) {
@@ -223,6 +238,12 @@ pub fn Core(comptime Self: type) type {
                 try entity.ClearBodyTags(engine_context);
             }
 
+            //a state tag comes off now rather than at the end of the frame, so the style pass after it sees it gone.
+            //It is a tag, with no storage that anything could be pointing into, which makes that safe
+            if (comptime Self == EManager and StyleSystem.IsStateTag(component_type)) {
+                return try self.RemoveComponentSync(engine_context, obj_id, component_type);
+            }
+
             try self.mECSManager.RemoveComponent(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
         }
 
@@ -230,6 +251,20 @@ pub fn Core(comptime Self: type) type {
         /// it is safe to use.
         pub fn RemoveComponentSync(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self), comptime component_type: type) !void {
             try self.mECSManager.RemoveComponentSync(engine_context, obj_id, @TypeOf(self.mECSManager).ComponentInd(component_type));
+            if (comptime Self == EManager and StyleSystem.IsStateTag(component_type)) {
+                const entity: Entity = .{ .mID = obj_id, .mManager = ObjManager(self) };
+                try MarkStyleDirty(engine_context, entity, component_type);
+            }
+        }
+
+        /// A styled entity restyled after `component_type` came or went: it alone, or everything inside it too for
+        /// DisabledTag, which they all show
+        fn MarkStyleDirty(engine_context: *EngineContext, entity: Entity, comptime component_type: type) !void {
+            if (component_type == DisabledTag) {
+                try engine_context.mUIManager.MarkStyleDirtyTree(engine_context, entity);
+            } else {
+                try engine_context.mUIManager.MarkStyleDirty(engine_context, entity);
+            }
         }
 
         pub fn GetComponent(self: *Self, component_type: type, obj_id: UnderlyingObjType(Self)) ?*component_type {

@@ -1,5 +1,8 @@
 //! Styles: what a UI element's StyleComponent names, out of the current theme (ThemeAsset.zig), written into its
-//! entity's quad and text every frame. Part of the UIManager. The colors follow the state the entity is in, read from
+//! entity's quad and text. Part of the UIManager. Only the elements marked with StyleDirtyTag are restyled, when
+//! something their style depends on changes (UIManager.MarkStyleDirty), and every one of them when the theme is new
+//! or read again: a frame where the pointer moves onto a button restyles that button, not the whole UI. So a color
+//! written into a styled entity by something else stays until its state next changes. The colors follow the state the entity is in, read from
 //! its tags, highest first: disabled (it or anything it is inside has DisabledTag), pressed, hovered, focused, selected,
 //! and otherwise normal. A state the style has no color for takes the normal one.
 //! A styled quad or text with no texture of its own is filled plain, with a white texture, so its color is the theme's
@@ -24,12 +27,26 @@ const HoveredTag = EntityComponents.HoveredTag;
 const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
 const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
+const StyleDirtyTag = @import("../ECSComponents/UIComponents.zig").StyleDirtyTag;
+const DisabledTag = EntityComponents.DisabledTag;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 
 const StyleSystem = @This();
 
 /// The state an entity is in, as far as its colors go
 pub const State = enum { Normal, Hovered, Pressed, Focused, Selected, Disabled };
+
+/// The tags an entity's state is read from (StateOf): adding or removing one has it styled again. DisabledTag has
+/// everything inside it styled again too
+pub const StateTags = [_]type{ PressedTag, HoveredTag, FocusedTag, SelectedTag, DisabledTag };
+
+/// Whether `component_type` is one of StateTags
+pub fn IsStateTag(comptime component_type: type) bool {
+    inline for (StateTags) |tag| {
+        if (component_type == tag) return true;
+    }
+    return false;
+}
 
 pub const empty: StyleSystem = .{};
 
@@ -48,19 +65,28 @@ pub fn ClearWarnings(self: *StyleSystem, engine_allocator: std.mem.Allocator) vo
     self.mWarned.clearRetainingCapacity();
 }
 
-/// Once a frame, before layout (a font changing changes sizes): every styled element's entity, in every world, takes
-/// its style out of `theme`
-pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const ThemeAsset, plain_texture: AssetHandle) !void {
+/// Once a frame, before layout (a font changing changes sizes): every styled element marked dirty, in every world, has
+/// its entity take its style out of `theme`, and is no longer marked. `restyle_all` for every styled element instead,
+/// for a theme that is new or was just read again
+pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
     const zone = Tracy.ZoneInit("StyleSystem::Update", @src());
     defer zone.Deinit();
     const ui_manager = &engine_context.mUIManager;
-    const element_ids = try ui_manager.GetGroup(engine_context.FrameAllocator(), .{ .Component = StyleComponent });
+    const frame_allocator = engine_context.FrameAllocator();
+    const element_ids = if (restyle_all)
+        try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleComponent })
+    else
+        try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleDirtyTag });
+    zone.Value(element_ids.items.len);
     for (element_ids.items) |element_id| {
         const element = UIElement{ .mID = element_id, .mManager = ui_manager };
         const entity = element.GetOwner();
+        //no entity has taken it yet: it stays marked until one does
         if (!entity.IsActive()) continue;
+        if (element.HasComponent(StyleDirtyTag)) try ui_manager.mECSManager.RemoveComponentSync(engine_context, element_id, @TypeOf(ui_manager.mECSManager).ComponentInd(StyleDirtyTag));
 
-        const name = element.GetComponent(StyleComponent).?.mStyle.items;
+        const style_component = element.GetComponent(StyleComponent) orelse continue;
+        const name = style_component.mStyle.items;
         const style = theme.GetStyle(name) orelse {
             try self.WarnMissing(engine_context.EngineAllocator(), name);
             continue;

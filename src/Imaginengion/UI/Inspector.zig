@@ -40,6 +40,7 @@ const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const FieldBindingComponent = UIComponents.FieldBindingComponent;
 const NumberFieldComponent = UIComponents.NumberFieldComponent;
 const ScrollComponent = UIComponents.ScrollComponent;
+const StyleComponent = UIComponents.StyleComponent;
 const PopupComponent = UIComponents.PopupComponent;
 
 /// How wide a field's label is, in canvas units: every field of an inspector lines up after it
@@ -560,11 +561,12 @@ fn ResolveFor(comptime object_type: type, comptime component_type: type) *const 
 fn AfterEditFor(comptime object_type: type, comptime component_type: type) *const fn (*EngineContext, ObjectRef) anyerror!void {
     return &struct {
         fn AfterEdit(engine_context: *EngineContext, object: ObjectRef) anyerror!void {
-            //a scroll or popup setting changes how the element's entity is laid out
+            //a scroll or popup setting changes how the element's entity is laid out, a style name how it looks
             if (object_type == UIElement) {
-                if (component_type != ScrollComponent and component_type != PopupComponent) return;
                 const element = object.UIElement;
                 if (!element.IsActive()) return;
+                if (component_type == StyleComponent) return try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
+                if (component_type != ScrollComponent and component_type != PopupComponent) return;
                 const owner = element.GetOwner();
                 if (owner.IsActive()) try owner.MarkLayoutDirty(engine_context);
                 return;

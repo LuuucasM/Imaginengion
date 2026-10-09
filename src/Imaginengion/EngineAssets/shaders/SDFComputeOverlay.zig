@@ -36,6 +36,8 @@ const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
     .BVH,
+    //this compile's variant (build_shaders.zig): the CPU runs the lean one for a pass with no merges and no marched shapes
+    if (@import("shader_variant").lean) .lean else .full,
 );
 
 export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void {

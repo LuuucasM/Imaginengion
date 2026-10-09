@@ -10,6 +10,7 @@ pub const NumberFieldComponent = @import("UIElement/NumberFieldComponent.zig");
 pub const SelectionGroupComponent = @import("UIElement/SelectionGroupComponent.zig");
 pub const FloatingWindowComponent = @import("UIElement/FloatingWindowComponent.zig");
 pub const FieldBindingComponent = @import("UIElement/FieldBindingComponent.zig");
+pub const StyleDirtyTag = @import("UIElement/StyleDirtyTag.zig");
 
 /// The components of the UIManager's objects, its UI elements: the parts of an entity's UI that only the UI ever uses
 /// (see UIElement.zig)
@@ -26,6 +27,8 @@ pub const ComponentsList = [_]type{
     FloatingWindowComponent,
     //never saved: the inspector that makes it is built again from its object
     FieldBindingComponent,
+    //never saved: worked out while it runs
+    StyleDirtyTag,
 };
 
 /// What an element is saved with, inside its entity's UIElementComponent, and copied with when the entity is.
@@ -66,4 +69,5 @@ pub const EComponents = enum(u16) {
     SelectionGroupComponent = ListInd(&ComponentsList, SelectionGroupComponent),
     FloatingWindowComponent = ListInd(&ComponentsList, FloatingWindowComponent),
     FieldBindingComponent = ListInd(&ComponentsList, FieldBindingComponent),
+    StyleDirtyTag = ListInd(&ComponentsList, StyleDirtyTag),
 };

@@ -21,6 +21,7 @@ const FocusedTag = EntityComponents.FocusedTag;
 const SelectedTag = EntityComponents.SelectedTag;
 const LayoutDirtyTag = EntityComponents.LayoutDirtyTag;
 const StyleComponent = @import("../../ECSComponents/UIComponents.zig").StyleComponent;
+const StyleDirtyTag = @import("../../ECSComponents/UIComponents.zig").StyleDirtyTag;
 
 const THEME =
     \\{ "Styles": {
@@ -78,7 +79,12 @@ const TestWorld = struct {
 
     fn Update(self: *TestWorld) !void {
         //no plain texture to fill with: there are no assets here
-        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme, .uninit);
+        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme, .uninit, false);
+    }
+
+    /// The style pass for a theme that is new or was just read again
+    fn UpdateAll(self: *TestWorld) !void {
+        try self.mEngineContext.mUIManager.mStyleSystem.Update(self.mEngineContext, &self.mTheme, .uninit, true);
     }
 };
 
@@ -219,6 +225,112 @@ test "styling an entity gives it a UI element, and styling it again changes its 
     try std.testing.expectEqualStrings("Plain", UIManager.GetUIComponent(entity, StyleComponent).?.mStyle.items);
     try UIManager.Style(engine_context, entity, "Button");
     try std.testing.expectEqualStrings("Button", UIManager.GetUIComponent(entity, StyleComponent).?.mStyle.items);
+}
+
+fn IsStyleDirty(entity: Entity) bool {
+    return UIManager.HasUIComponent(entity, StyleDirtyTag);
+}
+
+test "a styled entity is only styled again when something its style reads changes" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.Styled("Button", .Shape);
+    const surface = entity.GetComponent(SurfaceComponent).?;
+    try std.testing.expect(IsStyleDirty(entity));
+    try world.Update();
+    try std.testing.expect(!IsStyleDirty(entity));
+
+    //a color put there by something else stays while nothing changes
+    surface.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
+    try world.Update();
+    try ExpectColor(.{ 0.3, 0.3, 0.3, 1 }, surface.mTexOptions.mColor);
+
+    //the pointer moving onto it does
+    _ = try entity.AddComponent(engine_context, HoveredTag{});
+    try std.testing.expect(IsStyleDirty(entity));
+    try world.Update();
+    try ExpectColor(.{ 0.4, 0.5, 0.6, 1 }, surface.mTexOptions.mColor);
+
+    //and moving off it
+    try entity.RemoveComponentSync(engine_context, HoveredTag);
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, surface.mTexOptions.mColor);
+}
+
+test "a state tag removed the usual way is gone in time for the next style pass" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.Styled("Button", .Shape);
+    _ = try entity.AddComponent(engine_context, SelectedTag{});
+    try world.Update();
+    try ExpectColor(.{ 0, 1, 0, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+
+    //not left until the end of the frame, after the pass that would have seen it still there
+    try entity.RemoveComponent(engine_context, SelectedTag);
+    try std.testing.expect(!entity.HasComponent(SelectedTag));
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+}
+
+test "disabling an entity styles everything inside it again" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const item = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    const label = try item.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try label.AddComponent(engine_context, ShapeComponent{});
+    _ = try label.AddComponent(engine_context, SurfaceComponent{});
+    try UIManager.Style(engine_context, label, "Button");
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, label.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+
+    _ = try item.AddComponent(engine_context, EntityComponents.DisabledTag{});
+    try std.testing.expect(IsStyleDirty(label));
+    try world.Update();
+    try ExpectColor(.{ 0.2, 0.2, 0.2, 1 }, label.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+
+    try item.RemoveComponentSync(engine_context, EntityComponents.DisabledTag);
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, label.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+}
+
+test "a new style, or a new theme, styles again" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.Styled("Button", .Shape);
+    const surface = entity.GetComponent(SurfaceComponent).?;
+    try world.Update();
+
+    try UIManager.Style(engine_context, entity, "Plain");
+    try world.Update();
+    try ExpectColor(.{ 0.5, 0.5, 0.5, 1 }, surface.mTexOptions.mColor);
+
+    //a theme read again restyles even what wasn't marked
+    surface.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
+    try world.UpdateAll();
+    try ExpectColor(.{ 0.5, 0.5, 0.5, 1 }, surface.mTexOptions.mColor);
+}
+
+test "a part added to a styled entity later is styled too" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try entity.AddComponent(engine_context, ShapeComponent{});
+    try UIManager.Style(engine_context, entity, "Button");
+    try world.Update();
+
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
+    try world.Update();
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
 }
 
 test "the engine's default theme reads, with every style the editor's look needs" {

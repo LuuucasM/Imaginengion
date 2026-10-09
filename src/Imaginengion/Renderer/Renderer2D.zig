@@ -393,6 +393,14 @@ pub fn GetDirectCount(self: Renderer2D, pipeline_kind: PipelineType) u32 {
     };
 }
 
+/// How many merges (MergeComponent) a pass draws, which decide whether it needs the full shader (PassPlan.VariantFor)
+pub fn GetMergeCount(self: Renderer2D, pipeline_kind: PipelineType) usize {
+    return switch (pipeline_kind) {
+        .GamePipeline => self.mGameData.mMergeCount,
+        .OverlayPipeline => self.mOverlayData.mMergeCount,
+    };
+}
+
 pub fn DrawQuad(
     self: *Renderer2D,
     engine_context: *EngineContext,

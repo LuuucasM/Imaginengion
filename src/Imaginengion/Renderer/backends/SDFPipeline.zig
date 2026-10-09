@@ -8,6 +8,7 @@ const StageInfo = ShaderAsset.StageInfo;
 const Stage = ShaderAsset.Stage;
 const TextureFormat = @import("../../ECSComponents/AComponents.zig").Texture2D.TextureFormat;
 const PushConstants = @import("../RenderPipeline.zig").SDFPushConstants;
+const PassPlan = @import("../PassPlan.zig");
 
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
@@ -42,27 +43,38 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
     return struct {
         //the shaders as this build compiled them (build_shaders.zig's anonymous imports), so they always match the CPU
         //side's structs. `zig build shaders` still writes copies to EngineAssets/shaders/ for inspecting
-        const ComputeShader = switch (pipeline_type) {
+        const FullShader = switch (pipeline_type) {
             .Overlay => @embedFile("SDFComputeOverlay"),
             .Game => @embedFile("SDFComputeGame"),
+        };
+        //the same shader compiled with merges and marching left out (PassPlan.ShaderVariant)
+        const LeanShader = switch (pipeline_type) {
+            .Overlay => @embedFile("SDFComputeOverlayLean"),
+            .Game => @embedFile("SDFComputeGameLean"),
         };
 
         const Self = @This();
 
         pub const empty: Self = .{
-            .mPipeline = null,
+            .mFullPipeline = null,
+            .mLeanPipeline = null,
         };
 
-        mPipeline: ?*sdl.struct_SDL_GPUComputePipeline,
+        mFullPipeline: ?*sdl.struct_SDL_GPUComputePipeline,
+        mLeanPipeline: ?*sdl.struct_SDL_GPUComputePipeline,
 
         pub fn Init(self: *Self, engine_context: *EngineContext) !void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
+            self.mFullPipeline = try CreatePipeline(device, FullShader);
+            self.mLeanPipeline = try CreatePipeline(device, LeanShader);
+        }
 
-            std.debug.assert(ComputeShader.len % 4 == 0);
+        fn CreatePipeline(device: *sdl.SDL_GPUDevice, comptime shader: []const u8) !*sdl.struct_SDL_GPUComputePipeline {
+            std.debug.assert(shader.len % 4 == 0);
 
             const create_info = sdl.SDL_GPUComputePipelineCreateInfo{
-                .code_size = ComputeShader.len,
-                .code = ComputeShader.ptr,
+                .code_size = shader.len,
+                .code = shader.ptr,
                 .entrypoint = "main",
                 .format = sdl.SDL_GPU_SHADERFORMAT_SPIRV,
                 .num_samplers = ShaderInfo.mNumSamplers,
@@ -77,24 +89,28 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
                 .props = 0,
             };
 
-            self.mPipeline = sdl.SDL_CreateGPUComputePipeline(device, &create_info);
-            if (self.mPipeline == null) {
-                std.log.err("GameComputePipeline: failed to create — {s}", .{sdl.SDL_GetError()});
+            return sdl.SDL_CreateGPUComputePipeline(device, &create_info) orelse {
+                std.log.err("SDFPipeline({s}): failed to create — {s}", .{ @tagName(pipeline_type), sdl.SDL_GetError() });
                 return error.PipelineInitFailed;
-            }
-            std.log.info("GameComputePipeline: created successfully", .{});
+            };
         }
 
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
             _ = sdl.SDL_WaitForGPUIdle(device);
-            if (self.mPipeline) |p| sdl.SDL_ReleaseGPUComputePipeline(device, p);
-            self.mPipeline = null;
+            if (self.mFullPipeline) |p| sdl.SDL_ReleaseGPUComputePipeline(device, p);
+            if (self.mLeanPipeline) |p| sdl.SDL_ReleaseGPUComputePipeline(device, p);
+            self.mFullPipeline = null;
+            self.mLeanPipeline = null;
         }
 
-        pub fn Bind(self: Self, pass: *anyopaque) void {
+        /// Binds the compile of the shader `variant` says: the lean one for a pass without merges or marched shapes
+        pub fn Bind(self: Self, pass: *anyopaque, variant: PassPlan.ShaderVariant) void {
             const sdl_pass: *sdl.SDL_GPUComputePass = @ptrCast(pass);
-            sdl.SDL_BindGPUComputePipeline(sdl_pass, self.mPipeline);
+            sdl.SDL_BindGPUComputePipeline(sdl_pass, switch (variant) {
+                .Full => self.mFullPipeline,
+                .Lean => self.mLeanPipeline,
+            });
         }
 
         pub fn PushUniforms(_: Self, cmd: *anyopaque, push: PushConstants) void {
