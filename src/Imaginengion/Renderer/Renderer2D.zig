@@ -105,14 +105,16 @@ pub fn ShapeAxes(center: Vec3(f32), rotation: Quat(f32)) [3]Vec4(f32).ArrayT {
 /// What only the shape that was hit needs: which surfaces it is shaded with. The same slots for every kind of shape,
 /// read the way its Type says
 pub const ShapeSurface = extern struct {
-    //a quad's surface, a glyph's atlas entry
+    //what a hit on the shape is painted with: a quad's surface, a glyph's text fill (its color and texture)
     ShadingHandle: u32,
     //a quad's border band's solid color surface, drawn instead of ShadingHandle's within BorderWidth of its edge.
     //ShadingHandle again for a shape without a border
     BorderShadingHandle: u32,
     //a quad's border: world units, already scaled and kept to at most half the smaller side. 0 for none
     BorderWidth: f32,
-    _Pad: u32 = 0,
+    //a glyph's atlas entry: where its letter is in the font atlas, shared by every glyph of that letter
+    //(ShadingBuffers.GlyphSurface). Unused by other shapes
+    AtlasHandle: u32 = 0,
 };
 
 comptime {

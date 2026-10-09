@@ -184,6 +184,23 @@ pub fn ScrollArea(engine_context: *EngineContext, parent: Parent) !Entity {
     return area;
 }
 
+/// A box showing a line of text, as wide as what it is in, that a file from the Content Browser can be dropped on (a drop
+/// target for FileRefComponent): an asset field. Style "Field"
+pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
+    const box = try NewEntity(engine_context, parent);
+    try AddQuad(engine_context, box, .{}, .{});
+    _ = try box.AddComponent(engine_context, LayoutComponent{
+        .mDirection = .Row,
+        .mPadding = .{ .Left = PADDING, .Right = PADDING, .Top = PADDING / 2, .Bottom = PADDING / 2 },
+        .mCrossAlign = .Center,
+    });
+    _ = try box.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
+    _ = try box.AddComponent(engine_context, EntityComponents.DropTargetComponent.Accepting(&.{EntityComponents.FileRefComponent}));
+    try UIManager.Style(engine_context, box, "Field");
+    _ = try Label(engine_context, .{ .Entity = box }, text);
+    return box;
+}
+
 /// A grid as wide as what it is in, putting as many of its children side by side as fit and wrapping onto new rows,
 /// with `gap` between them both ways: e.g. Tiles
 pub fn Grid(engine_context: *EngineContext, parent: Parent, gap: f32) !Entity {

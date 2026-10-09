@@ -88,7 +88,6 @@ pub const SurfShadingData = extern struct {
     TextureUV1: if (is_spirv) Vec2(f32).VectorT else Vec2(f32).ArrayT,
     TilingFactor: f32,
     Texturehandle: u32,
-    SiblingShading: u32,
     TextureWidth: u32,
     TextureHeight: u32 align(16),
 };

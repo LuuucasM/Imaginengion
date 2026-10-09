@@ -34,6 +34,7 @@ test {
     _ = @import("Tests/UI/EditorShellTests.zig");
     _ = @import("Tests/UI/EditorMenuBarTests.zig");
     _ = @import("Tests/UI/InspectorTests.zig");
+    _ = @import("Tests/UI/InspectorPiecesTests.zig");
     _ = @import("Tests/EditorPanels/StatsPanelTests.zig");
     _ = @import("Tests/EditorPanels/AudioBusesPanelTests.zig");
     _ = @import("Tests/EditorPanels/UIElementPanelTests.zig");

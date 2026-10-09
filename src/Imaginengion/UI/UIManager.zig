@@ -176,6 +176,8 @@ pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: P
     defer zone.Deinit();
     try self.mScrollSystem.OnPointerEvent(engine_context, event);
     try self.mNumberFieldSystem.OnPointerEvent(engine_context, event);
+    //a file dropped on an asset field
+    try self.mBindingSystem.OnPointerEvent(engine_context, event);
     switch (event) {
         .PointerClicked => |e| try self.mFocusSystem.OnClicked(engine_context, e),
         else => {},

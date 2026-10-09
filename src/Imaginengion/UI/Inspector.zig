@@ -15,6 +15,7 @@ const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const Bus = @import("../ECSObjects/Bus.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const WidgetActions = @import("WidgetActions.zig");
 const UIManager = @import("UIManager.zig");
 const Widgets = @import("Widgets.zig");
@@ -23,6 +24,7 @@ const MathTypes = @import("../Math/MathTypes.zig");
 const Vec2 = MathTypes.Vec2;
 const Vec3 = MathTypes.Vec3;
 const Vec4 = MathTypes.Vec4;
+const Quat = MathTypes.Quat;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
@@ -72,6 +74,10 @@ pub const Value = union(enum) {
     Choice: usize,
     Color: Vec4(f32),
     Text: []const u8,
+    /// a rotation, shown as X, Y and Z in degrees
+    Rotation: Quat(f32),
+    /// an asset field's asset: only ever written by a file dropped on its widget
+    Asset: AssetHandle,
 };
 
 /// Reading and writing a field of one type, as a Value
@@ -100,6 +106,21 @@ pub const NumberOptions = struct {
     Decimals: u8 = 3,
     Convert: ?Conversion = null,
     OnChange: ?OnChange = null,
+};
+
+/// For a union: its case's own rows go under the dropdown of cases
+pub const UnionOptions = struct {
+    OnChange: ?OnChange = null,
+    /// for a case that is a number
+    Number: NumberOptions = .{},
+};
+
+/// For an asset field
+pub const AssetOptions = struct {
+    /// a small picture of the asset beside its name, for a texture
+    Thumbnail: bool = false,
+    OnChange: ?OnChange = null,
+    Rebuilds: bool = false,
 };
 
 pub const FieldOptions = struct {
@@ -167,6 +188,109 @@ pub const Builder = struct {
         };
         const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, choices, chosen, self.mOptions);
         try self.Bind(dropdown, field, access, options.OnChange, null, options.Rebuilds);
+    }
+
+    /// A rotation, as X, Y and Z in degrees. The three numbers are what is being edited: they are only set again from
+    /// the rotation when something else changed it, since a rotation can be the same for different angles, and turning
+    /// it back into angles part way through a drag could jump them (Y past 90 flips X and Z)
+    pub fn Rotation(self: *Builder, field: *Quat(f32), label: []const u8, options: NumberOptions) !void {
+        //read before any widget is made, which can move the component when it is in the same ECS
+        const degrees = field.ToDegrees();
+        const row = try self.Row(label);
+        const numbers = try Widgets.NumberRow(self.mEngineContext, .{ .Entity = row }, &.{ degrees.x, degrees.y, degrees.z }, .{
+            .mSpeed = options.Speed,
+            .mMin = options.Min,
+            .mMax = options.Max,
+            .mDecimals = options.Decimals,
+        });
+        //the whole row, which each number's ValueChanged reaches too
+        try self.Bind(numbers, field, AccessFor(Quat(f32)), options.OnChange, null, false);
+    }
+
+    /// A tagged union: a dropdown of its cases, named as they are in the code, then the case's own rows. A case that is
+    /// a number or a bool is one field named after the case, one that is a struct shows its UIRender's rows, and one with
+    /// nothing in it shows nothing. Picking another case starts it at the union's DefaultFor(tag) if it has one, else at
+    /// the case's own default, and builds the inspector again
+    pub fn Union(self: *Builder, field: anytype, label: []const u8, options: UnionOptions) !void {
+        const U = @typeInfo(@TypeOf(field)).pointer.child;
+        const names = comptime @typeInfo(U).@"union".field_names;
+        const chosen = CaseOf(U, field.*);
+        const row = try self.Row(label);
+        var choices: [names.len][]const u8 = undefined;
+        inline for (names, 0..) |name, i| choices[i] = name;
+        const dropdown = try Widgets.Dropdown(self.mEngineContext, .{ .Entity = row }, &choices, chosen, self.mOptions);
+        try self.Bind(dropdown, field, UnionCaseAccess(U), options.OnChange, null, true);
+
+        switch (field.*) {
+            inline else => |*payload, tag| {
+                const P = @TypeOf(payload.*);
+                const case_name = @tagName(tag);
+                switch (P) {
+                    void => {},
+                    f32 => try self.Float(payload, case_name, MergeOnChange(options.Number, options.OnChange)),
+                    i32 => try self.Int(payload, case_name, MergeOnChange(options.Number, options.OnChange)),
+                    u32 => try self.UInt(payload, case_name, MergeOnChange(options.Number, options.OnChange)),
+                    u8 => try self.UInt8(payload, case_name, MergeOnChange(options.Number, options.OnChange)),
+                    bool => try self.Bool(payload, case_name, .{ .OnChange = options.OnChange }),
+                    else => try self.Fields(payload),
+                }
+            },
+        }
+    }
+
+    /// A struct inside the component shown in place: its UIRender's rows go with the ones around them, under no header
+    /// of their own (see Struct for one under a header). A struct without a UIRender shows nothing
+    pub fn Fields(self: *Builder, field: anytype) !void {
+        const T = @typeInfo(@TypeOf(field)).pointer.child;
+        if (comptime @typeInfo(T) != .@"struct" or !@hasDecl(T, "UIRender")) return;
+        try field.UIRender(self);
+    }
+
+    /// A field shown and never edited, as `show` writes it into the buffer it is handed (at most 64 bytes), e.g. an id
+    /// or a size worked out by something else
+    pub fn Readout(self: *Builder, field: anytype, label: []const u8, comptime show: anytype) !void {
+        const T = @typeInfo(@TypeOf(field)).pointer.child;
+        var buffer: [READOUT_LEN]u8 = undefined;
+        const text = show(field.*, &buffer);
+        const row = try self.Row(label);
+        const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, text);
+        try self.Bind(shown, field, ReadoutAccess(T, show), null, null, false);
+    }
+
+    /// A set of bits (a std.StaticBitSet): a numbered checkbox for each, as many to a row as fit
+    pub fn Flags(self: *Builder, field: anytype, label: []const u8, options: FieldOptions) !void {
+        const T = @typeInfo(@TypeOf(field)).pointer.child;
+        const row = try self.Row(label);
+        const grid = try Widgets.Grid(self.mEngineContext, .{ .Entity = row }, Widgets.PADDING / 2);
+        inline for (0..T.bit_length) |bit| {
+            var number: [4]u8 = undefined;
+            const checkbox = try Widgets.Checkbox(self.mEngineContext, .{ .Entity = grid }, try std.fmt.bufPrint(&number, "{d}", .{bit}), self.mOptions);
+            var parts = checkbox.GetIterator(.Child);
+            try self.Bind(parts.next().?, field, BitAccess(T, bit), options.OnChange, null, options.Rebuilds);
+        }
+    }
+
+    /// An asset field: the asset's file name, "None" for no asset, and a file dropped on it from the Content Browser
+    /// whose extension is one of `accepts` (e.g. ".png") becomes its asset. With no extensions it only shows the asset.
+    /// `accepts` has to outlive the inspector, so it is a literal
+    pub fn Asset(self: *Builder, field: *AssetHandle, label: []const u8, comptime accepts: []const []const u8, options: AssetOptions) !void {
+        const row = try self.Row(label);
+        if (options.Thumbnail) {
+            const thumbnail = try Widgets.Image(self.mEngineContext, .{ .Entity = row }, .uninit, .{ .x = THUMBNAIL_SIZE, .y = THUMBNAIL_SIZE });
+            try self.Bind(thumbnail, field, AccessFor(AssetHandle), null, null, false);
+        }
+        const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "") else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
+        try self.Bind(shown, field, AccessFor(AssetHandle), options.OnChange, null, options.Rebuilds);
+        UIManager.GetUIComponent(shown, FieldBindingComponent).?.mAccepts = accepts;
+    }
+
+    /// Buttons side by side, one for each of `texts`, in their own row with no label. They do nothing when clicked:
+    /// whoever built the inspector handles their clicks
+    pub fn Buttons(self: *Builder, comptime texts: []const []const u8) ![texts.len]Entity {
+        const row = try Widgets.Row(self.mEngineContext, .{ .Entity = self.mParent });
+        var buttons: [texts.len]Entity = undefined;
+        inline for (texts, 0..) |text, i| buttons[i] = try Widgets.Button(self.mEngineContext, .{ .Entity = row }, text);
+        return buttons;
     }
 
     /// The name of the entity an entity field points at, "None" when it points at none. Shown only, not edited
@@ -332,6 +456,13 @@ pub fn BuildComponent(engine_context: *EngineContext, parent: Entity, root: Enti
 /// components to ECSs, and when that is the ECS the component is in (a UI element's own components are in the
 /// UIManager's, like the widgets' styles) it can move in memory part way through. The bindings find the real one
 pub fn RenderComponent(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options) !void {
+    try RenderComponentWith(engine_context, parent, root, object, component_type, options, null);
+}
+
+/// RenderComponent, and after the component's own rows (if it has a UIRender) `extras.After(component_type, builder,
+/// component, object)`, for rows that need the object rather than only the component: `extras` is whoever built the
+/// inspector, or null. The component it is handed is the copy the rows were built from
+pub fn RenderComponentWith(engine_context: *EngineContext, parent: Entity, root: Entity, object: anytype, comptime component_type: type, options: Widgets.Options, extras: anytype) !void {
     const zone = Tracy.ZoneInit("Inspector::RenderComponent", @src());
     defer zone.Deinit();
     const component = object.GetComponent(component_type) orelse return;
@@ -339,7 +470,8 @@ pub fn RenderComponent(engine_context: *EngineContext, parent: Entity, root: Ent
     copy.* = component.*;
     var builder = ForComponent(engine_context, parent, root, object, component_type, options);
     builder.mBase = @intFromPtr(copy);
-    try copy.UIRender(&builder);
+    if (comptime @hasDecl(component_type, "UIRender")) try copy.UIRender(&builder);
+    if (comptime @TypeOf(extras) != @TypeOf(null)) try extras.After(component_type, &builder, copy, object);
 }
 
 /// A Builder for `object`'s component of type `component_type`, putting its rows under `parent`, its field offsets
@@ -424,6 +556,8 @@ pub fn AccessFor(comptime T: type) *const Access {
                 i32, u32, u8 => .{ .Number = @floatFromInt(value.*) },
                 bool => .{ .Bool = value.* },
                 Vec4(f32) => .{ .Color = value.* },
+                Quat(f32) => .{ .Rotation = value.* },
+                AssetHandle => .{ .Asset = value.* },
                 std.ArrayList(u8) => .{ .Text = value.items },
                 else => .{ .Choice = ChoiceOf(T, value.*) orelse 0 },
             };
@@ -438,6 +572,12 @@ pub fn AccessFor(comptime T: type) *const Access {
                 u8 => value.* = @intFromFloat(std.math.clamp(@round(written.Number), 0, std.math.maxInt(u8))),
                 bool => value.* = written.Bool,
                 Vec4(f32) => value.* = written.Color,
+                Quat(f32) => value.* = written.Rotation,
+                //the written handle comes with a reference of its own, which the field takes over
+                AssetHandle => {
+                    value.ReleaseAsset();
+                    value.* = written.Asset;
+                },
                 std.ArrayList(u8) => {
                     value.clearRetainingCapacity();
                     try value.appendSlice(engine_context.EngineAllocator(), written.Text);
@@ -448,6 +588,99 @@ pub fn AccessFor(comptime T: type) *const Access {
                 },
             }
         }
+    }.access;
+}
+
+/// How big an asset field's thumbnail is, and the longest a readout's text is
+const THUMBNAIL_SIZE: f32 = 32;
+const READOUT_LEN = 64;
+
+/// A number's options with OnChange set, if it isn't already
+fn MergeOnChange(options: NumberOptions, on_change: ?OnChange) NumberOptions {
+    var merged = options;
+    if (merged.OnChange == null) merged.OnChange = on_change;
+    return merged;
+}
+
+/// Which case a union is in, by its place among the cases
+fn CaseOf(comptime U: type, value: U) usize {
+    return @intFromEnum(std.meta.activeTag(value));
+}
+
+/// A union's case, as a Choice: picking another starts it at its default (see Builder.Union)
+fn UnionCaseAccess(comptime U: type) *const Access {
+    return &struct {
+        const access = Access{ .Read = Read, .Write = Write };
+        const Tag = std.meta.Tag(U);
+
+        fn Read(field: *anyopaque) Value {
+            const value: *U = @ptrCast(@alignCast(field));
+            return .{ .Choice = CaseIndex(std.meta.activeTag(value.*)) };
+        }
+
+        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+            const value: *U = @ptrCast(@alignCast(field));
+            if (written.Choice == CaseIndex(std.meta.activeTag(value.*))) return;
+            const names = comptime @typeInfo(U).@"union".field_names;
+            const types = comptime @typeInfo(U).@"union".field_types;
+            inline for (names, types, 0..) |name, P, i| {
+                if (written.Choice == i) {
+                    value.* = if (comptime @hasDecl(U, "DefaultFor")) U.DefaultFor(@field(Tag, name)) else @unionInit(U, name, PayloadDefault(P));
+                }
+            }
+        }
+
+        fn CaseIndex(tag: Tag) usize {
+            inline for (@typeInfo(U).@"union".field_names, 0..) |name, i| {
+                if (tag == @field(Tag, name)) return i;
+            }
+            unreachable;
+        }
+    }.access;
+}
+
+/// What a union case starts at when it is picked, without a DefaultFor: the type's `default` if it has one, else its
+/// fields' defaults (zero where they have none)
+fn PayloadDefault(comptime P: type) P {
+    if (P == void) return {};
+    switch (@typeInfo(P)) {
+        .@"struct", .@"union", .@"enum" => if (@hasDecl(P, "default")) return P.default,
+        else => {},
+    }
+    if (@typeInfo(P) == .@"struct") return std.mem.zeroInit(P, .{});
+    return std.mem.zeroes(P);
+}
+
+/// One bit of a bit set, as a Bool
+fn BitAccess(comptime T: type, comptime bit: usize) *const Access {
+    return &struct {
+        const access = Access{ .Read = Read, .Write = Write };
+
+        fn Read(field: *anyopaque) Value {
+            const value: *T = @ptrCast(@alignCast(field));
+            return .{ .Bool = value.isSet(bit) };
+        }
+
+        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+            const value: *T = @ptrCast(@alignCast(field));
+            value.setValue(bit, written.Bool);
+        }
+    }.access;
+}
+
+/// A field shown as `show` writes it, as Text, never written. The text is in a buffer of its own, which the binding
+/// system puts on the label as soon as it reads it
+fn ReadoutAccess(comptime T: type, comptime show: anytype) *const Access {
+    return &struct {
+        const access = Access{ .Read = Read, .Write = Write };
+        var buffer: [READOUT_LEN]u8 = undefined;
+
+        fn Read(field: *anyopaque) Value {
+            const value: *T = @ptrCast(@alignCast(field));
+            return .{ .Text = show(value.*, &buffer) };
+        }
+
+        fn Write(_: *EngineContext, _: *anyopaque, _: Value) anyerror!void {}
     }.access;
 }
 

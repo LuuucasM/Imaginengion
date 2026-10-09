@@ -28,5 +28,7 @@ mOnChange: ?Inspector.OnChange = null,
 mConvert: ?Inspector.Conversion = null,
 /// The inspector to build again when this field is edited, null if it doesn't change what is shown
 mRebuild: ?Entity = null,
+/// For an asset field: the file extensions it takes when a file is dropped on it, e.g. ".png". A literal
+mAccepts: []const []const u8 = &.{},
 
 pub fn Deinit(_: *FieldBindingComponent, _: *EngineContext) void {}

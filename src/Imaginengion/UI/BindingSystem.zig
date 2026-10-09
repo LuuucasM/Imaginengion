@@ -1,7 +1,8 @@
 //! Widgets tied to fields (FieldBindingComponent, made by Inspector.Builder): every frame each one shows its field's
 //! value, unless it is being typed into or dragged, and an edit (its ValueChanged, or TextSubmitted for a text field)
-//! is written into the field. After a write the field's own OnChange runs, then what its component needs after an edit
-//! (dirty tags), and an inspector whose field decides what else is shown is asked to be built again (TakeRebuild).
+//! is written into the field. An asset field is written by a file dropped on it instead (OnPointerEvent). After a write
+//! the field's own OnChange runs, then what its component needs after an edit (dirty tags), and an inspector whose
+//! field decides what else is shown is asked to be built again (TakeRebuild).
 //! Showing a value never sends an event, so a widget never hears back what it was just given. Part of the UIManager.
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
@@ -9,6 +10,11 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const MathTypes = @import("../Math/MathTypes.zig");
+const Quat = MathTypes.Quat;
+const Vec3 = MathTypes.Vec3;
 const UIManager = @import("UIManager.zig");
 const WidgetActions = @import("WidgetActions.zig");
 const Inspector = @import("Inspector.zig");
@@ -17,6 +23,8 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const AttribComponent = EntityComponents.AttribComponent;
 const TextComponent = EntityComponents.TextComponent;
 const SelectedTag = EntityComponents.SelectedTag;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
 const FieldBindingComponent = @import("../ECSComponents/UIComponents.zig").FieldBindingComponent;
 
 const BindingSystem = @This();
@@ -70,6 +78,33 @@ pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: UI
     };
     const binding = (UIManager.GetUIComponent(widget, FieldBindingComponent) orelse return).*;
     const value = ValueOf(binding, widget) orelse return;
+    try self.Write(engine_context, binding, value);
+}
+
+/// One of the frame's pointer events: a file dropped on an asset field that takes its kind becomes the field's asset
+pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, event: PointerEvent) !void {
+    const dropped = switch (event) {
+        .PointerDropped => |e| e,
+        else => return,
+    };
+    const zone = Tracy.ZoneInit("BindingSystem::OnPointerEvent", @src());
+    defer zone.Deinit();
+    const binding = (UIManager.GetUIComponent(dropped.mEntity, FieldBindingComponent) orelse return).*;
+    if (binding.mAccepts.len == 0) return;
+    const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
+    const extension = std.fs.path.extension(file_ref.mRelPath.items);
+    for (binding.mAccepts) |accepted| {
+        if (std.ascii.eqlIgnoreCase(extension, accepted)) break;
+    } else {
+        std.log.warn("{s} can't go in this field, it takes {s} files", .{ file_ref.mRelPath.items, binding.mAccepts[0] });
+        return;
+    }
+    const asset = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = file_ref.mRelPath.items, .path_type = file_ref.mPathType } });
+    try self.Write(engine_context, binding, .{ .Asset = asset });
+}
+
+/// Writes a value into a binding's field, then what has to happen after an edit
+fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBindingComponent, value: Inspector.Value) !void {
     const component = binding.mResolve(binding.mObject) orelse return;
     const field: *anyopaque = @ptrFromInt(@intFromPtr(component) + binding.mOffset);
     try binding.mAccess.Write(engine_context, field, value);
@@ -107,6 +142,9 @@ fn ValueOf(binding: FieldBindingComponent, widget: Entity) ?Inspector.Value {
         .Choice => .{ .Choice = WidgetActions.ChosenIndex(widget) orelse return null },
         .Color => .{ .Color = WidgetActions.ColorOf(widget) },
         .Text => .{ .Text = (widget.GetComponent(TextComponent) orelse return null).mText.items },
+        .Rotation => .{ .Rotation = Quat(f32).FromDegrees(DegreesOf(widget)) },
+        //only ever written by a drop
+        .Asset => return null,
     };
     const convert = binding.mConvert orelse return shown;
     return switch (shown) {
@@ -132,13 +170,67 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
         },
         .Choice => |index| try WidgetActions.ShowChosen(engine_context, widget, index),
         .Color => |color| WidgetActions.ShowColor(widget, color),
-        .Text => |text| {
-            const text_component = widget.GetComponent(TextComponent) orelse return;
-            if (std.mem.eql(u8, text_component.mText.items, text)) return;
-            try text_component.SetText(engine_context, text);
-            try widget.MarkLayoutDirty(engine_context);
+        .Text => |text| try ShowText(engine_context, widget, text),
+        .Rotation => |rotation| {
+            //the numbers being edited stay as they are while they still make this rotation: only a rotation changed by
+            //something else sets them again
+            if (SameRotation(Quat(f32).FromDegrees(DegreesOf(widget)), rotation)) return;
+            const degrees = rotation.ToDegrees();
+            var numbers = widget.GetIterator(.Child);
+            var axis: usize = 0;
+            while (numbers.next()) |number| {
+                const attrib = number.GetComponent(AttribComponent) orelse continue;
+                const angle: f32 = switch (axis) {
+                    0 => degrees.x,
+                    1 => degrees.y,
+                    else => degrees.z,
+                };
+                attrib.mData.SetFromFloat(angle);
+                axis += 1;
+            }
+        },
+        .Asset => |asset| {
+            //a name on a label, or the asset itself on a thumbnail
+            if (UIManager.LabelOf(widget)) |label| return try ShowText(engine_context, label, AssetName(asset));
+            const surface = widget.GetComponent(SurfaceComponent) orelse return;
+            if (surface.mTexture.mID == asset.mID) return;
+            surface.mTexture.ReleaseAsset();
+            surface.mTexture = asset;
+            asset.RetainAsset();
         },
     }
+}
+
+fn ShowText(engine_context: *EngineContext, widget: Entity, text: []const u8) !void {
+    const text_component = widget.GetComponent(TextComponent) orelse return;
+    if (std.mem.eql(u8, text_component.mText.items, text)) return;
+    try text_component.SetText(engine_context, text);
+    try widget.MarkLayoutDirty(engine_context);
+}
+
+/// What an asset field shows: the asset's file name without its extension, "None" for none
+fn AssetName(asset: AssetHandle) []const u8 {
+    if (asset.mID == AssetHandle.NullObject) return "None";
+    return std.fs.path.stem(std.fs.path.basename(asset.GetFileMetaData().mRelPath.items));
+}
+
+/// A rotation row's X, Y and Z, its numbers in order
+fn DegreesOf(row: Entity) Vec3(f32) {
+    var degrees = [3]f32{ 0, 0, 0 };
+    var numbers = row.GetIterator(.Child);
+    var axis: usize = 0;
+    while (numbers.next()) |number| {
+        const attrib = number.GetComponent(AttribComponent) orelse continue;
+        if (axis < 3) degrees[axis] = @floatCast(attrib.mData.AsFloat());
+        axis += 1;
+    }
+    return .{ .x = degrees[0], .y = degrees[1], .z = degrees[2] };
+}
+
+/// Whether two rotations turn things the same way, near enough: q and -q are the same rotation
+fn SameRotation(a: Quat(f32), b: Quat(f32)) bool {
+    const dot = a.w * b.w + a.x * b.x + a.y * b.y + a.z * b.z;
+    return @abs(dot) > 1 - 1e-5;
 }
 
 /// Whether a widget, or anything in it, is being typed into or dragged: then it is the player's, not the field's
