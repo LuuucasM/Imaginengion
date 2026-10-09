@@ -605,12 +605,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
 
                     //the coverage test needs where in the glyph's box the hit is. the fill texture's UV
                     //is a different thing, a spot in its texture manager slot, and only for color
-                    const atlas_shading_data = self.mSurfShading[surface.ShadingHandle];
+                    const atlas_shading_data = self.mSurfShading[surface.AtlasHandle];
                     if (SDFFunc.GetMSD(hit.UV, atlas_shading_data, textures_array, sample_sampler) < 0.5) return .none;
 
-                    //the atlas only says where the letter is. What it is painted with, the text's color and texture, is
-                    //the fill surface the atlas entry points on to, so that is what the hit is shaded with
-                    const fill_handle = atlas_shading_data.SiblingShading;
+                    //the atlas only says where the letter is, and is shared by every glyph of that letter. What it is
+                    //painted with, the text's color and texture, is the glyph's own surface
+                    const fill_handle = surface.ShadingHandle;
                     const texture_shading_data = self.mSurfShading[fill_handle];
                     return .{
                         .Found = true,

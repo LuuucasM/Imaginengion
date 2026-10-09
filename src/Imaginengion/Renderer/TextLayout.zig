@@ -18,6 +18,8 @@ pub const GlyphPlacement = struct {
     //up (matching the font json's yOrigin bottom), and the glyph box's local UV runs bottom up too
     UV0: Vec2(f32),
     UV1: Vec2(f32),
+    //the glyph's place in its font (ToArrayIndex), the same for every use of the same letter
+    AtlasIndex: u32,
 };
 
 /// Logical bounds: from x = 0 to the widest line's advance, and from the first line's ascender down
@@ -76,7 +78,8 @@ pub fn Iterator(comptime FontT: type) type {
                 return null;
             }
 
-            const glyph = &self.mFont.mGlyphs[FontT.ToArrayIndex(decoded.Codepoint)];
+            const atlas_index = FontT.ToArrayIndex(decoded.Codepoint);
+            const glyph = &self.mFont.mGlyphs[atlas_index];
             const advance = glyph.mAdvance * self.mFontSize;
 
             //a glyph without plane bounds has no ink (a space). it only advances, and never wraps
@@ -104,6 +107,7 @@ pub fn Iterator(comptime FontT: type) type {
                 //atlas texels are (left, top) and (right, bottom), so the corners' y swap
                 .UV0 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel0.x, .y = glyph.mAtlasTexel1.y }, self.mFont.mAtlasSize),
                 .UV1 = Vec2(f32).DivVec(.{ .x = glyph.mAtlasTexel1.x, .y = glyph.mAtlasTexel0.y }, self.mFont.mAtlasSize),
+                .AtlasIndex = @intCast(atlas_index),
             };
 
             self.Advance(advance + self.Kerning(glyph) * self.mFontSize);

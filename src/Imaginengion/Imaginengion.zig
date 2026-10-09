@@ -17,6 +17,7 @@ test {
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
     _ = @import("Tests/Renderer/ViewShapesTests.zig");
     _ = @import("Tests/Renderer/RayMarcherTests.zig");
+    _ = @import("Tests/Renderer/ShadingBuffersTests.zig");
     _ = @import("Tests/Renderer/SDFProgramTests.zig");
     _ = @import("Tests/UI/LayoutComponentTests.zig");
     _ = @import("Tests/UI/LayoutSystemTests.zig");

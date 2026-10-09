@@ -419,7 +419,6 @@ pub fn DrawQuad(
             engine_context.EngineAllocator(),
             &surface.mTexOptions,
             texture_asset,
-            std.math.maxInt(u32),
         );
 
     var shading_flag: u32 = 0;
@@ -430,7 +429,7 @@ pub fn DrawQuad(
     if (box.BorderWidth > 0) {
         var border_options: Texture2D.TexOptions = .default;
         border_options.mColor = surface.mBorderColor;
-        border_shading_handle = try shading_buff.AddSurface(engine_context.EngineAllocator(), &border_options, texture_asset, std.math.maxInt(u32));
+        border_shading_handle = try shading_buff.AddSurface(engine_context.EngineAllocator(), &border_options, texture_asset);
         if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
@@ -490,7 +489,7 @@ pub fn DrawMerge(
     plain.mTexture.mManager = &engine_context.mAssetManager;
     const surface = root.GetComponent(SurfaceComponent) orelse &plain;
     const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
-    const shading_handle = try shading_buff.AddSurface(engine_allocator, &surface.mTexOptions, texture_asset, std.math.maxInt(u32));
+    const shading_handle = try shading_buff.AddSurface(engine_allocator, &surface.mTexOptions, texture_asset);
 
     //each part's shading, from the surface that paints it, added once for every part it paints. See-through where any
     //of them is, the way a quad's surface is
@@ -509,7 +508,7 @@ pub fn DrawMerge(
         if (!known.found_existing) {
             const painter_surface = painter_entity.GetComponent(SurfaceComponent).?;
             const painter_texture = try painter_surface.mTexture.GetAsset(engine_context, Texture2D);
-            known.value_ptr.* = @intCast(try shading_buff.AddSurface(engine_allocator, &painter_surface.mTexOptions, painter_texture, std.math.maxInt(u32)));
+            known.value_ptr.* = @intCast(try shading_buff.AddSurface(engine_allocator, &painter_surface.mTexOptions, painter_texture));
             if (painter_surface.mTexOptions.mIsTransparent) shading_flag |= ShapeData.FLAG_TRANSPARENT;
         }
         part.Shading = known.value_ptr.*;
@@ -523,7 +522,7 @@ pub fn DrawMerge(
         border_width = surface.mBorderWidth * @min(world_scale.x, world_scale.y) * if (canvas) |c| c.Scale else 1.0;
         var border_options: Texture2D.TexOptions = .default;
         border_options.mColor = surface.mBorderColor;
-        border_shading_handle = try shading_buff.AddSurface(engine_allocator, &border_options, texture_asset, std.math.maxInt(u32));
+        border_shading_handle = try shading_buff.AddSurface(engine_allocator, &border_options, texture_asset);
         if (surface.mBorderColor.w < 1.0) shading_flag |= ShapeData.FLAG_TRANSPARENT;
     }
 
@@ -548,7 +547,7 @@ pub fn DrawMerge(
 /// A plain white surface's shading, for a merge's parts that nothing paints
 fn PlainShading(engine_context: *EngineContext, shading_buff: *ShadingBuffers, plain: *SurfaceComponent) !usize {
     const texture_asset = try plain.mTexture.GetAsset(engine_context, Texture2D);
-    return shading_buff.AddSurface(engine_context.EngineAllocator(), &plain.mTexOptions, texture_asset, std.math.maxInt(u32));
+    return shading_buff.AddSurface(engine_context.EngineAllocator(), &plain.mTexOptions, texture_asset);
 }
 
 pub fn DrawText(
@@ -569,11 +568,11 @@ pub fn DrawText(
     const atlas_asset = &text_asset.mAtlas;
     const texture_asset = try surface.mTexture.GetAsset(engine_context, Texture2D);
 
-    const texture_shading_handle = try shading_buff.AddSurface(
+    //what every letter is painted with: the text's color and texture
+    const fill_shading_handle = try shading_buff.AddSurface(
         engine_context.EngineAllocator(),
         &surface.mTexOptions,
         texture_asset,
-        std.math.maxInt(u32),
     );
 
     var texture_shading_flags: u32 = 0;
@@ -610,19 +609,14 @@ pub fn DrawText(
         const glyph_box = ShapeGeometry.Box{ .Center = glyph_center, .Rotation = glyph_rot, .HalfExtents = half_extents };
         if (masks.CutsOff(mask, glyph_box)) continue;
 
-        var tex_options = Texture2D.TexOptions{
-            .mColor = Vec4(f32){ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
-            .mIsTransparent = false,
-            .mTextureUV0 = glyph.UV0,
-            .mTextureUV1 = glyph.UV1,
-            .mTilingFactor = 1.0,
-        };
-
-        const atlas_shading_handle = try shading_buff.AddSurface(
+        //where the letter is in the font atlas, shared with every other glyph of the same letter this render
+        const atlas_shading_handle = try shading_buff.GlyphSurface(
             engine_context.EngineAllocator(),
-            &tex_options,
-            atlas_asset,
-            texture_shading_handle,
+            .{ .AtlasTexture = @intCast(atlas_asset.GetTextureHandle()), .Glyph = glyph.AtlasIndex },
+            atlas_asset.GetWidth(),
+            atlas_asset.GetHeight(),
+            glyph.UV0,
+            glyph.UV1,
         );
 
         const axes = ShapeAxes(glyph_center, glyph_rot);
@@ -637,9 +631,10 @@ pub fn DrawText(
             .SurfaceIndex = undefined,
             .Flags = texture_shading_flags,
         }, .{
-            .ShadingHandle = @intCast(atlas_shading_handle),
-            .BorderShadingHandle = @intCast(atlas_shading_handle),
+            .ShadingHandle = @intCast(fill_shading_handle),
+            .BorderShadingHandle = @intCast(fill_shading_handle),
             .BorderWidth = 0,
+            .AtlasHandle = @intCast(atlas_shading_handle),
         }, .{});
     }
 }

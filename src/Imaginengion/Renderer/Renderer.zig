@@ -89,7 +89,7 @@ pub const SurfShadingData = extern struct {
     TilingFactor: f32,
     Texturehandle: u32,
     TextureWidth: u32,
-    TextureHeight: u32 align(16),
+    TextureHeight: u32,
 };
 
 pub const MedShadingData = extern struct {
@@ -147,6 +147,16 @@ pub const ShadingBuffers = struct {
     mSurfShadingBuffBase: std.ArrayList(SurfShadingData) = .empty,
     mMedShadingBuff: SSBO = .{},
     mMedShadingBuffBase: std.ArrayList(MedShadingData) = .empty,
+    /// each letter's atlas entry so far this render (GlyphSurface), emptied with the shadings by Reset
+    mGlyphSurfaces: std.AutoHashMapUnmanaged(GlyphKey, u32) = .empty,
+
+    /// Which letter of which font atlas an atlas entry is for: the atlas's texture manager slot and the letter's place
+    /// in its font (TextLayout.GlyphPlacement.AtlasIndex)
+    pub const GlyphKey = struct {
+        AtlasTexture: u32,
+        Glyph: u32,
+    };
+
     pub fn Init(self: *ShadingBuffers, engine_context: *EngineContext) !void {
         self.mSurfShadingBuff.Init(engine_context, @sizeOf(SurfShadingData) * 100, 0, .Compute);
         self.mSurfShadingBuffBase = try std.ArrayList(SurfShadingData).initCapacity(engine_context.EngineAllocator(), 100);
@@ -160,13 +170,13 @@ pub const ShadingBuffers = struct {
 
         self.mMedShadingBuff.Deinit(engine_context);
         self.mMedShadingBuffBase.deinit(engine_context.EngineAllocator());
+        self.mGlyphSurfaces.deinit(engine_context.EngineAllocator());
     }
     pub fn AddSurface(
         self: *ShadingBuffers,
         engine_allocator: std.mem.Allocator,
         tex_options: *Texture2D.TexOptions,
         texture_asset: *Texture2D,
-        sibling_shading: usize,
     ) !usize {
         try self.mSurfShadingBuffBase.append(engine_allocator, .{
             .Color = tex_options.mColor.ToArray(),
@@ -174,7 +184,6 @@ pub const ShadingBuffers = struct {
             .TextureUV1 = tex_options.mTextureUV1.ToArray(),
             .TilingFactor = tex_options.mTilingFactor,
             .Texturehandle = @intCast(texture_asset.GetTextureHandle()),
-            .SiblingShading = @intCast(sibling_shading),
             .TextureWidth = @intCast(texture_asset.GetWidth()),
             .TextureHeight = @intCast(texture_asset.GetHeight()),
         });
@@ -196,11 +205,38 @@ pub const ShadingBuffers = struct {
             .TextureUV1 = tex_options.mTextureUV1.ToArray(),
             .TilingFactor = tex_options.mTilingFactor,
             .Texturehandle = @intCast(texture_handle),
-            .SiblingShading = std.math.maxInt(u32),
             .TextureWidth = @intCast(width),
             .TextureHeight = @intCast(height),
         });
         return self.mSurfShadingBuffBase.items.len - 1;
+    }
+    /// The atlas entry for one letter: where it is in its font's atlas, which is all the coverage test reads. Every glyph
+    /// of that letter in that atlas shares the one entry, so a text's eleven e's add one, not eleven. What a glyph is
+    /// painted with is its text's fill, which its ShapeSurface points at itself. Good until the next Reset
+    pub fn GlyphSurface(
+        self: *ShadingBuffers,
+        engine_allocator: std.mem.Allocator,
+        key: GlyphKey,
+        atlas_width: usize,
+        atlas_height: usize,
+        uv0: Vec2(f32),
+        uv1: Vec2(f32),
+    ) !usize {
+        const entry = try self.mGlyphSurfaces.getOrPut(engine_allocator, key);
+        if (!entry.found_existing) {
+            errdefer _ = self.mGlyphSurfaces.remove(key);
+            try self.mSurfShadingBuffBase.append(engine_allocator, .{
+                .Color = .{ 1.0, 1.0, 1.0, 1.0 },
+                .TextureUV0 = uv0.ToArray(),
+                .TextureUV1 = uv1.ToArray(),
+                .TilingFactor = 1.0,
+                .Texturehandle = key.AtlasTexture,
+                .TextureWidth = @intCast(atlas_width),
+                .TextureHeight = @intCast(atlas_height),
+            });
+            entry.value_ptr.* = @intCast(self.mSurfShadingBuffBase.items.len - 1);
+        }
+        return entry.value_ptr.*;
     }
     pub fn AddMedium(self: *ShadingBuffers, engine_allocator: std.mem.Allocator, color: Vec4(f32), absorption: Vec3(f32), scattering: Vec3(f32)) !usize {
         try self.mMedShadingBuffBase.append(engine_allocator, .{
@@ -216,10 +252,12 @@ pub const ShadingBuffers = struct {
             .ClearAndFree => {
                 self.mSurfShadingBuffBase.clearAndFree(engine_allocator);
                 self.mMedShadingBuffBase.clearAndFree(engine_allocator);
+                self.mGlyphSurfaces.clearAndFree(engine_allocator);
             },
             .ClearRetainingCapacity => {
                 self.mSurfShadingBuffBase.clearRetainingCapacity();
                 self.mMedShadingBuffBase.clearRetainingCapacity();
+                self.mGlyphSurfaces.clearRetainingCapacity();
             },
         }
     }

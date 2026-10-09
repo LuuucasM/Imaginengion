@@ -69,14 +69,13 @@ fn FakeSample(_: *const FakeTextures, uv_layer: @Vector(3, f32), _: f32) @Vector
 
 //==================================building a scene==================================
 
-fn Shading(color: Vec4(f32), texture_handle: u32, sibling_shading: u32) SurfShadingData {
+fn Shading(color: Vec4(f32), texture_handle: u32) SurfShadingData {
     return .{
         .Color = color.ToArray(),
         .TextureUV0 = .{ 0, 0 },
         .TextureUV1 = .{ 1, 1 },
         .TilingFactor = 1,
         .Texturehandle = texture_handle,
-        .SiblingShading = sibling_shading,
         .TextureWidth = TEX_SIZE,
         .TextureHeight = TEX_SIZE,
     };
@@ -84,7 +83,7 @@ fn Shading(color: Vec4(f32), texture_handle: u32, sibling_shading: u32) SurfShad
 
 /// A plain colored surface, on the white texture
 fn ColorShading(color: Vec4(f32)) SurfShadingData {
-    return Shading(color, WHITE_HANDLE, std.math.maxInt(u32));
+    return Shading(color, WHITE_HANDLE);
 }
 
 /// A shape and its surface, which Trace puts in their two buffers the way Renderer2D does
@@ -119,7 +118,8 @@ fn MakeRoundedQuad(center: Vec3(f32), rotation: Quat(f32), half: Vec2(f32), radi
     };
 }
 
-fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, flags: u32) TestShape {
+/// A glyph whose letter is atlas entry `atlas_shading`, painted with `fill_shading`, the way DrawText makes one
+fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, fill_shading: u32, flags: u32) TestShape {
     const axes = Renderer2D.ShapeAxes(center, IDENTITY);
     return .{
         .Shape = .{
@@ -133,7 +133,7 @@ fn MakeGlyph(center: Vec3(f32), half: Vec2(f32), atlas_shading: u32, flags: u32)
             .SurfaceIndex = undefined,
             .Flags = flags,
         },
-        .Surface = .{ .ShadingHandle = atlas_shading, .BorderShadingHandle = atlas_shading, .BorderWidth = 0 },
+        .Surface = .{ .ShadingHandle = fill_shading, .BorderShadingHandle = fill_shading, .BorderWidth = 0, .AtlasHandle = atlas_shading },
     };
 }
 
@@ -435,11 +435,11 @@ test "a quad and a glyph at the same depth: the quad is drawn, whichever comes f
     //the glyph's letter covers its left half, which is where the ray goes
     const shadings = [_]SurfShadingData{
         ColorShading(RED),
-        Shading(WHITE, ATLAS_HANDLE, 2),
-        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
     };
     const quad = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
-    const glyph = MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
+    const glyph = MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0);
 
     const quad_first = [_]TestShape{ quad, glyph };
     const glyph_first = [_]TestShape{ glyph, quad };
@@ -584,8 +584,8 @@ test "each part of a merge shows its own texture at its own place, and the fill 
     //the left part shows the stand in atlas, white over its left half and black over its right, the right part the
     //green texture. Both 1.4 wide, 0.6 apart, joined smoothly enough to fill the gap but not to reach their middles
     const shadings = [_]SurfShadingData{
-        Shading(WHITE, ATLAS_HANDLE, std.math.maxInt(u32)),
-        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
     };
     var programs = TestPrograms{};
     const first = programs.InstrCount;
@@ -630,12 +630,12 @@ test "a glyph is drawn where its letter covers it, and the ray goes through its 
     //the letter covers the glyph's left half and is filled green; a blue quad sits behind
     const shadings = [_]SurfShadingData{
         ColorShading(BLUE),
-        Shading(WHITE, ATLAS_HANDLE, 2),
-        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
     };
     const shapes = [_]TestShape{
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
-        MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0),
+        MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0),
     };
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     try ExpectColor(GREEN, try Trace(scene, RayAt(-0.25, 0)));
@@ -647,11 +647,31 @@ test "a glyph is tinted by its text's color" {
     //white, and only says where the letter is
     const grey = Vec4(f32){ .x = 0.5, .y = 0.5, .z = 0.5, .w = 1 };
     const shadings = [_]SurfShadingData{
-        Shading(WHITE, ATLAS_HANDLE, 1),
+        Shading(WHITE, ATLAS_HANDLE),
         ColorShading(grey),
     };
-    const shapes = [_]TestShape{MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 0, 0)};
+    const shapes = [_]TestShape{MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 0, 1, 0)};
     try ExpectColor(grey, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
+}
+
+test "glyphs of the same letter share one atlas entry, and each is painted with its own text's color" {
+    //the same letter in a red text and a blue text: one atlas entry between them, the way ShadingBuffers.GlyphSurface
+    //hands it out, and each glyph's own surface says which text it belongs to
+    const shadings = [_]SurfShadingData{
+        Shading(WHITE, ATLAS_HANDLE),
+        ColorShading(RED),
+        ColorShading(BLUE),
+    };
+    const shapes = [_]TestShape{
+        MakeGlyph(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 0, 1, 0),
+        MakeGlyph(.{ .x = 1, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 0, 2, 0),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    //the letter covers each glyph's left half
+    try ExpectColor(RED, try Trace(scene, RayAt(-1.25, 0)));
+    try ExpectColor(BLUE, try Trace(scene, RayAt(0.75, 0)));
+    //and the gap on its right shows nothing
+    try ExpectColor(DEFAULT_COLOR, try Trace(scene, RayAt(1.25, 0)));
 }
 
 test "see-through text blends with what is behind it" {
@@ -659,12 +679,12 @@ test "see-through text blends with what is behind it" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{
         ColorShading(BLUE),
-        Shading(WHITE, ATLAS_HANDLE, 2),
+        Shading(WHITE, ATLAS_HANDLE),
         ColorShading(half_red),
     };
     const shapes = [_]TestShape{
         MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
-        MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, TRANSPARENT),
+        MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, TRANSPARENT),
     };
     try ExpectColor(.{ .x = 0.5, .y = 0, .z = 0.5, .w = 0.75 }, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(-0.25, 0)));
 }
@@ -674,10 +694,10 @@ test "a ray through the gaps of several overlapping glyphs at the same depth rea
     //half, so on the right the ray is turned down by each in turn before it gets to the blue quad behind
     const shadings = [_]SurfShadingData{
         ColorShading(BLUE),
-        Shading(WHITE, ATLAS_HANDLE, 2),
-        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
     };
-    const glyph = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
+    const glyph = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0);
     const shapes = [_]TestShape{
         glyph,
         glyph,
@@ -719,12 +739,12 @@ test "the direct search turns down at most MAX_DIRECT_REJECTS hits along an edge
     const rejects = SDFRayMarcher.MAX_DIRECT_REJECTS;
     const shadings = [_]SurfShadingData{
         ColorShading(BLUE),
-        Shading(WHITE, ATLAS_HANDLE, 2),
-        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
     };
     var shapes: [rejects + 2]TestShape = undefined;
     shapes[0] = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
-    for (shapes[1..]) |*shape| shape.* = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 0);
+    for (shapes[1..]) |*shape| shape.* = MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0);
 
     //as many gaps as it may turn down: the next search still finds the quad
     const at_limit = TestScene{ .Shapes = shapes[0 .. rejects + 1], .Shadings = &shadings };
@@ -764,8 +784,8 @@ test "walking the BVH finds the same color as testing every shape, on random sce
         ColorShading(BLUE),
         ColorShading(half_red),
         ColorShading(half_blue),
-        Shading(WHITE, ATLAS_HANDLE, 6),
-        Shading(WHITE, GREEN_HANDLE, std.math.maxInt(u32)),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
     };
     var masks = TestPrograms{};
     _ = masks.Add(.{ .x = -1, .y = 0, .z = 0 }, .{ .x = 1.5, .y = 3 }, .Intersect, NO_MASK);
@@ -789,7 +809,7 @@ test "walking the BVH finds the same color as testing every shape, on random sce
                 .z = if (on_plane) @floatFromInt(random.uintLessThan(u32, 2)) else random.float(f32) * 4 - 2,
             };
             if (random.float(f32) < 0.3) {
-                shape.* = MakeGlyph(center, half, 5, if (random.boolean()) TRANSPARENT else 0);
+                shape.* = MakeGlyph(center, half, 5, 6, if (random.boolean()) TRANSPARENT else 0);
                 continue;
             }
             const tilt_axis = (Vec3(f32){ .x = random.float(f32) - 0.5, .y = random.float(f32) - 0.5, .z = random.float(f32) - 0.5 }).Dir();
