@@ -12,8 +12,6 @@ mPlayerEntity: Player = .uninit,
 
 pub fn Deinit(_: *PlayerSlotComponent, _: *EngineContext) void {}
 
-pub fn EditorRender(_: *PlayerSlotComponent, _: *EngineContext) !void {}
-
 //nothing is saved yet
 const Json = JsonUtils.JsonFields(PlayerSlotComponent, .{});
 pub const jsonStringify = Json.jsonStringify;

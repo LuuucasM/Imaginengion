@@ -1,7 +1,5 @@
 const std = @import("std");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Layout = @import("../../UI/Layout.zig");
 const Inspector = @import("../../UI/Inspector.zig");
@@ -25,12 +23,6 @@ pub fn Deinit(_: *ScrollComponent, _: *EngineContext) void {}
 pub fn UIRender(self: *ScrollComponent, ui: *Inspector.Builder) !void {
     try ui.Enum(Layout.Scroll, &self.mScroll, "Scroll", .{});
     try ui.Float(&self.mWheelStep, "Wheel Step", .{ .Speed = 0.5, .Min = 0, .Decimals = 1 });
-}
-
-pub fn EditorRender(self: *ScrollComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderEnum(Layout.Scroll, &self.mScroll, "Scroll");
-    if (imgui.igIsItemHovered(0)) imgui.igSetTooltip("Needs a LayoutComponent, and a size that isn't Fit: Fixed, Fill or Percent");
-    _ = try ImguiManager.RenderFloatDrag(&self.mWheelStep, "Wheel Step", 0.5, 0, std.math.floatMax(f32));
 }
 
 const Json = JsonUtils.JsonFields(ScrollComponent, .{

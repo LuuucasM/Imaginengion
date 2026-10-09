@@ -251,3 +251,25 @@ test "a UI element's components are listed under it, with Edit UI Element" {
     }
     try std.testing.expect(found);
 }
+
+test "building again takes away the popups the old rows opened, a dropdown's list and a field's Clear menu" {
+    const test_panel = try TestPanel.Init();
+    defer test_panel.Deinit();
+    const engine_context = test_panel.mEngineContext;
+    const panel = &test_panel.mPanel;
+    const body = try test_panel.mGameScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try body.AddComponent(engine_context, RigidBodyComponent{});
+    try test_panel.Update(.{ .entity = body });
+    //they live at the top of the scene, outside the rows
+    const list = WidgetActions.PopupOf(panel.mBodyType.?).?;
+    try std.testing.expect(list.IsActive());
+
+    const other = try test_panel.mGameScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try test_panel.Update(.{ .entity = other });
+    //deleted at the end of the frame, with the rows
+    var callback_list: std.DoublyLinkedList = .{};
+    try engine_context.mEditorWorld.ProcessEvents(@import("../../Events/EManagerData.zig"), .EndOfFrame, engine_context, &callback_list);
+    try engine_context.mEditorWorld.ProcessEvents(@import("../../Events/ECSEventData.zig"), .EndOfFrame, engine_context, &callback_list);
+    try std.testing.expect(!list.IsActive());
+}
+

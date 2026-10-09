@@ -11,8 +11,6 @@ mAIEntity: Entity.Type = Entity.NullObject,
 
 pub fn Deinit(_: *AISlotComponent, _: *EngineContext) void {}
 
-pub fn EditorRender(_: *AISlotComponent, _: *EngineContext) !void {}
-
 //nothing is saved yet
 const Json = JsonUtils.JsonFields(AISlotComponent, .{});
 pub const jsonStringify = Json.jsonStringify;

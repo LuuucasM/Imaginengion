@@ -9,6 +9,7 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
+const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const UIManager = @import("UIManager.zig");
@@ -184,9 +185,10 @@ pub fn ScrollArea(engine_context: *EngineContext, parent: Parent) !Entity {
     return area;
 }
 
-/// A box showing a line of text, as wide as what it is in, that a file from the Content Browser can be dropped on (a drop
-/// target for FileRefComponent): an asset field. Style "Field"
-pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8) !Entity {
+/// A box showing a line of text, as wide as what it is in, that what drags one of `accepts` can be dropped on (a drop
+/// target for those components): a file from the Content Browser (FileRefComponent), an object's row from a hierarchy
+/// panel (ObjectRefComponent). An asset or reference field. Style "Field"
+pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8, comptime accepts: []const type) !Entity {
     const box = try NewEntity(engine_context, parent);
     try AddQuad(engine_context, box, .{}, .{});
     _ = try box.AddComponent(engine_context, LayoutComponent{
@@ -195,10 +197,20 @@ pub fn DropBox(engine_context: *EngineContext, parent: Parent, text: []const u8)
         .mCrossAlign = .Center,
     });
     _ = try box.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
-    _ = try box.AddComponent(engine_context, EntityComponents.DropTargetComponent.Accepting(&.{EntityComponents.FileRefComponent}));
+    _ = try box.AddComponent(engine_context, EntityComponents.DropTargetComponent.Accepting(accepts));
     try UIManager.Style(engine_context, box, "Field");
     _ = try Label(engine_context, .{ .Entity = box }, text);
     return box;
+}
+
+/// A quad filling what it is in that shows `player`'s view, its render target (ViewportComponent), instead of a texture:
+/// a camera's view in a panel. Whoever renders the player sizes its view to the quad (Viewports.FitPlayerToQuad)
+pub fn Viewport(engine_context: *EngineContext, parent: Parent, player: Player) !Entity {
+    const quad = try NewEntity(engine_context, parent);
+    try AddQuad(engine_context, quad, .{}, .{});
+    _ = try quad.AddComponent(engine_context, EntityComponents.ViewportComponent{ .mPlayer = player });
+    _ = try quad.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mHeight = .{ .Fill = 1 } });
+    return quad;
 }
 
 /// A grid as wide as what it is in, putting as many of its children side by side as fit and wrapping onto new rows,
@@ -583,7 +595,54 @@ pub fn Submenu(engine_context: *EngineContext, menu: Entity, text: []const u8, o
 /// A menu that right clicking `target` opens where the pointer is (the stock OpenContextMenu script, which keeps the
 /// click, so a row's own menu wins over the panel's it is in). Returns the menu, to put its items in
 pub fn ContextMenu(engine_context: *EngineContext, target: Entity, options: Options) !Entity {
-    const menu = try PopupList(engine_context, SceneOf(.{ .Entity = target }), PopupComponent{});
+    const menu = try NewContextMenu(engine_context, target);
+    try ShareContextMenu(engine_context, target, menu, options);
+    return menu;
+}
+
+/// Takes `entity` and everything in it away: hidden now (its layout item folded) and deleted at the end of the frame,
+/// along with the popups the things in it open, which live at the top of the scene rather than inside them (a
+/// dropdown's list, a right-click menu, and theirs in turn). A popup in `keep` stays: a menu shared with things that
+/// aren't going (ShareContextMenu)
+pub fn Remove(engine_context: *EngineContext, entity: Entity, keep: []const Entity) !void {
+    if (!entity.IsActive()) return;
+    var popups: std.ArrayList(Entity) = .empty;
+    try PopupsIn(engine_context.FrameAllocator(), entity, keep, &popups);
+    if (entity.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
+    try entity.MarkLayoutDirty(engine_context);
+    try entity.Delete(engine_context);
+    for (popups.items) |popup| {
+        if (popup.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
+        try popup.Delete(engine_context);
+    }
+}
+
+/// The popups `entity` and everything in it open, and the ones those open, each once
+fn PopupsIn(frame_allocator: std.mem.Allocator, entity: Entity, keep: []const Entity, popups: *std.ArrayList(Entity)) !void {
+    if (UIManager.GetUIComponent(entity, PopupRefComponent)) |popup_ref| {
+        const popup = popup_ref.mPopup;
+        const listed = for (keep) |kept| {
+            if (kept.mID == popup.mID and kept.mManager == popup.mManager) break true;
+        } else for (popups.items) |found| {
+            if (found.mID == popup.mID and found.mManager == popup.mManager) break true;
+        } else false;
+        if (!listed and popup.IsActive()) {
+            try popups.append(frame_allocator, popup);
+            try PopupsIn(frame_allocator, popup, keep, popups);
+        }
+    }
+    var children = entity.GetIterator(.Child);
+    while (children.next()) |child| try PopupsIn(frame_allocator, child, keep, popups);
+}
+
+/// A right-click menu that nothing opens yet, at the top of `near`'s scene: ShareContextMenu makes things open it
+pub fn NewContextMenu(engine_context: *EngineContext, near: Entity) !Entity {
+    return try PopupList(engine_context, SceneOf(.{ .Entity = near }), PopupComponent{});
+}
+
+/// Right clicking `target` opens `menu`, a menu ContextMenu made for something else: one menu for many rows, whose
+/// items act on whichever row was right clicked
+pub fn ShareContextMenu(engine_context: *EngineContext, target: Entity, menu: Entity, options: Options) !void {
     if (!target.HasComponent(UIElementComponent)) _ = try target.AddComponent(engine_context, UIElementComponent{});
     const element = UIManager.ElementOf(target).?;
     if (element.GetComponent(PopupRefComponent)) |popup_ref| {
@@ -592,7 +651,6 @@ pub fn ContextMenu(engine_context: *EngineContext, target: Entity, options: Opti
         _ = try element.AddComponent(engine_context, PopupRefComponent{ .mPopup = menu });
     }
     if (options.StockScripts) try AddStockScript(engine_context, target, .OpenContextMenu);
-    return menu;
 }
 
 /// Two panes side by side (a Row) or one above the other (a Column), with a divider between them that dragging moves (the

@@ -1,5 +1,4 @@
 const SystemEvent = @import("../Events/SystemEvent.zig").SystemEvent;
-const ImguiEvent = @import("../Events/ImguiEvent.zig").ImguiEvent;
 const GameEvent = @import("../Events/GameEvent.zig").GameEvent;
 const InputPressedEvent = @import("../Events/SystemEvent.zig").InputPressedEvent;
 const WindowResizeEvent = @import("../Events/SystemEvent.zig").WindowResizeEvent;
@@ -29,12 +28,6 @@ pub fn OnWindowResize(_: *UnsupportedProgram, _: WindowResizeEvent) !bool {
 pub fn OnInputPressedEvent(self: *UnsupportedProgram, e: InputPressedEvent) bool {
     _ = self;
     _ = e;
-    Unsupported();
-}
-
-pub fn OnImguiEvent(self: *UnsupportedProgram, event: *ImguiEvent) void {
-    _ = self;
-    _ = event;
     Unsupported();
 }
 

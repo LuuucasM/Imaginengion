@@ -41,7 +41,7 @@ const SEventData = @import("../../Events/SManagerData.zig");
 const ECSEventData = @import("../../Events/ECSEventData.zig");
 
 const EntityAsset = @import("../../ECSComponents/AComponents.zig").EntityAsset;
-const TmplEditPanel = @import("../../Imgui/TmplEditPanel.zig");
+const TmplEditPanel = @import("../../EditorPanels/TmplEditPanel.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const GroupQuery = @import("../../ECS/ECSManager.zig").GroupQuery;
 const ViewpointComponent = EntityComponents.ViewpointComponent;
@@ -50,9 +50,13 @@ const UIManager = @import("../../UI/UIManager.zig");
 
 const TEXTURE_PATH ="src/Imaginengion/EngineAssets/textures/DefaultTexture.png";
 
+const NO_SCRIPTS = @import("../../UI/Widgets.zig").Options{ .StockScripts = false };
+
 const TestWorld = struct {
     mEngineContext: *EngineContext,
     mTmpDir: std.testing.TmpDir,
+    /// Where template windows go, see UIScene
+    mUIScene: ?Scene = null,
 
     fn Init() !*TestWorld {
         const self = try std.heap.page_allocator.create(TestWorld);
@@ -114,6 +118,14 @@ const TestWorld = struct {
 
     fn GameWorld(self: *TestWorld) *WorldManager {
         return &self.mEngineContext.mEditorWorld;
+    }
+
+    /// An overlay scene in the editor world, for template windows, made the first time it is asked for
+    fn UIScene(self: *TestWorld) !Scene {
+        if (self.mUIScene) |scene| return scene;
+        const scene = try self.mEngineContext.mEditorWorld.NewScene(self.mEngineContext, .OverlayLayer, Scene.DefaultConfig);
+        self.mUIScene = scene;
+        return scene;
     }
 
     /// Saves `object` as a template file and returns a handle to it, the way a script or the editor gets one
@@ -899,7 +911,7 @@ fn OpenAndClose(world: *TestWorld, tmpl: AssetHandle, comptime obj_t: type, came
     const refs_before_open = world.Refs(tmpl);
     //the window takes over a reference of its own, like the one OpenTmplEvent carries
     tmpl.RetainAsset();
-    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene);
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene, try world.UIScene(), NO_SCRIPTS);
 
     const root: obj_t = switch (panel.mRoot) {
         inline else => |object| if (@TypeOf(object) == obj_t) object else return error.WrongRootType,
@@ -919,22 +931,30 @@ fn OpenAndClose(world: *TestWorld, tmpl: AssetHandle, comptime obj_t: type, came
         try std.testing.expect(panel.mEntityScene == null);
     }
 
-    //entity and scene templates get a fixed camera in the editor world, players and game contexts have nothing to show
+    //entity and scene templates get a preview: a fixed camera in the editor world, whose player a quad in the window
+    //shows. Players and game contexts have nothing to show
     const has_preview = obj_t == Entity or obj_t == Scene;
-    try std.testing.expectEqual(has_preview, panel.mCamera != null);
-    if (panel.mCamera) |camera| {
-        try std.testing.expect(camera.mManager == &engine_context.mEditorWorld);
-        try std.testing.expect(camera.HasComponent(ViewpointComponent));
-        try std.testing.expectEqual(@as(f32, 15.0), camera.GetComponent(TransformComponent).?.GetTranslation().z);
+    try std.testing.expectEqual(has_preview, panel.mPreview != null);
+    if (panel.mPreview) |preview| {
+        try std.testing.expect(preview.mCamera.mManager == &engine_context.mEditorWorld);
+        try std.testing.expect(preview.mCamera.HasComponent(ViewpointComponent));
+        try std.testing.expectEqual(@as(f32, 15.0), preview.mCamera.GetComponent(TransformComponent).?.GetTranslation().z);
+        try std.testing.expect(preview.mPlayer.GetRenderView() != null);
+        try std.testing.expectEqual(preview.mPlayer.mID, preview.mQuad.GetComponent(EntityComponents.ViewportComponent).?.mPlayer.mID);
     }
+    //its tree shows the root and what is under it, with the root highlighted
+    try panel.Update(engine_context);
+    try std.testing.expect(panel.IsOpen());
+    const window = panel.mWindow;
 
     try panel.Close(engine_context);
     try world.EndFrame(&engine_context.mTmplEditWorld);
     try world.EndFrame(&engine_context.mEditorWorld);
     try std.testing.expect(!root.IsActive());
     try std.testing.expect(!child.IsActive());
+    try std.testing.expect(!window.IsActive());
     if (panel.mEntityScene) |entity_scene| try std.testing.expect(!entity_scene.IsActive());
-    if (panel.mCamera) |camera| try std.testing.expect(!camera.IsActive());
+    if (panel.mPreview) |preview| try std.testing.expect(!preview.mCamera.IsActive() and !preview.mPlayer.IsActive());
     //nothing left in the editing world's scene stack
     try std.testing.expectEqual(@as(usize, 0), engine_context.mTmplEditWorld.mSManager.mNumofLayers);
     try std.testing.expectEqual(refs_before_open, world.Refs(tmpl));
@@ -965,6 +985,36 @@ test "a template window opens each type in the template editing world and closes
     try OpenAndClose(world, try world.SaveTmpl(game_context, "deathmatch.imgc"), GameContext, camera_scene);
 }
 
+test "a template window's tree selects inside the window, Delete is off on its root, and closing it hides then opens again" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const camera_scene = try world.GameWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const tmpl_scene = try world.TmplWorld().NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const goblin = try tmpl_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    const tmpl = try world.SaveTmpl(goblin, "goblin.imen");
+    tmpl.RetainAsset();
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene, try world.UIScene(), NO_SCRIPTS);
+    try panel.Update(engine_context);
+
+    //the root and its child, the child's row clicked: the window's selection, which the components pane shows
+    const tree = &panel.mTrees.entity;
+    try std.testing.expectEqual(@as(usize, 2), tree.mRows.items.len);
+    try panel.OnLeftClick(engine_context, tree.mRows.items[1].Header);
+    try std.testing.expectEqual(tree.mRows.items[1].Object.mID, panel.mSelected.?.entity.mID);
+    try panel.Update(engine_context);
+    try std.testing.expectEqual(tree.mRows.items[1].Object.mID, panel.mComponents.mBuiltFor.?.entity.mID);
+
+    //the X hides it, which the editor takes as closing; a failed save brings it back
+    try @import("../../UI/WidgetActions.zig").CloseWindow(engine_context, panel.mWindow);
+    try std.testing.expect(!panel.IsOpen());
+    try panel.BringForward(engine_context);
+    try std.testing.expect(panel.IsOpen());
+
+    try panel.Close(engine_context);
+}
+
 test "two open entity templates are in scenes of their own, so each preview only has its own shapes" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -986,8 +1036,8 @@ test "two open entity templates are in scenes of their own, so each preview only
     const tree_tmpl = try world.SaveTmpl(tree, "tree.imen");
     goblin_tmpl.RetainAsset();
     tree_tmpl.RetainAsset();
-    var goblin_panel = try TmplEditPanel.Open(engine_context, goblin_tmpl, camera_scene);
-    var tree_panel = try TmplEditPanel.Open(engine_context, tree_tmpl, camera_scene);
+    var goblin_panel = try TmplEditPanel.Open(engine_context, goblin_tmpl, camera_scene, try world.UIScene(), NO_SCRIPTS);
+    var tree_panel = try TmplEditPanel.Open(engine_context, tree_tmpl, camera_scene, try world.UIScene(), NO_SCRIPTS);
 
     //the same query RenderScene draws
     const shapes_query = ShapeGeometry.VISUALS_QUERY;
@@ -1011,7 +1061,7 @@ test "moving something in an open template updates where the transform pass puts
     _ = try goblin.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
     const tmpl = try world.SaveTmpl(goblin, "goblin.imen");
     tmpl.RetainAsset();
-    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene);
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene, try world.UIScene(), NO_SCRIPTS);
 
     const sword = FirstChild(panel.mRoot.entity);
     try sword.SetTranslation(engine_context, .{ .x = 3.0, .y = 0.0, .z = 0.0 });
@@ -1038,7 +1088,7 @@ test "saving a template window writes the edits to its file, and the next spawn 
     try ExpectName(FirstChild(before), "Sword");
 
     tmpl.RetainAsset();
-    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene);
+    var panel = try TmplEditPanel.Open(engine_context, tmpl, camera_scene, try world.UIScene(), NO_SCRIPTS);
     try SetName(engine_context, FirstChild(panel.mRoot.entity), "Axe");
     try panel.Save(engine_context);
 
@@ -1063,5 +1113,5 @@ test "a file that is not a template can not be opened in a template window" {
 
     var texture = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = TEXTURE_PATH, .path_type = .Eng } });
     defer texture.ReleaseAsset();
-    try std.testing.expectError(error.NotATmplFile, TmplEditPanel.Open(engine_context, texture, camera_scene));
+    try std.testing.expectError(error.NotATmplFile, TmplEditPanel.Open(engine_context, texture, camera_scene, try world.UIScene(), NO_SCRIPTS));
 }

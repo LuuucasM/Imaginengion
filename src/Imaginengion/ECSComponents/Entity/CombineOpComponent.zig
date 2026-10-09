@@ -2,7 +2,6 @@ const std = @import("std");
 const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 const CombineOpComponent = @This();
 
@@ -30,11 +29,6 @@ pub fn Deinit(_: *CombineOpComponent, _: *EngineContext) void {}
 pub fn UIRender(self: *CombineOpComponent, ui: *Inspector.Builder) !void {
     try ui.Enum(Op, &self.mOp, "Op", .{});
     try ui.Float(&self.mSmoothness, "Smoothness", .{ .Speed = 0.01, .Min = 0 });
-}
-
-pub fn EditorRender(self: *CombineOpComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderEnum(Op, &self.mOp, "Op");
-    _ = try ImguiManager.RenderFloatDrag(&self.mSmoothness, "Smoothness", 0.01, 0, std.math.floatMax(f32));
 }
 
 const Json = JsonUtils.JsonFields(CombineOpComponent, .{

@@ -1,7 +1,6 @@
 const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
 const RefMap = @import("../../ECSObjects/ECSObject.zig").RefMap;
@@ -20,13 +19,8 @@ mPopup: Entity = .uninit,
 
 pub fn Deinit(_: *PopupRefComponent, _: *EngineContext) void {}
 
-/// The popup's name, shown only: there is nothing in the editor's own UI to drag an entity from yet
 pub fn UIRender(self: *PopupRefComponent, ui: *Inspector.Builder) !void {
-    try ui.EntityName(&self.mPopup, "Popup");
-}
-
-pub fn EditorRender(self: *PopupRefComponent, engine_context: *EngineContext) !void {
-    if (try ImguiManager.RenderEntityRef(engine_context, &self.mPopup, "Popup")) |entity| self.mPopup = entity;
+    _ = try ui.EntityRef(&self.mPopup, "Popup", .{});
 }
 
 /// A copy of an opener in a template points at the copy of the popup the template's pointed at

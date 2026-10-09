@@ -269,10 +269,10 @@ test "a popup ref shows its popup's name, and a scroll edit lays the entity out 
     var rows: [8]Entity = undefined;
     _ = test_panel.Rows(1, &rows);
     const name = Part(rows[0], 1);
-    try std.testing.expectEqualStrings("Menu", name.GetComponent(TextComponent).?.mText.items);
+    try std.testing.expectEqualStrings("Menu", UIManager.LabelOf(name).?.GetComponent(TextComponent).?.mText.items);
     element.GetComponent(UIComponents.PopupRefComponent).?.mPopup = .uninit;
     try engine_context.mUIManager.mBindingSystem.Update(engine_context);
-    try std.testing.expectEqualStrings("None", name.GetComponent(TextComponent).?.mText.items);
+    try std.testing.expectEqualStrings("None", UIManager.LabelOf(name).?.GetComponent(TextComponent).?.mText.items);
 
     try entity.ClearLayoutDirty(engine_context);
     _ = test_panel.Rows(0, &rows);

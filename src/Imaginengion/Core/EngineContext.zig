@@ -13,15 +13,14 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const EngineContext = @This();
 const EngineStats = @import("EngineStats.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
-const ImguiManager = @import("../Imgui/Imgui.zig");
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEventManager = @import("../Events/EventManager.zig").EventManager(WindowEventData);
 pub const WindowEventCallback = WindowEventManager.EventCallback;
 
-const ImguiEventData = @import("../Events/ImguiEventData.zig");
-const ImguiEventManager = @import("../Events/EventManager.zig").EventManager(ImguiEventData);
-pub const ImguiEventCallback = ImguiEventManager.EventCallback;
+const EditorEventData = @import("../Events/EditorEventData.zig");
+const EditorEventManager = @import("../Events/EventManager.zig").EventManager(EditorEventData);
+pub const EditorEventCallback = EditorEventManager.EventCallback;
 
 const UIManager = @import("../UI/UIManager.zig");
 pub const UIEventCallback = UIManager.EventManagerT.EventCallback;
@@ -105,8 +104,8 @@ mAssetEntityScene: Scene = .uninit,
 /// with the loaded copy of the same file in mAssetWorld. Each open template gets a scene of its own in here.
 mTmplEditWorld: WorldManager = .{},
 
-mImguiManager: ImguiManager = .{},
-mImguiEventManager: ImguiEventManager = .empty,
+/// What the editor's panels ask the editor to do (Events/EditorEventData.zig)
+mEditorEventManager: EditorEventManager = .empty,
 
 mSerializer: Serializer = .empty,
 
@@ -156,7 +155,7 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
 pub fn SetSyncCallbacks(self: *EngineContext, program: *Program) void {
     self.mSystemEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mGameEventManager.SetSyncCallback(program, Program.OnEvent);
-    self.mImguiEventManager.SetSyncCallback(program, Program.OnEvent);
+    self.mEditorEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mPointerEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mUIManager.SetSyncCallback(program, Program.OnEvent);
 
@@ -184,7 +183,7 @@ pub fn DeInit(self: *EngineContext) void {
     self.mSerializer.Deinit(self.EngineAllocator());
 
     self.mGameEventManager.Deinit(self.EngineAllocator());
-    self.mImguiEventManager.Deinit(self.EngineAllocator());
+    self.mEditorEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
     self.mPointerEventManager.Deinit(self.EngineAllocator());
     self.mUIManager.Deinit(self);

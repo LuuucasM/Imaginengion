@@ -10,7 +10,6 @@ const FileMetaData = AssetsList.FileMetaData;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const TextComponent = @This();
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 pub const Editable: bool = true;
 pub const Name: []const u8 = "TextComponent";
@@ -54,18 +53,6 @@ pub fn UIRender(self: *TextComponent, ui: *Inspector.Builder) !void {
     try ui.Asset(&self.mTextAssetHandle, "Font", &.{ ".ttf", ".otf" }, .{});
     try ui.Float(&self.mFontSize, "Font Size", .{ .Speed = 0.5, .Min = 1 });
     try ui.Vec2Field(&self.mBounds, "Bounds", .{ .Speed = 0.1 });
-}
-
-pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {
-    try ImguiManager.RenderTextInput(engine_context, &self.mText, "Text");
-
-    //font name just as a text that can be drag dropped onto to change the text
-    try ImguiManager.RenderAssetRef(engine_context, &self.mTextAssetHandle, "Text Asset", "TextAsset");
-
-    _ = try ImguiManager.RenderFloatInput(&self.mFontSize, "Font Size", 1, 5);
-
-    //bounds, have sliders for left ([0]) and right ([1])
-    try ImguiManager.RenderFloat2Drag(&self.mBounds, "Bounds L R", 0.1, 0, 0);
 }
 
 const Json = JsonUtils.JsonFields(TextComponent, .{

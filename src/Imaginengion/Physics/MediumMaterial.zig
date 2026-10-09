@@ -1,6 +1,5 @@
 const std = @import("std");
 const Inspector = @import("../UI/Inspector.zig");
-const ImguiManager = @import("../Imgui/Imgui.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 
 const Vec3 = MathTypes.Vec3;
@@ -16,12 +15,6 @@ pub const MediumMaterials = enum {
 
 pub const MedPhysicsData = struct {
     //nothing yet
-
-    pub fn ImguiRender(self: MedPhysicsData, label: [:0]const u8) !void {
-        _ = self;
-        try ImguiManager.ImguiSeparator();
-        try ImguiManager.RenderText(label);
-    }
 };
 
 pub const MedSoundData = struct {
@@ -35,13 +28,6 @@ pub const MedRenderData = struct {
     pub fn UIRender(self: *MedRenderData, ui: *Inspector.Builder) !void {
         try ui.Vec3Field(&self.Absorption, "Absorption", .{ .Speed = 0.01 });
         try ui.Vec3Field(&self.Scattering, "Scattering", .{ .Speed = 0.01 });
-    }
-
-    pub fn ImguiRender(self: MedRenderData, label: []const u8) !void {
-        try ImguiManager.ImguiSeparator();
-        try ImguiManager.RenderText(label);
-        try ImguiManager.RenderVec3(&self.Absorption, "Absorbtion", 0.0, 0.01, 100);
-        try ImguiManager.RenderVec3(&self.Scattering, "Scattering", 0, 0.01, 100);
     }
 };
 

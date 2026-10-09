@@ -370,11 +370,10 @@ fn ReleaseKeyboard(engine_context: *EngineContext) void {
     engine_context.mInputManager.mKeyboardTaken = false;
 }
 
-/// The window's typed text on while a text input has the keyboard, and off again once it doesn't. It is one switch for
-/// the whole window, and an ImGui text field letting go of the keyboard turns it off, so it is turned on every frame
-/// one is being typed into, and only turned off if this turned it on
+/// The window's typed text on while a text input has the keyboard, and off again once it doesn't
 fn SyncTextInput(self: *FocusSystem, engine_context: *EngineContext) void {
     if (self.Focused() != null) {
+        if (self.mTextInputOn) return;
         engine_context.mAppWindow.StartTextInput();
         self.mTextInputOn = true;
     } else if (self.mTextInputOn) {

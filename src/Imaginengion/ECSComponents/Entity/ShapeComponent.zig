@@ -5,7 +5,6 @@ const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const ShapeComponent = @This();
 
 pub const Editable: bool = true;
@@ -53,19 +52,6 @@ pub fn GetQuad(self: *ShapeComponent) ?*Quad {
 
 pub fn UIRender(self: *ShapeComponent, ui: *Inspector.Builder) !void {
     try ui.Union(&self.mKind, "Shape", .{});
-}
-
-pub fn EditorRender(self: *ShapeComponent, _: *EngineContext) !void {
-    switch (self.mKind) {
-        .Quad => |*quad| {
-            //a negative size would turn the box inside out
-            try ImguiManager.RenderFloat2Drag(&quad.Size, "Size", 0.05, 0, std.math.floatMax(f32));
-
-            //the renderer keeps each radius and the border to at most half the quad's smaller side
-            try ImguiManager.RenderText("Corner radii: top right, bottom right, top left, bottom left");
-            try ImguiManager.RenderFloat4Drag(&quad.CornerRadii, "Corner Radii", 0.01, 0, std.math.floatMax(f32));
-        },
-    }
 }
 
 const Json = JsonUtils.JsonFields(ShapeComponent, .{

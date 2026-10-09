@@ -2,7 +2,6 @@ const std = @import("std");
 const Inspector = @import("../../UI/Inspector.zig");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const ConstantForceComponent = @This();
 
@@ -26,11 +25,6 @@ pub fn Deinit(_: *ConstantForceComponent, _: *EngineContext) void {}
 pub fn UIRender(self: *ConstantForceComponent, ui: *Inspector.Builder) !void {
     try ui.Vec3Field(&self.mForce, "World Force", .{ .Speed = 0.1 });
     try ui.Vec3Field(&self.mLocalForce, "Local Force", .{ .Speed = 0.1 });
-}
-
-pub fn EditorRender(self: *ConstantForceComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderVec3(&self.mForce, "World Force", 0.0, 0.1, 100.0);
-    try ImguiManager.RenderVec3(&self.mLocalForce, "Local Force", 0.0, 0.1, 100.0);
 }
 
 const Json = JsonUtils.JsonFields(ConstantForceComponent, .{ .Force = "mForce", .LocalForce = "mLocalForce" });

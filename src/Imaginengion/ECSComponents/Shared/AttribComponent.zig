@@ -2,7 +2,6 @@ const std = @import("std");
 const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const AttribComponent = @This();
@@ -20,15 +19,6 @@ pub const ValueTypes = union(ValueEnum) {
     float32: f32,
     bool: bool,
     pub const default: ValueTypes = .{ .uint32 = 0 };
-    /// Drawn by RenderUnion under the type picker
-    pub fn ImguiRender(self: *ValueTypes) !void {
-        switch (self.*) {
-            .uint32 => _ = try ImguiManager.RenderScalerInput(&self.uint32, "Value", 1, 10),
-            .int32 => _ = try ImguiManager.RenderIntInput(&self.int32, "Value", 1, 10),
-            .float32 => _ = try ImguiManager.RenderFloatInput(&self.float32, "Value", 0.5, 5),
-            .bool => try ImguiManager.RenderBool(&self.bool, "Value"),
-        }
-    }
 
     /// The value as a float, whatever its type: 1 or 0 for a bool
     pub fn AsFloat(self: ValueTypes) f64 {
@@ -61,10 +51,6 @@ pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
 
 pub fn UIRender(self: *AttribComponent, ui: *Inspector.Builder) !void {
     try ui.Union(&self.mData, "Value", .{});
-}
-
-pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderUnion(ValueTypes, &self.mData, "Type");
 }
 
 //the value is written as { "<type>": value }, which is how std.json handles a tagged union

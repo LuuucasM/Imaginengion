@@ -20,7 +20,6 @@ const PhysicsEventManager = @import("PhysicsManager.zig").EventManagerT;
 const CollisionType = @import("Collisions.zig").CollisionType;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
-const ImguiManager = @import("../Imgui/Imgui.zig");
 const Material = @import("Material.zig");
 
 const ColliderQuery = GroupQuery{ .Component = ColliderComponent };
@@ -140,12 +139,6 @@ pub const CollisionFilter = struct {
         try ui.Bool(&self.IsTrigger, "Trigger", .{});
         try ui.Flags(&self.CategoryMask, "Category", .{});
         try ui.Flags(&self.RespondMask, "Responds To", .{});
-    }
-
-    pub fn ImguiRender(self: *CollisionFilter) !void {
-        try ImguiManager.RenderBool(&self.IsTrigger, "Is Trigger?");
-        try ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.CategoryMask, "Category Mask");
-        try ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.RespondMask, "Response Mask");
     }
     IsTrigger: bool,
     CategoryMask: std.StaticBitSet(32),

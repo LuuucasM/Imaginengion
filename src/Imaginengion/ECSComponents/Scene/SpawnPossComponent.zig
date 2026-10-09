@@ -11,9 +11,8 @@ pub const Name: []const u8 = "SpawnPossComponent";
 
 mEntityRef: Entity = .uninit,
 
-/// Shown only, until there is something in the editor's own UI to drag an entity from
 pub fn UIRender(self: *SpawnPossComponent, ui: *Inspector.Builder) !void {
-    try ui.EntityName(&self.mEntityRef, "Spawns");
+    _ = try ui.EntityRef(&self.mEntityRef, "Spawns", .{});
 }
 
 pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext) void {

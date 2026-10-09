@@ -1,8 +1,6 @@
 const std = @import("std");
 const Inspector = @import("../../UI/Inspector.zig");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Layout = @import("../../UI/Layout.zig");
 
@@ -49,44 +47,6 @@ pub fn UIRender(self: *LayoutComponent, ui: *Inspector.Builder) !void {
     }
     try ui.Float(&self.mGap, "Gap", .{ .Speed = 0.5, .Min = 0 });
     try ui.Struct(&self.mPadding, "Padding");
-}
-
-pub fn EditorRender(self: *LayoutComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderEnum(Layout.Direction, &self.mDirection, "Direction");
-    if (self.mDirection == .Grid) {
-        RenderColumns(&self.mColumns);
-    } else {
-        //a grid's cells start at its top left
-        try ImguiManager.RenderEnum(Layout.MainAlign, &self.mMainAlign, "Main Align");
-        try ImguiManager.RenderEnum(Layout.CrossAlign, &self.mCrossAlign, "Cross Align");
-    }
-    _ = try ImguiManager.RenderFloatDrag(&self.mGap, "Gap", 0.5, 0, std.math.floatMax(f32));
-
-    try ImguiManager.RenderText("Padding");
-    _ = try ImguiManager.RenderFloatDrag(&self.mPadding.Left, "Left", 0.5, 0, std.math.floatMax(f32));
-    _ = try ImguiManager.RenderFloatDrag(&self.mPadding.Right, "Right", 0.5, 0, std.math.floatMax(f32));
-    _ = try ImguiManager.RenderFloatDrag(&self.mPadding.Top, "Top", 0.5, 0, std.math.floatMax(f32));
-    _ = try ImguiManager.RenderFloatDrag(&self.mPadding.Bottom, "Bottom", 0.5, 0, std.math.floatMax(f32));
-}
-
-/// As many as fit, or a set number
-fn RenderColumns(columns: *Layout.Columns) void {
-    const is_auto = columns.* == .Auto;
-    if (imgui.igBeginCombo("Columns", if (is_auto) "As many as fit" else "Set number", 0)) {
-        defer imgui.igEndCombo();
-        if (imgui.igSelectable_Bool("As many as fit", is_auto, 0, .{ .x = 0, .y = 0 })) columns.* = .Auto;
-        if (imgui.igSelectable_Bool("Set number", !is_auto, 0, .{ .x = 0, .y = 0 }) and is_auto) columns.* = .{ .Count = 3 };
-    }
-    switch (columns.*) {
-        .Auto => {
-            //it takes its width from its parent: fitting its children it has none, and is one row
-            if (imgui.igIsItemHovered(0)) imgui.igSetTooltip("Needs a width to fit the cells in: Fill, Percent or Fixed. Fit makes one row");
-        },
-        .Count => |*count| {
-            var value: c_int = @intCast(count.*);
-            if (imgui.igDragInt("Column Count", &value, 0.1, 1, 1000, "%d", 0)) count.* = @intCast(@max(value, 1));
-        },
-    }
 }
 
 const Json = JsonUtils.JsonFields(LayoutComponent, .{

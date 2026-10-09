@@ -12,7 +12,6 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const EditorProgram = @import("../Programs/EditorProgram.zig");
-const ViewportPanel = @import("../Imgui/ViewportPanel.zig");
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const RayCast = @import("../Physics/RayCast.zig");
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
@@ -96,7 +95,7 @@ pub fn Toggle(self: PickingDebugPanel, engine_context: *EngineContext) !void {
 }
 
 /// Once a frame, before layout, while it is open: each open section's lines
-pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, viewport_panel: *const ViewportPanel, editor_program: *const EditorProgram) !void {
+pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, editor_program: *const EditorProgram) !void {
     const zone = Tracy.ZoneInit("PickingDebugPanel::Update", @src());
     defer zone.Deinit();
     if (!self.IsOpen()) return;
@@ -107,7 +106,7 @@ pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, vi
         var lines = Lines{ .mAllocator = frame_allocator };
         try lines.Add("Mouse (window): {d:.1}, {d:.1}", .{ mouse_pos.x, mouse_pos.y });
         try lines.Add("Pixel density: {d:.2}   Display scale: {d:.2}", .{ engine_context.mAppWindow.GetPixelDensity(), engine_context.mAppWindow.GetDisplayScale() });
-        try lines.Add("Views drawn: Viewport {d}, Play {d} (hovered: {})", .{ editor_program.mViewportQuads.items.len, viewport_panel.mPlayRects.items.len, viewport_panel.mIsHoveredPlay });
+        try lines.Add("Views drawn: Viewport {d}, Play {d}", .{ editor_program.mViewportQuads.items.len, editor_program.mPlayQuads.items.len });
         try Widgets.SyncLines(engine_context, self.mWindowSection.Lines, lines.mLines.items);
     }
 

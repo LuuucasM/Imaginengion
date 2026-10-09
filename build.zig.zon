@@ -27,9 +27,6 @@
         .MiniAudio = .{
             .path = "src/Imaginengion/Vendor/miniaudio/",
         },
-        .Imgui = .{
-            .path = "src/Imaginengion/Vendor/",
-        },
         .stb = .{
             .path = "src/Imaginengion/Vendor/stb/",
         },

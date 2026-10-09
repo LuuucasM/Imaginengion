@@ -11,7 +11,6 @@ const UUIDComponent = @import("../Shared/UUIDComponent.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 const AudioComponent = @This();
 
@@ -129,28 +128,6 @@ const BUS_ACCESS = Inspector.Access{
         }
     }.Write,
 };
-
-pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
-    // Volume drag
-    _ = try ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);
-
-    // Pitch drag
-    //a playback rate: 1 is normal, 2 is twice as fast and an octave up, 0.5 half as fast and an octave down
-    _ = try ImguiManager.RenderFloatDrag(&self.mPitch, "Pitch", 0.01, 0.1, 4.0);
-
-    // Loop toggle
-    try ImguiManager.RenderBool(&self.mLoop, "Looping?");
-
-    try ImguiManager.RenderBool(&self.mStopWithSource, "Stop With Source?");
-
-    try ImguiManager.RenderEnum(AudioType, &self.mAudioType, "Audio Type");
-
-    try ImguiManager.ImguiSeparator();
-
-    try ImguiManager.RenderAssetRef(engine_context, &self.mAudioAsset, "Audio Asset", "AudioAsset");
-
-    if (try ImguiManager.RenderBusRef(engine_context, &self.mBus, "Bus")) |new_bus| self.mBus = new_bus;
-}
 
 pub fn jsonStringify(self: *const AudioComponent, jw: anytype) !void {
     try jw.beginObject();

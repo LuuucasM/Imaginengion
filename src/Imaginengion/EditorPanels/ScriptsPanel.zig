@@ -180,8 +180,8 @@ fn Rebuild(self: *ScriptsPanel, engine_context: *EngineContext, listed: ?Selecte
     const zone = Tracy.ZoneInit("ScriptsPanel::Rebuild", @src());
     defer zone.Deinit();
     const engine_allocator = engine_context.EngineAllocator();
-    if (self.mRows) |rows| try Remove(engine_context, rows);
-    for (self.mMenus.items) |menu| try Remove(engine_context, menu);
+    //each row's menu goes with it
+    if (self.mRows) |rows| try Widgets.Remove(engine_context, rows, &.{});
     self.mRows = null;
     self.mMenus.clearRetainingCapacity();
     self.mItems.clearRetainingCapacity();
@@ -246,12 +246,4 @@ fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !voi
     if (item.mCollapsed == hidden) return;
     item.mCollapsed = hidden;
     try line.MarkLayoutDirty(engine_context);
-}
-
-/// Hides an entity until it is deleted at the end of the frame
-fn Remove(engine_context: *EngineContext, entity: Entity) !void {
-    if (!entity.IsActive()) return;
-    if (entity.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
-    try entity.MarkLayoutDirty(engine_context);
-    try entity.Delete(engine_context);
 }

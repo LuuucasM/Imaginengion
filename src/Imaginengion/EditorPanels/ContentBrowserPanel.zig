@@ -229,7 +229,7 @@ pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: A
         .Open => |index| {
             const rel_path = try self.RelPath(engine_context.FrameAllocator(), self.NameOf(index));
             const tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
+            try engine_context.mEditorEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
         },
         .NewScene => {},
     }
@@ -285,7 +285,7 @@ fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: 
     const zone = Tracy.ZoneInit("ContentBrowserPanel::Rebuild", @src());
     defer zone.Deinit();
     const engine_allocator = engine_context.EngineAllocator();
-    if (self.mGrid) |grid| try Remove(engine_context, grid);
+    if (self.mGrid) |grid| try Widgets.Remove(engine_context, grid, &.{});
     self.mGrid = null;
     self.mTiles.clearRetainingCapacity();
     self.mNames.clearRetainingCapacity();
@@ -338,12 +338,4 @@ fn ShowLine(engine_context: *EngineContext, line: Entity, text: []const u8) !voi
     if (item.mCollapsed == hidden) return;
     item.mCollapsed = hidden;
     try line.MarkLayoutDirty(engine_context);
-}
-
-/// Hides an entity until it is deleted at the end of the frame
-fn Remove(engine_context: *EngineContext, entity: Entity) !void {
-    if (!entity.IsActive()) return;
-    if (entity.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
-    try entity.MarkLayoutDirty(engine_context);
-    try entity.Delete(engine_context);
 }

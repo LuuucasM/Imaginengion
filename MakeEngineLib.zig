@@ -41,27 +41,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     mini_c.addIncludePath(b.path("src/Imaginengion/Vendor/miniaudio/"));
     //--------------------------------------------------END MINIAUDIO--------------------------------------------------------
 
-    //-------------------------------------------------------------IMGUI---------------------------------------------------------
-    const imgui_c = b.addTranslateC(
-        .{
-            .target = target,
-            .optimize = optimize,
-            .root_source_file = b.path("src/Imaginengion/Vendor/imgui/imgui.h"),
-            .link_libc = true,
-        },
-    );
-
-    imgui_c.defineCMacro("CIMGUI_DEFINE_ENUMS_AND_STRUCTS", "");
-    imgui_c.defineCMacro("CIMGUI_USE_SDL3", "");
-    imgui_c.defineCMacro("CIMGUI_USE_SDLGPU", "");
-    imgui_c.defineCMacro("IMGUI_IMPL_API", "extern \"C\"");
-
-    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui/imgui/"));
-    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui/imgui/backends/"));
-    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/imgui"));
-    imgui_c.addIncludePath(b.path("src/Imaginengion/Vendor/sdl3/include/"));
-    //----------------------------------------------END IMGUI------------------------------------------------------------
-
     //===============================================SDL3------------------------------------------------------------
     const sdl3_c = b.addTranslateC(.{
         .target = target,
@@ -95,7 +74,7 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
     //------------------------------------------------------IMAGINENGION-------------------------------------------------------
     // Module only: wrapping this in `addLibrary` spawned a parallel compile that absorbed
     // vendor C/C++ objects while executables importing this module never linked that `.lib`,
-    // giving undefined SDL/ImGui symbols.
+    // giving undefined SDL symbols.
     const engine_module = switch (build_type) {
         .Full => b.addModule(
             "ImaginEngionEngine",
@@ -107,7 +86,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                 .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
                 .imports = &.{
                     .{ .name = "SDL3", .module = sdl3_c.createModule() },
-                    .{ .name = "IMGUI", .module = imgui_c.createModule() },
                     .{ .name = "NFD", .module = nfd_c.createModule() },
                     .{ .name = "Tracy", .module = tracy_c.createModule() },
                     .{ .name = "MiniAudio", .module = mini_c.createModule() },
@@ -125,7 +103,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
                 .root_source_file = .{ .src_path = .{ .owner = b, .sub_path = "src/Imaginengion/Imaginengion.zig" } },
                 .imports = &.{
                     .{ .name = "SDL3", .module = sdl3_c.createModule() },
-                    .{ .name = "IMGUI", .module = imgui_c.createModule() },
                     .{ .name = "NFD", .module = nfd_c.createModule() },
                     .{ .name = "Tracy", .module = tracy_c.createModule() },
                     .{ .name = "MiniAudio", .module = mini_c.createModule() },
@@ -172,17 +149,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             engine_module.linkLibrary(mini_lib);
             b.installArtifact(mini_lib);
 
-            const imgui_dep = b.dependency(
-                "Imgui",
-                .{
-                    .target = target,
-                    .optimize = optimize,
-                },
-            );
-            const imgui_lib = imgui_dep.artifact("Imgui");
-            engine_module.linkLibrary(imgui_lib);
-            b.installArtifact(imgui_lib);
-
             const sdl3_dep = b.dependency("SDL3", .{
                 .target = target,
                 .optimize = optimize,
@@ -204,7 +170,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             engine_module.linkSystemLibrary("NFD", .{ .needed = true });
             engine_module.linkSystemLibrary("Tracy", .{ .needed = true });
             engine_module.linkSystemLibrary("MiniAudio", .{ .needed = true });
-            engine_module.linkSystemLibrary("Imgui", .{ .needed = true });
             engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
             engine_module.linkSystemLibrary("stb", .{ .needed = true });
         },

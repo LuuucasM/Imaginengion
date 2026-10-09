@@ -116,6 +116,22 @@ pub fn RayBox(ray: Ray, center: Vec3(f32), rotation: Quat(f32), half_extents: Ve
     return hit;
 }
 
+/// What RayBoxLocal needs of the face a ray entered through: which way that face's axis points (from facing_back), and
+/// the hit point and half extent along the two axes across the face, iq's u then v
+const FaceAxes = struct {
+    FacingBack: f32,
+    U: f32,
+    UHalf: f32,
+    V: f32,
+    VHalf: f32,
+
+    /// For the face on axis `along`, with `u` and `v` the two across it. The axes are comptime so each component is
+    /// read with a constant index, which keeps it in a register on the GPU
+    fn Of(point: V3, half: V3, facing_back: V3, comptime along: u2, comptime u: u2, comptime v: u2) FaceAxes {
+        return .{ .FacingBack = facing_back[along], .U = point[u], .UHalf = half[u], .V = point[v], .VHalf = half[v] };
+    }
+};
+
 /// RayBox with the ray already in the box's own space, where it is axis aligned and centered on the origin: for a
 /// caller that has its own way into that space, like the renderer's precomputed shape axes. Everything it returns is
 /// in that space too, Normal included. `local_dir` has to be normalized, so T is still in world units
@@ -139,19 +155,21 @@ pub fn RayBoxLocal(local_origin_vec: Vec3(f32), local_dir_vec: Vec3(f32), half_e
     const entered_axis = slabs.Near == @as(V3, @splat(slabs.Enter));
     const local_normal = @select(f32, entered_axis, facing_back, zero);
 
-    //Face and UV have to be one face though, so an edge or corner hit takes the first of its axes
-    //arrays, since a vector can't be indexed by a runtime axis
-    const axis: u2 = if (entered_axis[0]) 0 else if (entered_axis[1]) 1 else 2;
-    const facing_back_arr: [3]f32 = facing_back;
-    const face: BoxFace = @enumFromInt(@as(u3, axis) * 2 + @intFromBool(facing_back_arr[axis] > 0));
+    //Face and UV have to be one face though, so an edge or corner hit takes the first of its axes. Each axis's
+    //components are picked out with constant indices: indexing an array by a runtime axis would put it in GPU local
+    //memory, slow memory instead of registers, and this runs for every glyph and square cornered quad a ray tests
+    const local_point = local_origin + local_dir * @as(V3, @splat(slabs.Enter));
+    const axis: u3, const entered: FaceAxes = if (entered_axis[0])
+        .{ 0, FaceAxes.Of(local_point, half, facing_back, 0, 1, 2) }
+    else if (entered_axis[1])
+        .{ 1, FaceAxes.Of(local_point, half, facing_back, 1, 2, 0) }
+    else
+        .{ 2, FaceAxes.Of(local_point, half, facing_back, 2, 0, 1) };
+    const face: BoxFace = @enumFromInt(axis * 2 + @intFromBool(entered.FacingBack > 0));
 
-    const local_point: [3]f32 = local_origin + local_dir * @as(V3, @splat(slabs.Enter));
-    const half_arr: [3]f32 = half;
-    const u_axis = (@as(u3, axis) + 1) % 3;
-    const v_axis = (@as(u3, axis) + 2) % 3;
     const uv = Vec2(f32){
-        .x = std.math.clamp((local_point[u_axis] + half_arr[u_axis]) / (2.0 * half_arr[u_axis]), 0.0, 1.0),
-        .y = std.math.clamp((local_point[v_axis] + half_arr[v_axis]) / (2.0 * half_arr[v_axis]), 0.0, 1.0),
+        .x = std.math.clamp((entered.U + entered.UHalf) / (2.0 * entered.UHalf), 0.0, 1.0),
+        .y = std.math.clamp((entered.V + entered.VHalf) / (2.0 * entered.VHalf), 0.0, 1.0),
     };
 
     return .{

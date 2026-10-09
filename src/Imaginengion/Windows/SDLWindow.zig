@@ -45,7 +45,7 @@ pub fn IsMinimized(self: SDLWindow) bool {
     return self.mIsMinimized;
 }
 
-/// Pixels per window coordinate. 1.0 means mouse positions, ImGui positions and render target
+/// Pixels per window coordinate. 1.0 means mouse positions and render target
 /// pixels are all the same unit.
 pub fn GetPixelDensity(self: SDLWindow) f32 {
     return sdl.SDL_GetWindowPixelDensity(self._Window);
@@ -89,7 +89,6 @@ pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
 
     var event: sdl.SDL_Event = undefined;
     while (sdl.SDL_PollEvent(&event)) {
-        engine_context.mImguiManager.ProcessEvent(&event);
         switch (event.type) {
             sdl.SDL_EVENT_WINDOW_CLOSE_REQUESTED => {
                 try engine_context.mSystemEventManager.Insert(

@@ -3,7 +3,6 @@ const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const PhysicsComponent = @This();
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Name: []const u8 = "PhysicsComponent";
@@ -14,10 +13,6 @@ pub fn Deinit(_: *PhysicsComponent, _: *EngineContext) void {}
 
 pub fn UIRender(self: *PhysicsComponent, ui: *Inspector.Builder) !void {
     try ui.Vec3Field(&self.mGravity, "Gravity", .{ .Speed = 0.1 });
-}
-
-pub fn EditorRender(self: *PhysicsComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderFloat3Input(&self.mGravity, "Gravity");
 }
 
 const Json = JsonUtils.JsonFields(PhysicsComponent, .{ .Gravity = "mGravity" });

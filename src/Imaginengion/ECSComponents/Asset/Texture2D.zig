@@ -5,7 +5,6 @@ const AssetsList = @import("../AComponents.zig").AssetsList;
 const Texture2D = @This();
 const EngineContext = @import("../../Core/EngineContext.zig");
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const MathTypes = @import("../../Math/MathTypes.zig");
@@ -34,13 +33,6 @@ pub const TexOptions = struct {
         try ui.Vec2Field(&self.mTextureUV0, "UV Min", .{ .Speed = 0.01 });
         try ui.Vec2Field(&self.mTextureUV1, "UV Max", .{ .Speed = 0.01 });
         try ui.Bool(&self.mIsTransparent, "Can Be Transparent", .{});
-    }
-
-    pub fn ImguiRender(self: *TexOptions, engine_context: *EngineContext, open: *bool, texture_asset: *Texture2D) !void {
-        try ImguiManager.RenderColor4Edit(&self.mColor, "Color");
-        _ = try ImguiManager.RenderFloatDrag(&self.mTilingFactor, "Tiling Factor", 0.1, 0.0, 0.0);
-        try ImguiManager.RenderUVCoords(open, &self.mTextureUV0, &self.mTextureUV1, engine_context, texture_asset);
-        try ImguiManager.RenderBool(&self.mIsTransparent, "Can Be Transparent?");
     }
 
     const Json = JsonUtils.JsonFields(TexOptions, .{

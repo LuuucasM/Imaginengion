@@ -1,7 +1,6 @@
 const std = @import("std");
 const OtherScriptAsset = @This();
 
-const imgui = @import("../../../Core/CImports.zig").imgui;
 
 const EntityComponents = @import("../../EComponents.zig");
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
@@ -84,9 +83,4 @@ pub fn Deinit(self: *OtherScriptAsset, _: *EngineContext) void {
 
 pub fn Run(self: *OtherScriptAsset, comptime script_type: type, args: anytype) ScriptResult {
     return @call(.auto, @as(script_type.RunFuncSig, @ptrCast(self.mRunFunc)), args);
-}
-
-pub fn EditorRender(self: *OtherScriptAsset) !void {
-    _ = self;
-    imgui.igText("Nothing for now!", "");
 }

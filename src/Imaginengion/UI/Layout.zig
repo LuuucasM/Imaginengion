@@ -12,7 +12,7 @@
 //! what it holds); top down, every container hands out its own final size to its children, giving leftover
 //! space to the ones that fill. Children that don't fit overflow, they are never squeezed.
 //!
-//! This covers what the editor's panels need (the audit of its ImGui use). New kinds of sizing, placement or
+//! This covers what the editor's panels need. New kinds of sizing, placement or
 //! container are new cases in the unions and enums below, each handled in the pass it affects.
 const Inspector = @import("Inspector.zig");
 const EngineContext = @import("../Core/EngineContext.zig");

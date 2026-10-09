@@ -1,5 +1,5 @@
-//! The editor's shell (Programs/EditorShell.zig): what it builds, which panes are shown, and where a laid out pane is in
-//! the window, which is where its ImGui panel is hosted. No window or ImGui needed. Run with `zig build test-engine`.
+//! The editor's shell (Programs/EditorShell.zig): what it builds, and which panes are shown. No window needed. Run with
+//! `zig build test-engine`.
 const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -60,23 +60,4 @@ test "the shell shows the first tab of each tab bar and the play preview, and hi
     try std.testing.expect(EditorShell.IsShown(shell.mPlayPane));
 
     try std.testing.expect(EditorShell.IsShown(shell.mMenuBar));
-}
-
-test "a laid out pane's window rectangle: the canvas is centered on the window with y up, a unit the display's scale" {
-    const world = try TestWorld.Init();
-    defer world.Deinit();
-    const engine_context = world.mEngineContext;
-
-    //200 x 100 units, centered 300 units right of and 100 units above the middle of a 1600 x 900 window, at scale 2
-    const pane = try world.mRoot.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
-    _ = try pane.AddComponent(engine_context, LayoutItemComponent{});
-    pane.GetComponent(LayoutItemComponent).?.mComputedSize = .{ .x = 200, .y = 100 };
-    try pane.SetTranslation(engine_context, .{ .x = 300, .y = 100, .z = 0 });
-    try PhysicsManager.UpdateWorldTransforms(&engine_context.mEditorWorld, engine_context);
-
-    const rect = EditorShell.WindowRect(pane, .{ .x = 1600, .y = 900 }, 2).?;
-    try std.testing.expectEqual(@as(f32, 800 + 200 * 2), rect.Pos.x);
-    try std.testing.expectEqual(@as(f32, 450 - 150 * 2), rect.Pos.y);
-    try std.testing.expectEqual(@as(f32, 400), rect.Size.x);
-    try std.testing.expectEqual(@as(f32, 200), rect.Size.y);
 }

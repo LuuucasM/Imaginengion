@@ -1,7 +1,5 @@
 const std = @import("std");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Inspector = @import("../../UI/Inspector.zig");
 
@@ -39,28 +37,6 @@ pub fn UIRender(self: *NumberFieldComponent, ui: *Inspector.Builder) !void {
     try ui.OptionalFloat(&self.mMin, "Min", .{});
     try ui.OptionalFloat(&self.mMax, "Max", .{});
     try ui.UInt8(&self.mDecimals, "Decimals", .{ .Speed = 0.1, .Min = 0, .Max = 9, .Decimals = 0 });
-}
-
-pub fn EditorRender(self: *NumberFieldComponent, _: *EngineContext) !void {
-    _ = try ImguiManager.RenderFloatDrag(&self.mSpeed, "Speed", 0.01, 0, std.math.floatMax(f32));
-    try RenderLimit(&self.mMin, "Min");
-    try RenderLimit(&self.mMax, "Max");
-    var decimals: i32 = self.mDecimals;
-    if (imgui.igDragInt("Decimals", &decimals, 0.1, 0, 9, "%d", 0)) self.mDecimals = @intCast(std.math.clamp(decimals, 0, 9));
-}
-
-/// A checkbox for whether there is a limit, and the limit beside it when there is
-fn RenderLimit(limit: *?f32, label: [:0]const u8) !void {
-    imgui.igPushID_Str(label.ptr);
-    defer imgui.igPopID();
-    var has_limit = limit.* != null;
-    if (imgui.igCheckbox("##has", &has_limit)) limit.* = if (has_limit) 0 else null;
-    imgui.igSameLine(0, -1);
-    if (limit.*) |*value| {
-        _ = try ImguiManager.RenderFloatDrag(value, label, 0.1, 0, 0);
-    } else {
-        imgui.igTextUnformatted(label.ptr, null);
-    }
 }
 
 const Json = JsonUtils.JsonFields(NumberFieldComponent, .{

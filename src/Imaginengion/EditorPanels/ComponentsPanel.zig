@@ -2,7 +2,8 @@
 //! components (ComponentList: a folding header each with its UIRender's rows, right click a header to delete it or the
 //! panel to add one). Under some components it adds rows that need the object rather than only the component (After):
 //! a rigid body's type, a scene's layer, an audio component's Preview and Stop, a template reference's Edit Template,
-//! and a UI element's components with Edit UI Element. A line says why when there is nothing to list. Every frame the
+//! a UI element's components with Edit UI Element, and a player's possessed entity, which an entity's row dropped on
+//! possesses (Player.Possess, which links both sides) and Clear lets go of. A line says why when there is nothing to list. Every frame the
 //! selection and which components it has are checked against what was built, and it is built again when they differ
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
@@ -16,6 +17,7 @@ const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const Inspector = @import("../UI/Inspector.zig");
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 const ComponentList = @import("ComponentList.zig").ComponentList;
 
@@ -26,6 +28,9 @@ const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const AudioComponent = EntityComponents.AudioComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const TmplRefComponent = EntityComponents.TmplRefComponent;
+const PlayerSlotComponent = EntityComponents.PlayerSlotComponent;
+const ObjectRefComponent = EntityComponents.ObjectRefComponent;
+const PossessComponent = @import("../ECSComponents/PComponents.zig").PossessComponent;
 const SceneComponent = @import("../ECSComponents/SComponents.zig").SceneComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 
@@ -48,6 +53,8 @@ pub const Action = union(enum) {
     EditTemplate,
     /// the UI Element panel shown
     EditUIElement,
+    /// the selected player lets go of the entity it possesses
+    Unpossess,
 };
 
 const ButtonAction = struct {
@@ -71,6 +78,8 @@ mBuiltPresent: u64 = 0,
 /// The buttons it added under components, and the rigid body type dropdown, if there is one
 mButtons: std.ArrayList(ButtonAction) = .empty,
 mBodyType: ?Entity = null,
+/// The selected player's possessed entity's box, which an entity's row can be dropped on
+mPossessBox: ?Entity = null,
 mOptions: Widgets.Options = .{},
 
 /// Builds the panel into `page`, the shell's Components tab
@@ -171,10 +180,36 @@ pub fn Run(self: *const ComponentsPanel, engine_context: *EngineContext, action:
             if (!tmpl_ref.mTmpl.IsIDValid()) return;
             //the event carries a reference of its own, which the editor takes over
             tmpl_ref.mTmpl.RetainAsset();
-            try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl_ref.mTmpl } });
+            try engine_context.mEditorEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl_ref.mTmpl } });
         },
         .EditUIElement => {},
+        .Unpossess => if (built == .player) {
+            const possess = built.player.GetComponent(PossessComponent) orelse return;
+            //both sides: the entity's slot stops naming the player, if it still does
+            const possessed = possess.mPossessedEntity;
+            if (possessed.mID != Entity.NullObject and possessed.IsActive()) {
+                if (possessed.GetComponent(PlayerSlotComponent)) |slot| {
+                    if (slot.mPlayerEntity.mID == built.player.mID) slot.mPlayerEntity = .uninit;
+                }
+            }
+            possess.mPossessedEntity = .uninit;
+        },
     }
+}
+
+/// A drop on the panel: an entity's row on the selected player's possessed entity, which it possesses
+pub fn OnDrop(self: *const ComponentsPanel, dropped: PointerDroppedEvent) void {
+    const box = self.mPossessBox orelse return;
+    if (!Same(dropped.mEntity, box)) return;
+    const built = self.mBuiltFor orelse return;
+    if (built != .player) return;
+    const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
+    if (object_ref.mObject != .entity) {
+        std.log.warn("A player can only possess an entity", .{});
+        return;
+    }
+    if (!object_ref.mObject.entity.IsActive()) return;
+    built.player.Possess(object_ref.mObject.entity);
 }
 
 /// One of the frame's UI events: a new type picked for the selected entity's rigid body
@@ -194,7 +229,7 @@ pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, e
 }
 
 /// Rows of its own under a component's (see Inspector.RenderComponentWith), for what needs the object
-pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspector.Builder, _: *component_type, object: anytype) !void {
+pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspector.Builder, component: *component_type, object: anytype) !void {
     const engine_allocator = ui.mEngineContext.EngineAllocator();
     const Object = @TypeOf(object);
     if (comptime component_type == RigidBodyComponent and Object == Entity) {
@@ -209,6 +244,15 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
         const label = try Widgets.Label(ui.mEngineContext, .{ .Entity = row }, "Body Type");
         label.GetComponent(LayoutItemComponent).?.mWidth = .{ .Fixed = Inspector.LABEL_WIDTH };
         self.mBodyType = try Widgets.Dropdown(ui.mEngineContext, .{ .Entity = row }, &names, chosen, self.mOptions);
+    }
+    if (comptime component_type == PossessComponent and Object == Player) {
+        //possessing links both sides, so the box takes the drop itself (OnDrop) rather than writing the field
+        //the copy the rows are built from, which field offsets are measured from
+        const box = try ui.EntityRef(&component.mPossessedEntity, "Possessed", .{ .Writes = false });
+        self.mPossessBox = box;
+        const menu = try Widgets.ContextMenu(ui.mEngineContext, box, self.mOptions);
+        const clear = try Widgets.MenuItem(ui.mEngineContext, menu, "Clear", .{ .StockScripts = self.mOptions.StockScripts });
+        try self.mButtons.append(engine_allocator, .{ .Button = clear, .Action = .Unpossess });
     }
     if (comptime component_type == SceneComponent and Object == Scene) {
         //shown, not edited: the scene stack slots a scene by its layer when it is made
@@ -264,6 +308,7 @@ fn Clear(self: *ComponentsPanel, engine_context: *EngineContext) !void {
     try self.mGameContextList.Clear(engine_context);
     self.mButtons.clearRetainingCapacity();
     self.mBodyType = null;
+    self.mPossessBox = null;
     self.mBuiltFor = null;
 }
 

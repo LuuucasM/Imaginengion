@@ -1,7 +1,6 @@
 const std = @import("std");
 const Inspector = @import("../UI/Inspector.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
-const ImguiManager = @import("../Imgui/Imgui.zig");
 
 const Vec4 = MathTypes.Vec4;
 const Vec3 = MathTypes.Vec3;
@@ -26,14 +25,6 @@ pub const SurfPhysicsData = struct {
         try ui.Float(&self.StaticFriction, "Static Friction", .{ .Speed = 0.01 });
         try ui.Float(&self.KineticFriction, "Kinetic Friction", .{ .Speed = 0.01 });
     }
-
-    pub fn ImguiRender(self: *SurfPhysicsData, label: [:0]const u8) !void {
-        try ImguiManager.ImguiSeparator();
-        try ImguiManager.RenderText(label);
-        _ = try ImguiManager.RenderFloatInput(&self.Restitution, "Restitution", 0.01, 0.1);
-        _ = try ImguiManager.RenderFloatInput(&self.StaticFriction, "Static Friction", 0.01, 0.1);
-        _ = try ImguiManager.RenderFloatInput(&self.KineticFriction, "Kinetic Friction", 0.01, 0.1);
-    }
 };
 
 pub const SurfSoundData = struct {
@@ -42,11 +33,6 @@ pub const SurfSoundData = struct {
 
 pub const SurfRenderData = struct {
     //nothing yet
-    pub fn ImguiRender(self: SurfRenderData, label: [:0]const u8) !void {
-        _ = self;
-        try ImguiManager.ImguiSeparator();
-        try ImguiManager.RenderText(label);
-    }
 };
 
 pub const SurfMatData = struct {

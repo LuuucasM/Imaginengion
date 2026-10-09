@@ -1,6 +1,8 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Inspector = @import("../../UI/Inspector.zig");
+const ObjectRefComponent = @import("../Entity/ObjectRefComponent.zig");
+const std = @import("std");
 
 const FieldBindingComponent = @This();
 
@@ -30,5 +32,9 @@ mConvert: ?Inspector.Conversion = null,
 mRebuild: ?Entity = null,
 /// For an asset field: the file extensions it takes when a file is dropped on it, e.g. ".png". A literal
 mAccepts: []const []const u8 = &.{},
+/// For a reference field: which kind of object it takes when a hierarchy row is dropped on it
+mTakes: ?std.meta.Tag(ObjectRefComponent.Ref) = null,
+/// For a field's Clear menu item: the value clicking it writes. Such a binding is never shown, it only writes
+mClear: ?Inspector.Value = null,
 
 pub fn Deinit(_: *FieldBindingComponent, _: *EngineContext) void {}

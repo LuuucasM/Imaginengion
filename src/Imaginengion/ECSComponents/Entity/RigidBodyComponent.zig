@@ -5,7 +5,6 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const Material = @import("../../Physics/Material.zig");
 const RigidBodyComponent = @This();
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable: bool = true;
@@ -37,14 +36,6 @@ pub fn UIRender(self: *RigidBodyComponent, ui: *Inspector.Builder) !void {
     try ui.Float(&self._Mass, "Mass", .{ .Speed = 0.1, .Min = 0 });
     try ui.Vec3Field(&self.mGravityScale, "Gravity Scale", .{ .Speed = 0.05 });
     try ui.Union(&self.mMaterialData, "Material", .{});
-}
-
-pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
-    //written straight into the field: the components panel syncs the body after this, which keeps it at
-    //MIN_MASS or above and works out _InvMass again
-    _ = try ImguiManager.RenderFloatInput(&self._Mass, "Mass", 0.1, 1.0);
-    try ImguiManager.RenderVec3(&self.mGravityScale, "Gravity Scale", 1.0, 0.05, 100.0);
-    try ImguiManager.RenderUnion(Material.PhysicsMaterial, &self.mMaterialData, "Material");
 }
 
 pub fn GetMass(self: *const RigidBodyComponent) f32 {

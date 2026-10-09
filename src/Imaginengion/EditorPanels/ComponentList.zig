@@ -45,8 +45,9 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
         mObject: ObjectType = undefined,
         /// The column of headers, null while nothing is built. What a field that asks to be built again names
         mRoot: ?Entity = null,
-        /// The right-click menus it made, each a popup at the top of its scene
+        /// The right-click menus it made, each a popup at the top of its scene: its headers', and the Add menu
         mMenus: std.ArrayList(Entity) = .empty,
+        mAddMenu: ?Entity = null,
         /// What each of the menus' items does
         mItems: std.ArrayList(ItemAction) = .empty,
 
@@ -98,7 +99,7 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             }
             if (addable == 0) return;
             const add_menu = try Widgets.ContextMenu(engine_context, menu_target, options);
-            try self.mMenus.append(engine_allocator, add_menu);
+            self.mAddMenu = add_menu;
             inline for (components, 0..) |component_type, i| {
                 if (comptime IsAddable(component_type)) {
                     if (!object.HasComponent(component_type)) try self.AddItem(engine_context, add_menu, component_type.Name, .{ .Add = i }, options);
@@ -106,10 +107,12 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             }
         }
 
-        /// Takes the list and its menus away: hidden now, deleted at the end of the frame
+        /// Takes the list and its menus away: hidden now, deleted at the end of the frame. The headers' menus and the
+        /// rows' popups (dropdowns, Clear menus) go with the list, the Add menu is on the menu target and goes by itself
         pub fn Clear(self: *Self, engine_context: *EngineContext) !void {
-            if (self.mRoot) |root| try Remove(engine_context, root);
-            for (self.mMenus.items) |menu| try Remove(engine_context, menu);
+            if (self.mRoot) |root| try Widgets.Remove(engine_context, root, &.{});
+            if (self.mAddMenu) |add_menu| try Widgets.Remove(engine_context, add_menu, &.{});
+            self.mAddMenu = null;
             self.mRoot = null;
             self.mMenus.clearRetainingCapacity();
             self.mItems.clearRetainingCapacity();
@@ -138,14 +141,6 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
             try self.mItems.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = action });
         }
     };
-}
-
-/// Hides an entity until it is deleted at the end of the frame
-fn Remove(engine_context: *EngineContext, entity: Entity) !void {
-    if (!entity.IsActive()) return;
-    if (entity.GetComponent(LayoutItemComponent)) |item| item.mCollapsed = true;
-    try entity.MarkLayoutDirty(engine_context);
-    try entity.Delete(engine_context);
 }
 
 /// A component the object can't work without declares `Removable = false`, and is offered no delete

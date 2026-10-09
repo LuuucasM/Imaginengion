@@ -2,7 +2,6 @@ const std = @import("std");
 const Inspector = @import("../../UI/Inspector.zig");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const CollisionFilter = @import("../../Physics/CollisionManager.zig").CollisionFilter;
 const CollisionManager = @import("../../Physics/CollisionManager.zig");
@@ -87,19 +86,6 @@ pub fn UIRender(self: *ColliderComponent, ui: *Inspector.Builder) !void {
     }
     try ui.Struct(&self.mCollisionFilter, "Collision Filter");
     try ui.Bool(&self.mPreSolveEvents, "Pre-Solve Events", .{});
-}
-
-pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {
-    try ImguiManager.RenderEnum(Shapes, &self.mShape, "Collider Type");
-    switch (self.mShape) {
-        .Box => {
-            try ImguiManager.RenderVec3(&self.mBoxSize, "Box Size", 1.0, 0.05, 100.0);
-            _ = try ImguiManager.RenderFloatDrag(&self.mCornerRadius, "Corner Radius", 0.01, 0, std.math.floatMax(f32));
-        },
-        .Sphere => _ = try ImguiManager.RenderFloatDrag(&self.mRadius, "Radius", 0.05, 0, std.math.floatMax(f32)),
-    }
-    try self.mCollisionFilter.ImguiRender();
-    try ImguiManager.RenderBool(&self.mPreSolveEvents, "Pre-Solve Events?");
 }
 
 const Json = JsonUtils.JsonFields(ColliderComponent, .{

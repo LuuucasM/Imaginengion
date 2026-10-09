@@ -6,8 +6,6 @@ const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
-//imgui stuff
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 
 const Vec3 = MathTypes.Vec3;
 const Quat = MathTypes.Quat;
@@ -84,14 +82,6 @@ pub fn UIRender(self: *TransformComponent, ui: *Inspector.Builder) !void {
     try ui.Vec3Field(&self._Translation, "Translation", .{ .Speed = 0.075 });
     try ui.Rotation(&self._Rotation, "Rotation", .{ .Speed = 0.25, .Decimals = 1 });
     try ui.Vec3Field(&self._Scale, "Scale", .{ .Speed = 0.075 });
-}
-
-pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {
-    //ImGui edits the fields in place, so the panel cannot go through Entity's setters. It marks
-    //the object dirty itself after this returns (see ComponentsPanel.PrintObjectComponent).
-    try ImguiManager.RenderVec3(&self._Translation, "Translation", 0.0, 0.075, 100.0);
-    try ImguiManager.RenderQuat(&self._Rotation, "Rotation", 0, 0.25, 100.0);
-    try ImguiManager.RenderVec3(&self._Scale, "Scale", 1.0, 0.075, 100.0);
 }
 
 const Json = JsonUtils.JsonFields(TransformComponent, .{

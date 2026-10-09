@@ -28,6 +28,7 @@ pub const DisabledTag = @import("Entity/TagComponents.zig").DisabledTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
 pub const FileRefComponent = @import("Entity/FileRefComponent.zig");
+pub const ObjectRefComponent = @import("Entity/ObjectRefComponent.zig");
 pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
 pub const MaskComponent = @import("Entity/MaskComponent.zig");
 pub const ViewportComponent = @import("Entity/ViewportComponent.zig");
@@ -103,6 +104,7 @@ pub const ComponentsList = [_]type{
     DragSourceComponent,
     DropTargetComponent,
     FileRefComponent,
+    ObjectRefComponent,
     FocusedTag,
     MaskComponent,
     UIElementComponent,
@@ -257,6 +259,7 @@ pub const EComponents = enum(u16) {
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
     FileRefComponent = ListInd(&ComponentsList, FileRefComponent),
+    ObjectRefComponent = ListInd(&ComponentsList, ObjectRefComponent),
     FocusedTag = ListInd(&ComponentsList, FocusedTag),
     MaskComponent = ListInd(&ComponentsList, MaskComponent),
     ViewportComponent = ListInd(&ComponentsList, ViewportComponent),
@@ -268,44 +271,6 @@ comptime {
         const type_name = " " ++ @typeName(component_type) ++ "\n";
         if (!@hasDecl(component_type, "Editable")) {
             @compileError("Type must have 'Editable' pub const declaration " ++ type_name);
-        }
-
-        if (component_type.Editable) { //if it is editable ensure that the signature is correct
-
-            if (!std.meta.hasFn(component_type, "EditorRender")) {
-                @compileError("Type must have 'EditorRender' member function is type is marked Editable " ++ type_name);
-            }
-
-            const editorrender_info = @typeInfo(@TypeOf(component_type.EditorRender));
-            if (editorrender_info != .@"fn") {
-                @compileError("Type's EditorRender must be a function " ++ type_name);
-            }
-
-            const fn_info = editorrender_info.@"fn";
-            if (fn_info.param_types.len != 2) {
-                @compileError("Type's EditorRender must have 2 parameters " ++ type_name);
-            }
-
-            const first_param = fn_info.param_types[0].?;
-            if (first_param != *component_type) {
-                @compileError("Type's EditorRender first parameter must be *type " ++ type_name);
-            }
-
-            const second_param = fn_info.param_types[1].?;
-            if (second_param != *EngineContext) {
-                @compileError("Type's EditorRender second paramter must be *EngineContext " ++ type_name);
-            }
-
-            const return_type = fn_info.return_type.?;
-            const return_info = @typeInfo(return_type);
-            if (return_info != .error_union) {
-                @compileError("Type's EditorRender return type must be error union " ++ type_name);
-            }
-
-            const payload_type = return_info.error_union.payload;
-            if (payload_type != void) {
-                @compileError("Type's EditorRender payload must be void " ++ type_name);
-            }
         }
     }
 

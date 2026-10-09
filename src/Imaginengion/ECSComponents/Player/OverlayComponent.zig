@@ -15,9 +15,8 @@ pub const Name: []const u8 = "OverlayComponent";
 /// Player.AddOverlay), so showing or hiding an overlay is adding or deleting a child.
 mScene: Scene = .uninit,
 
-/// Shown only, until there is something in the editor's own UI to drag a scene from
 pub fn UIRender(self: *OverlayComponent, ui: *Inspector.Builder) !void {
-    try ui.SceneName(&self.mScene, "Overlay Scene");
+    _ = try ui.SceneRef(&self.mScene, "Overlay Scene", .{ .OverlayOnly = true });
 }
 
 pub fn Deinit(_: *OverlayComponent, _: *EngineContext) void {}

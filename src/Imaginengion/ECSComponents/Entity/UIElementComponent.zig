@@ -1,5 +1,4 @@
 const std = @import("std");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const UIElement = @import("../../ECSObjects/UIElement.zig");
 const UIComponents = @import("../UIComponents.zig");
@@ -33,23 +32,6 @@ pub fn RemapRefs(self: *UIElementComponent, ref_map: *const RefMap) void {
         if (@hasDecl(component_type, "RemapRefs")) {
             if (self.mElement.GetComponent(component_type)) |component| component.RemapRefs(ref_map);
         }
-    }
-}
-
-pub fn EditorRender(self: *UIElementComponent, engine_context: *EngineContext) !void {
-    var count: usize = 0;
-    if (self.mElement.IsActive()) {
-        inline for (UIComponents.ComponentsPanelList) |component_type| {
-            if (self.mElement.HasComponent(component_type)) {
-                imgui.igBulletText("%s", component_type.Name.ptr);
-                count += 1;
-            }
-        }
-    }
-    if (count == 0) imgui.igTextUnformatted("No UI components yet", null);
-
-    if (imgui.igButton("Edit UI Element", .{ .x = 0, .y = 0 })) {
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenUIElementPanelEvent = .{} });
     }
 }
 

@@ -1,7 +1,5 @@
 const std = @import("std");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Inspector = @import("../../UI/Inspector.zig");
 
@@ -33,11 +31,6 @@ pub fn Init(engine_context: *EngineContext, name: []const u8) !StyleComponent {
 
 pub fn UIRender(self: *StyleComponent, ui: *Inspector.Builder) !void {
     try ui.Text(&self.mStyle, "Style", .{});
-}
-
-pub fn EditorRender(self: *StyleComponent, engine_context: *EngineContext) !void {
-    try ImguiManager.RenderTextInput(engine_context, &self.mStyle, "Style");
-    if (imgui.igIsItemHovered(0)) imgui.igSetTooltip("The name of a style in the current theme (Editor > UI Theme...)");
 }
 
 const Json = JsonUtils.JsonFields(StyleComponent, .{

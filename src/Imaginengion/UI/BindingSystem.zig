@@ -25,6 +25,7 @@ const TextComponent = EntityComponents.TextComponent;
 const SelectedTag = EntityComponents.SelectedTag;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const FileRefComponent = EntityComponents.FileRefComponent;
+const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const FieldBindingComponent = @import("../ECSComponents/UIComponents.zig").FieldBindingComponent;
 
 const BindingSystem = @This();
@@ -60,6 +61,8 @@ pub fn Update(_: *BindingSystem, engine_context: *EngineContext) !void {
         const widget = element.GetOwner();
         if (!widget.IsIDValid() or !widget.IsActive()) continue;
         const binding = element.GetComponent(FieldBindingComponent).?.*;
+        //a Clear menu item only writes
+        if (binding.mClear != null) continue;
         if (IsBeingEdited(engine_context, widget)) continue;
         const field = FieldOf(binding) orelse continue;
         try Show(engine_context, widget, Shown(binding, binding.mAccess.Read(field)));
@@ -81,15 +84,37 @@ pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: UI
     try self.Write(engine_context, binding, value);
 }
 
-/// One of the frame's pointer events: a file dropped on an asset field that takes its kind becomes the field's asset
+/// One of the frame's pointer events: a file dropped on an asset field that takes its kind becomes the field's asset, a
+/// hierarchy row dropped on a reference field that takes its kind becomes the field's object, and a field's Clear
+/// clicked writes what it clears to
 pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, event: PointerEvent) !void {
     const dropped = switch (event) {
         .PointerDropped => |e| e,
+        .PointerClicked => |e| {
+            if (e.mButton != .BUTTON_LEFT) return;
+            const binding = (UIManager.GetUIComponent(e.mEntity, FieldBindingComponent) orelse return).*;
+            const cleared = binding.mClear orelse return;
+            return try self.Write(engine_context, binding, cleared);
+        },
         else => return,
     };
     const zone = Tracy.ZoneInit("BindingSystem::OnPointerEvent", @src());
     defer zone.Deinit();
     const binding = (UIManager.GetUIComponent(dropped.mEntity, FieldBindingComponent) orelse return).*;
+    if (binding.mTakes) |kind| {
+        const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
+        if (std.meta.activeTag(object_ref.mObject) != kind) {
+            const kind_name = switch (kind) {
+                .entity => "an entity",
+                .scene_layer => "a scene",
+                .player => "a player",
+                .gamecontext => "a game mode",
+            };
+            std.log.warn("Only {s} can go in this field", .{kind_name});
+            return;
+        }
+        return try self.Write(engine_context, binding, .{ .Ref = object_ref.mObject });
+    }
     if (binding.mAccepts.len == 0) return;
     const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
     const extension = std.fs.path.extension(file_ref.mRelPath.items);
@@ -144,7 +169,7 @@ fn ValueOf(binding: FieldBindingComponent, widget: Entity) ?Inspector.Value {
         .Text => .{ .Text = (widget.GetComponent(TextComponent) orelse return null).mText.items },
         .Rotation => .{ .Rotation = Quat(f32).FromDegrees(DegreesOf(widget)) },
         //only ever written by a drop
-        .Asset => return null,
+        .Asset, .Ref => return null,
     };
     const convert = binding.mConvert orelse return shown;
     return switch (shown) {
@@ -198,14 +223,18 @@ fn Show(engine_context: *EngineContext, widget: Entity, value: Inspector.Value) 
             surface.mTexture = asset;
             asset.RetainAsset();
         },
+        //never read from a field
+        .Ref => {},
     }
 }
 
+/// Text on a label, or on the label inside a box (a reference field's)
 fn ShowText(engine_context: *EngineContext, widget: Entity, text: []const u8) !void {
-    const text_component = widget.GetComponent(TextComponent) orelse return;
+    const label = if (widget.HasComponent(TextComponent)) widget else UIManager.LabelOf(widget) orelse return;
+    const text_component = label.GetComponent(TextComponent).?;
     if (std.mem.eql(u8, text_component.mText.items, text)) return;
     try text_component.SetText(engine_context, text);
-    try widget.MarkLayoutDirty(engine_context);
+    try label.MarkLayoutDirty(engine_context);
 }
 
 /// What an asset field shows: the asset's file name without its extension, "None" for none

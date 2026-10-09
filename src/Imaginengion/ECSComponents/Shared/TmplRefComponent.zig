@@ -2,7 +2,6 @@ const std = @import("std");
 const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
-const imgui = @import("../../Core/CImports.zig").imgui;
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const TmplRefComponent = @This();
 
@@ -29,25 +28,6 @@ pub fn Clone(self: *const TmplRefComponent, _: *EngineContext) !TmplRefComponent
 /// The template, shown only: opening it to edit is the Components panel's Edit Template button
 pub fn UIRender(self: *TmplRefComponent, ui: *Inspector.Builder) !void {
     try ui.Asset(&self.mTmpl, "Template", &.{}, .{});
-}
-
-pub fn EditorRender(self: *TmplRefComponent, engine_context: *EngineContext) !void {
-    if (self.mTmpl.IsIDValid() and imgui.igButton("Edit Template", .{ .x = 0, .y = 0 })) {
-        //the event carries a reference of its own, the editor takes it over (see EditorProgram.OpenTmpl)
-        self.mTmpl.RetainAsset();
-        try engine_context.mImguiEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = self.mTmpl } });
-    }
-
-    //shown, not edited: which template an object is a copy of is set when it is spawned
-    imgui.igTextUnformatted("Template: ", null);
-    imgui.igSameLine(0.0, 0.0);
-    if (self.mTmpl.IsIDValid()) {
-        //the path is not null terminated, so it goes in with its end
-        const rel_path = self.mTmpl.GetFileMetaData().mRelPath.items;
-        imgui.igTextUnformatted(rel_path.ptr, rel_path.ptr + rel_path.len);
-    } else {
-        imgui.igTextUnformatted("None", null);
-    }
 }
 
 //the handle is saved as the template's path, like any other asset handle

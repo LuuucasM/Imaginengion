@@ -44,6 +44,10 @@ test {
     _ = @import("Tests/EditorPanels/ScriptsPanelTests.zig");
     _ = @import("Tests/EditorPanels/ContentBrowserPanelTests.zig");
     _ = @import("Tests/EditorPanels/ComponentsPanelTests.zig");
+    _ = @import("Tests/EditorPanels/HierarchyPanelTests.zig");
+    _ = @import("Tests/EditorPanels/ReferenceFieldsTests.zig");
+    _ = @import("Tests/EditorPanels/TmplPiecesTests.zig");
+    _ = @import("Tests/EditorPanels/PlayPreviewTests.zig");
     _ = @import("Tests/EditorPanels/AssetHandlesPanelTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");

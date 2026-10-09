@@ -143,7 +143,7 @@ pub fn FrameBuffer(comptime color_texture_formats: []const TextureFormat, compti
                     .type = sdl.SDL_GPU_TEXTURETYPE_2D,
                     .format = ToSDLTextureFormat(format),
                     // COLOR_TARGET: render pass writes to it
-                    // SAMPLER: copy pass can read from it (ImGui preview, RTT copy to atlas)
+                    // SAMPLER: copy pass can read from it (RTT copy to atlas)
                     .usage = sdl.SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | sdl.SDL_GPU_TEXTUREUSAGE_SAMPLER,
                     .width = @intCast(self.mWidth),
                     .height = @intCast(self.mHeight),

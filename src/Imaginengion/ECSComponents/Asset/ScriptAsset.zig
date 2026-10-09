@@ -63,10 +63,6 @@ pub fn Run(self: *ScriptAsset, comptime script_type: type, args: anytype) Script
     return self._Impl.Run(script_type, args);
 }
 
-pub fn EditorRender(self: *ScriptAsset) !void {
-    self._Impl.EditorRender();
-}
-
 pub fn GetScriptType(self: ScriptAsset) ScriptType {
     return self._Impl.GetScriptType();
 }

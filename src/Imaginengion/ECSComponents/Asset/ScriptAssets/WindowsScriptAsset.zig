@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const WindowsScriptAsset = @This();
 
-const imgui = @import("../../../Core/CImports.zig").imgui;
 
 const EntityComponents = @import("../../EComponents.zig");
 const EntityInputPressedScript = EntityComponents.OnInputPressedScript;
@@ -90,11 +89,6 @@ pub fn Deinit(self: *WindowsScriptAsset, _: *EngineContext) void {
 pub fn Run(self: *WindowsScriptAsset, comptime script_type: type, args: anytype) ScriptResult {
     const run_func: script_type.RunFuncSig = @ptrCast(self.mRunFunc);
     return @call(.auto, run_func, args);
-}
-
-pub fn EditorRender(self: *WindowsScriptAsset) !void {
-    _ = self;
-    imgui.igText("Nothing for now!", "");
 }
 
 pub fn GetScriptType(self: WindowsScriptAsset) ScriptType {

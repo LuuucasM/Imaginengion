@@ -1,5 +1,5 @@
-//! Building the UI that edits an object's component, out of the editor UI's widgets: the retained version of what
-//! EditorRender does in ImGui. A component (or any struct in it) that has a
+//! Building the UI that edits an object's component, out of the editor UI's widgets. A component (or any struct in it)
+//! that has a
 //!     pub fn UIRender(self: *T, ui: *Inspector.Builder) !void
 //! is shown by calling it once, when the inspector is built. Each Builder call makes a widget for one field and ties
 //! the widget to it (FieldBindingComponent): from then on the binding system (UI/BindingSystem.zig) keeps the widget
@@ -34,6 +34,8 @@ const TransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
 const NameComponent = EntityComponents.NameComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
+const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
 const FieldBindingComponent = UIComponents.FieldBindingComponent;
 const NumberFieldComponent = UIComponents.NumberFieldComponent;
@@ -76,8 +78,10 @@ pub const Value = union(enum) {
     Text: []const u8,
     /// a rotation, shown as X, Y and Z in degrees
     Rotation: Quat(f32),
-    /// an asset field's asset: only ever written by a file dropped on its widget
+    /// an asset field's asset: only ever written by a file dropped on its widget, or its Clear
     Asset: AssetHandle,
+    /// a reference field's object: only ever written by a hierarchy row dropped on its widget, or null by its Clear
+    Ref: ?ObjectRefComponent.Ref,
 };
 
 /// Reading and writing a field of one type, as a Value
@@ -121,6 +125,18 @@ pub const AssetOptions = struct {
     Thumbnail: bool = false,
     OnChange: ?OnChange = null,
     Rebuilds: bool = false,
+};
+
+/// For a reference field
+pub const RefOptions = struct {
+    /// whether a drop and Clear write the field, or are left to whoever built the inspector
+    Writes: bool = true,
+};
+
+pub const SceneRefOptions = struct {
+    Writes: bool = true,
+    /// only an overlay scene can go in it
+    OverlayOnly: bool = false,
 };
 
 pub const FieldOptions = struct {
@@ -279,9 +295,45 @@ pub const Builder = struct {
             const thumbnail = try Widgets.Image(self.mEngineContext, .{ .Entity = row }, .uninit, .{ .x = THUMBNAIL_SIZE, .y = THUMBNAIL_SIZE });
             try self.Bind(thumbnail, field, AccessFor(AssetHandle), null, null, false);
         }
-        const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "") else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
+        const shown = if (accepts.len > 0) try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, "", &.{FileRefComponent}) else try Widgets.Label(self.mEngineContext, .{ .Entity = row }, "");
         try self.Bind(shown, field, AccessFor(AssetHandle), options.OnChange, null, options.Rebuilds);
         UIManager.GetUIComponent(shown, FieldBindingComponent).?.mAccepts = accepts;
+        if (accepts.len > 0) try self.ClearMenu(shown, field, AccessFor(AssetHandle), .{ .Asset = .uninit }, options.OnChange);
+    }
+
+    /// An entity field: the entity's name in a box an entity's row from the Entities panel can be dropped on, which
+    /// becomes the field's entity, with a right-click Clear. With Writes off a drop writes nothing and there is no
+    /// Clear: whoever built the inspector takes the drop on the returned box, for an entity that has to be set some
+    /// other way (a player possessing it)
+    pub fn EntityRef(self: *Builder, field: *Entity, label: []const u8, options: RefOptions) !Entity {
+        return try self.ObjectRefField(Entity, .entity, field, label, NameAccess(Entity, false), options);
+    }
+
+    /// A scene field, the same way, taking a row from the Scenes panel. With OverlayOnly a game layer scene is turned
+    /// down
+    pub fn SceneRef(self: *Builder, field: *Scene, label: []const u8, options: SceneRefOptions) !Entity {
+        const access = if (options.OverlayOnly) NameAccess(Scene, true) else NameAccess(Scene, false);
+        return try self.ObjectRefField(Scene, .scene_layer, field, label, access, .{ .Writes = options.Writes });
+    }
+
+    fn ObjectRefField(self: *Builder, comptime T: type, comptime kind: std.meta.Tag(ObjectRefComponent.Ref), field: *T, label: []const u8, access: *const Access, options: RefOptions) !Entity {
+        const shown_name = NameOf(field.*);
+        const row = try self.Row(label);
+        const box = try Widgets.DropBox(self.mEngineContext, .{ .Entity = row }, shown_name, &.{ObjectRefComponent});
+        try self.Bind(box, field, access, null, null, false);
+        if (options.Writes) {
+            UIManager.GetUIComponent(box, FieldBindingComponent).?.mTakes = kind;
+            try self.ClearMenu(box, field, access, .{ .Ref = null }, null);
+        }
+        return box;
+    }
+
+    /// A right-click menu on `widget` with Clear, which writes `cleared` into the field
+    fn ClearMenu(self: *Builder, widget: Entity, field: anytype, access: *const Access, cleared: Value, on_change: ?OnChange) !void {
+        const menu = try Widgets.ContextMenu(self.mEngineContext, widget, self.mOptions);
+        const item = try Widgets.MenuItem(self.mEngineContext, menu, "Clear", .{ .StockScripts = self.mOptions.StockScripts });
+        try self.Bind(item, field, access, on_change, null, false);
+        UIManager.GetUIComponent(item, FieldBindingComponent).?.mClear = cleared;
     }
 
     /// Buttons side by side, one for each of `texts`, in their own row with no label. They do nothing when clicked:
@@ -295,19 +347,10 @@ pub const Builder = struct {
 
     /// The name of the entity an entity field points at, "None" when it points at none. Shown only, not edited
     pub fn EntityName(self: *Builder, field: *Entity, label: []const u8) !void {
-        try self.ObjectName(Entity, field, label);
-    }
-
-    /// The same for a scene field
-    pub fn SceneName(self: *Builder, field: *Scene, label: []const u8) !void {
-        try self.ObjectName(Scene, field, label);
-    }
-
-    fn ObjectName(self: *Builder, comptime T: type, field: *T, label: []const u8) !void {
         const shown_name = NameOf(field.*);
         const row = try self.Row(label);
         const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, shown_name);
-        try self.Bind(shown, field, NameAccess(T), null, null, false);
+        try self.Bind(shown, field, NameAccess(Entity, false), null, null, false);
     }
 
     pub fn Bool(self: *Builder, field: *bool, label: []const u8, options: FieldOptions) !void {
@@ -727,8 +770,9 @@ const OPTIONAL_VALUE = Access{
     }.Write,
 };
 
-/// An entity or scene field's object's name, never written
-fn NameAccess(comptime T: type) *const Access {
+/// An entity or scene field, shown as its object's name. Written only by a dropped row of its kind (Ref) or its Clear
+/// (a null Ref). With `overlay_only` a scene that isn't an overlay is turned down
+fn NameAccess(comptime T: type, comptime overlay_only: bool) *const Access {
     return &struct {
         const access = Access{ .Read = Read, .Write = Write };
 
@@ -737,7 +781,28 @@ fn NameAccess(comptime T: type) *const Access {
             return .{ .Text = NameOf(object.*) };
         }
 
-        fn Write(_: *EngineContext, _: *anyopaque, _: Value) anyerror!void {}
+        fn Write(_: *EngineContext, field: *anyopaque, written: Value) anyerror!void {
+            const object: *T = @ptrCast(@alignCast(field));
+            const ref = switch (written) {
+                .Ref => |ref| ref,
+                else => return,
+            } orelse {
+                object.* = .uninit;
+                return;
+            };
+            const dropped: T = switch (T) {
+                Entity => if (ref == .entity) ref.entity else return,
+                Scene => if (ref == .scene_layer) ref.scene_layer else return,
+                else => @compileError("Not a reference field type: " ++ @typeName(T)),
+            };
+            if (comptime overlay_only) {
+                if (dropped.GetLayer() != .OverlayLayer) {
+                    std.log.warn("Only an overlay scene can go here, not a game layer scene", .{});
+                    return;
+                }
+            }
+            object.* = dropped;
+        }
     }.access;
 }
 

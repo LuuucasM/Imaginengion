@@ -9,7 +9,6 @@ const CameraRay = @import("../../Math/CameraRay.zig");
 
 const ViewpointComponent = @This();
 
-const ImguiManager = @import("../../Imgui/Imgui.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 pub const Editable = true;
@@ -100,29 +99,6 @@ const DEGREES = Inspector.Conversion{
 fn Reproject(component: *anyopaque) void {
     const self: *ViewpointComponent = @ptrCast(@alignCast(component));
     self.RecalculateProjection();
-}
-
-pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {
-
-    //aspect ratio
-    try ImguiManager.RenderBool(&self.mIsFixedAspectRatio, "Is Fixed Aspect Ratio?");
-
-    //print the size/far/near variables depending on projection type
-    var perspective_degrees = MathUtils.RadiansToDegrees(self.mPerspectiveFOVRad);
-    if (try ImguiManager.RenderFloatDrag(&perspective_degrees, "FOV", 1.0, 0, 180.0)) {
-        self.mPerspectiveFOVRad = MathUtils.DegreesToRadians(perspective_degrees);
-        self.RecalculateProjection();
-    }
-
-    if (try ImguiManager.RenderFloatDrag(&self.mPerspectiveNear, "Perspective Near", 1.0, 0.0, 1.0)) {
-        self.RecalculateProjection();
-    }
-
-    if (try ImguiManager.RenderFloatDrag(&self.mPerspectiveFar, "Perspective Far", 1.0, 2.0, 0.0)) {
-        self.RecalculateProjection();
-    }
-
-    try ImguiManager.RenderFloat4Drag(&self.mAreaRect, "Area Rect", 0.01, 0, 1.0);
 }
 
 const Json = JsonUtils.JsonFields(ViewpointComponent, .{
