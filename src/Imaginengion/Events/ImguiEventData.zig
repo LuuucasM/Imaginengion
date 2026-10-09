@@ -1,7 +1,5 @@
 const Entity = @import("../ECSObjects/Entity.zig");
 const SceneLayer = @import("../ECSObjects/Scene.zig");
-const ScriptType = @import("../ECSComponents/Asset/ScriptAsset.zig").ScriptType;
-const LayerType = @import("../ECSComponents/Scene/SceneComponent.zig").LayerType;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 
@@ -18,8 +16,6 @@ pub const EventT = union(enum) {
     OpenSceneSpecEvent: OpenSceneSpecEvent,
     DeleteEntityEvent: DeleteEntityEvent,
     DeleteSceneEvent: DeleteSceneEvent,
-    NewScriptEvent: NewScriptEvent,
-    NewSceneEvent: NewSceneEvent,
     SelectObjectEvent: SelectObjectEvent,
     MakeTmplEvent: MakeTmplEvent,
     OpenTmplEvent: OpenTmplEvent,
@@ -59,14 +55,6 @@ pub const DeleteEntityEvent = struct {
 
 pub const DeleteSceneEvent = struct {
     mScene: SceneLayer,
-};
-
-pub const NewScriptEvent = struct {
-    mScriptType: ScriptType,
-};
-
-pub const NewSceneEvent = struct {
-    mLayerType: LayerType,
 };
 
 pub const SelectObjectEvent = struct {

@@ -27,6 +27,7 @@ pub const SelectedTag = @import("Entity/TagComponents.zig").SelectedTag;
 pub const DisabledTag = @import("Entity/TagComponents.zig").DisabledTag;
 pub const DragSourceComponent = @import("Entity/DragSourceComponent.zig");
 pub const DropTargetComponent = @import("Entity/DropTargetComponent.zig");
+pub const FileRefComponent = @import("Entity/FileRefComponent.zig");
 pub const FocusedTag = @import("Entity/TagComponents.zig").FocusedTag;
 pub const MaskComponent = @import("Entity/MaskComponent.zig");
 pub const ViewportComponent = @import("Entity/ViewportComponent.zig");
@@ -101,6 +102,7 @@ pub const ComponentsList = [_]type{
     DisabledTag,
     DragSourceComponent,
     DropTargetComponent,
+    FileRefComponent,
     FocusedTag,
     MaskComponent,
     UIElementComponent,
@@ -254,6 +256,7 @@ pub const EComponents = enum(u16) {
     DisabledTag = ListInd(&ComponentsList, DisabledTag),
     DragSourceComponent = ListInd(&ComponentsList, DragSourceComponent),
     DropTargetComponent = ListInd(&ComponentsList, DropTargetComponent),
+    FileRefComponent = ListInd(&ComponentsList, FileRefComponent),
     FocusedTag = ListInd(&ComponentsList, FocusedTag),
     MaskComponent = ListInd(&ComponentsList, MaskComponent),
     ViewportComponent = ListInd(&ComponentsList, ViewportComponent),

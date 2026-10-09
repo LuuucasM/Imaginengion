@@ -184,6 +184,29 @@ pub fn ScrollArea(engine_context: *EngineContext, parent: Parent) !Entity {
     return area;
 }
 
+/// A grid as wide as what it is in, putting as many of its children side by side as fit and wrapping onto new rows,
+/// with `gap` between them both ways: e.g. Tiles
+pub fn Grid(engine_context: *EngineContext, parent: Parent, gap: f32) !Entity {
+    const grid = try NewEntity(engine_context, parent);
+    _ = try grid.AddComponent(engine_context, LayoutComponent{ .mDirection = .Grid, .mGap = gap, .mColumns = .Auto });
+    _ = try grid.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
+    return grid;
+}
+
+/// A square image with a line of text under it, in a box `width` wide that lights up when hovered (style "Header"):
+/// a file in a file browser, an item in an inventory. It does nothing when clicked: what it does is up to whoever made it
+pub fn Tile(engine_context: *EngineContext, parent: Parent, texture: AssetHandle, text: []const u8, width: f32) !Entity {
+    const tile = try NewEntity(engine_context, parent);
+    try AddQuad(engine_context, tile, .{}, .{});
+    _ = try tile.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .All(PADDING / 2), .mGap = PADDING / 2, .mCrossAlign = .Center });
+    _ = try tile.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = width } });
+    try UIManager.Style(engine_context, tile, "Header");
+    const image_size = width - PADDING;
+    _ = try Image(engine_context, .{ .Entity = tile }, texture, .{ .x = image_size, .y = image_size });
+    _ = try Label(engine_context, .{ .Entity = tile }, text);
+    return tile;
+}
+
 /// A row to put things in side by side, e.g. buttons, with a gap between them. As big as what is in it
 pub fn Row(engine_context: *EngineContext, parent: Parent) !Entity {
     const row = try NewEntity(engine_context, parent);

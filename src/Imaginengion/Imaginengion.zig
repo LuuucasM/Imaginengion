@@ -39,6 +39,7 @@ test {
     _ = @import("Tests/EditorPanels/UIElementPanelTests.zig");
     _ = @import("Tests/EditorPanels/PickingDebugPanelTests.zig");
     _ = @import("Tests/EditorPanels/ScriptsPanelTests.zig");
+    _ = @import("Tests/EditorPanels/ContentBrowserPanelTests.zig");
     _ = @import("Tests/EditorPanels/AssetHandlesPanelTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");

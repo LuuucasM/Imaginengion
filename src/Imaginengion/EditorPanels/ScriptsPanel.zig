@@ -1,15 +1,23 @@
 //! The Scripts panel, in the editor's own UI, in the shell's Scripts tab: the selected object's name, then a row for
 //! each of its scripts, which right clicking offers to delete. A line says why when there is nothing to list. Every
 //! frame the selection and its scripts are checked against what the rows were built for, and they are built again when
-//! they differ. Scripts are added by dropping one from the Content Browser, which comes once that is in the editor's
-//! own UI too. Players and game modes have no scripts yet
+//! they differ. A script is added by dropping it on the panel from the Content Browser: an entity script onto an
+//! entity, a scene script onto a scene. Players and game modes have no scripts yet
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
-const LayoutItemComponent = @import("../ECSComponents/EComponents.zig").LayoutItemComponent;
+const UIManager = @import("../UI/UIManager.zig");
+const EntityComponents = @import("../ECSComponents/EComponents.zig");
+const LayoutItemComponent = EntityComponents.LayoutItemComponent;
+const SurfaceComponent = EntityComponents.SurfaceComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
+const ScriptAsset = @import("../ECSComponents/AComponents.zig").ScriptAsset;
+const ScriptType = @import("../ECSComponents/Asset/ScriptAsset.zig").ScriptType;
+const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 
 const ScriptsPanel = @This();
@@ -41,6 +49,11 @@ pub fn Build(engine_context: *EngineContext, page: Entity, options: Widgets.Opti
     const zone = Tracy.ZoneInit("ScriptsPanel::Build", @src());
     defer zone.Deinit();
     const area = try Widgets.ScrollArea(engine_context, .{ .Entity = page });
+    //a background, so dropping on the empty part of the panel lands on it, and it takes files (a script is checked for
+    //when it is dropped)
+    _ = try area.AddComponent(engine_context, SurfaceComponent{});
+    try UIManager.Style(engine_context, area, "Window");
+    _ = try area.AddComponent(engine_context, DropTargetComponent.Accepting(&.{FileRefComponent}));
     return .{
         .mArea = area,
         .mTitle = try Widgets.Label(engine_context, .{ .Entity = area }, ""),
@@ -112,6 +125,41 @@ pub fn ActionOf(self: *const ScriptsPanel, item: Entity) ?SelectedObject {
 pub fn Run(engine_context: *EngineContext, script: SelectedObject) !void {
     switch (script) {
         inline else => |object| try object.Delete(engine_context),
+    }
+}
+
+/// Which kind of object a script goes on, from its type: null for one that goes on neither an entity nor a scene
+pub fn ScriptOwnerOf(script_type: ScriptType) ?std.meta.Tag(SelectedObject) {
+    const name = @tagName(script_type);
+    if (std.mem.startsWith(u8, name, "Entity")) return .entity;
+    if (std.mem.startsWith(u8, name, "Scene")) return .scene_layer;
+    return null;
+}
+
+/// A drop on the panel: a script added to the selected object, if it is the kind of script that object takes
+pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, dropped: PointerDroppedEvent, selected: ?SelectedObject) !void {
+    if (!Same(dropped.mEntity, self.mArea)) return;
+    const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
+    const rel_path = file_ref.mRelPath.items;
+    if (!std.mem.eql(u8, std.fs.path.extension(rel_path), ".zig")) {
+        std.log.warn("Only a script (.zig) can be dropped on the Scripts panel, not {s}", .{rel_path});
+        return;
+    }
+    const object = selected orelse return;
+    if (!IsActive(object)) return;
+
+    //loading it (compiling it if it hasn't been) to find out what it is a script for
+    var script_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = file_ref.mPathType } });
+    defer script_handle.ReleaseAsset();
+    const script_type = (try script_handle.GetAsset(engine_context, ScriptAsset)).GetScriptType();
+    if (ScriptOwnerOf(script_type) != std.meta.activeTag(object)) {
+        std.log.warn("{s} is a {s} script, which doesn't go on a {s}", .{ rel_path, @tagName(script_type), @tagName(object) });
+        return;
+    }
+    switch (object) {
+        .entity => |entity| try entity.AddComponentScript(engine_context, rel_path, file_ref.mPathType),
+        .scene_layer => |scene| try scene.AddComponentScript(engine_context, rel_path, file_ref.mPathType),
+        .player, .gamecontext => {},
     }
 }
 
