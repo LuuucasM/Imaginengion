@@ -171,7 +171,7 @@ test "an enum is a dropdown, text a text field, and a struct with no UIRender sh
     var ui = world.Builder(ColliderComponent);
     try ui.Enum(ColliderComponent.Shapes, &collider.mShape, "Shape", .{ .Rebuilds = true });
     //no UIRender on it: no rows
-    try ui.Struct(&collider.mCollisionFilter, "Filter");
+    try ui.Struct(&collider.mBoxSize, "Box Size");
     try std.testing.expectEqual(@as(usize, 1), world.RowCount());
 
     const dropdown = world.Widget(0);

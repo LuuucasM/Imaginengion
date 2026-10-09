@@ -295,9 +295,19 @@ pub const Builder = struct {
 
     /// The name of the entity an entity field points at, "None" when it points at none. Shown only, not edited
     pub fn EntityName(self: *Builder, field: *Entity, label: []const u8) !void {
+        try self.ObjectName(Entity, field, label);
+    }
+
+    /// The same for a scene field
+    pub fn SceneName(self: *Builder, field: *Scene, label: []const u8) !void {
+        try self.ObjectName(Scene, field, label);
+    }
+
+    fn ObjectName(self: *Builder, comptime T: type, field: *T, label: []const u8) !void {
+        const shown_name = NameOf(field.*);
         const row = try self.Row(label);
-        const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, NameOf(field.*));
-        try self.Bind(shown, field, &ENTITY_NAME, null, null, false);
+        const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, shown_name);
+        try self.Bind(shown, field, NameAccess(T), null, null, false);
     }
 
     pub fn Bool(self: *Builder, field: *bool, label: []const u8, options: FieldOptions) !void {
@@ -717,23 +727,25 @@ const OPTIONAL_VALUE = Access{
     }.Write,
 };
 
-/// An entity field's entity's name, never written
-const ENTITY_NAME = Access{
-    .Read = struct {
-        fn Read(field: *anyopaque) Value {
-            const entity: *Entity = @ptrCast(@alignCast(field));
-            return .{ .Text = NameOf(entity.*) };
-        }
-    }.Read,
-    .Write = struct {
-        fn Write(_: *EngineContext, _: *anyopaque, _: Value) anyerror!void {}
-    }.Write,
-};
+/// An entity or scene field's object's name, never written
+fn NameAccess(comptime T: type) *const Access {
+    return &struct {
+        const access = Access{ .Read = Read, .Write = Write };
 
-fn NameOf(entity: Entity) []const u8 {
-    if (!entity.IsActive()) return "None";
-    const name = entity.GetComponent(NameComponent) orelse return "Entity";
-    return name.mName.items;
+        fn Read(field: *anyopaque) Value {
+            const object: *T = @ptrCast(@alignCast(field));
+            return .{ .Text = NameOf(object.*) };
+        }
+
+        fn Write(_: *EngineContext, _: *anyopaque, _: Value) anyerror!void {}
+    }.access;
+}
+
+/// An entity's or scene's name: "None" for none, up to the first 0 if it was saved with one
+fn NameOf(object: anytype) []const u8 {
+    if (object.mID == @TypeOf(object).NullObject or !object.IsActive()) return "None";
+    const name = (object.GetComponent(NameComponent) orelse return @typeName(@TypeOf(object))).mName.items;
+    return name[0 .. std.mem.indexOfScalar(u8, name, 0) orelse name.len];
 }
 
 /// Where an enum's value is among its values

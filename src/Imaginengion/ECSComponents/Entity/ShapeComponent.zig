@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Vec2 = MathTypes.Vec2;
@@ -26,6 +27,14 @@ pub const Quad = struct {
     //how far in each corner is rounded, in the same units as Size, in the order the rounded SDFs take them:
     //x top right, y bottom right, z top left, w bottom left. 0 is a square corner
     CornerRadii: Vec4(f32) = .{ .x = 0, .y = 0, .z = 0, .w = 0 },
+
+    pub fn UIRender(self: *Quad, ui: *Inspector.Builder) !void {
+        //a negative size would turn the box inside out
+        try ui.Vec2Field(&self.Size, "Size", .{ .Speed = 0.05, .Min = 0 });
+        //the renderer keeps each radius to at most half the quad's smaller side
+        try ui.Vec4Field(&self.CornerRadii, "Corner Radii", .{ .Speed = 0.01, .Min = 0 });
+        try ui.Note("top right, bottom right, top left, bottom left");
+    }
 };
 
 pub fn Deinit(_: *ShapeComponent, _: *EngineContext) void {}
@@ -40,6 +49,10 @@ pub fn GetQuad(self: *ShapeComponent) ?*Quad {
     return switch (self.mKind) {
         .Quad => |*quad| quad,
     };
+}
+
+pub fn UIRender(self: *ShapeComponent, ui: *Inspector.Builder) !void {
+    try ui.Union(&self.mKind, "Shape", .{});
 }
 
 pub fn EditorRender(self: *ShapeComponent, _: *EngineContext) !void {

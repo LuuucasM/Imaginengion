@@ -1,7 +1,7 @@
 //! The Content Browser, in the editor's own UI, in the shell's Content Browser pane: the open project's files, one
 //! folder at a time, as a grid of tiles (an icon and the file's name). Folders come first, then files, each by name,
 //! and only the kinds the editor uses are shown: folders, textures (.png), object files (.imen, .imsc...), scripts
-//! (.zig) and audio. Double clicking a folder goes into it, Back goes up a folder, and an object file opens as a
+//! (.zig), audio and fonts (.ttf, .otf). Double clicking a folder goes into it, Back goes up a folder, and an object file opens as a
 //! template. Every file's tile can be dragged, carrying the file (FileRefComponent), e.g. a script onto the Scripts
 //! panel. Right clicking the pane offers New Scene Layer. Every frame the folder is listed and checked against what
 //! the tiles were built from, so files added or removed on disk show up
@@ -29,7 +29,7 @@ const TILE_GAP: f32 = 4;
 const MAX_NAME_LEN = 12;
 
 /// What a tile is
-pub const Kind = enum { Back, Folder, Texture, Object, Script, Audio };
+pub const Kind = enum { Back, Folder, Texture, Object, Script, Audio, Font };
 
 /// The icon each kind of tile shows
 pub const Icons = struct {
@@ -39,6 +39,7 @@ pub const Icons = struct {
     Object: AssetHandle = .uninit,
     Script: AssetHandle = .uninit,
     Audio: AssetHandle = .uninit,
+    Font: AssetHandle = .uninit,
 
     /// The engine's icon textures
     pub fn Load(engine_context: *EngineContext) !Icons {
@@ -54,6 +55,8 @@ pub const Icons = struct {
             .Object = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/sceneicon.png"),
             .Script = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/scripticon.png"),
             .Audio = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/mp3.png"),
+            //no font icon yet: a document's, which the script one is
+            .Font = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/scripticon.png"),
         };
     }
 
@@ -204,7 +207,7 @@ pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?A
             .Back => .Up,
             .Folder => .{ .Enter = i },
             .Object => .{ .Open = i },
-            .Texture, .Script, .Audio => null,
+            .Texture, .Script, .Audio, .Font => null,
         };
     }
     return null;
@@ -272,6 +275,7 @@ fn KindOf(name: []const u8) ?Kind {
     if (std.mem.eql(u8, extension, ".png")) return .Texture;
     if (std.mem.eql(u8, extension, ".zig")) return .Script;
     if (std.mem.eql(u8, extension, ".mp3") or std.mem.eql(u8, extension, ".wav") or std.mem.eql(u8, extension, ".flac")) return .Audio;
+    if (std.mem.eql(u8, extension, ".ttf") or std.mem.eql(u8, extension, ".otf")) return .Font;
     if (Serializer.ObjectKindOf(extension) != null) return .Object;
     return null;
 }
@@ -303,7 +307,7 @@ fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Ent
     switch (kind) {
         .Back, .Folder => {},
         //a file can be dragged, carrying which file it is
-        .Texture, .Object, .Script, .Audio => {
+        .Texture, .Object, .Script, .Audio, .Font => {
             _ = try tile.AddComponent(engine_context, DragSourceComponent{});
             _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.FrameAllocator(), name), .Prj));
         },

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
@@ -9,6 +10,11 @@ const SpawnPossComponent = @This();
 pub const Name: []const u8 = "SpawnPossComponent";
 
 mEntityRef: Entity = .uninit,
+
+/// Shown only, until there is something in the editor's own UI to drag an entity from
+pub fn UIRender(self: *SpawnPossComponent, ui: *Inspector.Builder) !void {
+    try ui.EntityName(&self.mEntityRef, "Spawns");
+}
 
 pub fn Deinit(_: *SpawnPossComponent, _: *EngineContext) void {
     //deinit stuff

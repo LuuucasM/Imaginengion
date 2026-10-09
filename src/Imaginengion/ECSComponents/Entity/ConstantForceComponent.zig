@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -21,6 +22,11 @@ mForce: Vec3(f32) = .{ .x = 0, .y = 0, .z = 0 },
 mLocalForce: Vec3(f32) = .{ .x = 0, .y = 0, .z = 0 },
 
 pub fn Deinit(_: *ConstantForceComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *ConstantForceComponent, ui: *Inspector.Builder) !void {
+    try ui.Vec3Field(&self.mForce, "World Force", .{ .Speed = 0.1 });
+    try ui.Vec3Field(&self.mLocalForce, "Local Force", .{ .Speed = 0.1 });
+}
 
 pub fn EditorRender(self: *ConstantForceComponent, _: *EngineContext) !void {
     try ImguiManager.RenderVec3(&self.mForce, "World Force", 0.0, 0.1, 100.0);

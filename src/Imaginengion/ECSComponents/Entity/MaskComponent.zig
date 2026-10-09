@@ -1,4 +1,5 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
+const Inspector = @import("../../UI/Inspector.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
 const SDFProgram = @import("../../Renderer/SDFProgram.zig");
@@ -18,6 +19,10 @@ pub const Name: []const u8 = "MaskComponent";
 mOp: SDFProgram.MaskOp = .Intersect,
 
 pub fn Deinit(_: *MaskComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *MaskComponent, ui: *Inspector.Builder) !void {
+    try ui.Enum(SDFProgram.MaskOp, &self.mOp, "Op", .{});
+}
 
 pub fn EditorRender(self: *MaskComponent, _: *EngineContext) !void {
     try ImguiManager.RenderEnum(SDFProgram.MaskOp, &self.mOp, "Op");

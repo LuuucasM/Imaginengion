@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -35,6 +36,18 @@ pub fn ToNode(self: LayoutItemComponent) Layout.Node {
         .Placement = self.mPlacement,
         .Collapsed = self.mCollapsed,
     };
+}
+
+pub fn UIRender(self: *LayoutItemComponent, ui: *Inspector.Builder) !void {
+    try ui.Union(&self.mWidth, "Width", .{ .Number = .{ .Speed = 0.5, .Min = 0 } });
+    try ui.Union(&self.mHeight, "Height", .{ .Number = .{ .Speed = 0.5, .Min = 0 } });
+    try ui.Union(&self.mPlacement, "Placement", .{});
+    try ui.Bool(&self.mCollapsed, "Collapsed", .{});
+    try ui.Readout(&self.mComputedSize, "Computed Size", ShowSize);
+}
+
+fn ShowSize(size: Vec2(f32), buffer: []u8) []const u8 {
+    return std.fmt.bufPrint(buffer, "{d:.2} x {d:.2}", .{ size.x, size.y }) catch "?";
 }
 
 pub fn EditorRender(self: *LayoutItemComponent, _: *EngineContext) !void {

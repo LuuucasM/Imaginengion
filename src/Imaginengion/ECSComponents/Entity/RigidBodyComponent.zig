@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Material = @import("../../Physics/Material.zig");
@@ -30,6 +31,13 @@ _Velocity: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 _Force: Vec3(f32) = std.mem.zeroes(Vec3(f32)),
 
 pub fn Deinit(_: *RigidBodyComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *RigidBodyComponent, ui: *Inspector.Builder) !void {
+    //an edit keeps the mass at its minimum or above and the inverse mass in step (the inspector's after-edit)
+    try ui.Float(&self._Mass, "Mass", .{ .Speed = 0.1, .Min = 0 });
+    try ui.Vec3Field(&self.mGravityScale, "Gravity Scale", .{ .Speed = 0.05 });
+    try ui.Union(&self.mMaterialData, "Material", .{});
+}
 
 pub fn EditorRender(self: *RigidBodyComponent, _: *EngineContext) !void {
     //written straight into the field: the components panel syncs the body after this, which keeps it at

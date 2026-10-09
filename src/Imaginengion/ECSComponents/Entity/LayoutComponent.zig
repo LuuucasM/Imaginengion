@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -35,6 +36,19 @@ pub fn ToContainer(self: LayoutComponent) Layout.Container {
         .CrossAlign = self.mCrossAlign,
         .Columns = self.mColumns,
     };
+}
+
+pub fn UIRender(self: *LayoutComponent, ui: *Inspector.Builder) !void {
+    //a grid has columns, a row or column has alignments
+    try ui.Enum(Layout.Direction, &self.mDirection, "Direction", .{ .Rebuilds = true });
+    if (self.mDirection == .Grid) {
+        try ui.Union(&self.mColumns, "Columns", .{ .Number = .{ .Speed = 0.1, .Min = 1, .Decimals = 0 } });
+    } else {
+        try ui.Enum(Layout.MainAlign, &self.mMainAlign, "Main Align", .{});
+        try ui.Enum(Layout.CrossAlign, &self.mCrossAlign, "Cross Align", .{});
+    }
+    try ui.Float(&self.mGap, "Gap", .{ .Speed = 0.5, .Min = 0 });
+    try ui.Struct(&self.mPadding, "Padding");
 }
 
 pub fn EditorRender(self: *LayoutComponent, _: *EngineContext) !void {

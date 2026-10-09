@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
@@ -46,6 +47,13 @@ pub fn SetText(self: *TextComponent, engine_context: *EngineContext, text: []con
 /// Adds to the end of the text. Same as SetText, the caller marks the layout dirty if the entity is in one
 pub fn AppendText(self: *TextComponent, engine_context: *EngineContext, text: []const u8) !void {
     try self.mText.appendSlice(engine_context.EngineAllocator(), text);
+}
+
+pub fn UIRender(self: *TextComponent, ui: *Inspector.Builder) !void {
+    try ui.Text(&self.mText, "Text", .{});
+    try ui.Asset(&self.mTextAssetHandle, "Font", &.{ ".ttf", ".otf" }, .{});
+    try ui.Float(&self.mFontSize, "Font Size", .{ .Speed = 0.5, .Min = 1 });
+    try ui.Vec2Field(&self.mBounds, "Bounds", .{ .Speed = 0.1 });
 }
 
 pub fn EditorRender(self: *TextComponent, engine_context: *EngineContext) !void {

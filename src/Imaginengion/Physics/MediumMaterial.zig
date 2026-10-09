@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../UI/Inspector.zig");
 const ImguiManager = @import("../Imgui/Imgui.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 
@@ -30,6 +31,11 @@ pub const MedSoundData = struct {
 pub const MedRenderData = struct {
     Absorption: Vec3(f32),
     Scattering: Vec3(f32),
+
+    pub fn UIRender(self: *MedRenderData, ui: *Inspector.Builder) !void {
+        try ui.Vec3Field(&self.Absorption, "Absorption", .{ .Speed = 0.01 });
+        try ui.Vec3Field(&self.Scattering, "Scattering", .{ .Speed = 0.01 });
+    }
 
     pub fn ImguiRender(self: MedRenderData, label: []const u8) !void {
         try ImguiManager.ImguiSeparator();

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const builtin = @import("builtin");
 const AssetsList = @import("../AComponents.zig").AssetsList;
 const Texture2D = @This();
@@ -25,6 +26,15 @@ pub const TexOptions = struct {
         .mColor = .{ .x = 1.0, .y = 1.0, .z = 1.0, .w = 1.0 },
         .mIsTransparent = false,
     };
+
+    pub fn UIRender(self: *TexOptions, ui: *Inspector.Builder) !void {
+        try ui.Color(&self.mColor, "Color", .{});
+        try ui.Float(&self.mTilingFactor, "Tiling", .{ .Speed = 0.1 });
+        //the part of the texture shown, 0 to 1 across it
+        try ui.Vec2Field(&self.mTextureUV0, "UV Min", .{ .Speed = 0.01 });
+        try ui.Vec2Field(&self.mTextureUV1, "UV Max", .{ .Speed = 0.01 });
+        try ui.Bool(&self.mIsTransparent, "Can Be Transparent", .{});
+    }
 
     pub fn ImguiRender(self: *TexOptions, engine_context: *EngineContext, open: *bool, texture_asset: *Texture2D) !void {
         try ImguiManager.RenderColor4Edit(&self.mColor, "Color");

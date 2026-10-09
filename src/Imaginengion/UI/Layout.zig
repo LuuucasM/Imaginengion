@@ -14,6 +14,8 @@
 //!
 //! This covers what the editor's panels need (the audit of its ImGui use). New kinds of sizing, placement or
 //! container are new cases in the unions and enums below, each handled in the pass it affects.
+const Inspector = @import("Inspector.zig");
+const EngineContext = @import("../Core/EngineContext.zig");
 const std = @import("std");
 const Vec2 = @import("../Math/MathTypes.zig").Vec2;
 
@@ -31,6 +33,17 @@ pub const Sizing = union(enum) {
     /// this fraction (0 to 1) of the parent's inner size, or of the root area for a root. Counts as nothing
     /// towards a parent that fits its children, which would otherwise depend on itself
     Percent: f32,
+
+    /// What each kind starts at when it is picked in the editor: a number that does something visible, full size, an
+    /// equal share, all of the parent
+    pub fn DefaultFor(tag: std.meta.Tag(Sizing)) Sizing {
+        return switch (tag) {
+            .Fixed => .{ .Fixed = 100 },
+            .Fit => .Fit,
+            .Fill => .{ .Fill = 1 },
+            .Percent => .{ .Percent = 1 },
+        };
+    }
 };
 
 pub const Axis = enum { X, Y };
@@ -74,6 +87,13 @@ pub const Columns = union(enum) {
     Auto,
     /// this many, e.g. a 3 x 3 inventory
     Count: u32,
+
+    pub fn DefaultFor(tag: std.meta.Tag(Columns)) Columns {
+        return switch (tag) {
+            .Auto => .Auto,
+            .Count => .{ .Count = 3 },
+        };
+    }
 };
 
 /// Where a container's children sit along its direction when they don't fill it: from its start (the left of
@@ -99,6 +119,13 @@ pub const Padding = struct {
             .X => self.Left + self.Right,
             .Y => self.Top + self.Bottom,
         };
+    }
+
+    pub fn UIRender(self: *Padding, ui: *Inspector.Builder) !void {
+        try ui.Float(&self.Left, "Left", .{ .Speed = 0.5, .Min = 0 });
+        try ui.Float(&self.Right, "Right", .{ .Speed = 0.5, .Min = 0 });
+        try ui.Float(&self.Top, "Top", .{ .Speed = 0.5, .Min = 0 });
+        try ui.Float(&self.Bottom, "Bottom", .{ .Speed = 0.5, .Min = 0 });
     }
 };
 
@@ -127,6 +154,46 @@ pub const Anchoring = struct {
     Pivot: Vec2(f32) = .{ .x = 0, .y = 0 },
     /// moved this much from there
     Offset: Vec2(f32) = .{ .x = 0, .y = 0 },
+
+    pub fn UIRender(self: *Anchoring, ui: *Inspector.Builder) !void {
+        try ui.Choice(self, "Pin To", &PIN_NAMES, &PIN_ACCESS, .{});
+        try ui.Vec2Field(&self.Anchor, "Anchor", .{ .Speed = 0.01, .Min = -1, .Max = 1, .Decimals = 2 });
+        try ui.Vec2Field(&self.Pivot, "Pivot", .{ .Speed = 0.01, .Min = -1, .Max = 1, .Decimals = 2 });
+        try ui.Vec2Field(&self.Offset, "Offset", .{ .Speed = 0.5, .Decimals = 2 });
+    }
+
+    //pinning a corner of the element to the same corner of its parent is the common case, so each of these sets the
+    //anchor and the pivot to the same point: top left to bottom right, row by row
+    const PIN_NAMES = [_][]const u8{ "Top Left", "Top", "Top Right", "Left", "Center", "Right", "Bottom Left", "Bottom", "Bottom Right", "Custom" };
+    const PIN_POINTS = blk: {
+        var points: [9]Vec2(f32) = undefined;
+        for ([_]f32{ 1, 0, -1 }, 0..) |y, row| {
+            for ([_]f32{ -1, 0, 1 }, 0..) |x, column| points[row * 3 + column] = .{ .x = x, .y = y };
+        }
+        break :blk points;
+    };
+
+    /// The anchoring as one of the pins: the one whose point both the anchor and the pivot are at, Custom if none is
+    const PIN_ACCESS = Inspector.Access{
+        .Read = struct {
+            fn Read(field: *anyopaque) Inspector.Value {
+                const anchoring: *Anchoring = @ptrCast(@alignCast(field));
+                for (PIN_POINTS, 0..) |point, i| {
+                    if (anchoring.Anchor.x == point.x and anchoring.Anchor.y == point.y and
+                        anchoring.Pivot.x == point.x and anchoring.Pivot.y == point.y) return .{ .Choice = i };
+                }
+                return .{ .Choice = PIN_POINTS.len };
+            }
+        }.Read,
+        .Write = struct {
+            fn Write(_: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+                if (written.Choice >= PIN_POINTS.len) return;
+                const anchoring: *Anchoring = @ptrCast(@alignCast(field));
+                anchoring.Anchor = PIN_POINTS[written.Choice];
+                anchoring.Pivot = PIN_POINTS[written.Choice];
+            }
+        }.Write,
+    };
 };
 
 pub const Placement = union(enum) {

@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const Vec4 = MathTypes.Vec4;
 const Assets = @import("../AComponents.zig");
@@ -36,6 +37,15 @@ pub fn Clone(self: *const SurfaceComponent, _: *EngineContext) !SurfaceComponent
     new_component.mTexture.RetainAsset();
 
     return new_component;
+}
+
+pub fn UIRender(self: *SurfaceComponent, ui: *Inspector.Builder) !void {
+    try ui.Bool(&self.mShouldRender, "Should Render", .{});
+    try ui.Float(&self.mBorderWidth, "Border Width", .{ .Speed = 0.01, .Min = 0 });
+    try ui.Color(&self.mBorderColor, "Border Color", .{});
+    try ui.Struct(&self.mMaterial, "Material");
+    try ui.Asset(&self.mTexture, "Texture", &.{".png"}, .{ .Thumbnail = true });
+    try ui.Fields(&self.mTexOptions);
 }
 
 pub fn EditorRender(self: *SurfaceComponent, engine_context: *EngineContext) !void {

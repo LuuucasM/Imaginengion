@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const imgui = @import("../../Core/CImports.zig").imgui;
@@ -23,6 +24,11 @@ pub fn Deinit(self: *TmplRefComponent, _: *EngineContext) void {
 pub fn Clone(self: *const TmplRefComponent, _: *EngineContext) !TmplRefComponent {
     self.mTmpl.RetainAsset();
     return self.*;
+}
+
+/// The template, shown only: opening it to edit is the Components panel's Edit Template button
+pub fn UIRender(self: *TmplRefComponent, ui: *Inspector.Builder) !void {
+    try ui.Asset(&self.mTmpl, "Template", &.{}, .{});
 }
 
 pub fn EditorRender(self: *TmplRefComponent, engine_context: *EngineContext) !void {

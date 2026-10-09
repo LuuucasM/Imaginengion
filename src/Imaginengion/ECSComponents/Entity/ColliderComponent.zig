@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -72,6 +73,20 @@ pub fn LocalNormal(self: ColliderComponent, local_point: Vec3(f32), world_scale:
         .Box => SDF.normalRoundedBox(local_point, self.GetWorldHalfExtents(world_scale), self.GetWorldCornerRadius(world_scale)),
         .Sphere => SDF.gradSphere(local_point),
     };
+}
+
+pub fn UIRender(self: *ColliderComponent, ui: *Inspector.Builder) !void {
+    //which shape it is decides which sizes there are
+    try ui.Enum(Shapes, &self.mShape, "Shape", .{ .Rebuilds = true });
+    switch (self.mShape) {
+        .Box => {
+            try ui.Vec3Field(&self.mBoxSize, "Box Size", .{ .Speed = 0.05, .Min = 0 });
+            try ui.Float(&self.mCornerRadius, "Corner Radius", .{ .Speed = 0.01, .Min = 0 });
+        },
+        .Sphere => try ui.Float(&self.mRadius, "Radius", .{ .Speed = 0.05, .Min = 0 }),
+    }
+    try ui.Struct(&self.mCollisionFilter, "Collision Filter");
+    try ui.Bool(&self.mPreSolveEvents, "Pre-Solve Events", .{});
 }
 
 pub fn EditorRender(self: *ColliderComponent, _: *EngineContext) !void {

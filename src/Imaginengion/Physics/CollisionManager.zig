@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../UI/Inspector.zig");
 const Collisions = @import("Collisions.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Tracy = @import("../Core/Tracy.zig");
@@ -135,6 +136,12 @@ pub const CollisionFilter = struct {
         .CategoryMask = .empty,
         .RespondMask = .empty,
     };
+    pub fn UIRender(self: *CollisionFilter, ui: *Inspector.Builder) !void {
+        try ui.Bool(&self.IsTrigger, "Trigger", .{});
+        try ui.Flags(&self.CategoryMask, "Category", .{});
+        try ui.Flags(&self.RespondMask, "Responds To", .{});
+    }
+
     pub fn ImguiRender(self: *CollisionFilter) !void {
         try ImguiManager.RenderBool(&self.IsTrigger, "Is Trigger?");
         try ImguiManager.RenderStaticBitSet(std.StaticBitSet(32), &self.CategoryMask, "Category Mask");

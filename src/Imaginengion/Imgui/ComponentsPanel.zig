@@ -1,3 +1,5 @@
+//! The ImGui component list, now only for the ImGui template edit windows (TmplEditPanel), until they are in the
+//! editor's own UI too. The Components panel itself is EditorPanels/ComponentsPanel.zig
 const std = @import("std");
 const imgui = @import("../Core/CImports.zig").imgui;
 const Entity = @import("../ECSObjects/Entity.zig");
@@ -33,46 +35,6 @@ const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 const Tracy = @import("../Core/Tracy.zig");
 const ComponentList = @import("../EditorPanels/ComponentList.zig");
 
-_P_Open: bool = true,
-
-pub fn Init(_: *ComponentsPanel) void {}
-
-pub fn OnImguiRender(self: ComponentsPanel, engine_context: *EngineContext, selected_object_opt: *?SelectedObject) !void {
-    const zone = Tracy.ZoneInit("ComponentsPanel::OnImguiRender", @src());
-    defer zone.Deinit();
-
-    if (self._P_Open == false) return;
-
-    if (selected_object_opt.*) |selected_object| {
-        switch (selected_object) {
-            .entity => |e| try RenderBegin(Entity, engine_context, e),
-            .scene_layer => |s| try RenderBegin(SceneLayer, engine_context, s),
-            .player => |p| try RenderBegin(Player, engine_context, p),
-            .gamecontext => |g| try RenderBegin(GameMode, engine_context, g),
-        }
-        defer imgui.igEnd();
-
-        switch (selected_object) {
-            .entity => |e| try RenderComponents(Entity, engine_context, e),
-            .scene_layer => |s| try RenderComponents(SceneLayer, engine_context, s),
-            .player => |p| try RenderComponents(Player, engine_context, p),
-            .gamecontext => |g| try RenderComponents(GameMode, engine_context, g),
-        }
-    } else {
-        _ = imgui.igBegin("Components - No Entity###Components\x00", null, ImguiManager.PanelFlags());
-        defer imgui.igEnd();
-    }
-}
-
-fn RenderBegin(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
-    const object_name = object.GetName();
-    const name_len = std.mem.indexOf(u8, object_name, &.{0}) orelse object_name.len;
-    const trimmed_name = object_name[0..name_len];
-    const name = try std.fmt.allocPrintSentinel(engine_context.FrameAllocator(), "Components - {s}###Components", .{trimmed_name}, 0);
-
-    _ = imgui.igBegin(name.ptr, null, ImguiManager.PanelFlags());
-}
-
 /// The component list of one object, drawn into the current window (a template window draws its own)
 pub fn RenderComponents(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {
     try ObjectImguiRender(ObjectType, engine_context, object);
@@ -85,10 +47,6 @@ pub fn RenderComponents(comptime ObjectType: type, engine_context: *EngineContex
         defer imgui.igEndPopup();
         try NewObjectComponentPopup(ObjectType, engine_context, object);
     }
-}
-
-pub fn OnTogglePanelEvent(self: *ComponentsPanel) void {
-    self._P_Open = !self._P_Open;
 }
 
 fn ObjectImguiRender(comptime ObjectType: type, engine_context: *EngineContext, object: ObjectType) !void {

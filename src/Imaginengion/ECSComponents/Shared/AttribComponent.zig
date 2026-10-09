@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 
 const ImguiManager = @import("../../Imgui/Imgui.zig");
@@ -57,6 +58,10 @@ pub const Editable: bool = true;
 pub const Name: []const u8 = "AttribComponent";
 
 pub fn Deinit(_: *AttribComponent, _: *EngineContext) void {}
+
+pub fn UIRender(self: *AttribComponent, ui: *Inspector.Builder) !void {
+    try ui.Union(&self.mData, "Value", .{});
+}
 
 pub fn EditorRender(self: *AttribComponent, _: *EngineContext) !void {
     try ImguiManager.RenderUnion(ValueTypes, &self.mData, "Type");

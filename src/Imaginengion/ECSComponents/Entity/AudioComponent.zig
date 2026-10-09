@@ -1,10 +1,12 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Bus = @import("../../ECSObjects/Bus.zig");
+const BusNameComponent = @import("../VComponents.zig").NameComponent;
 const UUIDComponent = @import("../Shared/UUIDComponent.zig");
 const Serializer = @import("../../Serializer/Serializer.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -63,6 +65,71 @@ pub fn Clone(self: *const AudioComponent, _: *EngineContext) !AudioComponent {
 
     return new_component;
 }
+pub fn UIRender(self: *AudioComponent, ui: *Inspector.Builder) !void {
+    try ui.Float(&self.mVolume, "Volume", .{ .Speed = 0.01, .Min = 0, .Max = 1, .Decimals = 2 });
+    try ui.Float(&self.mPitch, "Pitch", .{ .Speed = 0.01, .Min = 0.1, .Max = 4, .Decimals = 2 });
+    try ui.Bool(&self.mLoop, "Looping", .{});
+    try ui.Bool(&self.mStopWithSource, "Stop With Source", .{});
+    try ui.Enum(AudioType, &self.mAudioType, "Audio Type", .{});
+    try ui.Separator();
+    try ui.Asset(&self.mAudioAsset, "Audio", &.{ ".mp3", ".wav", ".flac" }, .{});
+
+    //the buses as they are now: one added while this is shown appears the next time it is built
+    var buses: std.ArrayList(Bus) = .empty;
+    try BusesInOrder(ui.mEngineContext.FrameAllocator(), ui.mEngineContext.mAudioManager.GetMasterBus(), &buses);
+    const names = try ui.mEngineContext.FrameAllocator().alloc([]const u8, buses.items.len);
+    for (buses.items, names) |bus, *name| name.* = if (bus.GetComponent(BusNameComponent)) |bus_name| bus_name.mName.items else "Bus";
+    try ui.Choice(&self.mBus, "Bus", names, &BUS_ACCESS, .{});
+}
+
+/// `bus` and every bus under it, each before the ones under it: the order the Bus dropdown lists them in
+fn BusesInOrder(frame_allocator: std.mem.Allocator, bus: Bus, buses: *std.ArrayList(Bus)) !void {
+    try buses.append(frame_allocator, bus);
+    var children = bus.GetIterator(.Child);
+    while (children.next()) |child| try BusesInOrder(frame_allocator, child, buses);
+}
+
+/// Where `target` comes in BusesInOrder from `bus`, counting on from `next`
+fn BusIndex(bus: Bus, target: Bus.Type, next: *usize) ?usize {
+    if (bus.mID == target) return next.*;
+    next.* += 1;
+    var children = bus.GetIterator(.Child);
+    while (children.next()) |child| {
+        if (BusIndex(child, target, next)) |index| return index;
+    }
+    return null;
+}
+
+/// The bus at `index` in BusesInOrder from `bus`, counting on from `next`
+fn BusAt(bus: Bus, index: usize, next: *usize) ?Bus {
+    if (next.* == index) return bus;
+    next.* += 1;
+    var children = bus.GetIterator(.Child);
+    while (children.next()) |child| {
+        if (BusAt(child, index, next)) |found| return found;
+    }
+    return null;
+}
+
+/// The bus as its place in the Bus dropdown. No bus picked (uninit) plays through Master, the first
+const BUS_ACCESS = Inspector.Access{
+    .Read = struct {
+        fn Read(field: *anyopaque) Inspector.Value {
+            const bus: *Bus = @ptrCast(@alignCast(field));
+            if (bus.mID == Bus.NullObject) return .{ .Choice = 0 };
+            var next: usize = 0;
+            return .{ .Choice = BusIndex(bus.mManager.GetMasterBus(), bus.mID, &next) orelse 0 };
+        }
+    }.Read,
+    .Write = struct {
+        fn Write(engine_context: *EngineContext, field: *anyopaque, written: Inspector.Value) anyerror!void {
+            const bus: *Bus = @ptrCast(@alignCast(field));
+            var next: usize = 0;
+            if (BusAt(engine_context.mAudioManager.GetMasterBus(), written.Choice, &next)) |picked| bus.* = picked;
+        }
+    }.Write,
+};
+
 pub fn EditorRender(self: *AudioComponent, engine_context: *EngineContext) !void {
     // Volume drag
     _ = try ImguiManager.RenderFloatDrag(&self.mVolume, "Volume", 0.01, 0.0, 1.0);

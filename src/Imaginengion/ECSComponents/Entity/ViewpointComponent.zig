@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const MathUtils = @import("../../Math/MathUtils.zig");
@@ -70,6 +71,35 @@ pub fn GetRayParams(self: ViewpointComponent) CameraRay.RayParams {
 
 fn RecalculateProjection(self: *ViewpointComponent) void {
     self.mProjection = MathUtils.PerspectiveRHNO(self.mPerspectiveFOVRad, self.mAspectRatio, self.mPerspectiveNear, self.mPerspectiveFar);
+}
+
+pub fn UIRender(self: *ViewpointComponent, ui: *Inspector.Builder) !void {
+    try ui.Bool(&self.mIsFixedAspectRatio, "Fixed Aspect Ratio", .{});
+    try ui.Float(&self.mPerspectiveFOVRad, "FOV", .{ .Speed = 1, .Min = 1, .Max = 179, .Decimals = 1, .Convert = DEGREES, .OnChange = Reproject });
+    try ui.Float(&self.mPerspectiveNear, "Near", .{ .Speed = 0.01, .Min = 0, .OnChange = Reproject });
+    try ui.Float(&self.mPerspectiveFar, "Far", .{ .Speed = 1, .Min = 0, .OnChange = Reproject });
+    //the part of the target it is drawn into, 0 to 1 across it: x, y, width, height
+    try ui.Vec4Field(&self.mAreaRect, "Area", .{ .Speed = 0.01, .Min = 0, .Max = 1 });
+}
+
+/// The FOV is kept in radians and shown in degrees
+const DEGREES = Inspector.Conversion{
+    .ToShown = struct {
+        fn ToShown(radians: f64) f64 {
+            return std.math.radiansToDegrees(radians);
+        }
+    }.ToShown,
+    .FromShown = struct {
+        fn FromShown(degrees: f64) f64 {
+            return std.math.degreesToRadians(degrees);
+        }
+    }.FromShown,
+};
+
+/// After a lens setting is edited: the projection worked out again from it
+fn Reproject(component: *anyopaque) void {
+    const self: *ViewpointComponent = @ptrCast(@alignCast(component));
+    self.RecalculateProjection();
 }
 
 pub fn EditorRender(self: *ViewpointComponent, _: *EngineContext) !void {

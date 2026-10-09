@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../UI/Inspector.zig");
 const SurfMat = @import("SurfaceMaterial.zig");
 const MedMat = @import("MediumMaterial.zig");
 const ImguiManager = @import("../Imgui/Imgui.zig");
@@ -22,6 +23,11 @@ pub const SurfacePhysicsMat = struct {
         },
     };
     const DEFAULT_FRICTION: f32 = 0.6;
+
+    pub fn UIRender(self: *SurfacePhysicsMat, ui: *Inspector.Builder) !void {
+        try ui.Enum(SurfMat.SurfaceMaterials, &self.Kind, "Surface", .{});
+        try ui.Struct(&self.Scale, "Scale");
+    }
 
     pub fn ImguiRender(self: *SurfacePhysicsMat) !void {
         try ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
@@ -55,6 +61,11 @@ pub const MediumPhysicsMat = struct {
         .Kind = .Custom,
         .Scale = MedMat.MediumScaleIdentity.PhysicsData,
     };
+
+    pub fn UIRender(self: *MediumPhysicsMat, ui: *Inspector.Builder) !void {
+        try ui.Enum(MedMat.MediumMaterials, &self.Kind, "Medium", .{});
+        try ui.Struct(&self.Scale, "Scale");
+    }
 
     pub fn ImguiRender(self: *MediumPhysicsMat) !void {
         try ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");
@@ -157,6 +168,11 @@ pub const SurfaceRenderMat = struct {
         .Scale = SurfMat.SurfaceScaleIdentity.RenderData,
     };
 
+    pub fn UIRender(self: *SurfaceRenderMat, ui: *Inspector.Builder) !void {
+        try ui.Enum(SurfMat.SurfaceMaterials, &self.Kind, "Surface", .{});
+        try ui.Struct(&self.Scale, "Scale");
+    }
+
     pub fn ImguiRender(self: *SurfaceRenderMat) !void {
         try ImguiManager.RenderEnum(SurfMat.SurfaceMaterials, &self.Kind, "Surface Material");
         try self.Scale.ImguiRender("Scale");
@@ -187,6 +203,12 @@ pub const MediumRenderMat = struct {
         .Kind = .Custom,
         .Scale = MedMat.MediumScaleIdentity.RenderData,
     };
+
+    pub fn UIRender(self: *MediumRenderMat, ui: *Inspector.Builder) !void {
+        try ui.Enum(MedMat.MediumMaterials, &self.Kind, "Medium", .{});
+        try ui.Struct(&self.Scale, "Scale");
+        try ui.Color(&self.Color, "Color", .{});
+    }
 
     pub fn ImguiRender(self: *MediumRenderMat) !void {
         try ImguiManager.RenderEnum(MedMat.MediumMaterials, &self.Kind, "Medium Material");

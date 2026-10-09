@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const MathTypes = @import("../../Math/MathTypes.zig");
 const MathUtils = @import("../../Math/MathUtils.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -77,6 +78,12 @@ pub fn GetWorldScale(self: TransformComponent) Vec3(f32) {
 }
 pub fn SetWorldScale(self: *TransformComponent, new_scale: Vec3(f32)) void {
     self._InternalData.WorldScale = new_scale;
+}
+
+pub fn UIRender(self: *TransformComponent, ui: *Inspector.Builder) !void {
+    try ui.Vec3Field(&self._Translation, "Translation", .{ .Speed = 0.075 });
+    try ui.Rotation(&self._Rotation, "Rotation", .{ .Speed = 0.25, .Decimals = 1 });
+    try ui.Vec3Field(&self._Scale, "Scale", .{ .Speed = 0.075 });
 }
 
 pub fn EditorRender(self: *TransformComponent, _: *EngineContext) !void {

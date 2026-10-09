@@ -1,4 +1,5 @@
 const std = @import("std");
+const Inspector = @import("../../UI/Inspector.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const SceneUUIDComponent = @import("../SComponents.zig").UUIDComponent;
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
@@ -13,6 +14,11 @@ pub const Name: []const u8 = "OverlayComponent";
 /// A player that sees several has one on itself and one on each child player that holds another (see
 /// Player.AddOverlay), so showing or hiding an overlay is adding or deleting a child.
 mScene: Scene = .uninit,
+
+/// Shown only, until there is something in the editor's own UI to drag a scene from
+pub fn UIRender(self: *OverlayComponent, ui: *Inspector.Builder) !void {
+    try ui.SceneName(&self.mScene, "Overlay Scene");
+}
 
 pub fn Deinit(_: *OverlayComponent, _: *EngineContext) void {}
 
