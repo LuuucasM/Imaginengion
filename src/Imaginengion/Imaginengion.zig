@@ -5,6 +5,7 @@ test {
     _ = @import("Tests/Serializer/SerializerTests.zig");
     _ = @import("Tests/ECSComponents/Asset/ObjectAssetTests.zig");
     _ = @import("Tests/ECSComponents/Asset/PendingDeleteTests.zig");
+    _ = @import("Tests/ECSComponents/RenderTargetTests.zig");
     _ = @import("Tests/ECSObjects/TmplTests.zig");
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
     _ = @import("Tests/ECSObjects/OverlayTests.zig");
@@ -12,6 +13,7 @@ test {
     _ = @import("Tests/Physics/BodyTagTests.zig");
     _ = @import("Tests/Physics/CollisionsTests.zig");
     _ = @import("Tests/Physics/SolverTests.zig");
+    _ = @import("Tests/Physics/PauseTests.zig");
     _ = @import("Tests/Physics/RayCastTests.zig");
     _ = @import("Tests/Physics/PhysicsQueriesTests.zig");
     _ = @import("Tests/Math/SDFFunctionsTests.zig");
@@ -52,11 +54,14 @@ test {
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");
     _ = @import("Tests/Core/ProjectTests.zig");
+    _ = @import("Tests/Programs/GameProgramTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }
 
 //Core Stuff -----------------------------------
 pub const Application = @import("Core/Application.zig");
+pub const EditorProgram = @import("Programs/EditorProgram.zig");
+pub const GameProgram = @import("Programs/GameProgram.zig");
 pub const EngineContext = @import("Core/EngineContext.zig");
 pub const Tracy = @import("Core/Tracy.zig");
 

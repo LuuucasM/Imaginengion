@@ -35,6 +35,9 @@ const CollisionInfo = @import("../Physics/Collisions.zig").CollisionInfo;
 const CollisionBeginEvent = @import("../Events/PhysicsEventData.zig").CollisionBeginEvent;
 const CollisionEndEvent = @import("../Events/PhysicsEventData.zig").CollisionEndEvent;
 const PreSolveEvent = @import("../Events/PhysicsEventData.zig").PreSolveEvent;
+const PhysicsEventData = @import("../Events/PhysicsEventData.zig");
+const PhysicsEvent = PhysicsEventData.EventT;
+const EventResult = @import("../Events/EventManager.zig").EventResult;
 const PreSolveInfo = @import("../Physics/Collisions.zig").PreSolveInfo;
 
 const Assets = @import("../ECSComponents/AComponents.zig");
@@ -207,6 +210,26 @@ pub fn RunPreSolveScripts(engine_context: *EngineContext, event: PreSolveEvent) 
     };
     try RunCollisionScripts(OnPreSolveScript, engine_context, event.mTarget, event.mOrigin, &target_info);
     event.mEnabled.* = target_info.mEnabled;
+}
+
+/// A physics step is about to start on e.mWorld: the world's OnPhysicsUpdate scripts run now, at the step's own rate.
+/// A scene's first, the rules, then its entities'
+pub fn RunPhysicsUpdateScripts(engine_context: *EngineContext, e: PhysicsEventData.StepBeginEvent) !void {
+    _ = try RunScriptInWorld(Scene, SComponents.OnPhysicsUpdateScript, e.mWorld, engine_context, .{e.mDT});
+    _ = try RunScriptInWorld(Entity, EComponents.OnPhysicsUpdateScript, e.mWorld, engine_context, .{e.mDT});
+}
+
+/// What a physics step had to report, see PhysicsEventData: the callback a program processes a world's PostPhysics
+/// category with. No else, so a new physics event has to be given an arm here
+pub fn OnPhysicsEvent(_: *anyopaque, engine_context: *EngineContext, event: *const PhysicsEvent) anyerror!EventResult {
+    switch (event.*) {
+        .Default => {},
+        //dispatched synchronously, never queued, see the programs' OnEvent
+        .StepBegin, .PreSolve => {},
+        .CollisionBegin => |e| try RunCollisionBeginScripts(engine_context, e),
+        .CollisionEnd => |e| try RunCollisionEndScripts(engine_context, e),
+    }
+    return .Continue;
 }
 
 /// Runs owner's own collision scripts of one type. Nothing is checked for them first: every one is

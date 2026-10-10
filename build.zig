@@ -64,20 +64,54 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
+    //zig build editor: only builds it. -Dno-bin only compiles it, to check it builds without writing the exe
+    const editor_install = b.addInstallArtifact(editor_exe, .{});
+    const editor_step = b.step("editor", "Build the editor");
     if (no_bin) {
+        editor_step.dependOn(&editor_exe.step);
         b.getInstallStep().dependOn(&editor_exe.step);
     } else {
-        b.installArtifact(editor_exe);
+        editor_step.dependOn(&editor_install.step);
+        b.getInstallStep().dependOn(&editor_install.step);
     }
+
+    //zig build runeditor: builds it and runs it
+    const editor_run_cmd = b.addRunArtifact(editor_exe);
+    editor_run_cmd.step.dependOn(&editor_install.step);
+    const editor_run_step = b.step("runeditor", "Build and run the editor");
+    editor_run_step.dependOn(&editor_run_cmd.step);
     //=========================================END EDITOR STEP=====================================
 
-    //================================================RUN STEP=======================================
-    const run_cmd = b.addRunArtifact(editor_exe);
-    run_cmd.step.dependOn(b.getInstallStep());
+    //=========================================GAME STEP=========================================
+    //the engine running a project's game with no editor
+    const game_exe = b.addExecutable(.{
+        .name = "ImaginGame",
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("src/Game.zig"),
+            .imports = &.{
+                .{ .name = "IM", .module = engine_module_eng },
+            },
+        }),
+    });
 
-    const run_step = b.step("run", "Run Engine");
-    run_step.dependOn(&run_cmd.step);
-    //=========================================END RUN STEP====================================
+    //zig build game: only builds it
+    const game_install = b.addInstallArtifact(game_exe, .{});
+    const game_step = b.step("game", "Build the game program");
+    if (no_bin) {
+        game_step.dependOn(&game_exe.step);
+    } else {
+        game_step.dependOn(&game_install.step);
+    }
+
+    //zig build rungame -- <path>/<name>.imprj: builds it and runs that project's game
+    const game_run_cmd = b.addRunArtifact(game_exe);
+    game_run_cmd.step.dependOn(&game_install.step);
+    game_run_cmd.addPassthruArgs();
+    const game_run_step = b.step("rungame", "Build and run a project's game: zig build rungame -- <path>/<name>.imprj");
+    game_run_step.dependOn(&game_run_cmd.step);
+    //=========================================END GAME STEP=====================================
 
     //=========================================TEST STEP=========================================
     const test_step = b.step("test", "Test Engine");
@@ -95,7 +129,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_unit_tests.step);
 
     if (test_build) {
-        run_step.dependOn(test_step);
+        editor_run_step.dependOn(test_step);
+        game_run_step.dependOn(test_step);
     }
 
     //Tests that need the whole engine module, because they use EngineContext (see Imaginengion.zig's

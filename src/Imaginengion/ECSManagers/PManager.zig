@@ -134,9 +134,8 @@ pub fn ApplyConfig(self: *PManager, engine_context: *EngineContext, player_id: P
         try self.AddUUID(engine_context.EngineAllocator(), new_uuid_component.ID, player_id);
     }
     if (config.bAddRenderComponent) {
-        var render_component = RenderComponent{};
-        try render_component.mComputeTexture.Init(engine_context, 1600, 900);
-        _ = try self.AddComponent(engine_context, player_id, render_component);
+        //with no texture yet: the first fit to the size it is drawn at makes one
+        _ = try self.AddComponent(engine_context, player_id, RenderComponent{});
     }
     if (config.bAddPossessComponent) {
         _ = try self.AddComponent(engine_context, player_id, PossessComponent{});

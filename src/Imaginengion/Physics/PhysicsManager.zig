@@ -65,6 +65,9 @@ const SUB_STEP_DT: f32 = PHYSICS_DT / @as(f32, @floatFromInt(SUB_STEPS));
 /// whoever steps the world processes it afterwards, see ProcessEvents
 mEventManager: EventManagerT = .empty,
 
+/// While true the world's physics stands still, see SetPaused
+mPaused: bool = false,
+
 _CollisionManager: CollisionManager = .empty,
 _InternalData: InternalData = .empty,
 
@@ -90,10 +93,24 @@ pub fn ProcessEvents(self: *PhysicsManager, comptime event_category: EventData.E
     self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
 }
 
+/// Pauses or carries on the world's physics, e.g. from a pause menu's script. While paused there are no physics steps:
+/// nothing moves by its velocity, no forces or gravity, no collisions or their scripts, and no OnPhysicsUpdate scripts.
+/// Time doesn't build up meanwhile, so carrying on doesn't run the paused time's steps all at once. Only the physics
+/// stops: OnUpdate scripts still run, and one that moves things itself checks IsPaused
+pub fn SetPaused(self: *PhysicsManager, paused: bool) void {
+    self.mPaused = paused;
+}
+
+pub fn IsPaused(self: PhysicsManager) bool {
+    return self.mPaused;
+}
+
 /// Drops everything carried from one step to the next: the leftover time, which pairs were touching,
 /// and any events not processed yet. For when the owning world's entities are cleared out or replaced,
-/// since their ids then mean different objects
+/// since their ids then mean different objects. Unpauses too: pressing play copies a world through this, and a game
+/// quit while paused starts running the next time
 pub fn Reset(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
+    self.mPaused = false;
     self._InternalData = .empty;
     self._CollisionManager.Reset(engine_allocator);
     self.mEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
@@ -103,6 +120,9 @@ pub fn Reset(self: *PhysicsManager, engine_allocator: std.mem.Allocator) void {
 pub fn OnUpdate(self: *PhysicsManager, engine_context: *EngineContext, world_manager: *WorldManager) !void {
     const zone = Tracy.ZoneInit("PhysicsManager::OnUpdate", @src());
     defer zone.Deinit();
+
+    //before the time is added, so a paused world builds none up to catch up on later
+    if (self.mPaused) return;
 
     self._InternalData.Accumulator += engine_context.mDT;
 

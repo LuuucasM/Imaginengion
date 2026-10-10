@@ -41,7 +41,7 @@ pub fn Init(self: *Application, init: std.process.Init.Minimal) !void {
         sdl.SDL_SetLogPriority(sdl.SDL_LOG_CATEGORY_GPU, sdl.SDL_LOG_PRIORITY_VERBOSE);
     }
     try self.mEngineContext.Init(init.environ);
-    try self.mProgram.Init(&self.mEngineContext);
+    try self.mProgram.Init(&self.mEngineContext, init.args);
     self.mEngineContext.SetSyncCallbacks(&self.mProgram);
 }
 

@@ -4,11 +4,14 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const EventResult = @import("../Events/EventManager.zig").EventResult;
 const Program = @This();
 
-const Impl = @import("EditorProgram.zig");
+/// The program the engine runs, picked by the executable: its root file declares `pub const Program`, the editor's
+/// EditorProgram (src/Editor.zig) or a game's GameProgram (src/Game.zig)
+const Impl = @import("root").Program;
 _Impl: Impl = .{},
 
-pub fn Init(self: *Program, engine_context: *EngineContext) !void {
-    try self._Impl.Init(engine_context);
+/// `args` are the executable's command line arguments
+pub fn Init(self: *Program, engine_context: *EngineContext, args: std.process.Args) !void {
+    try self._Impl.Init(engine_context, args);
 }
 
 pub fn Deinit(self: *Program, engine_context: *EngineContext) void {

@@ -1,6 +1,7 @@
 //! Who has the keyboard: the one text input (an entity whose UI element has a TextInputComponent) being typed into, and
 //! the typing itself. Part of the UIManager.
-//!   - focus: the left button going down on a text input, or on anything inside one, gives it the keyboard; or a
+//!   - focus: the left button going down on a text input, on anything inside one, or on the box it sits directly in
+//!     (a text field's padding, or the empty room past its text) gives it the keyboard; or a
 //!     double click, for one whose TextInputComponent says so. It gets FocusedTag and a blinking caret (a thin quad on
 //!     a child entity, made and deleted here). Any button going down anywhere else takes the keyboard away again
 //!   - typing: typed text (TextTyped events) goes in at the caret. Backspace, Delete, Left, Right, Home and End edit
@@ -123,6 +124,7 @@ pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *c
             break;
         }
     }
+    if (pressed == null and pointer.mHovered.items.len > 0) pressed = ChildTextInput(pointer.mHovered.items[0]);
 
     if (self.Focused()) |focused| {
         if (pressed != null and Same(pressed.?, focused)) {
@@ -143,11 +145,31 @@ pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *c
 pub fn OnClicked(self: *FocusSystem, engine_context: *EngineContext, e: PointerClickedEvent) !void {
     const zone = Tracy.ZoneInit("FocusSystem::OnClicked", @src());
     defer zone.Deinit();
-    if (e.mButton != .BUTTON_LEFT or e.mClicks != 2) return;
-    //one event per entity in the chain: the text input's own
-    const text_input = UIManager.GetUIComponent(e.mEntity, TextInputComponent) orelse return;
-    if (text_input.mFocusOn != .DoubleClick or !e.mEntity.IsActive()) return;
-    _ = try self.Focus(engine_context, e.mEntity);
+    if (e.mButton != .BUTTON_LEFT or e.mClicks != 2 or !e.mEntity.IsActive()) return;
+    //one event per entity in the chain: the text input's own, or the box it is in when that is what was clicked
+    const entity = if (UIManager.HasUIComponent(e.mEntity, TextInputComponent))
+        e.mEntity
+    else if (Same(e.mEntity, e.mTarget))
+        ChildTextInput(e.mEntity) orelse return
+    else
+        return;
+    if (UIManager.GetUIComponent(entity, TextInputComponent).?.mFocusOn != .DoubleClick) return;
+    _ = try self.Focus(engine_context, entity);
+}
+
+/// The one text input directly inside `box`, null if there is none or more than one (no telling which was meant). A
+/// press on the box a text input sits in (a text field's padding, past the end of its text, or anywhere in it while it
+/// is empty) counts as a press on the text input
+fn ChildTextInput(box: Entity) ?Entity {
+    if (!box.IsActive()) return null;
+    var found: ?Entity = null;
+    var children = box.GetIterator(.Child);
+    while (children.next()) |child| {
+        if (!child.IsActive() or !UIManager.HasUIComponent(child, TextInputComponent)) continue;
+        if (found != null) return null;
+        found = child;
+    }
+    return found;
 }
 
 /// Gives `entity` the keyboard, with the caret at the end of its text. Returns false if it has no text to type into

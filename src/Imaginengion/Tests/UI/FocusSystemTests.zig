@@ -173,6 +173,33 @@ test "pressing a text input gives it the keyboard, with the caret at the end, an
     try ExpectFocused(world, null);
 }
 
+test "pressing the box a text input sits in gives it the keyboard, unless the box holds more than one" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    //a text field: a box holding just its text, which can be empty and so have nothing to press
+    const field = try world.mForm.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    const shown = try field.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    _ = try shown.AddComponent(engine_context, TextComponent{});
+    _ = try shown.AddComponent(engine_context, SurfaceComponent{});
+    try AddUI(engine_context, shown, TextInputComponent{});
+
+    try world.Press(field, .BUTTON_LEFT);
+    const focus = &engine_context.mUIManager.mFocusSystem;
+    try std.testing.expectEqual(shown.mID, focus.Focused().?.mID);
+    try world.Type("hi");
+    try std.testing.expectEqualStrings("hi", TestWorld.TextOf(shown));
+
+    //pressing the box again keeps the edit going
+    try world.Press(field, .BUTTON_LEFT);
+    try std.testing.expectEqual(shown.mID, focus.Focused().?.mID);
+
+    //the form holds two: a press on it is on neither, and ends the edit
+    try world.Press(world.mForm, .BUTTON_LEFT);
+    try ExpectFocused(world, null);
+}
+
 test "typing goes in at the caret, and the keys move it and delete around it" {
     const world = try TestWorld.Init();
     defer world.Deinit();

@@ -199,7 +199,7 @@ mEditorFont: AssetHandle = .uninit,
 mActiveWorld: *WorldManager = undefined,
 mActiveWorldType: EngineContext.WorldType = .Game,
 
-pub fn Init(self: *EditorProgram, engine_context: *EngineContext) !void {
+pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process.Args) !void {
     const zone = Tracy.ZoneInit("EditorProgram::Init", @src());
     defer zone.Deinit();
     //EDITOR UI STUFF================================================
@@ -379,7 +379,7 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         if (self.mEditorState == .Play) {
             //what the physics step queued. processed here and not inside the step, so whatever reacts is free
             //to move or delete what it hit, and before the update scripts so they see the result
-            var physics_event_callback = PhysicsManager.EventManagerT.EventCallback{ .mCtx = self, .mCallbackFn = OnPhysicsEvent };
+            var physics_event_callback = PhysicsManager.EventManagerT.EventCallback{ .mCtx = self, .mCallbackFn = ScriptsProcessor.OnPhysicsEvent };
             callback_list.append(&physics_event_callback.mNode);
             try engine_context.mSimulateWorld.ProcessEvents(PhysicsEventData, .PostPhysics, engine_context, &callback_list);
             callback_list.first = null;
@@ -573,7 +573,7 @@ pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anyt
         return .Continue;
     } else if (T == PhysicsEvent) {
         switch (event.*) {
-            .StepBegin => |e| try OnPhysicsStepBegin(engine_context, e),
+            .StepBegin => |e| try ScriptsProcessor.RunPhysicsUpdateScripts(engine_context, e),
             .PreSolve => |e| try ScriptsProcessor.RunPreSolveScripts(engine_context, e),
             else => {},
         }
@@ -922,25 +922,6 @@ pub fn OnWorldEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
     return .Continue;
 }
 
-/// A physics step is about to start on e.mWorld: the world's OnPhysicsUpdate scripts run now, at the step's own rate.
-/// A scene's first, the rules, then its entities'
-fn OnPhysicsStepBegin(engine_context: *EngineContext, e: PhysicsEventData.StepBeginEvent) !void {
-    _ = try ScriptsProcessor.RunScriptInWorld(Scene, SceneComponents.OnPhysicsUpdateScript, e.mWorld, engine_context, .{e.mDT});
-    _ = try ScriptsProcessor.RunScriptInWorld(Entity, EntityComponents.OnPhysicsUpdateScript, e.mWorld, engine_context, .{e.mDT});
-}
-
-/// What a physics step had to report, see PhysicsEventData. No else, so a new physics event has to be given an arm here
-pub fn OnPhysicsEvent(_: *anyopaque, engine_context: *EngineContext, event: *const PhysicsEvent) anyerror!EventResult {
-    switch (event.*) {
-        .Default => {},
-        //dispatched synchronously, never queued, see OnEvent
-        .StepBegin, .PreSolve => {},
-        .CollisionBegin => |e| try ScriptsProcessor.RunCollisionBeginScripts(engine_context, e),
-        .CollisionEnd => |e| try ScriptsProcessor.RunCollisionEndScripts(engine_context, e),
-    }
-    return .Continue;
-}
-
 /// What the panels asked the editor to do this frame
 pub fn OnEditorEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const EditorEvent) anyerror!EventResult {
     const zone = Tracy.ZoneInit("EditorProgram::OnEditorEvent", @src());
@@ -1029,6 +1010,8 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
                 self.mActiveWorld = &engine_context.mSimulateWorld;
                 self.mActiveWorldType = .Simulate;
                 self.mEditorState = .Play;
+                //the game starting, the same as in a built game (GameProgram): its scenes' start scripts set it up
+                _ = try ScriptsProcessor.RunScript(Scene, OnSceneStartScript, .Simulate, engine_context, .{});
             }
         }
     }

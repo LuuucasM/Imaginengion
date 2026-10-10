@@ -5,13 +5,16 @@ const IndexBuffer = @import("../../IndexBuffers/IndexBuffer.zig");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const ComputeOutput = @import("../../Renderer/Renderer.zig").ComputeOutput;
 const Texture2D = @import("../AComponents.zig").Texture2D;
-const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 
 const RenderTargetComponent = @This();
 
 pub const Editable = false;
 pub const Name: []const u8 = "RenderTargetComponent";
 
+/// The GPU texture is made by the renderer, never by making the component (loading, cloning, a new player): the
+/// first fit of the target to the size it is drawn at (SetViewportSize, Viewports.FitPlayerToQuad) creates it, and
+/// what draws or shows the target checks IsCreated first. So a script, which carries its own copy of the engine code
+/// it calls and none of SDL, can load scenes and make players
 mComputeTexture: ComputeOutput = .empty,
 /// Where a quad showing this target (ViewportComponent) samples it from: a slot in the texture manager, the target's
 /// size, which Shown copies the target into. Null until something shows it, and again after the target changes size
@@ -58,15 +61,10 @@ fn ReleaseShownSlot(self: *RenderTargetComponent, engine_context: *EngineContext
     self.mShownSlot = null;
 }
 
-/// The GPU texture is owned, so a copy gets its own at the same size. A plain value copy would
-/// share the handle, and whichever copy is deinit first frees it out from under the other.
-pub fn Clone(self: *const RenderTargetComponent, engine_context: *EngineContext) !RenderTargetComponent {
-    var compute_texture: ComputeOutput = .empty;
-    //an uncreated texture has no usable size yet, it gets one from Resize like the original would
-    if (self.mComputeTexture.IsCreated()) {
-        try compute_texture.Init(engine_context, self.mComputeTexture.GetWidth(), self.mComputeTexture.GetHeight());
-    }
-    return RenderTargetComponent{ .mComputeTexture = compute_texture };
+/// The GPU texture is owned, so a copy can't share it: a plain value copy would share the handle, and whichever copy
+/// is deinit first frees it out from under the other. The copy starts with none, see the GPU texture note below
+pub fn Clone(_: *const RenderTargetComponent, _: *EngineContext) !RenderTargetComponent {
+    return .{};
 }
 
 pub fn GetOutputTexture(self: *RenderTargetComponent) *Texture2D {
@@ -83,15 +81,7 @@ pub fn jsonStringify(_: *const RenderTargetComponent, jw: anytype) !void {
     try jw.endObject();
 }
 
-pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, _: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!RenderTargetComponent {
+pub fn jsonParse(_: std.mem.Allocator, reader: anytype, _: std.json.ParseOptions) std.json.ParseError(@TypeOf(reader.*))!RenderTargetComponent {
     try reader.skipValue();
-
-    const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
-
-    var compute_texture: ComputeOutput = .empty;
-    compute_texture.Init(engine_context, 1600, 900) catch |err| {
-        std.debug.panic("Failed to create render target while deserializing: {}", .{err});
-    };
-
-    return RenderTargetComponent{ .mComputeTexture = compute_texture };
+    return .{};
 }
