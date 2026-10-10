@@ -4,7 +4,6 @@ const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const JsonUtils = @import("../../Serializer/JsonUtils.zig");
 const Assets = @import("../AComponents.zig");
 const FileMetaData = Assets.FileMetaData;
-const Entity = @import("../../ECSObjects/Entity.zig");
 const Bus = @import("../../ECSObjects/Bus.zig");
 const BusNameComponent = @import("../VComponents.zig").NameComponent;
 const UUIDComponent = @import("../Shared/UUIDComponent.zig");
@@ -173,7 +172,7 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
     if (file_data.Bus) |bus_uuid| {
         const engine_context = JsonUtils.EngineContextFromAllocator(frame_allocator);
         const serializer = &engine_context.mSerializer;
-        std.debug.assert(serializer.mCurrDeserialize.requester == .Entity);
+        std.debug.assert(serializer.mCurrDeserialize.requester != .Bus);
         try serializer.AddResolveReq(engine_context.EngineAllocator(), .{
             .Requester = serializer.mCurrDeserialize.requester,
             .UUID = bus_uuid,
@@ -193,7 +192,10 @@ pub fn jsonParse(frame_allocator: std.mem.Allocator, reader: anytype, options: s
 
 fn ResolveBusRef(requester: Serializer.Requester, bus_uuid: u64) bool {
     //the component may have been removed since the request was made, nothing left to resolve
-    const audio_component = requester.Entity.GetComponent(AudioComponent) orelse return true;
+    const audio_component = switch (requester) {
+        inline .Entity, .Scene, .Player, .GameContext => |object| object.GetComponent(AudioComponent),
+        .Bus => unreachable,
+    } orelse return true;
     //AddComponent pointed mBus at the AudioManager when the parsed component was added
     const bus = audio_component.mBus.mManager.GetBusByUUID(bus_uuid) orelse return false;
     audio_component.mBus = bus;

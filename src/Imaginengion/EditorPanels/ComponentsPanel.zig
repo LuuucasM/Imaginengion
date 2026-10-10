@@ -169,10 +169,14 @@ pub fn Run(self: *const ComponentsPanel, engine_context: *EngineContext, action:
                 .gamecontext => try self.mGameContextList.Run(engine_context, ToListAction(GameContextList, action)),
             }
         },
-        .Preview => if (built == .entity) {
-            _ = try built.entity.PlayAudio(engine_context);
+        .Preview => switch (built) {
+            inline else => |object| {
+                _ = try object.PlayAudio(engine_context);
+            },
         },
-        .Stop => if (built == .entity) built.entity.StopAudio(),
+        .Stop => switch (built) {
+            inline else => |object| object.StopAudio(),
+        },
         .EditTemplate => {
             const tmpl_ref = switch (built) {
                 inline else => |object| object.GetComponent(TmplRefComponent),
@@ -258,7 +262,7 @@ pub fn After(self: *ComponentsPanel, comptime component_type: type, ui: *Inspect
         //shown, not edited: the scene stack slots a scene by its layer when it is made
         try ui.Note(try std.fmt.allocPrint(ui.mEngineContext.FrameAllocator(), "Layer: {s}", .{@tagName(object.GetLayer())}));
     }
-    if (comptime component_type == AudioComponent and Object == Entity) {
+    if (comptime component_type == AudioComponent) {
         const buttons = try ui.Buttons(&.{ "Preview", "Stop" });
         try self.mButtons.append(engine_allocator, .{ .Button = buttons[0], .Action = .Preview });
         try self.mButtons.append(engine_allocator, .{ .Button = buttons[1], .Action = .Stop });

@@ -4,7 +4,6 @@ const Vec3 = MathTypes.Vec3;
 const Ray = @import("../Math/CameraRay.zig").Ray;
 const RayIntersect = @import("../Math/RayIntersect.zig");
 const HitInfo = RayIntersect.HitInfo;
-const OverlayCanvas = @import("../Math/OverlayCanvas.zig");
 
 const EngineContext = @import("../Core/EngineContext.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
@@ -99,7 +98,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                 const entity = shape.Entity;
                 const canvas = shape.Canvas;
                 const best = if (canvas != null) &best_overlay else &best_game;
-                const far = if (canvas != null) OverlayCanvas.FAR_DISTANCE else camera_view.FarDistance;
+                const far = if (canvas != null) camera_view.OverlayFarDistance() else camera_view.FarDistance;
 
                 //compiled the way the renderer does, its box hit the way the renderer hits it, then its program at the
                 //hit says whether it is there
@@ -155,7 +154,7 @@ pub fn CastRay(engine_context: *EngineContext, world: *WorldManager, ray: Ray, c
                 const transform = entity.GetComponent(TransformComponent) orelse continue;
                 const collider = entity.GetComponent(ColliderComponent).?;
                 const best = if (canvas != null) &best_overlay else &best_game;
-                const far = if (canvas != null) OverlayCanvas.FAR_DISTANCE else camera_view.FarDistance;
+                const far = if (canvas != null) camera_view.OverlayFarDistance() else camera_view.FarDistance;
 
                 const hit = switch (collider.mShape) {
                     .Box => blk: {

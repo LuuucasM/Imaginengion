@@ -22,10 +22,20 @@ pub const REFERENCE_HEIGHT: f32 = 1080.0;
 /// It has to stay inside the overlay pass's far distance.
 pub const CANVAS_DISTANCE: f32 = 100.0;
 
-/// The overlay pass's own far distance, instead of the game camera's, so a camera that only sees a
-/// short way can't clip the canvas. Overlay content pushed further behind the canvas than the canvas
-/// is in front of the camera gets cut off.
+/// The overlay pass's own far distance straight ahead, instead of the game camera's, so a camera that
+/// only sees a short way can't clip the canvas. Overlay content pushed further behind the canvas than
+/// the canvas is in front of the camera gets cut off. Rays off to the side reach the canvas further
+/// out, so a view uses FarDistance, this stretched out to its corners.
 pub const FAR_DISTANCE: f32 = 2.0 * CANVAS_DISTANCE;
+
+/// The overlay pass's far distance for a view whose corner, on the plane one unit in front of the
+/// camera, is `half_width` and `half_height` from its center (tan of half the fov, and that times the
+/// aspect ratio). Rays are cut off by how far they have gone, not how deep they are, so FAR_DISTANCE on
+/// its own cuts a circle out of a wide view's canvas. Stretched by the corner ray's length, every ray
+/// reaches as deep behind the canvas as the middle one does.
+pub fn FarDistance(half_width: f32, half_height: f32) f32 {
+    return FAR_DISTANCE * @sqrt(1 + half_width * half_width + half_height * half_height);
+}
 
 pub const OverlayScaleMode = enum {
     /// A canvas unit is always the same number of pixels (times the OS display scale). A bigger screen

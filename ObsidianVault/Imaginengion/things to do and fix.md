@@ -1,0 +1,2 @@
+- add reparenting
+- be able to select and copy the UUID to clipboard

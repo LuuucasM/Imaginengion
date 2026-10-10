@@ -105,10 +105,12 @@ pub fn StartGame(engine_context: *EngineContext) !void {
     }
     if (missing) return error.NoProjectEntry;
 
-    _ = try engine_context.mGameWorld.Load(Scene, engine_context, try project.GetAbsPath(engine_context.FrameAllocator(), project.GetEntry(.Scene)));
+    _ = try engine_context.mGameWorld.Load(Scene, engine_context, project.GetEntry(.Scene), .Prj);
     _ = try SpawnEntry(Player, engine_context, .Player);
     _ = try SpawnEntry(GameContext, engine_context, .GameContext);
 
+    //the program isn't listening yet while it starts (Application.Init), so loading the entry scene didn't start it
+    //(SceneLoaded): it starts here, once the player and game mode its scripts set up are in
     _ = try ScriptsProcessor.RunScript(Scene, OnSceneStartScript, .Game, engine_context, .{});
 }
 
@@ -288,7 +290,16 @@ pub fn OnEvent(_: *GameProgram, engine_context: *EngineContext, event: anytype) 
             else => {},
         }
         return .Continue;
-    } else if (T == WindowEvent or T == WorldEvent or T == EditorEvent or T == UIEvent or T == PointerEvent or
+    } else if (T == WorldEvent) {
+        switch (event.*) {
+            //a scene loaded while the game runs, e.g. by a script, starts the way the entry scene did (StartGame)
+            .SceneLoaded => |e| if (e.mWorld == &engine_context.mGameWorld) {
+                _ = try ScriptsProcessor.RunOwnScripts(Scene, OnSceneStartScript, engine_context, e.mScene, .{});
+            },
+            else => {},
+        }
+        return .Continue;
+    } else if (T == WindowEvent or T == EditorEvent or T == UIEvent or T == PointerEvent or
         T == UIECSEvent or T == AManagerEvent or T == AudioManagerEvent or T == EManagerEvent or T == GCManagerEvent or
         T == PManagerEvent or T == SManagerEvent or T == ECSEvent)
     {
@@ -347,6 +358,8 @@ fn OnWorldEvent(_: *anyopaque, engine_context: *EngineContext, event: *const Wor
     switch (event.*) {
         .Default => {},
         .QuitGame => engine_context.mIsRunning = false,
+        //dispatched synchronously, never queued, see OnEvent
+        .SceneLoaded => {},
     }
     return .Continue;
 }

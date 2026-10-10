@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const EngineContext = @import("../Core/EngineContext.zig");
+const Tracy = @import("../Core/Tracy.zig");
 
 const AManager = @import("../ECSManagers/AManager.zig");
 const EManager = @import("../ECSManagers/EManager.zig");
@@ -30,6 +31,7 @@ const UUIDComponent = @import("../ECSComponents/Shared/UUIDComponent.zig");
 const NameComponent = @import("../ECSComponents/Shared/NameComponent.zig");
 const ScriptComponent = @import("../ECSComponents/Shared/ScriptComponent.zig");
 const TmplRefComponent = @import("../ECSComponents/Shared/TmplRefComponent.zig");
+const AudioComponent = @import("../ECSComponents/Shared/AudioComponent.zig");
 const EntitySceneComponent = EComponents.EntitySceneComponent;
 
 const ScriptAsset = AComponents.ScriptAsset;
@@ -53,6 +55,9 @@ pub const RefMap = struct {
         return self.mEntities.get(tmpl_entity.mID);
     }
 };
+
+/// What a copy made by Core._CopyObject gets for a UUID
+const CopyUUIDs = enum { None, Fresh };
 
 /// The templates a Fill is inside of, outermost first: the chain of copies of other templates it followed to get
 /// where it is. Filling a template already on it would never end
@@ -217,6 +222,12 @@ pub fn Core(comptime Self: type) type {
             return GetComponent(self, UUIDComponent).?.*.ID;
         }
 
+        /// The world this object lives in (game, editor or simulate). A script is handed its owner and not the world, so
+        /// this is how it finds the world it is running in
+        pub fn GetWorld(self: Self) *WorldManager {
+            return self.mManager;
+        }
+
         pub fn GetName(self: Self) []const u8 {
             return GetComponent(self, NameComponent).?.*.mName.items;
         }
@@ -226,6 +237,18 @@ pub fn Core(comptime Self: type) type {
             const name_component = GetComponent(self, NameComponent) orelse return;
             name_component.mName.clearRetainingCapacity();
             try name_component.mName.appendSlice(engine_context.EngineAllocator(), name);
+        }
+
+        /// Plays the object's AudioComponent from the start. Keep the returned voice to stop that one sound later, or
+        /// ignore it for a one-shot. Null (and logged) when nothing could play, e.g. the object has no AudioComponent
+        pub fn PlayAudio(self: Self, engine_context: *EngineContext) !?Voice {
+            return try engine_context.mAudioManager.PlayVoice(engine_context, self);
+        }
+
+        /// Stops every attached voice the object's AudioComponent is playing. Detached one-shots play on, stop one of
+        /// those with the Voice that PlayAudio returned
+        pub fn StopAudio(self: Self) void {
+            if (GetComponent(self, AudioComponent)) |audio_component| audio_component.StopVoices();
         }
         pub fn CreateChild(self: Self, engine_context: *EngineContext, child_type: ChildType, config: Self.CreateConfig) !Self {
             if (Self == Entity) {
@@ -241,15 +264,38 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
+        /// A copy of this object and everything under it (its scripts, children and, for a scene, its entities), next to
+        /// it: under the same parent, or for a top level one in the same scene (an entity) or world. It is copied the way
+        /// a template is (Fill): what it is saved with, each component hooking itself up as it does when loaded, and a
+        /// reference to something inside what was copied pointing at that thing's copy. Everything copied that had a
+        /// UUID gets a new one of its own. Not for a script
         pub fn Duplicate(self: Self, engine_context: *EngineContext) !Self {
+            const zone = Tracy.ZoneInit("ECSObject::Duplicate", @src());
+            defer zone.Deinit();
+            const copy = try _NewSibling(self, engine_context);
+            errdefer Delete(copy, engine_context) catch {};
+            var ref_map: RefMap = .{};
+            try _CopyObject(self, copy, engine_context, &ref_map, .Fresh);
+            try _RemapRefs(copy, engine_context, &ref_map, .empty);
+            return copy;
+        }
+
+        /// A new blank object where a copy of this one goes: under its parent, or at the top level of its scene or world
+        fn _NewSibling(self: Self, engine_context: *EngineContext) !Self {
+            if (GetComponent(self, ChildComponent(Self.Type))) |child_component| {
+                const parent: Self = .{ .mID = child_component.mParent, .mManager = self.mManager };
+                return try parent.CreateChild(engine_context, .Entity, Self.BlankConfig);
+            }
+            const world = self.mManager;
             if (Self == Entity) {
-                return try self.mManager.mEManager.Duplicate(engine_context, self.mID);
-            } else if (Self == GameContext) {
-                return try self.mManager.mGCManager.Duplicate(engine_context, self.mID);
-            } else if (Self == Player) {
-                return try self.mManager.mPManager.Duplicate(engine_context, self.mID);
+                return try GetComponent(self, EntitySceneComponent).?.mScene.CreateEntity(engine_context, Entity.BlankConfig);
             } else if (Self == Scene) {
-                return try self.mManager.mSManager.Duplicate(engine_context, self.mID);
+                //its layer tag, copied onto it, gives it its place in the scene stack
+                return try world.mSManager.CreateBlankScene(engine_context);
+            } else if (Self == Player) {
+                return try world.CreatePlayer(engine_context, Player.BlankConfig);
+            } else if (Self == GameContext) {
+                return try world.CreateGameContext(engine_context, GameContext.BlankConfig);
             } else {
                 @compileError(std.fmt.comptimePrint("This isnt implemented yet for object type: {s}", .{@typeName(Self)}));
             }
@@ -317,6 +363,11 @@ pub fn Core(comptime Self: type) type {
             //AddComponent deliberately rejects ScriptComponent to push callers here, so
             //this is the one place that goes straight to the manager
             _ = try _AddScriptComponent(new_script_entity, engine_context, new_script_component);
+            //named after its file, scripts aren't saved with a name so this also names them on load. One with no
+            //script yet keeps the name its config gave it
+            if (new_script_handle.mID != AssetHandle.NullObject) {
+                try SetName(new_script_entity, engine_context, std.fs.path.stem(new_script_handle.GetFileMetaData().mRelPath.items));
+            }
 
             return new_script_entity;
         }
@@ -417,7 +468,7 @@ pub fn Core(comptime Self: type) type {
             //so any reference in it already points where it should and is not remapped
             const own_components = _OwnComponents(self);
             var ref_map: RefMap = .{};
-            try _CopyObject(tmpl, self, engine_context, &ref_map);
+            try _CopyObject(tmpl, self, engine_context, &ref_map, .None);
             //after everything is copied, so every copy a reference could point at exists
             try _RemapRefs(self, engine_context, &ref_map, own_components);
             //last, so this template's remap never sees what they bring in: they remap it with their own map
@@ -456,13 +507,20 @@ pub fn Core(comptime Self: type) type {
             }
         }
 
-        /// Copies the template object `tmpl` onto `target`: its components, then its scripts, children and a scene's entities
-        fn _CopyObject(tmpl: Self, target: Self, engine_context: *EngineContext, ref_map: *RefMap) anyerror!void {
+        /// Copies the object `tmpl` onto `target`: its components, then its scripts, children and a scene's entities.
+        /// `uuids` is what a copy of something with a UUID gets: none (a template's copy), or a new one (Duplicate)
+        fn _CopyObject(tmpl: Self, target: Self, engine_context: *EngineContext, ref_map: *RefMap, uuids: CopyUUIDs) anyerror!void {
             if (Self == Entity) try ref_map.mEntities.put(engine_context.FrameAllocator(), tmpl.mID, target);
 
             inline for (comptime _SerializeList()) |component_type| {
-                //a copy gets no UUID, and whatever the target already has stays as it is
-                if (component_type != UUIDComponent and !HasComponent(target, component_type)) {
+                if (component_type == UUIDComponent) {
+                    if (uuids == .Fresh and !HasComponent(target, UUIDComponent) and HasComponent(tmpl, UUIDComponent)) {
+                        const io_source = std.Random.IoSource{ .io = engine_context.Io() };
+                        const new_uuid = try AddComponent(target, engine_context, UUIDComponent{ .ID = io_source.interface().int(u64) });
+                        try new_uuid.PostParse(engine_context, target);
+                    }
+                } else if (!HasComponent(target, component_type)) {
+                    //whatever the target already has stays as it is
                     if (GetComponent(tmpl, component_type)) |tmpl_component| {
                         //a component that owns memory copies itself, anything else is a plain value copy (as DuplicateEntity does)
                         const component = if (@hasDecl(component_type, "Clone")) try tmpl_component.Clone(engine_context) else tmpl_component.*;
@@ -487,7 +545,7 @@ pub fn Core(comptime Self: type) type {
             var child_iter = tmpl.GetIterator(.Child);
             while (child_iter.next()) |tmpl_child| {
                 const child = try target.CreateChild(engine_context, .Entity, Self.BlankConfig);
-                try _CopyObject(tmpl_child, child, engine_context, ref_map);
+                try _CopyObject(tmpl_child, child, engine_context, ref_map, uuids);
             }
 
             if (Self == Scene) {
@@ -495,7 +553,7 @@ pub fn Core(comptime Self: type) type {
                 const tmpl_roots = try _SceneRootEntities(tmpl, engine_context);
                 for (tmpl_roots.items) |tmpl_entity_id| {
                     const entity = try target.CreateEntity(engine_context, Entity.BlankConfig);
-                    try Core(Entity)._CopyObject(tmpl.GetEntity(tmpl_entity_id), entity, engine_context, ref_map);
+                    try Core(Entity)._CopyObject(tmpl.GetEntity(tmpl_entity_id), entity, engine_context, ref_map, uuids);
                 }
             }
         }

@@ -8,6 +8,8 @@ const Project = @import("../../Core/Project.zig");
 const TextSerializer = @import("../../Serializer/TextSerializer.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
+const Player = @import("../../ECSObjects/Player.zig");
+const GameContext = @import("../../ECSObjects/GameContext.zig");
 const Bus = @import("../../ECSObjects/Bus.zig");
 const VComponents = @import("../../ECSComponents/VComponents.zig");
 const VolumeComponent = VComponents.VolumeComponent;
@@ -197,6 +199,45 @@ test "an AudioComponent's bus is saved as its UUID and comes back once the buses
     try std.testing.expect(!loaded_master_component.mBus.IsIDValid());
     const loaded_audio_manager = loaded_engine.AudioManager();
     try std.testing.expectEqual(loaded_audio_manager.GetMasterBus().mID, loaded_audio_manager.ResolveBus(loaded_master_component.mBus.mID));
+}
+
+test "a scene, player or game context's AudioComponent gets its bus back too" {
+    const saved_engine = try TestEngine.Init();
+    defer saved_engine.Deinit();
+    const saved_context = saved_engine.mEngineContext;
+    const sfx = try NewBus(saved_engine, saved_engine.AudioManager().GetMasterBus(), "SFX", 0.5);
+
+    const scene = try saved_context.mEditorWorld.NewScene(saved_context, .GameLayer, Scene.DefaultConfig);
+    const player = try saved_context.mEditorWorld.CreatePlayer(saved_context, Player.DefaultConfig);
+    const game_context = try saved_context.mEditorWorld.CreateGameContext(saved_context, GameContext.DefaultConfig);
+    _ = try scene.AddComponent(saved_context, AudioComponent{ .mBus = sfx });
+    _ = try player.AddComponent(saved_context, AudioComponent{ .mBus = sfx });
+    _ = try game_context.AddComponent(saved_context, AudioComponent{ .mBus = sfx });
+
+    const scene_path = try saved_engine.FilePath("Level.imsc");
+    const player_path = try saved_engine.FilePath("Hero.impl");
+    const game_context_path = try saved_engine.FilePath("Rules.imgc");
+    try TextSerializer.SerializeECSObject(saved_context, scene, scene_path);
+    try TextSerializer.SerializeECSObject(saved_context, player, player_path);
+    try TextSerializer.SerializeECSObject(saved_context, game_context, game_context_path);
+    const settings = try SaveAudioSettings(saved_engine);
+
+    const loaded_engine = try TestEngine.Init();
+    defer loaded_engine.Deinit();
+    const loaded_context = loaded_engine.mEngineContext;
+    try LoadAudioSettings(loaded_engine, settings);
+
+    const loaded_scene = try loaded_context.mEditorWorld.mSManager.CreateBlankScene(loaded_context);
+    try TextSerializer.DeserializeECSObj(loaded_context, loaded_scene, scene_path);
+    const loaded_player = try loaded_context.mEditorWorld.CreatePlayer(loaded_context, Player.BlankConfig);
+    try TextSerializer.DeserializeECSObj(loaded_context, loaded_player, player_path);
+    const loaded_game_context = try loaded_context.mEditorWorld.CreateGameContext(loaded_context, GameContext.BlankConfig);
+    try TextSerializer.DeserializeECSObj(loaded_context, loaded_game_context, game_context_path);
+    loaded_context.mSerializer.ResolveUUIDs();
+
+    try std.testing.expectEqual(sfx.GetUUID(), loaded_scene.GetComponent(AudioComponent).?.mBus.GetUUID());
+    try std.testing.expectEqual(sfx.GetUUID(), loaded_player.GetComponent(AudioComponent).?.mBus.GetUUID());
+    try std.testing.expectEqual(sfx.GetUUID(), loaded_game_context.GetComponent(AudioComponent).?.mBus.GetUUID());
 }
 
 test "a project saves its buses and opening it in a fresh engine brings them back" {

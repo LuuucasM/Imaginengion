@@ -55,11 +55,11 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
     const result = try child.wait(engine_context.Io());
     if (result != .exited) {
         std.log.err("Unable to correctly compile script {s} it terminated by {s}!", .{ rel_path, @tagName(result) });
-        return error.AssetInitFail;
+        return error.AssetInitFailed;
     }
     if (result.exited != 0) {
         std.log.err("Unable to correctly compile script {s} exited with code {d}!", .{ rel_path, result.exited });
-        return error.AssetInitFail;
+        return error.AssetInitFailed;
     }
     std.log.info("script {s} compile success!\n", .{rel_path});
 
@@ -70,7 +70,7 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
 
     self.mLib = LoadLibraryExW(dyn_path_w.ptr, null, 0) orelse {
         std.log.err("Failed to load DLL: {s}", .{dyn_path});
-        return error.AssetInitFail;
+        return error.AssetInitFailed;
     };
 
     const script_type_func = try LoadSymbol(*const fn () ScriptType, self.mLib, "GetScriptType");
@@ -78,7 +78,7 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
 
     self.mRunFunc = GetProcAddress(self.mLib, "Run\x00") orelse {
         std.log.err("Missing exported symbol: Run", .{});
-        return error.AssetInitFail;
+        return error.AssetInitFailed;
     };
 }
 
@@ -98,7 +98,7 @@ pub fn GetScriptType(self: WindowsScriptAsset) ScriptType {
 fn LoadSymbol(comptime T: type, lib: std.os.windows.HMODULE, comptime name: [:0]const u8) !T {
     const addr = GetProcAddress(lib, name.ptr) orelse {
         std.log.err("Missing exported symbol: {s}", .{name});
-        return error.ScriptAssetInitFail;
+        return error.AssetInitFailed;
     };
 
     return @as(T, @ptrCast(@alignCast(addr)));

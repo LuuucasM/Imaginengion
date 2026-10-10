@@ -196,10 +196,15 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
     }
 }
 
-/// How many of `entity`'s own units one of a theme's sizes is: one in an overlay, whose units are the theme's, and
-/// ThemeAsset.GAME_LAYER_UNIT in a game scene, in world units
+/// How many of `entity`'s own units one of a theme's sizes is: ThemeAsset.GAME_LAYER_UNIT in a game scene, in world
+/// units, ThemeAsset.GAME_OVERLAY_UNIT in an overlay that scales with the screen (a game's), and one in an overlay of
+/// constant pixel size (the editor's), whose units are the theme's
 pub fn ThemeUnit(entity: Entity) f32 {
-    return if (entity.HasComponent(GameLayerTag)) ThemeAsset.GAME_LAYER_UNIT else 1;
+    if (entity.HasComponent(GameLayerTag)) return ThemeAsset.GAME_LAYER_UNIT;
+    return switch (entity.mManager.mOverlayScaleMode) {
+        .ScaleWithScreen => ThemeAsset.GAME_OVERLAY_UNIT,
+        .ConstantPixelSize => 1,
+    };
 }
 
 /// The color for `state`, the normal one if it has none, or null if it hasn't that either

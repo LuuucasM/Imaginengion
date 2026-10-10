@@ -119,7 +119,7 @@ test "deleting twice in a frame, or deleting something already gone, does nothin
     try world.EndFrame();
 }
 
-test "deleting a duplicate leaves its original's UUID entry alone" {
+test "a duplicate has a UUID of its own, and deleting it leaves its original's UUID entry alone" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -127,7 +127,8 @@ test "deleting a duplicate leaves its original's UUID entry alone" {
     const scene = try engine_context.mEditorWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
     const original = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     const copy = try original.Duplicate(engine_context);
-    try std.testing.expectEqual(original.GetUUID(), copy.GetUUID());
+    try std.testing.expect(original.GetUUID() != copy.GetUUID());
+    try std.testing.expectEqual(copy.mID, world.EntityByUUID(copy.GetUUID()).?.mID);
 
     try copy.Delete(engine_context);
     try world.EndFrame();

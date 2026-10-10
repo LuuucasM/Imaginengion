@@ -110,8 +110,14 @@ pub const CameraView = struct {
     //the size in pixels of what it's drawn into
     TargetWidth: f32,
     TargetHeight: f32,
-    FarDistance: f32, //game layer shapes past this aren't drawn (overlay uses OverlayCanvas.FAR_DISTANCE)
+    FarDistance: f32, //game layer shapes past this aren't drawn (overlay uses OverlayFarDistance)
     DisplayScale: f32, //the OS display scale, what ConstantPixelSize overlays size by
+
+    /// How far the overlay pass traces through this view, the renderer and picking alike
+    pub fn OverlayFarDistance(self: CameraView) f32 {
+        const aspect = if (self.TargetHeight > 0) self.TargetWidth / self.TargetHeight else 1;
+        return OverlayCanvas.FarDistance(self.TanHalfFov * aspect, self.TanHalfFov);
+    }
 
     /// The view of a camera entity, from its transform and viewpoint. The viewpoint's size has to
     /// already be set for this frame, since the target height comes from it.
@@ -556,9 +562,10 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         self.mTextureManager.BindCompute(overlay_compute_pass);
 
         //a copy, since the game pass below still needs the camera's own far distance. the canvas
-        //always sits CANVAS_DISTANCE out, so the overlay can't depend on how far the game camera sees
+        //always sits CANVAS_DISTANCE out, so the overlay can't depend on how far the game camera sees.
+        //the ray offset is the view's top left corner one unit out, which is how far its corner rays go
         var overlay_push_constants = self.mSDFPushConstants;
-        overlay_push_constants.mPerspectiveFar = OverlayCanvas.FAR_DISTANCE;
+        overlay_push_constants.mPerspectiveFar = OverlayCanvas.FarDistance(@abs(overlay_push_constants.mRayOffset[0]), @abs(overlay_push_constants.mRayOffset[1]));
         overlay_push_constants.mShapesCount = self.mR2D.GetShapeCount(.OverlayPipeline);
         overlay_push_constants.mDirectCount = self.mR2D.GetDirectCount(.OverlayPipeline);
         overlay_push_constants.mFlags = if (plan.OverlayOnGameBackground) PushConstants.FLAG_GAME_BACKGROUND else 0;

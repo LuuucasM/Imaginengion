@@ -4,7 +4,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 
 pub const AISlotComponent = @import("Entity/AISlotComponent.zig");
 pub const AttribComponent = @import("Shared/AttribComponent.zig");
-pub const AudioComponent = @import("Entity/AudioComponent.zig");
+pub const AudioComponent = @import("Shared/AudioComponent.zig");
 pub const ColliderComponent = @import("Entity/ColliderComponent.zig");
 pub const ConstantForceComponent = @import("Entity/ConstantForceComponent.zig");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");

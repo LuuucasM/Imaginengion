@@ -39,8 +39,6 @@ pub const CreatePlayer = Core.CreateObj;
 
 pub const DeletePlayer = Core.DeleteObj;
 
-pub const Duplicate = Core.Duplicate;
-
 pub const AddComponent = Core.AddComponent;
 
 pub const AddUUID = Core.AddUUID;

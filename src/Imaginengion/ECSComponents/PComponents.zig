@@ -1,5 +1,6 @@
 const ListInd = @import("../ECS/Components.zig").ListInd;
 pub const AttribComponent = @import("Shared/AttribComponent.zig");
+pub const AudioComponent = @import("Shared/AudioComponent.zig");
 pub const RenderTargetComponent = @import("Shared/RenderTargetComponent.zig");
 pub const MicComponent = @import("Player/MicComponent.zig");
 pub const PossessComponent = @import("Player/PossessComponent.zig");
@@ -11,6 +12,7 @@ pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
 
 pub const ComponentsList = [_]type{
     AttribComponent,
+    AudioComponent,
     RenderTargetComponent,
     MicComponent,
     PossessComponent,
@@ -28,6 +30,7 @@ pub const ComponentsPanelList = [_]type{
     PossessComponent,
     OverlayComponent,
     MicComponent,
+    AudioComponent,
     RenderTargetComponent,
     TmplRefComponent,
 };
@@ -41,6 +44,7 @@ pub const SerializeList = [_]type{
     MicComponent,
     PossessComponent,
     OverlayComponent,
+    AudioComponent,
     TmplRefComponent,
 };
 
@@ -56,6 +60,7 @@ pub const ScriptsList = [_]type{};
 
 pub const EComponents = enum(u16) {
     AttribComponent = ListInd(&ComponentsList, AttribComponent),
+    AudioComponent = ListInd(&ComponentsList, AudioComponent),
     RenderTargetComponent = ListInd(&ComponentsList, RenderTargetComponent),
     MicComponent = ListInd(&ComponentsList, MicComponent),
     PossessComponent = ListInd(&ComponentsList, PossessComponent),

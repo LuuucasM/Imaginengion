@@ -29,7 +29,10 @@ pub fn ObjectAsset(comptime obj_t: type, comptime name: []const u8) type {
 
             //TextSerializer rather than Serializer.DeserializeECSObj: that one also records the object as the
             //file's owner in mFileObjects, which would take an asset handle to the very asset being loaded
-            try TextSerializer.DeserializeECSObj(engine_context, object, abs_path);
+            TextSerializer.DeserializeECSObj(engine_context, object, abs_path) catch |err| {
+                std.log.err(name ++ " {s} could not be read: {s}", .{ rel_path, @errorName(err) });
+                return error.AssetInitFailed;
+            };
             engine_context.mSerializer.ResolveUUIDs();
 
             self.mObject = object;

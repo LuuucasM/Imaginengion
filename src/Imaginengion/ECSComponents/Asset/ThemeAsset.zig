@@ -23,6 +23,10 @@ pub const StateColors = struct {
 /// of them is this many world units, so text at a theme's usual 16 is one world unit tall (StyleSystem.ThemeUnit)
 pub const GAME_LAYER_UNIT: f32 = 1.0 / 16.0;
 
+/// In a game's overlay (one that scales with the screen, 1080 units tall) one of a theme's sizes is this many overlay
+/// units, so text at a theme's usual 16 starts at 48, menu sized instead of editor sized (StyleSystem.ThemeUnit)
+pub const GAME_OVERLAY_UNIT: f32 = 3.0;
+
 /// How an element with this style (StyleComponent) looks. Everything is optional: whatever a style leaves out is left
 /// as the entity has it
 pub const Style = struct {

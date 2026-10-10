@@ -95,8 +95,6 @@ pub fn CreateBlankScene(self: *SManager, engine_context: *EngineContext) !Scene 
 
 pub const DeleteScene = Core.DeleteObj;
 
-pub const Duplicate = Core.Duplicate;
-
 pub const CreateChild = Core.CreateChild;
 
 pub const AddComponent = Core.AddComponent;
@@ -124,9 +122,9 @@ pub const IsActiveObj = Core.IsActiveObj;
 
 pub const RemoveUUID = Core.RemoveUUID;
 
-pub const SaveScene = Core.SaveObject;
+pub const SaveObject = Core.SaveObject;
 
-pub const SaveSceneAs = Core.SaveObjectAs;
+pub const SaveObjectAs = Core.SaveObjectAs;
 
 pub const LoadScene = Core.LoadObject;
 

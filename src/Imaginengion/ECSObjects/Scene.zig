@@ -82,8 +82,13 @@ pub const HasComponent = Core.HasComponent;
 
 pub const GetUUID = Core.GetUUID;
 
+pub const GetWorld = Core.GetWorld;
+
 pub const GetName = Core.GetName;
 pub const SetName = Core.SetName;
+
+pub const PlayAudio = Core.PlayAudio;
+pub const StopAudio = Core.StopAudio;
 
 pub const Delete = Core.Delete;
 
@@ -167,9 +172,9 @@ pub fn CreateEntity(self: Scene, engine_context: *EngineContext, new_entity_conf
 }
 
 /// Loads an entity file as a new top level entity of this scene. Blank, every component comes from the file
-pub fn LoadEntity(self: Scene, engine_context: *EngineContext, abs_path: []const u8) !Entity {
+pub fn LoadEntity(self: Scene, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !Entity {
     const new_entity = try self.CreateEntity(engine_context, Entity.BlankConfig);
-    try engine_context.mSerializer.DeserializeECSObj(engine_context, new_entity, abs_path, .Text);
+    try engine_context.mSerializer.DeserializeECSObj(engine_context, new_entity, rel_path, path_type, .Text);
     return new_entity;
 }
 

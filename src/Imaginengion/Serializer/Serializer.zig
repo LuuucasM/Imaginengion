@@ -10,6 +10,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const Bus = @import("../ECSObjects/Bus.zig");
 
 const TextSerializer = @import("TextSerializer.zig");
+const PathType = @import("../ECSManagers/AManager.zig").PathType;
 
 const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 
@@ -108,12 +109,14 @@ pub fn SaveECSObjAs(self: *Serializer, engine_context: *EngineContext, object: a
     if (abs_path.len == 0) return;
 
     try SerializeECSObject(engine_context, object, abs_path, .Text);
-    try self.TrackFile(engine_context, object.GetUUID(), abs_path);
+    const path_type = engine_context.mAssetManager.PathTypeOf(abs_path);
+    try self.TrackFile(engine_context, object.GetUUID(), engine_context.mAssetManager.GetRelPath(abs_path, path_type), path_type);
 }
 
-/// Fills an already created object from the file at abs_path. The object should be blank
+/// Fills an already created object from the file at rel_path under path_type's root. The object should be blank
 /// (created without the default UUID/Name/Transform components) since those come from the file.
-pub fn DeserializeECSObj(self: *Serializer, engine_context: *EngineContext, object: anytype, abs_path: []const u8, comptime deserialize_type: SerializeType) !void {
+pub fn DeserializeECSObj(self: *Serializer, engine_context: *EngineContext, object: anytype, rel_path: []const u8, path_type: PathType, comptime deserialize_type: SerializeType) !void {
+    const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), rel_path, path_type);
     switch (deserialize_type) {
         .Text => try TextSerializer.DeserializeECSObj(engine_context, object, abs_path),
         .Binary => @compileError("Binary deserialization is not implemented yet"),
@@ -121,7 +124,7 @@ pub fn DeserializeECSObj(self: *Serializer, engine_context: *EngineContext, obje
 
     self.ResolveUUIDs();
 
-    try self.TrackFile(engine_context, object.GetUUID(), abs_path);
+    try self.TrackFile(engine_context, object.GetUUID(), rel_path, path_type);
 }
 
 pub fn AddResolveReq(self: *Serializer, engine_allocator: std.mem.Allocator, resolve_req: ResolveReq) !void {
@@ -150,9 +153,8 @@ fn SerializeECSObject(engine_context: *EngineContext, object: anytype, abs_path:
 }
 
 /// Remembers which file an object lives in so SaveECSObject can overwrite it without asking again
-fn TrackFile(self: *Serializer, engine_context: *EngineContext, uuid: u64, abs_path: []const u8) !void {
-    const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
-    const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
+fn TrackFile(self: *Serializer, engine_context: *EngineContext, uuid: u64, rel_path: []const u8, path_type: PathType) !void {
+    const asset_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
 
     const entry = try self.mFileObjects.getOrPut(engine_context.EngineAllocator(), uuid);
     if (entry.found_existing) entry.value_ptr.ReleaseAsset();

@@ -34,7 +34,6 @@ const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TextComponent = EntityComponents.TextComponent;
 const UIElementComponent = EntityComponents.UIElementComponent;
-const LayoutSystem = @import("../UI/LayoutSystem.zig");
 const StyleSystem = @import("../UI/StyleSystem.zig");
 const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
@@ -135,23 +134,12 @@ pub fn Core(comptime Self: type) type {
                     //the same destroy can be queued twice in one pass, and the second one finds it gone
                     if (!self.mECSManager.IsActiveEntity(e.mEntityID)) return .Continue;
                     const uuid_component = self.mECSManager.GetComponent(UUIDComponent, e.mEntityID) orelse return .Continue;
-                    //a duplicate carries its original's UUID without owning the map entry
+                    //only the object the map points at owns the entry
                     if (self.GetWorldID(uuid_component.ID) == e.mEntityID) self.RemoveUUID(uuid_component.ID);
                 },
                 else => {},
             }
             return .Continue;
-        }
-
-        pub fn Duplicate(self: *Self, engine_context: *EngineContext, obj_id: UnderlyingObjType(Self)) !UnderlyingObj(Self) {
-            const copy: UnderlyingObj(Self) = .{ .mID = try self.mECSManager.DuplicateEntity(engine_context, obj_id), .mManager = ObjManager(self) };
-            //the ECS copies the components straight across without AddComponent, so a copy in a layout tree has to
-            //ask for its tree to be laid out itself, and a copied UI element has to be told whose it is now
-            if (comptime Self == EManager) {
-                if (LayoutSystem.IsInLayout(copy)) try copy.MarkLayoutDirty(engine_context);
-                try engine_context.mUIManager.Adopt(engine_context, copy);
-            }
-            return copy;
         }
 
         pub fn CreateChild(self: *Self, engine_context: *EngineContext, parent_id: UnderlyingObjType(Self), child_type: ECSManager.ChildType, config: UnderlyingObj(Self).CreateConfig) !UnderlyingObj(Self) {
@@ -288,10 +276,10 @@ pub fn Core(comptime Self: type) type {
         }
 
         /// Blank, every component comes from the file
-        pub fn LoadObject(self: *Self, engine_context: *EngineContext, abs_path: []const u8) !UnderlyingObj(Self) {
+        pub fn LoadObject(self: *Self, engine_context: *EngineContext, rel_path: []const u8, path_type: AManager.PathType) !UnderlyingObj(Self) {
             if (Self == EManager) @compileError("an entity has to belong to a scene, load it with Scene.LoadEntity");
             const new_obj = try CreateObj(self, engine_context, UnderlyingObj(Self).BlankConfig);
-            try engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, abs_path, .Text);
+            try engine_context.mSerializer.DeserializeECSObj(engine_context, new_obj, rel_path, path_type, .Text);
             return new_obj;
         }
 

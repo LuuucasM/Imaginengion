@@ -9,6 +9,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Project = @import("../Core/Project.zig");
+const ObjectKind = @import("../Serializer/Serializer.zig").ObjectKind;
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 
@@ -46,10 +47,10 @@ pub const Action = union(enum) {
     NewGameScene,
     NewOverlayScene,
     OpenScene,
-    SaveScene,
-    SaveSceneAs,
-    SaveEntity,
-    SaveEntityAs,
+    /// save the selected object, of this kind, over its file (asking for one the first time)
+    Save: ObjectKind,
+    /// save the selected object, of this kind, to a file picked now
+    SaveAs: ObjectKind,
     NewProject,
     OpenProject,
     SaveProject,
@@ -72,9 +73,8 @@ pub const State = struct {
     /// whether each panel is shown
     Shown: std.EnumArray(Panel, bool),
     ProjectOpen: bool,
-    /// whether the selected object is a scene / an entity, which Save Scene (As) and Save Entity (As) save
-    SceneSelected: bool,
-    EntitySelected: bool,
+    /// the kind of the selected object, which only that kind's Save and Save As... items save
+    Selected: ?ObjectKind,
     /// whether Play/Stop can be used: stopping always, starting with a run player that can be drawn
     CanPlayStop: bool,
     PlayPreview: bool,
@@ -93,9 +93,8 @@ const ItemAction = struct {
 mActions: std.ArrayList(ItemAction) = .empty,
 mPanelItems: std.EnumArray(Panel, Entity) = .initFill(.uninit),
 mSaveProject: Entity = .uninit,
-/// Save Scene and Save Scene As..., then Save Entity and Save Entity As...
-mSaveSceneItems: [2]Entity = .{ .uninit, .uninit },
-mSaveEntityItems: [2]Entity = .{ .uninit, .uninit },
+/// Save <kind> and Save <kind> As..., for each kind of object
+mSaveItems: std.EnumArray(ObjectKind, [2]Entity) = .initFill(.{ .uninit, .uninit }),
 mEntryItems: std.EnumArray(Project.Entry, Entity) = .initFill(.uninit),
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
@@ -120,11 +119,11 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     _ = try self.Add(engine_context, new_scene, "New Game Scene", item_options, .NewGameScene);
     _ = try self.Add(engine_context, new_scene, "New Overlay Scene", item_options, .NewOverlayScene);
     _ = try self.Add(engine_context, file, "Open Scene", item_options, .OpenScene);
-    self.mSaveSceneItems[0] = try self.Add(engine_context, file, "Save Scene", item_options, .SaveScene);
-    self.mSaveSceneItems[1] = try self.Add(engine_context, file, "Save Scene As...", item_options, .SaveSceneAs);
+    try self.AddSaveItems(engine_context, file, .Scene, "Scene", item_options);
     _ = try Widgets.Separator(engine_context, .{ .Entity = file });
-    self.mSaveEntityItems[0] = try self.Add(engine_context, file, "Save Entity", item_options, .SaveEntity);
-    self.mSaveEntityItems[1] = try self.Add(engine_context, file, "Save Entity As...", item_options, .SaveEntityAs);
+    try self.AddSaveItems(engine_context, file, .Entity, "Entity", item_options);
+    try self.AddSaveItems(engine_context, file, .Player, "Player", item_options);
+    try self.AddSaveItems(engine_context, file, .GameContext, "Game Mode", item_options);
     _ = try Widgets.Separator(engine_context, .{ .Entity = file });
     _ = try self.Add(engine_context, file, "New Project", item_options, .NewProject);
     _ = try self.Add(engine_context, file, "Open Project", item_options, .OpenProject);
@@ -178,8 +177,9 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     }
     try WidgetActions.SetChecked(engine_context, self.mPlayPreview, state.PlayPreview);
     try WidgetActions.SetChecked(engine_context, self.mVSync, state.VSync);
-    for (self.mSaveSceneItems) |item| try WidgetActions.SetDisabled(engine_context, item, !state.SceneSelected);
-    for (self.mSaveEntityItems) |item| try WidgetActions.SetDisabled(engine_context, item, !state.EntitySelected);
+    for (std.enums.values(ObjectKind)) |kind| {
+        for (self.mSaveItems.get(kind)) |item| try WidgetActions.SetDisabled(engine_context, item, state.Selected != kind);
+    }
     try WidgetActions.SetDisabled(engine_context, self.mSaveProject, !state.ProjectOpen);
     for (self.mEntryItems.values) |item| try WidgetActions.SetDisabled(engine_context, item, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mPlayStop, !state.CanPlayStop);
@@ -208,6 +208,14 @@ fn SamePlayers(self: *const EditorMenuBar, players: []const Player) bool {
         if (player.mID != entry.Action.FollowPlayer.mID or player.mManager != entry.Action.FollowPlayer.mManager) return false;
     }
     return true;
+}
+
+/// Save <name> and Save <name> As..., for objects of `kind`
+fn AddSaveItems(self: *EditorMenuBar, engine_context: *EngineContext, menu: Entity, comptime kind: ObjectKind, comptime name: []const u8, options: Widgets.MenuItemOptions) !void {
+    self.mSaveItems.set(kind, .{
+        try self.Add(engine_context, menu, "Save " ++ name, options, .{ .Save = kind }),
+        try self.Add(engine_context, menu, "Save " ++ name ++ " As...", options, .{ .SaveAs = kind }),
+    });
 }
 
 /// A menu item that does `action`

@@ -9,6 +9,7 @@ const Player = @import("../../ECSObjects/Player.zig");
 const Widgets = @import("../../UI/Widgets.zig");
 const WidgetActions = @import("../../UI/WidgetActions.zig");
 const EditorMenuBar = @import("../../Programs/EditorMenuBar.zig");
+const ObjectKind = @import("../../Serializer/Serializer.zig").ObjectKind;
 
 const DisabledTag = @import("../../ECSComponents/EComponents.zig").DisabledTag;
 
@@ -42,7 +43,7 @@ const TestWorld = struct {
 fn State(players: []const Player, following: ?Player) EditorMenuBar.State {
     var shown = std.EnumArray(EditorMenuBar.Panel, bool).initFill(true);
     shown.set(.Stats, false);
-    return .{ .Shown = shown, .ProjectOpen = false, .SceneSelected = false, .EntitySelected = false, .CanPlayStop = true, .PlayPreview = false, .VSync = true, .Players = players, .Following = following };
+    return .{ .Shown = shown, .ProjectOpen = false, .Selected = null, .CanPlayStop = true, .PlayPreview = false, .VSync = true, .Players = players, .Following = following };
 }
 
 test "each item has its action, and the editor's state shows as check marks and greyed out items" {
@@ -68,31 +69,31 @@ test "each item has its action, and the editor's state shows as check marks and 
     try std.testing.expect(!menu_bar.mPlayStop.HasComponent(DisabledTag));
 }
 
-test "the save scene items need a scene selected, the save entity items an entity" {
+test "each kind's save items need an object of that kind selected" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
     defer menu_bar.Deinit(engine_context.EngineAllocator());
 
-    try std.testing.expectEqual(EditorMenuBar.Action.SaveSceneAs, menu_bar.ActionOf(menu_bar.mSaveSceneItems[1]).?);
-    try std.testing.expectEqual(EditorMenuBar.Action.SaveEntity, menu_bar.ActionOf(menu_bar.mSaveEntityItems[0]).?);
+    try std.testing.expectEqual(.Scene, menu_bar.ActionOf(menu_bar.mSaveItems.get(.Scene)[1]).?.SaveAs);
+    try std.testing.expectEqual(.GameContext, menu_bar.ActionOf(menu_bar.mSaveItems.get(.GameContext)[0]).?.Save);
 
     //nothing selected: all greyed out
     var state = State(&.{}, null);
     try menu_bar.Update(engine_context, state);
-    for (menu_bar.mSaveSceneItems ++ menu_bar.mSaveEntityItems) |item| try std.testing.expect(item.HasComponent(DisabledTag));
+    for (menu_bar.mSaveItems.values) |items| {
+        for (items) |item| try std.testing.expect(item.HasComponent(DisabledTag));
+    }
 
-    state.SceneSelected = true;
-    try menu_bar.Update(engine_context, state);
-    for (menu_bar.mSaveSceneItems) |item| try std.testing.expect(!item.HasComponent(DisabledTag));
-    for (menu_bar.mSaveEntityItems) |item| try std.testing.expect(item.HasComponent(DisabledTag));
-
-    state.SceneSelected = false;
-    state.EntitySelected = true;
-    try menu_bar.Update(engine_context, state);
-    for (menu_bar.mSaveSceneItems) |item| try std.testing.expect(item.HasComponent(DisabledTag));
-    for (menu_bar.mSaveEntityItems) |item| try std.testing.expect(!item.HasComponent(DisabledTag));
+    //only the selected kind's items can be used
+    for (std.enums.values(ObjectKind)) |selected| {
+        state.Selected = selected;
+        try menu_bar.Update(engine_context, state);
+        for (std.enums.values(ObjectKind)) |kind| {
+            for (menu_bar.mSaveItems.get(kind)) |item| try std.testing.expectEqual(kind != selected, item.HasComponent(DisabledTag));
+        }
+    }
 }
 
 test "the VSync item toggles vsync, and is checked while it is on" {

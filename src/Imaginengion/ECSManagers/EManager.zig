@@ -47,8 +47,6 @@ pub const DeleteEntity = Core.DeleteObj;
 
 pub const CreateChild = Core.CreateChild;
 
-pub const Duplicate = Core.Duplicate;
-
 pub const AddComponent = Core.AddComponent;
 
 pub const GetComponent = Core.GetComponent;
@@ -60,9 +58,9 @@ pub const HasComponent = Core.HasComponent;
 
 pub const IsActiveObj = Core.IsActiveObj;
 
-pub const SaveEntity = Core.SaveObject;
+pub const SaveObject = Core.SaveObject;
 
-pub const SaveEntityAs = Core.SaveObjectAs;
+pub const SaveObjectAs = Core.SaveObjectAs;
 
 pub const GetGroup = Core.GetGroup;
 

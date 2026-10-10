@@ -44,11 +44,11 @@ pub fn Init(self: *OtherScriptAsset, engine_context: *EngineContext, abs_path: [
 
     if (result != .Exited) {
         std.log.err("Unable to correctly compile script {s} it terminated by {s}!", .{ rel_path, @tagName(result) });
-        return error.ScriptAssetInitFail;
+        return error.AssetInitFailed;
     }
     if (result.Exited != 0) {
         std.log.err("Unable to correctly compile script {s} exited with code {d}!", .{ rel_path, result.Exited });
-        return error.ScriptAssetInitFail;
+        return error.AssetInitFailed;
     }
     std.log.info("script {s} compile success!\n", .{rel_path});
 

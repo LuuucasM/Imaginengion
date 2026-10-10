@@ -10,6 +10,7 @@ test {
     _ = @import("Tests/ECSObjects/TmplTests.zig");
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
     _ = @import("Tests/ECSObjects/OverlayTests.zig");
+    _ = @import("Tests/ECSObjects/GetWorldTests.zig");
     _ = @import("Tests/Physics/TransformPassTests.zig");
     _ = @import("Tests/Physics/BodyTagTests.zig");
     _ = @import("Tests/Physics/CollisionsTests.zig");
@@ -57,6 +58,7 @@ test {
     _ = @import("Tests/Core/ProjectTests.zig");
     _ = @import("Tests/Programs/GameProgramTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
+    _ = @import("Tests/AudioManager/VoiceSourceTests.zig");
 }
 
 //Core Stuff -----------------------------------

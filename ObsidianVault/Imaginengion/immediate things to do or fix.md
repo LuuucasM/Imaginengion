@@ -1,2 +1,0 @@
-- rotating in the engine doesnt work as intended
-	- when i rotate a parent entity i expect the child entity to rotate around the parents rotation point, but right now its just additive rotation so when a parent is rotated the child is just simply rotated by that same amount as well

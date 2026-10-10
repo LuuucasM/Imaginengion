@@ -2,7 +2,7 @@
 //! type (entities, scenes, players or game modes), the top level ones with what is under each nested below it. Scenes
 //! come in stack order, the top layer first. Clicking a row selects its object, and the selected object's row is
 //! highlighted however it was selected. Every row can be dragged, carrying its object (ObjectRefComponent). Right
-//! clicking a row offers New Child, Make Template and Delete (and New Entity for a scene), right clicking the panel New
+//! clicking a row offers New Child, Make Template, Duplicate and Delete (and New Entity for a scene), right clicking the panel New
 //! of its type. Entities and scenes also offer ready-made UI entities (a panel, text, a button, ...), each made by its
 //! widget builder (Widgets): the panel's menu puts one in the selected scene, an entity's row under that entity, a
 //! scene's row at the top of that scene. An object file of its type dragged from the Content Browser onto the panel is loaded into the world (an
@@ -91,6 +91,7 @@ pub fn HierarchyPanel(comptime T: type) type {
             NewChild,
             NewEntity,
             MakeTemplate,
+            Duplicate,
             Delete,
             /// a ready-made UI entity under the entity, or at the top of the scene, it was opened on
             NewUIChild: UIKind,
@@ -172,6 +173,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                 }
             }
             try self.AddRowItem(engine_context, "Make Template", .MakeTemplate);
+            try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.FrameAllocator(), "Duplicate {s}", .{type_name}), .Duplicate);
             try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.FrameAllocator(), "Delete {s}", .{type_name}), .Delete);
             return self;
         }
@@ -269,17 +271,17 @@ pub fn HierarchyPanel(comptime T: type) type {
                 if (!Same(row.Header, entity)) continue;
                 self.mMenuObject = row.Object;
                 const can_make_template = engine_context.mProject.IsOpen() and !row.Object.HasComponent(TmplRefComponent);
-                //a template's own root can't go: the template is it
+                //a template's own root can't go, or have a copy next to it: the template is it
                 const can_delete = self.mMode == .World or row.Depth > 0;
                 for (self.mRowItems.items) |item| {
                     if (item.Action == .MakeTemplate) try WidgetActions.SetDisabled(engine_context, item.Item, !can_make_template);
-                    if (item.Action == .Delete) try WidgetActions.SetDisabled(engine_context, item.Item, !can_delete);
+                    if (item.Action == .Delete or item.Action == .Duplicate) try WidgetActions.SetDisabled(engine_context, item.Item, !can_delete);
                 }
                 return;
             }
         }
 
-        /// Does what a click asked for, in `world`. Select changes the editor's selection
+        /// Does what a click asked for, in `world`. Select changes the editor's selection, and so does Duplicate, to the copy
         pub fn Run(self: *const Self, engine_context: *EngineContext, action: Action, world: *WorldManager, selected: *?SelectedObject) !void {
             const engine_allocator = engine_context.EngineAllocator();
             switch (action) {
@@ -301,7 +303,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                         if (object == .scene_layer) _ = try self.NewUIEntity(engine_context, kind, .{ .Scene = object.scene_layer });
                     }
                 },
-                .NewChild, .NewEntity, .MakeTemplate, .Delete, .NewUIChild => {
+                .NewChild, .NewEntity, .MakeTemplate, .Duplicate, .Delete, .NewUIChild => {
                     const object = self.mMenuObject orelse return;
                     if (!object.IsActive()) return;
                     switch (action) {
@@ -310,6 +312,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                             _ = try object.CreateEntity(engine_context, Entity.DefaultConfig);
                         },
                         .MakeTemplate => try engine_context.mEditorEventManager.Insert(engine_allocator, .EndOfFrame, .{ .MakeTmplEvent = .{ .mObject = ToSelected(object) } }),
+                        .Duplicate => selected.* = ToSelected(try object.Duplicate(engine_context)),
                         .Delete => try object.Delete(engine_context),
                         .NewUIChild => |kind| switch (T) {
                             Entity => _ = try self.NewUIEntity(engine_context, kind, .{ .Entity = object }),
@@ -333,7 +336,6 @@ pub fn HierarchyPanel(comptime T: type) type {
                 std.log.warn("Only a {s} file ({s}) can be dropped here, not {s}", .{ TypeName(), std.mem.span(Serializer.FileExtension(T)), rel_path });
                 return;
             }
-            const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), rel_path, file_ref.mPathType);
             const object: T = switch (T) {
                 Entity => blk: {
                     const scene: ?Scene = if (selected.*) |object| (if (object == .scene_layer and object.scene_layer.IsActive()) object.scene_layer else null) else null;
@@ -341,9 +343,9 @@ pub fn HierarchyPanel(comptime T: type) type {
                         std.log.warn("Select a scene to load {s} into", .{rel_path});
                         return;
                     }
-                    break :blk try scene.?.LoadEntity(engine_context, abs_path);
+                    break :blk try scene.?.LoadEntity(engine_context, rel_path, file_ref.mPathType);
                 },
-                else => try world.Load(T, engine_context, abs_path),
+                else => try world.Load(T, engine_context, rel_path, file_ref.mPathType),
             };
             selected.* = ToSelected(object);
         }
@@ -360,8 +362,9 @@ pub fn HierarchyPanel(comptime T: type) type {
 
         /// A ready-made UI entity of `kind` under `parent`, named after its kind. It takes the theme's look once and is
         /// then no longer styled, so the colors and font set on it stay. One that starts a layout tree of its own
-        /// (not inside a container) gets a width of its own if it fills what it is in. Widgets are built in overlay
-        /// units, so in a game scene its sizes are turned into world units, the same way the theme's are
+        /// (not inside a container) gets a width of its own if it fills what it is in. Widgets are built in the
+        /// theme's units, so its sizes are turned into the scene's the same way the theme's are: world units in a
+        /// game scene, and menu sized in a game's overlay (StyleSystem.ThemeUnit)
         fn NewUIEntity(self: *const Self, engine_context: *EngineContext, kind: UIKind, parent: Widgets.Parent) !Entity {
             const entity = switch (kind) {
                 .Panel => try Widgets.Panel(engine_context, parent, UI_PANEL_SIZE),

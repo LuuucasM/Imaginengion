@@ -13,7 +13,7 @@ const ECSCore = @import("../ECSManagers/Manager.zig").Core;
 
 const Voice = @import("../ECSObjects/Voice.zig");
 const Bus = @import("../ECSObjects/Bus.zig");
-const Entity = @import("../ECSObjects/Entity.zig");
+const ObjectRef = @import("../ECSComponents/Entity/ObjectRefComponent.zig").Ref;
 const VComponents = @import("../ECSComponents/VComponents.zig");
 const VoiceComponent = VComponents.VoiceComponent;
 const VoiceAssetComponent = VComponents.VoiceAssetComponent;
@@ -61,7 +61,7 @@ const VoiceState = union(enum) {
     Detached,
     /// Plays from this AudioComponent, its source's
     Attached: *AudioComponent,
-    /// Was attached, but its source entity or AudioComponent is gone, or the component's token has moved on. Fades
+    /// Was attached, but its source object or AudioComponent is gone, or the component's token has moved on. Fades
     /// out what it played last (VoiceComponent's mAssetID, mLastVolume, mLastPitch)
     Orphaned,
 };
@@ -138,17 +138,18 @@ pub fn GetManager(self: *AudioManager, comptime obj_t: type) *AudioManager {
 }
 const DeleteVoice = Core.DeleteObj;
 
-/// Starts playing source's AudioComponent from the beginning, as an attached or detached voice depending on the
+/// Starts playing source's AudioComponent from the beginning. source is any of the four object types (Entity, Scene,
+/// Player, GameContext), as an attached or detached voice depending on the
 /// component's mStopWithSource. A component with no asset plays the asset manager's default sound, like any other
 /// missing asset. Returns null, and logs why, when nothing can be played: the source has no AudioComponent, it is
 /// detached and looping, or MAX_VOICES are already playing
-pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: Entity) !?Voice {
+pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: anytype) !?Voice {
     if (!source.IsActive()) {
-        std.log.warn("PlayVoice called with an entity that no longer exists", .{});
+        std.log.warn("PlayVoice called with an object that no longer exists", .{});
         return null;
     }
     const audio_component = source.GetComponent(AudioComponent) orelse {
-        std.log.warn("PlayVoice called on an entity with no AudioComponent", .{});
+        std.log.warn("PlayVoice called on an object with no AudioComponent", .{});
         return null;
     };
     const is_attached = audio_component.mStopWithSource;
@@ -171,7 +172,7 @@ pub fn PlayVoice(self: *AudioManager, engine_context: *EngineContext, source: En
     errdefer self.DeleteVoice(engine_context, voice.mID) catch {};
 
     _ = try self.mECSManager.AddComponent(engine_allocator, voice.mID, VoiceComponent{
-        .mSource = if (is_attached) source else .uninit,
+        .mSource = if (is_attached) ObjectRef.Of(source) else null,
         .mToken = if (is_attached) audio_component.mVoiceToken else 0,
         //so a voice orphaned before its first mix still knows what to fade out, and does not slide in from silence
         .mAssetID = audio_component.mAudioAsset.mID,
@@ -527,16 +528,16 @@ fn ReadVoice(self: *AudioManager, engine_context: *EngineContext, voice_id: Voic
 }
 
 /// Which kind of voice this is, and for an attached voice the AudioComponent it plays from. An attached voice is
-/// orphaned once its source entity or AudioComponent is gone or the component's token has moved on (StopVoices, or a
+/// orphaned once its source object or AudioComponent is gone or the component's token has moved on (StopVoices, or a
 /// copy of the component: a cleared and re-copied world keeps its entity ids, but every copied component starts at
 /// token 0). It stays orphaned from then on, since its source is only ever looked at again to find it gone
 fn GetVoiceState(self: *AudioManager, voice_id: Voice.Type) VoiceState {
     const voice_component = self.GetComponent(VoiceComponent, voice_id).?;
 
-    const source = voice_component.mSource;
-    if (!source.IsIDValid()) return .Detached;
-    if (!source.IsActive()) return .Orphaned;
-    const source_component = source.GetComponent(AudioComponent) orelse return .Orphaned;
+    const source = voice_component.mSource orelse return .Detached;
+    const source_component = switch (source) {
+        inline else => |object| if (object.IsActive()) object.GetComponent(AudioComponent) else null,
+    } orelse return .Orphaned;
     if (source_component.mVoiceToken != voice_component.mToken) return .Orphaned;
     return .{ .Attached = source_component };
 }

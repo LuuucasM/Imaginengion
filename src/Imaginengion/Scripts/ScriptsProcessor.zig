@@ -126,7 +126,11 @@ fn RunScriptsFrom(
         const script_component = manager.GetComponent(ScriptComponent, script_id) orelse continue;
         if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
 
-        const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
+        //a script that failed to load (does not compile, say) is skipped rather than stopping the rest
+        const script_asset = script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
+            error.NoDefaultAsset => continue,
+            else => return err,
+        };
 
         var owner = ObjectType{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager };
 
@@ -247,7 +251,11 @@ fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContex
         const script_component = script.GetComponent(ScriptComponent) orelse continue;
         if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
 
-        const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
+        //a script that failed to load (does not compile, say) is skipped rather than stopping the rest
+        const script_asset = script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
+            error.NoDefaultAsset => continue,
+            else => return err,
+        };
 
         const script_zone = Tracy.ZoneInit("ScriptsProcessor::CollisionScript", @src());
         defer script_zone.Deinit();
@@ -303,7 +311,7 @@ pub const EventScripts = struct {
 
     fn Run(self: *EventScripts, comptime script_type: type, engine_context: *EngineContext, event: anytype) !void {
         if (!self.ShouldRun(event)) return;
-        const result = try RunEntityScripts(script_type, engine_context, event.mEntity, .{&event.mEvent});
+        const result = try RunOwnScripts(Entity, script_type, engine_context, event.mEntity, .{&event.mEvent});
         self.After(event, result);
     }
 
@@ -342,9 +350,10 @@ pub const EventScripts = struct {
     }
 };
 
-/// Runs `owner`'s own scripts of one type, in order, until one hands back .Handled
-pub fn RunEntityScripts(comptime script_type: type, engine_context: *EngineContext, owner: Entity, args: anytype) !ScriptResult {
-    _ValidateScriptType(Entity, script_type);
+/// Runs `owner`'s own scripts of one type, in order, until one hands back .Handled. Unlike RunScript only the one
+/// object's, e.g. the start scripts of a scene that has just loaded
+pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engine_context: *EngineContext, owner: ObjectType, args: anytype) !ScriptResult {
+    _ValidateScriptType(ObjectType, script_type);
 
     var script_iter = owner.GetIterator(.Script);
     while (script_iter.next()) |script| {
@@ -353,9 +362,13 @@ pub fn RunEntityScripts(comptime script_type: type, engine_context: *EngineConte
         const script_component = script.GetComponent(ScriptComponent) orelse continue;
         if (script_component.mScriptAssetHandle.mID == AssetHandle.NullObject) continue;
 
-        const script_asset = try script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset);
+        //a script that failed to load (does not compile, say) is skipped rather than stopping the rest
+        const script_asset = script_component.mScriptAssetHandle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
+            error.NoDefaultAsset => continue,
+            else => return err,
+        };
 
-        const script_zone = Tracy.ZoneInit("ScriptsProcessor::EntityScript", @src());
+        const script_zone = Tracy.ZoneInit("ScriptsProcessor::OwnScript", @src());
         defer script_zone.Deinit();
         if (Tracy.enable_tracy) script_zone.Name(script_component.mScriptAssetHandle.GetFileMetaData().mRelPath.items);
 

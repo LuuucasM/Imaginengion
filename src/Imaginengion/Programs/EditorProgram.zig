@@ -123,6 +123,15 @@ pub const SelectedObject = union(enum) {
     scene_layer: Scene,
     player: Player,
     gamecontext: GameContext,
+
+    pub fn Kind(self: SelectedObject) Serializer.ObjectKind {
+        return switch (self) {
+            .entity => .Entity,
+            .scene_layer => .Scene,
+            .player => .Player,
+            .gamecontext => .GameContext,
+        };
+    }
 };
 
 pub const ViewportType = enum {
@@ -554,14 +563,19 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
 ///
 /// The event pointer is only valid for the duration of this call: copy, never store it.
 pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anytype) anyerror!EventResult {
-    // discards so the shell compiles before the arms are filled in; drop them as you go
-    _ = self;
 
     const T = @TypeOf(event.*);
 
     if (T == WindowEvent) {
         return .Continue;
     } else if (T == WorldEvent) {
+        switch (event.*) {
+            //only the game being played starts its scenes: the edited world loads them to be worked on
+            .SceneLoaded => |e| if (self.mEditorState == .Play and e.mWorld == &engine_context.mSimulateWorld) {
+                _ = try ScriptsProcessor.RunOwnScripts(Scene, OnSceneStartScript, engine_context, e.mScene, .{});
+            },
+            else => {},
+        }
         return .Continue;
     } else if (T == EditorEvent) {
         return .Continue;
@@ -928,6 +942,8 @@ pub fn OnWorldEvent(editor_program: *anyopaque, engine_context: *EngineContext, 
         .QuitGame => |e| if (self.mEditorState == .Play and e.mWorld == &engine_context.mSimulateWorld) {
             try self.OnChangeEditorStateEvent(engine_context);
         },
+        //dispatched synchronously, never queued, see OnEvent
+        .SceneLoaded => {},
     }
     return .Continue;
 }
@@ -979,7 +995,6 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
         try self.OnChangeEditorStateEvent(engine_context);
     }
 
-
     return true;
 }
 
@@ -991,8 +1006,7 @@ fn PickTheme(_: *EditorProgram, engine_context: *EngineContext) !void {
     if (abs_path.len == 0) return;
 
     const asset_manager = &engine_context.mAssetManager;
-    const project = &engine_context.mProject;
-    const path_type: @import("../ECSManagers/AManager.zig").PathType = if (project.IsOpen() and std.mem.startsWith(u8, abs_path, project.mPath.items)) .Prj else .Eng;
+    const path_type = asset_manager.PathTypeOf(abs_path);
     const rel_path = asset_manager.GetRelPath(abs_path, path_type);
     const theme = try asset_manager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = path_type } });
     engine_context.mUIManager.SetTheme(engine_context, theme);
@@ -1075,8 +1089,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mMenuBar.Update(engine_context, .{
         .Shown = shown,
         .ProjectOpen = engine_context.mProject.IsOpen(),
-        .SceneSelected = if (self.mSelectedObj) |selected_object| selected_object == .scene_layer else false,
-        .EntitySelected = if (self.mSelectedObj) |selected_object| selected_object == .entity else false,
+        .Selected = if (self.mSelectedObj) |selected_object| selected_object.Kind() else null,
         //stopping is always allowed, starting needs a run player that can be drawn
         .CanPlayStop = self.mEditorState == .Play or (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false),
         .PlayPreview = self.mShowPlayPreview,
@@ -1095,20 +1108,22 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         .NewGameScene => _ = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig),
         .NewOverlayScene => _ = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig),
         .OpenScene => {
-            const abs_path = try PlatformUtils.OpenFile(engine_allocator, ".imsc");
-            if (abs_path.len > 0) _ = try engine_context.mGameWorld.Load(Scene, engine_context, abs_path);
+            const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), ".imsc");
+            if (abs_path.len > 0) {
+                const asset_manager = &engine_context.mAssetManager;
+                const path_type = asset_manager.PathTypeOf(abs_path);
+                _ = try engine_context.mGameWorld.Load(Scene, engine_context, asset_manager.GetRelPath(abs_path, path_type), path_type);
+            }
         },
-        .SaveScene => if (self.mSelectedObj) |selected_object| {
-            if (selected_object == .scene_layer) try engine_context.mGameWorld.SaveScene(engine_context, selected_object.scene_layer);
+        .Save => |kind| if (self.mSelectedObj) |selected_object| {
+            if (selected_object.Kind() == kind) switch (selected_object) {
+                inline else => |object| try engine_context.mGameWorld.Save(engine_context, object),
+            };
         },
-        .SaveSceneAs => if (self.mSelectedObj) |selected_object| {
-            if (selected_object == .scene_layer) try engine_context.mGameWorld.SaveSceneAs(engine_context, selected_object.scene_layer);
-        },
-        .SaveEntity => if (self.mSelectedObj) |selected_object| {
-            if (selected_object == .entity) try engine_context.mGameWorld.SaveEntity(engine_context, selected_object.entity);
-        },
-        .SaveEntityAs => if (self.mSelectedObj) |selected_object| {
-            if (selected_object == .entity) try engine_context.mGameWorld.SaveEntityAs(engine_context, selected_object.entity);
+        .SaveAs => |kind| if (self.mSelectedObj) |selected_object| {
+            if (selected_object.Kind() == kind) switch (selected_object) {
+                inline else => |object| try engine_context.mGameWorld.SaveAs(engine_context, object),
+            };
         },
         .NewProject => {
             const abs_path = try PlatformUtils.OpenFolder(engine_context.FrameAllocator());
@@ -1417,4 +1432,3 @@ fn FilterPossessedEntities(frame_allocator: std.mem.Allocator, player_slot_entit
 
     player_slot_entities.shrinkAndFree(frame_allocator, end);
 }
-

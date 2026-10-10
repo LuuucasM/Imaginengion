@@ -1,3 +1,0 @@
-- continue to build out the profiling system with tracy.
-	- ensure that there are frame profilingin appropriate places
-	- add memory profiling 

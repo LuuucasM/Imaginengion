@@ -141,3 +141,19 @@ test "a tilted canvas box keeps its shape in the world" {
     try std.testing.expectApproxEqAbs(world_edge.z, via_transform.z, 0.00001);
     try std.testing.expectApproxEqAbs(edge.Len() * canvas.Scale, world_edge.Len(), 0.00001);
 }
+
+test "a very wide view's corner rays reach as far behind the canvas as its middle one" {
+    //4.5 wide to 1 tall, wider than FAR_DISTANCE alone reaches: its corners would be cut off
+    const fov_rad = std.math.degreesToRadians(60.0);
+    const width: f32 = 1035;
+    const height: f32 = 230;
+    const params = CameraRay.ComputeRayParams(fov_rad, width, height);
+    const far = OverlayCanvas.FarDistance(@abs(params.Offset.x), @abs(params.Offset.y));
+
+    //how far the top left corner's ray goes to reach the canvas, which is CANVAS_DISTANCE deep
+    const dir = CameraRay.PixelToViewDir(params, .{ .x = 0, .y = 0 });
+    const to_canvas = OverlayCanvas.CANVAS_DISTANCE / -dir.z;
+    try std.testing.expect(to_canvas > OverlayCanvas.FAR_DISTANCE);
+    //and it is cut off as deep as the middle ray is: one canvas distance behind the canvas
+    try std.testing.expectApproxEqAbs(OverlayCanvas.FAR_DISTANCE, far * -dir.z, eps);
+}

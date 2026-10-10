@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Scene Manager.md",
+                "file": "things to do and fix.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Scene Manager"
+              "title": "things to do and fix"
             }
           }
         ]
@@ -173,6 +173,9 @@
   },
   "active": "c1904df8c5a0dd68",
   "lastOpenFiles": [
+    "things AI can look at andor fix.md",
+    "things to do and fix.md",
+    "Scene Manager.md",
     "Imgui.md",
     "Scripts.md",
     "Viewport Panel.md",
@@ -191,8 +194,6 @@
     "Useful commands.md",
     "ECS Manager.md",
     "longer term things to do or fix.md",
-    "things AI can look at andor fix.md",
-    "immediate things to do or fix.md",
     "Research/matt_bentley_-_the_low_complexity_jump-counting_pattern.pdf",
     "Research/matt_bentley_-_the_high_complexity_jump-counting_pattern.pdf",
     "Research",
@@ -203,7 +204,6 @@
     "Engine Notes/2026 9 sept",
     "Adding new scripts to engine.md",
     "Adding new components to engine.md",
-    "Scene Manager.md",
     "Engine Notes/2026 8 august",
     "Engine Notes/2026 7 July",
     "Engine Notes/2026 6 June",

@@ -7,7 +7,6 @@ const ScriptComponent = Components.ScriptComponent;
 const TransformComponent = Components.TransformComponent;
 const TransformDirtyTag = Components.TransformDirtyTag;
 const RigidBodyComponent = Components.RigidBodyComponent;
-const AudioComponent = Components.AudioComponent;
 const StaticBodyTag = Components.StaticBodyTag;
 const DynamicBodyTag = Components.DynamicBodyTag;
 const KinematicBodyTag = Components.KinematicBodyTag;
@@ -32,7 +31,6 @@ const ChildType = @import("../ECS/ECSManager.zig").ChildType;
 const Player = @import("Player.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
 const AssetHandle = @import("AssetHandle.zig");
-const Voice = @import("Voice.zig");
 const ECSCore = @import("ECSObject.zig").Core;
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -91,8 +89,13 @@ pub const HasComponent = Core.HasComponent;
 
 pub const GetUUID = Core.GetUUID;
 
+pub const GetWorld = Core.GetWorld;
+
 pub const GetName = Core.GetName;
 pub const SetName = Core.SetName;
+
+pub const PlayAudio = Core.PlayAudio;
+pub const StopAudio = Core.StopAudio;
 
 pub fn CreateChild(self: Entity, engine_context: *EngineContext, child_type: ChildType, config: CreateConfig) !Entity {
     const child_entity = try Core.CreateChild(self, engine_context, child_type, config);
@@ -198,18 +201,6 @@ pub fn AddScript(self: Entity, engine_context: *EngineContext, new_script_handle
 /// The only supported way to write an entity's local transform. Each one tags the entity so the
 /// next UpdateWorldTransforms pass picks it up; that is why TransformComponent's local fields are
 /// private. An entity with no TransformComponent is a no-op, matching GetComponent returning null.
-/// Plays this entity's AudioComponent from the start. Keep the returned voice to stop that one sound later, or ignore it
-/// for a one-shot. Null (and logged) when nothing could play, e.g. the entity has no AudioComponent
-pub fn PlayAudio(self: Entity, engine_context: *EngineContext) !?Voice {
-    return try engine_context.mAudioManager.PlayVoice(engine_context, self);
-}
-
-/// Stops every attached voice this entity's AudioComponent is playing. Detached one-shots play on, stop one of those
-/// with the Voice that PlayAudio returned
-pub fn StopAudio(self: Entity) void {
-    if (self.GetComponent(AudioComponent)) |audio_component| audio_component.StopVoices();
-}
-
 pub fn SetTranslation(self: Entity, engine_context: *EngineContext, translation: Vec3(f32)) !void {
     const transform = self.GetComponent(TransformComponent) orelse return;
     transform._SetLocalUntagged(translation, transform.GetRotation(), transform.GetScale());

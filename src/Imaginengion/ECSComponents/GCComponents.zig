@@ -1,5 +1,6 @@
 const ListInd = @import("../ECS/Components.zig").ListInd;
 pub const AttribComponent = @import("Shared/AttribComponent.zig");
+pub const AudioComponent = @import("Shared/AudioComponent.zig");
 pub const NameComponent = @import("Shared/NameComponent.zig");
 pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
 pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
@@ -8,6 +9,7 @@ const This = @This();
 
 pub const ComponentsList = [_]type{
     AttribComponent,
+    AudioComponent,
     NameComponent,
     UUIDComponent,
     ScriptComponent,
@@ -16,6 +18,7 @@ pub const ComponentsList = [_]type{
 
 pub const ComponentsPanelList = [_]type{
     AttribComponent,
+    AudioComponent,
     NameComponent,
     UUIDComponent,
     TmplRefComponent,
@@ -26,6 +29,7 @@ pub const SerializeList = [_]type{
     UUIDComponent,
     NameComponent,
     AttribComponent,
+    AudioComponent,
     TmplRefComponent,
 };
 
@@ -41,6 +45,7 @@ pub const ScriptsList = [_]type{};
 
 pub const EComponents = enum(u16) {
     AttribComponent = ListInd(&ComponentsList, AttribComponent),
+    AudioComponent = ListInd(&ComponentsList, AudioComponent),
     NameComponent = ListInd(&ComponentsList, NameComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),

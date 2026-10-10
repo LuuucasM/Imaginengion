@@ -1,5 +1,5 @@
 const EngineContext = @import("../../Core/EngineContext.zig");
-const Entity = @import("../../ECSObjects/Entity.zig");
+const ObjectRef = @import("../Entity/ObjectRefComponent.zig").Ref;
 const AssetHandle = @import("../../ECSObjects/AssetHandle.zig");
 const Bus = @import("../../ECSObjects/Bus.zig");
 const VoiceComponent = @This();
@@ -9,9 +9,9 @@ pub const Name: []const u8 = "VoiceComponent";
 //what every voice has. How it should sound is a modifier read from somewhere else: an attached voice reads its
 //source's AudioComponent live, a detached voice reads its own copies (VoiceAssetComponent, VolumeComponent, ...)
 
-/// The entity whose AudioComponent this voice plays, if it is attached. Invalid for a detached voice, which does not
-/// care what happens to the entity that started it
-mSource: Entity = .uninit,
+/// The object (entity, scene, player or game context) whose AudioComponent this voice plays, if it is attached. Null
+/// for a detached voice, which does not care what happens to the object that started it
+mSource: ?ObjectRef = null,
 /// The source component's mVoiceToken when this voice started. An attached voice is orphaned once they differ
 mToken: u32 = 0,
 

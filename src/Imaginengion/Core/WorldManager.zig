@@ -14,6 +14,7 @@ const GameContext = @import("../ECSObjects/GameContext.zig");
 const Player = @import("../ECSObjects/Player.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const PathType = @import("../ECSManagers/AManager.zig").PathType;
 
 const EManager = @import("../ECSManagers/EManager.zig");
 const GCManager = @import("../ECSManagers/GCManager.zig");
@@ -250,26 +251,49 @@ pub fn Spawn(self: *WorldManager, comptime obj_t: type, engine_context: *EngineC
     const object = try self.CreateBlank(obj_t, engine_context);
     errdefer object.Delete(engine_context) catch {};
     try object.SetTmpl(engine_context, tmpl);
+    if (obj_t == Scene) try self.SceneLoaded(engine_context, object);
     return object;
 }
 
-/// A new object read from the file at `abs_path` (a .imsc, .impl or .imgc, going by obj_t), UUID and all, the way
-/// a level is opened. Entities are loaded by the scene they go in (Scene.LoadEntity)
-pub fn Load(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext, abs_path: []const u8) !obj_t {
+/// A new object read from the file at `rel_path` under `path_type`'s root (a .imsc, .impl or .imgc, going by obj_t),
+/// UUID and all, the way a level is opened. Entities are loaded by the scene they go in (Scene.LoadEntity)
+pub fn Load(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext, rel_path: []const u8, path_type: PathType) !obj_t {
     const zone = Tracy.ZoneInit("WorldManager::Load", @src());
     defer zone.Deinit();
-    zone.Text(abs_path);
+    zone.Text(rel_path);
     if (obj_t == Scene) {
-        return try self.mSManager.LoadScene(engine_context, abs_path);
+        const scene = try self.mSManager.LoadScene(engine_context, rel_path, path_type);
+        try self.SceneLoaded(engine_context, scene);
+        return scene;
     } else if (obj_t == Player) {
-        return try self.mPManager.LoadPlayer(engine_context, abs_path);
+        return try self.mPManager.LoadPlayer(engine_context, rel_path, path_type);
     } else if (obj_t == GameContext) {
-        return try self.mGCManager.LoadGameContext(engine_context, abs_path);
+        return try self.mGCManager.LoadGameContext(engine_context, rel_path, path_type);
     } else if (obj_t == Entity) {
         @compileError("an entity has to belong to a scene, load it with Scene.LoadEntity");
     } else {
         @compileError(std.fmt.comptimePrint("{s} is not an object type owned by the WorldManager", .{@typeName(obj_t)}));
     }
+}
+
+/// Tells the program `scene` is in this world and finished loading, see WorldEventData.SceneLoadedEvent
+fn SceneLoaded(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
+    _ = try self.mEventManager.Dispatch(engine_context, .{ .SceneLoaded = .{ .mWorld = self, .mScene = scene } });
+}
+
+/// Writes `object` (an Entity, Scene, Player or GameContext) over the file it was last saved to or loaded from,
+/// asking for a file the first time, as SaveAs does
+pub fn Save(self: *WorldManager, engine_context: *EngineContext, object: anytype) !void {
+    const zone = Tracy.ZoneInit("WorldManager::Save", @src());
+    defer zone.Deinit();
+    try self.GetManager(@TypeOf(object)).SaveObject(engine_context, object);
+}
+
+/// Asks for a file (a .imen, .imsc, .impl or .imgc, going by the object's type) and writes `object` to it
+pub fn SaveAs(self: *WorldManager, engine_context: *EngineContext, object: anytype) !void {
+    const zone = Tracy.ZoneInit("WorldManager::SaveAs", @src());
+    defer zone.Deinit();
+    try self.GetManager(@TypeOf(object)).SaveObjectAs(engine_context, object);
 }
 
 //===============================Scenes==============================================
@@ -279,16 +303,6 @@ pub fn NewScene(self: *WorldManager, engine_context: *EngineContext, layer_type:
 
 pub fn DestroyScene(self: *WorldManager, engine_context: *EngineContext, destroy_scene: Scene) !void {
     try self.mSManager.DeleteScene(engine_context, destroy_scene.mID);
-}
-
-pub fn SaveScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    const zone = Tracy.ZoneInit("WorldManager::SaveScene", @src());
-    defer zone.Deinit();
-    try self.mSManager.SaveScene(engine_context, scene);
-}
-
-pub fn SaveSceneAs(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
-    try self.mSManager.SaveSceneAs(engine_context, scene);
 }
 
 pub fn MoveScene(self: *WorldManager, frame_allocator: std.mem.Allocator, scene: Scene, move_to_pos: usize) !void {
@@ -316,16 +330,6 @@ pub fn GetEntityGroup(self: *WorldManager, frame_allocator: std.mem.Allocator, c
 /// How many entities in this world have `component_type`, without building a group.
 pub fn NumEntitiesWith(self: *WorldManager, comptime component_type: type) usize {
     return self.mEManager.mECSManager.NumWithComponent(component_type);
-}
-
-pub fn SaveEntity(self: *WorldManager, engine_context: *EngineContext, entity: Entity) !void {
-    const zone = Tracy.ZoneInit("WorldManager::SaveEntity", @src());
-    defer zone.Deinit();
-    try self.mEManager.SaveEntity(engine_context, entity);
-}
-
-pub fn SaveEntityAs(self: *WorldManager, engine_context: *EngineContext, entity: Entity) !void {
-    try self.mEManager.SaveEntityAs(engine_context, entity);
 }
 
 //===============================Players==============================================

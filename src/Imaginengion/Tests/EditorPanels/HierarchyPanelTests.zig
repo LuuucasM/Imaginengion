@@ -29,6 +29,7 @@ const TransformComponent = EntityComponents.TransformComponent;
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
 const StyleSystem = @import("../../UI/StyleSystem.zig");
+const ThemeAsset = @import("../../ECSComponents/Asset/ThemeAsset.zig");
 const StyleComponent = @import("../../ECSComponents/UIComponents.zig").StyleComponent;
 const WidgetActions = @import("../../UI/WidgetActions.zig");
 
@@ -41,8 +42,15 @@ const TestWorld = struct {
         self.* = .{ .mEngineContext = try std.heap.page_allocator.create(EngineContext) };
         const engine_context = self.mEngineContext;
         engine_context.* = .{};
+        //UUIDs are drawn from the context's Io, which forwards to this
+        engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+            .concurrent_limit = .nothing,
+            .async_limit = .nothing,
+        });
         try engine_context.mUIManager.Init(engine_context.EngineAllocator());
         try engine_context.mEditorWorld.Init(engine_context.EngineAllocator());
+        //as the editor has it (EditorProgram)
+        engine_context.mEditorWorld.mOverlayScaleMode = .ConstantPixelSize;
         try engine_context.mGameWorld.Init(engine_context.EngineAllocator());
         const ui_scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
         //the shell's tab page
@@ -207,6 +215,75 @@ test "the row menu acts on the row it was opened on, and the panel's menu makes 
     try std.testing.expectEqual(.OverlayLayer, scenes.mRows.items[0].Object.GetLayer());
 }
 
+test "Duplicate copies the row's object next to it with UUIDs of its own, and selects the copy" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    try hero.SetName(engine_context, "Hero");
+    const sword = try hero.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    try sword.SetName(engine_context, "Sword");
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    var selected: ?SelectedObject = null;
+    try entities.Update(engine_context, game_world, selected);
+
+    try entities.OnRightClick(engine_context, entities.mRows.items[0].Header);
+    try entities.Run(engine_context, .Duplicate, game_world, &selected);
+    const copy = selected.?.entity;
+    try std.testing.expect(copy.mID != hero.mID);
+    try std.testing.expectEqualStrings("Hero", copy.GetName());
+    try std.testing.expectEqual(level.mID, copy.GetComponent(EntityComponents.EntitySceneComponent).?.mScene.mID);
+    try std.testing.expect(copy.GetUUID() != hero.GetUUID());
+    try std.testing.expectEqual(copy.mID, game_world.GetObjectByUUID(Entity, copy.GetUUID()).?.mID);
+    try std.testing.expectEqual(hero.mID, game_world.GetObjectByUUID(Entity, hero.GetUUID()).?.mID);
+    var children = copy.GetIterator(.Child);
+    const sword_copy = children.next().?;
+    try std.testing.expect(sword_copy.mID != sword.mID);
+    try std.testing.expectEqualStrings("Sword", sword_copy.GetName());
+    try std.testing.expect(sword_copy.GetUUID() != sword.GetUUID());
+
+    //two top rows now, each with its sword under it
+    try entities.Update(engine_context, game_world, selected);
+    try std.testing.expectEqual(@as(usize, 4), entities.mRows.items.len);
+
+    //a scene: its entities come along, pointing at the copy, and it gets a place of its own in the stack
+    var scenes = try world.Panel(Scene);
+    defer scenes.Deinit(engine_context.EngineAllocator());
+    try scenes.Update(engine_context, game_world, selected);
+    try scenes.OnRightClick(engine_context, scenes.mRows.items[0].Header);
+    try scenes.Run(engine_context, .Duplicate, game_world, &selected);
+    const level_copy = selected.?.scene_layer;
+    try std.testing.expect(level_copy.mID != level.mID);
+    try std.testing.expectEqual(.GameLayer, level_copy.GetLayer());
+    try std.testing.expectEqual(@as(usize, 2), game_world.mSManager.mNumofLayers);
+    const copied_entities = try level_copy.GetEntityGroup(engine_context.FrameAllocator(), .{ .Component = EntityComponents.EntitySceneComponent });
+    try std.testing.expectEqual(@as(usize, 4), copied_entities.items.len);
+    try scenes.Update(engine_context, game_world, selected);
+    try std.testing.expectEqual(@as(usize, 2), scenes.mRows.items.len);
+}
+
+test "a template's own root can't be duplicated" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const level = try engine_context.mGameWorld.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    const root = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try root.CreateChild(engine_context, .Entity, Entity.DefaultConfig);
+    var roots = try HierarchyPanel(Entity).BuildForRoots(engine_context, world.mPage, .{ .StockScripts = false });
+    defer roots.Deinit(engine_context.EngineAllocator());
+    try roots.UpdateRoots(engine_context, &.{root}, null);
+
+    for (roots.mRows.items) |row| {
+        try roots.OnRightClick(engine_context, row.Header);
+        for (roots.mRowItems.items) |item| {
+            if (item.Action == .Duplicate) try std.testing.expectEqual(row.Depth == 0, item.Item.HasComponent(DisabledTag));
+        }
+    }
+}
+
 test "the UI menus make ready-made UI entities: in the selected scene, under an entity, at the top of a scene" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -307,6 +384,27 @@ test "a ready-made UI entity in a game scene is built in world units, and stretc
     //the theme's sizes are turned into world units the same way when it styles something in a game scene
     try std.testing.expectEqual(@as(f32, 1.0 / 16.0), StyleSystem.ThemeUnit(button));
     try std.testing.expectEqual(@as(f32, 1), StyleSystem.ThemeUnit(world.mPage));
+}
+
+test "a ready-made UI entity in a game's overlay starts menu sized, the editor's own UI stays theme sized" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const menu = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    var selected: ?SelectedObject = .{ .scene_layer = menu };
+    try entities.Run(engine_context, .{ .NewUI = .Button }, game_world, &selected);
+    try entities.Update(engine_context, game_world, selected);
+    const button = entities.mRows.items[0].Object;
+    var labels = button.GetIterator(.Child);
+    const label = labels.next().?;
+
+    //the theme's 16 and 6 three times over
+    try std.testing.expectEqual(ThemeAsset.GAME_OVERLAY_UNIT, StyleSystem.ThemeUnit(button));
+    try std.testing.expectApproxEqAbs(@as(f32, 16 * ThemeAsset.GAME_OVERLAY_UNIT), label.GetComponent(TextComponent).?.mFontSize, 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f32, 6 * ThemeAsset.GAME_OVERLAY_UNIT), button.GetComponent(LayoutComponent).?.mPadding.Left, 0.0001);
 }
 
 test "a ready-made checkbox shows a check mark only while it is checked" {

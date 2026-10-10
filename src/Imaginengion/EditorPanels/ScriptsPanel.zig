@@ -151,7 +151,12 @@ pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dr
     //loading it (compiling it if it hasn't been) to find out what it is a script for
     var script_handle = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = file_ref.mPathType } });
     defer script_handle.ReleaseAsset();
-    const script_type = (try script_handle.GetAsset(engine_context, ScriptAsset)).GetScriptType();
+    const script_asset = script_handle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
+        //it failed to load (the reason is already logged), so there is nothing to add
+        error.NoDefaultAsset => return,
+        else => return err,
+    };
+    const script_type = script_asset.GetScriptType();
     if (ScriptOwnerOf(script_type) != std.meta.activeTag(object)) {
         std.log.warn("{s} is a {s} script, which doesn't go on a {s}", .{ rel_path, @tagName(script_type), @tagName(object) });
         return;

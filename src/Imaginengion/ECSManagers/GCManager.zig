@@ -37,8 +37,6 @@ pub const CreateGameContext = Core.CreateObj;
 
 pub const DeleteGameContext = Core.DeleteObj;
 
-pub const Duplicate = Core.Duplicate;
-
 pub const AddComponent = Core.AddComponent;
 
 pub const AddUUID = Core.AddUUID;

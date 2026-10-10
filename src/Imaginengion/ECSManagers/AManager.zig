@@ -396,6 +396,13 @@ pub fn GetAbsPath(self: *AManager, allocator: std.mem.Allocator, rel_path: []con
     }
 }
 
+/// Which root an absolute path (from a file dialog) is kept by: the open project's if it is inside it, else the
+/// engine's
+pub fn PathTypeOf(self: *AManager, abs_path: []const u8) PathType {
+    const project = self.GetProject();
+    return if (project.IsOpen() and std.mem.startsWith(u8, abs_path, project.mPath.items)) .Prj else .Eng;
+}
+
 pub fn GetRelPath(self: *AManager, abs_path: []const u8, path_type: PathType) []const u8 {
     return switch (path_type) {
         .Eng => abs_path[self.mCWDPath.items.len + 1 ..],

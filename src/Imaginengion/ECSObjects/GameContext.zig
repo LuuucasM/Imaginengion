@@ -61,9 +61,14 @@ pub const HasComponent = Core.HasComponent;
 pub const GetName = Core.GetName;
 pub const SetName = Core.SetName;
 
+pub const PlayAudio = Core.PlayAudio;
+pub const StopAudio = Core.StopAudio;
+
 pub const Duplicate = Core.Duplicate;
 
 pub const GetUUID = Core.GetUUID;
+
+pub const GetWorld = Core.GetWorld;
 
 pub const Delete = Core.Delete;
 
