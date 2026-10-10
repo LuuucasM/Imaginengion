@@ -46,8 +46,8 @@ const ViewpointComponent = EntityComponents.ViewpointComponent;
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEvent = WindowEventData.EventT;
 
-const GameEventData = @import("../Events/GameEventData.zig");
-const GameEvent = GameEventData.EventT;
+const WorldEventData = @import("../Events/WorldEventData.zig");
+const WorldEvent = WorldEventData.EventT;
 const UIEvent = @import("../Events/UIEventData.zig").EventT;
 const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
 const PhysicsEventData = @import("../Events/PhysicsEventData.zig");
@@ -490,10 +490,12 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         callback_list.first = null;
         callback_list.last = null;
 
-        //handle deleted objects this frame
-        var game_event_callback = EngineContext.GameEventCallback{ .mCtx = self, .mCallbackFn = OnGameEvent };
-        callback_list.append(&game_event_callback.mNode);
-        try engine_context.mGameEventManager.ProcessCategory(.EndOfFrame, engine_context, callback_list);
+        //what the worlds asked for, before the deletes: quitting clears the simulate world, deletes queued in it too
+        var world_event_callback = EngineContext.WorldEventCallback{ .mCtx = self, .mCallbackFn = OnWorldEvent };
+        callback_list.append(&world_event_callback.mNode);
+        for ([_]*WorldManager{ &engine_context.mGameWorld, &engine_context.mEditorWorld, &engine_context.mSimulateWorld, &engine_context.mTmplEditWorld }) |world| {
+            try world.ProcessEvents(WorldEventData, .EndOfFrame, engine_context, &callback_list);
+        }
         callback_list.first = null;
         callback_list.last = null;
 
@@ -520,9 +522,17 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         //after every world's deletes, so an element whose entity went this frame goes with it
         try engine_context.mUIManager.EndFrame(engine_context);
 
+        //after the deletes too: the selected object may have gone this frame, however it went (the hierarchy, its
+        //parent going, a script, or its world being cleared when play stopped)
+        if (self.mSelectedObj) |selected_obj| {
+            const alive = switch (selected_obj) {
+                inline else => |object| object.IsActive(),
+            };
+            if (!alive) self.mSelectedObj = null;
+        }
+
         //end of frame resets
         engine_context.mSystemEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
-        engine_context.mGameEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
         engine_context.mEditorEventManager.EventsReset(engine_allocator, .ClearRetainingCapacity);
     }
     //-----------------End End of Frame-------------------
@@ -551,7 +561,7 @@ pub fn OnEvent(self: *EditorProgram, engine_context: *EngineContext, event: anyt
 
     if (T == WindowEvent) {
         return .Continue;
-    } else if (T == GameEvent) {
+    } else if (T == WorldEvent) {
         return .Continue;
     } else if (T == EditorEvent) {
         return .Continue;
@@ -896,25 +906,18 @@ fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
     return false;
 }
 
-pub fn OnGameEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const GameEvent) anyerror!EventResult {
-    _ = engine_context;
+/// What the worlds asked for this frame, see WorldEventData. No else, so a new world event has to be given an arm here
+pub fn OnWorldEvent(editor_program: *anyopaque, engine_context: *EngineContext, event: *const WorldEvent) anyerror!EventResult {
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
 
     switch (event.*) {
-        .DestroySceneEvent, .DestroyEntityEvent, .DestroyPlayerEvent, .DestroyGameContextEvent => {
-            if (self.mSelectedObj) |*selected_obj| {
-                if (selected_obj.* == .entity and event.* == .DestroyEntityEvent) {
-                    self.mSelectedObj = null;
-                } else if (selected_obj.* == .scene_layer and event.* == .DestroySceneEvent) {
-                    self.mSelectedObj = null;
-                } else if (selected_obj.* == .player and event.* == .DestroyPlayerEvent) {
-                    self.mSelectedObj = null;
-                } else if (selected_obj.* == .gamecontext and event.* == .DestroyGameContextEvent) {
-                    self.mSelectedObj = null;
-                }
-            }
+        .Default => {},
+        //the game being played quitting stops play. Only from the simulate world while playing: the state change
+        //toggles, so stopping when not playing would start it. Clearing the simulate world from inside its own
+        //events is fine, its loop sees the list empty and a second quit this frame goes with it
+        .QuitGame => |e| if (self.mEditorState == .Play and e.mWorld == &engine_context.mSimulateWorld) {
+            try self.OnChangeEditorStateEvent(engine_context);
         },
-        else => std.log.err("This event type has not been handled by EditorProgram.OnGameEvent: {s}", .{@tagName(event.*)}),
     }
     return .Continue;
 }
@@ -1126,6 +1129,17 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
             }
         },
         .SaveProject => try engine_context.mProject.Save(engine_context),
+        .SetProjectEntry => |entry| {
+            const extension = entry.FileExtension();
+            const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), extension);
+            if (abs_path.len > 0) {
+                engine_context.mProject.SetEntry(engine_context, entry, abs_path) catch |err| switch (err) {
+                    error.NotInProject, error.WrongFileKind => return std.log.warn("The project's entry {s} has to be a {s} file inside the project folder, not {s}", .{ @tagName(entry), std.mem.span(extension), abs_path }),
+                    else => return err,
+                };
+                std.log.info("Project entry {s} set to {s}", .{ @tagName(entry), engine_context.mProject.GetEntry(entry) });
+            }
+        },
         .Exit => try engine_context.mSystemEventManager.Insert(engine_allocator, .WindowEvent, .{
             .WindowClose = .{ ._Window = &engine_context.mAppWindow },
         }),

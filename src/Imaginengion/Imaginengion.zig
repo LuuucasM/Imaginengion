@@ -51,6 +51,7 @@ test {
     _ = @import("Tests/EditorPanels/AssetHandlesPanelTests.zig");
     _ = @import("Tests/Core/WorldCopyTests.zig");
     _ = @import("Tests/Core/EngineStatsTests.zig");
+    _ = @import("Tests/Core/ProjectTests.zig");
     _ = @import("Tests/AudioManager/BusSaveTests.zig");
 }
 

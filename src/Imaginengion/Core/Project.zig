@@ -1,6 +1,10 @@
 const std = @import("std");
 const EngineContext = @import("EngineContext.zig");
 const Tracy = @import("Tracy.zig");
+const Serializer = @import("../Serializer/Serializer.zig");
+const Scene = @import("../ECSObjects/Scene.zig");
+const Player = @import("../ECSObjects/Player.zig");
+const GameContext = @import("../ECSObjects/GameContext.zig");
 const Project = @This();
 
 //the project that is open, if any: its folder, its project file, and the settings the engine keeps per project.
@@ -30,11 +34,37 @@ const SETTINGS_OWNERS = [_][]const u8{
 
 const STRINGIFY_OPTIONS: std.json.Stringify.Options = .{ .whitespace = .indent_2 };
 
-/// What the project file holds. Nothing reads it back yet: it marks the folder as a project, and has the version so
-/// a later format change can tell old projects apart
+/// What a built game starts from: the scene it opens, the player that views it and the game mode it runs. Each one is
+/// an object file in the project
+pub const Entry = enum {
+    Scene,
+    Player,
+    GameContext,
+
+    /// The kind of object file it has to be
+    pub fn FileExtension(self: Entry) [*c]const u8 {
+        return switch (self) {
+            .Scene => Serializer.FileExtension(Scene),
+            .Player => Serializer.FileExtension(Player),
+            .GameContext => Serializer.FileExtension(GameContext),
+        };
+    }
+
+    /// Its field in the project file
+    fn FieldName(comptime self: Entry) []const u8 {
+        return "Entry" ++ @tagName(self);
+    }
+};
+
+/// What the project file holds: it marks the folder as a project, has the version so a later format change can tell
+/// old projects apart, and the settings that are the whole project's rather than one engine system's
 const ProjectFile = struct {
     Name: []const u8,
     Version: u32,
+    /// The game's entries, see mEntries. Empty while one isn't set
+    EntryScene: []const u8 = "",
+    EntryPlayer: []const u8 = "",
+    EntryGameContext: []const u8 = "",
 };
 
 mDirectory: ?std.Io.Dir = null,
@@ -42,12 +72,16 @@ mDirectory: ?std.Io.Dir = null,
 mPath: std.ArrayList(u8) = .empty,
 /// The project file's name inside the folder, <name>.imprj
 mFileName: std.ArrayList(u8) = .empty,
+/// The files the game starts from, each as a path from the project folder with / between folders. What building the
+/// game starts from. Empty while one isn't set
+mEntries: std.EnumArray(Entry, std.ArrayList(u8)) = .initFill(.empty),
 
 /// Frees what the project holds without saving. The editor saves when it closes, before this runs
 pub fn Deinit(self: *Project, engine_context: *EngineContext) void {
     self.CloseFolder(engine_context);
     self.mPath.deinit(engine_context.EngineAllocator());
     self.mFileName.deinit(engine_context.EngineAllocator());
+    for (&self.mEntries.values) |*entry| entry.deinit(engine_context.EngineAllocator());
 }
 
 pub fn IsOpen(self: Project) bool {
@@ -74,6 +108,30 @@ pub fn GetRelPath(self: *const Project, abs_path: []const u8) []const u8 {
     return abs_path[self.mPath.items.len + 1 ..];
 }
 
+/// The file the game starts from for `entry`, from the project folder. Empty while it isn't set
+pub fn GetEntry(self: *const Project, entry: Entry) []const u8 {
+    return self.mEntries.getPtrConst(entry).items;
+}
+
+/// Makes the file at abs_path the game's `entry`, and writes the project file. The file has to be the entry's kind
+/// of object file, inside the project folder
+pub fn SetEntry(self: *Project, engine_context: *EngineContext, entry: Entry, abs_path: []const u8) !void {
+    if (!self.IsOpen()) return error.NoProjectOpen;
+    if (!std.mem.eql(u8, std.fs.path.extension(abs_path), std.mem.span(entry.FileExtension()))) return error.WrongFileKind;
+    const inside = abs_path.len > self.mPath.items.len + 1 and
+        std.mem.startsWith(u8, abs_path, self.mPath.items) and
+        std.fs.path.isSep(abs_path[self.mPath.items.len]);
+    if (!inside) return error.NotInProject;
+
+    const path = self.mEntries.getPtr(entry);
+    path.clearRetainingCapacity();
+    try path.appendSlice(engine_context.EngineAllocator(), self.GetRelPath(abs_path));
+    //the same path on every platform
+    std.mem.replaceScalar(u8, path.items, '\\', '/');
+
+    try self.SaveProjectFile(engine_context);
+}
+
 /// Makes folder_abs_path a new project: a <folder name>.imprj project file, and every owner's default settings.
 /// The project that was open is saved and closed first
 pub fn New(self: *Project, engine_context: *EngineContext, folder_abs_path: []const u8) !void {
@@ -92,7 +150,7 @@ pub fn New(self: *Project, engine_context: *EngineContext, folder_abs_path: []co
     try self.Save(engine_context);
 }
 
-/// Opens the project whose project file is project_file_abs_path and loads every owner's settings. An owner without a
+/// Opens the project whose project file is project_file_abs_path, reads the project file and loads every owner's settings. An owner without a
 /// settings file (a project older than it) gets its defaults. The project that was open is saved and closed first
 pub fn Open(self: *Project, engine_context: *EngineContext, project_file_abs_path: []const u8) !void {
     const zone = Tracy.ZoneInit("Project::Open", @src());
@@ -101,6 +159,7 @@ pub fn Open(self: *Project, engine_context: *EngineContext, project_file_abs_pat
     try self.Close(engine_context);
 
     try self.OpenFolder(engine_context, std.fs.path.dirname(project_file_abs_path).?, std.fs.path.basename(project_file_abs_path));
+    try self.LoadProjectFile(engine_context);
 
     inline for (SETTINGS_OWNERS) |owner_field| {
         try self.LoadOwnerSettings(engine_context, owner_field);
@@ -117,8 +176,7 @@ pub fn Save(self: *Project, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Project::Save", @src());
     defer zone.Deinit();
 
-    const project_file: ProjectFile = .{ .Name = std.fs.path.stem(self.mFileName.items), .Version = FORMAT_VERSION };
-    try self.WriteJson(engine_context, self.mFileName.items, project_file);
+    try self.SaveProjectFile(engine_context);
 
     try self.GetDirectory().createDirPath(engine_context.Io(), SETTINGS_FOLDER);
     inline for (SETTINGS_OWNERS) |owner_field| {
@@ -148,6 +206,22 @@ fn CloseFolder(self: *Project, engine_context: *EngineContext) void {
     self.mDirectory = null;
     self.mPath.clearRetainingCapacity();
     self.mFileName.clearRetainingCapacity();
+    for (&self.mEntries.values) |*entry| entry.clearRetainingCapacity();
+}
+
+fn SaveProjectFile(self: *Project, engine_context: *EngineContext) !void {
+    var project_file: ProjectFile = .{ .Name = std.fs.path.stem(self.mFileName.items), .Version = FORMAT_VERSION };
+    inline for (comptime std.enums.values(Entry)) |entry| @field(project_file, entry.FieldName()) = self.GetEntry(entry);
+    try self.WriteJson(engine_context, self.mFileName.items, project_file);
+}
+
+fn LoadProjectFile(self: *Project, engine_context: *EngineContext) !void {
+    const frame_allocator = engine_context.FrameAllocator();
+    const contents = try self.GetDirectory().readFileAlloc(engine_context.Io(), self.mFileName.items, frame_allocator, .unlimited);
+    const project_file = try std.json.parseFromSliceLeaky(ProjectFile, frame_allocator, contents, .{ .ignore_unknown_fields = true });
+    inline for (comptime std.enums.values(Entry)) |entry| {
+        try self.mEntries.getPtr(entry).appendSlice(engine_context.EngineAllocator(), @field(project_file, entry.FieldName()));
+    }
 }
 
 fn SettingsPath(comptime owner_field: []const u8) []const u8 {

@@ -250,16 +250,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                             _ = try object.CreateEntity(engine_context, Entity.DefaultConfig);
                         },
                         .MakeTemplate => try engine_context.mEditorEventManager.Insert(engine_allocator, .EndOfFrame, .{ .MakeTmplEvent = .{ .mObject = ToSelected(object) } }),
-                        .Delete => {
-                            try object.Delete(engine_context);
-                            try engine_context.mGameEventManager.Insert(engine_allocator, .EndOfFrame, switch (T) {
-                                Entity => .{ .DestroyEntityEvent = .{ .mEntity = object } },
-                                Scene => .{ .DestroySceneEvent = .{ .mScene = object } },
-                                Player => .{ .DestroyPlayerEvent = .{ .mPlayer = object } },
-                                GameContext => .{ .DestroyGameContextEvent = .{ .mGameContext = object } },
-                                else => unreachable,
-                            });
-                        },
+                        .Delete => try object.Delete(engine_context),
                         else => unreachable,
                     }
                 },

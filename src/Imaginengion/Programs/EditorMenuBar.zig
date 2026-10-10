@@ -1,5 +1,5 @@
 //! The editor's menu bar, built out of the editor UI's menu widgets (Widgets.MenuBar, Menu, MenuItem, Submenu): File,
-//! Window and Editor (theme, play options, vsync). Opening, closing and switching menus is the stock menu scripts'.
+//! Project (the scene, player and game mode the game starts from), Window and Editor (theme, play options, vsync). Opening, closing and switching menus is the stock menu scripts'.
 //! What an item does is the editor's: this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
 //! Update puts the editor's state on the items: which panels are shown (check marks), what can't be done right now
 //! (greyed out, DisabledTag), and the players the play preview can follow, a list rebuilt when they change.
@@ -8,6 +8,7 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const Player = @import("../ECSObjects/Player.zig");
+const Project = @import("../Core/Project.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 
@@ -52,6 +53,8 @@ pub const Action = union(enum) {
     NewProject,
     OpenProject,
     SaveProject,
+    /// pick the file the game starts from for this entry
+    SetProjectEntry: Project.Entry,
     Exit,
     /// show the panel if it is hidden, hide it if it is shown
     TogglePanel: Panel,
@@ -87,6 +90,7 @@ const ItemAction = struct {
 mActions: std.ArrayList(ItemAction) = .empty,
 mPanelItems: std.EnumArray(Panel, Entity) = .initFill(.uninit),
 mSaveProject: Entity = .uninit,
+mEntryItems: std.EnumArray(Project.Entry, Entity) = .initFill(.uninit),
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
 mVSync: Entity = .uninit,
@@ -121,6 +125,12 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     self.mSaveProject = try self.Add(engine_context, file, "Save Project", item_options, .SaveProject);
     _ = try Widgets.Separator(engine_context, .{ .Entity = file });
     _ = try self.Add(engine_context, file, "Exit", item_options, .Exit);
+
+    const project = try Widgets.Menu(engine_context, bar, "Project", options);
+    const entry = try Widgets.Submenu(engine_context, project, "Set Project Entry", options);
+    self.mEntryItems.set(.Scene, try self.Add(engine_context, entry, "Scene...", item_options, .{ .SetProjectEntry = .Scene }));
+    self.mEntryItems.set(.Player, try self.Add(engine_context, entry, "Player...", item_options, .{ .SetProjectEntry = .Player }));
+    self.mEntryItems.set(.GameContext, try self.Add(engine_context, entry, "Game Mode...", item_options, .{ .SetProjectEntry = .GameContext }));
 
     const window = try Widgets.Menu(engine_context, bar, "Window", options);
     for (std.enums.values(Panel)) |panel| {
@@ -163,6 +173,7 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     try WidgetActions.SetChecked(engine_context, self.mPlayPreview, state.PlayPreview);
     try WidgetActions.SetChecked(engine_context, self.mVSync, state.VSync);
     try WidgetActions.SetDisabled(engine_context, self.mSaveProject, !state.ProjectOpen);
+    for (self.mEntryItems.values) |item| try WidgetActions.SetDisabled(engine_context, item, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mPlayStop, !state.CanPlayStop);
 
     try self.UpdatePlayers(engine_context, state.Players);

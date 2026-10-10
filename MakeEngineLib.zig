@@ -128,7 +128,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             });
             const nfd_lib = nfd_dep.artifact("NFD");
             engine_module.linkLibrary(nfd_lib);
-            b.installArtifact(nfd_lib);
 
             const tracy_dep = b.dependency("tracy", .{
                 .target = target,
@@ -136,7 +135,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             });
             const tracy_lib = tracy_dep.artifact("Tracy");
             engine_module.linkLibrary(tracy_lib);
-            b.installArtifact(tracy_lib);
 
             const mini_dep = b.dependency(
                 "MiniAudio",
@@ -147,7 +145,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             );
             const mini_lib = mini_dep.artifact("MiniAudio");
             engine_module.linkLibrary(mini_lib);
-            b.installArtifact(mini_lib);
 
             const sdl3_dep = b.dependency("SDL3", .{
                 .target = target,
@@ -155,7 +152,6 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             });
             const sdl3_lib = sdl3_dep.artifact("SDL3");
             engine_module.linkLibrary(sdl3_lib);
-            b.installArtifact(sdl3_lib);
 
             const stb_dep = b.dependency("stb", .{
                 .target = target,
@@ -163,16 +159,9 @@ pub fn MakeEngineLib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: 
             });
             const stb_lib = stb_dep.artifact("stb");
             engine_module.linkLibrary(stb_lib);
-            b.installArtifact(stb_lib);
         },
-        .Script => {
-            engine_module.addLibraryPath(b.path("zig-out/lib/"));
-            engine_module.linkSystemLibrary("NFD", .{ .needed = true });
-            engine_module.linkSystemLibrary("Tracy", .{ .needed = true });
-            engine_module.linkSystemLibrary("MiniAudio", .{ .needed = true });
-            engine_module.linkSystemLibrary("SDL3", .{ .needed = true });
-            engine_module.linkSystemLibrary("stb", .{ .needed = true });
-        },
+        // Scripts link none of the C libs: script-callable code never calls them, and linking them from zig-out/lib
+        // kept Zig from ever caching a script's compile
         else => {},
     }
 

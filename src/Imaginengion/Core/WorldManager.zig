@@ -27,6 +27,8 @@ const PEventData = @import("../Events/PManagerData.zig");
 const SEventData = @import("../Events/SManagerData.zig");
 const ECSEventData = @import("../Events/ECSEventData.zig");
 const PhysicsEventData = @import("../Events/PhysicsEventData.zig");
+const WorldEventData = @import("../Events/WorldEventData.zig");
+pub const EventManagerT = @import("../Events/EventManager.zig").EventManager(WorldEventData);
 
 const ClearAndFreeOptions = enum {
     All,
@@ -44,6 +46,9 @@ mSManager: SManager = .empty,
 /// What physics carries from one step of this world to the next: leftover step time and which pairs
 /// were touching. It is about this world's entities, so it lives and is cleared with them
 mPhysicsManager: PhysicsManager = .{},
+
+/// What this world asks the program to do about the whole world, like quitting the game (Events/WorldEventData.zig)
+mEventManager: EventManagerT = .empty,
 
 /// How every overlay scene in this world turns its units into screen pixels: one for all of them, so they all share
 /// the one screen space, and the renderer can hold all their shapes in one tree. Each view still places that space
@@ -91,6 +96,12 @@ pub fn SetSyncCallback(self: *WorldManager, ctx: anytype, comptime handler: anyt
     self.mPManager.SetSyncCallback(ctx, handler);
     self.mSManager.SetSyncCallback(ctx, handler);
     self.mPhysicsManager.SetSyncCallback(ctx, handler);
+    self.mEventManager.SetSyncCallback(ctx, handler);
+}
+
+/// Asks to quit the game this world is playing, handled at the end of the frame (see WorldEventData.QuitGameEvent)
+pub fn QuitGame(self: *WorldManager, engine_context: *EngineContext) !void {
+    try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .QuitGame = .{ .mWorld = self } });
 }
 
 pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
@@ -99,6 +110,7 @@ pub fn Deinit(self: *WorldManager, engine_context: *EngineContext) void {
     self.mPManager.Deinit(engine_context);
     self.mSManager.Deinit(engine_context);
     self.mPhysicsManager.Deinit(engine_context.EngineAllocator());
+    self.mEventManager.Deinit(engine_context.EngineAllocator());
 }
 
 pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options: ClearAndFreeOptions) void {
@@ -107,6 +119,8 @@ pub fn clearAndFree(self: *WorldManager, engine_context: *EngineContext, options
 
     //the physics state names entities by id, so it goes whenever they do
     if (options == .All or options == .EManager) self.mPhysicsManager.Reset(engine_context.EngineAllocator());
+    //asks about the world that is going. Safe from inside this world's own ProcessEvents: its loop sees the list empty
+    if (options == .All) self.mEventManager.EventsReset(engine_context.EngineAllocator(), .ClearAndFree);
 
     switch (options) {
         .All => {
@@ -199,6 +213,9 @@ pub fn ProcessEvents(self: *WorldManager, comptime event_data: type, comptime ev
         try self.mSManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
     } else if (event_data == PhysicsEventData) {
         try self.mPhysicsManager.ProcessEvents(event_category, engine_context, callback_list);
+    } else if (event_data == WorldEventData) {
+        try self.mEventManager.ProcessCategory(event_category, engine_context, callback_list.*);
+        self.mEventManager.ClearCategory(engine_context.EngineAllocator(), event_category, .ClearRetainingCapacity);
     } else if (event_data == ECSEventData) {
         try self.mEManager.ProcessEvents(event_data, event_category, engine_context, callback_list);
         try self.mGCManager.ProcessEvents(event_data, event_category, engine_context, callback_list);

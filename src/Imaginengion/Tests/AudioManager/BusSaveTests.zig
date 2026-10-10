@@ -235,8 +235,8 @@ test "a project without audio settings opens with just Master" {
     defer engine.Deinit();
     const engine_context = engine.mEngineContext;
 
-    //a project from before audio settings existed: only its (empty) project file
-    try engine.mTmpDir.dir.writeFile(engine_context.Io(), .{ .sub_path = "Old.imprj", .data = "" });
+    //a project from before audio settings existed: only its project file
+    try engine.mTmpDir.dir.writeFile(engine_context.Io(), .{ .sub_path = "Old.imprj", .data = "{\"Name\": \"Old\", \"Version\": 1}" });
     const project_file_path = try std.fs.path.join(engine_context.FrameAllocator(), &.{ try engine.TmpDirAbsPath(), "Old.imprj" });
     try engine_context.mProject.Open(engine_context, project_file_path);
 

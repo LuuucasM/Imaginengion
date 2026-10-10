@@ -29,10 +29,7 @@ const PointerEventManager = @import("../Events/EventManager.zig").EventManager(P
 pub const PointerEventCallback = PointerEventManager.EventCallback;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 
-
-const GameEventData = @import("../Events/GameEventData.zig");
-const GameEventManager = @import("../Events/EventManager.zig").EventManager(GameEventData);
-pub const GameEventCallback = GameEventManager.EventCallback;
+pub const WorldEventCallback = WorldManager.EventManagerT.EventCallback;
 
 const MakeAllocatorVTable = @import("Allocators.zig").MakeAllocatorVTable;
 const MakeIoVTable = @import("Ios.zig").MakeIoVTable;
@@ -79,7 +76,6 @@ mAudioManager: AudioManager = .{},
 mInputManager: InputManager = .empty,
 mRenderer: Renderer = .{},
 
-mGameEventManager: GameEventManager = .empty,
 mSystemEventManager: WindowEventManager = .empty,
 /// What the pointer does to entities, sent by mPointerSystem (see Events/PointerEventData.zig)
 mPointerEventManager: PointerEventManager = .empty,
@@ -154,7 +150,6 @@ pub fn Init(self: *EngineContext, environ: std.process.Environ) !void {
 /// at it and nothing ever needs to unregister.
 pub fn SetSyncCallbacks(self: *EngineContext, program: *Program) void {
     self.mSystemEventManager.SetSyncCallback(program, Program.OnEvent);
-    self.mGameEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mEditorEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mPointerEventManager.SetSyncCallback(program, Program.OnEvent);
     self.mUIManager.SetSyncCallback(program, Program.OnEvent);
@@ -182,7 +177,6 @@ pub fn DeInit(self: *EngineContext) void {
     //holds handles to the files objects were saved to / loaded from
     self.mSerializer.Deinit(self.EngineAllocator());
 
-    self.mGameEventManager.Deinit(self.EngineAllocator());
     self.mEditorEventManager.Deinit(self.EngineAllocator());
     self.mSystemEventManager.Deinit(self.EngineAllocator());
     self.mPointerEventManager.Deinit(self.EngineAllocator());
