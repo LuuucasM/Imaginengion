@@ -67,8 +67,12 @@ const TestWorld = struct {
         const queued = self.mEngineContext.mUIManager.mEventManager.mEventsArray.getPtr(.UI);
         var to: std.ArrayList(Entity) = .empty;
         for (queued.items) |event| {
-            switch (event) {
-                .ValueChanged => |e| try to.append(self.mEngineContext.FrameAllocator(), e.mEntity),
+            const entity_event = switch (event) {
+                .Entity => |e| e,
+                else => continue,
+            };
+            switch (entity_event.mEvent) {
+                .ValueChanged => try to.append(self.mEngineContext.FrameAllocator(), entity_event.mEntity),
                 else => {},
             }
         }

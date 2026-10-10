@@ -7,8 +7,8 @@ const UIEvent = @import("IM").UIEvent;
 const OnUIEventScript = @This();
 
 /// Function that gets executed for every UI event sent to this entity. Like pointer events, they go to the entity it
-/// happened to and then to each one it is inside, so this hears about its children too. Each event has:
-///     mEntity: this entity
+/// happened to and then to each one it is inside, so this hears about its children too. Only this entity's own events
+/// come here, so there is no need to check who an event is for: switch on what happened. Each event has:
 ///     mTarget: the entity it actually happened to
 /// and then, by event:
 ///     .FocusGained / .FocusLost: a text input (TextInputComponent on its UI element) got the keyboard, or lost it

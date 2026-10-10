@@ -27,7 +27,7 @@ const Vec3 = MathTypes.Vec3;
 const Ray = @import("../Math/CameraRay.zig").Ray;
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const PointerEvent = @import("../Events/PointerEventData.zig").PointerEvent;
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const HoveredTag = EntityComponents.HoveredTag;
@@ -187,13 +187,13 @@ fn UpdateHover(self: *PointerSystem, engine_context: *EngineContext) !void {
     for (self.mHovered.items) |entity| {
         if (!entity.IsActive() or Contains(new_chain.items, entity)) continue;
         if (entity.HasComponent(HoveredTag)) try entity.RemoveComponentSync(engine_context, HoveredTag);
-        try Send(engine_context, .{ .PointerExit = .{ .mEntity = entity } });
+        try Send(engine_context, entity, .{ .PointerExit = .{} });
     }
     //entered: in the new chain and not the old one
     for (new_chain.items) |entity| {
         if (Contains(self.mHovered.items, entity)) continue;
         if (!entity.HasComponent(HoveredTag)) _ = try entity.AddComponent(engine_context, HoveredTag{});
-        try Send(engine_context, .{ .PointerEnter = .{ .mEntity = entity } });
+        try Send(engine_context, entity, .{ .PointerEnter = .{} });
     }
 
     try Assign(&self.mHovered, engine_context.EngineAllocator(), new_chain.items);
@@ -219,7 +219,7 @@ fn UpdateDrag(self: *PointerSystem, engine_context: *EngineContext, button: Mous
         }
         for (held.mChain.items) |entity| {
             if (!entity.IsActive()) continue;
-            try Send(engine_context, .{ .PointerDragStart = .{ .mEntity = entity, .mButton = button, .mTarget = target } });
+            try Send(engine_context, entity, .{ .PointerDragStart = .{ .mButton = button, .mTarget = target } });
         }
     }
 
@@ -234,8 +234,7 @@ fn UpdateDrag(self: *PointerSystem, engine_context: *EngineContext, button: Mous
     if (delta.x == 0 and delta.y == 0 and delta.z == 0) return;
     for (held.mChain.items) |entity| {
         if (!entity.IsActive()) continue;
-        try Send(engine_context, .{ .PointerDrag = .{
-            .mEntity = entity,
+        try Send(engine_context, entity, .{ .PointerDrag = .{
             .mButton = button,
             .mDelta = delta,
             .mTotal = point.SubVec(start),
@@ -287,7 +286,7 @@ pub fn OnPressed(self: *PointerSystem, engine_context: *EngineContext, button: M
     for (held.mChain.items) |entity| {
         if (!entity.IsActive()) continue;
         if (!entity.HasComponent(PressedTag)) _ = try entity.AddComponent(engine_context, PressedTag{});
-        try Send(engine_context, .{ .PointerPressed = .{ .mEntity = entity, .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
+        try Send(engine_context, entity, .{ .PointerPressed = .{ .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
     }
 }
 
@@ -307,7 +306,7 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
     if (button == DROP_BUTTON) {
         if (self.Carrying()) |source| {
             if (self.mDropTarget) |drop_target| {
-                if (drop_target.IsActive()) try Send(engine_context, .{ .PointerDropped = .{ .mEntity = drop_target, .mSource = source, .mPosition = self.mInput.Position } });
+                if (drop_target.IsActive()) try Send(engine_context, drop_target, .{ .PointerDropped = .{ .mSource = source, .mPosition = self.mInput.Position } });
             }
         }
         try self.SetDropTarget(engine_context, null);
@@ -322,8 +321,8 @@ pub fn OnReleased(self: *PointerSystem, engine_context: *EngineContext, button: 
         if (!entity.IsActive()) continue;
         //another button may still be holding it
         if (!self.IsHeld(entity) and entity.HasComponent(PressedTag)) try entity.RemoveComponentSync(engine_context, PressedTag);
-        if (was_dragging) try Send(engine_context, .{ .PointerDragEnd = .{ .mEntity = entity, .mButton = button, .mTotal = total, .mTarget = target } });
-        try Send(engine_context, .{ .PointerReleased = .{ .mEntity = entity, .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
+        if (was_dragging) try Send(engine_context, entity, .{ .PointerDragEnd = .{ .mButton = button, .mTotal = total, .mTarget = target } });
+        try Send(engine_context, entity, .{ .PointerReleased = .{ .mButton = button, .mPosition = self.mInput.Position, .mTarget = target } });
     }
 }
 
@@ -341,8 +340,7 @@ pub fn OnClicked(self: *PointerSystem, engine_context: *EngineContext, button: M
     const target = if (self.mHovered.items.len > 0) self.mHovered.items[0] else return;
     for (released.items) |entity| {
         if (!entity.IsActive() or !Contains(self.mHovered.items, entity)) continue;
-        try Send(engine_context, .{ .PointerClicked = .{
-            .mEntity = entity,
+        try Send(engine_context, entity, .{ .PointerClicked = .{
             .mButton = button,
             .mClicks = clicks,
             .mPosition = self.mInput.Position,
@@ -411,6 +409,6 @@ fn Assign(chain: *Chain, engine_allocator: std.mem.Allocator, entities: []const 
     try chain.appendSlice(engine_allocator, entities);
 }
 
-fn Send(engine_context: *EngineContext, event: PointerEvent) !void {
-    try engine_context.mPointerEventManager.Insert(engine_context.EngineAllocator(), .Pointer, event);
+fn Send(engine_context: *EngineContext, entity: Entity, event: PointerEvent) !void {
+    try engine_context.mPointerEventManager.Insert(engine_context.EngineAllocator(), .Pointer, .{ .mEntity = entity, .mEvent = event });
 }

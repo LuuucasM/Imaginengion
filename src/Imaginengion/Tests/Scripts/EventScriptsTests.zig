@@ -9,8 +9,8 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
 const ScriptsProcessor = @import("../../Scripts/ScriptsProcessor.zig");
 const EventScripts = ScriptsProcessor.EventScripts;
-const PointerEvent = @import("../../Events/PointerEventData.zig").EventT;
-const UIEvent = @import("../../Events/UIEventData.zig").EventT;
+const EntityPointerEvent = @import("../../Events/PointerEventData.zig").EntityEvent;
+const EntityUIEvent = @import("../../Events/UIEventData.zig").EntityEvent;
 
 /// A panel with a button in it, the button's label in that, and a second button
 const TestWorld = struct {
@@ -43,8 +43,8 @@ const TestWorld = struct {
     }
 };
 
-fn Click(entity: Entity, target: Entity, button: @import("../../Inputs/InputEnums.zig").MouseCodes) PointerEvent {
-    return .{ .PointerClicked = .{ .mEntity = entity, .mButton = button, .mClicks = 1, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = target } };
+fn Click(entity: Entity, target: Entity, button: @import("../../Inputs/InputEnums.zig").MouseCodes) EntityPointerEvent {
+    return .{ .mEntity = entity, .mEvent = .{ .PointerClicked = .{ .mButton = button, .mClicks = 1, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = target } } };
 }
 
 test "a script handling a click keeps it from the parents, and only that click" {
@@ -74,9 +74,9 @@ test "an enter or exit is each entity's own, so handling one stops nothing" {
     defer world.Deinit();
     var scripts: EventScripts = .{};
 
-    const enter_button = PointerEvent{ .PointerEnter = .{ .mEntity = world.mButton } };
+    const enter_button = EntityPointerEvent{ .mEntity = world.mButton, .mEvent = .{ .PointerEnter = .{} } };
     scripts.After(enter_button, .Handled);
-    try std.testing.expect(scripts.ShouldRun(PointerEvent{ .PointerEnter = .{ .mEntity = world.mPanel } }));
+    try std.testing.expect(scripts.ShouldRun(EntityPointerEvent{ .mEntity = world.mPanel, .mEvent = .{ .PointerEnter = .{} } }));
     try std.testing.expect(EventScripts.MomentOf(enter_button) == null);
 }
 
@@ -85,14 +85,14 @@ test "UI events stop the same way, by what they are about" {
     defer world.Deinit();
     var scripts: EventScripts = .{};
 
-    const submitted = UIEvent{ .TextSubmitted = .{ .mEntity = world.mButton, .mTarget = world.mLabel } };
+    const submitted = EntityUIEvent{ .mEntity = world.mButton, .mEvent = .{ .TextSubmitted = .{ .mTarget = world.mLabel } } };
     scripts.After(submitted, .Handled);
-    try std.testing.expect(!scripts.ShouldRun(UIEvent{ .TextSubmitted = .{ .mEntity = world.mPanel, .mTarget = world.mLabel } }));
+    try std.testing.expect(!scripts.ShouldRun(EntityUIEvent{ .mEntity = world.mPanel, .mEvent = .{ .TextSubmitted = .{ .mTarget = world.mLabel } } }));
     //a different kind of event about the same text input still goes up
-    try std.testing.expect(scripts.ShouldRun(UIEvent{ .FocusLost = .{ .mEntity = world.mPanel, .mTarget = world.mLabel } }));
+    try std.testing.expect(scripts.ShouldRun(EntityUIEvent{ .mEntity = world.mPanel, .mEvent = .{ .FocusLost = .{ .mTarget = world.mLabel } } }));
 }
 
-test "an event for an entity that is gone, or for no entity at all, runs nothing" {
+test "an event for an entity that is gone runs nothing" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -103,5 +103,4 @@ test "an event for an entity that is gone, or for no entity at all, runs nothing
     try engine_context.mEditorWorld.ProcessEvents(@import("../../Events/EManagerData.zig"), .EndOfFrame, engine_context, &callback_list);
     try engine_context.mEditorWorld.ProcessEvents(@import("../../Events/ECSEventData.zig"), .EndOfFrame, engine_context, &callback_list);
     try std.testing.expect(!scripts.ShouldRun(Click(world.mOther, world.mOther, .BUTTON_LEFT)));
-    try std.testing.expect(!scripts.ShouldRun(UIEvent{ .Default = .{} }));
 }

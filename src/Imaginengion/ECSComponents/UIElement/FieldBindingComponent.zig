@@ -22,14 +22,17 @@ mResolve: *const fn (Inspector.ObjectRef) ?*anyopaque,
 mOffset: usize,
 /// How the field's type is read and written
 mAccess: *const Inspector.Access,
-/// What has to happen after the component is edited (dirty tags and the like)
-mAfterEdit: *const fn (*EngineContext, Inspector.ObjectRef) anyerror!void,
+/// What has to happen after the component is edited (dirty tags and the like). True when that changed what the
+/// inspector shows, so it is built again
+mAfterEdit: *const fn (*EngineContext, Inspector.ObjectRef) anyerror!bool,
 /// The field's own, after it is edited
 mOnChange: ?Inspector.OnChange = null,
 /// How a number is shown, if not as it is kept
 mConvert: ?Inspector.Conversion = null,
-/// The inspector to build again when this field is edited, null if it doesn't change what is shown
-mRebuild: ?Entity = null,
+/// The inspector the field is in, built again when an edit changes what it shows
+mRoot: Entity,
+/// Whether every edit of this field changes what is shown (e.g. a dropdown picking which fields come after it)
+mRebuilds: bool = false,
 /// For an asset field: the file extensions it takes when a file is dropped on it, e.g. ".png". A literal
 mAccepts: []const []const u8 = &.{},
 /// For a reference field: which kind of object it takes when a hierarchy row is dropped on it

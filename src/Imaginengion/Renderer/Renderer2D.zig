@@ -596,21 +596,26 @@ pub fn DrawText(
 
     const buffers = if (canvas != null) &self.mOverlayData else &self.mGameData;
 
-    //font size and bounds with the text's scale applied, the same ones picking measures the text with
+    //laid out in the text's own space, the same as picking measures it, then stretched by its scale on each axis
     const params = ShapeGeometry.GetTextParams(transform_component, text_component);
+    const stretch = params.Stretch;
 
     var layout = TextLayout.Iterator(TextAsset).Init(text_component.mText.items, text_asset, params.FontSize, params.WrapWidth);
     while (layout.Next()) |glyph| {
         //the layout is in the text's own space, so the whole line turns with the transform instead
         //of each glyph turning in place along world x
-        const local_pen = Vec3(f32){ .x = glyph.Pen.x - params.LeftBound, .y = glyph.Pen.y, .z = 0 };
+        const local_pen = Vec3(f32){ .x = (glyph.Pen.x - params.LeftBound) * stretch.x, .y = glyph.Pen.y * stretch.y, .z = 0 };
         var pen_pos = text_pos.AddVec(local_pen.QuatRotate(text_rot));
         if (canvas) |c| pen_pos = c.ToWorldPoint(pen_pos);
-        const half_extents = Vec3(f32){ .x = glyph.HalfExtents.x * size_scale, .y = glyph.HalfExtents.y * size_scale, .z = THICKNESS_2D };
+        const half_extents = Vec3(f32){
+            .x = glyph.HalfExtents.x * @abs(stretch.x) * size_scale,
+            .y = glyph.HalfExtents.y * @abs(stretch.y) * size_scale,
+            .z = THICKNESS_2D,
+        };
 
         //the box sits PlaneCenter off the pen in the glyph's own plane. Worked out once here rather than for
         //every pixel and step on the GPU
-        const plane_offset = (Vec3(f32){ .x = glyph.PlaneCenter.x * size_scale, .y = glyph.PlaneCenter.y * size_scale, .z = 0 }).QuatRotate(glyph_rot);
+        const plane_offset = (Vec3(f32){ .x = glyph.PlaneCenter.x * stretch.x * size_scale, .y = glyph.PlaneCenter.y * stretch.y * size_scale, .z = 0 }).QuatRotate(glyph_rot);
         const glyph_center = pen_pos.AddVec(plane_offset);
 
         //a letter cut off altogether isn't sent

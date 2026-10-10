@@ -47,7 +47,7 @@ const StyleDirtyTag = UIComponents.StyleDirtyTag;
 const ScrollComponent = UIComponents.ScrollComponent;
 const ScrollStateComponent = UIComponents.ScrollStateComponent;
 const WindowEventData = @import("../Events/WindowEventData.zig");
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const ScanCodes = @import("../Inputs/InputEnums.zig").ScanCodes;
 
@@ -75,8 +75,8 @@ mStyleSystem: StyleSystem = .empty,
 mNumberFieldSystem: NumberFieldSystem = .empty,
 /// Widgets tied to fields of objects' components, kept showing them and writing edits back
 mBindingSystem: BindingSystem = .empty,
-/// The current theme, which styles are looked up in. uninit until something asks for it, and then the engine's
-/// default if no other has been set
+/// The editor's theme, which a style with no theme file of its own is looked up in. uninit until something asks for
+/// it, and then the engine's default if no other has been picked (Editor > UI Theme..., for the session)
 mTheme: AssetHandle = .uninit,
 /// The white texture styled shapes fill with (PLAIN_TEXTURE_PATH), loaded the first time it is needed
 mPlainTexture: AssetHandle = .uninit,
@@ -84,7 +84,7 @@ mPlainTexture: AssetHandle = .uninit,
 /// again after its file changed, restyles everything
 mStyledTheme: ?AssetHandle.Type = null,
 
-/// The theme every project starts with
+/// The editor's theme until another is picked
 pub const DEFAULT_THEME_PATH = "src/Imaginengion/EngineAssets/themes/Default.imtheme";
 /// What styled quads and text with no texture of their own fill with (see StyleSystem): plain white, so their color is
 /// the theme's alone
@@ -177,17 +177,25 @@ pub fn OnKeyTaken(self: *UIManager, engine_context: *EngineContext, taker: KeyTa
 
 /// One of the frame's pointer events: a dragged scrollbar scrolls its region, a dragged number field changes its value,
 /// and a double click can start typing
-pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: PointerEvent) !void {
+pub fn OnPointerEvent(self: *UIManager, engine_context: *EngineContext, event: EntityPointerEvent) !void {
     const zone = Tracy.ZoneInit("UIManager::OnPointerEvent", @src());
     defer zone.Deinit();
     try self.mScrollSystem.OnPointerEvent(engine_context, event);
     try self.mNumberFieldSystem.OnPointerEvent(engine_context, event);
     //a file dropped on an asset field
     try self.mBindingSystem.OnPointerEvent(engine_context, event);
-    switch (event) {
-        .PointerClicked => |e| try self.mFocusSystem.OnClicked(engine_context, e),
+    switch (event.mEvent) {
+        .PointerClicked => |e| try self.mFocusSystem.OnClicked(engine_context, event.mEntity, e),
         else => {},
     }
+}
+
+/// Whether the inspector `root` was asked to be built again by a field edit (BindingSystem.TakeRebuild), which it no
+/// longer is once this has said so. Not while a number field is being dragged: building it again would take the field
+/// out from under the drag, so it waits for the drag to end
+pub fn TakeRebuild(self: *UIManager, root: Entity) bool {
+    if (self.mNumberFieldSystem.mDragged != null) return false;
+    return self.mBindingSystem.TakeRebuild(root);
 }
 
 /// Hands out what the UI did this frame (typing, popups, values) to `callback_list`, then empties it. The UI's own
@@ -204,8 +212,12 @@ pub fn ProcessUIEvents(self: *UIManager, engine_context: *EngineContext, callbac
 }
 
 fn OnOwnUIEvent(self: *UIManager, engine_context: *EngineContext, event: *const UIEventData.EventT) !EventResult {
-    try self.mNumberFieldSystem.OnUIEvent(engine_context, event.*);
-    try self.mBindingSystem.OnUIEvent(engine_context, event.*);
+    const entity_event = switch (event.*) {
+        .Entity => |e| e,
+        else => return .Continue,
+    };
+    try self.mNumberFieldSystem.OnUIEvent(engine_context, entity_event);
+    try self.mBindingSystem.OnUIEvent(engine_context, entity_event);
     return .Continue;
 }
 
@@ -221,7 +233,7 @@ pub fn UpdateBeforeLayout(self: *UIManager, engine_context: *EngineContext) !voi
     //not loaded before CurrentTheme: read for the first time, or again after its file changed
     const was_loaded = self.mTheme.IsIDValid() and engine_context.mAssetManager.IsLoaded(ThemeAsset, self.mTheme.mID);
     const theme = self.CurrentTheme(engine_context) orelse return;
-    const restyle_all = !was_loaded or self.mStyledTheme != self.mTheme.mID;
+    const restyle_all = !was_loaded or self.mStyledTheme != self.mTheme.mID or self.mStyleSystem.ThemesReread(engine_context);
     self.mStyledTheme = self.mTheme.mID;
     try self.mStyleSystem.Update(engine_context, theme, self.PlainTexture(engine_context), restyle_all);
 }
@@ -291,42 +303,6 @@ pub fn PlainTexture(self: *UIManager, engine_context: *EngineContext) AssetHandl
         };
     }
     return self.mPlainTexture;
-}
-
-/// The current theme is kept per project, see Project.zig
-pub const ProjectSettingsName = "UI";
-
-pub fn SaveProjectSettings(self: *UIManager, _: *EngineContext, write_stream: *std.json.Stringify) !void {
-    try write_stream.beginObject();
-    try write_stream.objectField("Theme");
-    //the default is written as null, so a project keeps following it
-    try write_stream.write(self.mTheme);
-    try write_stream.endObject();
-}
-
-pub fn LoadProjectSettings(self: *UIManager, engine_context: *EngineContext, scanner: *std.json.Scanner) !void {
-    try self.ResetProjectSettings(engine_context);
-
-    if (.object_begin != try scanner.next()) return error.UnexpectedToken;
-    while (true) {
-        const key = switch (try scanner.nextAlloc(engine_context.FrameAllocator(), .alloc_if_needed)) {
-            .object_end => break,
-            inline .string, .allocated_string => |slice| slice,
-            else => return error.UnexpectedToken,
-        };
-        if (std.mem.eql(u8, key, "Theme")) {
-            const theme = try std.json.innerParse(AssetHandle, engine_context.FrameAllocator(), scanner, .{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len });
-            self.SetTheme(engine_context, theme);
-        } else {
-            std.log.warn("Skipping unknown key '{s}' in the UI settings", .{key});
-            try scanner.skipValue();
-        }
-    }
-}
-
-/// Back to the engine's default theme
-pub fn ResetProjectSettings(self: *UIManager, engine_context: *EngineContext) !void {
-    self.SetTheme(engine_context, .uninit);
 }
 
 //------------------------------elements------------------------------
@@ -407,13 +383,17 @@ pub fn HasUIComponent(entity: Entity, comptime component_type: type) bool {
     return element.HasComponent(component_type);
 }
 
-/// One `kind` of UI event, about `target`, to it and to everything it is inside. For the events that are only an
-/// entity and a target (ValueChanged, TextChanged, ...)
-pub fn SendToChain(self: *UIManager, engine_context: *EngineContext, target: Entity, comptime kind: std.meta.Tag(UIEventData.EventT)) !void {
+/// Queues `event` for `entity`'s UI event scripts, and whatever else hears the UI's events
+pub fn Send(self: *UIManager, engine_context: *EngineContext, entity: Entity, event: UIEventData.UIEvent) !void {
+    try self.mEventManager.Insert(engine_context.EngineAllocator(), .UI, .{ .Entity = .{ .mEntity = entity, .mEvent = event } });
+}
+
+/// One `kind` of UI event, about `target`, to it and to everything it is inside. For the events that are only a
+/// target (ValueChanged, TextChanged, ...)
+pub fn SendToChain(self: *UIManager, engine_context: *EngineContext, target: Entity, comptime kind: std.meta.Tag(UIEventData.UIEvent)) !void {
     var current = target;
     while (true) {
-        const event = @unionInit(UIEventData.EventT, @tagName(kind), .{ .mEntity = current, .mTarget = target });
-        try self.mEventManager.Insert(engine_context.EngineAllocator(), .UI, event);
+        try self.Send(engine_context, current, @unionInit(UIEventData.UIEvent, @tagName(kind), .{ .mTarget = target }));
         const child_component = current.GetComponent(@import("../ECS/Components.zig").ChildComponent(Entity.Type)) orelse break;
         current = Entity{ .mID = child_component.mParent, .mManager = current.mManager };
     }
@@ -443,6 +423,15 @@ pub fn Style(engine_context: *EngineContext, entity: Entity, style_name: []const
     } else {
         _ = try element.AddComponent(engine_context, style);
     }
+}
+
+/// Everything in `root`'s tree that has a style takes it once, at the next style pass, and is then no longer styled:
+/// its colors, corners and font are its own from then on, kept as they are set and saved. For UI made in a game,
+/// which has no theme: only the editor's own UI follows one
+pub fn StyleOnce(root: Entity) void {
+    if (GetUIComponent(root, StyleComponent)) |style| style.mOnce = true;
+    var children = root.GetIterator(.Child);
+    while (children.next()) |child| StyleOnce(child);
 }
 
 /// Called by Manager.AddComponent for every component an element gets: one that scrolls gets somewhere to keep how far

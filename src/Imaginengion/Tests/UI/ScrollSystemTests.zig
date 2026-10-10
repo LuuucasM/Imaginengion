@@ -181,26 +181,24 @@ test "dragging a thumb scrolls as much as keeps it under the pointer" {
 
     const thumb = Clip(world.mList).mThumbY.?;
     //10 down the track, which has 50 - 27.8 to travel for 40 of scrolling
-    try engine_context.mUIManager.mScrollSystem.OnPointerEvent(engine_context, .{ .PointerDrag = .{
-        .mEntity = thumb,
+    try engine_context.mUIManager.mScrollSystem.OnPointerEvent(engine_context, .{ .mEntity = thumb, .mEvent = .{ .PointerDrag = .{
         .mButton = .BUTTON_LEFT,
         .mDelta = .{ .x = 0, .y = -10, .z = 0 },
         .mTotal = .{ .x = 0, .y = -10, .z = 0 },
         .mTarget = thumb,
-    } });
+    } } });
     try world.Frame();
     const length: f32 = 50.0 * 50.0 / 90.0;
     try std.testing.expectApproxEqAbs(10 * 40 / (50 - length), Clip(world.mList).mOffset.y, eps);
     try ExpectThumb(thumb, THICK, length, 50 - THICK / 2, 25 - length / 2 - 10);
 
     //the same drag heard by the list it is in (the chain's other events) changes nothing more
-    try engine_context.mUIManager.mScrollSystem.OnPointerEvent(engine_context, .{ .PointerDrag = .{
-        .mEntity = world.mList,
+    try engine_context.mUIManager.mScrollSystem.OnPointerEvent(engine_context, .{ .mEntity = world.mList, .mEvent = .{ .PointerDrag = .{
         .mButton = .BUTTON_LEFT,
         .mDelta = .{ .x = 0, .y = -10, .z = 0 },
         .mTotal = .{ .x = 0, .y = -10, .z = 0 },
         .mTarget = thumb,
-    } });
+    } } });
     try world.Frame();
     try std.testing.expectApproxEqAbs(10 * 40 / (50 - length), Clip(world.mList).mOffset.y, eps);
 }

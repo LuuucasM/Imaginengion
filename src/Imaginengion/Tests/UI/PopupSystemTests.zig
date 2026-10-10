@@ -7,7 +7,7 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
-const UIEvent = @import("../../Events/UIEventData.zig").EventT;
+const UIEvent = @import("../../Events/UIEventData.zig").UIEvent;
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const LayoutSystem = @import("../../UI/LayoutSystem.zig");
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
@@ -129,8 +129,12 @@ const TestWorld = struct {
         const queued = engine_context.mUIManager.mEventManager.mEventsArray.getPtr(.UI);
         var taken: std.ArrayList(UIEvent) = .empty;
         for (queued.items) |event| {
-            switch (event) {
-                .PopupOpened, .PopupClosed => |e| if (e.mEntity.mID == e.mTarget.mID) try taken.append(engine_context.FrameAllocator(), event),
+            const entity_event = switch (event) {
+                .Entity => |e| e,
+                else => continue,
+            };
+            switch (entity_event.mEvent) {
+                .PopupOpened, .PopupClosed => |e| if (entity_event.mEntity.mID == e.mTarget.mID) try taken.append(engine_context.FrameAllocator(), entity_event.mEvent),
                 else => {},
             }
         }

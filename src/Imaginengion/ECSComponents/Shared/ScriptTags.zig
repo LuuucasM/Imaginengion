@@ -10,8 +10,8 @@ const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
 
 const CollisionInfo = @import("../../Physics/Collisions.zig").CollisionInfo;
 const PreSolveInfo = @import("../../Physics/Collisions.zig").PreSolveInfo;
-const PointerEvent = @import("../../Events/PointerEventData.zig").EventT;
-const UIEvent = @import("../../Events/UIEventData.zig").EventT;
+const PointerEvent = @import("../../Events/PointerEventData.zig").PointerEvent;
+const UIEvent = @import("../../Events/UIEventData.zig").UIEvent;
 
 //ENTITY SCRIPTS
 pub const OnKeyPressedScript = struct {
@@ -80,8 +80,8 @@ pub const EntityOnPhysicsUpdateScript = struct {
 };
 
 /// Runs for every pointer event sent to the owner (see Events/PointerEventData.zig): entered, exited, pressed,
-/// released, clicked, dragged, dropped on. Like a key pressed script being handed every key, the script checks which
-/// event it got. The pointer's events go to what it is over and then to each thing that is inside of, so a script on a
+/// released, clicked, dragged, dropped on. Only the owner's own events reach it, so it never checks who an event is
+/// for; like a key pressed script being handed every key, it checks which event it got. The pointer's events go to what it is over and then to each thing that is inside of, so a script on a
 /// panel hears clicks on its rows too, and the event's mTarget is what was actually under the pointer. Returning
 /// .Handled keeps a press, click, drag or drop from going on to the owner's parents (an enter or exit is each one's own)
 pub const OnPointerEventScript = struct {

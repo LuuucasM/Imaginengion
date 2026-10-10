@@ -18,7 +18,7 @@ const Renderer = @import("../Renderer/Renderer.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
 const HierarchyPanel = @import("HierarchyPanel.zig").HierarchyPanel;
 const ComponentsPanel = @import("ComponentsPanel.zig");
@@ -214,12 +214,12 @@ pub fn OnRightClick(self: *TmplEditPanel, engine_context: *EngineContext, entity
     }
 }
 
-pub fn OnUIEvent(self: *const TmplEditPanel, engine_context: *EngineContext, event: UIEvent) !void {
+pub fn OnUIEvent(self: *const TmplEditPanel, engine_context: *EngineContext, event: EntityUIEvent) !void {
     try self.mComponents.OnUIEvent(engine_context, event);
 }
 
-pub fn OnDrop(self: *const TmplEditPanel, dropped: PointerDroppedEvent) void {
-    self.mComponents.OnDrop(dropped);
+pub fn OnDrop(self: *const TmplEditPanel, on: Entity, dropped: PointerDroppedEvent) void {
+    self.mComponents.OnDrop(on, dropped);
 }
 
 /// Writes the template back to its file. The asset manager then notices the file changed and reloads its copy, so the

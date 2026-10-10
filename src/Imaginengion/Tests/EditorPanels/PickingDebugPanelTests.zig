@@ -59,16 +59,17 @@ test "sections start folded and are only filled in while open, and the pointer s
     //the pointer section unfolded: its lines, with the last event once there is one
     Unfold(panel.mPointer);
     try panel.Update(engine_context, editor_program);
-    try std.testing.expectEqual(@as(usize, 6), LinesOf(panel.mPointer, &lines));
-    try std.testing.expectEqualStrings("Pointer over: nothing", lines[0]);
-    try std.testing.expectEqualStrings("Last event: none yet", lines[5]);
+    try std.testing.expectEqual(@as(usize, 8), LinesOf(panel.mPointer, &lines));
+    try std.testing.expectEqualStrings("Pointing into: nothing yet", lines[0]);
+    try std.testing.expectEqualStrings("Pointer over: nothing", lines[2]);
+    try std.testing.expectEqualStrings("Last event: none yet", lines[7]);
 
     const button = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
     try button.SetName(engine_context, "Button");
-    panel.OnPointerEvent(.{ .PointerClicked = .{ .mEntity = button, .mButton = .BUTTON_LEFT, .mClicks = 2, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = button } });
+    panel.OnPointerEvent(.{ .mEntity = button, .mEvent = .{ .PointerClicked = .{ .mButton = .BUTTON_LEFT, .mClicks = 2, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = button } } });
     try panel.Update(engine_context, editor_program);
     _ = LinesOf(panel.mPointer, &lines);
-    try std.testing.expectEqualStrings("Last event: BUTTON_LEFT clicked 'Button' x2", lines[5]);
+    try std.testing.expectEqualStrings("Last event: BUTTON_LEFT clicked 'Button' x2", lines[7]);
 
     //the window section, unfolded
     Unfold(panel.mWindowSection);

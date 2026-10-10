@@ -83,14 +83,14 @@ const TestWorld = struct {
     }
 
     fn Drop(self: *TestWorld, source: Entity, target: Entity) !void {
-        try self.mEngineContext.mUIManager.OnPointerEvent(self.mEngineContext, .{ .PointerDropped = .{ .mEntity = target, .mSource = source, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } });
+        try self.mEngineContext.mUIManager.OnPointerEvent(self.mEngineContext, .{ .mEntity = target, .mEvent = .{ .PointerDropped = .{ .mSource = source, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     }
 
     /// A left click on the Clear item of `box`'s right-click menu
     fn Clear(self: *TestWorld, box: Entity) !void {
         var items = WidgetActions.PopupOf(box).?.GetIterator(.Child);
         const clear = items.next().?;
-        try self.mEngineContext.mUIManager.OnPointerEvent(self.mEngineContext, .{ .PointerClicked = .{ .mEntity = clear, .mButton = .BUTTON_LEFT, .mClicks = 1, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = clear } });
+        try self.mEngineContext.mUIManager.OnPointerEvent(self.mEngineContext, .{ .mEntity = clear, .mEvent = .{ .PointerClicked = .{ .mButton = .BUTTON_LEFT, .mClicks = 1, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = clear } } });
     }
 
     fn ShowFields(self: *TestWorld) !void {
@@ -195,7 +195,7 @@ test "the Components panel's Possess box possesses a dropped entity, linking bot
     try panel.Update(engine_context, .{ .player = player });
     const box = panel.mPossessBox.?;
 
-    panel.OnDrop(.{ .mEntity = box, .mSource = try world.Row(hero), .mPosition = .{ .x = 0, .y = 0, .z = 0 } });
+    panel.OnDrop(box, .{ .mSource = try world.Row(hero), .mPosition = .{ .x = 0, .y = 0, .z = 0 } });
     try std.testing.expectEqual(hero.mID, player.GetComponent(PossessComponent).?.mPossessedEntity.mID);
     try std.testing.expectEqual(player.mID, hero.GetComponent(PlayerSlotComponent).?.mPlayerEntity.mID);
     try panel.Update(engine_context, .{ .player = player });

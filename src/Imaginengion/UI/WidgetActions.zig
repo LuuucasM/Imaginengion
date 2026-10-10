@@ -37,11 +37,19 @@ pub const SetValue = NumberFieldSystem.SetValue;
 
 /// Checked or unchecked: adds `SelectedTag` to the entity, or takes it off. ValueChanged goes to it and its parents
 pub fn Toggle(engine_context: *EngineContext, entity: Entity) !void {
-    if (entity.HasComponent(SelectedTag)) {
+    const checked = !entity.HasComponent(SelectedTag);
+    if (checked) {
+        _ = try entity.AddComponent(engine_context, SelectedTag{});
+    } else {
         //at once, so it is drawn unchecked this frame
         try entity.RemoveComponentSync(engine_context, SelectedTag);
-    } else {
-        _ = try entity.AddComponent(engine_context, SelectedTag{});
+    }
+    //a check mark inside it (Widgets.AddCheckMark) shows only while it is checked
+    var marks = entity.GetIterator(.Child);
+    while (marks.next()) |mark| {
+        const item = mark.GetComponent(LayoutItemComponent) orelse continue;
+        item.mCollapsed = !checked;
+        try entity.MarkLayoutDirty(engine_context);
     }
     try engine_context.mUIManager.SendToChain(engine_context, entity, .ValueChanged);
 }

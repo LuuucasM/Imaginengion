@@ -137,8 +137,8 @@ pub fn ScriptOwnerOf(script_type: ScriptType) ?std.meta.Tag(SelectedObject) {
 }
 
 /// A drop on the panel: a script added to the selected object, if it is the kind of script that object takes
-pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, dropped: PointerDroppedEvent, selected: ?SelectedObject) !void {
-    if (!Same(dropped.mEntity, self.mArea)) return;
+pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent, selected: ?SelectedObject) !void {
+    if (!Same(on, self.mArea)) return;
     const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
     const rel_path = file_ref.mRelPath.items;
     if (!std.mem.eql(u8, std.fs.path.extension(rel_path), ".zig")) {

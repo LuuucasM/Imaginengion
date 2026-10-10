@@ -16,6 +16,8 @@ const Vec4 = MathTypes.Vec4;
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const ShapeComponent = EntityComponents.ShapeComponent;
+const LayoutItemComponent = EntityComponents.LayoutItemComponent;
+const Layout = @import("../../UI/Layout.zig");
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const TextComponent = EntityComponents.TextComponent;
 const ColliderComponent = EntityComponents.ColliderComponent;
@@ -230,6 +232,34 @@ test "a binding finds its field after the component has moved, and an edit sets 
     try EditNumber(world, x, 8);
     try std.testing.expectEqual(@as(f32, 8), world.mObject.GetComponent(TransformComponent).?.GetTranslation().x);
     try std.testing.expect(world.mObject.HasComponent(TransformDirtyTag));
+}
+
+test "typing a size into a quad layout sizes keeps it: that side of its layout item becomes Fixed" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    //a button's box: layout fitted it to 40 x 20
+    _ = try world.mObject.AddComponent(engine_context, ShapeComponent.MakeQuad(.{ .Size = .{ .x = 40, .y = 20 } }));
+    _ = try world.mObject.AddComponent(engine_context, LayoutItemComponent{ .mComputedSize = .{ .x = 40, .y = 20 } });
+    const quad = world.mObject.GetComponent(ShapeComponent).?.GetQuad().?;
+    var ui = world.Builder(ShapeComponent);
+    try ui.Vec2Field(&quad.Size, "Size", .{});
+    try world.ShowFields();
+    var numbers = world.Widget(0).GetIterator(.Child);
+    _ = numbers.next(); //the X box
+    const x = numbers.next().?;
+
+    //only the width was typed: it is kept, the height still fits, and the inspector is built again to show it
+    try EditNumber(world, x, 100);
+    const item = world.mObject.GetComponent(LayoutItemComponent).?;
+    try std.testing.expectEqual(Layout.Sizing{ .Fixed = 100 }, item.mWidth);
+    try std.testing.expect(item.mHeight == .Fit);
+    //not while the field is still being dragged, which building again would end: once the drag is let go
+    const ui_manager = &engine_context.mUIManager;
+    ui_manager.mNumberFieldSystem.mDragged = x;
+    try std.testing.expect(!ui_manager.TakeRebuild(world.mPanel));
+    ui_manager.mNumberFieldSystem.mDragged = null;
+    try std.testing.expect(ui_manager.TakeRebuild(world.mPanel));
 }
 
 test "fields read and write each type as a value" {

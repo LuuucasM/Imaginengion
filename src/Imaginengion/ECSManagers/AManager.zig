@@ -12,6 +12,7 @@ const AssetComponents = @import("../ECSComponents/AComponents.zig");
 const AssetComponentsList = AssetComponents.ComponentsList;
 const FileMetaData = AssetComponents.FileMetaData;
 const PendingDelete = AssetComponents.PendingDelete;
+const LoadFailedTag = AssetComponents.LoadFailedTag;
 const AssetMetaData = AssetComponents.AssetMetaData;
 const GenMetaData = AssetComponents.GenMetaData;
 const Texture2D = AssetComponents.Texture2D;
@@ -237,6 +238,9 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
     if (self.mECSManager.IsActiveEntity(asset_id)) {
         if (self.mECSManager.GetComponent(asset_type, asset_id)) |asset| {
             return asset;
+        } else if (self.mECSManager.HasComponent(LoadFailedTag, asset_id)) {
+            //it failed last time and the file has not changed since, so it would only fail again
+            return try self.GetDefaultAsset(asset_type);
         } else {
             //only the load is zoned: the hit path above is a lookup that runs for every drawn shape
             const zone = Tracy.ZoneInit("AssetManager::LoadAsset", @src());
@@ -255,6 +259,7 @@ pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_
             asset_component.Init(engine_context, abs_path, file_data.mRelPath.items, asset_file) catch |err| {
                 if (err == error.AssetInitFailed) {
                     std.log.err("Failed To initialize asset {s} for asset type {s}\n", .{ abs_path, @typeName(asset_type) });
+                    _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), asset_id, LoadFailedTag{});
                     return try self.GetDefaultAsset(asset_type);
                 } else return err;
             };
@@ -446,6 +451,10 @@ pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: E
                 if (self.mECSManager.HasComponent(comp_type, e.mAssetID)) {
                     try self.mECSManager.RemoveComponent(engine_context, e.mAssetID, ECSManagerT.ComponentInd(comp_type));
                 }
+            }
+            //new contents get a fresh try
+            if (self.mECSManager.HasComponent(LoadFailedTag, e.mAssetID)) {
+                try self.mECSManager.RemoveComponent(engine_context, e.mAssetID, ECSManagerT.ComponentInd(LoadFailedTag));
             }
         },
         .ToDestroyAsset => |e| {

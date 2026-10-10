@@ -150,7 +150,8 @@ test "a header per component, rows from UIRender, and the add and delete menus" 
     var parts: [16]Entity = undefined;
     try std.testing.expectEqual(@as(usize, 4), Children(panel.mList.mRoot.?, &parts));
     var rows: [8]Entity = undefined;
-    try std.testing.expectEqual(@as(usize, 1), test_panel.Rows(0, &rows));
+    //the style's theme file and its name
+    try std.testing.expectEqual(@as(usize, 2), test_panel.Rows(0, &rows));
     //no UIRender: an empty header, still there to delete
     try std.testing.expectEqual(@as(usize, 0), test_panel.Rows(1, &rows));
 

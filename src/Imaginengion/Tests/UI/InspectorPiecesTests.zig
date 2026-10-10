@@ -238,12 +238,12 @@ test "an asset field shows its asset's name, and takes a dropped file of a kind 
     //something carrying a file, dropped on the box: a script is turned down, a picture taken
     const carried = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try carried.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "Mover.zig", .Prj));
-    try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .PointerDropped = .{ .mEntity = box, .mSource = carried, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } });
+    try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = box, .mEvent = .{ .PointerDropped = .{ .mSource = carried, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     try std.testing.expect(world.mObject.GetComponent(SurfaceComponent).?.mTexture.mID == @import("../../ECSObjects/AssetHandle.zig").NullObject);
 
     const picture = try world.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try picture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "src/Imaginengion/EngineAssets/textures/White.png", .Eng));
-    try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .PointerDropped = .{ .mEntity = box, .mSource = picture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } });
+    try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = box, .mEvent = .{ .PointerDropped = .{ .mSource = picture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } } } });
     const texture = world.mObject.GetComponent(SurfaceComponent).?.mTexture;
     try std.testing.expect(texture.mID != @import("../../ECSObjects/AssetHandle.zig").NullObject);
     try world.ShowFields();

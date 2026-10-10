@@ -29,6 +29,7 @@ const Quat = MathTypes.Quat;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutComponent = EntityComponents.LayoutComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
+const ShapeComponent = EntityComponents.ShapeComponent;
 const TextComponent = EntityComponents.TextComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const RigidBodyComponent = EntityComponents.RigidBodyComponent;
@@ -157,7 +158,7 @@ pub const Builder = struct {
     /// the component as it was when this was built, which field offsets are measured from
     mBase: usize,
     mResolve: *const fn (ObjectRef) ?*anyopaque,
-    mAfterEdit: *const fn (*EngineContext, ObjectRef) anyerror!void,
+    mAfterEdit: *const fn (*EngineContext, ObjectRef) anyerror!bool,
     mOptions: Widgets.Options,
 
     pub fn Float(self: *Builder, field: *f32, label: []const u8, options: NumberOptions) !void {
@@ -485,7 +486,8 @@ pub const Builder = struct {
             .mAfterEdit = self.mAfterEdit,
             .mOnChange = on_change,
             .mConvert = convert,
-            .mRebuild = if (rebuilds) self.mRoot else null,
+            .mRoot = self.mRoot,
+            .mRebuilds = rebuilds,
         });
     }
 };
@@ -557,23 +559,27 @@ fn ResolveFor(comptime object_type: type, comptime component_type: type) *const 
 }
 
 /// What has to happen after a component of one type is edited, the edits going straight into its fields: a transform's
-/// world transform worked out again, a layout setting laid out again, a rigid body kept in step with its mass
-fn AfterEditFor(comptime object_type: type, comptime component_type: type) *const fn (*EngineContext, ObjectRef) anyerror!void {
+/// world transform worked out again, a layout setting laid out again, a rigid body kept in step with its mass, a typed
+/// quad size kept (KeepQuadSize). True when that changed what the inspector shows
+fn AfterEditFor(comptime object_type: type, comptime component_type: type) *const fn (*EngineContext, ObjectRef) anyerror!bool {
     return &struct {
-        fn AfterEdit(engine_context: *EngineContext, object: ObjectRef) anyerror!void {
+        fn AfterEdit(engine_context: *EngineContext, object: ObjectRef) anyerror!bool {
             //a scroll or popup setting changes how the element's entity is laid out, a style name how it looks
             if (object_type == UIElement) {
                 const element = object.UIElement;
-                if (!element.IsActive()) return;
-                if (component_type == StyleComponent) return try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
-                if (component_type != ScrollComponent and component_type != PopupComponent) return;
+                if (!element.IsActive()) return false;
+                if (component_type == StyleComponent) {
+                    try engine_context.mUIManager.MarkElementStyleDirty(engine_context, element);
+                    return false;
+                }
+                if (component_type != ScrollComponent and component_type != PopupComponent) return false;
                 const owner = element.GetOwner();
                 if (owner.IsActive()) try owner.MarkLayoutDirty(engine_context);
-                return;
+                return false;
             }
-            if (object_type != Entity) return;
+            if (object_type != Entity) return false;
             const entity = object.Entity;
-            if (!entity.IsActive()) return;
+            if (!entity.IsActive()) return false;
             if (component_type == TransformComponent) {
                 try entity.MarkTransformDirty(engine_context);
                 //x and y of something layout places snap back, z stays editable
@@ -583,8 +589,30 @@ fn AfterEditFor(comptime object_type: type, comptime component_type: type) *cons
                 try entity.MarkLayoutDirty(engine_context);
             }
             if (component_type == RigidBodyComponent) try entity.SyncRigidBody(engine_context);
+            if (component_type == ShapeComponent) return try KeepQuadSize(engine_context, entity);
+            return false;
         }
     }.AfterEdit;
+}
+
+/// A quad that layout sizes had its size typed in: each side typed keeps that size from now on, its LayoutItemComponent
+/// Width or Height made Fixed, rather than layout putting the size back the next time it lays the entity out (when its
+/// text changes, or its scene is opened). The side typed is the one that is no longer the size layout last gave it.
+/// True when that made a side Fixed, which changes the fields the LayoutItemComponent shows
+fn KeepQuadSize(engine_context: *EngineContext, entity: Entity) !bool {
+    const item = entity.GetComponent(LayoutItemComponent) orelse return false;
+    const quad = (entity.GetComponent(ShapeComponent) orelse return false).GetQuad() orelse return false;
+    var made_fixed = false;
+    if (quad.Size.x != item.mComputedSize.x) {
+        made_fixed = made_fixed or item.mWidth != .Fixed;
+        item.mWidth = .{ .Fixed = quad.Size.x };
+    }
+    if (quad.Size.y != item.mComputedSize.y) {
+        made_fixed = made_fixed or item.mHeight != .Fixed;
+        item.mHeight = .{ .Fixed = quad.Size.y };
+    }
+    try entity.MarkLayoutDirty(engine_context);
+    return made_fixed;
 }
 
 fn ObjectTag(comptime object_type: type) []const u8 {

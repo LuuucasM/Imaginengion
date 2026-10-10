@@ -29,6 +29,8 @@ const TransformComponent = EntityComponents.TransformComponent;
 const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
 const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
 const StyleSystem = @import("../../UI/StyleSystem.zig");
+const StyleComponent = @import("../../ECSComponents/UIComponents.zig").StyleComponent;
+const WidgetActions = @import("../../UI/WidgetActions.zig");
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -261,7 +263,7 @@ test "the UI menus make ready-made UI entities: in the selected scene, under an 
     try std.testing.expect(found_panel);
 }
 
-test "a ready-made UI entity in a game scene is built in world units, and scaling it scales its text with it" {
+test "a ready-made UI entity in a game scene is built in world units, and stretching it stretches its text with it" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
@@ -284,11 +286,12 @@ test "a ready-made UI entity in a game scene is built in world units, and scalin
     const text_params = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
     try std.testing.expectApproxEqAbs(@as(f32, 1), text_params.FontSize, 0.0001);
 
-    //shrinking only x and y shrinks the label too: text is flat, its z scale doesn't count
-    try button.SetScale(engine_context, .{ .x = 0.5, .y = 0.5, .z = 1 });
+    //stretching the button stretches its label the same way, each axis on its own
+    try button.SetScale(engine_context, .{ .x = 2, .y = 0.5, .z = 1 });
     try PhysicsManager.UpdateWorldTransforms(game_world, engine_context);
-    const shrunk = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
-    try std.testing.expectApproxEqAbs(@as(f32, 0.5), shrunk.FontSize, 0.0001);
+    const stretched = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
+    try std.testing.expectApproxEqAbs(@as(f32, 2), stretched.Stretch.x, 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), stretched.Stretch.y, 0.0001);
 
     //a text made inside the button is in world units too
     try entities.OnRightClick(engine_context, entities.mRows.items[0].Header);
@@ -298,9 +301,39 @@ test "a ready-made UI entity in a game scene is built in world units, and scalin
         try std.testing.expectApproxEqAbs(@as(f32, 1), child.GetComponent(TextComponent).?.mFontSize, 0.0001);
     }
 
+    //it takes the theme's look once, and keeps what is set on it after
+    try std.testing.expect(UIManager.GetUIComponent(button, StyleComponent).?.mOnce);
+
     //the theme's sizes are turned into world units the same way when it styles something in a game scene
     try std.testing.expectEqual(@as(f32, 1.0 / 16.0), StyleSystem.ThemeUnit(button));
     try std.testing.expectEqual(@as(f32, 1), StyleSystem.ThemeUnit(world.mPage));
+}
+
+test "a ready-made checkbox shows a check mark only while it is checked" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    var selected: ?SelectedObject = .{ .scene_layer = level };
+    try entities.Run(engine_context, .{ .NewUI = .Checkbox }, game_world, &selected);
+    try entities.Update(engine_context, game_world, selected);
+    const checkbox = for (entities.mRows.items) |row| {
+        if (row.Depth == 0) break row.Object;
+    } else unreachable;
+    var parts = checkbox.GetIterator(.Child);
+    const box = parts.next().?;
+    var marks = box.GetIterator(.Child);
+    const mark = marks.next().?;
+    try std.testing.expectEqualStrings("Check", mark.GetComponent(NameComponent).?.mName.items);
+
+    try std.testing.expect(mark.GetComponent(LayoutItemComponent).?.mCollapsed);
+    try WidgetActions.Toggle(engine_context, box);
+    try std.testing.expect(!mark.GetComponent(LayoutItemComponent).?.mCollapsed);
+    try WidgetActions.Toggle(engine_context, box);
+    try std.testing.expect(mark.GetComponent(LayoutItemComponent).?.mCollapsed);
 }
 
 test "a file dropped on the panel: another type's file ignored, an entity file needs a scene selected" {
@@ -325,14 +358,14 @@ test "a file dropped on the panel: another type's file ignored, an entity file n
 
     //an entity file on the Scenes panel: left alone
     var selected: ?SelectedObject = .{ .scene_layer = level };
-    try scenes.OnDrop(engine_context, .{ .mEntity = scenes.mArea, .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
+    try scenes.OnDrop(engine_context, scenes.mArea, .{ .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
     try scenes.Update(engine_context, game_world, selected);
     try std.testing.expectEqual(@as(usize, 1), scenes.mRows.items.len);
     try std.testing.expectEqual(level.mID, selected.?.scene_layer.mID);
 
     //on the Entities panel with no scene selected: nowhere to put it
     selected = null;
-    try entities.OnDrop(engine_context, .{ .mEntity = entities.mArea, .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
+    try entities.OnDrop(engine_context, entities.mArea, .{ .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
     try entities.Update(engine_context, game_world, selected);
     try std.testing.expectEqual(@as(usize, 0), entities.mRows.items.len);
     try std.testing.expect(selected == null);

@@ -41,9 +41,15 @@ pub fn OpenFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 
     return path_result;
 }
 
-pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8) ![]const u8 {
+/// `default_folder` is the folder the dialog opens in, null for the system's choice
+pub fn SaveFile(allocator: std.mem.Allocator, filter: [*c]const u8, default_folder: ?[]const u8) ![]const u8 {
+    //the native separator, as Windows' dialog can't open a folder written with '/'
+    const folder: ?[:0]u8 = if (default_folder) |path| try allocator.dupeSentinel(u8, path, 0) else null;
+    defer if (folder) |path| allocator.free(path);
+    if (folder) |path| std.mem.replaceScalar(u8, path, if (std.fs.path.sep == '/') '\\' else '/', std.fs.path.sep);
+
     var outPath: [*c]nfd.nfdchar_t = undefined;
-    const file_result = nfd.NFD_SaveDialog(&filter[1], null, &outPath);
+    const file_result = nfd.NFD_SaveDialog(&filter[1], if (folder) |path| path.ptr else null, &outPath);
 
     if (file_result != nfd.NFD_OKAY) {
         if (file_result == nfd.NFD_ERROR) {

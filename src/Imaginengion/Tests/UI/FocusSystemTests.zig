@@ -7,7 +7,8 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
-const UIEvent = @import("../../Events/UIEventData.zig").EventT;
+const UIEventData = @import("../../Events/UIEventData.zig");
+const EntityUIEvent = UIEventData.EntityEvent;
 const MouseCodes = @import("../../Inputs/InputEnums.zig").MouseCodes;
 const ScanCodes = @import("../../Inputs/InputEnums.zig").ScanCodes;
 
@@ -96,13 +97,17 @@ const TestWorld = struct {
 
     /// The focus and text events sent since the last call, the way the frame's processing empties them. Pointer
     /// events are left out: they are the pointer system's tests'
-    fn TakeEvents(self: *TestWorld) ![]UIEvent {
+    fn TakeEvents(self: *TestWorld) ![]EntityUIEvent {
         const engine_context = self.mEngineContext;
         const queued = engine_context.mUIManager.mEventManager.mEventsArray.getPtr(.UI);
-        var taken: std.ArrayList(UIEvent) = .empty;
+        var taken: std.ArrayList(EntityUIEvent) = .empty;
         for (queued.items) |event| {
-            switch (event) {
-                .FocusGained, .FocusLost, .TextChanged, .TextSubmitted => try taken.append(engine_context.FrameAllocator(), event),
+            const entity_event = switch (event) {
+                .Entity => |e| e,
+                else => continue,
+            };
+            switch (entity_event.mEvent) {
+                .FocusGained, .FocusLost, .TextChanged, .TextSubmitted => try taken.append(engine_context.FrameAllocator(), entity_event),
                 else => {},
             }
         }
@@ -127,14 +132,14 @@ fn AddUI(engine_context: *EngineContext, entity: Entity, component: anytype) !vo
     _ = try UIManager.ElementOf(entity).?.AddComponent(engine_context, component);
 }
 
-const Kind = std.meta.Tag(UIEvent);
+const Kind = std.meta.Tag(UIEventData.UIEvent);
 
 /// The kinds of events in order, one for each entity in the text input's chain (it, then the form)
-fn ExpectKinds(events: []const UIEvent, kinds: []const Kind) !void {
+fn ExpectKinds(events: []const EntityUIEvent, kinds: []const Kind) !void {
     try std.testing.expectEqual(kinds.len * 2, events.len);
     for (kinds, 0..) |kind, i| {
-        try std.testing.expectEqual(kind, std.meta.activeTag(events[i * 2]));
-        try std.testing.expectEqual(kind, std.meta.activeTag(events[i * 2 + 1]));
+        try std.testing.expectEqual(kind, std.meta.activeTag(events[i * 2].mEvent));
+        try std.testing.expectEqual(kind, std.meta.activeTag(events[i * 2 + 1].mEvent));
     }
 }
 
@@ -159,9 +164,9 @@ test "pressing a text input gives it the keyboard, with the caret at the end, an
 
     const events = try world.TakeEvents();
     try ExpectKinds(events, &.{.FocusGained});
-    try std.testing.expectEqual(world.mName.mID, events[0].FocusGained.mEntity.mID);
-    try std.testing.expectEqual(world.mForm.mID, events[1].FocusGained.mEntity.mID);
-    try std.testing.expectEqual(world.mName.mID, events[1].FocusGained.mTarget.mID);
+    try std.testing.expectEqual(world.mName.mID, events[0].mEntity.mID);
+    try std.testing.expectEqual(world.mForm.mID, events[1].mEntity.mID);
+    try std.testing.expectEqual(world.mName.mID, events[1].mEvent.FocusGained.mTarget.mID);
 
     //the game's polled keys read nothing while it is being typed into
     try std.testing.expect(!world.mEngineContext.mInputManager.IsKeyPressed(.A));
@@ -250,13 +255,12 @@ test "a text input that focuses on a double click ignores a single press, and ta
 
     //a double click comes as a pointer click to the text input and the form; only the text input's own counts
     for ([_]Entity{ world.mName, world.mForm }) |entity| {
-        try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .PointerClicked = .{
-            .mEntity = entity,
+        try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = entity, .mEvent = .{ .PointerClicked = .{
             .mButton = .BUTTON_LEFT,
             .mClicks = 2,
             .mPosition = .{ .x = 0, .y = 0, .z = 0 },
             .mTarget = world.mName,
-        } });
+        } } });
     }
     try ExpectFocused(world, world.mName);
     try std.testing.expectEqual(@as(usize, 3), engine_context.mUIManager.mFocusSystem.Caret());
@@ -320,8 +324,8 @@ test "pressing somewhere else keeps the edit, and pressing another text input mo
     try std.testing.expectEqualStrings("Bobby", TestWorld.TextOf(world.mName));
     const events = try world.TakeEvents();
     try ExpectKinds(events, &.{ .TextSubmitted, .FocusLost, .FocusGained });
-    try std.testing.expectEqual(world.mName.mID, events[0].TextSubmitted.mTarget.mID);
-    try std.testing.expectEqual(world.mTeam.mID, events[4].FocusGained.mTarget.mID);
+    try std.testing.expectEqual(world.mName.mID, events[0].mEvent.TextSubmitted.mTarget.mID);
+    try std.testing.expectEqual(world.mTeam.mID, events[4].mEvent.FocusGained.mTarget.mID);
 
     //pressing the one that has it keeps it
     try world.Press(world.mTeam, .BUTTON_LEFT);

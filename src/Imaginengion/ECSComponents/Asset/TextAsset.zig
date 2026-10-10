@@ -44,9 +44,10 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
 
     const frame_allocator = engine_context.FrameAllocator();
 
-    const ext = std.fs.path.extension(rel_path);
-
-    const base_path = rel_path[0 .. rel_path.len - ext.len];
+    //the generated files sit next to the font, so they are built from the absolute path: the rel path is
+    //relative to the project (or engine) folder, not the working directory the files are opened from
+    const ext = std.fs.path.extension(abs_path);
+    const base_path = abs_path[0 .. abs_path.len - ext.len];
 
     const name_png = try std.fmt.allocPrint(frame_allocator, "{s}.png", .{base_path});
     const name_json = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{base_path});
@@ -113,9 +114,9 @@ pub fn Init(self: *TextAsset, engine_context: *EngineContext, abs_path: []const 
 
     try self.ProcessTextJson(engine_context, file_json.?);
 
-    const atlas_rel_path = name_png;
-    const atlas_abs_path = try std.fmt.allocPrint(frame_allocator, "{s}.json", .{abs_path});
-    try self.mAtlas.Init(engine_context, atlas_rel_path, atlas_abs_path, file_png.?);
+    const rel_ext = std.fs.path.extension(rel_path);
+    const atlas_rel_path = try std.fmt.allocPrint(frame_allocator, "{s}.png", .{rel_path[0 .. rel_path.len - rel_ext.len]});
+    try self.mAtlas.Init(engine_context, name_png, atlas_rel_path, file_png.?);
 }
 
 /// Assets are shared through reference counted handles instead of being copied, and this one owns a GPU

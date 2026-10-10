@@ -6,7 +6,8 @@ const std = @import("std");
 const EngineContext = @import("../../Core/EngineContext.zig");
 const Entity = @import("../../ECSObjects/Entity.zig");
 const Scene = @import("../../ECSObjects/Scene.zig");
-const PointerEvent = @import("../../Events/PointerEventData.zig").EventT;
+const PointerEventData = @import("../../Events/PointerEventData.zig");
+const EntityPointerEvent = PointerEventData.EntityEvent;
 const Vec3 = @import("../../Math/MathTypes.zig").Vec3;
 const Vec2 = @import("../../Math/MathTypes.zig").Vec2;
 const CameraRay = @import("../../Math/CameraRay.zig");
@@ -74,10 +75,10 @@ const TestWorld = struct {
     }
 
     /// The events sent since the last call, the way the frame's processing empties them
-    fn TakeEvents(self: *TestWorld) ![]PointerEvent {
+    fn TakeEvents(self: *TestWorld) ![]EntityPointerEvent {
         const engine_context = self.mEngineContext;
         const queued = engine_context.mPointerEventManager.mEventsArray.getPtr(.Pointer);
-        const taken = try engine_context.FrameAllocator().dupe(PointerEvent, queued.items);
+        const taken = try engine_context.FrameAllocator().dupe(EntityPointerEvent, queued.items);
         queued.clearRetainingCapacity();
         return taken;
     }
@@ -102,24 +103,16 @@ fn ViewThrough(pixel: Vec2(f32), width: f32, height: f32) PointerSystem.View {
     };
 }
 
-const Kind = std.meta.Tag(PointerEvent);
-
-/// Who an event is for
-fn EntityOf(event: PointerEvent) Entity {
-    return switch (event) {
-        .Default => unreachable,
-        inline else => |e| e.mEntity,
-    };
-}
+const Kind = std.meta.Tag(PointerEventData.PointerEvent);
 
 /// Exactly these entities got an event of this kind, in any order
-fn ExpectSent(events: []const PointerEvent, kind: Kind, expected: []const Entity) !void {
+fn ExpectSent(events: []const EntityPointerEvent, kind: Kind, expected: []const Entity) !void {
     var count: usize = 0;
     for (events) |event| {
-        if (std.meta.activeTag(event) != kind) continue;
+        if (std.meta.activeTag(event.mEvent) != kind) continue;
         count += 1;
         var found = false;
-        for (expected) |entity| found = found or entity.mID == EntityOf(event).mID;
+        for (expected) |entity| found = found or entity.mID == event.mEntity.mID;
         try std.testing.expect(found);
     }
     try std.testing.expectEqual(expected.len, count);
@@ -151,7 +144,7 @@ test "a disabled entity and what is inside it are passed by: the pointer is over
     try ExpectSent(events, .PointerClicked, &.{world.mMenu});
     try ExpectTagged(PressedTag, &.{}, &.{ world.mLabel, world.mPlay, world.mMenu });
     for (events) |event| {
-        if (event == .PointerClicked) try std.testing.expectEqual(world.mMenu.mID, event.PointerClicked.mTarget.mID);
+        if (event.mEvent == .PointerClicked) try std.testing.expectEqual(world.mMenu.mID, event.mEvent.PointerClicked.mTarget.mID);
     }
 
     //enabled again, the next frame it is hovered like anything else
@@ -208,8 +201,8 @@ test "a click in place clicks the whole chain, with how many times and what was 
     const events = try world.TakeEvents();
     try ExpectSent(events, .PointerClicked, &chain);
     for (events) |event| {
-        try std.testing.expectEqual(@as(u8, 2), event.PointerClicked.mClicks);
-        try std.testing.expectEqual(world.mLabel.mID, event.PointerClicked.mTarget.mID);
+        try std.testing.expectEqual(@as(u8, 2), event.mEvent.PointerClicked.mClicks);
+        try std.testing.expectEqual(world.mLabel.mID, event.mEvent.PointerClicked.mTarget.mID);
     }
 }
 
@@ -236,7 +229,7 @@ test "a release goes to what was pressed, and a click only to what was under the
     try pointer.OnClicked(engine_context, .BUTTON_LEFT, 1);
     const events = try world.TakeEvents();
     try ExpectSent(events, .PointerClicked, &.{world.mMenu});
-    try std.testing.expectEqual(world.mQuit.mID, events[0].PointerClicked.mTarget.mID);
+    try std.testing.expectEqual(world.mQuit.mID, events[0].mEvent.PointerClicked.mTarget.mID);
 }
 
 test "an entity held by two buttons stays pressed until both are up" {
@@ -274,9 +267,9 @@ test "when the hovered entity is deleted, what it was inside still hears the poi
 //-------------------------------dragging-------------------------------
 
 /// The one event of this kind that is for `entity`
-fn EventFor(events: []const PointerEvent, kind: Kind, entity: Entity) !PointerEvent {
+fn EventFor(events: []const EntityPointerEvent, kind: Kind, entity: Entity) !PointerEventData.PointerEvent {
     for (events) |event| {
-        if (std.meta.activeTag(event) == kind and EntityOf(event).mID == entity.mID) return event;
+        if (std.meta.activeTag(event.mEvent) == kind and event.mEntity.mID == entity.mID) return event.mEvent;
     }
     return error.TestExpectedEvent;
 }

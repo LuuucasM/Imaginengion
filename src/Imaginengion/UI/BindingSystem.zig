@@ -9,8 +9,8 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
+const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Quat = MathTypes.Quat;
@@ -70,13 +70,13 @@ pub fn Update(_: *BindingSystem, engine_context: *EngineContext) !void {
 }
 
 /// One of the frame's UI events: a bound widget's edit is written into its field
-pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: UIEvent) !void {
+pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: EntityUIEvent) !void {
     const zone = Tracy.ZoneInit("BindingSystem::OnUIEvent", @src());
     defer zone.Deinit();
     //one event per entity in the chain: the bound widget's own
-    const widget = switch (event) {
-        .ValueChanged => |e| e.mEntity,
-        .TextSubmitted => |e| if (e.mEntity.mID == e.mTarget.mID) e.mEntity else return,
+    const widget = switch (event.mEvent) {
+        .ValueChanged => event.mEntity,
+        .TextSubmitted => |e| if (event.mEntity.mID == e.mTarget.mID) event.mEntity else return,
         else => return,
     };
     const binding = (UIManager.GetUIComponent(widget, FieldBindingComponent) orelse return).*;
@@ -87,12 +87,12 @@ pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: UI
 /// One of the frame's pointer events: a file dropped on an asset field that takes its kind becomes the field's asset, a
 /// hierarchy row dropped on a reference field that takes its kind becomes the field's object, and a field's Clear
 /// clicked writes what it clears to
-pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, event: PointerEvent) !void {
-    const dropped = switch (event) {
+pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
+    const dropped = switch (event.mEvent) {
         .PointerDropped => |e| e,
         .PointerClicked => |e| {
             if (e.mButton != .BUTTON_LEFT) return;
-            const binding = (UIManager.GetUIComponent(e.mEntity, FieldBindingComponent) orelse return).*;
+            const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
             const cleared = binding.mClear orelse return;
             return try self.Write(engine_context, binding, cleared);
         },
@@ -100,7 +100,7 @@ pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, even
     };
     const zone = Tracy.ZoneInit("BindingSystem::OnPointerEvent", @src());
     defer zone.Deinit();
-    const binding = (UIManager.GetUIComponent(dropped.mEntity, FieldBindingComponent) orelse return).*;
+    const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
     if (binding.mTakes) |kind| {
         const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
         if (std.meta.activeTag(object_ref.mObject) != kind) {
@@ -135,8 +135,9 @@ fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBin
     try binding.mAccess.Write(engine_context, field, value);
 
     if (binding.mOnChange) |on_change| on_change(component);
-    try binding.mAfterEdit(engine_context, binding.mObject);
-    if (binding.mRebuild) |root| {
+    const reshaped = try binding.mAfterEdit(engine_context, binding.mObject);
+    if (binding.mRebuilds or reshaped) {
+        const root = binding.mRoot;
         for (self.mRebuild.items) |asked| {
             if (asked.mID == root.mID and asked.mManager == root.mManager) return;
         }

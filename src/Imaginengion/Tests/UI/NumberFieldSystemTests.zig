@@ -54,21 +54,20 @@ const TestWorld = struct {
         const label = UIManager.LabelOf(field).?;
         const chain = [_]Entity{ label, field, self.mPanel };
         const ui = &self.mEngineContext.mUIManager;
-        for (chain) |entity| try ui.OnPointerEvent(self.mEngineContext, .{ .PointerDragStart = .{ .mEntity = entity, .mButton = .BUTTON_LEFT, .mTarget = label } });
+        for (chain) |entity| try ui.OnPointerEvent(self.mEngineContext, .{ .mEntity = entity, .mEvent = .{ .PointerDragStart = .{ .mButton = .BUTTON_LEFT, .mTarget = label } } });
         var total: f32 = 0;
         for (steps) |step| {
             total += step;
             for (chain) |entity| {
-                try ui.OnPointerEvent(self.mEngineContext, .{ .PointerDrag = .{
-                    .mEntity = entity,
+                try ui.OnPointerEvent(self.mEngineContext, .{ .mEntity = entity, .mEvent = .{ .PointerDrag = .{
                     .mButton = .BUTTON_LEFT,
                     .mDelta = .{ .x = step, .y = 0, .z = 0 },
                     .mTotal = .{ .x = total, .y = 0, .z = 0 },
                     .mTarget = label,
-                } });
+                } } });
             }
         }
-        for (chain) |entity| try ui.OnPointerEvent(self.mEngineContext, .{ .PointerDragEnd = .{ .mEntity = entity, .mButton = .BUTTON_LEFT, .mTotal = .{ .x = total, .y = 0, .z = 0 }, .mTarget = label } });
+        for (chain) |entity| try ui.OnPointerEvent(self.mEngineContext, .{ .mEntity = entity, .mEvent = .{ .PointerDragEnd = .{ .mButton = .BUTTON_LEFT, .mTotal = .{ .x = total, .y = 0, .z = 0 }, .mTarget = label } } });
     }
 
     /// A double click on a field's text, then `typed` in place of its text, kept with Enter, and the frame's UI events
@@ -77,7 +76,7 @@ const TestWorld = struct {
         const engine_context = self.mEngineContext;
         const label = UIManager.LabelOf(field).?;
         for ([_]Entity{ label, field, self.mPanel }) |entity| {
-            try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .PointerClicked = .{ .mEntity = entity, .mButton = .BUTTON_LEFT, .mClicks = 2, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = label } });
+            try engine_context.mUIManager.OnPointerEvent(engine_context, .{ .mEntity = entity, .mEvent = .{ .PointerClicked = .{ .mButton = .BUTTON_LEFT, .mClicks = 2, .mPosition = .{ .x = 0, .y = 0, .z = 0 }, .mTarget = label } } });
         }
         const focus = &engine_context.mUIManager.mFocusSystem;
         try std.testing.expectEqual(label.mID, focus.Focused().?.mID);
@@ -94,7 +93,7 @@ const TestWorld = struct {
             mAllocator: std.mem.Allocator,
             fn OnEvent(collector: *@This(), _: *EngineContext, event: *const UIEvent) !@import("../../Events/EventManager.zig").EventResult {
                 switch (event.*) {
-                    .ValueChanged => |e| try collector.mTo.append(collector.mAllocator, e.mEntity),
+                    .Entity => |e| if (e.mEvent == .ValueChanged) try collector.mTo.append(collector.mAllocator, e.mEntity),
                     else => {},
                 }
                 return .Continue;

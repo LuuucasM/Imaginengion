@@ -335,7 +335,10 @@ fn OnPointerEvent(game_program: *anyopaque, engine_context: *EngineContext, even
 
 fn OnUIEvent(game_program: *anyopaque, engine_context: *EngineContext, event: *const UIEvent) anyerror!EventResult {
     const self: *GameProgram = @ptrCast(@alignCast(game_program));
-    try self.mEventScripts.OnUIEvent(engine_context, event.*);
+    switch (event.*) {
+        .Entity => |e| try self.mEventScripts.OnUIEvent(engine_context, e),
+        else => {},
+    }
     return .Continue;
 }
 

@@ -20,7 +20,7 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const UIEvent = @import("../Events/UIEventData.zig").UIEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const Layout = @import("Layout.zig");
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
@@ -316,8 +316,7 @@ fn Send(engine_context: *EngineContext, popup: Entity, at: At, comptime kind: st
     };
     const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), popup);
     for (chain.items) |entity| {
-        const event = @unionInit(UIEvent, @tagName(kind), .{ .mEntity = entity, .mTarget = popup, .mOpener = opener });
-        try engine_context.mUIManager.mEventManager.Insert(engine_context.EngineAllocator(), .UI, event);
+        try engine_context.mUIManager.Send(engine_context, entity, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = popup, .mOpener = opener }));
     }
 }
 

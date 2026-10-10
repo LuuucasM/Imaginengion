@@ -15,8 +15,8 @@ const EditorProgram = @import("../Programs/EditorProgram.zig");
 const ShapeGeometry = @import("../Renderer/ShapeGeometry.zig");
 const RayCast = @import("../Physics/RayCast.zig");
 const CameraView = @import("../Renderer/Renderer.zig").CameraView;
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
+const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const EntityNameComponent = EntityComponents.NameComponent;
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
@@ -68,9 +68,9 @@ pub fn Build(engine_context: *EngineContext, scene: Scene, options: Widgets.Opti
     const window = try Widgets.FloatingWindow(engine_context, scene, "Picking Debug", SIZE, AT, options);
     var self = PickingDebugPanel{ .mWindow = window.Window };
     self.mWindowSection = try NewSection(engine_context, window.Content, "Window", options);
-    self.mPointer = try NewSection(engine_context, window.Content, "Pointer", options);
+    self.mPointer = try NewSection(engine_context, window.Content, "Pointer events", options);
     self.mView = try NewSection(engine_context, window.Content, "Under the mouse", options);
-    self.mCasts = try NewSection(engine_context, window.Content, "Ray casts", options);
+    self.mCasts = try NewSection(engine_context, window.Content, "Ray casts (editor selection)", options);
     self.mOverlays = try NewSection(engine_context, window.Content, "Overlays", options);
     try WidgetActions.CloseWindow(engine_context, self.mWindow);
     return self;
@@ -112,7 +112,7 @@ pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, ed
 
     if (self.mPointer.IsOpen()) {
         var lines = Lines{ .mAllocator = frame_allocator };
-        try self.PointerLines(engine_context, &lines);
+        try self.PointerLines(engine_context, editor_program, &lines);
         try Widgets.SyncLines(engine_context, self.mPointer.Lines, lines.mLines.items);
     }
 
@@ -127,9 +127,24 @@ pub fn Update(self: *const PickingDebugPanel, engine_context: *EngineContext, ed
     if (self.mOverlays.IsOpen()) try Widgets.SyncLines(engine_context, self.mOverlays.Lines, overlay_lines.mLines.items);
 }
 
-/// The pointer system's state: only a running game's views have one, the editor camera's view is for selecting
-fn PointerLines(self: *const PickingDebugPanel, engine_context: *EngineContext, lines: *Lines) !void {
+/// The pointer system's state, what hover, click and drag events and OnPointerEventScripts see. It points into a
+/// running game's view while in Play, and into the editor's own UI otherwise: the editor camera's view is for
+/// selecting (the ray casts section), so there the scene's entities are never hovered
+fn PointerLines(self: *const PickingDebugPanel, engine_context: *EngineContext, editor_program: *const EditorProgram, lines: *Lines) !void {
     const pointer_system = &engine_context.mPointerSystem;
+    if (editor_program.mPointerCamera) |camera| {
+        if (editor_program.IsEditorUICamera(camera)) {
+            try lines.Add("Pointing into: the editor's own UI", .{});
+            try lines.Add("    the scene only gets pointer events in Play, over a game view", .{});
+        } else {
+            const camera_name = if (camera.GetComponent(PlayerNameComponent)) |name_component| name_component.mName.items else "<unnamed>";
+            try lines.Add("Pointing into: the game, through camera '{s}'", .{camera_name});
+            try lines.Add("    its entities and their pointer scripts get these events", .{});
+        }
+    } else {
+        try lines.Add("Pointing into: nothing yet", .{});
+        try lines.Add("    the editor's own UI, or a game view under the mouse in Play", .{});
+    }
     try ChainLine(lines, "Pointer over", pointer_system.mHovered.items);
     try ChainLine(lines, "Left button holding", pointer_system.mHeld.get(.BUTTON_LEFT).mChain.items);
     try lines.Add("Carrying: {s}", .{if (pointer_system.Carrying()) |source| EntityName(source) else "nothing"});
@@ -242,32 +257,33 @@ fn EntityName(entity: Entity) []const u8 {
 
 /// Remembers the last press, release or click to show. Enter and exit aren't kept: they'd bury the clicks, and
 /// what is hovered is shown as it is
-pub fn OnPointerEvent(self: *PickingDebugPanel, event: PointerEvent) void {
-    const text = switch (event) {
-        .PointerPressed => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} pressed on '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
-        .PointerReleased => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} released from '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
-        .PointerClicked => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} clicked '{s}' x{d}", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mClicks }),
-        .PointerDragStart => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} started dragging '{s}'", .{ @tagName(e.mButton), EntityName(e.mEntity) }),
-        .PointerDrag => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} dragging '{s}', {d:.1}, {d:.1}, {d:.1} so far", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
-        .PointerDragEnd => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} dragged '{s}' {d:.1}, {d:.1}, {d:.1}", .{ @tagName(e.mButton), EntityName(e.mEntity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
-        .PointerDropped => |e| std.fmt.bufPrint(&self.mLastEvent, "dropped '{s}' on '{s}'", .{ EntityName(e.mSource), EntityName(e.mEntity) }),
-        .PointerEnter, .PointerExit, .Default => return,
+pub fn OnPointerEvent(self: *PickingDebugPanel, event: EntityPointerEvent) void {
+    const entity = event.mEntity;
+    const text = switch (event.mEvent) {
+        .PointerPressed => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} pressed on '{s}'", .{ @tagName(e.mButton), EntityName(entity) }),
+        .PointerReleased => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} released from '{s}'", .{ @tagName(e.mButton), EntityName(entity) }),
+        .PointerClicked => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} clicked '{s}' x{d}", .{ @tagName(e.mButton), EntityName(entity), e.mClicks }),
+        .PointerDragStart => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} started dragging '{s}'", .{ @tagName(e.mButton), EntityName(entity) }),
+        .PointerDrag => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} dragging '{s}', {d:.1}, {d:.1}, {d:.1} so far", .{ @tagName(e.mButton), EntityName(entity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
+        .PointerDragEnd => |e| std.fmt.bufPrint(&self.mLastEvent, "{s} dragged '{s}' {d:.1}, {d:.1}, {d:.1}", .{ @tagName(e.mButton), EntityName(entity), e.mTotal.x, e.mTotal.y, e.mTotal.z }),
+        .PointerDropped => |e| std.fmt.bufPrint(&self.mLastEvent, "dropped '{s}' on '{s}'", .{ EntityName(e.mSource), EntityName(entity) }),
+        .PointerEnter, .PointerExit => return,
     } catch return;
     self.mLastEventLen = text.len;
 }
 
 /// The same for the UI's events: typing and popups
-pub fn OnUIEvent(self: *PickingDebugPanel, event: UIEvent) void {
-    const text = switch (event) {
+pub fn OnUIEvent(self: *PickingDebugPanel, event: EntityUIEvent) void {
+    const entity = event.mEntity;
+    const text = switch (event.mEvent) {
         //one per entity in the chain: only the target's own, so it isn't always its top parent's
-        .FocusGained => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' got the keyboard", .{EntityName(e.mTarget)}) else return,
-        .FocusLost => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' lost the keyboard", .{EntityName(e.mTarget)}) else return,
-        .TextChanged => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text changed", .{EntityName(e.mTarget)}) else return,
-        .TextSubmitted => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text submitted", .{EntityName(e.mTarget)}) else return,
-        .PopupOpened => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' opened", .{EntityName(e.mTarget)}) else return,
-        .PopupClosed => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' closed", .{EntityName(e.mTarget)}) else return,
-        .ValueChanged => |e| if (Same(e.mEntity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' value changed", .{EntityName(e.mTarget)}) else return,
-        .DestroyUIElement, .Default => return,
+        .FocusGained => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' got the keyboard", .{EntityName(e.mTarget)}) else return,
+        .FocusLost => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' lost the keyboard", .{EntityName(e.mTarget)}) else return,
+        .TextChanged => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text changed", .{EntityName(e.mTarget)}) else return,
+        .TextSubmitted => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' text submitted", .{EntityName(e.mTarget)}) else return,
+        .PopupOpened => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' opened", .{EntityName(e.mTarget)}) else return,
+        .PopupClosed => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "popup '{s}' closed", .{EntityName(e.mTarget)}) else return,
+        .ValueChanged => |e| if (Same(entity, e.mTarget)) std.fmt.bufPrint(&self.mLastEvent, "'{s}' value changed", .{EntityName(e.mTarget)}) else return,
     } catch return;
     self.mLastEventLen = text.len;
 }

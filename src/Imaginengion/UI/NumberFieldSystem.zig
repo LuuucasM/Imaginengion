@@ -14,8 +14,8 @@ const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
+const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 const UIManager = @import("UIManager.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
@@ -42,22 +42,23 @@ mDragged: ?Entity = null,
 mRemainder: f64 = 0,
 
 /// A frame's pointer events: a field being dragged changes its value
-pub fn OnPointerEvent(self: *NumberFieldSystem, engine_context: *EngineContext, event: PointerEvent) !void {
+pub fn OnPointerEvent(self: *NumberFieldSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
     const zone = Tracy.ZoneInit("NumberFieldSystem::OnPointerEvent", @src());
     defer zone.Deinit();
-    switch (event) {
-        .PointerDragStart => |e| if (e.mButton == .BUTTON_LEFT and IsField(e.mEntity)) {
-            self.mDragged = e.mEntity;
+    const entity = event.mEntity;
+    switch (event.mEvent) {
+        .PointerDragStart => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
+            self.mDragged = entity;
             self.mRemainder = 0;
         },
-        .PointerDrag => |e| if (e.mButton == .BUTTON_LEFT and IsField(e.mEntity)) {
-            if (self.mDragged == null or !Same(self.mDragged.?, e.mEntity)) {
-                self.mDragged = e.mEntity;
+        .PointerDrag => |e| if (e.mButton == .BUTTON_LEFT and IsField(entity)) {
+            if (self.mDragged == null or !Same(self.mDragged.?, entity)) {
+                self.mDragged = entity;
                 self.mRemainder = 0;
             }
-            try self.Drag(engine_context, e.mEntity, e.mDelta.x);
+            try self.Drag(engine_context, entity, e.mDelta.x);
         },
-        .PointerDragEnd => |e| if (self.mDragged != null and Same(self.mDragged.?, e.mEntity)) {
+        .PointerDragEnd => if (self.mDragged != null and Same(self.mDragged.?, entity)) {
             self.mDragged = null;
         },
         else => {},
@@ -65,15 +66,15 @@ pub fn OnPointerEvent(self: *NumberFieldSystem, engine_context: *EngineContext, 
 }
 
 /// A frame's UI events: an edit kept in a field's text sets its value
-pub fn OnUIEvent(_: *NumberFieldSystem, engine_context: *EngineContext, event: UIEvent) !void {
+pub fn OnUIEvent(_: *NumberFieldSystem, engine_context: *EngineContext, event: EntityUIEvent) !void {
     const zone = Tracy.ZoneInit("NumberFieldSystem::OnUIEvent", @src());
     defer zone.Deinit();
-    const submitted = switch (event) {
+    const submitted = switch (event.mEvent) {
         .TextSubmitted => |e| e,
         else => return,
     };
     //one event per entity in the chain: the field's own
-    const field = submitted.mEntity;
+    const field = event.mEntity;
     if (!IsField(field) or !field.IsActive()) return;
     const label = LabelOf(field) orelse return;
     if (!Same(label, submitted.mTarget)) return;

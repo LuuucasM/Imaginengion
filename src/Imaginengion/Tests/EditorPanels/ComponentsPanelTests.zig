@@ -274,7 +274,7 @@ test "a rigid body's type is picked under it, a scene shows its layer, and audio
     try WidgetActions.Choose(engine_context, choice);
     try engine_context.mUIManager.ProcessUIEvents(engine_context, .{});
     //the editor hands the panel the frame's UI events
-    try panel.OnUIEvent(engine_context, .{ .ValueChanged = .{ .mEntity = dropdown, .mTarget = dropdown } });
+    try panel.OnUIEvent(engine_context, .{ .mEntity = dropdown, .mEvent = .{ .ValueChanged = .{ .mTarget = dropdown } } });
     try std.testing.expect(entity.HasComponent(DynamicBodyTag));
 
     try std.testing.expect(test_panel.ButtonFor(.Preview) != null);

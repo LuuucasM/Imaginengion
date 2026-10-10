@@ -11,7 +11,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const UIElement = @import("../ECSObjects/UIElement.zig");
 const WorldManager = @import("../Core/WorldManager.zig");
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
+const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const UIManager = @import("UIManager.zig");
 const Layout = @import("Layout.zig");
@@ -57,15 +57,15 @@ pub fn OnWheel(_: *ScrollSystem, engine_context: *EngineContext, pointer: *const
 
 /// A frame's pointer events: a scrollbar thumb being dragged scrolls its region, as much as keeps the thumb under the
 /// pointer
-pub fn OnPointerEvent(_: *ScrollSystem, engine_context: *EngineContext, event: PointerEvent) !void {
+pub fn OnPointerEvent(_: *ScrollSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
     const zone = Tracy.ZoneInit("ScrollSystem::OnPointerEvent", @src());
     defer zone.Deinit();
-    const drag = switch (event) {
+    const drag = switch (event.mEvent) {
         .PointerDrag => |drag| drag,
         else => return,
     };
     //one event per entity in the chain: only the thumb's own
-    if (drag.mEntity.mID != drag.mTarget.mID or drag.mEntity.mManager != drag.mTarget.mManager) return;
+    if (event.mEntity.mID != drag.mTarget.mID or event.mEntity.mManager != drag.mTarget.mManager) return;
     if (drag.mButton != .BUTTON_LEFT) return;
 
     const thumb = drag.mTarget;

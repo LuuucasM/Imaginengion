@@ -113,7 +113,7 @@ test "a tile per folder and shown file, folders first, each by name, others left
     try std.testing.expectEqual(@as(usize, 8), browser.Names(&names));
     try std.testing.expectEqualStrings("EngineAssets", names[0]);
     try std.testing.expectEqualStrings("Sprites", names[1]);
-    try std.testing.expectEqualStrings("AVeryLong...", names[2]);
+    try std.testing.expectEqualStrings("AVeryL...png", names[2]);
     try std.testing.expectEqualStrings("Level.imsc", names[3]);
     try std.testing.expectEqualStrings("Mover.zig", names[4]);
     try std.testing.expectEqualStrings("PHOTO.JPG", names[5]);
@@ -136,6 +136,10 @@ test "a tile per folder and shown file, folders first, each by name, others left
     try browser.Update();
     try std.testing.expect(browser.mPanel.mGrid.?.mID != grid.mID);
     try std.testing.expectEqual(@as(usize, 9), browser.Names(&names));
+    //a theme file too, for a style to name
+    try browser.WriteFile("Look.imtheme");
+    try browser.Update();
+    try std.testing.expectEqual(@as(usize, 10), browser.Names(&names));
 }
 
 test "double clicking a folder goes into it, Back comes up again, and a single click does nothing" {
@@ -170,6 +174,9 @@ test "double clicking a folder goes into it, Back comes up again, and a single c
 
     //the pane's menu
     try std.testing.expect(browser.mPanel.ActionOf(browser.mPanel.mNewScene, 1).? == .NewScene);
+    for (browser.mPanel.mNewScripts, 0..) |item, i| {
+        try std.testing.expectEqual(i, browser.mPanel.ActionOf(item, 1).?.NewScript);
+    }
 }
 
 test "EngineAssets goes into the engine's assets, whose files are engine files, and Back from its top comes out to the project" {
@@ -232,7 +239,7 @@ test "the Scripts panel takes an entity script onto an entity and a scene script
     const texture = try browser.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     _ = try texture.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "hero.png", .Prj));
 
-    try scripts.OnDrop(engine_context, .{ .mEntity = scripts.mArea, .mSource = texture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, .{ .entity = entity });
+    try scripts.OnDrop(engine_context, scripts.mArea, .{ .mSource = texture, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, .{ .entity = entity });
     var children = entity.GetIterator(.Script);
     try std.testing.expect(children.next() == null);
 }

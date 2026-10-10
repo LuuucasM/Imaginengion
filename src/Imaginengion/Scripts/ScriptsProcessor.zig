@@ -28,8 +28,8 @@ const OnCollisionEndScript = EComponents.OnCollisionEndScript;
 const OnPreSolveScript = EComponents.OnPreSolveScript;
 const OnPointerEventScript = EComponents.OnPointerEventScript;
 const OnUIEventScript = EComponents.OnUIEventScript;
-const PointerEvent = @import("../Events/PointerEventData.zig").EventT;
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
+const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 
 const CollisionInfo = @import("../Physics/Collisions.zig").CollisionInfo;
 const CollisionBeginEvent = @import("../Events/PhysicsEventData.zig").CollisionBeginEvent;
@@ -258,10 +258,12 @@ fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContex
 }
 
 /// Hands the pointer's and the UI's events to the event scripts of the entities they are sent to (OnPointerEventScript,
-/// OnUIEventScript), one batch at a time, the way the batch is processed. One thing that happened (a click, a drop, a
-/// text input getting the keyboard) is sent as one event to each entity in a chain, the one it happened to first and
-/// then each one it is inside, next to each other in the batch. A script that hands back .Handled for one of them
-/// keeps it from the rest of that chain. Enter and exit are each entity's own, so nothing stops them
+/// OnUIEventScript), one batch at a time, the way the batch is processed. Only the scripts of the entity an event is
+/// sent to run, and they are handed the event without who it is for: they are its scripts, so it is always for them.
+/// One thing that happened (a click, a drop, a text input getting the keyboard) is sent as one event to each entity in
+/// a chain, the one it happened to first and then each one it is inside, next to each other in the batch. A script
+/// that hands back .Handled for one of them keeps it from the rest of that chain. Enter and exit are each entity's
+/// own, so nothing stops them
 pub const EventScripts = struct {
     /// The last thing a script handled in this batch: the chain's later events for it are skipped
     mHandled: ?Moment = null,
@@ -283,7 +285,7 @@ pub const EventScripts = struct {
         self.mHandled = null;
     }
 
-    pub fn OnPointerEvent(self: *EventScripts, engine_context: *EngineContext, event: PointerEvent) !void {
+    pub fn OnPointerEvent(self: *EventScripts, engine_context: *EngineContext, event: EntityPointerEvent) !void {
 
         const zone = Tracy.ZoneInit("EventScripts::OnPointerEvent", @src());
 
@@ -291,7 +293,7 @@ pub const EventScripts = struct {
         try self.Run(OnPointerEventScript, engine_context, event);
     }
 
-    pub fn OnUIEvent(self: *EventScripts, engine_context: *EngineContext, event: UIEvent) !void {
+    pub fn OnUIEvent(self: *EventScripts, engine_context: *EngineContext, event: EntityUIEvent) !void {
 
         const zone = Tracy.ZoneInit("EventScripts::OnUIEvent", @src());
 
@@ -301,15 +303,14 @@ pub const EventScripts = struct {
 
     fn Run(self: *EventScripts, comptime script_type: type, engine_context: *EngineContext, event: anytype) !void {
         if (!self.ShouldRun(event)) return;
-        const result = try RunEntityScripts(script_type, engine_context, EntityOf(event).?, .{&event});
+        const result = try RunEntityScripts(script_type, engine_context, event.mEntity, .{&event.mEvent});
         self.After(event, result);
     }
 
     /// Whether `event` still goes to its entity's scripts: it is sent to one that is still there, and no script before
     /// it in its chain has handled what it is about
     pub fn ShouldRun(self: *const EventScripts, event: anytype) bool {
-        const owner = EntityOf(event) orelse return false;
-        if (!owner.IsActive()) return false;
+        if (!event.mEntity.IsActive()) return false;
         const moment = MomentOf(event) orelse return true;
         const handled = self.mHandled orelse return true;
         return !moment.Same(handled);
@@ -321,17 +322,10 @@ pub const EventScripts = struct {
         if (MomentOf(event)) |moment| self.mHandled = moment;
     }
 
-    /// Who an event is sent to, null for one that isn't sent to an entity
-    pub fn EntityOf(event: anytype) ?Entity {
-        return switch (event) {
-            inline else => |e| if (@hasField(@TypeOf(e), "mEntity")) e.mEntity else null,
-        };
-    }
-
     /// The thing that happened that an event is one of a chain's events for, null for an event that is only its
     /// entity's own (an enter, an exit)
     pub fn MomentOf(event: anytype) ?Moment {
-        return switch (event) {
+        return switch (event.mEvent) {
             inline else => |e| blk: {
                 const E = @TypeOf(e);
                 if (!@hasField(E, "mTarget")) {
@@ -339,7 +333,7 @@ pub const EventScripts = struct {
                     break :blk null;
                 }
                 break :blk Moment{
-                    .Kind = @intFromEnum(std.meta.activeTag(event)),
+                    .Kind = @intFromEnum(std.meta.activeTag(event.mEvent)),
                     .Target = e.mTarget,
                     .Button = if (@hasField(E, "mButton")) @intFromEnum(e.mButton) else 0,
                 };

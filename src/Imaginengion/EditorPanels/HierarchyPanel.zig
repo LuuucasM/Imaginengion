@@ -324,8 +324,8 @@ pub fn HierarchyPanel(comptime T: type) type {
 
         /// A drop on the panel: an object file of its type loaded into `world`, as Open Scene does, and selected. An
         /// entity goes into the selected scene, as New Entity does
-        pub fn OnDrop(self: *const Self, engine_context: *EngineContext, dropped: PointerDroppedEvent, world: *WorldManager, selected: *?SelectedObject) !void {
-            if (!Same(dropped.mEntity, self.mArea)) return;
+        pub fn OnDrop(self: *const Self, engine_context: *EngineContext, on: Entity, dropped: PointerDroppedEvent, world: *WorldManager, selected: *?SelectedObject) !void {
+            if (!Same(on, self.mArea)) return;
             const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
             const rel_path = file_ref.mRelPath.items;
             const is_kind = if (Serializer.ObjectKindOf(std.fs.path.extension(rel_path))) |kind| kind == KIND else false;
@@ -358,7 +358,8 @@ pub fn HierarchyPanel(comptime T: type) type {
             try items.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = action });
         }
 
-        /// A ready-made UI entity of `kind` under `parent`, named after its kind. One that starts a layout tree of its own
+        /// A ready-made UI entity of `kind` under `parent`, named after its kind. It takes the theme's look once and is
+        /// then no longer styled, so the colors and font set on it stay. One that starts a layout tree of its own
         /// (not inside a container) gets a width of its own if it fills what it is in. Widgets are built in overlay
         /// units, so in a game scene its sizes are turned into world units, the same way the theme's are
         fn NewUIEntity(self: *const Self, engine_context: *EngineContext, kind: UIKind, parent: Widgets.Parent) !Entity {
@@ -373,6 +374,8 @@ pub fn HierarchyPanel(comptime T: type) type {
             //what is inside it named for what it is too: a button's or field's text, a checkbox's box and text
             var children = entity.GetIterator(.Child);
             while (children.next()) |child| try child.SetName(engine_context, if (child.HasComponent(TextComponent)) "Text" else "Box");
+            //with no theme to color its box when it is checked, a checkbox shows it with a mark
+            if (kind == .Checkbox) try (try Widgets.AddCheckMark(engine_context, entity)).SetName(engine_context, "Check");
             const starts_tree = switch (parent) {
                 .Scene => true,
                 .Entity => |parent_entity| !parent_entity.HasComponent(LayoutComponent),
@@ -383,6 +386,8 @@ pub fn HierarchyPanel(comptime T: type) type {
             }
             const unit = StyleSystem.ThemeUnit(entity);
             if (unit != 1) try Widgets.ScaleSizes(engine_context, entity, unit);
+            //it starts out looking as the theme has it, and then keeps what is set on it: only the editor follows a theme
+            UIManager.StyleOnce(entity);
             return entity;
         }
 

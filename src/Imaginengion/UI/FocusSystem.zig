@@ -19,7 +19,7 @@ const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const MouseCodes = @import("../Inputs/InputEnums.zig").MouseCodes;
 const KeyboardPressedEvent = @import("../Events/WindowEventData.zig").KeyboardPressedEvent;
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const UIEvent = @import("../Events/UIEventData.zig").UIEvent;
 const PointerClickedEvent = @import("../Events/PointerEventData.zig").PointerClickedEvent;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 const TextEdit = @import("TextEdit.zig");
@@ -142,15 +142,15 @@ pub fn OnPressed(self: *FocusSystem, engine_context: *EngineContext, pointer: *c
 
 /// One of the frame's pointer clicks: a double click (left button) on a text input that focuses on one gives it the
 /// keyboard, with the caret at the end of its text
-pub fn OnClicked(self: *FocusSystem, engine_context: *EngineContext, e: PointerClickedEvent) !void {
+pub fn OnClicked(self: *FocusSystem, engine_context: *EngineContext, clicked: Entity, e: PointerClickedEvent) !void {
     const zone = Tracy.ZoneInit("FocusSystem::OnClicked", @src());
     defer zone.Deinit();
-    if (e.mButton != .BUTTON_LEFT or e.mClicks != 2 or !e.mEntity.IsActive()) return;
+    if (e.mButton != .BUTTON_LEFT or e.mClicks != 2 or !clicked.IsActive()) return;
     //one event per entity in the chain: the text input's own, or the box it is in when that is what was clicked
-    const entity = if (UIManager.HasUIComponent(e.mEntity, TextInputComponent))
-        e.mEntity
-    else if (Same(e.mEntity, e.mTarget))
-        ChildTextInput(e.mEntity) orelse return
+    const entity = if (UIManager.HasUIComponent(clicked, TextInputComponent))
+        clicked
+    else if (Same(clicked, e.mTarget))
+        ChildTextInput(clicked) orelse return
     else
         return;
     if (UIManager.GetUIComponent(entity, TextInputComponent).?.mFocusOn != .DoubleClick) return;
@@ -408,8 +408,7 @@ fn SyncTextInput(self: *FocusSystem, engine_context: *EngineContext) void {
 fn Send(engine_context: *EngineContext, text_input: Entity, comptime kind: std.meta.Tag(UIEvent)) !void {
     const chain = try PointerSystem.ChainOf(engine_context.FrameAllocator(), text_input);
     for (chain.items) |entity| {
-        const event = @unionInit(UIEvent, @tagName(kind), .{ .mEntity = entity, .mTarget = text_input });
-        try engine_context.mUIManager.mEventManager.Insert(engine_context.EngineAllocator(), .UI, event);
+        try engine_context.mUIManager.Send(engine_context, entity, @unionInit(UIEvent, @tagName(kind), .{ .mTarget = text_input }));
     }
 }
 

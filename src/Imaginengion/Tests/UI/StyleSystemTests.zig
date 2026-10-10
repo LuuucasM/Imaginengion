@@ -259,6 +259,25 @@ test "a styled entity is only styled again when something its style reads change
     try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, surface.mTexOptions.mColor);
 }
 
+test "a style taken once is taken off after, and what is set on the entity then stays" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const entity = try world.Styled("Button", .Shape);
+    UIManager.StyleOnce(entity);
+    try world.Update();
+    const surface = entity.GetComponent(SurfaceComponent).?;
+    try ExpectColor(.{ 0.1, 0.2, 0.3, 1 }, surface.mTexOptions.mColor);
+    try std.testing.expect(UIManager.GetUIComponent(entity, StyleComponent) == null);
+
+    //a color set by hand stays, even through what would restyle it
+    surface.mTexOptions.mColor = .{ .x = 0.3, .y = 0.3, .z = 0.3, .w = 1 };
+    _ = try entity.AddComponent(engine_context, HoveredTag{});
+    try world.UpdateAll();
+    try ExpectColor(.{ 0.3, 0.3, 0.3, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+}
+
 test "a state tag removed the usual way is gone in time for the next style pass" {
     const world = try TestWorld.Init();
     defer world.Deinit();
@@ -368,4 +387,51 @@ test "the engine's default theme reads, with every style the editor's look needs
     asset_manager.mEventManager.Deinit(engine_allocator);
     asset_manager.mCWDPath.deinit(engine_allocator);
     _ = engine_context._Internal.EngineGPA.deinit();
+}
+
+test "a style names a theme file of its own, and is taken out of it instead of the editor's theme" {
+    var tmp_dir = std.testing.tmpDir(.{});
+    defer tmp_dir.cleanup();
+    const engine_context = try std.heap.page_allocator.create(EngineContext);
+    defer std.heap.page_allocator.destroy(engine_context);
+    engine_context.* = .{};
+    const engine_allocator = engine_context.EngineAllocator();
+    engine_context._Internal.ThreadedIO = std.Io.Threaded.init(engine_context._Internal.EngineGPA.allocator(), .{
+        .concurrent_limit = .nothing,
+        .async_limit = .nothing,
+    });
+    //no Setup: its default assets need the GPU
+    try engine_context.mAssetManager.Init(engine_context);
+    try engine_context.mUIManager.Init(engine_allocator);
+    try engine_context.mEditorWorld.Init(engine_allocator);
+    var editor_theme = ThemeAsset{};
+    try editor_theme.FromJson(engine_context, THEME);
+    defer {
+        editor_theme.Deinit(engine_context);
+        engine_context.mEditorWorld.Deinit(engine_context);
+        engine_context.mUIManager.Deinit(engine_context);
+        const asset_manager = &engine_context.mAssetManager;
+        asset_manager.mECSManager.Deinit(engine_context);
+        asset_manager.mUUIDToWorldID.deinit(engine_allocator);
+        asset_manager.mEventManager.Deinit(engine_allocator);
+        asset_manager.mCWDPath.deinit(engine_allocator);
+        _ = engine_context._Internal.EngineGPA.deinit();
+    }
+
+    //a game's own theme, with its own "Button"
+    try tmp_dir.dir.writeFile(engine_context.Io(), .{ .sub_path = "Game.imtheme", .data =
+        \\{ "Styles": { "Button": { "Background": { "Normal": [1, 0, 0, 1] } } } }
+    });
+    const rel_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), ".zig-cache/tmp/{s}/Game.imtheme", .{tmp_dir.sub_path});
+    const scene = try engine_context.mEditorWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const entity = try scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try entity.AddComponent(engine_context, ShapeComponent{});
+    _ = try entity.AddComponent(engine_context, SurfaceComponent{});
+    try UIManager.Style(engine_context, entity, "Button");
+    UIManager.GetUIComponent(entity, StyleComponent).?.mTheme = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Eng } });
+
+    try engine_context.mUIManager.mStyleSystem.Update(engine_context, &editor_theme, .uninit, false);
+    try ExpectColor(.{ 1, 0, 0, 1 }, entity.GetComponent(SurfaceComponent).?.mTexOptions.mColor);
+    //read in, and so watched for its file changing
+    try std.testing.expect(!engine_context.mUIManager.mStyleSystem.ThemesReread(engine_context));
 }

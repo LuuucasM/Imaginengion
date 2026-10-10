@@ -390,6 +390,10 @@ pub fn Core(comptime Self: type) type {
             try _Fill(self, engine_context, &tmpl_path);
         }
 
+        pub fn Eq(self: Self, other: Self) bool {
+            return if (self.mID == other.mID) true else false;
+        }
+
         /// The SerializeList components an object has, one bit per entry
         const ComponentSet = std.StaticBitSet(_SerializeList().len);
 

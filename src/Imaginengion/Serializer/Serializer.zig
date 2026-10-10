@@ -104,7 +104,7 @@ pub fn SaveECSObject(self: *Serializer, engine_context: *EngineContext, object: 
 }
 
 pub fn SaveECSObjAs(self: *Serializer, engine_context: *EngineContext, object: anytype) !void {
-    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), FileExtension(@TypeOf(object)));
+    const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), FileExtension(@TypeOf(object)), null);
     if (abs_path.len == 0) return;
 
     try SerializeECSObject(engine_context, object, abs_path, .Text);

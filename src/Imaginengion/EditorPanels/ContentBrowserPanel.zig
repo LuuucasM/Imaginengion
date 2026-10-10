@@ -1,10 +1,11 @@
 //! The Content Browser, in the editor's own UI, in the shell's Content Browser pane: the open project's files, one
 //! folder at a time, as a grid of tiles (an icon and the file's name). Folders come first, then files, each by name,
 //! and only the kinds the editor uses are shown: folders, textures (.png, .jpg), object files (.imen, .imsc...), scripts
-//! (.zig), audio and fonts (.ttf, .otf). Double clicking a folder goes into it, Back goes up a folder, and an object file opens as a
+//! (.zig), audio, fonts (.ttf, .otf) and themes (.imtheme, for a StyleComponent's Theme). Double clicking a folder goes into it, Back goes up a folder, and an object file opens as a
 //! template. Every file's tile can be dragged, carrying the file (FileRefComponent), e.g. a script onto the Scripts
 //! panel. At the top of the project an EngineAssets tile goes into the engine's own assets (the white texture, the
-//! fonts...), browsed the same way, its files carried as engine files; Back from its top comes out to the project. Right clicking the pane offers New Scene Layer. Every frame the folder is listed and checked against what
+//! fonts...), browsed the same way, its files carried as engine files; Back from its top comes out to the project. Right clicking the pane offers New Scene Layer, and New Script: a copy of one of the engine's script
+//! templates, named and put where the save dialog says (the folder being shown to start with). Every frame the folder is listed and checked against what
 //! the tiles were built from, so files added or removed on disk show up
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
@@ -13,6 +14,7 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const AManager = @import("../ECSManagers/AManager.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
+const PlatformUtils = @import("../PlatformUtils/PlatformUtils.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
@@ -29,11 +31,35 @@ const TILE_WIDTH: f32 = 80;
 const TILE_GAP: f32 = 4;
 /// The most of a name a tile shows: a longer one is shortened to fit, ending in "..."
 const MAX_NAME_LEN = 12;
+/// The longest file type, dot included, a shortened name keeps at its end
+const MAX_EXTENSION_LEN = 5;
 /// The engine's assets folder, from the engine's folder (an engine file's path starts with it)
 const ENGINE_ASSETS_PATH = "src/Imaginengion/EngineAssets";
 
+/// A script New Script makes: one of the engine's script templates, each a kind of script
+pub const ScriptTemplate = struct {
+    /// the submenu of New Script it is in, and its item there
+    Group: []const u8,
+    Name: []const u8,
+    Text: []const u8,
+};
+
+/// Every script template, a group's together
+pub const SCRIPT_TEMPLATES = [_]ScriptTemplate{
+    .{ .Group = "GameObject", .Name = "On Update", .Text = @embedFile("../Scripts/GameObject/OnUpdateInputTemplate.zig") },
+    .{ .Group = "GameObject", .Name = "On Input Pressed", .Text = @embedFile("../Scripts/GameObject/OnInputPressedTemplate.zig") },
+    .{ .Group = "GameObject", .Name = "On Physics Update", .Text = @embedFile("../Scripts/GameObject/OnPhysicsUpdateTemplate.zig") },
+    .{ .Group = "GameObject", .Name = "On Pointer Event", .Text = @embedFile("../Scripts/GameObject/OnPointerEventTemplate.zig") },
+    .{ .Group = "Physics", .Name = "On Collision Begin", .Text = @embedFile("../Scripts/Physics/OnCollisionBeginTemplate.zig") },
+    .{ .Group = "Physics", .Name = "On Collision End", .Text = @embedFile("../Scripts/Physics/OnCollisionEndTemplate.zig") },
+    .{ .Group = "Physics", .Name = "On Pre Solve", .Text = @embedFile("../Scripts/Physics/OnPreSolveTemplate.zig") },
+    .{ .Group = "Scene", .Name = "On Scene Start", .Text = @embedFile("../Scripts/Scene/OnSceneStartTemplate.zig") },
+    .{ .Group = "Scene", .Name = "On Physics Update", .Text = @embedFile("../Scripts/Scene/OnPhysicsUpdateTemplate.zig") },
+    .{ .Group = "UI", .Name = "On UI Event", .Text = @embedFile("../Scripts/UI/OnUIEventTemplate.zig") },
+};
+
 /// What a tile is
-pub const Kind = enum { Back, Folder, EngineAssets, Texture, Object, Script, Audio, Font };
+pub const Kind = enum { Back, Folder, EngineAssets, Texture, Object, Script, Audio, Font, Theme };
 
 /// The icon each kind of tile shows
 pub const Icons = struct {
@@ -44,6 +70,7 @@ pub const Icons = struct {
     Script: AssetHandle = .uninit,
     Audio: AssetHandle = .uninit,
     Font: AssetHandle = .uninit,
+    Theme: AssetHandle = .uninit,
 
     /// The engine's icon textures
     pub fn Load(engine_context: *EngineContext) !Icons {
@@ -59,8 +86,8 @@ pub const Icons = struct {
             .Object = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/sceneicon.png"),
             .Script = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/scripticon.png"),
             .Audio = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/mp3.png"),
-            //no font icon yet: a document's, which the script one is
-            .Font = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/scripticon.png"),
+            .Font = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/fonticon.png"),
+            .Theme = try Get.Texture(engine_context, "src/Imaginengion/EngineAssets/textures/themeicon.png"),
         };
     }
 
@@ -88,6 +115,8 @@ pub const Action = union(enum) {
     Open: usize,
     /// a new game scene, from the pane's right-click menu
     NewScene,
+    /// a new script, a copy of the script template at this place in SCRIPT_TEMPLATES, from the pane's right-click menu
+    NewScript: usize,
 };
 
 /// A file or folder in the folder being shown
@@ -110,6 +139,8 @@ mArea: Entity = .uninit,
 mMessage: Entity = .uninit,
 /// The New Scene Layer item of the pane's right-click menu
 mNewScene: Entity = .uninit,
+/// New Script's items, one per script template
+mNewScripts: [SCRIPT_TEMPLATES.len]Entity = @splat(.uninit),
 /// The grid of tiles, null while none is built
 mGrid: ?Entity = null,
 mTiles: std.ArrayList(Tile) = .empty,
@@ -135,13 +166,23 @@ pub fn Build(engine_context: *EngineContext, page: Entity, icons: Icons, options
     _ = try area.AddComponent(engine_context, SurfaceComponent{});
     try UIManager.Style(engine_context, area, "Window");
     const menu = try Widgets.ContextMenu(engine_context, area, options);
-    return .{
+    var self: ContentBrowserPanel = .{
         .mArea = area,
         .mMessage = try Widgets.Label(engine_context, .{ .Entity = area }, ""),
         .mNewScene = try Widgets.MenuItem(engine_context, menu, "New Scene Layer", .{ .StockScripts = options.StockScripts }),
         .mIcons = icons,
         .mOptions = options,
     };
+    //New Script, then a submenu per group of templates
+    const new_script = try Widgets.Submenu(engine_context, menu, "New Script", options);
+    var group: Entity = .uninit;
+    for (SCRIPT_TEMPLATES, 0..) |template, i| {
+        if (i == 0 or !std.mem.eql(u8, template.Group, SCRIPT_TEMPLATES[i - 1].Group)) {
+            group = try Widgets.Submenu(engine_context, new_script, template.Group, options);
+        }
+        self.mNewScripts[i] = try Widgets.MenuItem(engine_context, group, template.Name, .{ .StockScripts = options.StockScripts });
+    }
+    return self;
 }
 
 pub fn Deinit(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) void {
@@ -225,10 +266,13 @@ pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void 
     try self.Rebuild(engine_context, listing, built_from.items);
 }
 
-/// What a click on `entity` does: a double click on a folder, Back, or an object file, or New Scene Layer from the
-/// pane's menu. Null for anything else
+/// What a click on `entity` does: a double click on a folder, Back, or an object file, or New Scene Layer or a New
+/// Script item from the pane's menu. Null for anything else
 pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?Action {
     if (Same(entity, self.mNewScene)) return .NewScene;
+    for (self.mNewScripts, 0..) |item, i| {
+        if (Same(entity, item)) return .{ .NewScript = i };
+    }
     if (clicks != 2) return null;
     for (self.mTiles.items, 0..) |tile, i| {
         if (!Same(tile.Entity, entity)) continue;
@@ -237,7 +281,7 @@ pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?A
             .Folder => .{ .Enter = i },
             .EngineAssets => .EnterEngineAssets,
             .Object => .{ .Open = i },
-            .Texture, .Script, .Audio, .Font => null,
+            .Texture, .Script, .Audio, .Font, .Theme => null,
         };
     }
     return null;
@@ -251,7 +295,7 @@ fn IsAny(extension: []const u8, options: []const []const u8) bool {
 }
 
 /// Does what a click asked for, other than NewScene, which is the editor's (its menu bar's New Game Scene). A new
-/// folder's tiles are built the next frame
+/// folder's tiles are built the next frame, and so is a new script's tile
 pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: Action) !void {
     switch (action) {
         .Up => {
@@ -279,6 +323,12 @@ pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: A
             try engine_context.mEditorEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
         },
         .NewScene => {},
+        .NewScript => |index| {
+            if (self.mPath.items.len == 0) return;
+            const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), ".zig", self.mPath.items);
+            if (abs_path.len == 0) return;
+            try std.Io.Dir.cwd().writeFile(engine_context.Io(), .{ .sub_path = abs_path, .data = SCRIPT_TEMPLATES[index].Text });
+        },
     }
 }
 
@@ -327,6 +377,7 @@ fn KindOf(name: []const u8) ?Kind {
     if (IsAny(extension, &.{".zig"})) return .Script;
     if (IsAny(extension, &.{ ".mp3", ".wav", ".flac" })) return .Audio;
     if (IsAny(extension, &.{ ".ttf", ".otf" })) return .Font;
+    if (IsAny(extension, &.{".imtheme"})) return .Theme;
     if (Serializer.ObjectKindOf(extension) != null) return .Object;
     return null;
 }
@@ -362,7 +413,7 @@ fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Ent
     switch (kind) {
         .Back, .Folder, .EngineAssets => {},
         //a file can be dragged, carrying which file it is
-        .Texture, .Object, .Script, .Audio, .Font => {
+        .Texture, .Object, .Script, .Audio, .Font, .Theme => {
             _ = try tile.AddComponent(engine_context, DragSourceComponent{});
             _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.FrameAllocator(), name), self.CurrentPathType()));
         },
@@ -371,14 +422,19 @@ fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Ent
     try self.mNames.appendSlice(engine_allocator, name);
 }
 
-/// `name`, shortened to MAX_NAME_LEN letters ending in "..." if it is longer. Counted in letters, not bytes
+/// `name`, shortened to MAX_NAME_LEN letters with "..." in it if it is longer. The file's type is kept at the end, so
+/// files of one name are told apart: "TacoRegular.ttf" is "TacoRe...ttf", its atlas "TacoRe...png". Counted in letters,
+/// not bytes
 fn ShortName(frame_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
     const letters = std.unicode.utf8CountCodepoints(name) catch return name;
     if (letters <= MAX_NAME_LEN) return name;
+    //the type without its dot, if it is short enough to leave room for some of the name
+    const extension = std.fs.path.extension(name);
+    const ending = if (extension.len > 1 and extension.len <= MAX_EXTENSION_LEN) extension[1..] else "";
     var view = std.unicode.Utf8View.initUnchecked(name).iterator();
     var kept: usize = 0;
-    for (0..MAX_NAME_LEN - 3) |_| kept += (view.nextCodepointSlice() orelse break).len;
-    return try std.fmt.allocPrint(frame_allocator, "{s}...", .{name[0..kept]});
+    for (0..MAX_NAME_LEN - 3 - ending.len) |_| kept += (view.nextCodepointSlice() orelse break).len;
+    return try std.fmt.allocPrint(frame_allocator, "{s}...{s}", .{ name[0..kept], ending });
 }
 
 fn Same(a: Entity, b: Entity) bool {

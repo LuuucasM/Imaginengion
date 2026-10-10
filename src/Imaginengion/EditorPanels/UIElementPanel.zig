@@ -86,7 +86,7 @@ pub fn Update(self: *UIElementPanel, engine_context: *EngineContext, selected: ?
     if (target.Element) |element| {
         const present = Components.PresentOf(element);
         const stale = self.mBuiltFor == null or self.mBuiltFor.?.mID != element.mID or !present.eql(self.mBuiltPresent) or
-            engine_context.mUIManager.mBindingSystem.TakeRebuild(self.mList.mRoot.?);
+            engine_context.mUIManager.TakeRebuild(self.mList.mRoot.?);
         if (stale) {
             try self.mList.Build(engine_context, self.mContent, self.mWindow, element, self.mOptions, null);
             self.mBuiltFor = element;

@@ -5,6 +5,7 @@ test {
     _ = @import("Tests/Serializer/SerializerTests.zig");
     _ = @import("Tests/ECSComponents/Asset/ObjectAssetTests.zig");
     _ = @import("Tests/ECSComponents/Asset/PendingDeleteTests.zig");
+    _ = @import("Tests/ECSComponents/Asset/LoadFailedTagTests.zig");
     _ = @import("Tests/ECSComponents/RenderTargetTests.zig");
     _ = @import("Tests/ECSObjects/TmplTests.zig");
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
@@ -83,9 +84,9 @@ pub const _ValidateScript = @import("Scripts/ScriptsProcessor.zig")._ValidateScr
 
 //Event Stuff -----------------------------------------------
 pub const KeyboardPressedEvent = @import("Events/WindowEventData.zig").KeyboardPressedEvent;
-pub const PointerEvent = @import("Events/PointerEventData.zig").EventT;
+pub const PointerEvent = @import("Events/PointerEventData.zig").PointerEvent;
 pub const PointerEventData = @import("Events/PointerEventData.zig");
-pub const UIEvent = @import("Events/UIEventData.zig").EventT;
+pub const UIEvent = @import("Events/UIEventData.zig").UIEvent;
 pub const UIEventData = @import("Events/UIEventData.zig");
 
 //UI Stuff --------------------------------------------------

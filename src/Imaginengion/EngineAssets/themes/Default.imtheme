@@ -70,6 +70,10 @@
         "Pressed": [0.247, 0.510, 0.710, 1.0]
       }
     },
+    "CheckMark": {
+      "Background": { "Normal": [0.624, 0.827, 0.941, 1.0] },
+      "CornerRadius": 2
+    },
     "MenuCheck": {
       "Background": {
         "Normal": [0.0, 0.0, 0.0, 0.0],

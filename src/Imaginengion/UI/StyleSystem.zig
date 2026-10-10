@@ -1,4 +1,4 @@
-//! Styles: what a UI element's StyleComponent names, out of the current theme (ThemeAsset.zig), written into its
+//! Styles: what a UI element's StyleComponent names, out of its theme file or the editor's theme (ThemeAsset.zig), written into its
 //! entity's quad and text. Part of the UIManager. Only the elements marked with StyleDirtyTag are restyled, when
 //! something their style depends on changes (UIManager.MarkStyleDirty), and every one of them when the theme is new
 //! or read again: a frame where the pointer moves onto a button restyles that button, not the whole UI. So a color
@@ -53,10 +53,23 @@ pub const empty: StyleSystem = .{};
 
 /// The style names already warned about as missing from the theme, so a typo is logged once and not every frame
 mWarned: std.StringHashMapUnmanaged(void) = .empty,
+/// The theme files styles were taken from, besides the editor's, since everything was last styled: when one of them is
+/// read again after its file changed, everything is styled again (ThemesReread)
+mThemesUsed: std.ArrayList(AssetHandle.Type) = .empty,
 
 pub fn Deinit(self: *StyleSystem, engine_allocator: std.mem.Allocator) void {
     self.ClearWarnings(engine_allocator);
     self.mWarned.deinit(engine_allocator);
+    self.mThemesUsed.deinit(engine_allocator);
+}
+
+/// Whether a theme file a style was taken from is no longer read in, because its file changed (or it is gone): its
+/// styles have to be taken again
+pub fn ThemesReread(self: *const StyleSystem, engine_context: *EngineContext) bool {
+    for (self.mThemesUsed.items) |theme_id| {
+        if (!engine_context.mAssetManager.IsLoaded(ThemeAsset, theme_id)) return true;
+    }
+    return false;
 }
 
 /// Forgets which missing styles were warned about, e.g. once another theme is current
@@ -67,8 +80,8 @@ pub fn ClearWarnings(self: *StyleSystem, engine_allocator: std.mem.Allocator) vo
 }
 
 /// Once a frame, before layout (a font changing changes sizes): every styled element marked dirty, in every world, has
-/// its entity take its style out of `theme`, and is no longer marked. `restyle_all` for every styled element instead,
-/// for a theme that is new or was just read again
+/// its entity take its style out of its theme file, or out of `theme` (the editor's) if it names none, and is no longer
+/// marked. `restyle_all` for every styled element instead, for a theme that is new or was just read again
 pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const ThemeAsset, plain_texture: AssetHandle, restyle_all: bool) !void {
     const zone = Tracy.ZoneInit("StyleSystem::Update", @src());
     defer zone.Deinit();
@@ -79,6 +92,8 @@ pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const 
     else
         try ui_manager.GetGroup(frame_allocator, .{ .Component = StyleDirtyTag });
     zone.Value(element_ids.items.len);
+    //every styled element is about to say which theme it takes its style from
+    if (restyle_all) self.mThemesUsed.clearRetainingCapacity();
     for (element_ids.items) |element_id| {
         const element = UIElement{ .mID = element_id, .mManager = ui_manager };
         const entity = element.GetOwner();
@@ -88,12 +103,26 @@ pub fn Update(self: *StyleSystem, engine_context: *EngineContext, theme: *const 
 
         const style_component = element.GetComponent(StyleComponent) orelse continue;
         const name = style_component.mStyle.items;
-        const style = theme.GetStyle(name) orelse {
+        const style_theme = try self.ThemeOf(engine_context, style_component.*) orelse theme;
+        const style = style_theme.GetStyle(name) orelse {
             try self.WarnMissing(engine_context.EngineAllocator(), name);
             continue;
         };
         try Apply(engine_context, entity, style.*, plain_texture);
+        //at once: nothing holds on to the component past here, and next frame it is no longer styled
+        if (style_component.mOnce) try element.RemoveComponentSync(engine_context, StyleComponent);
     }
+}
+
+/// The theme file a style names, read in if it isn't yet and remembered as used. Null for a style that names none,
+/// which takes the editor's theme, or one that can't be read
+fn ThemeOf(self: *StyleSystem, engine_context: *EngineContext, style: StyleComponent) !?*const ThemeAsset {
+    if (!style.mTheme.IsIDValid()) return null;
+    const theme = style.mTheme.GetAsset(engine_context, ThemeAsset) catch return null;
+    if (std.mem.indexOfScalar(AssetHandle.Type, self.mThemesUsed.items, style.mTheme.mID) == null) {
+        try self.mThemesUsed.append(engine_context.EngineAllocator(), style.mTheme.mID);
+    }
+    return theme;
 }
 
 /// Gives a surface with no texture of its own the plain one, sampled only at its middle, so the edges of the texture
@@ -188,6 +217,6 @@ pub fn ColorFor(colors: ThemeAsset.StateColors, state: State) ?Vec4(f32) {
 
 fn WarnMissing(self: *StyleSystem, engine_allocator: std.mem.Allocator, name: []const u8) !void {
     if (self.mWarned.contains(name)) return;
-    std.log.warn("The current theme has no style called '{s}'", .{name});
+    std.log.warn("No style called '{s}' in its theme", .{name});
     try self.mWarned.put(engine_allocator, try engine_allocator.dupe(u8, name), {});
 }

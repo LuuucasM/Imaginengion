@@ -88,6 +88,8 @@ pub const PADDING: f32 = 6;
 pub const DEPTH_STEP: f32 = 0.01;
 /// A checkbox's box
 pub const CHECKBOX_SIZE: f32 = 16;
+/// How far in from its box's edges a checkbox's check mark is (AddCheckMark)
+pub const CHECK_INSET: f32 = 4;
 /// How far in front of the rest of its scene a dropdown's list or a menu is, so it is drawn over what it hangs over:
 /// in front of the floating windows too (WidgetActions.WINDOW_DEPTH), as many as a scene is likely to have. The overlay
 /// is drawn in perspective, so something this far in front is drawn a little bigger, about 0.3%
@@ -787,6 +789,24 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
 
     try WidgetActions.RaiseWindow(engine_context, window);
     return .{ .Window = window, .TitleBar = title_bar, .Content = content };
+}
+
+/// A mark inside a checkbox's box (the row's first child), shown only while it is checked (WidgetActions.Toggle): what
+/// shows a checkbox is checked when nothing colors its box by its state, as a theme does. Style "CheckMark"
+pub fn AddCheckMark(engine_context: *EngineContext, checkbox: Entity) !Entity {
+    var parts = checkbox.GetIterator(.Child);
+    const box = parts.next().?;
+    _ = try box.AddComponent(engine_context, LayoutComponent{ .mPadding = .All(CHECK_INSET), .mMainAlign = .Center, .mCrossAlign = .Center });
+    const mark = try NewEntity(engine_context, .{ .Entity = box });
+    try AddQuad(engine_context, mark, .{}, .{});
+    const size = CHECKBOX_SIZE - 2 * CHECK_INSET;
+    _ = try mark.AddComponent(engine_context, LayoutItemComponent{
+        .mWidth = .{ .Fixed = size },
+        .mHeight = .{ .Fixed = size },
+        .mCollapsed = !box.HasComponent(EntityComponents.SelectedTag),
+    });
+    try UIManager.Style(engine_context, mark, "CheckMark");
+    return mark;
 }
 
 /// Multiplies every size in the widget `root` and everything under it by `factor`: where each sits, gaps and padding,

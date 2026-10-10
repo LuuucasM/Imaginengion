@@ -16,7 +16,7 @@ const UIManager = @import("../UI/UIManager.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const Inspector = @import("../UI/Inspector.zig");
-const UIEvent = @import("../Events/UIEventData.zig").EventT;
+const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
 const ComponentList = @import("ComponentList.zig").ComponentList;
@@ -198,9 +198,9 @@ pub fn Run(self: *const ComponentsPanel, engine_context: *EngineContext, action:
 }
 
 /// A drop on the panel: an entity's row on the selected player's possessed entity, which it possesses
-pub fn OnDrop(self: *const ComponentsPanel, dropped: PointerDroppedEvent) void {
+pub fn OnDrop(self: *const ComponentsPanel, on: Entity, dropped: PointerDroppedEvent) void {
     const box = self.mPossessBox orelse return;
-    if (!Same(dropped.mEntity, box)) return;
+    if (!Same(on, box)) return;
     const built = self.mBuiltFor orelse return;
     if (built != .player) return;
     const object_ref = dropped.mSource.GetComponent(ObjectRefComponent) orelse return;
@@ -213,9 +213,9 @@ pub fn OnDrop(self: *const ComponentsPanel, dropped: PointerDroppedEvent) void {
 }
 
 /// One of the frame's UI events: a new type picked for the selected entity's rigid body
-pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, event: UIEvent) !void {
-    const changed = switch (event) {
-        .ValueChanged => |e| e.mEntity,
+pub fn OnUIEvent(self: *const ComponentsPanel, engine_context: *EngineContext, event: EntityUIEvent) !void {
+    const changed = switch (event.mEvent) {
+        .ValueChanged => event.mEntity,
         else => return,
     };
     const dropdown = self.mBodyType orelse return;
@@ -328,7 +328,7 @@ fn TakeRebuild(self: *ComponentsPanel, engine_context: *EngineContext) bool {
         .player => self.mPlayerList.mRoot,
         .gamecontext => self.mGameContextList.mRoot,
     } orelse return false;
-    return engine_context.mUIManager.mBindingSystem.TakeRebuild(root);
+    return engine_context.mUIManager.TakeRebuild(root);
 }
 
 /// Which of its list's components the object has, as bits

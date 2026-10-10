@@ -6,11 +6,13 @@ const ScriptResult = @import("IM").ScriptResult;
 const PointerEvent = @import("IM").PointerEvent;
 const OnPointerEventScript = @This();
 
-/// Function that gets executed for every pointer (mouse) event sent to this entity: it is what makes the entity a
-/// button, a draggable, a slot things are dropped in. Events are sent to what the pointer is over and then to each
-/// thing that is inside of, so this hears clicks on this entity's children too. Each event has:
-///     mEntity: this entity
-///     mTarget: what the pointer was actually over (this entity, or something inside it). Not on enter and exit
+/// Function that gets executed for every pointer (mouse) event sent to this entity. Any entity the pointer can be over
+/// gets them, in the world as much as in UI: an enemy that lights up when hovered, a door that opens when clicked, a
+/// crate that can be dragged, as well as a button or a slot things are dropped in. Events are sent to what the pointer
+/// is over and then to each thing that is inside of, so this hears clicks on this entity's children too. Only this
+/// entity's own events come here, so there is no need to check who an event is for: switch on what happened. Each
+/// event but enter and exit has:
+///     mTarget: what the pointer was actually over (this entity, or something inside it)
 /// and then, by event:
 ///     .PointerEnter / .PointerExit: the pointer came over this entity (or something inside it), or left it
 ///     .PointerPressed / .PointerReleased: mButton went down or came up. mPosition is where, in the world

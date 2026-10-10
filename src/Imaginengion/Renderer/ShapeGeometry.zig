@@ -337,27 +337,27 @@ pub fn QuadBox(transform: *const TransformComponent, quad: ShapeComponent.Quad, 
     };
 }
 
-/// What TextLayout needs for a text component, with its scale already applied. Text only grows evenly,
-/// so it takes the larger of its x and y scale. Not z: text is flat, like a quad, so shrinking a button's x and y
-/// shrinks its label with it. The font size and the bounds grow together, which keeps the wrapping on the same words
-/// at any scale.
+/// What TextLayout needs for a text component, and how its scale stretches the result. The text is laid out in its
+/// own space, at its own font size, the same as layout measures it, so it wraps on the same words whatever its scale.
+/// The laid out text is then stretched by its x and y scale, each on its own, the way a quad is: a button stretched
+/// wide stretches its label with it. Not by z: text is flat
 pub const TextParams = struct {
     FontSize: f32,
     LeftBound: f32, //how far the text runs left of its transform; layout lines start at x = 0, so they shift left by this
     RightBound: f32,
     WrapWidth: f32,
+    /// what the laid out text is multiplied by, across and up
+    Stretch: Vec2(f32),
 };
 
 pub fn GetTextParams(transform: *const TransformComponent, text: *const TextComponent) TextParams {
     const world_scale = transform.GetWorldScale();
-    const text_scale = @max(world_scale.x, world_scale.y);
-    const left = text.mBounds.x * text_scale;
-    const right = text.mBounds.y * text_scale;
     return .{
-        .FontSize = text.mFontSize * text_scale,
-        .LeftBound = left,
-        .RightBound = right,
-        .WrapWidth = left + right,
+        .FontSize = text.mFontSize,
+        .LeftBound = text.mBounds.x,
+        .RightBound = text.mBounds.y,
+        .WrapWidth = text.mBounds.x + text.mBounds.y,
+        .Stretch = .{ .x = world_scale.x, .y = world_scale.y },
     };
 }
 
@@ -369,14 +369,16 @@ pub fn TextBox(comptime FontT: type, transform: *const TransformComponent, text:
     const params = GetTextParams(transform, text);
     const metrics = TextLayout.Measure(FontT, text.mText.items, font, params.FontSize, params.WrapWidth);
 
-    //in the text's own space: x from -left to +right around the transform, y over the laid out lines
+    //in the text's own space: x from -left to +right around the transform, y over the laid out lines. Then stretched
+    //by its scale
+    const stretch = params.Stretch;
     const local_center = Vec3(f32){
-        .x = (params.RightBound - params.LeftBound) * 0.5,
-        .y = (metrics.Min.y + metrics.Max.y) * 0.5,
+        .x = (params.RightBound - params.LeftBound) * 0.5 * stretch.x,
+        .y = (metrics.Min.y + metrics.Max.y) * 0.5 * stretch.y,
         .z = 0,
     };
-    var half_x = (params.LeftBound + params.RightBound) * 0.5;
-    var half_y = (metrics.Max.y - metrics.Min.y) * 0.5;
+    var half_x = (params.LeftBound + params.RightBound) * 0.5 * @abs(stretch.x);
+    var half_y = (metrics.Max.y - metrics.Min.y) * 0.5 * @abs(stretch.y);
 
     const text_rotation = transform.GetWorldRotation();
     var center = transform.GetWorldPosition().AddVec(local_center.QuatRotate(text_rotation));

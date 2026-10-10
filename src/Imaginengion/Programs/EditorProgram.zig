@@ -627,41 +627,42 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
     try engine_context.mUIManager.OnPointerEvent(engine_context, event.*);
     //a menu bar item or a panel's button picked: one event per entity in the chain, the item's own is the one with its
     //action
-    switch (event.*) {
+    const entity = event.mEntity;
+    switch (event.mEvent) {
         .PointerClicked => |click| if (click.mButton == .BUTTON_LEFT) {
-            if (self.mMenuBar.ActionOf(click.mEntity)) |action| try self.RunMenuAction(engine_context, action);
-            if (self.mAudioBusesPanel.ActionOf(click.mEntity)) |action| try AudioBusesPanel.Run(engine_context, action);
-            if (self.mUIElementPanel.ActionOf(click.mEntity)) |action| try self.mUIElementPanel.Run(engine_context, action);
-            if (self.mScriptsPanel.ActionOf(click.mEntity)) |script| try ScriptsPanel.Run(engine_context, script);
-            if (self.mComponentsPanel.ActionOf(click.mEntity)) |action| switch (action) {
+            if (self.mMenuBar.ActionOf(entity)) |action| try self.RunMenuAction(engine_context, action);
+            if (self.mAudioBusesPanel.ActionOf(entity)) |action| try AudioBusesPanel.Run(engine_context, action);
+            if (self.mUIElementPanel.ActionOf(entity)) |action| try self.mUIElementPanel.Run(engine_context, action);
+            if (self.mScriptsPanel.ActionOf(entity)) |script| try ScriptsPanel.Run(engine_context, script);
+            if (self.mComponentsPanel.ActionOf(entity)) |action| switch (action) {
                 .EditUIElement => try self.mUIElementPanel.Open(engine_context),
                 else => try self.mComponentsPanel.Run(engine_context, action),
             };
-            if (self.mContentBrowserPanel.ActionOf(click.mEntity, click.mClicks)) |action| switch (action) {
+            if (self.mContentBrowserPanel.ActionOf(entity, click.mClicks)) |action| switch (action) {
                 .NewScene => try self.RunMenuAction(engine_context, .NewGameScene),
                 else => try self.mContentBrowserPanel.Run(engine_context, action),
             };
-            if (self.mScenePanel.ActionOf(click.mEntity)) |action| try self.mScenePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mEntityPanel.ActionOf(click.mEntity)) |action| try self.mEntityPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mPlayerPanel.ActionOf(click.mEntity)) |action| try self.mPlayerPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            if (self.mGameModePanel.ActionOf(click.mEntity)) |action| try self.mGameModePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            for (self.mTmplEditPanels.items) |*panel| try panel.OnLeftClick(engine_context, click.mEntity);
+            if (self.mScenePanel.ActionOf(entity)) |action| try self.mScenePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mEntityPanel.ActionOf(entity)) |action| try self.mEntityPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mPlayerPanel.ActionOf(entity)) |action| try self.mPlayerPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            if (self.mGameModePanel.ActionOf(entity)) |action| try self.mGameModePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
+            for (self.mTmplEditPanels.items) |*panel| try panel.OnLeftClick(engine_context, entity);
         } else if (click.mButton == .BUTTON_RIGHT) {
-            for (self.mTmplEditPanels.items) |*panel| try panel.OnRightClick(engine_context, click.mEntity);
+            for (self.mTmplEditPanels.items) |*panel| try panel.OnRightClick(engine_context, entity);
             //a hierarchy row's menu is one menu for every row: which row it opens on, before its script opens it
-            try self.mScenePanel.OnRightClick(engine_context, click.mEntity);
-            try self.mEntityPanel.OnRightClick(engine_context, click.mEntity);
-            try self.mPlayerPanel.OnRightClick(engine_context, click.mEntity);
-            try self.mGameModePanel.OnRightClick(engine_context, click.mEntity);
+            try self.mScenePanel.OnRightClick(engine_context, entity);
+            try self.mEntityPanel.OnRightClick(engine_context, entity);
+            try self.mPlayerPanel.OnRightClick(engine_context, entity);
+            try self.mGameModePanel.OnRightClick(engine_context, entity);
         },
         .PointerDropped => |dropped| {
-            try self.mScriptsPanel.OnDrop(engine_context, dropped, self.mSelectedObj);
-            self.mComponentsPanel.OnDrop(dropped);
-            for (self.mTmplEditPanels.items) |panel| panel.OnDrop(dropped);
-            try self.mScenePanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mEntityPanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mPlayerPanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
-            try self.mGameModePanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mScriptsPanel.OnDrop(engine_context, entity, dropped, self.mSelectedObj);
+            self.mComponentsPanel.OnDrop(entity, dropped);
+            for (self.mTmplEditPanels.items) |panel| panel.OnDrop(entity, dropped);
+            try self.mScenePanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mEntityPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mPlayerPanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mGameModePanel.OnDrop(engine_context, entity, dropped, self.mActiveWorld, &self.mSelectedObj);
         },
         else => {},
     }
@@ -675,11 +676,15 @@ pub fn OnUIEvent(editor_program: *anyopaque, engine_context: *EngineContext, eve
     const zone = Tracy.ZoneInit("EditorProgram::OnUIEvent", @src());
     defer zone.Deinit();
     const self: *EditorProgram = @ptrCast(@alignCast(editor_program));
-    self.mPickingDebugPanel.OnUIEvent(event.*);
+    const entity_event = switch (event.*) {
+        .Entity => |e| e,
+        else => return .Continue,
+    };
+    self.mPickingDebugPanel.OnUIEvent(entity_event);
     //a rigid body's type picked
-    try self.mComponentsPanel.OnUIEvent(engine_context, event.*);
-    for (self.mTmplEditPanels.items) |panel| try panel.OnUIEvent(engine_context, event.*);
-    try self.mEventScripts.OnUIEvent(engine_context, event.*);
+    try self.mComponentsPanel.OnUIEvent(engine_context, entity_event);
+    for (self.mTmplEditPanels.items) |panel| try panel.OnUIEvent(engine_context, entity_event);
+    try self.mEventScripts.OnUIEvent(engine_context, entity_event);
     return .Continue;
 }
 
@@ -807,7 +812,7 @@ fn IsEditorCamera(self: *const EditorProgram, camera: Player) bool {
     return camera.mID == self.mEditorViewportPlayer.mID and camera.mManager == self.mEditorViewportPlayer.mManager;
 }
 
-fn IsEditorUICamera(self: *const EditorProgram, camera: Player) bool {
+pub fn IsEditorUICamera(self: *const EditorProgram, camera: Player) bool {
     return camera.mID == self.mEditorUIPlayer.mID and camera.mManager == self.mEditorUIPlayer.mManager;
 }
 
@@ -978,7 +983,8 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     return true;
 }
 
-/// Asks for a theme file and makes it the current theme. A file in the open project is kept by the project's path,
+/// Asks for a theme file and makes it the editor's theme, for this session: how the editor looks, not the game (a
+/// game's UI names its own theme files, see StyleComponent). A file in the open project is kept by the project's path,
 /// anything else by the engine's
 fn PickTheme(_: *EditorProgram, engine_context: *EngineContext) !void {
     const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), ".imtheme");
