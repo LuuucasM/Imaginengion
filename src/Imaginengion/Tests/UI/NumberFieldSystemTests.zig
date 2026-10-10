@@ -159,6 +159,29 @@ test "a u32 field never goes below 0, and every field keeps within its limits" {
     try std.testing.expectApproxEqAbs(@as(f32, 0.9), ValueOf(volume).float32, 0.0001);
 }
 
+test "a size field moves by a share of itself, and Shift drags slower" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    //a lowest value and no highest: 1% of itself per unit, so 100 moves by 1
+    const width = try world.Field(.{ .float32 = 100 }, .{ .mSpeed = 0.5, .mMin = 0 });
+    try world.Drag(width, &.{10});
+    try std.testing.expectApproxEqAbs(@as(f32, 110), ValueOf(width).float32, 0.0001);
+
+    //at 0 it still moves, by 2% of its speed per unit
+    const gap = try world.Field(.{ .float32 = 0 }, .{ .mSpeed = 0.5, .mMin = 0 });
+    try world.Drag(gap, &.{10});
+    try std.testing.expectApproxEqAbs(@as(f32, 0.1), ValueOf(gap).float32, 0.0001);
+
+    //Shift held: a tenth as far, for any field
+    const input = &engine_context.mInputManager;
+    defer input.Deinit(engine_context.EngineAllocator());
+    try input._KeyPressedSet.put(engine_context.EngineAllocator(), .LSHIFT, 0);
+    const offset = try world.Field(.{ .float32 = 0 }, .{ .mSpeed = 0.5 });
+    try world.Drag(offset, &.{10});
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), ValueOf(offset).float32, 0.0001);
+}
+
 test "typing a number into a field sets it within its limits, and anything else puts its value back" {
     const world = try TestWorld.Init();
     defer world.Deinit();

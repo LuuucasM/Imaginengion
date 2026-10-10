@@ -338,8 +338,9 @@ pub fn QuadBox(transform: *const TransformComponent, quad: ShapeComponent.Quad, 
 }
 
 /// What TextLayout needs for a text component, with its scale already applied. Text only grows evenly,
-/// so it takes the largest scale axis, like a sphere collider. The font size and the bounds grow
-/// together, which keeps the wrapping on the same words at any scale.
+/// so it takes the larger of its x and y scale. Not z: text is flat, like a quad, so shrinking a button's x and y
+/// shrinks its label with it. The font size and the bounds grow together, which keeps the wrapping on the same words
+/// at any scale.
 pub const TextParams = struct {
     FontSize: f32,
     LeftBound: f32, //how far the text runs left of its transform; layout lines start at x = 0, so they shift left by this
@@ -349,7 +350,7 @@ pub const TextParams = struct {
 
 pub fn GetTextParams(transform: *const TransformComponent, text: *const TextComponent) TextParams {
     const world_scale = transform.GetWorldScale();
-    const text_scale = @max(world_scale.x, @max(world_scale.y, world_scale.z));
+    const text_scale = @max(world_scale.x, world_scale.y);
     const left = text.mBounds.x * text_scale;
     const right = text.mBounds.y * text_scale;
     return .{

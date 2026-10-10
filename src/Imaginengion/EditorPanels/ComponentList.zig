@@ -2,7 +2,7 @@
 //! component the object has, in the list's order, with the rows its UIRender asks for under it (a component without a
 //! UIRender has an empty header, so it can still be seen and deleted). Right clicking a header offers to delete that
 //! component, and right clicking the panel (the menu target the panel hands in) offers to add one the object doesn't
-//! have. The menus' clicks come in through the editor's pointer events (ActionOf), and Run does what was picked.
+//! have, which scrolls past ADD_MENU_ROWS. The menus' clicks come in through the editor's pointer events (ActionOf), and Run does what was picked.
 //! Built once for an object: the panel builds it again when the object or which components it has change, or when a
 //! field asks for it (BindingSystem.TakeRebuild with Root). Every header starts folded for an object just picked, and
 //! one that was opened stays open while the list is built again for the same object, so adding a component (which
@@ -24,6 +24,9 @@ const ShapeComponent = EntityComponents.ShapeComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const AttribComponent = EntityComponents.AttribComponent;
 const UIComponents = @import("../ECSComponents/UIComponents.zig");
+
+/// How many components the Add menu shows at once: past that it scrolls
+pub const ADD_MENU_ROWS: usize = 10;
 
 /// The list for objects of type ObjectType, showing the components in `components`
 pub fn ComponentList(comptime ObjectType: type, comptime components: []const type) type {
@@ -114,6 +117,8 @@ pub fn ComponentList(comptime ObjectType: type, comptime components: []const typ
                     if (!object.HasComponent(component_type)) try self.AddItem(engine_context, add_menu, component_type.Name, .{ .Add = i }, options);
                 }
             }
+            //a long list scrolls rather than running off the screen
+            if (addable > ADD_MENU_ROWS) try Widgets.ScrollingMenu(engine_context, add_menu, ADD_MENU_ROWS);
         }
 
         /// Takes the list and its menus away: hidden now, deleted at the end of the frame. The headers' menus and the

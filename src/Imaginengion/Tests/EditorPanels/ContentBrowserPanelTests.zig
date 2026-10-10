@@ -1,7 +1,7 @@
 //! The Content Browser in the editor's own UI (EditorPanels/ContentBrowserPanel.zig), on a temporary folder: a tile per
 //! folder and shown file, folders first and each by name, other files left out, long names shortened, going into a
-//! folder and back up by double clicking, a new file showing up, files' tiles carrying their path when dragged, and New
-//! Scene Layer from the pane's menu. Also the Scripts panel taking a drop: which object a script type goes on, and a
+//! folder and back up by double clicking, a new file showing up, files' tiles carrying their path when dragged, going
+//! into the engine's assets from the top of the project and back out, and New Scene Layer from the pane's menu. Also the Scripts panel taking a drop: which object a script type goes on, and a
 //! file that isn't a script ignored (adding a real script compiles it, so that part isn't run here). No window or
 //! renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
@@ -47,6 +47,7 @@ const TestBrowser = struct {
     fn Deinit(self: *TestBrowser) void {
         const engine_context = self.mEngineContext;
         self.mPanel.Deinit(engine_context.EngineAllocator());
+        engine_context.mAssetManager.mCWDPath.deinit(engine_context.EngineAllocator());
         engine_context.mEditorWorld.Deinit(engine_context);
         engine_context.mUIManager.Deinit(engine_context);
         _ = engine_context._Internal.EngineGPA.deinit();
@@ -100,24 +101,32 @@ test "a tile per folder and shown file, folders first, each by name, others left
     try browser.WriteFile("Mover.zig");
     try browser.WriteFile("Level.imsc");
     try browser.WriteFile("hero.png");
+    try browser.WriteFile("sky.jpg");
+    try browser.WriteFile("PHOTO.JPG");
     try browser.WriteFile("notes.txt");
     try browser.WriteFile("AVeryLongFileName.png");
     try browser.Open();
     try browser.Update();
 
+    //the engine's assets first, at the top of the project
     var names: [16][]const u8 = undefined;
-    try std.testing.expectEqual(@as(usize, 5), browser.Names(&names));
-    try std.testing.expectEqualStrings("Sprites", names[0]);
-    try std.testing.expectEqualStrings("AVeryLong...", names[1]);
-    try std.testing.expectEqualStrings("Level.imsc", names[2]);
-    try std.testing.expectEqualStrings("Mover.zig", names[3]);
-    try std.testing.expectEqualStrings("hero.png", names[4]);
+    try std.testing.expectEqual(@as(usize, 8), browser.Names(&names));
+    try std.testing.expectEqualStrings("EngineAssets", names[0]);
+    try std.testing.expectEqualStrings("Sprites", names[1]);
+    try std.testing.expectEqualStrings("AVeryLong...", names[2]);
+    try std.testing.expectEqualStrings("Level.imsc", names[3]);
+    try std.testing.expectEqualStrings("Mover.zig", names[4]);
+    try std.testing.expectEqualStrings("PHOTO.JPG", names[5]);
+    try std.testing.expectEqualStrings("hero.png", names[6]);
+    try std.testing.expectEqualStrings("sky.jpg", names[7]);
     try std.testing.expect(browser.mPanel.mMessage.GetComponent(LayoutItemComponent).?.mCollapsed);
 
     //a file's tile carries its path when dragged, a folder's isn't dragged at all
     try std.testing.expect(!browser.Tile(0).HasComponent(DragSourceComponent));
-    try std.testing.expect(browser.Tile(3).HasComponent(DragSourceComponent));
-    try std.testing.expectEqualStrings("Mover.zig", browser.Tile(3).GetComponent(FileRefComponent).?.mRelPath.items);
+    try std.testing.expect(!browser.Tile(1).HasComponent(DragSourceComponent));
+    try std.testing.expect(browser.Tile(4).HasComponent(DragSourceComponent));
+    try std.testing.expectEqualStrings("Mover.zig", browser.Tile(4).GetComponent(FileRefComponent).?.mRelPath.items);
+    try std.testing.expectEqual(.Prj, browser.Tile(4).GetComponent(FileRefComponent).?.mPathType);
 
     //nothing changed: not built again. A new file: built again with it
     const grid = browser.mPanel.mGrid.?;
@@ -126,7 +135,7 @@ test "a tile per folder and shown file, folders first, each by name, others left
     try browser.WriteFile("Jump.wav");
     try browser.Update();
     try std.testing.expect(browser.mPanel.mGrid.?.mID != grid.mID);
-    try std.testing.expectEqual(@as(usize, 6), browser.Names(&names));
+    try std.testing.expectEqual(@as(usize, 9), browser.Names(&names));
 }
 
 test "double clicking a folder goes into it, Back comes up again, and a single click does nothing" {
@@ -139,8 +148,8 @@ test "double clicking a folder goes into it, Back comes up again, and a single c
     try browser.Update();
     const root_len = browser.mPanel.CurrentPath().len;
 
-    try std.testing.expect(browser.mPanel.ActionOf(browser.Tile(0), 1) == null);
-    const enter = browser.mPanel.ActionOf(browser.Tile(0), 2).?;
+    try std.testing.expect(browser.mPanel.ActionOf(browser.Tile(1), 1) == null);
+    const enter = browser.mPanel.ActionOf(browser.Tile(1), 2).?;
     try browser.mPanel.Run(engine_context, enter);
     try browser.Update();
     try std.testing.expect(std.mem.endsWith(u8, browser.mPanel.CurrentPath(), "/Sprites"));
@@ -156,11 +165,55 @@ test "double clicking a folder goes into it, Back comes up again, and a single c
     try std.testing.expectEqual(root_len, browser.mPanel.CurrentPath().len);
     try std.testing.expectEqualStrings("Sprites", (blk: {
         _ = browser.Names(&names);
-        break :blk names[0];
+        break :blk names[1];
     }));
 
     //the pane's menu
     try std.testing.expect(browser.mPanel.ActionOf(browser.mPanel.mNewScene, 1).? == .NewScene);
+}
+
+test "EngineAssets goes into the engine's assets, whose files are engine files, and Back from its top comes out to the project" {
+    const browser = try TestBrowser.Init();
+    defer browser.Deinit();
+    const engine_context = browser.mEngineContext;
+    //the temporary folder is the engine's folder as well as the project's
+    const cwd = try browser.mTmpDir.dir.realPathFileAlloc(browser.Io(), ".", engine_context.FrameAllocator());
+    try engine_context.mAssetManager.mCWDPath.appendSlice(engine_context.EngineAllocator(), cwd);
+    try browser.mTmpDir.dir.createDirPath(browser.Io(), "src/Imaginengion/EngineAssets/textures");
+    try browser.WriteFile("src/Imaginengion/EngineAssets/textures/White.png");
+    try browser.WriteFile("hero.png");
+    try browser.Open();
+    try browser.Update();
+    const root_len = browser.mPanel.CurrentPath().len;
+
+    try browser.mPanel.Run(engine_context, browser.mPanel.ActionOf(browser.Tile(0), 2).?);
+    try browser.Update();
+    try std.testing.expect(std.mem.endsWith(u8, browser.mPanel.CurrentPath(), "src/Imaginengion/EngineAssets"));
+    try std.testing.expectEqual(.Eng, browser.mPanel.CurrentPathType());
+    var names: [8][]const u8 = undefined;
+    try std.testing.expectEqual(@as(usize, 2), browser.Names(&names));
+    try std.testing.expectEqualStrings("Back", names[0]);
+    try std.testing.expectEqualStrings("textures", names[1]);
+
+    //a file in it: its path is from the engine's folder
+    try browser.mPanel.Run(engine_context, browser.mPanel.ActionOf(browser.Tile(1), 2).?);
+    try browser.Update();
+    const white = browser.Tile(1).GetComponent(FileRefComponent).?;
+    try std.testing.expectEqualStrings("src/Imaginengion/EngineAssets/textures/White.png", white.mRelPath.items);
+    try std.testing.expectEqual(.Eng, white.mPathType);
+
+    //Back up to its top, then out to the top of the project
+    try browser.mPanel.Run(engine_context, .Up);
+    try browser.Update();
+    try std.testing.expect(std.mem.endsWith(u8, browser.mPanel.CurrentPath(), "src/Imaginengion/EngineAssets"));
+    try browser.mPanel.Run(engine_context, .Up);
+    try browser.Update();
+    try std.testing.expectEqual(root_len, browser.mPanel.CurrentPath().len);
+    try std.testing.expectEqual(.Prj, browser.mPanel.CurrentPathType());
+    try std.testing.expectEqualStrings("EngineAssets", (blk: {
+        _ = browser.Names(&names);
+        break :blk names[0];
+    }));
 }
 
 test "the Scripts panel takes an entity script onto an entity and a scene script onto a scene, and nothing else" {

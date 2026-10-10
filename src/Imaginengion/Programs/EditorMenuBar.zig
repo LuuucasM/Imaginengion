@@ -2,7 +2,7 @@
 //! Project (the scene, player and game mode the game starts from), Window and Editor (theme, play options, vsync). Opening, closing and switching menus is the stock menu scripts'.
 //! What an item does is the editor's: this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
 //! Update puts the editor's state on the items: which panels are shown (check marks), what can't be done right now
-//! (greyed out, DisabledTag), and the players the play preview can follow, a list rebuilt when they change.
+//! (greyed out, DisabledTag, e.g. saving a scene with no scene selected), and the players the play preview can follow, a list rebuilt when they change.
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -72,6 +72,9 @@ pub const State = struct {
     /// whether each panel is shown
     Shown: std.EnumArray(Panel, bool),
     ProjectOpen: bool,
+    /// whether the selected object is a scene / an entity, which Save Scene (As) and Save Entity (As) save
+    SceneSelected: bool,
+    EntitySelected: bool,
     /// whether Play/Stop can be used: stopping always, starting with a run player that can be drawn
     CanPlayStop: bool,
     PlayPreview: bool,
@@ -90,6 +93,9 @@ const ItemAction = struct {
 mActions: std.ArrayList(ItemAction) = .empty,
 mPanelItems: std.EnumArray(Panel, Entity) = .initFill(.uninit),
 mSaveProject: Entity = .uninit,
+/// Save Scene and Save Scene As..., then Save Entity and Save Entity As...
+mSaveSceneItems: [2]Entity = .{ .uninit, .uninit },
+mSaveEntityItems: [2]Entity = .{ .uninit, .uninit },
 mEntryItems: std.EnumArray(Project.Entry, Entity) = .initFill(.uninit),
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
@@ -114,11 +120,11 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     _ = try self.Add(engine_context, new_scene, "New Game Scene", item_options, .NewGameScene);
     _ = try self.Add(engine_context, new_scene, "New Overlay Scene", item_options, .NewOverlayScene);
     _ = try self.Add(engine_context, file, "Open Scene", item_options, .OpenScene);
-    _ = try self.Add(engine_context, file, "Save Scene", item_options, .SaveScene);
-    _ = try self.Add(engine_context, file, "Save Scene As...", item_options, .SaveSceneAs);
+    self.mSaveSceneItems[0] = try self.Add(engine_context, file, "Save Scene", item_options, .SaveScene);
+    self.mSaveSceneItems[1] = try self.Add(engine_context, file, "Save Scene As...", item_options, .SaveSceneAs);
     _ = try Widgets.Separator(engine_context, .{ .Entity = file });
-    _ = try self.Add(engine_context, file, "Save Entity", item_options, .SaveEntity);
-    _ = try self.Add(engine_context, file, "Save Entity As...", item_options, .SaveEntityAs);
+    self.mSaveEntityItems[0] = try self.Add(engine_context, file, "Save Entity", item_options, .SaveEntity);
+    self.mSaveEntityItems[1] = try self.Add(engine_context, file, "Save Entity As...", item_options, .SaveEntityAs);
     _ = try Widgets.Separator(engine_context, .{ .Entity = file });
     _ = try self.Add(engine_context, file, "New Project", item_options, .NewProject);
     _ = try self.Add(engine_context, file, "Open Project", item_options, .OpenProject);
@@ -172,6 +178,8 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     }
     try WidgetActions.SetChecked(engine_context, self.mPlayPreview, state.PlayPreview);
     try WidgetActions.SetChecked(engine_context, self.mVSync, state.VSync);
+    for (self.mSaveSceneItems) |item| try WidgetActions.SetDisabled(engine_context, item, !state.SceneSelected);
+    for (self.mSaveEntityItems) |item| try WidgetActions.SetDisabled(engine_context, item, !state.EntitySelected);
     try WidgetActions.SetDisabled(engine_context, self.mSaveProject, !state.ProjectOpen);
     for (self.mEntryItems.values) |item| try WidgetActions.SetDisabled(engine_context, item, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mPlayStop, !state.CanPlayStop);

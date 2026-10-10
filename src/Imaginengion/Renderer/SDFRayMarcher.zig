@@ -618,7 +618,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                         .Normal = hit.Normal,
                         .TextureUV = SDFFunc.TextureUV(
                             texture_shading_data.Texturehandle,
-                            hit.UV,
+                            SDFFunc.SurfaceUV(texture_shading_data, hit.UV),
                             texture_shading_data.TextureWidth,
                             texture_shading_data.TextureHeight,
                         ),

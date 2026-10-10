@@ -3,7 +3,10 @@
 //! come in stack order, the top layer first. Clicking a row selects its object, and the selected object's row is
 //! highlighted however it was selected. Every row can be dragged, carrying its object (ObjectRefComponent). Right
 //! clicking a row offers New Child, Make Template and Delete (and New Entity for a scene), right clicking the panel New
-//! of its type. Every frame the world's objects are walked and checked against the shape of the tree that was built
+//! of its type. Entities and scenes also offer ready-made UI entities (a panel, text, a button, ...), each made by its
+//! widget builder (Widgets): the panel's menu puts one in the selected scene, an entity's row under that entity, a
+//! scene's row at the top of that scene. An object file of its type dragged from the Content Browser onto the panel is loaded into the world (an
+//! entity into the selected scene) and selected. Every frame the world's objects are walked and checked against the shape of the tree that was built
 //! (which objects, under which), and it is built again when that changed, keeping which nodes were open; a rename only
 //! changes the row's text. Built with BuildForRoots it shows only the objects it is handed each frame and what is under
 //! them instead of a whole world, with no menu of its own and no Delete on those top rows: a template's tree, in a
@@ -18,20 +21,54 @@ const Player = @import("../ECSObjects/Player.zig");
 const GameContext = @import("../ECSObjects/GameContext.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const Widgets = @import("../UI/Widgets.zig");
+const StyleSystem = @import("../UI/StyleSystem.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
 const GroupQuery = @import("../ECS/ECSManager.zig").GroupQuery;
 const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
 const SelectedObject = @import("../Programs/EditorProgram.zig").SelectedObject;
+const Serializer = @import("../Serializer/Serializer.zig");
+const PointerDroppedEvent = @import("../Events/PointerEventData.zig").PointerDroppedEvent;
+const MathTypes = @import("../Math/MathTypes.zig");
 
 const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const LayoutItemComponent = EntityComponents.LayoutItemComponent;
+const LayoutComponent = EntityComponents.LayoutComponent;
+const TextComponent = EntityComponents.TextComponent;
 const SurfaceComponent = EntityComponents.SurfaceComponent;
 const SelectedTag = EntityComponents.SelectedTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const NameComponent = EntityComponents.NameComponent;
 const TmplRefComponent = EntityComponents.TmplRefComponent;
 const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
+
+/// The ready-made UI entities the entity and scene menus offer, each one widget builder's
+pub const UIKind = enum {
+    Panel,
+    Text,
+    Button,
+    Checkbox,
+    TextField,
+
+    /// Its menu item's text, and the name of what it makes
+    pub fn Name(self: UIKind) []const u8 {
+        return switch (self) {
+            .Panel => "Panel",
+            .Text => "Text",
+            .Button => "Button",
+            .Checkbox => "Checkbox",
+            .TextField => "Text Field",
+        };
+    }
+};
+
+/// A new Panel's size
+const UI_PANEL_SIZE = MathTypes.Vec2(f32){ .x = 200, .y = 150 };
+/// The width a ready-made UI entity that fills what it is in gets when it isn't in a layout, where there is nothing to
+/// fill (in an overlay it would be the whole screen). In overlay units, like the rest of a widget's sizes
+const UI_TOP_WIDTH: f32 = 200;
 
 /// The panel for objects of type T
 pub fn HierarchyPanel(comptime T: type) type {
@@ -55,9 +92,13 @@ pub fn HierarchyPanel(comptime T: type) type {
             NewEntity,
             MakeTemplate,
             Delete,
+            /// a ready-made UI entity under the entity, or at the top of the scene, it was opened on
+            NewUIChild: UIKind,
             /// from the panel's menu
             New,
             NewOverlay,
+            /// a ready-made UI entity in the selected scene
+            NewUI: UIKind,
         };
 
         const MenuItem = struct {
@@ -100,6 +141,8 @@ pub fn HierarchyPanel(comptime T: type) type {
         pub fn Build(engine_context: *EngineContext, page: Entity, options: Widgets.Options) !Self {
             var self = try Make(engine_context, page, options, .World);
             try self.AddAreaMenu(engine_context);
+            //it takes files (one of its type is checked for when it is dropped)
+            _ = try self.mArea.AddComponent(engine_context, DropTargetComponent.Accepting(&.{FileRefComponent}));
             return self;
         }
 
@@ -122,6 +165,12 @@ pub fn HierarchyPanel(comptime T: type) type {
             const type_name = TypeName();
             try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.FrameAllocator(), "New Child {s}", .{type_name}), .NewChild);
             if (T == Scene) try self.AddRowItem(engine_context, "New Entity", .NewEntity);
+            if (T == Entity or T == Scene) {
+                const ui_menu = try Widgets.Submenu(engine_context, self.mRowMenu, if (T == Entity) "New UI Child" else "New UI Entity", self.mOptions);
+                for (std.enums.values(UIKind)) |kind| {
+                    try self.AddItem(engine_context, ui_menu, &self.mRowItems, kind.Name(), .{ .NewUIChild = kind });
+                }
+            }
             try self.AddRowItem(engine_context, "Make Template", .MakeTemplate);
             try self.AddRowItem(engine_context, try std.fmt.allocPrint(engine_context.FrameAllocator(), "Delete {s}", .{type_name}), .Delete);
             return self;
@@ -133,7 +182,13 @@ pub fn HierarchyPanel(comptime T: type) type {
             const item_options = Widgets.MenuItemOptions{ .StockScripts = self.mOptions.StockScripts };
             const area_menu = try Widgets.ContextMenu(engine_context, self.mArea, self.mOptions);
             switch (T) {
-                Entity => try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Entity", item_options), .Action = .New }),
+                Entity => {
+                    try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Entity", item_options), .Action = .New });
+                    const ui_menu = try Widgets.Submenu(engine_context, area_menu, "New UI Entity", self.mOptions);
+                    for (std.enums.values(UIKind)) |kind| {
+                        try self.AddItem(engine_context, ui_menu, &self.mAreaItems, kind.Name(), .{ .NewUI = kind });
+                    }
+                },
                 Scene => {
                     try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Game Scene", item_options), .Action = .New });
                     try self.mAreaItems.append(engine_allocator, .{ .Item = try Widgets.MenuItem(engine_context, area_menu, "New Overlay Scene", item_options), .Action = .NewOverlay });
@@ -154,7 +209,7 @@ pub fn HierarchyPanel(comptime T: type) type {
 
         /// Once a frame, before layout: `world`'s tree built again if its shape changed, each row named after its
         /// object, the selected object's row highlighted, and the panel's menu's items greyed out when they can't be
-        /// done (New Entity needs a scene selected)
+        /// done (New Entity and the New UI Entity ones need a scene selected)
         pub fn Update(self: *Self, engine_context: *EngineContext, world: *WorldManager, selected: ?SelectedObject) !void {
             const zone = Tracy.ZoneInit("HierarchyPanel::Update", @src());
             defer zone.Deinit();
@@ -166,7 +221,7 @@ pub fn HierarchyPanel(comptime T: type) type {
             try self.Sync(engine_context, world, objects.items, shape.items, selected);
             if (T == Entity) {
                 const has_scene = if (selected) |object| object == .scene_layer and object.scene_layer.IsActive() else false;
-                try WidgetActions.SetDisabled(engine_context, self.mAreaItems.items[0].Item, !has_scene);
+                for (self.mAreaItems.items) |item| try WidgetActions.SetDisabled(engine_context, item.Item, !has_scene);
             }
         }
 
@@ -241,7 +296,12 @@ pub fn HierarchyPanel(comptime T: type) type {
                 .NewOverlay => if (T == Scene) {
                     _ = try world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
                 },
-                .NewChild, .NewEntity, .MakeTemplate, .Delete => {
+                .NewUI => |kind| if (T == Entity) {
+                    if (selected.*) |object| {
+                        if (object == .scene_layer) _ = try self.NewUIEntity(engine_context, kind, .{ .Scene = object.scene_layer });
+                    }
+                },
+                .NewChild, .NewEntity, .MakeTemplate, .Delete, .NewUIChild => {
                     const object = self.mMenuObject orelse return;
                     if (!object.IsActive()) return;
                     switch (action) {
@@ -251,15 +311,79 @@ pub fn HierarchyPanel(comptime T: type) type {
                         },
                         .MakeTemplate => try engine_context.mEditorEventManager.Insert(engine_allocator, .EndOfFrame, .{ .MakeTmplEvent = .{ .mObject = ToSelected(object) } }),
                         .Delete => try object.Delete(engine_context),
+                        .NewUIChild => |kind| switch (T) {
+                            Entity => _ = try self.NewUIEntity(engine_context, kind, .{ .Entity = object }),
+                            Scene => _ = try self.NewUIEntity(engine_context, kind, .{ .Scene = object }),
+                            else => {},
+                        },
                         else => unreachable,
                     }
                 },
             }
         }
 
+        /// A drop on the panel: an object file of its type loaded into `world`, as Open Scene does, and selected. An
+        /// entity goes into the selected scene, as New Entity does
+        pub fn OnDrop(self: *const Self, engine_context: *EngineContext, dropped: PointerDroppedEvent, world: *WorldManager, selected: *?SelectedObject) !void {
+            if (!Same(dropped.mEntity, self.mArea)) return;
+            const file_ref = dropped.mSource.GetComponent(FileRefComponent) orelse return;
+            const rel_path = file_ref.mRelPath.items;
+            const is_kind = if (Serializer.ObjectKindOf(std.fs.path.extension(rel_path))) |kind| kind == KIND else false;
+            if (!is_kind) {
+                std.log.warn("Only a {s} file ({s}) can be dropped here, not {s}", .{ TypeName(), std.mem.span(Serializer.FileExtension(T)), rel_path });
+                return;
+            }
+            const abs_path = try engine_context.mAssetManager.GetAbsPath(engine_context.FrameAllocator(), rel_path, file_ref.mPathType);
+            const object: T = switch (T) {
+                Entity => blk: {
+                    const scene: ?Scene = if (selected.*) |object| (if (object == .scene_layer and object.scene_layer.IsActive()) object.scene_layer else null) else null;
+                    if (scene == null) {
+                        std.log.warn("Select a scene to load {s} into", .{rel_path});
+                        return;
+                    }
+                    break :blk try scene.?.LoadEntity(engine_context, abs_path);
+                },
+                else => try world.Load(T, engine_context, abs_path),
+            };
+            selected.* = ToSelected(object);
+        }
+
         fn AddRowItem(self: *Self, engine_context: *EngineContext, text: []const u8, action: Action) !void {
-            const item = try Widgets.MenuItem(engine_context, self.mRowMenu, text, .{ .StockScripts = self.mOptions.StockScripts });
-            try self.mRowItems.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = action });
+            try self.AddItem(engine_context, self.mRowMenu, &self.mRowItems, text, action);
+        }
+
+        /// An item of `menu` doing `action`, kept in `items`
+        fn AddItem(self: *Self, engine_context: *EngineContext, menu: Entity, items: *std.ArrayList(MenuItem), text: []const u8, action: Action) !void {
+            const item = try Widgets.MenuItem(engine_context, menu, text, .{ .StockScripts = self.mOptions.StockScripts });
+            try items.append(engine_context.EngineAllocator(), .{ .Item = item, .Action = action });
+        }
+
+        /// A ready-made UI entity of `kind` under `parent`, named after its kind. One that starts a layout tree of its own
+        /// (not inside a container) gets a width of its own if it fills what it is in. Widgets are built in overlay
+        /// units, so in a game scene its sizes are turned into world units, the same way the theme's are
+        fn NewUIEntity(self: *const Self, engine_context: *EngineContext, kind: UIKind, parent: Widgets.Parent) !Entity {
+            const entity = switch (kind) {
+                .Panel => try Widgets.Panel(engine_context, parent, UI_PANEL_SIZE),
+                .Text => try Widgets.Label(engine_context, parent, "Text"),
+                .Button => try Widgets.Button(engine_context, parent, "Button"),
+                .Checkbox => try Widgets.Checkbox(engine_context, parent, "Checkbox", self.mOptions),
+                .TextField => try Widgets.TextField(engine_context, parent, "Text"),
+            };
+            try entity.SetName(engine_context, kind.Name());
+            //what is inside it named for what it is too: a button's or field's text, a checkbox's box and text
+            var children = entity.GetIterator(.Child);
+            while (children.next()) |child| try child.SetName(engine_context, if (child.HasComponent(TextComponent)) "Text" else "Box");
+            const starts_tree = switch (parent) {
+                .Scene => true,
+                .Entity => |parent_entity| !parent_entity.HasComponent(LayoutComponent),
+            };
+            if (starts_tree) {
+                const item = entity.GetComponent(LayoutItemComponent).?;
+                if (item.mWidth == .Fill) item.mWidth = .{ .Fixed = UI_TOP_WIDTH };
+            }
+            const unit = StyleSystem.ThemeUnit(entity);
+            if (unit != 1) try Widgets.ScaleSizes(engine_context, entity, unit);
+            return entity;
         }
 
         /// The world's objects of type T in the order the tree shows them, each before what is under it, and the
@@ -367,6 +491,15 @@ pub fn HierarchyPanel(comptime T: type) type {
             const stack_pos = world.mSManager.GetComponent(StackPosComponent, scene_id) orelse return 0;
             return stack_pos.mPosition;
         }
+
+        /// The kind of object file the panel takes
+        const KIND: Serializer.ObjectKind = switch (T) {
+            Entity => .Entity,
+            Scene => .Scene,
+            Player => .Player,
+            GameContext => .GameContext,
+            else => unreachable,
+        };
 
         fn TypeName() []const u8 {
             return switch (T) {

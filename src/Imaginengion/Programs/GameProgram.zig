@@ -105,7 +105,7 @@ pub fn StartGame(engine_context: *EngineContext) !void {
     }
     if (missing) return error.NoProjectEntry;
 
-    _ = try engine_context.mGameWorld.LoadScene(engine_context, try project.GetAbsPath(engine_context.FrameAllocator(), project.GetEntry(.Scene)));
+    _ = try engine_context.mGameWorld.Load(Scene, engine_context, try project.GetAbsPath(engine_context.FrameAllocator(), project.GetEntry(.Scene)));
     _ = try SpawnEntry(Player, engine_context, .Player);
     _ = try SpawnEntry(GameContext, engine_context, .GameContext);
 

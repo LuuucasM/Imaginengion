@@ -189,7 +189,9 @@ pub const ShadingBuffers = struct {
 
         return self.mSurfShadingBuffBase.items.len - 1;
     }
-    /// AddSurface for a texture manager slot that isn't a Texture2D asset: a render target shown on a quad
+    /// AddSurface for a texture manager slot that isn't a Texture2D asset: a render target shown on a quad. A render
+    /// target's rows run top down (its rays start at the top left pixel), where a loaded texture's run bottom up, so v
+    /// is turned over for it to show the right way up
     pub fn AddSurfaceSlot(
         self: *ShadingBuffers,
         engine_allocator: std.mem.Allocator,
@@ -200,8 +202,8 @@ pub const ShadingBuffers = struct {
     ) !usize {
         try self.mSurfShadingBuffBase.append(engine_allocator, .{
             .Color = tex_options.mColor.ToArray(),
-            .TextureUV0 = tex_options.mTextureUV0.ToArray(),
-            .TextureUV1 = tex_options.mTextureUV1.ToArray(),
+            .TextureUV0 = .{ tex_options.mTextureUV0.x, 1 - tex_options.mTextureUV0.y },
+            .TextureUV1 = .{ tex_options.mTextureUV1.x, 1 - tex_options.mTextureUV1.y },
             .TilingFactor = tex_options.mTilingFactor,
             .Texturehandle = @intCast(texture_handle),
             .TextureWidth = @intCast(width),

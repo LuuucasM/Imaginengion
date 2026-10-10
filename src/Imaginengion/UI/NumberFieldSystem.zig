@@ -2,7 +2,9 @@
 //! Part of the UIManager.
 //!   - dragging one sideways (left button) changes its value by the field's speed per unit dragged. A float changes
 //!     smoothly; a whole number changes in steps, with what is left over kept for the rest of the drag, so a slow drag
-//!     still gets there. The field's limits hold, and a u32 never goes below 0
+//!     still gets there. The field's limits hold, and a u32 never goes below 0. A float with a lowest value and no
+//!     highest is a size (a width, a gap, a font size): it moves by a share of itself instead, so a small size moves
+//!     in small steps and a big one in big ones. Holding Shift drags ten times slower
 //!   - typing into its text (a double click, see TextInputComponent) and keeping the edit sets the value to the number
 //!     typed, within the limits. Anything that isn't a number puts the value's text back
 //!   - its text shows its value every frame it isn't being typed into, so code can just set the AttribComponent
@@ -20,6 +22,13 @@ const EntityComponents = @import("../ECSComponents/EComponents.zig");
 const AttribComponent = EntityComponents.AttribComponent;
 const TextComponent = EntityComponents.TextComponent;
 const NumberFieldComponent = @import("../ECSComponents/UIComponents.zig").NumberFieldComponent;
+
+/// How much of itself a size moves per unit dragged
+const SIZE_SHARE: f64 = 0.01;
+/// The least a size moves per unit dragged, as a share of its field's speed: so it can still be dragged up from 0
+const SIZE_LEAST_SHARE: f64 = 0.02;
+/// How much slower a drag with Shift held is
+const FINE_FACTOR: f64 = 0.1;
 
 const NumberFieldSystem = @This();
 /// The entity showing a field's value
@@ -108,10 +117,22 @@ fn Drag(self: *NumberFieldSystem, engine_context: *EngineContext, field: Entity,
     const attrib = field.GetComponent(AttribComponent) orelse return;
     if (attrib.mData == .bool) return;
 
-    const wanted = settings.Clamp(attrib.mData.AsFloat() + self.mRemainder + @as(f64, units) * settings.mSpeed);
+    const input = &engine_context.mInputManager;
+    const fine = input.IsKeyPressed(.LSHIFT) or input.IsKeyPressed(.RSHIFT);
+    const step = StepOf(settings, attrib.mData) * if (fine) FINE_FACTOR else 1;
+    const wanted = settings.Clamp(attrib.mData.AsFloat() + self.mRemainder + @as(f64, units) * step);
     try SetValue(engine_context, field, wanted);
     //only what rounding to a whole number left: what a type's own floor cut off (a u32 at 0) isn't owed back
     self.mRemainder = std.math.clamp(wanted - attrib.mData.AsFloat(), -0.5, 0.5);
+}
+
+/// How much a field's value moves per unit dragged: its speed, or for a size (a float with a lowest value and no
+/// highest) a share of itself, never less than a share of its speed
+fn StepOf(settings: NumberFieldComponent, value: AttribComponent.ValueTypes) f64 {
+    const speed: f64 = settings.mSpeed;
+    const is_size = value == .float32 and settings.mMin != null and settings.mMax == null;
+    if (!is_size) return speed;
+    return @max(@abs(value.AsFloat()) * SIZE_SHARE, speed * SIZE_LEAST_SHARE);
 }
 
 /// Sets a field's value to `number` within its limits, and sends ValueChanged if that changed it

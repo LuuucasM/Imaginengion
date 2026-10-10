@@ -315,7 +315,7 @@ pub fn LoadProjectSettings(self: *UIManager, engine_context: *EngineContext, sca
             else => return error.UnexpectedToken,
         };
         if (std.mem.eql(u8, key, "Theme")) {
-            const theme = try std.json.innerParse(AssetHandle, engine_context.FrameAllocator(), scanner, .{ .max_value_len = std.json.default_max_value_len });
+            const theme = try std.json.innerParse(AssetHandle, engine_context.FrameAllocator(), scanner, .{ .allocate = .alloc_if_needed, .max_value_len = std.json.default_max_value_len });
             self.SetTheme(engine_context, theme);
         } else {
             std.log.warn("Skipping unknown key '{s}' in the UI settings", .{key});

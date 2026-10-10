@@ -42,7 +42,7 @@ const TestWorld = struct {
 fn State(players: []const Player, following: ?Player) EditorMenuBar.State {
     var shown = std.EnumArray(EditorMenuBar.Panel, bool).initFill(true);
     shown.set(.Stats, false);
-    return .{ .Shown = shown, .ProjectOpen = false, .CanPlayStop = true, .PlayPreview = false, .VSync = true, .Players = players, .Following = following };
+    return .{ .Shown = shown, .ProjectOpen = false, .SceneSelected = false, .EntitySelected = false, .CanPlayStop = true, .PlayPreview = false, .VSync = true, .Players = players, .Following = following };
 }
 
 test "each item has its action, and the editor's state shows as check marks and greyed out items" {
@@ -66,6 +66,33 @@ test "each item has its action, and the editor's state shows as check marks and 
     try std.testing.expect(menu_bar.mSaveProject.HasComponent(DisabledTag));
     try std.testing.expect(menu_bar.mEntryItems.get(.Scene).HasComponent(DisabledTag));
     try std.testing.expect(!menu_bar.mPlayStop.HasComponent(DisabledTag));
+}
+
+test "the save scene items need a scene selected, the save entity items an entity" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
+    defer menu_bar.Deinit(engine_context.EngineAllocator());
+
+    try std.testing.expectEqual(EditorMenuBar.Action.SaveSceneAs, menu_bar.ActionOf(menu_bar.mSaveSceneItems[1]).?);
+    try std.testing.expectEqual(EditorMenuBar.Action.SaveEntity, menu_bar.ActionOf(menu_bar.mSaveEntityItems[0]).?);
+
+    //nothing selected: all greyed out
+    var state = State(&.{}, null);
+    try menu_bar.Update(engine_context, state);
+    for (menu_bar.mSaveSceneItems ++ menu_bar.mSaveEntityItems) |item| try std.testing.expect(item.HasComponent(DisabledTag));
+
+    state.SceneSelected = true;
+    try menu_bar.Update(engine_context, state);
+    for (menu_bar.mSaveSceneItems) |item| try std.testing.expect(!item.HasComponent(DisabledTag));
+    for (menu_bar.mSaveEntityItems) |item| try std.testing.expect(item.HasComponent(DisabledTag));
+
+    state.SceneSelected = false;
+    state.EntitySelected = true;
+    try menu_bar.Update(engine_context, state);
+    for (menu_bar.mSaveSceneItems) |item| try std.testing.expect(item.HasComponent(DisabledTag));
+    for (menu_bar.mSaveEntityItems) |item| try std.testing.expect(!item.HasComponent(DisabledTag));
 }
 
 test "the VSync item toggles vsync, and is checked while it is on" {

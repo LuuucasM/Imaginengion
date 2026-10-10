@@ -42,7 +42,7 @@ pub fn UIRender(self: *SurfaceComponent, ui: *Inspector.Builder) !void {
     try ui.Float(&self.mBorderWidth, "Border Width", .{ .Speed = 0.01, .Min = 0 });
     try ui.Color(&self.mBorderColor, "Border Color", .{});
     try ui.Struct(&self.mMaterial, "Material");
-    try ui.Asset(&self.mTexture, "Texture", &.{".png"}, .{ .Thumbnail = true });
+    try ui.Asset(&self.mTexture, "Texture", &.{ ".png", ".jpg", ".jpeg" }, .{ .Thumbnail = true });
     try ui.Fields(&self.mTexOptions);
 }
 

@@ -29,6 +29,7 @@ const SelectedTag = EntityComponents.SelectedTag;
 const StyleComponent = @import("../ECSComponents/UIComponents.zig").StyleComponent;
 const StyleDirtyTag = @import("../ECSComponents/UIComponents.zig").StyleDirtyTag;
 const DisabledTag = EntityComponents.DisabledTag;
+const GameLayerTag = EntityComponents.GameLayerTag;
 const PointerSystem = @import("../Pointer/PointerSystem.zig");
 
 const StyleSystem = @This();
@@ -126,6 +127,8 @@ pub fn StateOf(entity: Entity) State {
 /// background and border colors, a text's the text color
 pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.Style, plain_texture: AssetHandle) !void {
     const state = StateOf(entity);
+    //the style's sizes are in overlay units
+    const unit = ThemeUnit(entity);
     const surface = entity.GetComponent(SurfaceComponent);
     if (surface) |surf| FillPlain(&surf.mTexture, &surf.mTexOptions, plain_texture);
 
@@ -133,9 +136,10 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
         if (surface) |surf| {
             if (ColorFor(style.Background, state)) |color| SetColor(surf, color);
             if (ColorFor(style.Border, state)) |color| surf.mBorderColor = color;
-            if (style.BorderWidth) |width| surf.mBorderWidth = width;
+            if (style.BorderWidth) |width| surf.mBorderWidth = width * unit;
         }
-        if (style.CornerRadius) |radius| {
+        if (style.CornerRadius) |size| {
+            const radius = size * unit;
             if (shape.GetQuad()) |quad| quad.CornerRadii = .{ .x = radius, .y = radius, .z = radius, .w = radius };
         }
     }
@@ -152,7 +156,8 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
             text.mTextAssetHandle.RetainAsset();
             resized = true;
         }
-        if (style.FontSize) |size| {
+        if (style.FontSize) |theme_size| {
+            const size = theme_size * unit;
             if (text.mFontSize != size) {
                 text.mFontSize = size;
                 resized = true;
@@ -160,6 +165,12 @@ pub fn Apply(engine_context: *EngineContext, entity: Entity, style: ThemeAsset.S
         }
         if (resized) try entity.MarkLayoutDirty(engine_context);
     }
+}
+
+/// How many of `entity`'s own units one of a theme's sizes is: one in an overlay, whose units are the theme's, and
+/// ThemeAsset.GAME_LAYER_UNIT in a game scene, in world units
+pub fn ThemeUnit(entity: Entity) f32 {
+    return if (entity.HasComponent(GameLayerTag)) ThemeAsset.GAME_LAYER_UNIT else 1;
 }
 
 /// The color for `state`, the normal one if it has none, or null if it hasn't that either

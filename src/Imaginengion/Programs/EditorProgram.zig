@@ -658,6 +658,10 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
             try self.mScriptsPanel.OnDrop(engine_context, dropped, self.mSelectedObj);
             self.mComponentsPanel.OnDrop(dropped);
             for (self.mTmplEditPanels.items) |panel| panel.OnDrop(dropped);
+            try self.mScenePanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mEntityPanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mPlayerPanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
+            try self.mGameModePanel.OnDrop(engine_context, dropped, self.mActiveWorld, &self.mSelectedObj);
         },
         else => {},
     }
@@ -892,9 +896,10 @@ fn UpdateTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !v
 fn MakeTmpl(self: *EditorProgram, engine_context: *EngineContext, object: anytype) !void {
     const extension = std.mem.span(Serializer.FileExtension(@TypeOf(object)));
     const abs_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "{s}/{s}{s}", .{ self.mContentBrowserPanel.CurrentPath(), object.GetName(), extension });
-    //the content browser only ever shows folders inside the project
-    const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, .Prj);
-    try object.MakeTmpl(engine_context, rel_path, .Prj);
+    //the content browser shows folders inside the project or the engine's assets
+    const path_type = self.mContentBrowserPanel.CurrentPathType();
+    const rel_path = engine_context.mAssetManager.GetRelPath(abs_path, path_type);
+    try object.MakeTmpl(engine_context, rel_path, path_type);
 }
 
 fn OnWindowClose(_: *EditorProgram, engine_context: *EngineContext) bool {
@@ -1064,6 +1069,8 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     try self.mMenuBar.Update(engine_context, .{
         .Shown = shown,
         .ProjectOpen = engine_context.mProject.IsOpen(),
+        .SceneSelected = if (self.mSelectedObj) |selected_object| selected_object == .scene_layer else false,
+        .EntitySelected = if (self.mSelectedObj) |selected_object| selected_object == .entity else false,
         //stopping is always allowed, starting needs a run player that can be drawn
         .CanPlayStop = self.mEditorState == .Play or (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false),
         .PlayPreview = self.mShowPlayPreview,
@@ -1083,7 +1090,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         .NewOverlayScene => _ = try engine_context.mGameWorld.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig),
         .OpenScene => {
             const abs_path = try PlatformUtils.OpenFile(engine_allocator, ".imsc");
-            if (abs_path.len > 0) _ = try engine_context.mGameWorld.LoadScene(engine_context, abs_path);
+            if (abs_path.len > 0) _ = try engine_context.mGameWorld.Load(Scene, engine_context, abs_path);
         },
         .SaveScene => if (self.mSelectedObj) |selected_object| {
             if (selected_object == .scene_layer) try engine_context.mGameWorld.SaveScene(engine_context, selected_object.scene_layer);

@@ -290,3 +290,17 @@ test "a point lands the caret on the nearest spot of the line it is on" {
     try std.testing.expectEqual(@as(usize, 1), TextLayout.CaretIndexAt(FakeFont, "A\nA", &font, 2, 0, .{ .x = 0.9, .y = 10 }));
     try std.testing.expectEqual(@as(usize, 2), TextLayout.CaretIndexAt(FakeFont, "A\nA", &font, 2, 0, .{ .x = -1, .y = -100 }));
 }
+
+test "text wrapped at exactly its own measured width stays on one line at any scale" {
+    var font = try FakeFont.Init(std.testing.allocator);
+    defer font.Deinit();
+    //what layout does: measures the text unwrapped and gives it that width to wrap at. The renderer then lays it out
+    //again with the font size and the wrap width both grown by the text's scale, which rounds differently
+    const text = "AVAVA AVAVAVA VA";
+    const width = TextLayout.Measure(FakeFont, text, &font, 1, 0).Size().x;
+    var scale: f32 = 0.05;
+    while (scale < 3) : (scale += 0.0137) {
+        const metrics = TextLayout.Measure(FakeFont, text, &font, scale, width * scale);
+        try std.testing.expectEqual(@as(u32, 1), metrics.LineCount);
+    }
+}

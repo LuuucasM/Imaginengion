@@ -344,14 +344,20 @@ pub fn TextureUV(texture_handle: u32, local_uv: Vec2(f32), tex_width: u32, tex_h
     return TextureManager.GetTextureUV(texture_handle, local_uv, tex_width, tex_height);
 }
 
+/// `face_uv` (0 to 1 across a shape's face, bottom left (0, 0)) as a spot in the part of the texture the shading
+/// covers, TextureUV0 to TextureUV1. The texture still 0 to 1 over itself, TextureUV turns it into its slot
+pub fn SurfaceUV(shading_data: SurfShadingData, face_uv: Vec2(f32)) Vec2(f32) {
+    //uv0 + (uv1 - uv0) * t. multiplying after the add instead gives uv1 * t, which for a glyph samples everything
+    //from the atlas corner to the glyph and paints a patch of other glyphs into this one's box
+    const uv0 = Vec2(f32).FromArray(shading_data.TextureUV0);
+    return uv0.AddVec(Vec2(f32).FromArray(shading_data.TextureUV1).SubVec(uv0).MulVec(face_uv));
+}
+
 /// `glyph_uv` is where in the glyph's box, from rayIMGlyph. TextureUV0/1 are the glyph's
 /// bottom-left and top-right in the atlas: textures load flipped so v runs bottom up, the same as
 /// the font json's yOrigin bottom, and the same as glyph_uv.
 pub fn GetMSD(glyph_uv: Vec2(f32), atlas_shading_data: SurfShadingData, textures_array: anytype, sample_sampler: anytype) f32 {
-    //uv0 + (uv1 - uv0) * t. multiplying after the add instead gives uv1 * t, which samples everything
-    //from the atlas corner to the glyph and paints a patch of other glyphs into this one's box
-    const atlas_uv0 = Vec2(f32).FromArray(atlas_shading_data.TextureUV0);
-    const raw_uv: Vec2(f32) = atlas_uv0.AddVec(Vec2(f32).FromArray(atlas_shading_data.TextureUV1).SubVec(atlas_uv0).MulVec(glyph_uv));
+    const raw_uv = SurfaceUV(atlas_shading_data, glyph_uv);
     const sample_uv = TextureManager.GetTextureUV(atlas_shading_data.Texturehandle, raw_uv, atlas_shading_data.TextureWidth, atlas_shading_data.TextureHeight);
     const msd = sample_sampler(textures_array, sample_uv.ToVector(), 0.0);
     return Median(msd[0], msd[1], msd[2]);

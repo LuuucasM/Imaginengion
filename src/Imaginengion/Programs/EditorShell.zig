@@ -21,8 +21,9 @@ const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Ent
 const EditorShell = @This();
 
 /// How wide the right column starts, how tall the hierarchy tabs, the content browser and the play preview start, in
-/// canvas units (the editor UI's are window points at the display's scale)
-const RIGHT_COLUMN_WIDTH: f32 = 320;
+/// canvas units (the editor UI's are window points at the display's scale). The right column fits a Vec4 row of the
+/// components panel without dragging it wider
+const RIGHT_COLUMN_WIDTH: f32 = 560;
 const HIERARCHY_HEIGHT: f32 = 300;
 const CONTENT_BROWSER_HEIGHT: f32 = 280;
 const PLAY_PREVIEW_HEIGHT: f32 = 300;

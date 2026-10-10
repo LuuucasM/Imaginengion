@@ -1,15 +1,17 @@
 //! The Content Browser, in the editor's own UI, in the shell's Content Browser pane: the open project's files, one
 //! folder at a time, as a grid of tiles (an icon and the file's name). Folders come first, then files, each by name,
-//! and only the kinds the editor uses are shown: folders, textures (.png), object files (.imen, .imsc...), scripts
+//! and only the kinds the editor uses are shown: folders, textures (.png, .jpg), object files (.imen, .imsc...), scripts
 //! (.zig), audio and fonts (.ttf, .otf). Double clicking a folder goes into it, Back goes up a folder, and an object file opens as a
 //! template. Every file's tile can be dragged, carrying the file (FileRefComponent), e.g. a script onto the Scripts
-//! panel. Right clicking the pane offers New Scene Layer. Every frame the folder is listed and checked against what
+//! panel. At the top of the project an EngineAssets tile goes into the engine's own assets (the white texture, the
+//! fonts...), browsed the same way, its files carried as engine files; Back from its top comes out to the project. Right clicking the pane offers New Scene Layer. Every frame the folder is listed and checked against what
 //! the tiles were built from, so files added or removed on disk show up
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
 const Entity = @import("../ECSObjects/Entity.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
+const AManager = @import("../ECSManagers/AManager.zig");
 const Serializer = @import("../Serializer/Serializer.zig");
 const UIManager = @import("../UI/UIManager.zig");
 const Widgets = @import("../UI/Widgets.zig");
@@ -27,9 +29,11 @@ const TILE_WIDTH: f32 = 80;
 const TILE_GAP: f32 = 4;
 /// The most of a name a tile shows: a longer one is shortened to fit, ending in "..."
 const MAX_NAME_LEN = 12;
+/// The engine's assets folder, from the engine's folder (an engine file's path starts with it)
+const ENGINE_ASSETS_PATH = "src/Imaginengion/EngineAssets";
 
 /// What a tile is
-pub const Kind = enum { Back, Folder, Texture, Object, Script, Audio, Font };
+pub const Kind = enum { Back, Folder, EngineAssets, Texture, Object, Script, Audio, Font };
 
 /// The icon each kind of tile shows
 pub const Icons = struct {
@@ -66,6 +70,7 @@ pub const Icons = struct {
 
     fn Of(self: Icons, kind: Kind) AssetHandle {
         return switch (kind) {
+            .EngineAssets => self.Folder,
             inline else => |tag| @field(self, @tagName(tag)),
         };
     }
@@ -77,6 +82,8 @@ pub const Action = union(enum) {
     Up,
     /// into the folder of the tile at this place among the tiles
     Enter: usize,
+    /// into the engine's assets, from the top of the project
+    EnterEngineAssets,
     /// opens the object file of the tile at this place as a template
     Open: usize,
     /// a new game scene, from the pane's right-click menu
@@ -111,6 +118,9 @@ mNames: std.ArrayList(u8) = .empty,
 /// The project's folder, which is as far up as it goes, and the folder being shown, empty with no project open
 mRoot: std.ArrayList(u8) = .empty,
 mPath: std.ArrayList(u8) = .empty,
+/// The engine's assets folder, and whether the folder being shown is in it rather than in the project
+mEngineRoot: std.ArrayList(u8) = .empty,
+mInEngine: bool = false,
 /// The folder and its listing as they were when the tiles were built, to tell when they change
 mBuiltFrom: std.ArrayList(u8) = .empty,
 mIcons: Icons = .{},
@@ -140,6 +150,7 @@ pub fn Deinit(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) v
     self.mNames.deinit(engine_allocator);
     self.mRoot.deinit(engine_allocator);
     self.mPath.deinit(engine_allocator);
+    self.mEngineRoot.deinit(engine_allocator);
     self.mBuiltFrom.deinit(engine_allocator);
 }
 
@@ -161,11 +172,31 @@ pub fn SetRoot(self: *ContentBrowserPanel, engine_context: *EngineContext, root:
     try self.mRoot.appendSlice(engine_allocator, root);
     self.mPath.clearRetainingCapacity();
     try self.mPath.appendSlice(engine_allocator, root);
+    self.mEngineRoot.clearRetainingCapacity();
+    try self.mEngineRoot.print(engine_allocator, "{s}/{s}", .{ engine_context.mAssetManager.mCWDPath.items, ENGINE_ASSETS_PATH });
+    self.mInEngine = false;
 }
 
 /// The folder being shown, as an absolute path. Empty with no project open
 pub fn CurrentPath(self: ContentBrowserPanel) []const u8 {
     return self.mPath.items;
+}
+
+/// What the folder being shown is in: the engine's assets or the project
+pub fn CurrentPathType(self: ContentBrowserPanel) AManager.PathType {
+    return if (self.mInEngine) .Eng else .Prj;
+}
+
+/// As far up as the folder being shown goes: the engine's assets folder or the project's
+fn Top(self: ContentBrowserPanel) []const u8 {
+    return if (self.mInEngine) self.mEngineRoot.items else self.mRoot.items;
+}
+
+/// Back to the top of the project
+fn GoToRoot(self: *ContentBrowserPanel, engine_allocator: std.mem.Allocator) !void {
+    self.mInEngine = false;
+    self.mPath.clearRetainingCapacity();
+    try self.mPath.appendSlice(engine_allocator, self.mRoot.items);
 }
 
 /// Once a frame, before layout, while it is shown: the folder listed, and the tiles built again if it changed
@@ -182,9 +213,7 @@ pub fn Update(self: *ContentBrowserPanel, engine_context: *EngineContext) !void 
     const listing = ListFolder(engine_context, self.mPath.items) catch |err| {
         //gone from disk, or can't be read: back to the top of the project
         std.log.warn("The content browser can't show {s} ({s})", .{ self.mPath.items, @errorName(err) });
-        self.mPath.clearRetainingCapacity();
-        try self.mPath.appendSlice(engine_context.EngineAllocator(), self.mRoot.items);
-        return;
+        return try self.GoToRoot(engine_context.EngineAllocator());
     };
     try ShowLine(engine_context, self.mMessage, "");
 
@@ -206,6 +235,7 @@ pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?A
         return switch (tile.Kind) {
             .Back => .Up,
             .Folder => .{ .Enter = i },
+            .EngineAssets => .EnterEngineAssets,
             .Object => .{ .Open = i },
             .Texture, .Script, .Audio, .Font => null,
         };
@@ -213,22 +243,39 @@ pub fn ActionOf(self: *const ContentBrowserPanel, entity: Entity, clicks: u8) ?A
     return null;
 }
 
+fn IsAny(extension: []const u8, options: []const []const u8) bool {
+    for (options) |option| {
+        if (std.ascii.eqlIgnoreCase(extension, option)) return true;
+    }
+    return false;
+}
+
 /// Does what a click asked for, other than NewScene, which is the editor's (its menu bar's New Game Scene). A new
 /// folder's tiles are built the next frame
 pub fn Run(self: *ContentBrowserPanel, engine_context: *EngineContext, action: Action) !void {
     switch (action) {
         .Up => {
-            if (self.mPath.items.len <= self.mRoot.items.len) return;
+            const top = self.Top();
+            if (self.mPath.items.len <= top.len) {
+                //out of the engine's assets, back to the project they were entered from
+                if (self.mInEngine) try self.GoToRoot(engine_context.EngineAllocator());
+                return;
+            }
             const last_slash = std.mem.lastIndexOfAny(u8, self.mPath.items, "/\\") orelse return;
-            self.mPath.shrinkRetainingCapacity(@max(last_slash, self.mRoot.items.len));
+            self.mPath.shrinkRetainingCapacity(@max(last_slash, top.len));
         },
         .Enter => |index| {
             const name = self.NameOf(index);
             try self.mPath.print(engine_context.EngineAllocator(), "/{s}", .{name});
         },
+        .EnterEngineAssets => {
+            self.mInEngine = true;
+            self.mPath.clearRetainingCapacity();
+            try self.mPath.appendSlice(engine_context.EngineAllocator(), self.mEngineRoot.items);
+        },
         .Open => |index| {
             const rel_path = try self.RelPath(engine_context.FrameAllocator(), self.NameOf(index));
-            const tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = .Prj } });
+            const tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{ .rel_path = rel_path, .path_type = self.CurrentPathType() } });
             try engine_context.mEditorEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .OpenTmplEvent = .{ .mTmpl = tmpl } });
         },
         .NewScene => {},
@@ -240,9 +287,13 @@ fn NameOf(self: ContentBrowserPanel, index: usize) []const u8 {
     return self.mNames.items[tile.NameStart..][0..tile.NameLen];
 }
 
-/// A file in the folder being shown, as a path from the project's folder
+/// A file in the folder being shown, as a path from the project's folder, or from the engine's for an engine asset
 fn RelPath(self: ContentBrowserPanel, frame_allocator: std.mem.Allocator, name: []const u8) ![]const u8 {
-    const inside = std.mem.trimStart(u8, self.mPath.items[self.mRoot.items.len..], "/\\");
+    const inside = std.mem.trimStart(u8, self.mPath.items[self.Top().len..], "/\\");
+    if (self.mInEngine) {
+        if (inside.len == 0) return try std.fmt.allocPrint(frame_allocator, "{s}/{s}", .{ ENGINE_ASSETS_PATH, name });
+        return try std.fmt.allocPrint(frame_allocator, "{s}/{s}/{s}", .{ ENGINE_ASSETS_PATH, inside, name });
+    }
     if (inside.len == 0) return name;
     return try std.fmt.allocPrint(frame_allocator, "{s}/{s}", .{ inside, name });
 }
@@ -269,13 +320,13 @@ fn ListFolder(engine_context: *EngineContext, path: []const u8) ![]Listed {
     return listing.items;
 }
 
-/// What kind of file the editor shows a file as, null for one it doesn't show
+/// What kind of file the editor shows a file as, null for one it doesn't show. Extensions match in any case (.PNG, .Jpg)
 fn KindOf(name: []const u8) ?Kind {
     const extension = std.fs.path.extension(name);
-    if (std.mem.eql(u8, extension, ".png")) return .Texture;
-    if (std.mem.eql(u8, extension, ".zig")) return .Script;
-    if (std.mem.eql(u8, extension, ".mp3") or std.mem.eql(u8, extension, ".wav") or std.mem.eql(u8, extension, ".flac")) return .Audio;
-    if (std.mem.eql(u8, extension, ".ttf") or std.mem.eql(u8, extension, ".otf")) return .Font;
+    if (IsAny(extension, &.{ ".png", ".jpg", ".jpeg" })) return .Texture;
+    if (IsAny(extension, &.{".zig"})) return .Script;
+    if (IsAny(extension, &.{ ".mp3", ".wav", ".flac" })) return .Audio;
+    if (IsAny(extension, &.{ ".ttf", ".otf" })) return .Font;
     if (Serializer.ObjectKindOf(extension) != null) return .Object;
     return null;
 }
@@ -296,7 +347,11 @@ fn Rebuild(self: *ContentBrowserPanel, engine_context: *EngineContext, listing: 
 
     const grid = try Widgets.Grid(engine_context, .{ .Entity = self.mArea }, TILE_GAP);
     self.mGrid = grid;
-    if (self.mPath.items.len > self.mRoot.items.len) try self.AddTile(engine_context, grid, .Back, "Back");
+    if (self.mInEngine or self.mPath.items.len > self.mRoot.items.len) {
+        try self.AddTile(engine_context, grid, .Back, "Back");
+    } else {
+        try self.AddTile(engine_context, grid, .EngineAssets, "EngineAssets");
+    }
     for (listing) |listed| try self.AddTile(engine_context, grid, listed.Kind, listed.Name);
 }
 
@@ -305,11 +360,11 @@ fn AddTile(self: *ContentBrowserPanel, engine_context: *EngineContext, grid: Ent
     const shown = try ShortName(engine_context.FrameAllocator(), name);
     const tile = try Widgets.Tile(engine_context, .{ .Entity = grid }, self.mIcons.Of(kind), shown, TILE_WIDTH);
     switch (kind) {
-        .Back, .Folder => {},
+        .Back, .Folder, .EngineAssets => {},
         //a file can be dragged, carrying which file it is
         .Texture, .Object, .Script, .Audio, .Font => {
             _ = try tile.AddComponent(engine_context, DragSourceComponent{});
-            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.FrameAllocator(), name), .Prj));
+            _ = try tile.AddComponent(engine_context, try FileRefComponent.Init(engine_context, try self.RelPath(engine_context.FrameAllocator(), name), self.CurrentPathType()));
         },
     }
     try self.mTiles.append(engine_allocator, .{ .Entity = tile, .Kind = kind, .NameStart = self.mNames.items.len, .NameLen = name.len });

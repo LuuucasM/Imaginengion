@@ -1,6 +1,6 @@
 //! The Components panel in the editor's own UI (EditorPanels/ComponentsPanel.zig): the lines saying what is selected
 //! and why there is nothing to list, a header per component for each kind of object, built again when the selection
-//! or its components change, Add and Delete through the menus, and the rows it adds that need the object: a rigid
+//! or its components change, Add and Delete through the menus, a long Add menu scrolling, and the rows it adds that need the object: a rigid
 //! body's type, a scene's layer, an audio component's Preview and Stop, Edit Template only with a template, and a UI
 //! element's components with Edit UI Element. No window or renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
@@ -180,6 +180,27 @@ test "Add and Delete through the menus, built again when the components change" 
         if (entry.Action == .Delete and entry.Action.Delete == collider_index) delete_collider = panel.ActionOf(entry.Item);
     }
     try std.testing.expect(delete_collider != null);
+}
+
+test "a long Add menu is a few rows tall and scrolls, a short one fits what is in it" {
+    const test_panel = try TestPanel.Init();
+    defer test_panel.Deinit();
+    const engine_context = test_panel.mEngineContext;
+    const panel = &test_panel.mPanel;
+
+    //an entity can be given far more components than fit
+    const entity = try test_panel.mGameScene.CreateEntity(engine_context, Entity.DefaultConfig);
+    try test_panel.Update(.{ .entity = entity });
+    const long_menu = panel.mEntityList.mAddMenu.?;
+    try std.testing.expect(UIManager.GetUIComponent(long_menu, UIComponents.ScrollComponent) != null);
+    try std.testing.expect(long_menu.HasComponent(EntityComponents.MaskComponent));
+    try std.testing.expect(long_menu.GetComponent(LayoutItemComponent).?.mHeight == .Fixed);
+
+    //a scene only a few
+    try test_panel.Update(.{ .scene_layer = test_panel.mGameScene });
+    const short_menu = panel.mSceneList.mAddMenu.?;
+    try std.testing.expect(UIManager.GetUIComponent(short_menu, UIComponents.ScrollComponent) == null);
+    try std.testing.expect(short_menu.GetComponent(LayoutItemComponent).?.mHeight == .Fit);
 }
 
 /// Whether the entity list's header for `component_type` is open, null if the entity hasn't it

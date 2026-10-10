@@ -253,6 +253,25 @@ pub fn Spawn(self: *WorldManager, comptime obj_t: type, engine_context: *EngineC
     return object;
 }
 
+/// A new object read from the file at `abs_path` (a .imsc, .impl or .imgc, going by obj_t), UUID and all, the way
+/// a level is opened. Entities are loaded by the scene they go in (Scene.LoadEntity)
+pub fn Load(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext, abs_path: []const u8) !obj_t {
+    const zone = Tracy.ZoneInit("WorldManager::Load", @src());
+    defer zone.Deinit();
+    zone.Text(abs_path);
+    if (obj_t == Scene) {
+        return try self.mSManager.LoadScene(engine_context, abs_path);
+    } else if (obj_t == Player) {
+        return try self.mPManager.LoadPlayer(engine_context, abs_path);
+    } else if (obj_t == GameContext) {
+        return try self.mGCManager.LoadGameContext(engine_context, abs_path);
+    } else if (obj_t == Entity) {
+        @compileError("an entity has to belong to a scene, load it with Scene.LoadEntity");
+    } else {
+        @compileError(std.fmt.comptimePrint("{s} is not an object type owned by the WorldManager", .{@typeName(obj_t)}));
+    }
+}
+
 //===============================Scenes==============================================
 pub fn NewScene(self: *WorldManager, engine_context: *EngineContext, layer_type: LayerType, config: Scene.CreateConfig) !Scene {
     return try self.mSManager.CreateScene(engine_context, layer_type, config);
@@ -260,13 +279,6 @@ pub fn NewScene(self: *WorldManager, engine_context: *EngineContext, layer_type:
 
 pub fn DestroyScene(self: *WorldManager, engine_context: *EngineContext, destroy_scene: Scene) !void {
     try self.mSManager.DeleteScene(engine_context, destroy_scene.mID);
-}
-
-pub fn LoadScene(self: *WorldManager, engine_context: *EngineContext, abs_path: []const u8) !Scene {
-    const zone = Tracy.ZoneInit("WorldManager::LoadScene", @src());
-    defer zone.Deinit();
-    zone.Text(abs_path);
-    return try self.mSManager.LoadScene(engine_context, abs_path);
 }
 
 pub fn SaveScene(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {

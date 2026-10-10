@@ -19,6 +19,10 @@ pub const StateColors = struct {
     Disabled: ?Vec4(f32) = null,
 };
 
+/// A theme's sizes (BorderWidth, CornerRadius, FontSize) are in overlay units, about a pixel each. In a game scene one
+/// of them is this many world units, so text at a theme's usual 16 is one world unit tall (StyleSystem.ThemeUnit)
+pub const GAME_LAYER_UNIT: f32 = 1.0 / 16.0;
+
 /// How an element with this style (StyleComponent) looks. Everything is optional: whatever a style leaves out is left
 /// as the entity has it
 pub const Style = struct {

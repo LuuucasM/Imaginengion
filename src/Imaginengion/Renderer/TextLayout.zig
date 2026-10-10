@@ -90,7 +90,7 @@ pub fn Iterator(comptime FontT: type) type {
             }
 
             //the pen > 0 check stops a glyph wider than the whole wrap width from leaving an empty line
-            if (self.mWrapWidth > 0 and self.mPen.x > 0 and self.mPen.x + advance > self.mWrapWidth) {
+            if (self.mWrapWidth > 0 and self.mPen.x > 0 and self.mPen.x + advance > self.mWrapWidth * (1 + WRAP_SLACK)) {
                 self.NewLine();
             }
 
@@ -146,6 +146,12 @@ pub fn Iterator(comptime FontT: type) type {
         }
     };
 }
+
+/// How far past its wrap width, as a share of it, a line can run and still fit. Layout wraps text at exactly the width
+/// it measured, and the renderer measures it again with the font size and wrap width grown by the text's scale, which
+/// rounds a little differently: without this the last letter could land a hair past the edge and drop onto a line of
+/// its own, outside its box
+const WRAP_SLACK: f32 = 1e-4;
 
 /// Runs the same iterator the renderer draws with, so the size it reports is the size that gets drawn.
 pub fn Measure(comptime FontT: type, text: []const u8, font: *const FontT, font_size: f32, wrap_width: f32) Metrics {

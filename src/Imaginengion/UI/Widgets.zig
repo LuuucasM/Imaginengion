@@ -14,6 +14,7 @@ const Scene = @import("../ECSObjects/Scene.zig");
 const AssetHandle = @import("../ECSObjects/AssetHandle.zig");
 const UIManager = @import("UIManager.zig");
 const NumberFieldSystem = @import("NumberFieldSystem.zig");
+const ScrollSystem = @import("ScrollSystem.zig");
 const WidgetActions = @import("WidgetActions.zig");
 const Layout = @import("Layout.zig");
 const MathTypes = @import("../Math/MathTypes.zig");
@@ -126,6 +127,9 @@ pub const ARROW_SIZE: f32 = 16;
 pub const INDENT: f32 = 16;
 /// A checkable menu item's check box
 pub const MENU_CHECK_SIZE: f32 = 10;
+/// About how tall a menu row is: a line of text (a little more than its font size) and the row's padding. Only for
+/// sizing a ScrollingMenu, so being a little off shows part of a row, which hints there is more
+pub const MENU_ROW_HEIGHT: f32 = TEXT_SIZE * 1.25 + PADDING;
 
 /// What TreeNode and CollapsingHeader make
 pub const Fold = struct {
@@ -250,6 +254,17 @@ pub fn Column(engine_context: *EngineContext, parent: Parent) !Entity {
     _ = try column.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     _ = try column.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
     return column;
+}
+
+/// A box with a background, `size` big, to put other widgets in one under the other with a gap between them: a menu
+/// screen, a corner of a HUD. What doesn't fit runs over its edges. Style "Window"
+pub fn Panel(engine_context: *EngineContext, parent: Parent, size: Vec2(f32)) !Entity {
+    const panel = try NewEntity(engine_context, parent);
+    try AddQuad(engine_context, panel, .{}, .{});
+    _ = try panel.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mGap = PADDING, .mPadding = .All(PADDING) });
+    _ = try panel.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = size.x }, .mHeight = .{ .Fixed = size.y } });
+    try UIManager.Style(engine_context, panel, "Window");
+    return panel;
 }
 
 /// A column of lines of text, one under the other, as wide as what it is in: for SyncLines to keep showing a list
@@ -600,6 +615,18 @@ pub fn ContextMenu(engine_context: *EngineContext, target: Entity, options: Opti
     return menu;
 }
 
+/// Makes a menu or a dropdown's list about `rows` rows tall, whatever is in it: what doesn't fit scrolls, with the mouse
+/// wheel over it or the scrollbar down its right side (which it leaves room for), cut off at its edges by its own
+/// background. For a list too long to show whole
+pub fn ScrollingMenu(engine_context: *EngineContext, menu: Entity, rows: usize) !void {
+    const half = PADDING / 2;
+    menu.GetComponent(LayoutItemComponent).?.mHeight = .{ .Fixed = @as(f32, @floatFromInt(rows)) * MENU_ROW_HEIGHT + 2 * half };
+    menu.GetComponent(LayoutComponent).?.mPadding.Right = half + ScrollSystem.THUMB_THICKNESS;
+    if (!menu.HasComponent(EntityComponents.MaskComponent)) _ = try menu.AddComponent(engine_context, EntityComponents.MaskComponent{});
+    _ = try UIManager.ElementOf(menu).?.AddComponent(engine_context, UIComponents.ScrollComponent{ .mScroll = .Vertical });
+    try menu.MarkLayoutDirty(engine_context);
+}
+
 /// Takes `entity` and everything in it away: hidden now (its layout item folded) and deleted at the end of the frame,
 /// along with the popups the things in it open, which live at the top of the scene rather than inside them (a
 /// dropdown's list, a right-click menu, and theirs in turn). A popup in `keep` stays: a menu shared with things that
@@ -760,6 +787,44 @@ pub fn FloatingWindow(engine_context: *EngineContext, scene: Scene, title: []con
 
     try WidgetActions.RaiseWindow(engine_context, window);
     return .{ .Window = window, .TitleBar = title_bar, .Content = content };
+}
+
+/// Multiplies every size in the widget `root` and everything under it by `factor`: where each sits, gaps and padding,
+/// fixed sizes, quads and their corners and borders, and text. For a widget built in overlay units going into a game
+/// scene, with StyleSystem.ThemeUnit as the factor, so its numbers are world units at a scale of 1
+pub fn ScaleSizes(engine_context: *EngineContext, root: Entity, factor: f32) !void {
+    if (root.GetComponent(EntityComponents.TransformComponent)) |transform| {
+        try root.SetTranslation(engine_context, transform.GetTranslation().MulScalar(factor));
+    }
+    if (root.GetComponent(LayoutComponent)) |layout| {
+        layout.mGap *= factor;
+        layout.mPadding = .{
+            .Left = layout.mPadding.Left * factor,
+            .Right = layout.mPadding.Right * factor,
+            .Top = layout.mPadding.Top * factor,
+            .Bottom = layout.mPadding.Bottom * factor,
+        };
+    }
+    if (root.GetComponent(LayoutItemComponent)) |item| {
+        for ([_]*Layout.Sizing{ &item.mWidth, &item.mHeight }) |sizing| {
+            if (sizing.* == .Fixed) sizing.* = .{ .Fixed = sizing.Fixed * factor };
+        }
+        if (item.mPlacement == .Anchored) item.mPlacement.Anchored.Offset = item.mPlacement.Anchored.Offset.MulScalar(factor);
+    }
+    if (root.GetComponent(ShapeComponent)) |shape| {
+        if (shape.GetQuad()) |quad| {
+            quad.Size = quad.Size.MulScalar(factor);
+            quad.CornerRadii = quad.CornerRadii.MulScalar(factor);
+        }
+    }
+    if (root.GetComponent(SurfaceComponent)) |surface| surface.mBorderWidth *= factor;
+    if (root.GetComponent(TextComponent)) |text| {
+        text.mFontSize *= factor;
+        text.mBounds = text.mBounds.MulScalar(factor);
+    }
+    var children = root.GetIterator(.Child);
+    while (children.next()) |child| try ScaleSizes(engine_context, child, factor);
+    try root.MarkLayoutDirty(engine_context);
 }
 
 /// Puts one of the stock scripts on `entity`

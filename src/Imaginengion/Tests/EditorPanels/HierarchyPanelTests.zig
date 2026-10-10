@@ -1,7 +1,9 @@
 //! The hierarchy panels in the editor's own UI (EditorPanels/HierarchyPanel.zig): the tree of a world's objects with
 //! children under their parents and scenes in stack order, rows following renames, built again when the tree's shape
 //! changes with its open nodes kept open, a click selecting and the selected row highlighted however it was selected,
-//! rows carrying their object to drag, the row menu acting on the row it was opened on, and the panel's own menu.
+//! rows carrying their object to drag, the row menu acting on the row it was opened on, and the panel's own menu. Also
+//! the panel taking a file dropped from the Content Browser: another type's file ignored, and an entity file with no
+//! scene selected ignored (loading a real one tracks its file in the open project, so that part isn't run here).
 //! No window or renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
 
@@ -20,6 +22,13 @@ const SelectedTag = EntityComponents.SelectedTag;
 const DisabledTag = EntityComponents.DisabledTag;
 const DragSourceComponent = EntityComponents.DragSourceComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
+const DropTargetComponent = EntityComponents.DropTargetComponent;
+const FileRefComponent = EntityComponents.FileRefComponent;
+const NameComponent = EntityComponents.NameComponent;
+const TransformComponent = EntityComponents.TransformComponent;
+const PhysicsManager = @import("../../Physics/PhysicsManager.zig");
+const ShapeGeometry = @import("../../Renderer/ShapeGeometry.zig");
+const StyleSystem = @import("../../UI/StyleSystem.zig");
 
 const TestWorld = struct {
     mEngineContext: *EngineContext,
@@ -194,4 +203,137 @@ test "the row menu acts on the row it was opened on, and the panel's menu makes 
     try scenes.Update(engine_context, game_world, selected);
     try std.testing.expectEqual(@as(usize, 2), scenes.mRows.items.len);
     try std.testing.expectEqual(.OverlayLayer, scenes.mRows.items[0].Object.GetLayer());
+}
+
+test "the UI menus make ready-made UI entities: in the selected scene, under an entity, at the top of a scene" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .OverlayLayer, Scene.DefaultConfig);
+    const hero = try level.CreateEntity(engine_context, Entity.DefaultConfig);
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    var selected: ?SelectedObject = null;
+    try entities.Update(engine_context, game_world, selected);
+
+    //every one of the panel's menu items needs a scene selected
+    for (entities.mAreaItems.items) |item| try std.testing.expect(item.Item.HasComponent(DisabledTag));
+    selected = .{ .scene_layer = level };
+    try entities.Update(engine_context, game_world, selected);
+    for (entities.mAreaItems.items) |item| try std.testing.expect(!item.Item.HasComponent(DisabledTag));
+
+    //a text field at the top of the scene: named after its kind, and a width of its own rather than the whole screen
+    try entities.Run(engine_context, .{ .NewUI = .TextField }, game_world, &selected);
+    try entities.Update(engine_context, game_world, selected);
+    //Hero, the field, and the field's text under it
+    try std.testing.expectEqual(@as(usize, 3), entities.mRows.items.len);
+    const field = for (entities.mRows.items) |row| {
+        if (row.Depth == 0 and row.Object.mID != hero.mID) break row.Object;
+    } else unreachable;
+    try std.testing.expectEqualStrings("Text Field", field.GetComponent(NameComponent).?.mName.items);
+    try std.testing.expect(field.GetComponent(LayoutItemComponent).?.mWidth == .Fixed);
+
+    //a button under Hero, from its row's menu: a child with its label under it
+    for (entities.mRows.items) |row| {
+        if (row.Object.mID == hero.mID) try entities.OnRightClick(engine_context, row.Header);
+    }
+    try entities.Run(engine_context, .{ .NewUIChild = .Button }, game_world, &selected);
+    var children = hero.GetIterator(.Child);
+    const button = children.next().?;
+    try std.testing.expectEqualStrings("Button", button.GetComponent(NameComponent).?.mName.items);
+    var labels = button.GetIterator(.Child);
+    const button_text = labels.next().?;
+    try std.testing.expect(button_text.HasComponent(TextComponent));
+    try std.testing.expectEqualStrings("Text", button_text.GetComponent(NameComponent).?.mName.items);
+
+    //a panel at the top of the scene, from the scene's row
+    var scenes = try world.Panel(Scene);
+    defer scenes.Deinit(engine_context.EngineAllocator());
+    try scenes.Update(engine_context, game_world, selected);
+    try scenes.OnRightClick(engine_context, scenes.mRows.items[0].Header);
+    try scenes.Run(engine_context, .{ .NewUIChild = .Panel }, game_world, &selected);
+    try entities.Update(engine_context, game_world, selected);
+    var found_panel = false;
+    for (entities.mRows.items) |row| {
+        if (std.mem.eql(u8, row.Object.GetComponent(NameComponent).?.mName.items, "Panel")) found_panel = row.Depth == 0;
+    }
+    try std.testing.expect(found_panel);
+}
+
+test "a ready-made UI entity in a game scene is built in world units, and scaling it scales its text with it" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    var selected: ?SelectedObject = .{ .scene_layer = level };
+    try entities.Run(engine_context, .{ .NewUI = .Button }, game_world, &selected);
+    try entities.Update(engine_context, game_world, selected);
+    const button = entities.mRows.items[0].Object;
+    var labels = button.GetIterator(.Child);
+    const label = labels.next().?;
+
+    //at a scale of 1: a line of text one world unit tall, and the padding around it in world units too
+    try std.testing.expectEqual(@as(f32, 1), button.GetComponent(TransformComponent).?.GetScale().x);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), label.GetComponent(TextComponent).?.mFontSize, 0.0001);
+    try std.testing.expectApproxEqAbs(@as(f32, 6.0 / 16.0), button.GetComponent(LayoutComponent).?.mPadding.Left, 0.0001);
+    try PhysicsManager.UpdateWorldTransforms(game_world, engine_context);
+    const text_params = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
+    try std.testing.expectApproxEqAbs(@as(f32, 1), text_params.FontSize, 0.0001);
+
+    //shrinking only x and y shrinks the label too: text is flat, its z scale doesn't count
+    try button.SetScale(engine_context, .{ .x = 0.5, .y = 0.5, .z = 1 });
+    try PhysicsManager.UpdateWorldTransforms(game_world, engine_context);
+    const shrunk = ShapeGeometry.GetTextParams(label.GetComponent(TransformComponent).?, label.GetComponent(TextComponent).?);
+    try std.testing.expectApproxEqAbs(@as(f32, 0.5), shrunk.FontSize, 0.0001);
+
+    //a text made inside the button is in world units too
+    try entities.OnRightClick(engine_context, entities.mRows.items[0].Header);
+    try entities.Run(engine_context, .{ .NewUIChild = .Text }, game_world, &selected);
+    var children = button.GetIterator(.Child);
+    while (children.next()) |child| {
+        try std.testing.expectApproxEqAbs(@as(f32, 1), child.GetComponent(TextComponent).?.mFontSize, 0.0001);
+    }
+
+    //the theme's sizes are turned into world units the same way when it styles something in a game scene
+    try std.testing.expectEqual(@as(f32, 1.0 / 16.0), StyleSystem.ThemeUnit(button));
+    try std.testing.expectEqual(@as(f32, 1), StyleSystem.ThemeUnit(world.mPage));
+}
+
+test "a file dropped on the panel: another type's file ignored, an entity file needs a scene selected" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    const game_world = &engine_context.mGameWorld;
+    const level = try game_world.NewScene(engine_context, .GameLayer, Scene.DefaultConfig);
+    var scenes = try world.Panel(Scene);
+    defer scenes.Deinit(engine_context.EngineAllocator());
+    var entities = try world.Panel(Entity);
+    defer entities.Deinit(engine_context.EngineAllocator());
+    try std.testing.expect(scenes.mArea.HasComponent(DropTargetComponent));
+    //a template's tree takes no drops
+    var roots = try HierarchyPanel(Entity).BuildForRoots(engine_context, world.mPage, .{ .StockScripts = false });
+    defer roots.Deinit(engine_context.EngineAllocator());
+    try std.testing.expect(!roots.mArea.HasComponent(DropTargetComponent));
+
+    const ui_scene = world.mPage.GetComponent(EntityComponents.EntitySceneComponent).?.mScene;
+    const goblin_file = try ui_scene.CreateEntity(engine_context, Entity.DefaultConfig);
+    _ = try goblin_file.AddComponent(engine_context, try FileRefComponent.Init(engine_context, "goblin.imen", .Prj));
+
+    //an entity file on the Scenes panel: left alone
+    var selected: ?SelectedObject = .{ .scene_layer = level };
+    try scenes.OnDrop(engine_context, .{ .mEntity = scenes.mArea, .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
+    try scenes.Update(engine_context, game_world, selected);
+    try std.testing.expectEqual(@as(usize, 1), scenes.mRows.items.len);
+    try std.testing.expectEqual(level.mID, selected.?.scene_layer.mID);
+
+    //on the Entities panel with no scene selected: nowhere to put it
+    selected = null;
+    try entities.OnDrop(engine_context, .{ .mEntity = entities.mArea, .mSource = goblin_file, .mPosition = .{ .x = 0, .y = 0, .z = 0 } }, game_world, &selected);
+    try entities.Update(engine_context, game_world, selected);
+    try std.testing.expectEqual(@as(usize, 0), entities.mRows.items.len);
+    try std.testing.expect(selected == null);
 }
