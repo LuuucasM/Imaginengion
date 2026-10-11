@@ -40,6 +40,13 @@ pub const ScriptType = enum(u8) {
     SceneInputPressed,
     SceneOnUpdate,
     SceneOnPhysicsUpdate,
+
+    //Player Scripts
+    PlayerOnUpdate,
+    PlayerInputPressed,
+
+    //Game Context Scripts
+    GameContextGameStart,
 };
 
 const Impl = switch (builtin.os.tag) {

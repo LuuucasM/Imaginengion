@@ -91,3 +91,24 @@ test "a change to the file clears the mark so the next GetAsset tries again" {
     //no longer short-circuited: it really tries the file now, which here is missing
     try std.testing.expectError(error.FileNotFound, asset_manager.GetAsset(engine_context, TextAsset, asset_id));
 }
+
+test "a change to the file marks it changed until the next update clears it" {
+    const test_context = try TestContext.Init();
+    defer test_context.Deinit();
+    const engine_context = test_context.mEngineContext;
+    const asset_manager = &engine_context.mAssetManager;
+    const engine_allocator = engine_context.EngineAllocator();
+
+    const asset_id = try CreateMissingFileAsset(engine_context);
+    try std.testing.expect(!asset_manager.AnyFileChanged());
+
+    try asset_manager.mEventManager.Insert(engine_allocator, .EndOfFrame, .{ .FileUpdate = .{ .mAssetID = asset_id } });
+    try asset_manager.ProcessDestroyedAssets(engine_context);
+    try std.testing.expect(asset_manager.AnyFileChanged());
+    try std.testing.expect(asset_manager.FileChanged(asset_id));
+
+    //what the start of OnUpdate does
+    try asset_manager.ClearFileChanged(engine_context);
+    try std.testing.expect(!asset_manager.AnyFileChanged());
+    try std.testing.expect(!asset_manager.FileChanged(asset_id));
+}

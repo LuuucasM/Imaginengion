@@ -82,6 +82,9 @@ const SceneComponents = @import("../ECSComponents/SComponents.zig");
 const SceneComponent = SceneComponents.SceneComponent;
 const OverlayLayerTag = SceneComponents.OverlayLayerTag;
 const OnSceneStartScript = SceneComponents.OnSceneStartScript;
+const PlayerOnUpdateScript = @import("../ECSComponents/PComponents.zig").OnUpdateScript;
+const PlayerOnInputPressedScript = @import("../ECSComponents/PComponents.zig").OnInputPressedScript;
+const OnGameStartScript = @import("../ECSComponents/GCComponents.zig").OnGameStartScript;
 
 const PlayerComponents = @import("../ECSComponents/PComponents.zig");
 const PossessComponent = PlayerComponents.PossessComponent;
@@ -394,8 +397,10 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
             callback_list.first = null;
             callback_list.last = null;
 
+            _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Simulate, engine_context, .{});
             _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Simulate, engine_context, .{});
         }
+        _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Editor, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Editor, engine_context, .{});
     }
     //-------------Game Logic End----------------
@@ -411,6 +416,9 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
     {
         const assets_zone = Tracy.ZoneInit("Assets Section", @src());
         defer assets_zone.Deinit();
+        //scripts whose files changed last frame, before OnUpdate clears what changed
+        const script_worlds = [_]*WorldManager{ &engine_context.mGameWorld, &engine_context.mEditorWorld, &engine_context.mTmplEditWorld, &engine_context.mSimulateWorld };
+        try ScriptsProcessor.SyncScriptTypes(engine_context, if (self.mEditorState == .Play) &script_worlds else script_worlds[0..3]);
         try engine_context.mAssetManager.OnUpdate(engine_context);
     }
     //-------------End Assets Update ------------------
@@ -980,14 +988,17 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
         return true;
     }
 
-    _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Editor, engine_context, .{&e});
+    //the players hear what the scene stack leaves them, and never a key the UI took
+    if (try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Editor, engine_context, .{&e}) == .Continue) {
+        _ = try ScriptsProcessor.RunScript(Player, PlayerOnInputPressedScript, .Editor, engine_context, .{&e});
+    }
     if (self.mEditorState == .Play) {
         if (ui_manager.KeyTakerFor(e._InputCode)) |taker| {
             if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Simulate, engine_context, taker.StackPos, .{&e}) == .Continue) {
                 try ui_manager.OnKeyTaken(engine_context, taker, e);
             }
-        } else {
-            _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Simulate, engine_context, .{&e});
+        } else if (try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Simulate, engine_context, .{&e}) == .Continue) {
+            _ = try ScriptsProcessor.RunScript(Player, PlayerOnInputPressedScript, .Simulate, engine_context, .{&e});
         }
     }
 
@@ -998,6 +1009,13 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     //turn, then off again
     if (e._InputCode == .F6) {
         engine_context.mRenderer.mHeatmap = Renderer.HeatMetric.Next(engine_context.mRenderer.mHeatmap);
+    }
+    //File > Save and Save As...: once per press, not again while S is held
+    if (e._InputCode == .S and e._Repeat == 0) {
+        const input = &engine_context.mInputManager;
+        if (input.IsKeyPressedUnfiltered(.LCTRL) or input.IsKeyPressedUnfiltered(.RCTRL)) {
+            try self.SaveSelected(engine_context, input.IsKeyPressedUnfiltered(.LSHIFT) or input.IsKeyPressedUnfiltered(.RSHIFT));
+        }
     }
 
     return true;
@@ -1040,7 +1058,9 @@ pub fn OnChangeEditorStateEvent(self: *EditorProgram, engine_context: *EngineCon
                 self.mActiveWorld = &engine_context.mSimulateWorld;
                 self.mActiveWorldType = .Simulate;
                 self.mEditorState = .Play;
-                //the game starting, the same as in a built game (GameProgram): its scenes' start scripts set it up
+                //the game starting, the same as in a built game (GameProgram): its game modes' start scripts set up
+                //its rules, then its scenes' start scripts set it up
+                _ = try ScriptsProcessor.RunScript(GameContext, OnGameStartScript, .Simulate, engine_context, .{});
                 _ = try ScriptsProcessor.RunScript(Scene, OnSceneStartScript, .Simulate, engine_context, .{});
             }
         }
@@ -1105,6 +1125,20 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
     });
 }
 
+/// Saves the file the selected object is kept in: an entity's is its scene's, a scene, player or game mode is its own.
+/// `as` asks for the file, otherwise it goes over the one it was last saved to or loaded from (asking the first time)
+fn SaveSelected(self: *EditorProgram, engine_context: *EngineContext, as: bool) !void {
+    const selected_object = self.mSelectedObj orelse return;
+    switch (selected_object) {
+        .entity => |entity| try SaveObject(engine_context, entity.GetComponent(EntitySceneComponent).?.mScene, as),
+        inline else => |object| try SaveObject(engine_context, object, as),
+    }
+}
+
+fn SaveObject(engine_context: *EngineContext, object: anytype, as: bool) !void {
+    if (as) try engine_context.mGameWorld.SaveAs(engine_context, object) else try engine_context.mGameWorld.Save(engine_context, object);
+}
+
 /// Does what a menu bar item was picked for
 fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: EditorMenuBar.Action) !void {
     const zone = Tracy.ZoneInit("EditorProgram::RunMenuAction", @src());
@@ -1121,15 +1155,11 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
                 _ = try engine_context.mGameWorld.Load(Scene, engine_context, asset_manager.GetRelPath(abs_path, path_type), path_type);
             }
         },
-        .Save => |kind| if (self.mSelectedObj) |selected_object| {
-            if (selected_object.Kind() == kind) switch (selected_object) {
-                inline else => |object| try engine_context.mGameWorld.Save(engine_context, object),
-            };
-        },
-        .SaveAs => |kind| if (self.mSelectedObj) |selected_object| {
-            if (selected_object.Kind() == kind) switch (selected_object) {
-                inline else => |object| try engine_context.mGameWorld.SaveAs(engine_context, object),
-            };
+        .Save => try self.SaveSelected(engine_context, false),
+        .SaveAs => try self.SaveSelected(engine_context, true),
+        .ExportEntity => if (self.mSelectedObj) |selected_object| switch (selected_object) {
+            .entity => |entity| try engine_context.mGameWorld.SaveAs(engine_context, entity),
+            else => {},
         },
         .NewProject => {
             const abs_path = try PlatformUtils.OpenFolder(engine_context.FrameAllocator());

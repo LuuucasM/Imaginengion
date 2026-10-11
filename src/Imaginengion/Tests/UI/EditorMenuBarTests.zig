@@ -70,30 +70,29 @@ test "each item has its action, and the editor's state shows as check marks and 
     try std.testing.expect(!menu_bar.mPlayStop.HasComponent(DisabledTag));
 }
 
-test "each kind's save items need an object of that kind selected" {
+test "Save and Save As... need something selected, Export Entity... an entity" {
     const world = try TestWorld.Init();
     defer world.Deinit();
     const engine_context = world.mEngineContext;
     var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
     defer menu_bar.Deinit(engine_context.EngineAllocator());
 
-    try std.testing.expectEqual(.Scene, menu_bar.ActionOf(menu_bar.mSaveItems.get(.Scene)[1]).?.SaveAs);
-    try std.testing.expectEqual(.GameContext, menu_bar.ActionOf(menu_bar.mSaveItems.get(.GameContext)[0]).?.Save);
+    try std.testing.expectEqual(EditorMenuBar.Action.Save, menu_bar.ActionOf(menu_bar.mSave).?);
+    try std.testing.expectEqual(EditorMenuBar.Action.SaveAs, menu_bar.ActionOf(menu_bar.mSaveAs).?);
+    try std.testing.expectEqual(EditorMenuBar.Action.ExportEntity, menu_bar.ActionOf(menu_bar.mExportEntity).?);
 
     //nothing selected: all greyed out
     var state = State(&.{}, null);
     try menu_bar.Update(engine_context, state);
-    for (menu_bar.mSaveItems.values) |items| {
-        for (items) |item| try std.testing.expect(item.HasComponent(DisabledTag));
-    }
+    for ([_]Entity{ menu_bar.mSave, menu_bar.mSaveAs, menu_bar.mExportEntity }) |item| try std.testing.expect(item.HasComponent(DisabledTag));
 
-    //only the selected kind's items can be used
+    //any kind selected can be saved, only an entity exported
     for (std.enums.values(ObjectKind)) |selected| {
         state.Selected = selected;
         try menu_bar.Update(engine_context, state);
-        for (std.enums.values(ObjectKind)) |kind| {
-            for (menu_bar.mSaveItems.get(kind)) |item| try std.testing.expectEqual(kind != selected, item.HasComponent(DisabledTag));
-        }
+        try std.testing.expect(!menu_bar.mSave.HasComponent(DisabledTag));
+        try std.testing.expect(!menu_bar.mSaveAs.HasComponent(DisabledTag));
+        try std.testing.expectEqual(selected != .Entity, menu_bar.mExportEntity.HasComponent(DisabledTag));
     }
 }
 

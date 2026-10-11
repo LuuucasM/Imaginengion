@@ -30,6 +30,9 @@ const OnKeyPressedScript = EntityComponents.OnKeyPressedScript;
 const OnUpdateScript = EntityComponents.OnUpdateScript;
 const OnSceneStartScript = @import("../ECSComponents/SComponents.zig").OnSceneStartScript;
 const PossessComponent = @import("../ECSComponents/PComponents.zig").PossessComponent;
+const PlayerOnUpdateScript = @import("../ECSComponents/PComponents.zig").OnUpdateScript;
+const PlayerOnInputPressedScript = @import("../ECSComponents/PComponents.zig").OnInputPressedScript;
+const OnGameStartScript = @import("../ECSComponents/GCComponents.zig").OnGameStartScript;
 
 const WindowEventData = @import("../Events/WindowEventData.zig");
 const WindowEvent = WindowEventData.EventT;
@@ -92,8 +95,8 @@ pub fn Init(self: *GameProgram, engine_context: *EngineContext, args: std.proces
 
 pub fn Deinit(_: *GameProgram, _: *EngineContext) void {}
 
-/// Loads the entry scene, spawns the entry player and game mode, and runs the scenes' start scripts. The project is
-/// already open
+/// Loads the entry scene, player and game mode, and runs the game mode's then the scenes' start
+/// scripts. The project is already open
 pub fn StartGame(engine_context: *EngineContext) !void {
     const project = &engine_context.mProject;
     var missing = false;
@@ -105,24 +108,16 @@ pub fn StartGame(engine_context: *EngineContext) !void {
     }
     if (missing) return error.NoProjectEntry;
 
+    //all three are the files themselves, UUIDs and all, as in the editor's Play, so scripts can find them by UUID
     _ = try engine_context.mGameWorld.Load(Scene, engine_context, project.GetEntry(.Scene), .Prj);
-    _ = try SpawnEntry(Player, engine_context, .Player);
-    _ = try SpawnEntry(GameContext, engine_context, .GameContext);
+    _ = try engine_context.mGameWorld.Load(Player, engine_context, project.GetEntry(.Player), .Prj);
+    _ = try engine_context.mGameWorld.Load(GameContext, engine_context, project.GetEntry(.GameContext), .Prj);
 
+    //the game mode's start scripts set up the game's rules first
+    _ = try ScriptsProcessor.RunScript(GameContext, OnGameStartScript, .Game, engine_context, .{});
     //the program isn't listening yet while it starts (Application.Init), so loading the entry scene didn't start it
     //(SceneLoaded): it starts here, once the player and game mode its scripts set up are in
     _ = try ScriptsProcessor.RunScript(Scene, OnSceneStartScript, .Game, engine_context, .{});
-}
-
-/// A copy of the project's `entry` file in the game world, the way scripts spawn one (WorldManager.Spawn)
-fn SpawnEntry(comptime obj_t: type, engine_context: *EngineContext, entry: Project.Entry) !obj_t {
-    var tmpl = try engine_context.mAssetManager.GetAssetHandle(engine_context, .{ .File = .{
-        .rel_path = engine_context.mProject.GetEntry(entry),
-        .path_type = .Prj,
-    } });
-    //the copy keeps its own reference
-    defer tmpl.ReleaseAsset();
-    return try engine_context.mGameWorld.Spawn(obj_t, engine_context, tmpl);
 }
 
 pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
@@ -186,6 +181,7 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
         callback_list.first = null;
         callback_list.last = null;
 
+        _ = try ScriptsProcessor.RunScript(Player, PlayerOnUpdateScript, .Game, engine_context, .{});
         _ = try ScriptsProcessor.RunScript(Entity, OnUpdateScript, .Game, engine_context, .{});
     }
     //-------------Game Logic End----------------
@@ -194,6 +190,8 @@ pub fn OnUpdate(self: *GameProgram, engine_context: *EngineContext) !void {
     {
         const assets_zone = Tracy.ZoneInit("Assets Section", @src());
         defer assets_zone.Deinit();
+        //scripts whose files changed last frame, before OnUpdate clears what changed
+        try ScriptsProcessor.SyncScriptTypes(engine_context, &.{game_world});
         try engine_context.mAssetManager.OnUpdate(engine_context);
     }
     //-------------End Assets Update ------------------
@@ -324,15 +322,15 @@ fn OnSystemEvent(_: *anyopaque, engine_context: *EngineContext, event: *const Wi
 }
 
 /// Scene by scene from the top of the stack. When the UI takes the key it does at its own scene's turn, see
-/// EditorProgram.OnKeyboardPressedEvent
+/// EditorProgram.OnKeyboardPressedEvent. The players hear what the scenes leave them, and never a key the UI took
 fn OnKeyboardPressed(engine_context: *EngineContext, e: WindowEventData.KeyboardPressedEvent) !void {
     const ui_manager = &engine_context.mUIManager;
     if (ui_manager.KeyTakerFor(e._InputCode)) |taker| {
         if (try ScriptsProcessor.RunScriptAbove(Entity, OnKeyPressedScript, .Game, engine_context, taker.StackPos, .{&e}) == .Continue) {
             try ui_manager.OnKeyTaken(engine_context, taker, e);
         }
-    } else {
-        _ = try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Game, engine_context, .{&e});
+    } else if (try ScriptsProcessor.RunScript(Entity, OnKeyPressedScript, .Game, engine_context, .{&e}) == .Continue) {
+        _ = try ScriptsProcessor.RunScript(Player, PlayerOnInputPressedScript, .Game, engine_context, .{&e});
     }
 }
 

@@ -45,6 +45,7 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     for (0..64) |i| {
         if (i % 2 == 1) engine_context.mEngineStats.FrameAcquired();
         engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum = 42;
+        engine_context.mEngineStats.EditorWorldStats.mRenderStats.OverlayBVH = .{ .Nodes = 7, .Leaves = 4, .Depth = 3, .LeafDepths = 10, .Items = 14 };
         engine_context.mEngineStats.ResetStats();
         engine_context.mEngineStats.CountLoop(engine_context.mDT);
     }
@@ -54,6 +55,9 @@ test "the stats window starts closed, opens and closes, and shows the loop, the 
     try std.testing.expectEqualStrings("Loop time: 15625 us (0.01563 s)", TextOf(panel.mLoopTime));
     //the last rendered frame's, kept when the frame's were reset
     try std.testing.expectEqualStrings("Glyphs: 42", TextOf(panel.mEditor.Glyphs));
+    //each layer's BVH: its deepest and average leaf, then its size; a layer with no tree is all 0
+    try std.testing.expectEqualStrings("Overlay BVH: depth 3 (avg 2.5), 7 nodes, 4 leaves of 3.5", TextOf(panel.mEditor.OverlayBVH));
+    try std.testing.expectEqualStrings("Game BVH: depth 0 (avg 0.0), 0 nodes, 0 leaves of 0.0", TextOf(panel.mEditor.GameBVH));
     try std.testing.expectEqual(@as(usize, 0), engine_context.mEngineStats.EditorWorldStats.mRenderStats.OutputGlyphNum);
 
     //every world's section starts folded

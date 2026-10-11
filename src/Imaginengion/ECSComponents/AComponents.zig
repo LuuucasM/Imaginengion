@@ -3,6 +3,7 @@ pub const AssetMetaData = @import("Asset/AssetMetaData.zig");
 pub const FileMetaData = @import("Asset/FileMetaData.zig");
 pub const PendingDelete = @import("Asset/PendingDelete.zig");
 pub const LoadFailedTag = @import("Asset/LoadFailedTag.zig");
+pub const FileChangedTag = @import("Asset/FileChangedTag.zig");
 pub const GenMetaData = @import("Asset/GenMetaData.zig");
 pub const ScriptAsset = @import("Asset/ScriptAsset.zig");
 pub const ShaderAsset = @import("Asset/ShaderAsset.zig");
@@ -36,6 +37,7 @@ pub const ComponentsList = [_]type{
     FileMetaData,
     PendingDelete,
     LoadFailedTag,
+    FileChangedTag,
     GenMetaData,
     AudioAsset,
     ThemeAsset,
@@ -54,6 +56,7 @@ pub const EComponents = enum(16) {
     FileMetaData = ListInd(&ComponentsList, FileMetaData),
     PendingDelete = ListInd(&ComponentsList, PendingDelete),
     LoadFailedTag = ListInd(&ComponentsList, LoadFailedTag),
+    FileChangedTag = ListInd(&ComponentsList, FileChangedTag),
     GenMetaData = ListInd(&ComponentsList, GenMetaData),
     AudioAsset = ListInd(&ComponentsList, AudioAsset),
     ThemeAsset = ListInd(&ComponentsList, ThemeAsset),

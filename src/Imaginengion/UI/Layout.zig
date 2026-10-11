@@ -82,8 +82,9 @@ pub const Scroll = enum {
 
 /// How many columns a grid has before it wraps
 pub const Columns = union(enum) {
-    /// as many cells as fit across the grid's width, which it takes from its parent (Fill, Percent or Fixed). A grid
-    /// that fits its children has no width to fit them in, so it is one row
+    /// as many cells as fit across the grid's width, which it takes from its parent (Fill, Percent or Fixed), never
+    /// asking for more than one cell's width itself. A grid that fits its children has no width to fit them in, so
+    /// it is one row
     Auto,
     /// this many, e.g. a 3 x 3 inventory
     Count: u32,
@@ -333,14 +334,18 @@ const Solver = struct {
         return size + container.Padding.Along(axis);
     }
 
-    /// A grid: across, its columns' worth of cells, or every cell in one row if it fits as many as there is room for.
-    /// Down, its rows, which needs the column count and so its final width: every width is worked out before any
-    /// height
+    /// A grid: across, its columns' worth of cells. With Auto columns, a grid that fits its children is every cell in
+    /// one row, and one that takes its width from its parent asks for just one cell, so the cells wrap to whatever
+    /// width it is given rather than pushing it out to one long row. Down, its rows, which needs the column count and
+    /// so its final width: every width is worked out before any height
     fn GridFit(self: *Solver, index: Index, container: Container, axis: Axis) f32 {
         const count = self.FlowCount(index);
         const lines = switch (axis) {
             .X => switch (container.Columns) {
-                .Auto => count,
+                .Auto => switch (self.mNodes[index].SizingOf(.X)) {
+                    .Fit => count,
+                    .Fixed, .Fill, .Percent => @min(count, 1),
+                },
                 .Count => |columns| @min(@max(columns, 1), count),
             },
             .Y => if (count == 0) 0 else std.math.divCeil(usize, count, self.GridColumns(index, container)) catch unreachable,

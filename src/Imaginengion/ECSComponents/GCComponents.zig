@@ -7,6 +7,10 @@ pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
 const This = @This();
 
+const ScriptTags = @import("Shared/ScriptTags.zig");
+pub const OnGameStartScript = ScriptTags.OnGameStartScript;
+pub const UntypedScriptTag = ScriptTags.UntypedScriptTag;
+
 pub const ComponentsList = [_]type{
     AttribComponent,
     AudioComponent,
@@ -14,6 +18,10 @@ pub const ComponentsList = [_]type{
     UUIDComponent,
     ScriptComponent,
     TmplRefComponent,
+
+    //Scripts
+    OnGameStartScript,
+    UntypedScriptTag,
 };
 
 pub const ComponentsPanelList = [_]type{
@@ -41,7 +49,9 @@ pub const ShellList = [_]type{
     TmplRefComponent,
 };
 
-pub const ScriptsList = [_]type{};
+pub const ScriptsList = [_]type{
+    OnGameStartScript,
+};
 
 pub const EComponents = enum(u16) {
     AttribComponent = ListInd(&ComponentsList, AttribComponent),
@@ -49,4 +59,7 @@ pub const EComponents = enum(u16) {
     NameComponent = ListInd(&ComponentsList, NameComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
+    ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
+    OnGameStartScript = ListInd(&ComponentsList, OnGameStartScript),
+    UntypedScriptTag = ListInd(&ComponentsList, UntypedScriptTag),
 };

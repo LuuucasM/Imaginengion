@@ -207,18 +207,40 @@ fn _CollectOverlayScenes(player: Player, frame_allocator: std.mem.Allocator, sce
     }
 }
 
-//NOTE: no scripts for players yet
-//pub fn AddComponentScript(self: Player, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
-//    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
-//    const script_type = script_asset.GetScriptType();
-//    _ValidateScriptType() //add assert to make sure the type is an allowed type
-//
-//    const new_script_entity = Core.AddScript(self, engine_context, new_script_handle);
-//
-//    _ = switch (script_asset.GetScriptType()) {
-//        else => @panic("This shouldnt happen!"),
-//    };
-//}
+pub fn AddScript(self: Player, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
+    const script_asset = new_script_handle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
+        //it failed to load (the reason is already logged). Keep the script child so the script stays on the
+        //player and is saved back out. Nothing runs it until its file is fixed, see ScriptsProcessor.SyncScriptTypes
+        error.NoDefaultAsset => {
+            const new_script_player = try Core.AddScript(self, engine_context, new_script_handle);
+            _ = try new_script_player.AddComponent(engine_context, PlayerComponents.UntypedScriptTag{});
+            return;
+        },
+        else => return err,
+    };
+    const script_type = script_asset.GetScriptType();
+    _ValidateScriptType(script_type);
+
+    const new_script_player = try Core.AddScript(self, engine_context, new_script_handle);
+    if (!try AddScriptTypeTag(new_script_player, engine_context, script_type)) unreachable;
+}
+
+/// Gives a script child the tag for script_type, which is what has it run. False, with nothing added, if script_type
+/// is not a player script
+pub fn AddScriptTypeTag(script: Player, engine_context: *EngineContext, script_type: ScriptAsset.ScriptType) !bool {
+    switch (script_type) {
+        .PlayerOnUpdate => _ = try script.AddComponent(engine_context, PlayerComponents.OnUpdateScript{}),
+        .PlayerInputPressed => _ = try script.AddComponent(engine_context, PlayerComponents.OnInputPressedScript{}),
+        else => return false,
+    }
+    return true;
+}
+
+pub const AddComponentScript = Core.AddComponentScript;
+
+fn _ValidateScriptType(script_type: ScriptAsset.ScriptType) void {
+    std.debug.assert(script_type == .PlayerOnUpdate or script_type == .PlayerInputPressed);
+}
 
 //TODO: Move to PManager
 //pub fn CreatePlayerConfig(self: *Player, engine_context: *EngineContext, config: NewPlayerConfig) !void {

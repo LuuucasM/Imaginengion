@@ -2,7 +2,7 @@
 //! Project (the scene, player and game mode the game starts from), Window and Editor (theme, play options, vsync, shader heatmap). Opening, closing and switching menus is the stock menu scripts'.
 //! What an item does is the editor's: this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
 //! Update puts the editor's state on the items: which panels are shown (check marks), what can't be done right now
-//! (greyed out, DisabledTag, e.g. saving a scene with no scene selected), and the players the play preview can follow, a list rebuilt when they change.
+//! (greyed out, DisabledTag, e.g. saving with nothing selected), and the players the play preview can follow, a list rebuilt when they change.
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -48,10 +48,13 @@ pub const Action = union(enum) {
     NewGameScene,
     NewOverlayScene,
     OpenScene,
-    /// save the selected object, of this kind, over its file (asking for one the first time)
-    Save: ObjectKind,
-    /// save the selected object, of this kind, to a file picked now
-    SaveAs: ObjectKind,
+    /// save the file the selected object is kept in over itself (asking for one the first time): a selected entity's
+    /// scene, or the selected scene, player or game mode. Ctrl+S
+    Save,
+    /// save the file the selected object is kept in, as Save does, to a file picked now. Ctrl+Shift+S
+    SaveAs,
+    /// write the selected entity on its own, to an entity file picked now, leaving its scene as it is
+    ExportEntity,
     NewProject,
     OpenProject,
     SaveProject,
@@ -88,7 +91,7 @@ pub const State = struct {
     /// whether each panel is shown
     Shown: std.EnumArray(Panel, bool),
     ProjectOpen: bool,
-    /// the kind of the selected object, which only that kind's Save and Save As... items save
+    /// the kind of the selected object: Save and Save As... need one, Export Entity... an entity
     Selected: ?ObjectKind,
     /// whether Play/Stop can be used: stopping always, starting with a run player that can be drawn
     CanPlayStop: bool,
@@ -110,8 +113,9 @@ const ItemAction = struct {
 mActions: std.ArrayList(ItemAction) = .empty,
 mPanelItems: std.EnumArray(Panel, Entity) = .initFill(.uninit),
 mSaveProject: Entity = .uninit,
-/// Save <kind> and Save <kind> As..., for each kind of object
-mSaveItems: std.EnumArray(ObjectKind, [2]Entity) = .initFill(.{ .uninit, .uninit }),
+mSave: Entity = .uninit,
+mSaveAs: Entity = .uninit,
+mExportEntity: Entity = .uninit,
 mEntryItems: std.EnumArray(Project.Entry, Entity) = .initFill(.uninit),
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
@@ -139,11 +143,9 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     _ = try self.Add(engine_context, new_scene, "New Game Scene", item_options, .NewGameScene);
     _ = try self.Add(engine_context, new_scene, "New Overlay Scene", item_options, .NewOverlayScene);
     _ = try self.Add(engine_context, file, "Open Scene", item_options, .OpenScene);
-    try self.AddSaveItems(engine_context, file, .Scene, "Scene", item_options);
-    _ = try Widgets.Separator(engine_context, .{ .Entity = file });
-    try self.AddSaveItems(engine_context, file, .Entity, "Entity", item_options);
-    try self.AddSaveItems(engine_context, file, .Player, "Player", item_options);
-    try self.AddSaveItems(engine_context, file, .GameContext, "Game Mode", item_options);
+    self.mSave = try self.Add(engine_context, file, "Save", .{ .Shortcut = "Ctrl+S", .StockScripts = options.StockScripts }, .Save);
+    self.mSaveAs = try self.Add(engine_context, file, "Save As...", .{ .Shortcut = "Ctrl+Shift+S", .StockScripts = options.StockScripts }, .SaveAs);
+    self.mExportEntity = try self.Add(engine_context, file, "Export Entity...", item_options, .ExportEntity);
     _ = try Widgets.Separator(engine_context, .{ .Entity = file });
     _ = try self.Add(engine_context, file, "New Project", item_options, .NewProject);
     _ = try self.Add(engine_context, file, "Open Project", item_options, .OpenProject);
@@ -208,9 +210,9 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     for (std.enums.values(HeatMetric)) |metric| {
         try WidgetActions.SetChecked(engine_context, self.mHeatmapItems.get(metric), state.Heatmap == metric);
     }
-    for (std.enums.values(ObjectKind)) |kind| {
-        for (self.mSaveItems.get(kind)) |item| try WidgetActions.SetDisabled(engine_context, item, state.Selected != kind);
-    }
+    try WidgetActions.SetDisabled(engine_context, self.mSave, state.Selected == null);
+    try WidgetActions.SetDisabled(engine_context, self.mSaveAs, state.Selected == null);
+    try WidgetActions.SetDisabled(engine_context, self.mExportEntity, state.Selected != .Entity);
     try WidgetActions.SetDisabled(engine_context, self.mSaveProject, !state.ProjectOpen);
     for (self.mEntryItems.values) |item| try WidgetActions.SetDisabled(engine_context, item, !state.ProjectOpen);
     try WidgetActions.SetDisabled(engine_context, self.mPlayStop, !state.CanPlayStop);
@@ -239,14 +241,6 @@ fn SamePlayers(self: *const EditorMenuBar, players: []const Player) bool {
         if (player.mID != entry.Action.FollowPlayer.mID or player.mManager != entry.Action.FollowPlayer.mManager) return false;
     }
     return true;
-}
-
-/// Save <name> and Save <name> As..., for objects of `kind`
-fn AddSaveItems(self: *EditorMenuBar, engine_context: *EngineContext, menu: Entity, comptime kind: ObjectKind, comptime name: []const u8, options: Widgets.MenuItemOptions) !void {
-    self.mSaveItems.set(kind, .{
-        try self.Add(engine_context, menu, "Save " ++ name, options, .{ .Save = kind }),
-        try self.Add(engine_context, menu, "Save " ++ name ++ " As...", options, .{ .SaveAs = kind }),
-    });
 }
 
 /// A menu item that does `action`

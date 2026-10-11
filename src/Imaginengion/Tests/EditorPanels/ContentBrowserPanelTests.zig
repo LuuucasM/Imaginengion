@@ -223,9 +223,12 @@ test "EngineAssets goes into the engine's assets, whose files are engine files, 
     }));
 }
 
-test "the Scripts panel takes an entity script onto an entity and a scene script onto a scene, and nothing else" {
+test "the Scripts panel takes each kind of script onto its kind of object, and nothing else" {
     try std.testing.expectEqual(.entity, ScriptsPanel.ScriptOwnerOf(.EntityOnUpdate).?);
     try std.testing.expectEqual(.scene_layer, ScriptsPanel.ScriptOwnerOf(.SceneOnUpdate).?);
+    try std.testing.expectEqual(.player, ScriptsPanel.ScriptOwnerOf(.PlayerOnUpdate).?);
+    try std.testing.expectEqual(.player, ScriptsPanel.ScriptOwnerOf(.PlayerInputPressed).?);
+    try std.testing.expectEqual(.gamecontext, ScriptsPanel.ScriptOwnerOf(.GameContextGameStart).?);
 
     //a texture dropped on it: left alone, nothing loaded
     const browser = try TestBrowser.Init();

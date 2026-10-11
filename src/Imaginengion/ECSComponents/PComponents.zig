@@ -10,6 +10,11 @@ pub const UUIDComponent = @import("Shared/UUIDComponent.zig");
 pub const ScriptComponent = @import("Shared/ScriptComponent.zig");
 pub const TmplRefComponent = @import("Shared/TmplRefComponent.zig");
 
+const ScriptTags = @import("Shared/ScriptTags.zig");
+pub const OnUpdateScript = ScriptTags.PlayerOnUpdateScript;
+pub const OnInputPressedScript = ScriptTags.PlayerOnInputPressedScript;
+pub const UntypedScriptTag = ScriptTags.UntypedScriptTag;
+
 pub const ComponentsList = [_]type{
     AttribComponent,
     AudioComponent,
@@ -21,6 +26,11 @@ pub const ComponentsList = [_]type{
     UUIDComponent,
     ScriptComponent,
     TmplRefComponent,
+
+    //Scripts
+    OnUpdateScript,
+    OnInputPressedScript,
+    UntypedScriptTag,
 };
 
 pub const ComponentsPanelList = [_]type{
@@ -56,7 +66,10 @@ pub const ShellList = [_]type{
     TmplRefComponent,
 };
 
-pub const ScriptsList = [_]type{};
+pub const ScriptsList = [_]type{
+    OnUpdateScript,
+    OnInputPressedScript,
+};
 
 pub const EComponents = enum(u16) {
     AttribComponent = ListInd(&ComponentsList, AttribComponent),
@@ -68,4 +81,8 @@ pub const EComponents = enum(u16) {
     NameComponent = ListInd(&ComponentsList, NameComponent),
     UUIDComponent = ListInd(&ComponentsList, UUIDComponent),
     TmplRefComponent = ListInd(&ComponentsList, TmplRefComponent),
+    ScriptComponent = ListInd(&ComponentsList, ScriptComponent),
+    OnUpdateScript = ListInd(&ComponentsList, OnUpdateScript),
+    OnInputPressedScript = ListInd(&ComponentsList, OnInputPressedScript),
+    UntypedScriptTag = ListInd(&ComponentsList, UntypedScriptTag),
 };

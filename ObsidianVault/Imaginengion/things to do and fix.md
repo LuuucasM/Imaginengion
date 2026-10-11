@@ -1,2 +1,13 @@
 - add reparenting
 - be able to select and copy the UUID to clipboard
+- fix the rendering at the ends of quads theres some weird artifacts
+	- for pngs the see through parts for some reason skips the behind objects when it should continue to march forward to the next object behind this one
+- have scenes highlighted maybe some color or something, and then entities also get that same highlight so u know which scene each entity is in
+- the example in the physics on begin script may be incorrect / outdated
+- maybe when you do a save a little box pops up in the bottom left corner for a couple of seconds that say  blah saved and fades away
+- theres no way to make events and have systems talk to each other by events
+	- need an event system that can work at runtime somehow or maybe this will unbury one of the major possible changes of making the engine into this hot reloading DLL type thingy
+- When adding a text component it defaults to having none but it should default to engine text, or at least use the defualt text in the case theres none
+- keeping track of whats modified so we can do a SAVE ALL
+- add .Error to ScriptResult and change all the scripts to return .Error on error instead of whatever its doing now
+- rename UI stuff that refers to Entity as GameObject

@@ -11,7 +11,8 @@
 //!     is under it either way: clicking a second dropdown while one is open opens the second straight away
 //!   - Escape closes the top one, at its scene's turn in the scene stack
 //!
-//! A popup is placed every frame after layout, so it follows what opened it. It should be its own layout root: at the
+//! A popup is placed every frame after layout, so it follows what opened it. An overlay popup that would run off the
+//! screen is flipped to the other side of what opened it, then kept inside. It should be its own layout root: at the
 //! top level of its scene (or under something that isn't a container), in the same scene as what opens it. Its
 //! placement is the popup system's: leave its LayoutItemComponent's placement at Flow. Its z is yours, like the rest
 //! of layout: give popups a z in front of the UI they open over.
@@ -36,7 +37,9 @@ const LayoutItemComponent = EntityComponents.LayoutItemComponent;
 const TransformComponent = EntityComponents.TransformComponent;
 const EntitySceneComponent = EntityComponents.EntitySceneComponent;
 const EntityChildComponent = @import("../ECS/Components.zig").ChildComponent(Entity.Type);
-const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
+const SComponents = @import("../ECSComponents/SComponents.zig");
+const StackPosComponent = SComponents.StackPosComponent;
+const SceneComponent = SComponents.SceneComponent;
 
 const PopupSystem = @This();
 
@@ -222,16 +225,28 @@ fn Place(engine_context: *EngineContext, open: OpenPopup) !void {
     const anchoring = (UIManager.GetUIComponent(popup, PopupComponent) orelse return).mPlacement;
     const size = if (popup.GetComponent(LayoutItemComponent)) |item| item.mComputedSize else Vec2(f32){ .x = 0, .y = 0 };
 
-    const center: Vec2(f32) = switch (open.mAt) {
-        .Point => |point| point.AddVec(Layout.AnchoredCenter(anchoring, .{ .x = 0, .y = 0 }, size)),
-        .Opener => |opener| blk: {
+    var opener_center = Vec2(f32){ .x = 0, .y = 0 };
+    var opener_size = Vec2(f32){ .x = 0, .y = 0 };
+    switch (open.mAt) {
+        .Point => |point| opener_center = point,
+        .Opener => |opener| {
             if (!opener.IsActive()) return;
             const transform = opener.GetComponent(TransformComponent) orelse return;
             const position = transform.GetWorldPosition();
-            const opener_center = Vec2(f32){ .x = position.x, .y = position.y };
-            break :blk opener_center.AddVec(Layout.AnchoredCenter(anchoring, RectSize(opener), size));
+            opener_center = .{ .x = position.x, .y = position.y };
+            opener_size = RectSize(opener);
         },
-    };
+    }
+    var center = opener_center.AddVec(Layout.AnchoredCenter(anchoring, opener_size, size));
+
+    //an overlay popup is kept on the screen its scene was laid out on
+    if (popup.GetLayer() == .OverlayLayer) {
+        const scene = popup.GetComponent(EntitySceneComponent).?.mScene;
+        if (scene.GetComponent(SceneComponent).?.mLayoutArea) |area| {
+            center.x = OnScreen(.X, center.x, opener_center.x, anchoring.Anchor.x, anchoring.Pivot.x, anchoring.Offset.x, opener_size.x, size.x, area.x);
+            center.y = OnScreen(.Y, center.y, opener_center.y, anchoring.Anchor.y, anchoring.Pivot.y, anchoring.Offset.y, opener_size.y, size.y, area.y);
+        }
+    }
 
     //placed in its parent's space, if it has one
     const transform = popup.GetComponent(TransformComponent) orelse return;
@@ -249,6 +264,26 @@ fn Place(engine_context: *EngineContext, open: OpenPopup) !void {
     const current = transform.GetTranslation();
     if (current.x == local.x and current.y == local.y) return;
     try popup.SetTranslation(engine_context, .{ .x = local.x, .y = local.y, .z = current.z });
+}
+
+/// Where a popup's center goes along one axis of a screen `area` wide around 0, given it is `placed` there: flipped to
+/// the other side of what opened it if that runs off the screen less (a right-click menu near the bottom opens
+/// upwards, a submenu near the right edge opens to the left), then moved back inside. One bigger than the screen
+/// keeps its left or top edge on it, where a menu starts
+fn OnScreen(comptime axis: Layout.Axis, placed: f32, opener_center: f32, anchor: f32, pivot: f32, offset: f32, opener_size: f32, size: f32, area: f32) f32 {
+    const half = area / 2;
+    const flipped = opener_center - anchor * opener_size / 2 + pivot * size / 2 - offset;
+    const center = if (Overrun(flipped, size, half) < Overrun(placed, size, half)) flipped else placed;
+    if (size >= area) return switch (axis) {
+        .X => -half + size / 2,
+        .Y => half - size / 2,
+    };
+    return std.math.clamp(center, -half + size / 2, half - size / 2);
+}
+
+/// How far something `size` big centered at `center` runs past either edge of a screen from -half to half
+fn Overrun(center: f32, size: f32, half: f32) f32 {
+    return @max(center + size / 2 - half, 0) + @max(-half - (center - size / 2), 0);
 }
 
 /// How big an opener's rectangle is: the size layout gave it, or else its quad's, grown by its scale

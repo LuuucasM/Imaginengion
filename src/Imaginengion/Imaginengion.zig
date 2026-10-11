@@ -11,6 +11,7 @@ test {
     _ = @import("Tests/ECSObjects/LayerTagTests.zig");
     _ = @import("Tests/ECSObjects/OverlayTests.zig");
     _ = @import("Tests/ECSObjects/GetWorldTests.zig");
+    _ = @import("Tests/ECSObjects/LoadOrGetTests.zig");
     _ = @import("Tests/Physics/TransformPassTests.zig");
     _ = @import("Tests/Physics/BodyTagTests.zig");
     _ = @import("Tests/Physics/CollisionsTests.zig");
@@ -78,6 +79,12 @@ pub const Bus = @import("ECSObjects/Bus.zig");
 
 //Scene Stuff -----------------------------------------
 pub const SceneLayer = @import("ECSObjects/Scene.zig");
+
+//Player and Game Context Stuff ------------------------
+pub const Player = @import("ECSObjects/Player.zig");
+pub const PlayerComponents = @import("ECSComponents/PComponents.zig");
+pub const GameContext = @import("ECSObjects/GameContext.zig");
+pub const GCComponents = @import("ECSComponents/GCComponents.zig");
 
 //Script Stuff ----------------------------------------------
 pub const ScriptType = @import("ECSComponents/Asset/ScriptAsset.zig").ScriptType;

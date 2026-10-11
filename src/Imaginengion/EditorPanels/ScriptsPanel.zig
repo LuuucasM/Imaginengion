@@ -2,7 +2,7 @@
 //! each of its scripts, which right clicking offers to delete. A line says why when there is nothing to list. Every
 //! frame the selection and its scripts are checked against what the rows were built for, and they are built again when
 //! they differ. A script is added by dropping it on the panel from the Content Browser: an entity script onto an
-//! entity, a scene script onto a scene. Players and game modes have no scripts yet
+//! entity, a scene script onto a scene, a player script onto a player, a game mode script onto a game mode
 const std = @import("std");
 const Tracy = @import("../Core/Tracy.zig");
 const EngineContext = @import("../Core/EngineContext.zig");
@@ -94,15 +94,9 @@ pub fn Update(self: *ScriptsPanel, engine_context: *EngineContext, selected: ?Se
     if (selected) |object| {
         if (IsActive(object)) {
             title = NameOf(object);
-            switch (object) {
-                .player => message = "Players can't have scripts yet",
-                .gamecontext => message = "Game modes can't have scripts yet",
-                .entity, .scene_layer => {
-                    listed = object;
-                    try ScriptsOf(frame_allocator, object, &scripts);
-                    if (scripts.items.len == 0) message = "No scripts yet";
-                },
-            }
+            listed = object;
+            try ScriptsOf(frame_allocator, object, &scripts);
+            if (scripts.items.len == 0) message = "No scripts yet";
         }
     } else {
         message = "Select an object to see its scripts";
@@ -128,11 +122,13 @@ pub fn Run(engine_context: *EngineContext, script: SelectedObject) !void {
     }
 }
 
-/// Which kind of object a script goes on, from its type: null for one that goes on neither an entity nor a scene
+/// Which kind of object a script goes on, from its type's name: null for one whose name says none of them
 pub fn ScriptOwnerOf(script_type: ScriptType) ?std.meta.Tag(SelectedObject) {
     const name = @tagName(script_type);
     if (std.mem.startsWith(u8, name, "Entity")) return .entity;
     if (std.mem.startsWith(u8, name, "Scene")) return .scene_layer;
+    if (std.mem.startsWith(u8, name, "Player")) return .player;
+    if (std.mem.startsWith(u8, name, "GameContext")) return .gamecontext;
     return null;
 }
 
@@ -162,9 +158,7 @@ pub fn OnDrop(self: ScriptsPanel, engine_context: *EngineContext, on: Entity, dr
         return;
     }
     switch (object) {
-        .entity => |entity| try entity.AddComponentScript(engine_context, rel_path, file_ref.mPathType),
-        .scene_layer => |scene| try scene.AddComponentScript(engine_context, rel_path, file_ref.mPathType),
-        .player, .gamecontext => {},
+        inline else => |typed| try typed.AddComponentScript(engine_context, rel_path, file_ref.mPathType),
     }
 }
 

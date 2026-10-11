@@ -1,12 +1,14 @@
 const std = @import("std");
 const EngineContext = @import("../Core/EngineContext.zig");
-const MakeAllocatorVTable = @import("../Core/Allocators.zig").MakeAllocatorVTable;
 
 /// std.json only hands custom jsonParse functions an allocator. The serializer always parses with
 /// EngineContext.FrameAllocator(), whose ptr is the EngineContext itself, so it can be recovered here.
+/// Checked against the vtable stored on the context, not &MakeAllocatorVTable(.Frame).vtable: inside a
+/// script DLL that address is the DLL's own copy, while the allocator carries the engine binary's.
 pub fn EngineContextFromAllocator(frame_allocator: std.mem.Allocator) *EngineContext {
-    std.debug.assert(frame_allocator.vtable == &MakeAllocatorVTable(.Frame).vtable);
-    return @ptrCast(@alignCast(frame_allocator.ptr));
+    const engine_context: *EngineContext = @ptrCast(@alignCast(frame_allocator.ptr));
+    std.debug.assert(frame_allocator.vtable == engine_context._Internal.FrameAllocVTable);
+    return engine_context;
 }
 
 /// Generates jsonStringify/jsonParse for a struct from a key -> field mapping, e.g.

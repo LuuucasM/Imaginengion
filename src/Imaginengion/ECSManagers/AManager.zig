@@ -13,6 +13,7 @@ const AssetComponentsList = AssetComponents.ComponentsList;
 const FileMetaData = AssetComponents.FileMetaData;
 const PendingDelete = AssetComponents.PendingDelete;
 const LoadFailedTag = AssetComponents.LoadFailedTag;
+const FileChangedTag = AssetComponents.FileChangedTag;
 const AssetMetaData = AssetComponents.AssetMetaData;
 const GenMetaData = AssetComponents.GenMetaData;
 const Texture2D = AssetComponents.Texture2D;
@@ -232,6 +233,16 @@ pub fn IsLoaded(self: *AManager, comptime asset_type: type, asset_id: AssetHandl
     return self.mECSManager.IsActiveEntity(asset_id) and self.mECSManager.HasComponent(asset_type, asset_id);
 }
 
+/// Whether any asset's file changed last frame (see FileChangedTag)
+pub fn AnyFileChanged(self: *AManager) bool {
+    return self.mECSManager.NumWithComponent(FileChangedTag) != 0;
+}
+
+/// Whether this asset's file changed last frame (see FileChangedTag)
+pub fn FileChanged(self: *AManager, asset_id: AssetHandle.Type) bool {
+    return self.mECSManager.IsActiveEntity(asset_id) and self.mECSManager.HasComponent(FileChangedTag, asset_id);
+}
+
 pub fn GetAsset(self: *AManager, engine_context: *EngineContext, comptime asset_type: type, asset_id: AssetHandle.Type) !*asset_type {
     _ValidateAssetType(asset_type);
 
@@ -284,6 +295,9 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
     defer zone.Deinit();
 
     const frame_allocator = engine_context.FrameAllocator();
+
+    //the files that changed last frame have had their frame to be caught up with
+    try self.ClearFileChanged(engine_context);
 
     //check through all the assets we currently have to see if they are still valid/need to be updated
     const group = try self.mECSManager.GetGroup(frame_allocator, .{ .Component = FileMetaData });
@@ -341,6 +355,16 @@ pub fn OnUpdate(self: *AManager, engine_context: *EngineContext) !void {
         if (ns > ASSET_DELETE_TIMEOUT_NS) {
             try self.mEventManager.Insert(engine_context.EngineAllocator(), .EndOfFrame, .{ .ToDestroyAsset = .{ .mAssetID = asset_id } });
         }
+    }
+}
+
+/// Takes every FileChangedTag off, done at the start of OnUpdate so each lasts the one frame after its change
+pub fn ClearFileChanged(self: *AManager, engine_context: *EngineContext) !void {
+    if (!self.AnyFileChanged()) return;
+    const changed = try self.mECSManager.GetGroup(engine_context.FrameAllocator(), .{ .Component = FileChangedTag });
+    for (changed.items) |asset_id| {
+        //a tag has no value to move, so it is safe to take off now
+        try self.mECSManager.RemoveComponentSync(engine_context, asset_id, ECSManagerT.ComponentInd(FileChangedTag));
     }
 }
 
@@ -462,6 +486,10 @@ pub fn OnManagerEvents(self: *AManager, engine_context: *EngineContext, event: E
             //new contents get a fresh try
             if (self.mECSManager.HasComponent(LoadFailedTag, e.mAssetID)) {
                 try self.mECSManager.RemoveComponent(engine_context, e.mAssetID, ECSManagerT.ComponentInd(LoadFailedTag));
+            }
+            //for the next frame, so what was built from the old contents can catch up (see FileChangedTag)
+            if (!self.mECSManager.HasComponent(FileChangedTag, e.mAssetID)) {
+                _ = try self.mECSManager.AddComponent(engine_context.EngineAllocator(), e.mAssetID, FileChangedTag{});
             }
         },
         .ToDestroyAsset => |e| {

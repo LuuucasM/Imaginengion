@@ -28,6 +28,7 @@ const OnCollisionEndScript = EComponents.OnCollisionEndScript;
 const OnPreSolveScript = EComponents.OnPreSolveScript;
 const OnPointerEventScript = EComponents.OnPointerEventScript;
 const OnUIEventScript = EComponents.OnUIEventScript;
+const UntypedScriptTag = @import("../ECSComponents/Shared/ScriptTags.zig").UntypedScriptTag;
 const EntityPointerEvent = @import("../Events/PointerEventData.zig").EntityEvent;
 const EntityUIEvent = @import("../Events/UIEventData.zig").EntityEvent;
 
@@ -131,6 +132,8 @@ fn RunScriptsFrom(
             error.NoDefaultAsset => continue,
             else => return err,
         };
+        //edited into another kind since it was tagged: its Run takes other arguments. Retagged by SyncScriptTypes
+        if (script_asset.GetScriptType() != script_type.Scripttype) continue;
 
         var owner = ObjectType{ .mID = OwnerOf(ObjectType, world_manager, script_id), .mManager = world_manager };
 
@@ -256,6 +259,8 @@ fn RunCollisionScripts(comptime script_type: type, engine_context: *EngineContex
             error.NoDefaultAsset => continue,
             else => return err,
         };
+        //edited into another kind since it was tagged: its Run takes other arguments. Retagged by SyncScriptTypes
+        if (script_asset.GetScriptType() != script_type.Scripttype) continue;
 
         const script_zone = Tracy.ZoneInit("ScriptsProcessor::CollisionScript", @src());
         defer script_zone.Deinit();
@@ -367,6 +372,8 @@ pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engi
             error.NoDefaultAsset => continue,
             else => return err,
         };
+        //edited into another kind since it was tagged: its Run takes other arguments. Retagged by SyncScriptTypes
+        if (script_asset.GetScriptType() != script_type.Scripttype) continue;
 
         const script_zone = Tracy.ZoneInit("ScriptsProcessor::OwnScript", @src());
         defer script_zone.Deinit();
@@ -375,6 +382,67 @@ pub fn RunOwnScripts(comptime ObjectType: type, comptime script_type: type, engi
         if (script_asset.Run(script_type, .{ engine_context, &owner } ++ args) == .Handled) return .Handled;
     }
     return .Continue;
+}
+
+/// Catches the scripts in `worlds` up with the script files that changed last frame (AManager.FileChanged): each is
+/// loaded again and given the type tag of what it is now, or UntypedScriptTag if it no longer loads (does not compile,
+/// say), which nothing runs. So a script edited while its scene is open becomes whatever kind it now is, and one that
+/// is fixed starts running, without the scene being loaded again. Has to come before AManager.OnUpdate, which clears
+/// what changed. On a frame where no file changed it does nothing
+pub fn SyncScriptTypes(engine_context: *EngineContext, worlds: []const *WorldManager) !void {
+    const zone = Tracy.ZoneInit("ScriptsProcessor::SyncScriptTypes", @src());
+    defer zone.Deinit();
+
+    const asset_manager = &engine_context.mAssetManager;
+    if (!asset_manager.AnyFileChanged()) return;
+
+    for (worlds) |world_manager| {
+        inline for (.{ Entity, Scene, Player, GameContext }) |ObjectType| {
+            const manager = world_manager.GetManager(ObjectType);
+            const script_ids = try manager.GetGroup(engine_context.FrameAllocator(), GroupQuery{ .Component = ScriptComponent });
+            for (script_ids.items) |script_id| {
+                const script_handle = manager.GetComponent(ScriptComponent, script_id).?.mScriptAssetHandle;
+                if (!asset_manager.FileChanged(script_handle.mID)) continue;
+                try SyncScriptType(ObjectType, .{ .mID = script_id, .mManager = world_manager }, engine_context, script_handle);
+            }
+        }
+    }
+}
+
+/// One script of SyncScriptTypes: its type tag swapped for the one its asset now has, if that's different
+fn SyncScriptType(comptime ObjectType: type, script: ObjectType, engine_context: *EngineContext, script_handle: AssetHandle) !void {
+    const new_type: ?ScriptType = if (script_handle.GetAsset(engine_context, ScriptAsset)) |script_asset|
+        script_asset.GetScriptType()
+    else |err| switch (err) {
+        //no longer loads, GetAsset logged why
+        error.NoDefaultAsset => null,
+        else => return err,
+    };
+
+    //already the kind it is now, which is most edits
+    if (new_type) |script_type| {
+        if (TypeTagOf(ObjectType, script) == script_type) return;
+    } else if (script.HasComponent(UntypedScriptTag)) return;
+
+    //tags carry no value to move, so they are safe to take off now
+    if (script.HasComponent(UntypedScriptTag)) try script.RemoveComponentSync(engine_context, UntypedScriptTag);
+    inline for (comptime ScriptsListFor(ObjectType)) |tag_type| {
+        if (script.HasComponent(tag_type)) try script.RemoveComponentSync(engine_context, tag_type);
+    }
+
+    if (new_type) |script_type| {
+        if (try ObjectType.AddScriptTypeTag(script, engine_context, script_type)) return;
+        std.log.warn("{s} is now a {s} script, which doesn't go on a {s}, so it will not run", .{ script_handle.GetFileMetaData().mRelPath.items, @tagName(script_type), Tracy.ShortTypeName(ObjectType) });
+    }
+    _ = try script.AddComponent(engine_context, UntypedScriptTag{});
+}
+
+/// The script type a script child is tagged to run as, null for an untyped one
+fn TypeTagOf(comptime ObjectType: type, script: ObjectType) ?ScriptType {
+    inline for (comptime ScriptsListFor(ObjectType)) |tag_type| {
+        if (script.HasComponent(tag_type)) return tag_type.Scripttype;
+    }
+    return null;
 }
 
 /// Scripts run top layer first, matching the order scenes are drawn in. The sort is

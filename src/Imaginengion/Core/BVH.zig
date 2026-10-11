@@ -275,6 +275,63 @@ pub fn Refit(items: []const Item, nodes: []Node) void {
     }
 }
 
+/// What a built tree looks like, for the editor's stats: how much a walk has to go through. The deeper its leaves, the
+/// more boxes every ray tests on its way down
+pub const TreeStats = struct {
+    Nodes: u32 = 0,
+    Leaves: u32 = 0,
+    /// how deep its deepest leaf is, the root being 0 (never more than MAX_DEPTH)
+    Depth: u32 = 0,
+    /// every leaf's depth added up, for the average
+    LeafDepths: u32 = 0,
+    Items: u32 = 0,
+
+    /// How deep a leaf is on average: about how many levels a ray goes down to reach one
+    pub fn AverageLeafDepth(self: TreeStats) f32 {
+        if (self.Leaves == 0) return 0;
+        return @as(f32, @floatFromInt(self.LeafDepths)) / @as(f32, @floatFromInt(self.Leaves));
+    }
+
+    /// How many items a leaf holds on average, out of MAX_LEAF_ITEMS
+    pub fn AverageLeafItems(self: TreeStats) f32 {
+        if (self.Leaves == 0) return 0;
+        return @as(f32, @floatFromInt(self.Items)) / @as(f32, @floatFromInt(self.Leaves));
+    }
+
+    /// The bigger of two trees' stats, by node count: what a render keeps when it builds a tree for each view
+    pub fn Bigger(self: TreeStats, other: TreeStats) TreeStats {
+        return if (other.Nodes > self.Nodes) other else self;
+    }
+};
+
+/// The stats of the tree in `nodes`, found by going down every branch
+pub fn Stats(nodes: []const Node) TreeStats {
+    var stats = TreeStats{ .Nodes = @intCast(nodes.len) };
+    if (nodes.len == 0) return stats;
+
+    //the branches still to go down, each with its depth. Going down one keeps the other, at most one per level
+    const Branch = struct { Node: u32, Depth: u32 };
+    var waiting: [MAX_DEPTH + 1]Branch = undefined;
+    var waiting_count: usize = 1;
+    waiting[0] = .{ .Node = 0, .Depth = 0 };
+    while (waiting_count > 0) {
+        waiting_count -= 1;
+        const branch = waiting[waiting_count];
+        const node = nodes[branch.Node];
+        if (node.IsLeaf()) {
+            stats.Leaves += 1;
+            stats.Items += node.ItemCount();
+            stats.LeafDepths += branch.Depth;
+            stats.Depth = @max(stats.Depth, branch.Depth);
+            continue;
+        }
+        waiting[waiting_count] = .{ .Node = node.RightChild(), .Depth = branch.Depth + 1 };
+        waiting[waiting_count + 1] = .{ .Node = branch.Node + 1, .Depth = branch.Depth + 1 };
+        waiting_count += 2;
+    }
+    return stats;
+}
+
 /// Walks the tree with a ray, the stack free way, in the tree's own fixed order: into each node whose box the ray
 /// reaches within how far is still worth looking and that has any of `mask`, and on to its Skip past any that it does
 /// not. Every item of each leaf it reaches is handed to `visitor.Visit(item_index)`, which returns how far along the ray

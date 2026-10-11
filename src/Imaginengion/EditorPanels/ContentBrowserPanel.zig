@@ -56,6 +56,9 @@ pub const SCRIPT_TEMPLATES = [_]ScriptTemplate{
     .{ .Group = "Scene", .Name = "On Scene Start", .Text = @embedFile("../Scripts/Scene/OnSceneStartTemplate.zig") },
     .{ .Group = "Scene", .Name = "On Physics Update", .Text = @embedFile("../Scripts/Scene/OnPhysicsUpdateTemplate.zig") },
     .{ .Group = "UI", .Name = "On UI Event", .Text = @embedFile("../Scripts/UI/OnUIEventTemplate.zig") },
+    .{ .Group = "Player", .Name = "On Update", .Text = @embedFile("../Scripts/Player/OnUpdateTemplate.zig") },
+    .{ .Group = "Player", .Name = "On Input Pressed", .Text = @embedFile("../Scripts/Player/OnInputPressedTemplate.zig") },
+    .{ .Group = "Game Mode", .Name = "On Game Start", .Text = @embedFile("../Scripts/GameContext/OnGameStartTemplate.zig") },
 };
 
 /// What a tile is

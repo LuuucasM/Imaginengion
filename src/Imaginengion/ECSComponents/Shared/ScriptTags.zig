@@ -4,6 +4,8 @@ const Entity = @import("../../ECSObjects/Entity.zig");
 const ScriptType = @import("../Asset/ScriptAsset.zig").ScriptType;
 const ScriptResult = @import("../Asset/ScriptAsset.zig").ScriptResult;
 const SceneLayer = @import("../../ECSObjects/Scene.zig");
+const Player = @import("../../ECSObjects/Player.zig");
+const GameContext = @import("../../ECSObjects/GameContext.zig");
 
 const WindowEventData = @import("../../Events/WindowEventData.zig");
 const KeyboardPressedEvent = WindowEventData.KeyboardPressedEvent;
@@ -104,6 +106,15 @@ pub const OnUIEventScript = struct {
     pub fn Deinit(_: *OnUIEventScript, _: *EngineContext) void {}
 };
 
+/// On a script that does not load (it does not compile, say), so it has none of the type tags here and nothing runs
+/// it. Given by AddScript, or by ScriptsProcessor.SyncScriptTypes when an edit breaks a script, and swapped for the
+/// type tag by SyncScriptTypes once the script's file is changed and loads. For all four object types. Never saved
+pub const UntypedScriptTag = struct {
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "UntypedScriptTag";
+    pub fn Deinit(_: *UntypedScriptTag, _: *EngineContext) void {}
+};
+
 //SCENE SCRIPTS
 pub const OnSceneStartScript = struct {
     pub const RunFuncSig = *const fn (*EngineContext, *const SceneLayer) callconv(.c) ScriptResult;
@@ -133,4 +144,36 @@ pub const InputPressedScript = struct {
     pub const Name: []const u8 = "InputPressedScript";
     pub const Scripttype: ScriptType = .SceneInputPressed;
     pub fn Deinit(_: *InputPressedScript, _: *EngineContext) void {}
+};
+
+//PLAYER SCRIPTS
+/// Runs once a frame for each player, before the entities' OnUpdate scripts
+pub const PlayerOnUpdateScript = struct {
+    pub const RunFuncSig = *const fn (*EngineContext, *const Player) callconv(.c) ScriptResult;
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "PlayerOnUpdateScript";
+    pub const Scripttype: ScriptType = .PlayerOnUpdate;
+    pub fn Deinit(_: *PlayerOnUpdateScript, _: *EngineContext) void {}
+};
+
+/// OnKeyPressedScript for a player: handed every key, like the entities' ones, and checks which it got. Hears what the
+/// scene stack leaves, so after every entity's key pressed scripts, and only if none of them handled it. A key the UI
+/// takes (a text input with the keyboard) never reaches it
+pub const PlayerOnInputPressedScript = struct {
+    pub const RunFuncSig = *const fn (*EngineContext, *const Player, *const KeyboardPressedEvent) callconv(.c) ScriptResult;
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "PlayerOnInputPressedScript";
+    pub const Scripttype: ScriptType = .PlayerInputPressed;
+    pub fn Deinit(_: *PlayerOnInputPressedScript, _: *EngineContext) void {}
+};
+
+//GAME CONTEXT SCRIPTS
+/// Runs once when the game starts (Play in the editor, launching a built game), before the scenes' OnSceneStart
+/// scripts: the place to set up the game's rules
+pub const OnGameStartScript = struct {
+    pub const RunFuncSig = *const fn (*EngineContext, *const GameContext) callconv(.c) ScriptResult;
+    pub const Editable: bool = false;
+    pub const Name: []const u8 = "OnGameStartScript";
+    pub const Scripttype: ScriptType = .GameContextGameStart;
+    pub fn Deinit(_: *OnGameStartScript, _: *EngineContext) void {}
 };

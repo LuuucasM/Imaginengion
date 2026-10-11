@@ -13,12 +13,13 @@ const Entity = @import("../ECSObjects/Entity.zig");
 const Scene = @import("../ECSObjects/Scene.zig");
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
+const BVH = @import("../Core/BVH.zig");
 
 const StatsPanel = @This();
 
 /// Where the window opens, from the middle of the editor UI, and how big it is
 const AT = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 300, .y = 100 };
-const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 300, .y = 320 };
+const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 420, .y = 360 };
 
 /// One world's section: a line for each stat
 const WorldLines = struct {
@@ -26,6 +27,9 @@ const WorldLines = struct {
     Quads: Entity,
     Glyphs: Entity,
     Shadings: Entity,
+    /// the BVH over each layer's shapes: how deep a ray walks down it
+    OverlayBVH: Entity,
+    GameBVH: Entity,
     Entities: Entity,
 };
 
@@ -95,8 +99,22 @@ fn World(engine_context: *EngineContext, content: Entity, title: []const u8, opt
         .Quads = try Widgets.Label(engine_context, lines, ""),
         .Glyphs = try Widgets.Label(engine_context, lines, ""),
         .Shadings = try Widgets.Label(engine_context, lines, ""),
+        .OverlayBVH = try Widgets.Label(engine_context, lines, ""),
+        .GameBVH = try Widgets.Label(engine_context, lines, ""),
         .Entities = try Widgets.Label(engine_context, lines, ""),
     };
+}
+
+/// One layer's BVH as a line: how deep its deepest and its average leaf are, then its size
+fn SetTreeLine(engine_context: *EngineContext, label: Entity, layer: []const u8, tree: BVH.TreeStats) !void {
+    try SetLine(engine_context, label, "{s} BVH: depth {d} (avg {d:.1}), {d} nodes, {d} leaves of {d:.1}", .{
+        layer,
+        tree.Depth,
+        tree.AverageLeafDepth(),
+        tree.Nodes,
+        tree.Leaves,
+        tree.AverageLeafItems(),
+    });
 }
 
 fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStats.WorldStats) !void {
@@ -105,6 +123,8 @@ fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStat
     try SetLine(engine_context, lines.Quads, "Quads: {d}", .{render.OutputQuadNum});
     try SetLine(engine_context, lines.Glyphs, "Glyphs: {d}", .{render.OutputGlyphNum});
     try SetLine(engine_context, lines.Shadings, "Shadings: {d} (surface {d}, medium {d})", .{ render.Shadings.TotalShadings, render.Shadings.SurfShadings, render.Shadings.MedShadings });
+    try SetTreeLine(engine_context, lines.OverlayBVH, "Overlay", render.OverlayBVH);
+    try SetTreeLine(engine_context, lines.GameBVH, "Game", render.GameBVH);
     try SetLine(engine_context, lines.Entities, "Entities: {d}", .{stats.mECSStats.TotalEntities});
 }
 

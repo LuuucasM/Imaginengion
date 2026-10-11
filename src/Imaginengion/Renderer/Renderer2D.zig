@@ -363,10 +363,16 @@ pub fn SetMasks(self: *Renderer2D, engine_allocator: std.mem.Allocator, masks: *
 }
 
 pub fn SetBuffers(self: *Renderer2D, stats: *RenderStats, engine_context: *EngineContext, copy_pass: *anyopaque, pipeline_t: PipelineType) !void {
-    try switch (pipeline_t) {
-        .GamePipeline => self.mGameData.SetBuffers(stats, engine_context, copy_pass),
-        .OverlayPipeline => self.mOverlayData.SetBuffers(stats, engine_context, copy_pass),
-    };
+    switch (pipeline_t) {
+        .GamePipeline => {
+            try self.mGameData.SetBuffers(stats, engine_context, copy_pass);
+            stats.GameBVH = stats.GameBVH.Bigger(BVH.Stats(self.mGameData.mBVHNodes.items));
+        },
+        .OverlayPipeline => {
+            try self.mOverlayData.SetBuffers(stats, engine_context, copy_pass);
+            stats.OverlayBVH = stats.OverlayBVH.Bigger(BVH.Stats(self.mOverlayData.mBVHNodes.items));
+        },
+    }
 }
 
 pub fn BindBuffers(self: Renderer2D, render_pass: *anyopaque, pipeline_t: PipelineType) void {

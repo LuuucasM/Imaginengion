@@ -90,7 +90,7 @@ test "the lines say what is selected and why there is nothing to list" {
     try player.SetName(engine_context, "One");
     try test_panel.Update(.{ .player = player });
     try std.testing.expectEqualStrings("One", TextOf(panel.mTitle));
-    try std.testing.expectEqualStrings("Players can't have scripts yet", TextOf(panel.mMessage));
+    try std.testing.expectEqualStrings("No scripts yet", TextOf(panel.mMessage));
 
     const entity = try test_panel.mScene.CreateEntity(engine_context, Entity.DefaultConfig);
     try entity.SetName(engine_context, "Hero");

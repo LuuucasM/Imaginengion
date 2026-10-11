@@ -565,6 +565,21 @@ test "a grid filling its parent works out its columns from the width it is given
     try ExpectVec(V(100, 20), results[column].Size);
 }
 
+test "a grid filling the rest of a row wraps to what is left, rather than widening the row" {
+    var tree: Tree = .{};
+    defer tree.Deinit();
+    //a field's row: a 40 wide label, then the grid filling what is left of 100
+    const row = try tree.Add(null, .{ .Width = .{ .Fixed = 100 }, .Container = .{ .Direction = .Row } });
+    _ = try tree.Add(row, .{ .Width = .{ .Fixed = 40 }, .Content = Box(40, 10) });
+    const grid = try tree.Add(row, .{ .Width = .{ .Fill = 1 }, .Container = .{ .Direction = .Grid } });
+    for (0..8) |_| _ = try tree.Add(grid, .{ .Content = Box(20, 10) });
+
+    const results = try tree.Solve(null);
+    defer std.testing.allocator.free(results);
+    //three 20 wide cells fit in the 60 left, so eight take three rows
+    try ExpectVec(V(60, 30), results[grid].Size);
+}
+
 test "a collapsed child takes no cell" {
     var tree: Tree = .{};
     defer tree.Deinit();

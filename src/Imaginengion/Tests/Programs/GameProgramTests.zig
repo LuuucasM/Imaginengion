@@ -1,5 +1,5 @@
 //! Starting a game from a project's entries (Programs/GameProgram.zig): the entry scene loaded into the game world and
-//! the entry player and game mode spawned there. No window or renderer needed. Run with `zig build test-engine`.
+//! the entry player and game mode loaded there too, UUIDs and all. No window or renderer needed. Run with `zig build test-engine`.
 const std = @import("std");
 
 const EngineContext = @import("../../Core/EngineContext.zig");
@@ -88,7 +88,7 @@ fn SetName(engine_context: *EngineContext, object: anytype, comptime name_t: typ
     try name_list.appendSlice(engine_context.EngineAllocator(), name);
 }
 
-test "starting a game loads the entry scene and spawns the entry player and game mode into the game world" {
+test "starting a game loads the entry scene, player and game mode into the game world" {
     const engine = try TestEngine.Init();
     defer engine.Deinit();
     const engine_context = engine.mEngineContext;
@@ -128,8 +128,11 @@ test "starting a game loads the entry scene and spawns the entry player and game
     const player_ids = try game_world.GetPlayerGroup(frame_allocator, .{ .Component = PossessComponent });
     try std.testing.expectEqual(@as(usize, 1), player_ids.items.len);
     try std.testing.expect(!game_world.GetPlayer(player_ids.items[0]).GetComponent(PossessComponent).?.mPossessedEntity.IsActive());
+    //loaded rather than copied, so scripts can find them by the UUIDs saved in their files
+    try std.testing.expectEqual(player_ids.items[0], game_world.GetObjectByUUID(Player, player.GetUUID()).?.mID);
 
     const game_mode_ids = try game_world.GetGameContextGroup(frame_allocator, .{ .Component = GCNameComponent });
     try std.testing.expectEqual(@as(usize, 1), game_mode_ids.items.len);
     try std.testing.expectEqualStrings("Rules", game_world.GetGameContext(game_mode_ids.items[0]).GetName());
+    try std.testing.expectEqual(game_mode_ids.items[0], game_world.GetObjectByUUID(GameContext, game_mode.GetUUID()).?.mID);
 }

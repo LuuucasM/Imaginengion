@@ -234,6 +234,35 @@ test "a run of Morton codes one bit apart, which would make a long chain, still 
     try std.testing.expect(Depth(nodes.items) <= BVH.MAX_DEPTH);
 }
 
+test "a tree's stats count its nodes, leaves and items, and how deep its leaves are" {
+    var empty_nodes = try BuildTree(&.{});
+    defer empty_nodes.deinit(std.testing.allocator);
+    try std.testing.expectEqualDeep(BVH.TreeStats{}, BVH.Stats(empty_nodes.items));
+
+    //one leaf: the root, at depth 0
+    const three = [_]BVH.Item{
+        .{ .Code = 0, .Bounds = UNIT_BOUNDS, .Mask = BVH.Mask.RENDER },
+        .{ .Code = 1, .Bounds = UNIT_BOUNDS, .Mask = BVH.Mask.RENDER },
+        .{ .Code = 2, .Bounds = UNIT_BOUNDS, .Mask = BVH.Mask.RENDER },
+    };
+    var leaf_nodes = try BuildTree(&three);
+    defer leaf_nodes.deinit(std.testing.allocator);
+    try std.testing.expectEqualDeep(BVH.TreeStats{ .Nodes = 1, .Leaves = 1, .Depth = 0, .LeafDepths = 0, .Items = 3 }, BVH.Stats(leaf_nodes.items));
+
+    var prng = std.Random.DefaultPrng.init(0x57A7);
+    const items = try RandomItems(prng.random(), 300);
+    defer std.testing.allocator.free(items);
+    var nodes = try BuildTree(items);
+    defer nodes.deinit(std.testing.allocator);
+    const stats = BVH.Stats(nodes.items);
+    try std.testing.expectEqual(@as(u32, 300), stats.Items);
+    //every inner node has two children, so a binary tree has one fewer of them than it has leaves
+    try std.testing.expectEqual(stats.Nodes, 2 * stats.Leaves - 1);
+    try std.testing.expectEqual(Depth(nodes.items), stats.Depth);
+    try std.testing.expect(stats.AverageLeafDepth() > 0 and stats.AverageLeafDepth() <= @as(f32, @floatFromInt(stats.Depth)));
+    try std.testing.expect(stats.AverageLeafItems() > 0 and stats.AverageLeafItems() <= @as(f32, @floatFromInt(BVH.MAX_LEAF_ITEMS)));
+}
+
 test "a refit after items move keeps every box exactly around what is under it" {
     var prng = std.Random.DefaultPrng.init(0x4EF1);
     const items = try RandomItems(prng.random(), 120);

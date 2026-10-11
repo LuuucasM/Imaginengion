@@ -128,19 +128,34 @@ pub fn GetSceneComponent(self: Scene) SceneComponent {
 //}
 
 pub fn AddScript(self: Scene, engine_context: *EngineContext, new_script_handle: AssetHandle) !void {
-    const script_asset = try new_script_handle.GetAsset(engine_context, ScriptAsset);
+    const script_asset = new_script_handle.GetAsset(engine_context, ScriptAsset) catch |err| switch (err) {
+        //it failed to load (the reason is already logged). Keep the script child so the script stays on the
+        //scene and is saved back out. Nothing runs it until its file is fixed, see ScriptsProcessor.SyncScriptTypes
+        error.NoDefaultAsset => {
+            const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
+            _ = try new_script_entity.AddComponent(engine_context, SceneComponents.UntypedScriptTag{});
+            return;
+        },
+        else => return err,
+    };
     const script_type = script_asset.GetScriptType();
     _ValidateScriptType(script_type);
 
     const new_script_entity = try Core.AddScript(self, engine_context, new_script_handle);
+    if (!try AddScriptTypeTag(new_script_entity, engine_context, script_type)) unreachable;
+}
 
-    _ = switch (script_asset.GetScriptType()) {
-        .SceneSceneStart => try new_script_entity.AddComponent(engine_context, OnSceneStartScript{}),
-        .SceneInputPressed => try new_script_entity.AddComponent(engine_context, SceneInputPressed{}),
-        .SceneOnUpdate => try new_script_entity.AddComponent(engine_context, SceneOnUpdate{}),
-        .SceneOnPhysicsUpdate => try new_script_entity.AddComponent(engine_context, SceneComponents.OnPhysicsUpdateScript{}),
-        else => unreachable,
-    };
+/// Gives a script child the tag for script_type, which is what has it run. False, with nothing added, if script_type
+/// is not a scene script
+pub fn AddScriptTypeTag(script: Scene, engine_context: *EngineContext, script_type: ScriptAsset.ScriptType) !bool {
+    switch (script_type) {
+        .SceneSceneStart => _ = try script.AddComponent(engine_context, OnSceneStartScript{}),
+        .SceneInputPressed => _ = try script.AddComponent(engine_context, SceneInputPressed{}),
+        .SceneOnUpdate => _ = try script.AddComponent(engine_context, SceneOnUpdate{}),
+        .SceneOnPhysicsUpdate => _ = try script.AddComponent(engine_context, SceneComponents.OnPhysicsUpdateScript{}),
+        else => return false,
+    }
+    return true;
 }
 
 pub const AddComponentScript = Core.AddComponentScript;
@@ -176,6 +191,17 @@ pub fn LoadEntity(self: Scene, engine_context: *EngineContext, rel_path: []const
     const new_entity = try self.CreateEntity(engine_context, Entity.BlankConfig);
     try engine_context.mSerializer.DeserializeECSObj(engine_context, new_entity, rel_path, path_type, .Text);
     return new_entity;
+}
+
+/// The entity with UUID `uuid` if the world has one loaded (in any scene, not only this one), otherwise the file at
+/// `rel_path` loaded into this scene as LoadEntity does. See WorldManager.LoadOrGet
+pub fn LoadOrGetEntity(self: Scene, engine_context: *EngineContext, uuid: u64, rel_path: []const u8, path_type: PathType) !Entity {
+    if (self.GetWorld().GetObjectByUUID(Entity, uuid)) |entity| return entity;
+    const entity = try self.LoadEntity(engine_context, rel_path, path_type);
+    if (entity.GetUUID() != uuid) {
+        std.log.warn("LoadOrGetEntity: {s} has UUID {d}, not {d}, so it is loaded again each call", .{ rel_path, entity.GetUUID(), uuid });
+    }
+    return entity;
 }
 
 /// A new top level entity that is a copy of the template `tmpl` (a handle to an EntityAsset), with a transform of

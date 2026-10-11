@@ -3,6 +3,7 @@ const EngineStats = @This();
 const EngineContext = @import("EngineContext.zig");
 const WorldManager = @import("WorldManager.zig");
 const Tracy = @import("Tracy.zig");
+const BVH = @import("BVH.zig");
 const EntityTagComponent = @import("../ECS/Components.zig").EntityTagComponent;
 const ScriptTagComponent = @import("../ECS/Components.zig").ScriptTagComponent;
 
@@ -25,6 +26,9 @@ pub const RenderStats = struct {
     OutputGlyphNum: usize = 0,
     OutputMergeNum: usize = 0,
     Shadings: ShadingStats = .{},
+    /// the BVH over each layer's direct shapes: the biggest one this frame when there are several views
+    OverlayBVH: BVH.TreeStats = .{},
+    GameBVH: BVH.TreeStats = .{},
 
     pub fn ResetStats(self: *RenderStats) void {
         self.TotalObjects = 0;
@@ -32,6 +36,8 @@ pub const RenderStats = struct {
         self.OutputGlyphNum = 0;
         self.OutputMergeNum = 0;
         self.Shadings.ResetStats();
+        self.OverlayBVH = .{};
+        self.GameBVH = .{};
     }
 
 };

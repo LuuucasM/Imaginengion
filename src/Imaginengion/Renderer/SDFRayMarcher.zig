@@ -110,11 +110,12 @@ const SurfaceHit = struct {
     };
 };
 
-/// Only a plate's front is drawn. Its back or thin sides, or a ray starting inside it, is nothing there.
-fn IsFrontHit(hit: HitInfo) bool {
+/// A plate is drawn on both faces, the back as a mirror image of the front: its UV is the same spot from either side.
+/// Its thin sides, or a ray starting inside it, are nothing there.
+fn IsFaceHit(hit: HitInfo) bool {
     if (!hit.IsHit() or hit.StartedInside) return false;
     const face = hit.Face orelse return false;
-    return face == .PosZ;
+    return face == .PosZ or face == .NegZ;
 }
 
 /// The ray straight against a shape, by its kind. A kind `features` leaves out is never hit, so its code isn't compiled
@@ -539,7 +540,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             };
         }
 
-        /// Ray tests one direct shape, and makes it the nearest if its front is hit before the nearest so far and it is
+        /// Ray tests one direct shape, and makes it the nearest if a face of it is hit before the nearest so far and it is
         /// really drawn there. Only a hit that would win is checked, so a shape the search has already beaten never
         /// pays for its masks or its letter. All a search does with a shape, whichever way it found it
         fn ConsiderShape(self: *Self, ray: Ray, shape_ind: u32, skip_shape: u32, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
@@ -547,7 +548,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             const shape: ShapeData = self.mShapes[shape_ind];
             self.Count(.ShapeTests);
             const hit = HitShape(features, ray, shape);
-            if (!IsFrontHit(hit)) return;
+            if (!IsFaceHit(hit)) return;
             const order = HitOrder.Of(hit.T, shape, shape_ind);
             if (!order.Before(nearest.Order)) return;
             self.Count(.AcceptChecks);
@@ -572,7 +573,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                     const shape: ShapeData = self.mShapes[shape_ind];
                     self.Count(.ShapeTests);
                     const hit = HitShape(features, ray, shape);
-                    if (IsFrontHit(hit)) {
+                    if (IsFaceHit(hit)) {
                         const hit_order = HitOrder.Of(hit.T, shape, shape_ind);
                         if (hit_order.Before(nearest.Order)) order.* = hit_order;
                     }
@@ -698,8 +699,8 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 }
 
                 //close enough to count, so ask the shape itself where exactly the ray meets it. only
-                //a plate's front is drawn, and a glyph only where the letter covers it: at its back,
-                //its sides or a gap in the letter the ray goes on to whatever is behind
+                //a plate's faces are drawn, and a glyph only where the letter covers it: at its thin
+                //sides or a gap in the letter the ray goes on to whatever is behind
                 self.Count(.AcceptChecks);
                 const surface = self.SurfaceAt(ray, march_data.shape, sample_sampler, textures_array);
                 if (surface.Found) return surface;
@@ -745,7 +746,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             return SDFProgram.InMasks(self.mMasks, self.mInstrs, self.mParts, mask_ind, point);
         }
 
-        /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: the front of a plate, and for
+        /// Where the ray meets shape `shape_ind`, if it does in a way that's drawn: a face of a plate, and for
         /// a glyph, only where the letter covers it. Neither where its masks cut it off
         fn SurfaceAt(self: *const Self, ray: Ray, shape_ind: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             return self.SurfaceFromHit(ray, shape_ind, HitShape(features, ray, self.mShapes[shape_ind]), sample_sampler, textures_array);
@@ -754,12 +755,12 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// SurfaceAt for a hit already found against the shape (HitShape), so the march doesn't test the ray against it
         /// twice: checked, then shaded
         fn SurfaceFromHit(self: *const Self, ray: Ray, shape_ind: u32, hit: HitInfo, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
-            if (!IsFrontHit(hit)) return .none;
+            if (!IsFaceHit(hit)) return .none;
             if (!self.Accepts(ray, self.mShapes[shape_ind], hit, sample_sampler, textures_array)) return .none;
             return self.Shade(ray, shape_ind, hit, sample_sampler, textures_array);
         }
 
-        /// Whether a front hit on a shape is really drawn there: inside its masks, and for a glyph where its letter
+        /// Whether a face hit on a shape is really drawn there: inside its masks, and for a glyph where its letter
         /// covers it, for a merge where its program says it is. Only distances, nothing colored: what a search checks
         /// for every hit that would be its nearest. One turned down lets the ray go on to whatever is behind it
         fn Accepts(self: *const Self, ray: Ray, shape: ShapeData, hit: HitInfo, sample_sampler: anytype, textures_array: textures_array_type) bool {

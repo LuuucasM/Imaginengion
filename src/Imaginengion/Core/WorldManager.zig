@@ -276,6 +276,19 @@ pub fn Load(self: *WorldManager, comptime obj_t: type, engine_context: *EngineCo
     }
 }
 
+/// The object with UUID `uuid` if this world has one loaded, otherwise the file at `rel_path` loaded as Load does.
+/// For something loaded once and found again each time after (a pause menu shown on every Esc) without a second
+/// copy. `uuid` is the one saved in the file: if the file holds another, every call loads it again, so that is warned
+pub fn LoadOrGet(self: *WorldManager, comptime obj_t: type, engine_context: *EngineContext, uuid: u64, rel_path: []const u8, path_type: PathType) !obj_t {
+    if (obj_t == Entity) @compileError("an entity has to belong to a scene, use Scene.LoadOrGetEntity");
+    if (self.GetObjectByUUID(obj_t, uuid)) |object| return object;
+    const object = try self.Load(obj_t, engine_context, rel_path, path_type);
+    if (object.GetUUID() != uuid) {
+        std.log.warn("LoadOrGet: {s} has UUID {d}, not {d}, so it is loaded again each call", .{ rel_path, object.GetUUID(), uuid });
+    }
+    return object;
+}
+
 /// Tells the program `scene` is in this world and finished loading, see WorldEventData.SceneLoadedEvent
 fn SceneLoaded(self: *WorldManager, engine_context: *EngineContext, scene: Scene) !void {
     _ = try self.mEventManager.Dispatch(engine_context, .{ .SceneLoaded = .{ .mWorld = self, .mScene = scene } });

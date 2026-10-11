@@ -10,6 +10,10 @@ const OverlayComponent = @This();
 
 pub const Name: []const u8 = "OverlayComponent";
 
+pub const uninit: OverlayComponent = .{
+    .mScene = .uninit,
+};
+
 /// One overlay scene this player sees, drawn on top of the game in the player's view and nobody else's.
 /// A player that sees several has one on itself and one on each child player that holds another (see
 /// Player.AddOverlay), so showing or hiding an overlay is adding or deleting a child.

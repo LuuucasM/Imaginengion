@@ -410,11 +410,21 @@ test "a turned quad is hit just inside its edges and missed just past them" {
     try ExpectColor(DEFAULT_COLOR, try Trace(scene, .{ .Origin = camera, .Dir = past_top.SubVec(camera).Dir() }));
 }
 
-test "only a quad's front is drawn" {
+test "a quad is drawn from behind as well as from the front, but not on its thin side" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     const from_behind = Ray{ .Origin = .{ .x = 0, .y = 0, .z = -10 }, .Dir = .{ .x = 0, .y = 0, .z = 1 } };
-    try ExpectColor(DEFAULT_COLOR, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, from_behind));
+    const onto_side = Ray{ .Origin = .{ .x = -10, .y = 0, .z = 0 }, .Dir = .{ .x = 1, .y = 0, .z = 0 } };
+    try ExpectColor(RED, try Trace(scene, from_behind));
+    try ExpectColor(DEFAULT_COLOR, try Trace(scene, onto_side));
+}
+
+test "a quad turned to face away is drawn, the way a panel is mirrored" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const facing_away = Quat(f32).FromAxisAngle(.{ .x = 0, .y = 1, .z = 0 }, std.math.pi);
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, facing_away, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    try ExpectColor(RED, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.5, -0.5)));
 }
 
 test "a quad past the far distance is not drawn" {
@@ -679,6 +689,24 @@ test "a glyph is drawn where its letter covers it, and the ray goes through its 
     const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
     try ExpectColor(GREEN, try Trace(scene, RayAt(-0.25, 0)));
     try ExpectColor(BLUE, try Trace(scene, RayAt(0.25, 0)));
+}
+
+test "a glyph seen from behind is its letter mirrored" {
+    //the letter covers the glyph's left half. From behind, that half is on the viewer's right: the ray at x = -0.25
+    //still meets the letter, and the one at x = 0.25 goes through the gap to the blue quad past it
+    const shadings = [_]SurfShadingData{
+        ColorShading(BLUE),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
+    };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeGlyph(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    const forward = Vec3(f32){ .x = 0, .y = 0, .z = 1 };
+    try ExpectColor(GREEN, try Trace(scene, .{ .Origin = .{ .x = -0.25, .y = 0, .z = -10 }, .Dir = forward }));
+    try ExpectColor(BLUE, try Trace(scene, .{ .Origin = .{ .x = 0.25, .y = 0, .z = -10 }, .Dir = forward }));
 }
 
 test "a glyph is tinted by its text's color" {
