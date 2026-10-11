@@ -42,7 +42,10 @@ const FileRefComponent = EntityComponents.FileRefComponent;
 const ObjectRefComponent = EntityComponents.ObjectRefComponent;
 const NameComponent = EntityComponents.NameComponent;
 const TmplRefComponent = EntityComponents.TmplRefComponent;
-const StackPosComponent = @import("../ECSComponents/SComponents.zig").StackPosComponent;
+const EntitySceneComponent = EntityComponents.EntitySceneComponent;
+const SceneComponents = @import("../ECSComponents/SComponents.zig");
+const StackPosComponent = SceneComponents.StackPosComponent;
+const SceneUUIDComponent = SceneComponents.UUIDComponent;
 
 /// The ready-made UI entities the entity and scene menus offer, each one widget builder's
 pub const UIKind = enum {
@@ -454,6 +457,7 @@ pub fn HierarchyPanel(comptime T: type) type {
                     .Leaf = !has_children,
                     .Open = self.mOpen.contains(object.mID),
                     .StockScripts = self.mOptions.StockScripts,
+                    .Stripe = if (self.mMode == .World) StripeOf(object, depth) else null,
                 });
                 //what dragging the row carries, and the row menu, opened for it
                 _ = try node.Header.AddComponent(engine_context, DragSourceComponent{});
@@ -491,6 +495,16 @@ pub fn HierarchyPanel(comptime T: type) type {
                 Player => world.GetPlayer(id),
                 GameContext => world.GetGameContext(id),
                 else => unreachable,
+            };
+        }
+
+        /// The stripe a row starts with, in the scene's color: every scene's row, and a top level entity's (what is under
+        /// it is in the same scene). Nothing for players and game modes, which aren't in a scene
+        fn StripeOf(object: T, depth: usize) ?MathTypes.Vec4(f32) {
+            return switch (T) {
+                Scene => SceneColor(object),
+                Entity => if (depth == 0) SceneColor((object.GetComponent(EntitySceneComponent) orelse return null).mScene) else null,
+                else => null,
             };
         }
 
@@ -534,6 +548,28 @@ pub fn HierarchyPanel(comptime T: type) type {
             };
         }
     };
+}
+
+/// A scene's color in the hierarchy panels: a hue picked from its UUID, so it stays the same each time the project is
+/// opened, at a brightness that shows on any theme. Its id if it has no UUID
+fn SceneColor(scene: Scene) MathTypes.Vec4(f32) {
+    const key: u64 = if (scene.GetComponent(SceneUUIDComponent)) |uuid| uuid.ID else scene.mID;
+    const hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&key));
+    //hue in sixths of the color wheel, 0 to 6
+    const hue: f32 = @as(f32, @floatFromInt(hash % 360)) / 60;
+    const value: f32 = 0.9;
+    const chroma: f32 = value * 0.65;
+    const mid = chroma * (1 - @abs(@mod(hue, 2) - 1));
+    const rgb: [3]f32 = switch (@as(u32, @intFromFloat(hue))) {
+        0 => .{ chroma, mid, 0 },
+        1 => .{ mid, chroma, 0 },
+        2 => .{ 0, chroma, mid },
+        3 => .{ 0, mid, chroma },
+        4 => .{ mid, 0, chroma },
+        else => .{ chroma, 0, mid },
+    };
+    const low = value - chroma;
+    return .{ .x = rgb[0] + low, .y = rgb[1] + low, .z = rgb[2] + low, .w = 1 };
 }
 
 fn Same(a: Entity, b: Entity) bool {

@@ -61,8 +61,8 @@ pub fn Update(_: *BindingSystem, engine_context: *EngineContext) !void {
         const widget = element.GetOwner();
         if (!widget.IsIDValid() or !widget.IsActive()) continue;
         const binding = element.GetComponent(FieldBindingComponent).?.*;
-        //a Clear menu item only writes
-        if (binding.mClear != null) continue;
+        //a Clear menu item only writes, and a Copy one only reads when clicked
+        if (binding.mClear != null or binding.mCopies) continue;
         if (IsBeingEdited(engine_context, widget)) continue;
         const field = FieldOf(binding) orelse continue;
         try Show(engine_context, widget, Shown(binding, binding.mAccess.Read(field)));
@@ -85,14 +85,15 @@ pub fn OnUIEvent(self: *BindingSystem, engine_context: *EngineContext, event: En
 }
 
 /// One of the frame's pointer events: a file dropped on an asset field that takes its kind becomes the field's asset, a
-/// hierarchy row dropped on a reference field that takes its kind becomes the field's object, and a field's Clear
-/// clicked writes what it clears to
+/// hierarchy row dropped on a reference field that takes its kind becomes the field's object, a field's Clear
+/// clicked writes what it clears to, and a readout's Copy clicked puts its text on the clipboard
 pub fn OnPointerEvent(self: *BindingSystem, engine_context: *EngineContext, event: EntityPointerEvent) !void {
     const dropped = switch (event.mEvent) {
         .PointerDropped => |e| e,
         .PointerClicked => |e| {
             if (e.mButton != .BUTTON_LEFT) return;
             const binding = (UIManager.GetUIComponent(event.mEntity, FieldBindingComponent) orelse return).*;
+            if (binding.mCopies) return try Copy(engine_context, binding);
             const cleared = binding.mClear orelse return;
             return try self.Write(engine_context, binding, cleared);
         },
@@ -142,6 +143,15 @@ fn Write(self: *BindingSystem, engine_context: *EngineContext, binding: FieldBin
             if (asked.mID == root.mID and asked.mManager == root.mManager) return;
         }
         try self.mRebuild.append(engine_context.EngineAllocator(), root);
+    }
+}
+
+/// Puts a readout's text on the clipboard, as it is right now
+fn Copy(engine_context: *EngineContext, binding: FieldBindingComponent) !void {
+    const field = FieldOf(binding) orelse return;
+    switch (binding.mAccess.Read(field)) {
+        .Text => |text| try engine_context.mAppWindow.SetClipboardText(engine_context.FrameAllocator(), text),
+        else => {},
     }
 }
 

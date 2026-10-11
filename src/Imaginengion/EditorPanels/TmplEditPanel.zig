@@ -186,10 +186,21 @@ pub fn RenderPreview(self: *TmplEditPanel, engine_context: *EngineContext, ui_vi
     if (self.mPreview) |*preview| try preview.Render(engine_context, self.PreviewScene().?, ui_view);
 }
 
-/// A left click on `entity`: Save, a tree row or menu item, or something in the components pane. EditUIElement there
-/// does nothing: the UI Element panel shows the editor's selection, not the window's
+/// Whether `entity` is the window's Save button. The editor saves it, so it can say whether the save worked
+pub fn IsSaveButton(self: TmplEditPanel, entity: Entity) bool {
+    return entity.mID == self.mSave.mID and entity.mManager == self.mSave.mManager;
+}
+
+/// The name of the object the template is
+pub fn Name(self: TmplEditPanel) []const u8 {
+    return switch (self.mRoot) {
+        inline else => |root| root.GetName(),
+    };
+}
+
+/// A left click on `entity`: a tree row or menu item, or something in the components pane. EditUIElement there does
+/// nothing: the UI Element panel shows the editor's selection, not the window's
 pub fn OnLeftClick(self: *TmplEditPanel, engine_context: *EngineContext, entity: Entity) !void {
-    if (entity.mID == self.mSave.mID and entity.mManager == self.mSave.mManager) return try self.Save(engine_context);
     const world = &engine_context.mTmplEditWorld;
     switch (self.mTrees) {
         .scene_layer => |*trees| {

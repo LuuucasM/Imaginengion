@@ -265,14 +265,20 @@ pub const Builder = struct {
     }
 
     /// A field shown and never edited, as `show` writes it into the buffer it is handed (at most 64 bytes), e.g. an id
-    /// or a size worked out by something else
+    /// or a size worked out by something else. A right-click Copy puts the text on the clipboard
     pub fn Readout(self: *Builder, field: anytype, label: []const u8, comptime show: anytype) !void {
         const T = @typeInfo(@TypeOf(field)).pointer.child;
         var buffer: [READOUT_LEN]u8 = undefined;
         const text = show(field.*, &buffer);
         const row = try self.Row(label);
         const shown = try Widgets.Label(self.mEngineContext, .{ .Entity = row }, text);
-        try self.Bind(shown, field, ReadoutAccess(T, show), null, null, false);
+        const access = ReadoutAccess(T, show);
+        try self.Bind(shown, field, access, null, null, false);
+
+        const menu = try Widgets.ContextMenu(self.mEngineContext, shown, self.mOptions);
+        const item = try Widgets.MenuItem(self.mEngineContext, menu, "Copy", .{ .StockScripts = self.mOptions.StockScripts });
+        try self.Bind(item, field, access, null, null, false);
+        UIManager.GetUIComponent(item, FieldBindingComponent).?.mCopies = true;
     }
 
     /// A set of bits (a std.StaticBitSet): a numbered checkbox for each, as many to a row as fit

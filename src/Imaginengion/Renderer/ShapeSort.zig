@@ -1,14 +1,15 @@
 //! The order shapes go into the shape buffer. Each shape gets a key as it is added, and the buffer is uploaded sorted
 //! by it, so whatever the GPU wants side by side is: direct shapes before marched ones, a combined SDF's shapes in one
-//! run, and later shapes close in space close in the buffer for a BVH to be built over. Everything that points at a
-//! place in the buffer (the direct/marched split, group ranges, BVH nodes) is worked out after the sort, from it.
+//! run. The direct shapes are then put in the order their BVH's build leaves them (Renderer2D.BuildBVH). Everything
+//! that points at a place in the buffer (the direct/marched split, group ranges, BVH nodes) is worked out after the
+//! sort, from it.
 const std = @import("std");
 
 /// What a shape is sorted by. Compared as one number, so the top field decides the coarsest grouping and the bottom
 /// one the finest. A field a feature doesn't use yet stays 0, which leaves the order to the fields that are set
 pub const ShapeSortKey = packed struct(u64) {
-    /// Direct shapes: their Morton code (their center's x, y and z bits interleaved), once there is a BVH to build
-    /// over them. Marched shapes: where they come in their group's combining
+    /// Marched shapes: where they come in their group's combining. 0 for direct shapes, which their BVH's build orders
+    /// instead
     Order: u32 = 0,
     /// Marched shapes: which combined SDF they belong to, so each group is one run of the buffer. 0 for direct shapes
     Group: u31 = 0,

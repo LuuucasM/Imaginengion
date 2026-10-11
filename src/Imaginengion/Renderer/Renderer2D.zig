@@ -265,49 +265,35 @@ pub const RenderBuffers = struct {
         self.mPartBuffer.Bind(render_pass);
     }
 
-    /// The shapes in their keys' order, into mSortedShapes, ready to upload. Their surfaces and masks stay where they
-    /// are, since a shape points at those rather than the other way round
+    /// The shapes in their keys' order, into mSortedShapes, ready to upload, the direct ones in their BVH's order.
+    /// Their surfaces and masks stay where they are, since a shape points at those rather than the other way round
     fn SortShapes(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
         const zone = Tracy.ZoneInit("Renderer2D::SortShapes", @src());
         defer zone.Deinit();
         zone.Value(self.mSortEntries.items.len);
 
-        self.SetMortonOrders();
         ShapeSort.Sort(self.mSortEntries.items);
-        try self.mSortedShapes.resize(engine_allocator, self.mShapeBufferBase.items.len);
-        ShapeSort.Gather(ShapeData, self.mShapeBufferBase.items, self.mSortEntries.items, self.mSortedShapes.items);
         self.mDirectCount = ShapeSort.DirectCount(self.mSortEntries.items);
         try self.BuildBVH(engine_allocator);
+        try self.mSortedShapes.resize(engine_allocator, self.mShapeBufferBase.items.len);
+        ShapeSort.Gather(ShapeData, self.mShapeBufferBase.items, self.mSortEntries.items, self.mSortedShapes.items);
     }
 
-    /// The BVH over the direct shapes, which the sort has just put first and in Morton order: each one's code, box and
-    /// mask, in that order
+    /// The BVH over the direct shapes, which the sort has just put first: each one's box and mask, its Id where it was
+    /// added. The build reorders them, and the direct entries are put in its order, so each leaf's shapes are one run
+    /// of the buffer. Every direct entry has the same key, so only where each points changes
     fn BuildBVH(self: *RenderBuffers, engine_allocator: std.mem.Allocator) !void {
         const zone = Tracy.ZoneInit("Renderer2D::BuildBVH", @src());
         defer zone.Deinit();
         zone.Value(self.mDirectCount);
 
-        try self.mBVHItems.resize(engine_allocator, self.mDirectCount);
-        for (self.mSortEntries.items[0..self.mDirectCount], self.mBVHItems.items) |entry, *item| {
-            item.* = .{ .Code = entry.Key.Order, .Bounds = self.mShapeBounds.items[entry.Index], .Mask = BVH.Mask.RENDER };
+        const direct = self.mSortEntries.items[0..self.mDirectCount];
+        try self.mBVHItems.resize(engine_allocator, direct.len);
+        for (direct, self.mBVHItems.items) |entry, *item| {
+            item.* = .{ .Id = entry.Index, .Bounds = self.mShapeBounds.items[entry.Index], .Mask = BVH.Mask.RENDER };
         }
         try BVH.Build(engine_allocator, self.mBVHItems.items, &self.mBVHNodes);
-    }
-
-    /// Each direct shape's key gets its Morton code (BVH.MortonCode) as its Order, from where its bounding box's center
-    /// is among all the direct shapes' centers, so sorting puts shapes close in space next to each other: the order
-    /// the BVH is built from. Marched shapes keep their Order, which is their place in their group
-    fn SetMortonOrders(self: *RenderBuffers) void {
-        var centers = Aabb.empty;
-        for (self.mSortEntries.items) |entry| {
-            if (entry.Key.Path != .Direct) continue;
-            const center = self.mShapeBounds.items[entry.Index].Center();
-            centers = centers.Union(.{ .Min = center, .Max = center });
-        }
-        for (self.mSortEntries.items) |*entry| {
-            if (entry.Key.Path != .Direct) continue;
-            entry.Key.Order = BVH.MortonCode(self.mShapeBounds.items[entry.Index].Center(), centers);
-        }
+        for (direct, self.mBVHItems.items) |*entry, item| entry.Index = item.Id;
     }
 
     /// Adds a shape and its surface, pointing the shape at it, and the key it is sorted by. The shape's SurfaceIndex
@@ -407,6 +393,17 @@ pub fn GetMergeCount(self: Renderer2D, pipeline_kind: PipelineType) usize {
     };
 }
 
+/// Whether a quad painted with `surface` draws nothing at all: see-through, with a fill and a border (if it has one)
+/// both fully see-through. Its texture doesn't matter, since the fill color tints it (SDFRayMarcher.SurfaceColor). Such
+/// a quad is only there to be clicked, like a menu row's button until it is hovered, and picking tests its box on the
+/// CPU, so it is left out of the shapes. A quad that isn't see-through hides what is behind it whatever its alpha, so
+/// it is still drawn
+pub fn QuadDrawsNothing(surface: SurfaceComponent) bool {
+    if (!surface.mTexOptions.mIsTransparent) return false;
+    if (surface.mTexOptions.mColor.w > 0) return false;
+    return surface.mBorderWidth <= 0 or surface.mBorderColor.w <= 0;
+}
+
 pub fn DrawQuad(
     self: *Renderer2D,
     engine_context: *EngineContext,
@@ -419,6 +416,8 @@ pub fn DrawQuad(
     masks: *const ShapeGeometry.ViewMasks,
     shading_buff: *ShadingBuffers,
 ) !void {
+    //invisible: nothing to draw, and every pixel under it would start a whole new walk past it
+    if (QuadDrawsNothing(surface.*)) return;
     //the same box picking tests against
     const box = ShapeGeometry.QuadBox(transform_component, quad, surface.mBorderWidth, canvas);
     //cut off altogether: nothing to draw, and nothing for every pixel to march past

@@ -101,6 +101,7 @@ const ContentBrowserPanel = @import("../EditorPanels/ContentBrowserPanel.zig");
 const TmplEditPanel = @import("../EditorPanels/TmplEditPanel.zig");
 const ScriptsPanel = @import("../EditorPanels/ScriptsPanel.zig");
 const StatsPanel = @import("../EditorPanels/StatsPanel.zig");
+const SaveNotice = @import("../EditorPanels/SaveNotice.zig");
 const PickingDebugPanel = @import("../EditorPanels/PickingDebugPanel.zig");
 const UIElementPanel = @import("../EditorPanels/UIElementPanel.zig");
 const UIManager = @import("../UI/UIManager.zig");
@@ -162,6 +163,8 @@ mTmplEditPanels: std.ArrayList(TmplEditPanel) = .empty,
 mScriptsPanel: ScriptsPanel = .{},
 /// The Stats window, in the editor UI
 mStatsPanel: StatsPanel = .{},
+/// The box in the editor UI's bottom right corner saying what was just saved
+mSaveNotice: SaveNotice = .{},
 /// The Picking Debug window, in the editor UI
 mPickingDebugPanel: PickingDebugPanel = .{},
 /// The UI Element window, in the editor UI
@@ -200,6 +203,8 @@ mViewportQuads: std.ArrayList(Entity) = .empty,
 mPlayQuads: std.ArrayList(Entity) = .empty,
 /// Whether the main viewport is shown (the Window menu's Viewport)
 mShowViewport: bool = true,
+/// F7 was pressed: the editor UI's next render dumps its BVH (Renderer.mDumpOverlayBVH)
+mDumpBVH: bool = false,
 
 //Editor viewport stuff
 mEditorViewportScene: Scene = .uninit,
@@ -255,6 +260,7 @@ pub fn Init(self: *EditorProgram, engine_context: *EngineContext, _: std.process
     self.mShell = try EditorShell.Build(engine_context, self.mEditorUIRoot, .{});
     self.mMenuBar = try EditorMenuBar.Build(engine_context, self.mShell.mMenuBar, .{});
     self.mStatsPanel = try StatsPanel.Build(engine_context, self.mEditorUIScene, .{});
+    self.mSaveNotice = try SaveNotice.Build(engine_context, self.mEditorUIScene);
     self.mAssetHandlesPanel = try AssetHandlesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mAudioBusesPanel = try AudioBusesPanel.Build(engine_context, self.mEditorUIScene, .{});
     self.mUIElementPanel = try UIElementPanel.Build(engine_context, self.mEditorUIScene, .{});
@@ -432,6 +438,8 @@ pub fn OnUpdate(self: *EditorProgram, engine_context: *EngineContext) !void {
         try self.UpdateShell(engine_context);
         //how styled UI looks, which can change the size of its text
         try engine_context.mUIManager.UpdateBeforeLayout(engine_context);
+        //after the style pass, which would put its fading colors back to the theme's
+        try self.mSaveNotice.Update(engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mGameWorld, engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mEditorWorld, engine_context);
         try LayoutSystem.UpdateLayouts(&engine_context.mTmplEditWorld, engine_context);
@@ -668,7 +676,11 @@ pub fn OnPointerEvent(editor_program: *anyopaque, engine_context: *EngineContext
             if (self.mEntityPanel.ActionOf(entity)) |action| try self.mEntityPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
             if (self.mPlayerPanel.ActionOf(entity)) |action| try self.mPlayerPanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
             if (self.mGameModePanel.ActionOf(entity)) |action| try self.mGameModePanel.Run(engine_context, action, self.mActiveWorld, &self.mSelectedObj);
-            for (self.mTmplEditPanels.items) |*panel| try panel.OnLeftClick(engine_context, entity);
+            for (self.mTmplEditPanels.items) |*panel| {
+                if (panel.IsSaveButton(entity)) {
+                    try self.NoticeSave(engine_context, panel.Name(), panel.Save(engine_context));
+                } else try panel.OnLeftClick(engine_context, entity);
+            }
         } else if (click.mButton == .BUTTON_RIGHT) {
             for (self.mTmplEditPanels.items) |*panel| try panel.OnRightClick(engine_context, entity);
             //a hierarchy row's menu is one menu for every row: which row it opens on, before its script opens it
@@ -907,13 +919,17 @@ fn UpdateTmplEditPanels(self: *EditorProgram, engine_context: *EngineContext) !v
             i += 1;
             continue;
         }
+        //the name is the template object's, which is still there until the end of the frame, but read before closing
+        const name = try engine_context.FrameAllocator().dupe(u8, panel.Name());
         panel.Close(engine_context) catch |err| {
             //nothing is lost: the window opens again with the edits still in it
             std.log.err("Failed to save template, so its window stays open: {s}", .{@errorName(err)});
+            try self.mSaveNotice.Show(engine_context, "Failed to save {s}", .{name});
             try panel.BringForward(engine_context);
             i += 1;
             continue;
         };
+        try self.mSaveNotice.Show(engine_context, "Saved {s}", .{name});
         _ = self.mTmplEditPanels.orderedRemove(i);
     }
 }
@@ -964,7 +980,10 @@ pub fn OnEditorEvent(editor_program: *anyopaque, engine_context: *EngineContext,
     switch (event.*) {
         .SelectObjectEvent => |e| self.mSelectedObj = e.mObject,
         .MakeTmplEvent => |e| switch (e.mObject) {
-            inline else => |object| try self.MakeTmpl(engine_context, object),
+            inline else => |object| {
+                const saved = self.MakeTmpl(engine_context, object);
+                try self.NoticeSave(engine_context, object.GetName(), saved);
+            },
         },
         .OpenTmplEvent => |e| self.OpenTmpl(engine_context, e.mTmpl) catch |err| {
             //a file that can't be opened as a template shouldn't take the editor down with it
@@ -1009,6 +1028,10 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     //turn, then off again
     if (e._InputCode == .F6) {
         engine_context.mRenderer.mHeatmap = Renderer.HeatMetric.Next(engine_context.mRenderer.mHeatmap);
+    }
+    //the BVH dump: the editor UI's next render writes its camera, shapes and BVH to a file (Renderer/BVHDump.zig)
+    if (e._InputCode == .F7 and e._Repeat == 0) {
+        self.mDumpBVH = true;
     }
     //File > Save and Save As...: once per press, not again while S is held
     if (e._InputCode == .S and e._Repeat == 0) {
@@ -1130,13 +1153,27 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
 fn SaveSelected(self: *EditorProgram, engine_context: *EngineContext, as: bool) !void {
     const selected_object = self.mSelectedObj orelse return;
     switch (selected_object) {
-        .entity => |entity| try SaveObject(engine_context, entity.GetComponent(EntitySceneComponent).?.mScene, as),
-        inline else => |object| try SaveObject(engine_context, object, as),
+        .entity => |entity| try self.SaveObject(engine_context, entity.GetComponent(EntitySceneComponent).?.mScene, as),
+        inline else => |object| try self.SaveObject(engine_context, object, as),
     }
 }
 
-fn SaveObject(engine_context: *EngineContext, object: anytype, as: bool) !void {
-    if (as) try engine_context.mGameWorld.SaveAs(engine_context, object) else try engine_context.mGameWorld.Save(engine_context, object);
+fn SaveObject(self: *EditorProgram, engine_context: *EngineContext, object: anytype, as: bool) !void {
+    const saved = if (as) engine_context.mGameWorld.SaveAs(engine_context, object) else engine_context.mGameWorld.Save(engine_context, object);
+    try self.NoticeSave(engine_context, object.GetName(), saved);
+}
+
+/// Says in the save notice how saving the thing called `name` went: saved, or failed, which is logged too. A save
+/// cancelled in its file dialog wrote nothing and says nothing
+fn NoticeSave(self: *EditorProgram, engine_context: *EngineContext, name: []const u8, saved: anyerror!void) !void {
+    saved catch |err| switch (err) {
+        error.SaveCancelled => return,
+        else => {
+            std.log.err("Failed to save {s}: {s}", .{ name, @errorName(err) });
+            return try self.mSaveNotice.Show(engine_context, "Failed to save {s}", .{name});
+        },
+    };
+    try self.mSaveNotice.Show(engine_context, "Saved {s}", .{name});
 }
 
 /// Does what a menu bar item was picked for
@@ -1158,7 +1195,10 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         .Save => try self.SaveSelected(engine_context, false),
         .SaveAs => try self.SaveSelected(engine_context, true),
         .ExportEntity => if (self.mSelectedObj) |selected_object| switch (selected_object) {
-            .entity => |entity| try engine_context.mGameWorld.SaveAs(engine_context, entity),
+            .entity => |entity| {
+                const saved = engine_context.mGameWorld.SaveAs(engine_context, entity);
+                try self.NoticeSave(engine_context, entity.GetName(), saved);
+            },
             else => {},
         },
         .NewProject => {
@@ -1175,7 +1215,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
                 try self.mContentBrowserPanel.SetRoot(engine_context, engine_context.mProject.GetPath());
             }
         },
-        .SaveProject => try engine_context.mProject.Save(engine_context),
+        .SaveProject => if (engine_context.mProject.IsOpen()) try self.NoticeSave(engine_context, "project", engine_context.mProject.Save(engine_context)),
         .SetProjectEntry => |entry| {
             const extension = entry.FileExtension();
             const abs_path = try PlatformUtils.OpenFile(engine_context.FrameAllocator(), extension);
@@ -1333,6 +1373,9 @@ fn RenderEditorUI(self: *EditorProgram, engine_context: *EngineContext) !void {
     try render_component.mComputeTexture.Resize(engine_context, width, height);
     if (!render_component.mComputeTexture.IsCreated()) return;
 
+    //F7's dump is of this render, the editor UI's, not whichever overlay pass comes first
+    engine_context.mRenderer.mDumpOverlayBVH = self.mDumpBVH;
+    self.mDumpBVH = false;
     try engine_context.mRenderer.RenderScene(
         self.mEditorUIScene,
         &engine_context.mEngineStats.EditorWorldStats.mRenderStats,

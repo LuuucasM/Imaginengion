@@ -26,6 +26,11 @@ test "a box's center is half way between its corners" {
     try std.testing.expectEqual(Vec3(f32){ .x = 1, .y = 1, .z = 1 }, a.Center());
 }
 
+test "a box's half area is one of each of its three faces, and a flat box's is its face" {
+    try std.testing.expectEqual(@as(f32, 1 * 2 + 2 * 3 + 3 * 1), Box(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 2, .z = 3 }).HalfArea());
+    try std.testing.expectEqual(@as(f32, 6), Box(.{ .x = -1, .y = 4, .z = 2 }, .{ .x = 1, .y = 7, .z = 2 }).HalfArea());
+}
+
 test "a box contains what is inside it and on it, and nothing past it" {
     const a = Box(.{ .x = 0, .y = 0, .z = 0 }, .{ .x = 1, .y = 1, .z = 1 });
     try std.testing.expect(a.Contains(.{ .x = 0.5, .y = 0.5, .z = 0.5 }));

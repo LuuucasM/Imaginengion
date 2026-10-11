@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const game_build_options = @import("game_build_options");
 const WindowsScriptAsset = @This();
 
 
@@ -26,8 +27,32 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
     defer zone.Deinit();
     zone.Text(rel_path);
 
+    //a packaged game (-Dprebuilt-scripts) ships its scripts already built, everything else builds them here so an
+    //edit to one is picked up. Either way the dll ends up at the same place
+    if (!game_build_options.prebuilt_scripts) try Compile(engine_context, abs_path, rel_path);
+
+    //get the path of the newly create dyn lib and open it
+    const dyn_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
+
+    const dyn_path_w = try std.unicode.utf8ToUtf16LeAllocZ(engine_context.FrameAllocator(), dyn_path);
+
+    self.mLib = LoadLibraryExW(dyn_path_w.ptr, null, 0) orelse {
+        std.log.err("Failed to load DLL: {s}", .{dyn_path});
+        return error.AssetInitFailed;
+    };
+
+    const script_type_func = try LoadSymbol(*const fn () ScriptType, self.mLib, "GetScriptType");
+    self.mScriptType = script_type_func();
+
+    self.mRunFunc = GetProcAddress(self.mLib, "Run\x00") orelse {
+        std.log.err("Missing exported symbol: Run", .{});
+        return error.AssetInitFailed;
+    };
+}
+
+/// Builds the script at abs_path into zig-out/bin/<file name>.dll with the engine's own build (zig build script)
+fn Compile(engine_context: *EngineContext, abs_path: []const u8, rel_path: []const u8) !void {
     const name = std.fs.path.basename(abs_path);
-    //const the_path = std.fs.path.dirname(abs_path);
 
     //spawn a child to handle compiling the zig file into a dll
     const path_arg = try std.fmt.allocPrint(engine_context.FrameAllocator(), "-Dscript_path={s}", .{abs_path});
@@ -62,24 +87,6 @@ pub fn Init(self: *WindowsScriptAsset, engine_context: *EngineContext, abs_path:
         return error.AssetInitFailed;
     }
     std.log.info("script {s} compile success!\n", .{rel_path});
-
-    //get the path of the newly create dyn lib and open it
-    const dyn_path = try std.fmt.allocPrint(engine_context.FrameAllocator(), "zig-out/bin/{s}.dll", .{std.fs.path.basename(abs_path)});
-
-    const dyn_path_w = try std.unicode.utf8ToUtf16LeAllocZ(engine_context.FrameAllocator(), dyn_path);
-
-    self.mLib = LoadLibraryExW(dyn_path_w.ptr, null, 0) orelse {
-        std.log.err("Failed to load DLL: {s}", .{dyn_path});
-        return error.AssetInitFailed;
-    };
-
-    const script_type_func = try LoadSymbol(*const fn () ScriptType, self.mLib, "GetScriptType");
-    self.mScriptType = script_type_func();
-
-    self.mRunFunc = GetProcAddress(self.mLib, "Run\x00") orelse {
-        std.log.err("Missing exported symbol: Run", .{});
-        return error.AssetInitFailed;
-    };
 }
 
 pub fn Deinit(self: *WindowsScriptAsset, _: *EngineContext) void {

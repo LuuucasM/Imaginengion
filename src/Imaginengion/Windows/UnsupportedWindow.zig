@@ -75,6 +75,13 @@ pub fn GetClipboardText(self: UnsupportedWindow, allocator: @import("std").mem.A
     return Unsupported();
 }
 
+pub fn SetClipboardText(self: UnsupportedWindow, allocator: @import("std").mem.Allocator, text: []const u8) !void {
+    _ = self;
+    _ = allocator;
+    _ = text;
+    Unsupported();
+}
+
 fn Unsupported() noreturn {
     @compileError("Unsupported operating system: " ++ @tagName(builtin.os.tag) ++ " in Window\n");
 }

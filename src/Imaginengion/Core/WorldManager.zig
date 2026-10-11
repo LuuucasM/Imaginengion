@@ -295,14 +295,15 @@ fn SceneLoaded(self: *WorldManager, engine_context: *EngineContext, scene: Scene
 }
 
 /// Writes `object` (an Entity, Scene, Player or GameContext) over the file it was last saved to or loaded from,
-/// asking for a file the first time, as SaveAs does
+/// asking for a file the first time, as SaveAs does (and can be cancelled the same way)
 pub fn Save(self: *WorldManager, engine_context: *EngineContext, object: anytype) !void {
     const zone = Tracy.ZoneInit("WorldManager::Save", @src());
     defer zone.Deinit();
     try self.GetManager(@TypeOf(object)).SaveObject(engine_context, object);
 }
 
-/// Asks for a file (a .imen, .imsc, .impl or .imgc, going by the object's type) and writes `object` to it
+/// Asks for a file (a .imen, .imsc, .impl or .imgc, going by the object's type) and writes `object` to it.
+/// error.SaveCancelled when no file was picked, so nothing was written
 pub fn SaveAs(self: *WorldManager, engine_context: *EngineContext, object: anytype) !void {
     const zone = Tracy.ZoneInit("WorldManager::SaveAs", @src());
     defer zone.Deinit();

@@ -76,6 +76,13 @@ pub fn GetClipboardText(_: SDLWindow, allocator: std.mem.Allocator) ![]u8 {
     return allocator.dupe(u8, std.mem.span(clipboard));
 }
 
+/// Puts `text` on the clipboard, in place of whatever was there. SDL wants it ending in a zero, so it is copied with one
+pub fn SetClipboardText(_: SDLWindow, allocator: std.mem.Allocator, text: []const u8) !void {
+    const terminated = try allocator.dupeSentinel(u8, text, 0);
+    defer allocator.free(terminated);
+    if (!sdl.SDL_SetClipboardText(terminated.ptr)) return error.SetClipboardFailed;
+}
+
 pub fn PollInputEvents(self: *SDLWindow, engine_context: *EngineContext) !void {
     const zone = Tracy.ZoneInit("Window::PollInputEvents", @src());
     defer zone.Deinit();

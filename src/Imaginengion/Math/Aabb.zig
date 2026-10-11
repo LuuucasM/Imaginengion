@@ -28,6 +28,14 @@ pub fn Center(self: Aabb) Vec3(f32) {
     return self.Min.AddVec(self.Max).MulScalar(0.5);
 }
 
+/// Half the box's surface area. A ray from anywhere through a bigger box around it goes through this one with a chance
+/// in proportion to its surface area, which is what a BVH build weighs boxes by; only ever compared, so half does. A
+/// flat box still has the area of its face. Not for the empty box
+pub fn HalfArea(self: Aabb) f32 {
+    const size = self.Max.SubVec(self.Min);
+    return size.x * size.y + size.y * size.z + size.z * size.x;
+}
+
 /// Whether `point` is inside or on the box
 pub fn Contains(self: Aabb, point: Vec3(f32)) bool {
     return point.x >= self.Min.x and point.y >= self.Min.y and point.z >= self.Min.z and

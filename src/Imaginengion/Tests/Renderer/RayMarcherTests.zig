@@ -277,31 +277,18 @@ fn MergeCount(scene: TestScene) usize {
     return count;
 }
 
-/// Sorts the direct shapes the way Renderer2D.SortShapes does for its BVH: by the Morton code of their bounding box's
-/// center among all of theirs, ties in draw order. Fills in the tree's items in that order too
-fn SortForBVH(shapes: []ShapeData, items: []BVH.Item) void {
-    var centers = Aabb.empty;
-    for (shapes) |shape| {
-        const center = SDFFunc.aabbIMShape(shape).Center();
-        centers = centers.Union(.{ .Min = center, .Max = center });
+//// Builds the BVH over the direct shapes the way Renderer2D.BuildBVH does, each item's Id its shape's place, and puts
+/// the shapes in the order the build left the items: each leaf's shapes one run of them
+fn BuildForBVH(shapes: []ShapeData, nodes: *std.ArrayList(BVH.Node)) !void {
+    var items: [MAX_TEST_SHAPES]BVH.Item = undefined;
+    for (shapes, items[0..shapes.len], 0..) |shape, *item, i| {
+        item.* = .{ .Id = @intCast(i), .Bounds = SDFFunc.aabbIMShape(shape), .Mask = BVH.Mask.RENDER };
     }
+    try BVH.Build(std.testing.allocator, items[0..shapes.len], nodes);
 
-    const Keyed = struct { Code: u32, Shape: ShapeData };
-    var keyed: [MAX_TEST_SHAPES]Keyed = undefined;
-    for (shapes, keyed[0..shapes.len]) |shape, *entry| {
-        entry.* = .{ .Code = BVH.MortonCode(SDFFunc.aabbIMShape(shape).Center(), centers), .Shape = shape };
-    }
-    std.mem.sort(Keyed, keyed[0..shapes.len], {}, struct {
-        fn lessThan(_: void, a: Keyed, b: Keyed) bool {
-            if (a.Code != b.Code) return a.Code < b.Code;
-            return a.Shape.SurfaceIndex < b.Shape.SurfaceIndex;
-        }
-    }.lessThan);
-
-    for (keyed[0..shapes.len], shapes, items) |entry, *shape, *item| {
-        shape.* = entry.Shape;
-        item.* = .{ .Code = entry.Code, .Bounds = SDFFunc.aabbIMShape(entry.Shape), .Mask = BVH.Mask.RENDER };
-    }
+    var built: [MAX_TEST_SHAPES]ShapeData = undefined;
+    for (items[0..shapes.len], built[0..shapes.len]) |item, *shape| shape.* = shapes[item.Id];
+    @memcpy(shapes, built[0..shapes.len]);
 }
 
 /// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, the direct
@@ -322,7 +309,7 @@ fn CountWork(scene: TestScene, ray: Ray) !SDFRayMarcher.Counters {
 }
 
 /// TraceSearch, with the work counted. Set up the way Renderer2D and SDFComputeGame's main set up a pixel's ray: the
-/// direct shapes sorted for their BVH and the tree built over them, then the first node and edge
+/// tree built over the direct shapes and them put in its order, then the first node and edge
 fn TraceCounted(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) !Traced {
     std.debug.assert(scene.Shadings.len > 0);
     std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and direct_count <= scene.Shapes.len);
@@ -337,11 +324,9 @@ fn TraceCounted(scene: TestScene, ray: Ray, direct_count: usize, comptime search
         surfaces[draw_order] = test_shape.Surface;
     }
 
-    var items: [MAX_TEST_SHAPES]BVH.Item = undefined;
-    SortForBVH(shapes[0..direct_count], items[0..direct_count]);
     var bvh_nodes: std.ArrayList(BVH.Node) = .empty;
     defer bvh_nodes.deinit(std.testing.allocator);
-    try BVH.Build(std.testing.allocator, items[0..direct_count], &bvh_nodes);
+    try BuildForBVH(shapes[0..direct_count], &bvh_nodes);
 
     const Marcher = TestMarcher(search, features);
     var marcher = Marcher{
@@ -954,7 +939,7 @@ test "a ray through a letter's gap checks both the glyph and the quad behind it,
 
 test "a ray onto the front of a stack of shapes in one leaf checks only the front one" {
     //four quads one behind another, the way UI nests things DEPTH_STEP apart, few enough for the tree's one leaf. The
-    //leaf holds them back first (their centers' Morton codes grow with depth), so taking each that beats the nearest so
+    //leaf holds them back first (the order they are given in, which a leaf keeps), so taking each that beats the nearest so
     //far, in the leaf's order, would check all four
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     var shapes: [BVH.MAX_LEAF_ITEMS]TestShape = undefined;

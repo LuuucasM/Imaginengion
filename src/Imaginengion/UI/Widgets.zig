@@ -127,6 +127,8 @@ pub const SWATCH_SIZE: f32 = 20;
 pub const ARROW_SIZE: f32 = 16;
 /// How far a tree node's children sit in from it
 pub const INDENT: f32 = 16;
+/// A tree node's colored stripe at the start of its header (TreeNodeOptions.Stripe)
+pub const STRIPE_WIDTH: f32 = 4;
 /// A checkable menu item's check box
 pub const MENU_CHECK_SIZE: f32 = 10;
 /// About how tall a menu row is: a line of text (a little more than its font size) and the row's padding. Only for
@@ -149,6 +151,9 @@ pub const TreeNodeOptions = struct {
     /// whether its content starts out shown
     Open: bool = false,
     StockScripts: bool = true,
+    /// a thin bar of this color at the start of the header, before the arrow, that no style touches: a mark of what
+    /// the row belongs to
+    Stripe: ?Vec4(f32) = null,
 };
 
 pub const MenuItemOptions = struct {
@@ -521,16 +526,18 @@ pub fn Tree(engine_context: *EngineContext, parent: Parent) !Entity {
 /// A node of a tree, like a row of the scene hierarchy: a header row (an arrow and a label) that clicking selects (the
 /// stock Select script, one at a time across the tree it is in, see Tree), and under it its content, indented, which
 /// the arrow folds away and out again (the stock FoldArrow script). Put its child nodes in Content. A leaf has a gap
-/// where the arrow would be, and no content. The header has style "Header", its arrow box "Arrow"
+/// where the arrow would be, and no content. The header has style "Header", its arrow box "Arrow", and a stripe before
+/// the arrow if it was given one
 pub fn TreeNode(engine_context: *EngineContext, parent: Parent, text: []const u8, options: TreeNodeOptions) !Fold {
     const node = try NewEntity(engine_context, parent);
     _ = try node.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column });
     _ = try node.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
 
-    const header = try FoldHeader(engine_context, .{ .Entity = node }, text, if (options.Leaf) null else options.Open);
+    const parts = try FoldHeader(engine_context, .{ .Entity = node }, text, if (options.Leaf) null else options.Open, options.Stripe);
+    const header = parts.Header;
     if (options.StockScripts) {
         try AddStockScript(engine_context, header, .Select);
-        if (!options.Leaf) try AddStockScript(engine_context, FirstChild(header).?, .FoldArrow);
+        if (!options.Leaf) try AddStockScript(engine_context, parts.Arrow, .FoldArrow);
     }
     if (options.Leaf) return .{ .Node = node, .Header = header, .Content = null };
 
@@ -542,7 +549,7 @@ pub fn TreeNode(engine_context: *EngineContext, parent: Parent, text: []const u8
 /// Fold script): a section of a panel, like a component in the components panel. The header and its content both go in
 /// `parent`, the content right after the header, so Node is the header. Style "Header"
 pub fn CollapsingHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: bool, options: Options) !Fold {
-    const header = try FoldHeader(engine_context, parent, text, open);
+    const header = (try FoldHeader(engine_context, parent, text, open, null)).Header;
     if (options.StockScripts) try AddStockScript(engine_context, header, .Fold);
     const content = try FoldContent(engine_context, parent, open, 0);
     return .{ .Node = header, .Header = header, .Content = content };
@@ -885,9 +892,10 @@ fn MenuRow(engine_context: *EngineContext, menu: Entity, text: []const u8) !Enti
     return row;
 }
 
-/// A folding header row: an arrow box showing whether it is `open` (null for none, only a gap where it would be) and a
-/// label. Style "Header", the arrow box "Arrow"
-fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: ?bool) !Entity {
+/// A folding header row: a bar of `stripe`'s color if it has one, an arrow box showing whether it is `open` (null for
+/// none, only a gap where it would be) and a label. Style "Header", the arrow box "Arrow", the stripe none, so its color
+/// stays
+fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, open: ?bool, stripe: ?Vec4(f32)) !struct { Header: Entity, Arrow: Entity } {
     const header = try NewEntity(engine_context, parent);
     try AddQuad(engine_context, header, .{}, .{});
     _ = try header.AddComponent(engine_context, LayoutComponent{
@@ -899,6 +907,13 @@ fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, 
     _ = try header.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 } });
     try UIManager.Style(engine_context, header, "Header");
 
+    if (stripe) |color| {
+        const bar = try NewEntity(engine_context, .{ .Entity = header });
+        var surface = SurfaceComponent{};
+        surface.mTexOptions.mColor = color;
+        try AddQuad(engine_context, bar, .{}, surface);
+        _ = try bar.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = STRIPE_WIDTH }, .mHeight = .{ .Fixed = ARROW_SIZE } });
+    }
     const arrow = try NewEntity(engine_context, .{ .Entity = header });
     _ = try arrow.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fixed = ARROW_SIZE }, .mHeight = .{ .Fixed = ARROW_SIZE } });
     if (open) |is_open| {
@@ -908,7 +923,7 @@ fn FoldHeader(engine_context: *EngineContext, parent: Parent, text: []const u8, 
         _ = try Label(engine_context, .{ .Entity = arrow }, if (is_open) WidgetActions.ARROW_OPEN else WidgetActions.ARROW_FOLDED);
     }
     _ = try Label(engine_context, .{ .Entity = header }, text);
-    return header;
+    return .{ .Header = header, .Arrow = arrow };
 }
 
 /// What a folding header folds: a column, indented by `indent`, shown if `open`
@@ -917,11 +932,6 @@ fn FoldContent(engine_context: *EngineContext, parent: Parent, open: bool, inden
     _ = try content.AddComponent(engine_context, LayoutComponent{ .mDirection = .Column, .mPadding = .{ .Left = indent, .Right = 0, .Top = 0, .Bottom = 0 } });
     _ = try content.AddComponent(engine_context, LayoutItemComponent{ .mWidth = .{ .Fill = 1 }, .mCollapsed = !open });
     return content;
-}
-
-fn FirstChild(entity: Entity) ?Entity {
-    var children = entity.GetIterator(.Child);
-    return children.next();
 }
 
 /// The scene `parent` is in

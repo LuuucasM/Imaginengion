@@ -39,5 +39,7 @@ mAccepts: []const []const u8 = &.{},
 mTakes: ?std.meta.Tag(ObjectRefComponent.Ref) = null,
 /// For a field's Clear menu item: the value clicking it writes. Such a binding is never shown, it only writes
 mClear: ?Inspector.Value = null,
+/// For a readout's Copy menu item: clicking it puts the field's text on the clipboard. Such a binding is never shown
+mCopies: bool = false,
 
 pub fn Deinit(_: *FieldBindingComponent, _: *EngineContext) void {}

@@ -178,20 +178,24 @@ pub fn CollapseNext(engine_context: *EngineContext, entity: Entity) !void {
 pub const ARROW_OPEN = "v";
 pub const ARROW_FOLDED = ">";
 
-/// Folds the entity right after `header` away, or out again (CollapseNext), and turns the header's arrow to match: its
-/// first child, whose text shows ARROW_OPEN or ARROW_FOLDED. A tree node's header, a collapsing header. A header whose
-/// first child shows neither has no arrow, and only folds
+/// Folds the entity right after `header` away, or out again (CollapseNext), and turns the header's arrow to match: the
+/// first of its children before its own label whose text shows ARROW_OPEN or ARROW_FOLDED (a tree node's stripe can
+/// come before it). A tree node's header, a collapsing header. A header with no such child has no arrow, and only folds
 pub fn FoldNext(engine_context: *EngineContext, header: Entity) !void {
     try CollapseNext(engine_context, header);
     const next = NextSibling(header) orelse return;
     const folded = next.GetComponent(LayoutItemComponent).?.mCollapsed;
     var children = header.GetIterator(.Child);
-    const arrow = children.next() orelse return;
-    const label = UIManager.LabelOf(arrow) orelse return;
-    const text = label.GetComponent(TextComponent).?;
-    if (!std.mem.eql(u8, text.mText.items, ARROW_OPEN) and !std.mem.eql(u8, text.mText.items, ARROW_FOLDED)) return;
-    try text.SetText(engine_context, if (folded) ARROW_FOLDED else ARROW_OPEN);
-    try label.MarkLayoutDirty(engine_context);
+    while (children.next()) |child| {
+        //the header's own label: everything that could be the arrow comes before it
+        if (child.HasComponent(TextComponent)) return;
+        const label = UIManager.LabelOf(child) orelse continue;
+        const text = label.GetComponent(TextComponent).?;
+        if (!std.mem.eql(u8, text.mText.items, ARROW_OPEN) and !std.mem.eql(u8, text.mText.items, ARROW_FOLDED)) continue;
+        try text.SetText(engine_context, if (folded) ARROW_FOLDED else ARROW_OPEN);
+        try label.MarkLayoutDirty(engine_context);
+        return;
+    }
 }
 
 /// FoldNext for the header a tree node's arrow is in, the arrow's parent

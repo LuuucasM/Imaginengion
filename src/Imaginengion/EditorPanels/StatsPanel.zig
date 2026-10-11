@@ -19,7 +19,7 @@ const StatsPanel = @This();
 
 /// Where the window opens, from the middle of the editor UI, and how big it is
 const AT = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 300, .y = 100 };
-const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 420, .y = 360 };
+const SIZE = @import("../Math/MathTypes.zig").Vec2(f32){ .x = 420, .y = 380 };
 
 /// One world's section: a line for each stat
 const WorldLines = struct {
@@ -30,6 +30,8 @@ const WorldLines = struct {
     /// the BVH over each layer's shapes: how deep a ray walks down it
     OverlayBVH: Entity,
     GameBVH: Entity,
+    /// how good each tree is (BVH.TreeStats.Cost): lower is better for the same shapes
+    BVHCosts: Entity,
     Entities: Entity,
 };
 
@@ -101,6 +103,7 @@ fn World(engine_context: *EngineContext, content: Entity, title: []const u8, opt
         .Shadings = try Widgets.Label(engine_context, lines, ""),
         .OverlayBVH = try Widgets.Label(engine_context, lines, ""),
         .GameBVH = try Widgets.Label(engine_context, lines, ""),
+        .BVHCosts = try Widgets.Label(engine_context, lines, ""),
         .Entities = try Widgets.Label(engine_context, lines, ""),
     };
 }
@@ -125,6 +128,7 @@ fn SetWorld(engine_context: *EngineContext, lines: WorldLines, stats: EngineStat
     try SetLine(engine_context, lines.Shadings, "Shadings: {d} (surface {d}, medium {d})", .{ render.Shadings.TotalShadings, render.Shadings.SurfShadings, render.Shadings.MedShadings });
     try SetTreeLine(engine_context, lines.OverlayBVH, "Overlay", render.OverlayBVH);
     try SetTreeLine(engine_context, lines.GameBVH, "Game", render.GameBVH);
+    try SetLine(engine_context, lines.BVHCosts, "BVH cost: overlay {d:.1}, game {d:.1}", .{ render.OverlayBVH.Cost, render.GameBVH.Cost });
     try SetLine(engine_context, lines.Entities, "Entities: {d}", .{stats.mECSStats.TotalEntities});
 }
 

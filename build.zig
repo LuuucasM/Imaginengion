@@ -38,6 +38,14 @@ pub fn build(b: *std.Build) void {
     engine_module_eng.addOptions("debug_build_options", debug_build_options);
     engine_module_script.addOptions("debug_build_options", debug_build_options);
 
+    //a game packaged to send to someone: its scripts are built ahead of time and shipped with it, since whoever
+    //plays it has no zig or engine source to build them with
+    const prebuilt_scripts = b.option(bool, "prebuilt-scripts", "load script DLLs built ahead of time instead of compiling them, for a packaged game") orelse false;
+    var game_build_options = b.addOptions();
+    game_build_options.addOption(bool, "prebuilt_scripts", prebuilt_scripts);
+    engine_module_eng.addOptions("game_build_options", game_build_options);
+    engine_module_script.addOptions("game_build_options", game_build_options);
+
     var compute_build_options = b.addOptions();
     compute_build_options.addOption(bool, "compute_type", compute_type);
     engine_module_shader.addOptions("compute_build_options", compute_build_options);

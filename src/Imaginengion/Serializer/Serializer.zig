@@ -104,9 +104,11 @@ pub fn SaveECSObject(self: *Serializer, engine_context: *EngineContext, object: 
     }
 }
 
+/// Asks for a file and writes `object` to it. error.SaveCancelled when the dialog was closed without picking one, so
+/// nothing was written
 pub fn SaveECSObjAs(self: *Serializer, engine_context: *EngineContext, object: anytype) !void {
     const abs_path = try PlatformUtils.SaveFile(engine_context.FrameAllocator(), FileExtension(@TypeOf(object)), null);
-    if (abs_path.len == 0) return;
+    if (abs_path.len == 0) return error.SaveCancelled;
 
     try SerializeECSObject(engine_context, object, abs_path, .Text);
     const path_type = engine_context.mAssetManager.PathTypeOf(abs_path);

@@ -45,7 +45,7 @@
       "Text": { "Normal": [0.894, 0.910, 0.941, 1.0] }
     },
     "Popup": {
-      "Background": { "Normal": [0.067, 0.102, 0.157, 0.97] },
+      "Background": { "Normal": [0.067, 0.102, 0.157, 1.0] },
       "Border": { "Normal": [0.180, 0.239, 0.333, 0.60] },
       "BorderWidth": 1
     },

@@ -9,6 +9,7 @@ const Scene = @import("../../ECSObjects/Scene.zig");
 const UIManager = @import("../../UI/UIManager.zig");
 const WidgetActions = @import("../../UI/WidgetActions.zig");
 const Widgets = @import("../../UI/Widgets.zig");
+const MathTypes = @import("../../Math/MathTypes.zig");
 
 const EntityComponents = @import("../../ECSComponents/EComponents.zig");
 const SelectedTag = EntityComponents.SelectedTag;
@@ -130,6 +131,26 @@ test "a tree node's arrow folds its content and turns, and a leaf has no arrow a
     var gap_children = Child(leaf.Header, 0).GetIterator(.Child);
     try std.testing.expect(gap_children.next() == null);
     try WidgetActions.FoldNext(engine_context, leaf.Header);
+}
+
+test "a tree node's stripe comes before its arrow in its own color, with no style to repaint it, and folding still turns the arrow" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+
+    const color = MathTypes.Vec4(f32){ .x = 0.2, .y = 0.8, .z = 0.4, .w = 1 };
+    const tree = try Widgets.Tree(engine_context, .{ .Entity = world.mPanel });
+    const node = try Widgets.TreeNode(engine_context, .{ .Entity = tree }, "Player", .{ .StockScripts = false, .Stripe = color });
+    const stripe = Child(node.Header, 0);
+    try std.testing.expectEqual(Widgets.STRIPE_WIDTH, stripe.GetComponent(LayoutItemComponent).?.mWidth.Fixed);
+    try std.testing.expectEqual(color, stripe.GetComponent(EntityComponents.SurfaceComponent).?.mTexOptions.mColor);
+    try std.testing.expect(UIManager.GetUIComponent(stripe, StyleComponent) == null);
+    try std.testing.expectEqualStrings("Player", TextOf(UIManager.LabelOf(node.Header).?));
+
+    try std.testing.expectEqualStrings(WidgetActions.ARROW_FOLDED, TextOf(Child(node.Header, 1)));
+    try WidgetActions.FoldFromArrow(engine_context, Child(node.Header, 1));
+    try std.testing.expect(!node.Content.?.GetComponent(LayoutItemComponent).?.mCollapsed);
+    try std.testing.expectEqualStrings(WidgetActions.ARROW_OPEN, TextOf(Child(node.Header, 1)));
 }
 
 test "a collapsing header folds the content right after it, and folding a header without an arrow leaves its text" {

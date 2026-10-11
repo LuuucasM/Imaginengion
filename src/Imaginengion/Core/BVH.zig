@@ -3,9 +3,8 @@
 //! renderer builds one over its shapes, and the same code can build one over colliders.
 //!
 //! Built in stages, each its own piece:
-//! - Morton ordering: a number per item from where its center is, which sorting by puts items close in space next
-//!   to each other
-//! - the binary build: split the sorted items where their Morton codes first differ, down to small leaves
+//! - the binary build: top down, each node's items split in two where the surface area heuristic says a ray will
+//!   pay least for them (binned, see Split), the items reordered as it goes so each leaf's are a run of them
 //! - layouts: how the tree is laid out for whoever walks it. Node holds both ways to walk it: each inner node's two
 //!   children, which the GPU walks into the nearer one first (SDFRayMarcher.NearestByBVH, depth kept to MAX_DEPTH),
 //!   and Skip links for a walk with no stack in a fixed order, the CPU's (WalkRay). Wider trees (4 or 8 children) would
@@ -17,43 +16,6 @@ const Aabb = @import("../Math/Aabb.zig");
 const RayIntersect = @import("../Math/RayIntersect.zig");
 const Ray = @import("../Math/CameraRay.zig").Ray;
 const GPUAsserts = @import("GPUAsserts.zig");
-
-//==================================Morton ordering==================================
-
-/// How finely each axis is cut: 2^10 = 1024 steps each, 30 bits in all, which fits a u32 with room to spare
-pub const MORTON_BITS_PER_AXIS = 10;
-const MORTON_STEPS: f32 = 1 << MORTON_BITS_PER_AXIS;
-
-/// Spreads the low 10 bits of `value` out with two zero bits between each, so three of them can be interleaved
-/// into one number: bit i lands at bit 3i
-pub fn SpreadBits(value: u32) u32 {
-    var v = value & 0x3FF;
-    v = (v *% 0x00010001) & 0xFF0000FF;
-    v = (v *% 0x00000101) & 0x0F00F00F;
-    v = (v *% 0x00000011) & 0xC30C30C3;
-    v = (v *% 0x00000005) & 0x49249249;
-    return v;
-}
-
-/// Which of the 1024 steps along one axis `value` falls in, over `min` to `max`. A flat axis (min == max) is all in
-/// step 0, and anything outside clamps to the end steps
-fn Quantize(value: f32, min: f32, max: f32) u32 {
-    const extent = max - min;
-    if (!(extent > 0)) return 0;
-    const t = @min(@max((value - min) / extent, 0.0), 1.0);
-    return @min(@as(u32, @intFromFloat(t * MORTON_STEPS)), (1 << MORTON_BITS_PER_AXIS) - 1);
-}
-
-/// `point`'s Morton code within `bounds`: its step along x, y and z, their bits interleaved x first (x9 y9 z9 x8 y8
-/// z8 ... x0 y0 z0). Sorting by it traces a Z shaped path through space, so items close together sort close together,
-/// and a code's top bits say which region it is in: the top bit which half along x, the top two which quarter, and
-/// so on, which is where the binary build splits
-pub fn MortonCode(point: Vec3(f32), bounds: Aabb) u32 {
-    const x = Quantize(point.x, bounds.Min.x, bounds.Max.x);
-    const y = Quantize(point.y, bounds.Min.y, bounds.Max.y);
-    const z = Quantize(point.z, bounds.Min.z, bounds.Max.z);
-    return (SpreadBits(x) << 2) | (SpreadBits(y) << 1) | SpreadBits(z);
-}
 
 //==================================the tree==================================
 
@@ -147,18 +109,19 @@ comptime {
     GPUAsserts.AssertGPULayout(Node);
 }
 
-/// One item a tree is built over: its Morton code (MortonCode), its box and its mask. A build takes them sorted by
-/// code, and a leaf's items are a run of that sorted order, so whatever the items stand for can be kept in the same
-/// order and found by a leaf's FirstItem and ItemCount
+//// One item a tree is built over: its box, its mask, and an Id for whatever it stands for. A build reorders the items
+/// so each leaf's are a run of them, found by its FirstItem and ItemCount, and whoever built it puts what the items
+/// stand for in that same order by their Ids
 pub const Item = struct {
-    Code: u32,
+    /// the builder's own: the shape, collider... the item is, which the build carries along and never reads
+    Id: u32,
     Bounds: Aabb,
     Mask: u4,
 };
 
 /// The deepest a leaf can be, the root being 0. A walk that goes into the nearer child first keeps the farther one to
 /// come back to, at most one per level, so this is how many it can be holding (SDFRayMarcher.NearestByBVH). Build
-/// keeps to it by splitting down the middle wherever the Morton split would leave a half too big to fit
+/// keeps to it by splitting down the middle wherever its chosen split would leave a half too big to fit
 pub const MAX_DEPTH: u32 = 32;
 
 /// How many levels a range of `count` items needs below it at the least, split down the middle each time
@@ -177,10 +140,11 @@ comptime {
 /// How many ranges the build can have waiting: only right halves wait their turn, at most one per level
 const MAX_BUILD_DEPTH = MAX_DEPTH + 1;
 
-/// The tree over `items`, which have to be sorted by Code, into `nodes` (cleared first, its memory kept). No
-/// recursion: one pass makes the nodes depth first from a list of ranges still to do, one pass forward fills in each
-/// node's Skip, and Refit fills in the boxes and masks going back up
-pub fn Build(allocator: std.mem.Allocator, items: []const Item, nodes: *std.ArrayList(Node)) !void {
+/// The tree over `items` into `nodes` (cleared first, its memory kept), reordering `items` so each leaf's are a run of
+/// them. The same items in the same order always build the same tree. No recursion: one pass makes the nodes depth
+/// first from a list of ranges still to do, splitting each range's items as it gets to it, one pass forward fills in
+/// each node's Skip, and Refit fills in the boxes and masks going back up
+pub fn Build(allocator: std.mem.Allocator, items: []Item, nodes: *std.ArrayList(Node)) !void {
     nodes.clearRetainingCapacity();
     if (items.len == 0) return;
     std.debug.assert(items.len <= MAX_ITEMS);
@@ -206,11 +170,7 @@ pub fn Build(allocator: std.mem.Allocator, items: []const Item, nodes: *std.Arra
 
         //an inner node: its right half waits, its left half is made next, so it lands right after it
         try nodes.append(allocator, Node.Init(0, 0));
-        var split = SplitPoint(items, range.First, range.End);
-        //a half too big to fit in the levels left under MAX_DEPTH, the way a long run of codes one bit apart would make,
-        //goes down the middle instead, which always fits
-        const bigger_half = @max(split - range.First, range.End - split);
-        if (range.Depth + 1 + LevelsBelow(bigger_half) > MAX_DEPTH) split = range.First + count / 2;
+        const split = range.First + Split(items[range.First..range.End], range.Depth);
         std.debug.assert(pending_count + 2 <= MAX_BUILD_DEPTH);
         pending[pending_count] = .{ .First = split, .End = range.End, .RightOf = node_ind, .Depth = range.Depth + 1 };
         pending[pending_count + 1] = .{ .First = range.First, .End = split, .RightOf = null, .Depth = range.Depth + 1 };
@@ -231,22 +191,138 @@ pub fn Build(allocator: std.mem.Allocator, items: []const Item, nodes: *std.Arra
     Refit(items, nodes.items);
 }
 
-/// Where a range of items sorted by code splits in two: where their codes' highest differing bit turns from 0 to 1,
-/// so each half is one side of a plane through space. Items that all share one code split down the middle instead
-fn SplitPoint(items: []const Item, first: u32, end: u32) u32 {
-    const first_code = items[first].Code;
-    const last_code = items[end - 1].Code;
-    if (first_code == last_code) return first + (end - first) / 2;
+/// How many bins a split sorts a node's items into along each axis, by where their centers are, to try a split at
+/// every boundary between two: more finds a slightly better split, fewer builds slightly faster
+pub const SAH_BINS: u32 = 16;
 
-    //every code in the range shares the bits above this one, so the ones with it set are all at the end
-    const split_bit = @as(u32, 1) << @intCast(31 - @clz(first_code ^ last_code));
-    var low = first;
-    var high = end - 1;
-    while (low < high) {
-        const middle = low + (high - low) / 2;
-        if (items[middle].Code & split_bit != 0) high = middle else low = middle + 1;
+/// A split BestSplit has picked: the items whose centers fall in bins below Bin along Axis go left. Min and Scale
+/// place a center in its bin (BinOf), kept so the items are put in exactly the bins they were counted in
+const SplitChoice = struct {
+    Axis: usize,
+    Bin: u32,
+    LeftCount: u32,
+    Min: f32,
+    Scale: f32,
+};
+
+/// Splits `items`, more than a leaf holds, in two at depth `depth`: reorders them so the left half comes first and
+/// returns how many that is. The split is the cheapest by the surface area heuristic (BestSplit). Items whose centers
+/// are all in one spot, which no plane splits, and a split leaving a half too big to fit in the levels left under
+/// MAX_DEPTH, the way items each much further out than the last would peel off one at a time, go down the middle
+/// instead, which always fits
+fn Split(items: []Item, depth: u32) u32 {
+    const count: u32 = @intCast(items.len);
+    var centers = Aabb.empty;
+    for (items) |item| {
+        const center = item.Bounds.Center();
+        centers = centers.Union(.{ .Min = center, .Max = center });
     }
-    return low;
+
+    if (BestSplit(items, centers)) |best| {
+        const bigger_half = @max(best.LeftCount, count - best.LeftCount);
+        if (depth + 1 + LevelsBelow(bigger_half) <= MAX_DEPTH) {
+            Partition(items, best);
+            return best.LeftCount;
+        }
+    }
+    SortAlongWidest(items, centers);
+    return count / 2;
+}
+
+/// Which bin a center at `at` along an axis falls in, the bins starting at `min`, `scale` of them a unit
+fn BinOf(at: f32, min: f32, scale: f32) u32 {
+    const bin: u32 = @intFromFloat((at - min) * scale);
+    return @min(bin, SAH_BINS - 1);
+}
+
+fn CenterOn(item: Item, axis: usize) f32 {
+    const center: [3]f32 = item.Bounds.Center().ToVector();
+    return center[axis];
+}
+
+/// The cheapest split of `items`, whose centers are within `centers`, or null if every center is in one spot. Along
+/// each axis the centers spread over, the items go into SAH_BINS bins, each keeping a box around its items and how
+/// many there are, and each boundary between two bins is a split: its cost is each side's box's surface area times
+/// how many items it holds, added up. A ray through the node goes through a box with a chance in proportion to its
+/// area, and then has its items to pay for, so the cheapest split is the one a ray pays least for
+fn BestSplit(items: []const Item, centers: Aabb) ?SplitChoice {
+    const Bin = struct { Bounds: Aabb = .empty, Count: u32 = 0 };
+    const min: [3]f32 = centers.Min.ToVector();
+    const max: [3]f32 = centers.Max.ToVector();
+
+    var best: ?SplitChoice = null;
+    var best_cost = std.math.inf(f32);
+    for (0..3) |axis| {
+        const extent = max[axis] - min[axis];
+        if (!(extent > 0)) continue;
+        const scale = @as(f32, SAH_BINS) / extent;
+
+        var bins: [SAH_BINS]Bin = @splat(.{});
+        for (items) |item| {
+            const bin = &bins[BinOf(CenterOn(item, axis), min[axis], scale)];
+            bin.Bounds = bin.Bounds.Union(item.Bounds);
+            bin.Count += 1;
+        }
+
+        //every boundary's right side, swept in from the right end: what is in bin b and every bin past it
+        var right_costs: [SAH_BINS]f32 = undefined;
+        var right_counts: [SAH_BINS]u32 = undefined;
+        var right = Bin{};
+        var bin_ind = SAH_BINS;
+        while (bin_ind > 1) {
+            bin_ind -= 1;
+            right.Bounds = right.Bounds.Union(bins[bin_ind].Bounds);
+            right.Count += bins[bin_ind].Count;
+            right_counts[bin_ind] = right.Count;
+            right_costs[bin_ind] = if (right.Count > 0) right.Bounds.HalfArea() * @as(f32, @floatFromInt(right.Count)) else 0;
+        }
+
+        //then each boundary's left side, swept in from the left end. The first cheapest wins a tie, so the same items
+        //always split the same way
+        var left = Bin{};
+        for (1..SAH_BINS) |boundary| {
+            left.Bounds = left.Bounds.Union(bins[boundary - 1].Bounds);
+            left.Count += bins[boundary - 1].Count;
+            if (left.Count == 0 or right_counts[boundary] == 0) continue;
+            const cost = left.Bounds.HalfArea() * @as(f32, @floatFromInt(left.Count)) + right_costs[boundary];
+            if (cost < best_cost) {
+                best_cost = cost;
+                best = .{ .Axis = axis, .Bin = @intCast(boundary), .LeftCount = left.Count, .Min = min[axis], .Scale = scale };
+            }
+        }
+    }
+    return best;
+}
+
+/// Reorders `items` so the ones `split` puts on the left come first
+fn Partition(items: []Item, split: SplitChoice) void {
+    var left: usize = 0;
+    var right = items.len;
+    while (left < right) {
+        if (BinOf(CenterOn(items[left], split.Axis), split.Min, split.Scale) < split.Bin) {
+            left += 1;
+        } else {
+            right -= 1;
+            std.mem.swap(Item, &items[left], &items[right]);
+        }
+    }
+    std.debug.assert(left == split.LeftCount);
+}
+
+/// Sorts `items` by their centers along the axis `centers` is widest on, so splitting them down the middle still
+/// splits them in space. Items whose centers are all in one spot stay as they are
+fn SortAlongWidest(items: []Item, centers: Aabb) void {
+    const extent: [3]f32 = centers.Max.SubVec(centers.Min).ToVector();
+    var axis: usize = 0;
+    for (1..3) |other| {
+        if (extent[other] > extent[axis]) axis = other;
+    }
+    if (!(extent[axis] > 0)) return;
+    std.sort.pdq(Item, items, axis, struct {
+        fn lessThan(on: usize, a: Item, b: Item) bool {
+            return CenterOn(a, on) < CenterOn(b, on);
+        }
+    }.lessThan);
 }
 
 /// Each node's box and mask from the items under it, going back up: every node after its children, which come
@@ -285,6 +361,11 @@ pub const TreeStats = struct {
     /// every leaf's depth added up, for the average
     LeafDepths: u32 = 0,
     Items: u32 = 0,
+    /// How many boxes and items a ray through the root tests on average, if it went into every box it goes through and
+    /// stopped at none: the root's box, each inner node's two children's and each leaf's items, each counted by the
+    /// chance a ray through the root goes through that node's box, its surface area over the root's. What the build
+    /// keeps low (BestSplit): lower is a better tree for the same items
+    Cost: f32 = 0,
 
     /// How deep a leaf is on average: about how many levels a ray goes down to reach one
     pub fn AverageLeafDepth(self: TreeStats) f32 {
@@ -308,6 +389,9 @@ pub const TreeStats = struct {
 pub fn Stats(nodes: []const Node) TreeStats {
     var stats = TreeStats{ .Nodes = @intCast(nodes.len) };
     if (nodes.len == 0) return stats;
+    //a root with no area, everything in one point, has every ray through it go through everything
+    const root_area = nodes[0].Bounds().HalfArea();
+    stats.Cost = 1;
 
     //the branches still to go down, each with its depth. Going down one keeps the other, at most one per level
     const Branch = struct { Node: u32, Depth: u32 };
@@ -318,13 +402,16 @@ pub fn Stats(nodes: []const Node) TreeStats {
         waiting_count -= 1;
         const branch = waiting[waiting_count];
         const node = nodes[branch.Node];
+        const chance = if (root_area > 0) node.Bounds().HalfArea() / root_area else 1;
         if (node.IsLeaf()) {
+            stats.Cost += chance * @as(f32, @floatFromInt(node.ItemCount()));
             stats.Leaves += 1;
             stats.Items += node.ItemCount();
             stats.LeafDepths += branch.Depth;
             stats.Depth = @max(stats.Depth, branch.Depth);
             continue;
         }
+        stats.Cost += chance * 2;
         waiting[waiting_count] = .{ .Node = node.RightChild(), .Depth = branch.Depth + 1 };
         waiting[waiting_count + 1] = .{ .Node = branch.Node + 1, .Depth = branch.Depth + 1 };
         waiting_count += 2;

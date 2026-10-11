@@ -48,6 +48,11 @@ pub fn GetClipboardText(self: Window, allocator: std.mem.Allocator) ![]u8 {
     return self._Impl.GetClipboardText(allocator);
 }
 
+/// Puts `text` on the clipboard. `allocator` is only used for the copy handed to the OS
+pub fn SetClipboardText(self: Window, allocator: std.mem.Allocator, text: []const u8) !void {
+    return self._Impl.SetClipboardText(allocator, text);
+}
+
 pub fn IsMinimized(self: Window) bool {
     return self._Impl.IsMinimized();
 }

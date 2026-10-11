@@ -37,6 +37,7 @@ const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.Text
 const RenderPlatform = @import("RenderPlatform.zig");
 const FrameLimiter = @import("FrameLimiter.zig");
 const PassPlan = @import("PassPlan.zig");
+const BVHDump = @import("BVHDump.zig");
 pub const HeatMetric = @import("SDFRayMarcher.zig").HeatMetric;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const Viewports = @import("Viewports.zig");
@@ -298,6 +299,9 @@ mPresentMode: RenderPlatform.PresentMode = .VSync,
 /// The shader heatmap: which count of each pixel's work every pass draws instead of the picture, null for the picture.
 /// The editor's debug view (Editor > Shader Heatmap)
 mHeatmap: ?HeatMetric = null,
+/// Writes the next overlay pass's camera, shapes and BVH to a file (BVHDump), then goes back off. The editor's debug
+/// dump (F7), set just before the render it wants
+mDumpOverlayBVH: bool = false,
 mFrameLimiter: FrameLimiter = .Init(FRAME_LIMIT),
 mTextureManager: TextureManager = .{},
 mOverlayPipeline: SDFPipeline(.Overlay) = .empty,
@@ -587,6 +591,19 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         overlay_push_constants.mDirectCount = self.mR2D.GetDirectCount(.OverlayPipeline);
         overlay_push_constants.mFlags = if (plan.OverlayOnGameBackground) PushConstants.FLAG_GAME_BACKGROUND else 0;
         self.mOverlayPipeline.PushUniforms(cmd, overlay_push_constants);
+        if (self.mDumpOverlayBVH) {
+            self.mDumpOverlayBVH = false;
+            const buffers = &self.mR2D.mOverlayData;
+            if (BVHDump.Write(engine_context, .{
+                .Camera = overlay_push_constants,
+                .Shapes = buffers.mSortedShapes.items,
+                .Nodes = buffers.mBVHNodes.items,
+            })) {
+                std.log.info("Wrote the overlay pass's BVH to {s}", .{BVHDump.FILE_NAME});
+            } else |err| {
+                std.log.warn("Couldn't write the BVH dump: {t}", .{err});
+            }
+        }
 
         self.mOverlayPipeline.Dispatch(overlay_compute_pass, @intCast(compute_texture.GetWidth()), @intCast(compute_texture.GetHeight()));
         compute_texture.EndComputePass(overlay_compute_pass);
