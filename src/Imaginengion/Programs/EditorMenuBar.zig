@@ -170,8 +170,9 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     self.mPlayersMenu = try Widgets.Submenu(engine_context, editor, "Player Camera", options);
     _ = try Widgets.Separator(engine_context, .{ .Entity = editor });
     self.mVSync = try self.Add(engine_context, editor, "VSync", check_options, .ToggleVSync);
-    //a debug view: each pixel colored by how much work its ray did, black for none up to red
-    const heatmap = try Widgets.Submenu(engine_context, editor, "Shader Heatmap", options);
+    //a debug view: each pixel colored by how much work its ray did, from none up to red, over the picture dimmed. F6
+    //steps through it from the keyboard (EditorProgram.OnKeyboardPressedEvent)
+    const heatmap = try Widgets.Submenu(engine_context, editor, "Shader Heatmap (F6)", options);
     self.mHeatmapOff = try self.Add(engine_context, heatmap, "Off", check_options, .{ .SetHeatmap = null });
     inline for (comptime std.enums.values(HeatMetric)) |metric| {
         self.mHeatmapItems.set(metric, try self.Add(engine_context, heatmap, HeatmapTitle(metric), check_options, .{ .SetHeatmap = metric }));

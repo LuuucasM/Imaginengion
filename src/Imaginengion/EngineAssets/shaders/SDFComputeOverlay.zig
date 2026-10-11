@@ -73,14 +73,16 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
 
     //traverse ray tree backwards to obtain final output color
     const overlay_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
-    //the game layer has nothing in it this render, so its pass is skipped and this puts its background under instead.
-    //The heatmap shows how much work this pixel's ray did
-    const final_color = if (shader_variant.heatmap)
-        @import("IM").HeatColor(marcher.mCounters.OfIndex(CameraUBO.mHeatMetric), CameraUBO.mHeatRedAt)
-    else if (CameraUBO.mFlags & PushConstants.FLAG_GAME_BACKGROUND != 0)
+    //the game layer has nothing in it this render, so its pass is skipped and this puts its background under instead
+    const picture = if (CameraUBO.mFlags & PushConstants.FLAG_GAME_BACKGROUND != 0)
         SDFShared.Over(overlay_color, .FromArray(PushConstants.GAME_BACKGROUND))
     else
         overlay_color;
+    //the heatmap draws how much work this pixel's ray did over a dimmed copy of the picture
+    const final_color = if (shader_variant.heatmap)
+        @import("IM").HeatOver(@import("IM").HeatColor(marcher.mCounters.OfIndex(CameraUBO.mHeatMetric), CameraUBO.mHeatRedAt), picture)
+    else
+        picture;
 
     std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, final_color.ToVector());
 }

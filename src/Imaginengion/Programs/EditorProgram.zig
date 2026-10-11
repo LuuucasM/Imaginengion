@@ -994,6 +994,11 @@ pub fn OnKeyboardPressedEvent(self: *EditorProgram, engine_context: *EngineConte
     if (e._InputCode == .F5) {
         try self.OnChangeEditorStateEvent(engine_context);
     }
+    //the shader heatmap's own shortcut, which works however hard the heatmap makes the menus to read: off, each count in
+    //turn, then off again
+    if (e._InputCode == .F6) {
+        engine_context.mRenderer.mHeatmap = Renderer.HeatMetric.Next(engine_context.mRenderer.mHeatmap);
+    }
 
     return true;
 }

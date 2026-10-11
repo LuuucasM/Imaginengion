@@ -957,3 +957,26 @@ test "the heatmap goes from black for nothing through blue, green and yellow to 
     //half way between blue and green
     try ExpectColor(.{ .x = 0, .y = 0.5, .z = 0.5, .w = 1 }, SDFRayMarcher.HeatColor(3, 8));
 }
+
+test "the heatmap is drawn over the picture dimmed, so where nothing is counted the picture still shows" {
+    const share = SDFRayMarcher.HEAT_PICTURE_SHARE;
+    const nothing = SDFRayMarcher.HeatColor(0, 8);
+    //a white spot of the picture under no work: the picture, dimmed
+    try ExpectColor(.{ .x = share, .y = share, .z = share, .w = 1 }, SDFRayMarcher.HeatOver(nothing, WHITE));
+    //a see-through spot of the picture adds only as much of itself as it covers
+    const half_white = Vec4(f32){ .x = 1, .y = 1, .z = 1, .w = 0.5 };
+    try ExpectColor(.{ .x = share * 0.5, .y = share * 0.5, .z = share * 0.5, .w = 1 }, SDFRayMarcher.HeatOver(nothing, half_white));
+    //the most work: mostly red, with the picture still under it
+    try ExpectColor(.{ .x = 1 - share + share, .y = share, .z = share, .w = 1 }, SDFRayMarcher.HeatOver(RED, WHITE));
+}
+
+test "the heatmap's shortcut goes from off through every count and back to off" {
+    var metric: ?SDFRayMarcher.HeatMetric = null;
+    var seen: usize = 0;
+    metric = SDFRayMarcher.HeatMetric.Next(metric);
+    while (metric) |current| : (metric = SDFRayMarcher.HeatMetric.Next(metric)) {
+        try std.testing.expectEqual(@as(usize, @intFromEnum(current)), seen);
+        seen += 1;
+    }
+    try std.testing.expectEqual(std.enums.values(SDFRayMarcher.HeatMetric).len, seen);
+}

@@ -246,6 +246,13 @@ pub const HeatMetric = enum(u32) {
     /// march steps, for marched shapes
     MarchSteps,
 
+    /// What the heatmap's shortcut switches to from `current`: off, then each count in turn, then off again
+    pub fn Next(current: ?HeatMetric) ?HeatMetric {
+        const metric = current orelse return @enumFromInt(0);
+        const next = @intFromEnum(metric) + 1;
+        return if (next < std.enums.values(HeatMetric).len) @enumFromInt(next) else null;
+    }
+
     /// The count shown fully red. Fixed, so the colors mean the same numbers from one screenshot to the next
     pub fn RedAt(self: HeatMetric) u32 {
         return switch (self) {
@@ -275,6 +282,17 @@ pub fn HeatColor(count: u32, red_at: f32) Vec4(f32) {
     if (at < 2) return stops[1].Lerp(stops[2], at - 1);
     if (at < 3) return stops[2].Lerp(stops[3], at - 2);
     return stops[3].Lerp(stops[4], at - 3);
+}
+
+/// How much of the picture shows under the heatmap's colors
+pub const HEAT_PICTURE_SHARE: f32 = 0.4;
+
+/// The heatmap as it's drawn: its color over the picture dimmed underneath, so what each spot belongs to can still be
+/// seen and read, the editor's own menus included (where it's turned off). Where nothing is counted it's only the dimmed
+/// picture, never solid black
+pub fn HeatOver(heat: Vec4(f32), picture: Vec4(f32)) Vec4(f32) {
+    const rgb = heat.ToVec3().MulScalar(1.0 - HEAT_PICTURE_SHARE).AddVec(picture.ToVec3().MulScalar(picture.w * HEAT_PICTURE_SHARE));
+    return .{ .x = rgb.x, .y = rgb.y, .z = rgb.z, .w = 1 };
 }
 
 /// The work one pixel's ray did, counted by a marcher compiled with Features.Heatmap. Every other variant keeps it at 0
