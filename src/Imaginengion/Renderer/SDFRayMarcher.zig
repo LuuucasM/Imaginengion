@@ -327,8 +327,10 @@ pub const Counters = extern struct {
 /// How far a BVH node's box can reach past what it was built around and still count, as a share of the distance
 /// along the ray (at least 1 unit's worth). A box is worked out on the CPU from a shape's axes and a hit on the GPU
 /// in the shape's own space, so for a plate facing the ray the box's face and the plate's are the same distance away
-/// up to rounding. Without this a box could round to just past a hit it holds and be pruned, losing an exact tie
-const BVH_BOX_SLACK: f32 = 0.0001;
+/// up to rounding. Without this a box could round to just past a hit it holds and be pruned, losing an exact tie.
+/// A few float steps, no more: UI layers sit Widgets.DEPTH_STEP apart, about a thousandth of a world unit on an
+/// overlay canvas 100 units out, and any more than this hid that gap, so nothing behind a menu was ever pruned
+const BVH_BOX_SLACK: f32 = 4.0 * std.math.floatEps(f32);
 
 pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type, comptime bvh_nodes_type: type, comptime masks_type: type, comptime instrs_type: type, comptime parts_type: type, comptime surf_shading_type: type, comptime med_shading_type: type, comptime textures_array_type: type, comptime direct_search: DirectSearch, comptime features: Features) type {
     return extern struct {

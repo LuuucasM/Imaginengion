@@ -951,6 +951,21 @@ test "a ray onto the front of a deep stack of shapes searches the front leaf onl
     try std.testing.expectEqual(@as(u32, 1), counted.AcceptChecks);
 }
 
+test "UI layers a thousandth of a unit apart, as far out as an overlay canvas, are still told apart by the walk" {
+    //the overlay canvas sits 100 units out, and nested UI is DEPTH_STEP apart, about a thousandth of a world unit
+    //there. The walk's rounding let off has to stay well under that gap, or every layer counts as the same distance
+    //and nothing behind the front one is ever passed over
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    var shapes: [20]TestShape = undefined;
+    for (&shapes, 0..) |*shape, i| {
+        shape.* = MakeQuad(.{ .x = 0, .y = 0, .z = @as(f32, @floatFromInt(i)) * 0.001 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
+    }
+    const ray = Ray{ .Origin = .{ .x = 0, .y = 0, .z = 100 }, .Dir = .{ .x = 0, .y = 0, .z = -1 } };
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, ray);
+    try std.testing.expect(counted.ShapeTests <= BVH.MAX_LEAF_ITEMS);
+    try std.testing.expectEqual(@as(u32, 1), counted.AcceptChecks);
+}
+
 test "a see-through quad sends its ray on through, one more edge" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };
