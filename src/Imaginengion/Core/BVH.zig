@@ -6,8 +6,10 @@
 //! - Morton ordering: a number per item from where its center is, which sorting by puts items close in space next
 //!   to each other
 //! - the binary build: split the sorted items where their Morton codes first differ, down to small leaves
-//! - layouts: how the tree is laid out for whoever walks it. Node is the stack free one the GPU walks, which the CPU
-//!   can walk too (WalkRay). Wider trees (4 or 8 children) would be another layout, collapsed from the binary one
+//! - layouts: how the tree is laid out for whoever walks it. Node holds both ways to walk it: each inner node's two
+//!   children, which the GPU walks into the nearer one first (SDFRayMarcher.NearestByBVH, depth kept to MAX_DEPTH),
+//!   and Skip links for a walk with no stack in a fixed order, the CPU's (WalkRay). Wider trees (4 or 8 children) would
+//!   be another layout, collapsed from the binary one
 const std = @import("std");
 const MathTypes = @import("../Math/MathTypes.zig");
 const Vec3 = MathTypes.Vec3;
@@ -89,7 +91,8 @@ pub const Node = extern struct {
     MinY: f32,
     MinZ: f32,
     /// The node right after this one's whole subtree: where a walk goes once it has missed this node's box or
-    /// finished with it. The root's is the node count, the end of the walk
+    /// finished with it. The root's is the node count, the end of the walk. Only the CPU's stack free walk (WalkRay)
+    /// uses them now; the GPU goes into the nearer child first instead. Until WalkRay does too, for physics
     Skip: u32,
     MaxX: f32,
     MaxY: f32,
@@ -153,9 +156,26 @@ pub const Item = struct {
     Mask: u4,
 };
 
-/// The deepest a build can go: 30 Morton bits, then splits down the middle for items that share a code, which halve
-/// at most the 24 bits of MAX_ITEMS. Only right halves wait their turn, at most one per level
-const MAX_BUILD_DEPTH = 64;
+/// The deepest a leaf can be, the root being 0. A walk that goes into the nearer child first keeps the farther one to
+/// come back to, at most one per level, so this is how many it can be holding (SDFRayMarcher.NearestByBVH). Build
+/// keeps to it by splitting down the middle wherever the Morton split would leave a half too big to fit
+pub const MAX_DEPTH: u32 = 32;
+
+/// How many levels a range of `count` items needs below it at the least, split down the middle each time
+fn LevelsBelow(count: u32) u32 {
+    var levels: u32 = 0;
+    var left = count;
+    while (left > MAX_LEAF_ITEMS) : (levels += 1) left = left - left / 2;
+    return levels;
+}
+
+comptime {
+    //even the most items fit under MAX_DEPTH split down the middle, so a build can always keep to it
+    std.debug.assert(LevelsBelow(MAX_ITEMS) <= MAX_DEPTH);
+}
+
+/// How many ranges the build can have waiting: only right halves wait their turn, at most one per level
+const MAX_BUILD_DEPTH = MAX_DEPTH + 1;
 
 /// The tree over `items`, which have to be sorted by Code, into `nodes` (cleared first, its memory kept). No
 /// recursion: one pass makes the nodes depth first from a list of ranges still to do, one pass forward fills in each
@@ -167,10 +187,10 @@ pub fn Build(allocator: std.mem.Allocator, items: []const Item, nodes: *std.Arra
 
     //the structure, depth first. A range waiting its turn is a right half, whose parent's Info gets its index once it
     //is made, or the root
-    const Pending = struct { First: u32, End: u32, RightOf: ?u32 };
+    const Pending = struct { First: u32, End: u32, RightOf: ?u32, Depth: u32 };
     var pending: [MAX_BUILD_DEPTH]Pending = undefined;
     var pending_count: usize = 1;
-    pending[0] = .{ .First = 0, .End = @intCast(items.len), .RightOf = null };
+    pending[0] = .{ .First = 0, .End = @intCast(items.len), .RightOf = null, .Depth = 0 };
 
     while (pending_count > 0) {
         pending_count -= 1;
@@ -186,10 +206,14 @@ pub fn Build(allocator: std.mem.Allocator, items: []const Item, nodes: *std.Arra
 
         //an inner node: its right half waits, its left half is made next, so it lands right after it
         try nodes.append(allocator, Node.Init(0, 0));
-        const split = SplitPoint(items, range.First, range.End);
+        var split = SplitPoint(items, range.First, range.End);
+        //a half too big to fit in the levels left under MAX_DEPTH, the way a long run of codes one bit apart would make,
+        //goes down the middle instead, which always fits
+        const bigger_half = @max(split - range.First, range.End - split);
+        if (range.Depth + 1 + LevelsBelow(bigger_half) > MAX_DEPTH) split = range.First + count / 2;
         std.debug.assert(pending_count + 2 <= MAX_BUILD_DEPTH);
-        pending[pending_count] = .{ .First = split, .End = range.End, .RightOf = node_ind };
-        pending[pending_count + 1] = .{ .First = range.First, .End = split, .RightOf = null };
+        pending[pending_count] = .{ .First = split, .End = range.End, .RightOf = node_ind, .Depth = range.Depth + 1 };
+        pending[pending_count + 1] = .{ .First = range.First, .End = split, .RightOf = null, .Depth = range.Depth + 1 };
         pending_count += 2;
     }
 
@@ -251,12 +275,12 @@ pub fn Refit(items: []const Item, nodes: []Node) void {
     }
 }
 
-/// Walks the tree with a ray, the stack free way the GPU walks it: into each node whose box the ray reaches within how
-/// far is still worth looking and that has any of `mask`, and on to its Skip past any that it does not. Every item of
-/// each leaf it reaches is handed to `visitor.Visit(item_index)`, which returns how far along the ray is still worth
-/// looking: the nearest hit so far for a nearest hit search, which then passes over every box starting past it, or
-/// `max_t` again to see them all. A leaf's items can have different masks, so the visitor checks an item's own if
-/// that matters
+/// Walks the tree with a ray, the stack free way, in the tree's own fixed order: into each node whose box the ray
+/// reaches within how far is still worth looking and that has any of `mask`, and on to its Skip past any that it does
+/// not. Every item of each leaf it reaches is handed to `visitor.Visit(item_index)`, which returns how far along the ray
+/// is still worth looking: the nearest hit so far for a nearest hit search, which then passes over every box starting
+/// past it, or `max_t` again to see them all. A leaf's items can have different masks, so the visitor checks an item's
+/// own if that matters
 pub fn WalkRay(nodes: []const Node, ray: Ray, max_t: f32, mask: u32, visitor: anytype) void {
     const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
     var reach = max_t;

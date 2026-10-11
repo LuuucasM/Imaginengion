@@ -196,6 +196,44 @@ test "items that all share one Morton code still build a valid tree, split down 
     try ExpectValidTree(&items, nodes.items);
 }
 
+/// How deep the tree's deepest leaf is, the root being 0
+fn Depth(nodes: []const BVH.Node) u32 {
+    var deepest: u32 = 0;
+    var waiting: [64]struct { Node: u32, Depth: u32 } = undefined;
+    var waiting_count: usize = 1;
+    waiting[0] = .{ .Node = 0, .Depth = 0 };
+    while (waiting_count > 0) {
+        waiting_count -= 1;
+        const at = waiting[waiting_count];
+        const node = nodes[at.Node];
+        if (node.IsLeaf()) {
+            deepest = @max(deepest, at.Depth);
+            continue;
+        }
+        waiting[waiting_count] = .{ .Node = at.Node + 1, .Depth = at.Depth + 1 };
+        waiting[waiting_count + 1] = .{ .Node = node.RightChild(), .Depth = at.Depth + 1 };
+        waiting_count += 2;
+    }
+    return deepest;
+}
+
+test "a run of Morton codes one bit apart, which would make a long chain, still builds no deeper than MAX_DEPTH" {
+    //31 groups of 20 items, each group's code one more leading 1 bit than the last (1000..., 1100..., 1110...): every
+    //split on the highest differing bit peels off only one group, so without the cap the tree would be a chain about
+    //31 levels long before each group even starts splitting
+    var items: [31 * 20]BVH.Item = undefined;
+    for (&items, 0..) |*item, i| {
+        const group: u5 = @intCast(i / 20);
+        const x: f32 = @floatFromInt(i);
+        const code = ~@as(u32, 0) << (31 - @as(u5, group));
+        item.* = .{ .Code = code, .Bounds = .{ .Min = .{ .x = x, .y = 0, .z = 0 }, .Max = .{ .x = x + 1, .y = 1, .z = 1 } }, .Mask = BVH.Mask.RENDER };
+    }
+    var nodes = try BuildTree(&items);
+    defer nodes.deinit(std.testing.allocator);
+    try ExpectValidTree(&items, nodes.items);
+    try std.testing.expect(Depth(nodes.items) <= BVH.MAX_DEPTH);
+}
+
 test "a refit after items move keeps every box exactly around what is under it" {
     var prng = std.Random.DefaultPrng.init(0x4EF1);
     const items = try RandomItems(prng.random(), 120);

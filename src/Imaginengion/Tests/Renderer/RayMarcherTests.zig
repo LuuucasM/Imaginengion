@@ -924,6 +924,33 @@ test "a ray through a letter's gap checks both the glyph and the quad behind it,
     try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 2, .AcceptChecks = 2, .Edges = 1, .MarchSteps = 0 }, counted);
 }
 
+test "a ray onto the front of a stack of shapes in one leaf checks only the front one" {
+    //four quads one behind another, the way UI nests things DEPTH_STEP apart, few enough for the tree's one leaf. The
+    //leaf holds them back first (their centers' Morton codes grow with depth), so taking each that beats the nearest so
+    //far, in the leaf's order, would check all four
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    var shapes: [BVH.MAX_LEAF_ITEMS]TestShape = undefined;
+    for (&shapes, 0..) |*shape, i| {
+        shape.* = MakeQuad(.{ .x = 0, .y = 0, .z = @as(f32, @floatFromInt(i)) * 0.01 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
+    }
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
+    try std.testing.expectEqual(@as(u32, BVH.MAX_LEAF_ITEMS), counted.ShapeTests);
+    try std.testing.expectEqual(@as(u32, 1), counted.AcceptChecks);
+}
+
+test "a ray onto the front of a deep stack of shapes searches the front leaf only, and passes over the rest" {
+    //20 quads one behind another, over several leaves: the walk goes into the nearer child each time, so it reaches the
+    //front leaf first, and every box behind then starts past the hit it found there
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    var shapes: [20]TestShape = undefined;
+    for (&shapes, 0..) |*shape, i| {
+        shape.* = MakeQuad(.{ .x = 0, .y = 0, .z = @as(f32, @floatFromInt(i)) * 0.01 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK);
+    }
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
+    try std.testing.expect(counted.ShapeTests <= BVH.MAX_LEAF_ITEMS);
+    try std.testing.expectEqual(@as(u32, 1), counted.AcceptChecks);
+}
+
 test "a see-through quad sends its ray on through, one more edge" {
     const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
     const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };

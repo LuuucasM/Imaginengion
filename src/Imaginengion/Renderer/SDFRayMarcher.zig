@@ -151,6 +151,9 @@ const HitOrder = struct {
     //the shape's place in the shape buffer, which isn't compared: what the search hands back
     Shape: u32,
 
+    /// No hit: after every one, so it's never the nearest of anything
+    const none: HitOrder = .{ .T = std.math.inf(f32), .Rank = std.math.maxInt(u32), .DrawOrder = std.math.maxInt(u32), .Shape = NO_SHAPE };
+
     fn Of(t: f32, shape: ShapeData, shape_ind: u32) HitOrder {
         return .{ .T = t, .Rank = TieRank(shape.Type), .DrawOrder = shape.SurfaceIndex, .Shape = shape_ind };
     }
@@ -549,34 +552,109 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) nearest.* = .{ .Order = order, .Hit = hit };
         }
 
+        /// The shapes of one BVH leaf, checked nearest first: each is ray tested, then the ones that beat the nearest so
+        /// far are checked (Accepts) in order along the ray, stopping at the first that's really drawn, since every one
+        /// after it is further away. Whatever order the leaf holds them in, a stack of shapes facing the ray costs one
+        /// check, not one per shape that was nearest for a moment. Every loop over the leaf is unrolled, so each slot is
+        /// read with a constant index and stays in a register: a runtime indexed array would sit in slow local memory
+        fn ConsiderLeaf(self: *Self, ray: Ray, leaf: BVHNode, skip_shape: u32, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+            const first = leaf.FirstItem();
+            const count = leaf.ItemCount();
+
+            //where along the ray each slot's shape is hit, none for one that's missed, skipped or can't win
+            var orders: [BVH.MAX_LEAF_ITEMS]HitOrder = undefined;
+            inline for (&orders, 0..) |*order, slot| {
+                order.* = .none;
+                const shape_ind: u32 = first + @as(u32, slot);
+                if (slot < count and shape_ind != skip_shape) {
+                    const shape: ShapeData = self.mShapes[shape_ind];
+                    self.Count(.ShapeTests);
+                    const hit = HitShape(features, ray, shape);
+                    if (IsFrontHit(hit)) {
+                        const hit_order = HitOrder.Of(hit.T, shape, shape_ind);
+                        if (hit_order.Before(nearest.Order)) order.* = hit_order;
+                    }
+                }
+            }
+
+            //the nearest left each time, until one is drawn or none is left
+            var picks: u32 = 0;
+            while (picks < count) : (picks += 1) {
+                var best: HitOrder = .none;
+                inline for (orders) |order| {
+                    if (order.Before(best)) best = order;
+                }
+                if (best.Shape == NO_SHAPE) return;
+
+                //its hit again, rather than keeping every slot's whole hit in registers for the one or two checked
+                const shape: ShapeData = self.mShapes[best.Shape];
+                const hit = HitShape(features, ray, shape);
+                self.Count(.AcceptChecks);
+                if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) {
+                    nearest.* = .{ .Order = best, .Hit = hit };
+                    return;
+                }
+                inline for (&orders) |*order| {
+                    if (order.Shape == best.Shape) order.* = .none;
+                }
+            }
+        }
+
         //==================================the two direct searches (DirectSearch)==================================
 
-        /// DirectSearch.BVH: walks the tree over the direct shapes the stack free way (Core/BVH.zig), into each node the
-        /// ray reaches and on to its Skip past each it doesn't, considering the shapes of every leaf it reaches. A leaf's
-        /// shapes are a run of mShapes, since the tree was built over them in that order
+        /// DirectSearch.BVH: walks the tree over the direct shapes (Core/BVH.zig) into the nearer child first, considering
+        /// the shapes of every leaf it reaches. The farther child waits its turn, and by then a hit found in the nearer
+        /// one usually starts before its box does, so it's passed over without going in: a menu in front of a panel is
+        /// searched first, and everything behind it skipped. Each inner node has its left child right after it and its
+        /// right one in its Info. A leaf's shapes are a run of mShapes, since the tree was built over them in that order
         fn NearestByBVH(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
-            const node_count = self.mBVHNodes[0].Skip;
+            //the farther children still to come back to, the next on top: at most one per level (BVH.MAX_DEPTH)
+            var waiting: [BVH.MAX_DEPTH]u32 = undefined;
+            var waiting_count: u32 = 0;
+
+            self.Count(.BVHNodes);
+            if (NodeEnter(ray, inv_dir, self.mBVHNodes[0], nearest.Order) == null) return nearest;
             var node_ind: u32 = 0;
-            while (node_ind < node_count) {
+            while (true) {
                 const node: BVHNode = self.mBVHNodes[node_ind];
-                self.Count(.BVHNodes);
-                if (!ReachesNode(ray, inv_dir, node, nearest.Order)) {
-                    node_ind = node.Skip;
-                    continue;
+                if (node.IsLeaf()) {
+                    self.ConsiderLeaf(ray, node, skip_shape, &nearest, sample_sampler, textures_array);
+                } else {
+                    const left_ind = node_ind + 1;
+                    const right_ind = node.RightChild();
+                    self.Count(.BVHNodes);
+                    const left_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[left_ind], nearest.Order);
+                    self.Count(.BVHNodes);
+                    const right_enter = NodeEnter(ray, inv_dir, self.mBVHNodes[right_ind], nearest.Order);
+                    if (left_enter) |left| {
+                        if (right_enter) |right| {
+                            //both: into the one the ray reaches first, the other waits
+                            const left_first = left <= right;
+                            waiting[waiting_count] = if (left_first) right_ind else left_ind;
+                            waiting_count += 1;
+                            node_ind = if (left_first) left_ind else right_ind;
+                        } else node_ind = left_ind;
+                        continue;
+                    }
+                    if (right_enter != null) {
+                        node_ind = right_ind;
+                        continue;
+                    }
                 }
-                if (!node.IsLeaf()) {
-                    node_ind += 1;
-                    continue;
-                }
-                const first = node.FirstItem();
-                for (first..first + node.ItemCount()) |shape_ind| {
-                    self.ConsiderShape(ray, @intCast(shape_ind), skip_shape, &nearest, sample_sampler, textures_array);
-                }
-                node_ind = node.Skip;
+
+                //back to the last waiting child whose box still starts before the nearest hit, or done
+                while (waiting_count > 0) {
+                    waiting_count -= 1;
+                    const next = waiting[waiting_count];
+                    self.Count(.BVHNodes);
+                    if (NodeEnter(ray, inv_dir, self.mBVHNodes[next], nearest.Order) != null) {
+                        node_ind = next;
+                        break;
+                    }
+                } else return nearest;
             }
-            return nearest;
         }
 
         /// DirectSearch.Linear: considers every direct shape, the BVH walk's answer key
@@ -588,15 +666,16 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             return nearest;
         }
 
-        /// Whether a BVH walk goes into `node`: it holds shapes to draw, the ray goes through its box in front of its
-        /// origin, and the box doesn't start past the nearest hit so far, so it could hold something nearer. Let off by
-        /// BVH_BOX_SLACK, and an exact equal is kept, so a tie at the same distance still gets looked at
-        fn ReachesNode(ray: Ray, inv_dir: Vec3(f32), node: BVHNode, nearest: HitOrder) bool {
-            if (node.ItemMask() & BVH.Mask.RENDER == 0) return false;
+        /// How far along the ray a BVH walk reaches `node`'s box, null when it doesn't go in: the node holds nothing to
+        /// draw, the ray misses its box or only meets it behind its origin, or the box starts past the nearest hit so
+        /// far, so it can't hold anything nearer. Let off by BVH_BOX_SLACK, and an exact equal is kept, so a tie at the
+        /// same distance still gets looked at
+        fn NodeEnter(ray: Ray, inv_dir: Vec3(f32), node: BVHNode, nearest: HitOrder) ?f32 {
+            if (node.ItemMask() & BVH.Mask.RENDER == 0) return null;
             const bounds = node.Bounds();
-            const span = RayIntersect.RayAabb(ray.Origin, inv_dir, bounds.Min, bounds.Max) orelse return false;
+            const span = RayIntersect.RayAabb(ray.Origin, inv_dir, bounds.Min, bounds.Max) orelse return null;
             const slack = BVH_BOX_SLACK * @max(1.0, @abs(nearest.T));
-            return span.Enter <= nearest.T + slack;
+            return if (span.Enter <= nearest.T + slack) span.Enter else null;
         }
 
         /// The nearest surface a ray draws among the marched shapes, stepping along it no further than `limit`. Each
