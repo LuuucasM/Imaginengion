@@ -9,6 +9,7 @@ const Player = @import("../../ECSObjects/Player.zig");
 const Widgets = @import("../../UI/Widgets.zig");
 const WidgetActions = @import("../../UI/WidgetActions.zig");
 const EditorMenuBar = @import("../../Programs/EditorMenuBar.zig");
+const HeatMetric = @import("../../Renderer/SDFRayMarcher.zig").HeatMetric;
 const ObjectKind = @import("../../Serializer/Serializer.zig").ObjectKind;
 
 const DisabledTag = @import("../../ECSComponents/EComponents.zig").DisabledTag;
@@ -111,6 +112,28 @@ test "the VSync item toggles vsync, and is checked while it is on" {
     state.VSync = false;
     try menu_bar.Update(engine_context, state);
     try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mVSync));
+}
+
+test "the Shader Heatmap items pick what it counts, Off draws the picture again, and only the one shown is checked" {
+    const world = try TestWorld.Init();
+    defer world.Deinit();
+    const engine_context = world.mEngineContext;
+    var menu_bar = try EditorMenuBar.Build(engine_context, world.mBar, .{ .StockScripts = false });
+    defer menu_bar.Deinit(engine_context.EngineAllocator());
+
+    try std.testing.expectEqual(@as(?HeatMetric, null), menu_bar.ActionOf(menu_bar.mHeatmapOff).?.SetHeatmap);
+    try std.testing.expectEqual(@as(?HeatMetric, .AcceptChecks), menu_bar.ActionOf(menu_bar.mHeatmapItems.get(.AcceptChecks)).?.SetHeatmap);
+
+    var state = State(&.{}, null);
+    try menu_bar.Update(engine_context, state);
+    try std.testing.expect(WidgetActions.IsChecked(menu_bar.mHeatmapOff));
+    try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mHeatmapItems.get(.BVHNodes)));
+
+    state.Heatmap = .BVHNodes;
+    try menu_bar.Update(engine_context, state);
+    try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mHeatmapOff));
+    try std.testing.expect(WidgetActions.IsChecked(menu_bar.mHeatmapItems.get(.BVHNodes)));
+    try std.testing.expect(!WidgetActions.IsChecked(menu_bar.mHeatmapItems.get(.ShapeTests)));
 }
 
 test "the players to follow are listed, checked when followed, and listed again when they change" {

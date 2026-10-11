@@ -37,6 +37,7 @@ const TextureFormat = @import("../ECSComponents/AComponents.zig").Texture2D.Text
 const RenderPlatform = @import("RenderPlatform.zig");
 const FrameLimiter = @import("FrameLimiter.zig");
 const PassPlan = @import("PassPlan.zig");
+pub const HeatMetric = @import("SDFRayMarcher.zig").HeatMetric;
 const TextureManager = @import("../TextureManager/TextureManager.zig");
 const Viewports = @import("Viewports.zig");
 const RenderTargetComponent = @import("../ECSComponents/Shared/RenderTargetComponent.zig");
@@ -294,6 +295,9 @@ pub const ShadingBuffers = struct {
 mPlatform: RenderPlatform = .{},
 /// How frames reach the window: vsync until something switches it (SetPresentMode)
 mPresentMode: RenderPlatform.PresentMode = .VSync,
+/// The shader heatmap: which count of each pixel's work every pass draws instead of the picture, null for the picture.
+/// The editor's debug view (Editor > Shader Heatmap)
+mHeatmap: ?HeatMetric = null,
 mFrameLimiter: FrameLimiter = .Init(FRAME_LIMIT),
 mTextureManager: TextureManager = .{},
 mOverlayPipeline: SDFPipeline(.Overlay) = .empty,
@@ -378,6 +382,8 @@ pub fn BuildPushConstants(transform_component: *TransformComponent, viewpoint_co
         .mViewportWidth = @floatFromInt(viewpoint_component.mViewportWidth),
         .mViewportHeight = @floatFromInt(viewpoint_component.mViewportHeight),
         .mFlags = 0,
+        .mHeatMetric = 0,
+        .mHeatRedAt = 1,
     };
 }
 
@@ -502,6 +508,17 @@ fn DrawShape(self: *Renderer, engine_context: *EngineContext, shape: ShapeGeomet
     }
 }
 
+/// Which compile of the shader a pass runs: the heatmap one while it's shown, otherwise the lean one unless the pass has
+/// merges or marched shapes. Only right once the pass's shapes are sorted (SetBuffers), for the direct count
+fn PassVariant(self: *const Renderer, pipeline_kind: RenderPipeline.PipelineType) PassPlan.ShaderVariant {
+    if (self.mHeatmap != null) return .Heatmap;
+    return PassPlan.VariantFor(
+        self.mR2D.GetMergeCount(pipeline_kind),
+        self.mR2D.GetShapeCount(pipeline_kind),
+        self.mR2D.GetDirectCount(pipeline_kind),
+    );
+}
+
 fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineContext, compute_texture: *ComputeOutput, rendering_mode: RenderingMode) !void {
     const zone = Tracy.ZoneInit("Renderer::EndRendering", @src());
     defer zone.Deinit();
@@ -519,6 +536,12 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         self.mR2D.GetShapeCount(.OverlayPipeline),
         self.mR2D.GetShapeCount(.GamePipeline),
     );
+
+    //what the heatmap colors by, read only by its compile. Set before the overlay pass copies the push constants
+    if (self.mHeatmap) |metric| {
+        self.mSDFPushConstants.mHeatMetric = @intFromEnum(metric);
+        self.mSDFPushConstants.mHeatRedAt = @floatFromInt(metric.RedAt());
+    }
 
     if (plan.ClearTo != .None) {
         self.mPlatform.PushDebugGroup("Clear");
@@ -550,13 +573,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
 
         const overlay_compute_pass = compute_texture.BeginComputePass(engine_context, true);
 
-        //the lean compile unless this pass has merges or marched shapes. Its shapes are sorted by now, so the direct count
-        //is right
-        self.mOverlayPipeline.Bind(overlay_compute_pass, PassPlan.VariantFor(
-            self.mR2D.GetMergeCount(.OverlayPipeline),
-            self.mR2D.GetShapeCount(.OverlayPipeline),
-            self.mR2D.GetDirectCount(.OverlayPipeline),
-        ));
+        self.mOverlayPipeline.Bind(overlay_compute_pass, self.PassVariant(.OverlayPipeline));
         self.mR2D.BindBuffers(overlay_compute_pass, .OverlayPipeline);
         self.mSDFShading.BindBuffers(overlay_compute_pass);
         self.mTextureManager.BindCompute(overlay_compute_pass);
@@ -583,11 +600,7 @@ fn EndRendering(self: *Renderer, stats: *RenderStats, engine_context: *EngineCon
         //under an overlay it reads what that pass wrote, so the texture can't be swapped for a fresh one
         const game_compute_pass = compute_texture.BeginComputePass(engine_context, !plan.GameUnderOverlay);
 
-        self.mGamePipeline.Bind(game_compute_pass, PassPlan.VariantFor(
-            self.mR2D.GetMergeCount(.GamePipeline),
-            self.mR2D.GetShapeCount(.GamePipeline),
-            self.mR2D.GetDirectCount(.GamePipeline),
-        ));
+        self.mGamePipeline.Bind(game_compute_pass, self.PassVariant(.GamePipeline));
         self.mR2D.BindBuffers(game_compute_pass, .GamePipeline);
         self.mSDFShading.BindBuffers(game_compute_pass);
         self.mTextureManager.BindCompute(game_compute_pass);

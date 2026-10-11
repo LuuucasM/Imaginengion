@@ -36,9 +36,12 @@ const OverlayRayMarcher = RayMarcherFn(
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
     .BVH,
-    //this compile's variant (build_shaders.zig): the CPU runs the lean one for a pass with no merges and no marched shapes
-    if (@import("shader_variant").lean) .lean else .full,
+    //this compile's variant (build_shaders.zig): the CPU runs the lean one for a pass with no merges and no marched
+    //shapes, and the heatmap one while the editor shows the shader heatmap
+    if (shader_variant.lean) .lean else if (shader_variant.heatmap) .heatmap else .full,
 );
+
+const shader_variant = @import("shader_variant");
 
 export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void {
     const global = spirv.global_invocation_id;
@@ -70,8 +73,11 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
 
     //traverse ray tree backwards to obtain final output color
     const overlay_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
-    //the game layer has nothing in it this render, so its pass is skipped and this puts its background under instead
-    const final_color = if (CameraUBO.mFlags & PushConstants.FLAG_GAME_BACKGROUND != 0)
+    //the game layer has nothing in it this render, so its pass is skipped and this puts its background under instead.
+    //The heatmap shows how much work this pixel's ray did
+    const final_color = if (shader_variant.heatmap)
+        @import("IM").HeatColor(marcher.mCounters.OfIndex(CameraUBO.mHeatMetric), CameraUBO.mHeatRedAt)
+    else if (CameraUBO.mFlags & PushConstants.FLAG_GAME_BACKGROUND != 0)
         SDFShared.Over(overlay_color, .FromArray(PushConstants.GAME_BACKGROUND))
     else
         overlay_color;

@@ -2,10 +2,12 @@ const std = @import("std");
 const MakeEngineLib = @import("MakeEngineLib.zig").MakeEngineLib;
 
 /// Every shader is compiled once per variant (SDFRayMarcher.Features), each embedded under its own name: the plain one
-/// does everything, the Lean one only direct shapes and their masks, for passes with no merges and no marched shapes
+/// does everything, the Lean one only direct shapes and their masks, for passes with no merges and no marched shapes,
+/// and the Heatmap one everything, counted, for the editor's shader heatmap. Name, lean, heatmap
 const variants = .{
-    .{ "", false },
-    .{ "Lean", true },
+    .{ "", false, false },
+    .{ "Lean", true, false },
+    .{ "Heatmap", false, true },
 };
 
 const shaders = .{
@@ -31,9 +33,10 @@ pub fn BuildShader(b: *std.Build, module: *std.Build.Module, target: std.Build.R
         inline for (variants) |v| {
             const name = s[0] ++ v[0];
 
-            //which variant this compile is, read by the shader's main as @import("shader_variant").lean
+            //which variant this compile is, read by the shader's main as @import("shader_variant")
             const variant_options = b.addOptions();
             variant_options.addOption(bool, "lean", v[1]);
+            variant_options.addOption(bool, "heatmap", v[2]);
 
             const obj = b.addExecutable(.{
                 .name = name,

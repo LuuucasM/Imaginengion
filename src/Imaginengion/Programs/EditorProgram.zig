@@ -1094,6 +1094,7 @@ fn UpdateMenuBar(self: *EditorProgram, engine_context: *EngineContext) !void {
         .CanPlayStop = self.mEditorState == .Play or (if (self.mRunPlayer) |run_player| run_player.GetRenderView() != null else false),
         .PlayPreview = self.mShowPlayPreview,
         .VSync = engine_context.mRenderer.mPresentMode == .VSync,
+        .Heatmap = engine_context.mRenderer.mHeatmap,
         .Players = players.items,
         .Following = self.mRunPlayer,
     });
@@ -1170,6 +1171,7 @@ fn RunMenuAction(self: *EditorProgram, engine_context: *EngineContext, action: E
         .TogglePlayPreview => self.mShowPlayPreview = !self.mShowPlayPreview,
         //menu actions run before this pass of the loop renders, so no frame has its window image yet
         .ToggleVSync => _ = engine_context.mRenderer.SetPresentMode(engine_context, if (engine_context.mRenderer.mPresentMode == .VSync) .Off else .VSync),
+        .SetHeatmap => |metric| engine_context.mRenderer.mHeatmap = metric,
         .FollowPlayer => |player| {
             const already = if (self.mRunPlayer) |run_player| run_player.mID == player.mID else false;
             self.mRunPlayer = if (already) null else player;

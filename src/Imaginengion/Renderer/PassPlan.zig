@@ -42,6 +42,9 @@ pub const ShaderVariant = enum {
     /// only direct shapes and their masks, with merges and marching compiled out: fewer registers, so more pixels in
     /// flight at once
     Lean,
+    /// everything, with the work each pixel's ray does counted and drawn as a heatmap instead of the picture: the
+    /// editor's debug view, never picked by VariantFor
+    Heatmap,
 };
 
 /// The leanest compile that can draw a pass: Lean unless it has a merge, or a shape found by marching (every shape past

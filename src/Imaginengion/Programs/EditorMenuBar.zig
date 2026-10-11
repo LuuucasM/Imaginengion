@@ -1,5 +1,5 @@
 //! The editor's menu bar, built out of the editor UI's menu widgets (Widgets.MenuBar, Menu, MenuItem, Submenu): File,
-//! Project (the scene, player and game mode the game starts from), Window and Editor (theme, play options, vsync). Opening, closing and switching menus is the stock menu scripts'.
+//! Project (the scene, player and game mode the game starts from), Window and Editor (theme, play options, vsync, shader heatmap). Opening, closing and switching menus is the stock menu scripts'.
 //! What an item does is the editor's: this keeps which item is which action (ActionOf), and the editor runs the action when the item is clicked. Every frame
 //! Update puts the editor's state on the items: which panels are shown (check marks), what can't be done right now
 //! (greyed out, DisabledTag, e.g. saving a scene with no scene selected), and the players the play preview can follow, a list rebuilt when they change.
@@ -12,6 +12,7 @@ const Project = @import("../Core/Project.zig");
 const ObjectKind = @import("../Serializer/Serializer.zig").ObjectKind;
 const Widgets = @import("../UI/Widgets.zig");
 const WidgetActions = @import("../UI/WidgetActions.zig");
+const HeatMetric = @import("../Renderer/SDFRayMarcher.zig").HeatMetric;
 
 const EditorMenuBar = @This();
 
@@ -66,7 +67,21 @@ pub const Action = union(enum) {
     FollowPlayer: Player,
     /// turn vsync off if it is on, on if it is off
     ToggleVSync,
+    /// draw every pass as a heatmap of this count of each pixel's work, or the picture again for null
+    SetHeatmap: ?HeatMetric,
 };
+
+/// A Shader Heatmap item's text: what it counts, and the count shown fully red
+fn HeatmapTitle(comptime metric: HeatMetric) []const u8 {
+    const what = switch (metric) {
+        .BVHNodes => "BVH nodes",
+        .ShapeTests => "Shape tests",
+        .AcceptChecks => "Accept checks",
+        .Edges => "Ray tree edges",
+        .MarchSteps => "March steps",
+    };
+    return comptime std.fmt.comptimePrint("{s} (red = {d})", .{ what, metric.RedAt() });
+}
 
 /// The editor's state the items show, for Update
 pub const State = struct {
@@ -80,6 +95,8 @@ pub const State = struct {
     PlayPreview: bool,
     /// whether frames wait for the screen's refresh (Renderer.mPresentMode)
     VSync: bool,
+    /// what the shader heatmap counts, null when the picture is drawn (Renderer.mHeatmap)
+    Heatmap: ?HeatMetric = null,
     /// the players the play preview can follow, and the one it does
     Players: []const Player,
     Following: ?Player,
@@ -99,6 +116,9 @@ mEntryItems: std.EnumArray(Project.Entry, Entity) = .initFill(.uninit),
 mPlayStop: Entity = .uninit,
 mPlayPreview: Entity = .uninit,
 mVSync: Entity = .uninit,
+/// The Shader Heatmap submenu's items: Off, and one per count it can show
+mHeatmapOff: Entity = .uninit,
+mHeatmapItems: std.EnumArray(HeatMetric, Entity) = .initFill(.uninit),
 /// The Player Camera submenu, and its items, one per player, in the order of the players
 mPlayersMenu: Entity = .uninit,
 mPlayerItems: std.ArrayList(ItemAction) = .empty,
@@ -150,6 +170,12 @@ pub fn Build(engine_context: *EngineContext, bar: Entity, options: Widgets.Optio
     self.mPlayersMenu = try Widgets.Submenu(engine_context, editor, "Player Camera", options);
     _ = try Widgets.Separator(engine_context, .{ .Entity = editor });
     self.mVSync = try self.Add(engine_context, editor, "VSync", check_options, .ToggleVSync);
+    //a debug view: each pixel colored by how much work its ray did, black for none up to red
+    const heatmap = try Widgets.Submenu(engine_context, editor, "Shader Heatmap", options);
+    self.mHeatmapOff = try self.Add(engine_context, heatmap, "Off", check_options, .{ .SetHeatmap = null });
+    inline for (comptime std.enums.values(HeatMetric)) |metric| {
+        self.mHeatmapItems.set(metric, try self.Add(engine_context, heatmap, HeatmapTitle(metric), check_options, .{ .SetHeatmap = metric }));
+    }
     return self;
 }
 
@@ -177,6 +203,10 @@ pub fn Update(self: *EditorMenuBar, engine_context: *EngineContext, state: State
     }
     try WidgetActions.SetChecked(engine_context, self.mPlayPreview, state.PlayPreview);
     try WidgetActions.SetChecked(engine_context, self.mVSync, state.VSync);
+    try WidgetActions.SetChecked(engine_context, self.mHeatmapOff, state.Heatmap == null);
+    for (std.enums.values(HeatMetric)) |metric| {
+        try WidgetActions.SetChecked(engine_context, self.mHeatmapItems.get(metric), state.Heatmap == metric);
+    }
     for (std.enums.values(ObjectKind)) |kind| {
         for (self.mSaveItems.get(kind)) |item| try WidgetActions.SetDisabled(engine_context, item, state.Selected != kind);
     }

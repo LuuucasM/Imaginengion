@@ -48,6 +48,10 @@ pub const SDFPushConstants = extern struct {
     mViewportHeight: f32,
     //the FLAG_ bits, set per pass from the render's PassPlan
     mFlags: u32,
+    //the heatmap compile only (SDFRayMarcher.Features.Heatmap): which count it colors pixels by
+    //(SDFRayMarcher.HeatMetric) and the count shown fully red
+    mHeatMetric: u32,
+    mHeatRedAt: f32,
 };
 
 comptime {

@@ -222,11 +222,85 @@ pub const Features = struct {
     Merges: bool = true,
     /// shapes found by marching, past the direct ones (mDirectCount < mShapesCount)
     Marched: bool = true,
+    /// counts the work each pixel's ray does (Counters), for the shader heatmap, a debug view of where it costs most
+    Heatmap: bool = false,
 
     /// everything: what a pass needs when it has merges or marched shapes
     pub const full: Features = .{};
     /// only direct shapes and their masks: the editor's own UI
     pub const lean: Features = .{ .Merges = false, .Marched = false };
+    /// everything, counted: draws any pass, as a heatmap of one of its Counters
+    pub const heatmap: Features = .{ .Heatmap = true };
+};
+
+/// What the shader heatmap colors a pixel by: one of the counts of the work its ray did
+pub const HeatMetric = enum(u32) {
+    /// BVH nodes the direct search tested its ray against
+    BVHNodes,
+    /// direct shapes ray tested, in the leaves the search reached
+    ShapeTests,
+    /// hits checked for really being drawn (Accepts): masks, letters' coverage, merges' programs
+    AcceptChecks,
+    /// ray tree edges: 1, and one more for each see-through surface the ray went on through
+    Edges,
+    /// march steps, for marched shapes
+    MarchSteps,
+
+    /// The count shown fully red. Fixed, so the colors mean the same numbers from one screenshot to the next
+    pub fn RedAt(self: HeatMetric) u32 {
+        return switch (self) {
+            .BVHNodes => 64,
+            .ShapeTests => 32,
+            .AcceptChecks => 8,
+            .Edges => 8,
+            .MarchSteps => 64,
+        };
+    }
+};
+
+/// The heatmap's color for `count` of a metric that is fully red at `red_at`: black for none, then blue, green, yellow
+/// and red at a quarter, half, three quarters and all of `red_at`, and red past it. Opaque, so it hides what's below
+pub fn HeatColor(count: u32, red_at: f32) Vec4(f32) {
+    const stops = [_]Vec4(f32){
+        .{ .x = 0, .y = 0, .z = 0, .w = 1 },
+        .{ .x = 0, .y = 0, .z = 1, .w = 1 },
+        .{ .x = 0, .y = 1, .z = 0, .w = 1 },
+        .{ .x = 1, .y = 1, .z = 0, .w = 1 },
+        .{ .x = 1, .y = 0, .z = 0, .w = 1 },
+    };
+    //where between the stops, 0 to 4. Each stop picked with a constant index, as a runtime indexed array would sit in
+    //a GPU's slow local memory
+    const at = std.math.clamp(@as(f32, @floatFromInt(count)) / red_at, 0.0, 1.0) * 4.0;
+    if (at < 1) return stops[0].Lerp(stops[1], at);
+    if (at < 2) return stops[1].Lerp(stops[2], at - 1);
+    if (at < 3) return stops[2].Lerp(stops[3], at - 2);
+    return stops[3].Lerp(stops[4], at - 3);
+}
+
+/// The work one pixel's ray did, counted by a marcher compiled with Features.Heatmap. Every other variant keeps it at 0
+/// and never writes it, so the shader compiler drops it
+pub const Counters = extern struct {
+    BVHNodes: u32 = 0,
+    ShapeTests: u32 = 0,
+    AcceptChecks: u32 = 0,
+    Edges: u32 = 0,
+    MarchSteps: u32 = 0,
+
+    pub fn Of(self: Counters, metric: HeatMetric) u32 {
+        return self.OfIndex(@intFromEnum(metric));
+    }
+
+    /// Of, for a metric given as its number, the way the shader gets it in its push constants. 0 for one that isn't
+    pub fn OfIndex(self: Counters, metric: u32) u32 {
+        return switch (metric) {
+            @intFromEnum(HeatMetric.BVHNodes) => self.BVHNodes,
+            @intFromEnum(HeatMetric.ShapeTests) => self.ShapeTests,
+            @intFromEnum(HeatMetric.AcceptChecks) => self.AcceptChecks,
+            @intFromEnum(HeatMetric.Edges) => self.Edges,
+            @intFromEnum(HeatMetric.MarchSteps) => self.MarchSteps,
+            else => 0,
+        };
+    }
 };
 
 /// How far a BVH node's box can reach past what it was built around and still count, as a share of the distance
@@ -264,10 +338,13 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         mSurfShading: surf_shading_type,
         mMedShading: med_shading_type,
         mPerspectiveFar: f32,
+        /// the work this pixel's ray did, counted only by the heatmap variant (Features.Heatmap)
+        mCounters: Counters = .{},
 
         /// Plants the ray tree's root for `ray`: the node it starts from and the edge it sets out along, through air.
         /// Every trace starts here, then March, then GenerateColor
         pub fn Start(self: *Self, ray: Ray) void {
+            if (features.Heatmap) self.mCounters = .{};
             self.mNodes[0] = .{
                 .Point = ray.Origin,
                 .Normal = .{ .x = 0, .y = 0, .z = 0 },
@@ -291,12 +368,18 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
             self.mEdgeCount = 1;
         }
 
+        /// Counts one more of `counter` for the heatmap. Nothing at all in a variant without it
+        inline fn Count(self: *Self, comptime counter: std.meta.FieldEnum(Counters)) void {
+            if (features.Heatmap) @field(self.mCounters, @tagName(counter)) += 1;
+        }
+
         pub fn March(self: *Self, sample_sampler: anytype, textures_array: textures_array_type) void {
             var edge_ind_stack: Stack(usize, MAX_EDGES) = .empty;
             edge_ind_stack.Push(0);
 
             while (edge_ind_stack.len > 0) {
                 const curr_edge_ind = edge_ind_stack.Pop();
+                self.Count(.Edges);
                 const curr_edge = self.mEdges[curr_edge_ind];
                 const from_point = self.mNodes[@intCast(curr_edge.FromNode)].Point;
 
@@ -409,7 +492,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// (picked by `direct_search`). A candidate is only taken as the nearest once it's checked to really be drawn
         /// (Accepts), so one cut off by its masks or in a gap in a letter is passed over within the same search and the
         /// ray goes on to whatever is behind it, without ever searching again
-        fn DirectSurface(self: *const Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn DirectSurface(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             if (self.mDirectCount == 0) return .none;
             const nearest = switch (direct_search) {
                 .BVH => self.NearestByBVH(ray, skip_shape, sample_sampler, textures_array),
@@ -436,15 +519,16 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// Ray tests one direct shape, and makes it the nearest if its front is hit before the nearest so far and it is
         /// really drawn there. Only a hit that would win is checked, so a shape the search has already beaten never
         /// pays for its masks or its letter. All a search does with a shape, whichever way it found it
-        fn ConsiderShape(self: *const Self, ray: Ray, shape_ind: u32, skip_shape: u32, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
+        fn ConsiderShape(self: *Self, ray: Ray, shape_ind: u32, skip_shape: u32, nearest: *Candidate, sample_sampler: anytype, textures_array: textures_array_type) void {
             if (shape_ind == skip_shape) return;
             const shape: ShapeData = self.mShapes[shape_ind];
+            self.Count(.ShapeTests);
             const hit = HitShape(features, ray, shape);
             if (!IsFrontHit(hit)) return;
             const order = HitOrder.Of(hit.T, shape, shape_ind);
-            if (order.Before(nearest.Order) and self.Accepts(ray, shape, hit, sample_sampler, textures_array)) {
-                nearest.* = .{ .Order = order, .Hit = hit };
-            }
+            if (!order.Before(nearest.Order)) return;
+            self.Count(.AcceptChecks);
+            if (self.Accepts(ray, shape, hit, sample_sampler, textures_array)) nearest.* = .{ .Order = order, .Hit = hit };
         }
 
         //==================================the two direct searches (DirectSearch)==================================
@@ -452,13 +536,14 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// DirectSearch.BVH: walks the tree over the direct shapes the stack free way (Core/BVH.zig), into each node the
         /// ray reaches and on to its Skip past each it doesn't, considering the shapes of every leaf it reaches. A leaf's
         /// shapes are a run of mShapes, since the tree was built over them in that order
-        fn NearestByBVH(self: *const Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
+        fn NearestByBVH(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             const inv_dir = Vec3(f32).FromVector(@as(Vec3(f32).VectorT, @splat(1.0)) / ray.Dir.ToVector());
             const node_count = self.mBVHNodes[0].Skip;
             var node_ind: u32 = 0;
             while (node_ind < node_count) {
                 const node: BVHNode = self.mBVHNodes[node_ind];
+                self.Count(.BVHNodes);
                 if (!ReachesNode(ray, inv_dir, node, nearest.Order)) {
                     node_ind = node.Skip;
                     continue;
@@ -477,7 +562,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         }
 
         /// DirectSearch.Linear: considers every direct shape, the BVH walk's answer key
-        fn NearestByLinearSearch(self: *const Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
+        fn NearestByLinearSearch(self: *Self, ray: Ray, skip_shape: u32, sample_sampler: anytype, textures_array: textures_array_type) Candidate {
             var nearest = self.NoCandidate();
             for (0..self.mDirectCount) |shape_ind| {
                 self.ConsiderShape(ray, @intCast(shape_ind), skip_shape, &nearest, sample_sampler, textures_array);
@@ -499,12 +584,13 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
         /// The nearest surface a ray draws among the marched shapes, stepping along it no further than `limit`. Each
         /// shape the march gets within epsilon of is checked against the shape itself, and one turned down is skipped
         /// for the rest of the edge (SkipList)
-        fn MarchedSurface(self: *const Self, ray: Ray, skip_shape: u32, limit: f32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
+        fn MarchedSurface(self: *Self, ray: Ray, skip_shape: u32, limit: f32, sample_sampler: anytype, textures_array: textures_array_type) SurfaceHit {
             var skips = SkipList.Init(skip_shape);
             var dist_origin: f32 = 0;
 
             var i: u32 = 0;
             while (i < MAX_STEPS and dist_origin < limit) : (i += 1) {
+                self.Count(.MarchSteps);
                 const point = ray.Origin.AddVec(ray.Dir.MulScalar(dist_origin));
                 const march_data = self.NextSurface(point, skips);
                 if (march_data.min_dist > SurfaceEpsilon(dist_origin)) {
@@ -515,6 +601,7 @@ pub fn RayMarcher(comptime shapes_type: type, comptime shape_surfaces_type: type
                 //close enough to count, so ask the shape itself where exactly the ray meets it. only
                 //a plate's front is drawn, and a glyph only where the letter covers it: at its back,
                 //its sides or a gap in the letter the ray goes on to whatever is behind
+                self.Count(.AcceptChecks);
                 const surface = self.SurfaceAt(ray, march_data.shape, sample_sampler, textures_array);
                 if (surface.Found) return surface;
                 skips.Add(march_data.shape);

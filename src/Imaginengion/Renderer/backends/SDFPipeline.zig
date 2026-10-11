@@ -43,30 +43,35 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
     return struct {
         //the shaders as this build compiled them (build_shaders.zig's anonymous imports), so they always match the CPU
         //side's structs. `zig build shaders` still writes copies to EngineAssets/shaders/ for inspecting
-        const FullShader = switch (pipeline_type) {
-            .Overlay => @embedFile("SDFComputeOverlay"),
-            .Game => @embedFile("SDFComputeGame"),
+        const ShaderName = switch (pipeline_type) {
+            .Overlay => "SDFComputeOverlay",
+            .Game => "SDFComputeGame",
         };
-        //the same shader compiled with merges and marching left out (PassPlan.ShaderVariant)
-        const LeanShader = switch (pipeline_type) {
-            .Overlay => @embedFile("SDFComputeOverlayLean"),
-            .Game => @embedFile("SDFComputeGameLean"),
-        };
+
+        /// The compile of the shader for `variant` (PassPlan.ShaderVariant): the plain one, then each variant's under its
+        /// name, the way build_shaders.zig names them
+        fn ShaderOf(comptime variant: PassPlan.ShaderVariant) []const u8 {
+            return switch (variant) {
+                .Full => @embedFile(ShaderName),
+                .Lean => @embedFile(ShaderName ++ "Lean"),
+                .Heatmap => @embedFile(ShaderName ++ "Heatmap"),
+            };
+        }
 
         const Self = @This();
 
         pub const empty: Self = .{
-            .mFullPipeline = null,
-            .mLeanPipeline = null,
+            .mPipelines = .initFill(null),
         };
 
-        mFullPipeline: ?*sdl.struct_SDL_GPUComputePipeline,
-        mLeanPipeline: ?*sdl.struct_SDL_GPUComputePipeline,
+        /// one per compile of the shader, so a pass binds whichever it needs
+        mPipelines: std.EnumArray(PassPlan.ShaderVariant, ?*sdl.struct_SDL_GPUComputePipeline),
 
         pub fn Init(self: *Self, engine_context: *EngineContext) !void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
-            self.mFullPipeline = try CreatePipeline(device, FullShader);
-            self.mLeanPipeline = try CreatePipeline(device, LeanShader);
+            inline for (comptime std.enums.values(PassPlan.ShaderVariant)) |variant| {
+                self.mPipelines.set(variant, try CreatePipeline(device, ShaderOf(variant)));
+            }
         }
 
         fn CreatePipeline(device: *sdl.SDL_GPUDevice, comptime shader: []const u8) !*sdl.struct_SDL_GPUComputePipeline {
@@ -98,19 +103,17 @@ pub fn SDFPipeline(pipeline_type: PipelineType) type {
         pub fn Deinit(self: *Self, engine_context: *EngineContext) void {
             const device: *sdl.SDL_GPUDevice = @ptrCast(engine_context.mRenderer.mPlatform.GetDevice());
             _ = sdl.SDL_WaitForGPUIdle(device);
-            if (self.mFullPipeline) |p| sdl.SDL_ReleaseGPUComputePipeline(device, p);
-            if (self.mLeanPipeline) |p| sdl.SDL_ReleaseGPUComputePipeline(device, p);
-            self.mFullPipeline = null;
-            self.mLeanPipeline = null;
+            for (&self.mPipelines.values) |*pipeline| {
+                if (pipeline.*) |p| sdl.SDL_ReleaseGPUComputePipeline(device, p);
+                pipeline.* = null;
+            }
         }
 
-        /// Binds the compile of the shader `variant` says: the lean one for a pass without merges or marched shapes
+        /// Binds the compile of the shader `variant` says: the lean one for a pass without merges or marched shapes, the
+        /// heatmap one while the editor shows the shader heatmap
         pub fn Bind(self: Self, pass: *anyopaque, variant: PassPlan.ShaderVariant) void {
             const sdl_pass: *sdl.SDL_GPUComputePass = @ptrCast(pass);
-            sdl.SDL_BindGPUComputePipeline(sdl_pass, switch (variant) {
-                .Full => self.mFullPipeline,
-                .Lean => self.mLeanPipeline,
-            });
+            sdl.SDL_BindGPUComputePipeline(sdl_pass, self.mPipelines.get(variant));
         }
 
         pub fn PushUniforms(_: Self, cmd: *anyopaque, push: PushConstants) void {

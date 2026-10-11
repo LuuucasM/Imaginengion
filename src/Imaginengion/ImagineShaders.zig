@@ -9,6 +9,7 @@ pub const ProgramPart = @import("Renderer/SDFProgram.zig").Part;
 pub const SurfShadingData = @import("Renderer/Renderer.zig").SurfShadingData;
 pub const MedShadingData = @import("Renderer/Renderer.zig").MedShadingData;
 pub const RayMarcher = @import("Renderer/SDFRayMarcher.zig").RayMarcher;
+pub const HeatColor = @import("Renderer/SDFRayMarcher.zig").HeatColor;
 pub const Node = @import("Renderer/SDFRayMarcher.zig").Node;
 pub const Edge = @import("Renderer/SDFRayMarcher.zig").Edge;
 

@@ -245,14 +245,19 @@ fn Trace(scene: TestScene, ray: Ray) !Vec4(f32) {
 }
 
 /// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, found both
-/// ways the direct shapes can be searched: walking their BVH, and testing every one. The two have to agree. A scene
-/// the lean shader can draw, every shape direct and none a merge, is traced by the lean marcher too, which has to
-/// agree as well
+/// ways the direct shapes can be searched: walking their BVH, and testing every one. The two have to agree, and so does
+/// the heatmap marcher, whose counting mustn't change what it draws. A scene the lean shader can draw, every shape
+/// direct and none a merge, is traced by the lean marcher too, which has to agree as well
 fn TraceWith(scene: TestScene, ray: Ray, direct_count: usize) !Vec4(f32) {
     const bvh = try TraceSearch(scene, ray, direct_count, .BVH, .full);
     const linear = try TraceSearch(scene, ray, direct_count, .Linear, .full);
     ExpectColor(bvh, linear) catch |err| {
         std.debug.print("the BVH walk and testing every shape disagree: bvh {any}, linear {any}\n", .{ bvh, linear });
+        return err;
+    };
+    const counted = try TraceSearch(scene, ray, direct_count, .BVH, .heatmap);
+    ExpectColor(bvh, counted) catch |err| {
+        std.debug.print("the full and heatmap marchers disagree: full {any}, heatmap {any}\n", .{ bvh, counted });
         return err;
     };
     if (PassPlan.VariantFor(MergeCount(scene), scene.Shapes.len, direct_count) == .Lean) {
@@ -300,9 +305,25 @@ fn SortForBVH(shapes: []ShapeData, items: []BVH.Item) void {
 }
 
 /// The color one ray comes out with when the first `direct_count` shapes are direct and the rest marched, the direct
-/// ones found by `search`. Set up the way Renderer2D and SDFComputeGame's main set up a pixel's ray: the direct shapes
-/// sorted for their BVH and the tree built over them, then the first node and edge
+/// ones found by `search`
 fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) !Vec4(f32) {
+    return (try TraceCounted(scene, ray, direct_count, search, features)).Color;
+}
+
+/// A traced ray's color, and the work it took (counted by a marcher with Features.Heatmap, all 0 otherwise)
+const Traced = struct {
+    Color: Vec4(f32),
+    Counters: SDFRayMarcher.Counters,
+};
+
+/// The work one ray takes with every shape direct, found by walking the BVH: what the shader heatmap colors by
+fn CountWork(scene: TestScene, ray: Ray) !SDFRayMarcher.Counters {
+    return (try TraceCounted(scene, ray, scene.Shapes.len, .BVH, .heatmap)).Counters;
+}
+
+/// TraceSearch, with the work counted. Set up the way Renderer2D and SDFComputeGame's main set up a pixel's ray: the
+/// direct shapes sorted for their BVH and the tree built over them, then the first node and edge
+fn TraceCounted(scene: TestScene, ray: Ray, direct_count: usize, comptime search: SDFRayMarcher.DirectSearch, comptime features: SDFRayMarcher.Features) !Traced {
     std.debug.assert(scene.Shadings.len > 0);
     std.debug.assert(scene.Shapes.len <= MAX_TEST_SHAPES and direct_count <= scene.Shapes.len);
 
@@ -341,7 +362,7 @@ fn TraceSearch(scene: TestScene, ray: Ray, direct_count: usize, comptime search:
     marcher.Start(ray);
 
     marcher.March(FakeSample, &TEXTURES);
-    return marcher.GenerateColor(FakeSample, &TEXTURES);
+    return .{ .Color = marcher.GenerateColor(FakeSample, &TEXTURES), .Counters = marcher.mCounters };
 }
 
 /// Straight down -z from in front of everything, at (x, y)
@@ -869,4 +890,70 @@ test "walking the BVH finds the same color as testing every shape, on random sce
     }
     //about half the 1200 rays land on something (631 with this seed), so the walk was really tested
     try std.testing.expect(hits > 500);
+}
+
+//==================================the shader heatmap's counts==================================
+
+test "a ray that misses everything tests the tree's root and nothing in it" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(5, 5));
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 0, .AcceptChecks = 0, .Edges = 1, .MarchSteps = 0 }, counted);
+}
+
+test "a ray onto one quad tests it once and checks it once" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 1, .AcceptChecks = 1, .Edges = 1, .MarchSteps = 0 }, counted);
+}
+
+test "a ray through a letter's gap checks both the glyph and the quad behind it, in one walk" {
+    //whichever the leaf holds first, each becomes the nearest so far once and is checked once: the glyph is turned
+    //down and the quad taken
+    const shadings = [_]SurfShadingData{
+        ColorShading(BLUE),
+        Shading(WHITE, ATLAS_HANDLE),
+        Shading(WHITE, GREEN_HANDLE),
+    };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeGlyph(.{ .x = 0, .y = 0, .z = 1 }, .{ .x = 0.5, .y = 0.5 }, 1, 2, 0),
+    };
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0.25, 0));
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{ .BVHNodes = 1, .ShapeTests = 2, .AcceptChecks = 2, .Edges = 1, .MarchSteps = 0 }, counted);
+}
+
+test "a see-through quad sends its ray on through, one more edge" {
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(BLUE), ColorShading(half_red) };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
+    };
+    const counted = try CountWork(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0));
+    try std.testing.expectEqual(@as(u32, 2), counted.Edges);
+}
+
+test "marched shapes count their steps, and a search over no direct shapes tests no node" {
+    const shadings = [_]SurfShadingData{ColorShading(RED)};
+    const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
+    const counted = (try TraceCounted(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 0, .BVH, .heatmap)).Counters;
+    try std.testing.expect(counted.MarchSteps > 0);
+    try std.testing.expectEqual(@as(u32, 0), counted.BVHNodes);
+    //the full marcher draws the same, but never counts
+    const uncounted = (try TraceCounted(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 0, .BVH, .full)).Counters;
+    try std.testing.expectEqualDeep(SDFRayMarcher.Counters{}, uncounted);
+}
+
+test "the heatmap goes from black for nothing through blue, green and yellow to red at its red count, and stays red" {
+    const black = Vec4(f32){ .x = 0, .y = 0, .z = 0, .w = 1 };
+    try ExpectColor(black, SDFRayMarcher.HeatColor(0, 8));
+    try ExpectColor(.{ .x = 0, .y = 0, .z = 1, .w = 1 }, SDFRayMarcher.HeatColor(2, 8));
+    try ExpectColor(.{ .x = 0, .y = 1, .z = 0, .w = 1 }, SDFRayMarcher.HeatColor(4, 8));
+    try ExpectColor(.{ .x = 1, .y = 1, .z = 0, .w = 1 }, SDFRayMarcher.HeatColor(6, 8));
+    try ExpectColor(RED, SDFRayMarcher.HeatColor(8, 8));
+    try ExpectColor(RED, SDFRayMarcher.HeatColor(100, 8));
+    //half way between blue and green
+    try ExpectColor(.{ .x = 0, .y = 0.5, .z = 0.5, .w = 1 }, SDFRayMarcher.HeatColor(3, 8));
 }

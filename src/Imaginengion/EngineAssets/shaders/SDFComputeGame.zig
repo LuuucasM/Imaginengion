@@ -37,17 +37,20 @@ const GameRayMarcher = RayMarcherFn(
     @TypeOf(&MedShadingSSBO.ptr),
     @TypeOf(TexturesArray),
     .BVH,
-    //this compile's variant (build_shaders.zig): the CPU runs the lean one for a pass with no merges and no marched shapes
-    if (@import("shader_variant").lean) .lean else .full,
+    //this compile's variant (build_shaders.zig): the CPU runs the lean one for a pass with no merges and no marched
+    //shapes, and the heatmap one while the editor shows the shader heatmap
+    if (shader_variant.lean) .lean else if (shader_variant.heatmap) .heatmap else .full,
 );
+
+const shader_variant = @import("shader_variant");
 
 export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void {
     const global = spirv.global_invocation_id;
     if (@as(f32, @floatFromInt(global[0])) >= CameraUBO.mViewportWidth or @as(f32, @floatFromInt(global[1])) >= CameraUBO.mViewportHeight) return;
 
     //what the overlay pass drew here, which this goes under. Without an overlay pass this render the texture holds
-    //nothing of this frame, so there is nothing above
-    const sample: Vec4(f32) = if (CameraUBO.mFlags & PushConstants.FLAG_UNDER_OVERLAY != 0)
+    //nothing of this frame, so there is nothing above. The heatmap shows this layer's own cost everywhere instead
+    const sample: Vec4(f32) = if (!shader_variant.heatmap and CameraUBO.mFlags & PushConstants.FLAG_UNDER_OVERLAY != 0)
         .FromVector(imageRead(OutTexture, u32, .{ global[0], global[1] }))
     else
         .{ .x = 0, .y = 0, .z = 0, .w = 0 };
@@ -80,8 +83,11 @@ export fn main() callconv(.{ .spirv_kernel = .{ .x = 8, .y = 8, .z = 1 } }) void
     //traverse ray tree backwards to obtain final output color
     const march_color = marcher.GenerateColor(SDFShared.imageSampleExplicitLod, TexturesArray);
 
-    //the overlay over the game
-    const final_color = SDFShared.Over(sample, march_color);
+    //the overlay over the game, or for the heatmap how much work this pixel's ray did
+    const final_color = if (shader_variant.heatmap)
+        @import("IM").HeatColor(marcher.mCounters.OfIndex(CameraUBO.mHeatMetric), CameraUBO.mHeatRedAt)
+    else
+        SDFShared.Over(sample, march_color);
 
     std.spirv.imageWrite(OutTexture, u32, .{ global[0], global[1] }, final_color.ToVector());
 }
