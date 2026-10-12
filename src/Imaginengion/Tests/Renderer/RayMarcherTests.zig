@@ -990,6 +990,71 @@ test "a see-through quad sends its ray on through, one more edge" {
     try std.testing.expectEqual(@as(u32, 2), counted.Edges);
 }
 
+/// The color of a stack of see-through `colors`, front first, over a solid `behind`, blended back to front
+fn StackColor(colors: []const Vec4(f32), behind: Vec4(f32)) Vec4(f32) {
+    var color = behind;
+    var i = colors.len;
+    while (i > 0) {
+        i -= 1;
+        color = colors[i].Lerp(color, 1.0 - colors[i].w);
+    }
+    return color;
+}
+
+/// `count` see-through quads one behind another from z = count down to 1, each its own shading, over a solid blue quad at
+/// z = 0, with spare room for their shadings
+fn SeeThroughStack(comptime count: usize, shapes: *[count + 1]TestShape, shadings: *[count + 1]SurfShadingData, colors: *[count]Vec4(f32)) void {
+    for (0..count) |i| {
+        //each a different half see-through color, so a layer drawn twice or left out shows
+        colors[i] = .{ .x = @as(f32, @floatFromInt(i)) / count, .y = 1 - @as(f32, @floatFromInt(i)) / count, .z = 0.25, .w = 0.5 };
+        shadings[i] = ColorShading(colors[i]);
+        shapes[i] = MakeQuad(.{ .x = 0, .y = 0, .z = @floatFromInt(count - i) }, IDENTITY, .{ .x = 1, .y = 1 }, @intCast(i), TRANSPARENT, NO_MASK);
+    }
+    shadings[count] = ColorShading(BLUE);
+    shapes[count] = MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, @intCast(count), 0, NO_MASK);
+}
+
+test "a deep stack of see-through quads blends every layer" {
+    var shapes: [7]TestShape = undefined;
+    var shadings: [7]SurfShadingData = undefined;
+    var colors: [6]Vec4(f32) = undefined;
+    SeeThroughStack(6, &shapes, &shadings, &colors);
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(StackColor(&colors, BLUE), try Trace(scene, RayAt(0, 0)));
+    const counted = try CountWork(scene, RayAt(0, 0));
+    try std.testing.expectEqual(@as(u32, 7), counted.Edges);
+}
+
+test "a see-through quad whose color turns out solid still hides what is behind it" {
+    //marked see-through, but its color is solid red
+    const shadings = [_]SurfShadingData{ ColorShading(RED), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, 0, NO_MASK),
+    };
+    const scene = TestScene{ .Shapes = &shapes, .Shadings = &shadings };
+    try ExpectColor(RED, try Trace(scene, RayAt(0, 0)));
+    try std.testing.expectEqual(@as(u32, 1), (try CountWork(scene, RayAt(0, 0))).Edges);
+}
+
+test "a marched see-through quad between two direct ones is still blended in its place" {
+    //the first two shapes direct and the last two marched: the march wins the second edge
+    const half_red = Vec4(f32){ .x = 1, .y = 0, .z = 0, .w = 0.5 };
+    const half_green = Vec4(f32){ .x = 0, .y = 1, .z = 0, .w = 0.5 };
+    const half_white = Vec4(f32){ .x = 1, .y = 1, .z = 1, .w = 0.5 };
+    const shadings = [_]SurfShadingData{ ColorShading(half_red), ColorShading(half_green), ColorShading(half_white), ColorShading(BLUE) };
+    const shapes = [_]TestShape{
+        MakeQuad(.{ .x = 0, .y = 0, .z = 3 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 1 }, IDENTITY, .{ .x = 1, .y = 1 }, 2, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 2 }, IDENTITY, .{ .x = 1, .y = 1 }, 1, TRANSPARENT, NO_MASK),
+        MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 3, 0, NO_MASK),
+    };
+    const expected = StackColor(&.{ half_red, half_green, half_white }, BLUE);
+    //the first two direct, the last two marched, and the whole of it both ways
+    try ExpectColor(expected, try TraceWith(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0), 2));
+    try ExpectColor(expected, try Trace(.{ .Shapes = &shapes, .Shadings = &shadings }, RayAt(0, 0)));
+}
+
 test "marched shapes count their steps, and a search over no direct shapes tests no node" {
     const shadings = [_]SurfShadingData{ColorShading(RED)};
     const shapes = [_]TestShape{MakeQuad(.{ .x = 0, .y = 0, .z = 0 }, IDENTITY, .{ .x = 1, .y = 1 }, 0, 0, NO_MASK)};
